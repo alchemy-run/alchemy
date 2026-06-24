@@ -29,22 +29,22 @@ export default Cloudflare.Worker(
         if (request.method === "PUT" && url.pathname === "/seed") {
           const key = url.searchParams.get("key") ?? "";
           const value = yield* request.text;
-          yield* object.put(key, value);
-          return HttpServerResponse.json({ ok: true });
+          yield* object.put(key, value).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ ok: true });
         }
 
         // Bucket read end-to-end through the container over RPC.
         if (url.pathname === "/rpc") {
           const key = url.searchParams.get("key") ?? "";
           const value = yield* object.readObjectRpc(key).pipe(Effect.orDie);
-          return HttpServerResponse.json({ value });
+          return yield* HttpServerResponse.json({ value });
         }
 
         // Bucket read end-to-end through the container over fetch (TCP port).
         if (url.pathname === "/fetch") {
           const key = url.searchParams.get("key") ?? "";
           const result = yield* object.readObjectFetch(key);
-          return HttpServerResponse.json(result);
+          return yield* HttpServerResponse.json(result);
         }
 
         if (url.pathname === "/hello") {

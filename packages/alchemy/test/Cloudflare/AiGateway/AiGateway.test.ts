@@ -112,6 +112,82 @@ test.provider("create, update, delete ai gateway", (stack) =>
   }).pipe(logLevel),
 );
 
+// Per-gateway spend limits replace the deprecated account-level spending
+// limit. Verify they are applied on create, mutate in place, and that a
+// redeploy of identical props is a no-op (exercising the diff normalization
+// that drops the server-assigned rule id and per-rule `enabled` default).
+test.provider("create, update spend limits, delete ai gateway", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const gateway = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AiGateway("SpendGateway", {
+          id: "alchemy-test-ai-gateway-spend",
+          spendLimits: {
+            enabled: true,
+            // Effect Duration.Input is decoded to whole seconds for the API.
+            rules: [{ limitType: "cost", limit: 500_00, window: "1 day" }],
+          },
+        });
+      }),
+    );
+
+    expect(gateway.spendLimits?.enabled).toEqual(true);
+    expect(gateway.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+    expect(gateway.spendLimits?.rules?.[0]?.window).toEqual(86_400);
+
+    const live = yield* aiGateway.getAiGateway({
+      accountId,
+      id: gateway.gatewayId,
+    });
+    expect(live.spendLimits?.enabled).toEqual(true);
+    expect(live.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+    expect(live.spendLimits?.rules?.[0]?.window).toEqual(86_400);
+
+    // Re-deploying identical props must be a no-op (no perpetual drift from
+    // the server-assigned rule id / enabled default).
+    const again = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AiGateway("SpendGateway", {
+          id: "alchemy-test-ai-gateway-spend",
+          spendLimits: {
+            enabled: true,
+            rules: [{ limitType: "cost", limit: 500_00, window: "1 day" }],
+          },
+        });
+      }),
+    );
+    expect(again.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+
+    // Update the cap in place.
+    const updated = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AiGateway("SpendGateway", {
+          id: "alchemy-test-ai-gateway-spend",
+          spendLimits: {
+            enabled: true,
+            rules: [{ limitType: "cost", limit: 1_000_00, window: "1 hour" }],
+          },
+        });
+      }),
+    );
+    expect(updated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
+
+    const liveUpdated = yield* aiGateway.getAiGateway({
+      accountId,
+      id: gateway.gatewayId,
+    });
+    expect(liveUpdated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
+    expect(liveUpdated.spendLimits?.rules?.[0]?.window).toEqual(3_600);
+
+    yield* stack.destroy();
+    yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
+  }).pipe(logLevel),
+);
+
 test.provider("list enumerates the deployed ai gateway", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();

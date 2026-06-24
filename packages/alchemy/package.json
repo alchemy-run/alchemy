@@ -20,6 +20,7 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
+    "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
     "build": "tsgo -b && tsgo -b tsconfig.bin.json && bun bundle",
     "bundle": "tsdown",

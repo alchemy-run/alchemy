@@ -1,9 +1,11 @@
 import type * as cf from "@cloudflare/workers-types";
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import { pipe } from "effect/Function";
 import * as Latch from "effect/Latch";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -127,29 +129,76 @@ export const fromCloudflareFetcher = (
 };
 
 /**
+ * A freshly-deployed Durable Object / service script is eventually consistent:
+ * for a short window after deploy, workerd can route a `.fetch()` to a stale
+ * script version whose class has no fetch handler yet, surfacing as
+ * "Handler does not export a fetch() function." It clears within seconds once
+ * the new version propagates, so it is safe to retry.
+ */
+const isHandlerNotReady = (error: unknown): boolean => {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : typeof (error as { message?: unknown } | null)?.message === "string"
+          ? ((error as { message: string }).message as string)
+          : "";
+  return message.includes("does not export a fetch");
+};
+
+/**
  * Adapt anything that exposes a server-shaped `fetch` (e.g. a Durable Object
  * stub, a Worker service binding) into an Effect `HttpClient`. Lets HttpApi
  * clients address bindings without a base URL via `transformClient`.
  */
+class HandlerNotReady {
+  readonly _tag = "HandlerNotReady";
+  constructor(readonly cause: unknown) {}
+}
+
 export const toHttpClient = (fetcher: {
   fetch: (
     request: HttpServerRequest.HttpServerRequest,
   ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 }) =>
   HttpClient.make((request) => {
-    return fetcher.fetch(HttpServerRequest.fromClientRequest(request)).pipe(
-      Effect.map((response) => {
-        return HttpClientResponse.fromWeb(
-          request,
-          HttpServerResponse.toWeb(response),
-        );
+    return Effect.suspend(() =>
+      // Rebuild the server request on every attempt so a retry re-serializes
+      // the body instead of replaying a consumed one.
+      fetcher
+        .fetch(HttpServerRequest.fromClientRequest(request))
+        .pipe(
+          Effect.map((response) =>
+            HttpClientResponse.fromWeb(
+              request,
+              HttpServerResponse.toWeb(response),
+            ),
+          ),
+        ),
+    ).pipe(
+      // The not-ready window surfaces as a defect (a rejected `fetch` promise),
+      // so inspect the whole cause and re-raise it as a typed, retryable error;
+      // anything else is re-raised faithfully.
+      Effect.catchCause(
+        (cause): Effect.Effect<never, HandlerNotReady | HttpServerError> => {
+          const squashed = Cause.squash(cause);
+          return isHandlerNotReady(squashed)
+            ? Effect.fail(new HandlerNotReady(squashed))
+            : Effect.failCause(cause);
+        },
+      ),
+      Effect.retry({
+        while: (error) => error instanceof HandlerNotReady,
+        schedule: Schedule.exponential("100 millis"),
+        times: 8,
       }),
       Effect.mapError(
-        (cause) =>
+        (error) =>
           new HttpClientError({
             reason: new TransportError({
               request,
-              cause,
+              cause: error instanceof HandlerNotReady ? error.cause : error,
               description: "Fetcher-backed HttpClient request failed",
             }),
           }),

@@ -14,10 +14,11 @@ const page = (title: string, body: string) =>
  * domain the account owns, so it can seed an AI Search web-crawler instance
  * (which rejects domains the account hasn't verified).
  *
- * The instance uses `parseType: "crawl"` to walk pages from the seed. We avoid
- * the default `sitemap` parse because Cloudflare validates the sitemap
- * synchronously at create time and discovers it via `robots.txt`, which a
- * freshly-deployed `workers.dev` URL doesn't serve reliably in time.
+ * The instance uses `parseType: "crawl"` with `crawlOptions.source: "links"`
+ * to walk pages by following links from the seed. We avoid the default
+ * `sitemap` parse (and sitemap-based link discovery) because Cloudflare
+ * validates the sitemap synchronously at create time and discovers it via
+ * `robots.txt`, which a freshly-deployed `workers.dev` URL doesn't serve.
  */
 export default class AiSearchCrawlTargetWorker extends Cloudflare.Worker<AiSearchCrawlTargetWorker>()(
   "AiSearchCrawlTargetWorker",
@@ -28,9 +29,10 @@ export default class AiSearchCrawlTargetWorker extends Cloudflare.Worker<AiSearc
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const { pathname } = new URL(request.url);
-
-        if (pathname === "/docs") {
+        // `HttpServerRequest.url` is the request path (e.g. `/docs`), not an
+        // absolute URL — `new URL(request.url)` would throw and 500. Match on
+        // the path prefix directly.
+        if (request.url.startsWith("/docs")) {
           return page(
             "Docs",
             "<h1>Alchemy docs</h1><p>Indexable documentation content.</p>",

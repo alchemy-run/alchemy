@@ -5,7 +5,7 @@ import * as Redacted from "effect/Redacted";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { Platform } from "../../Platform.ts";
-import type { Rpc } from "../../Rpc.ts";
+import { type Rpc, serveRpc } from "../../Rpc.ts";
 import * as Server from "../../Server/index.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
@@ -32,15 +32,27 @@ export const ContainerPlatform: Platform<
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};
 
-      const serve = <Req = never>(handler: HttpEffect<Req>) =>
+      const serve = <Req = never>(
+        handler: HttpEffect<Req>,
+        options?: { shape?: Record<string, unknown> },
+      ) =>
         Effect.sync(() => {
+          // Containers have no native RPC transport (unlike a Cloudflare
+          // Worker's JSRPC), so expose the impl's non-`fetch` shape methods
+          // over the plain-`fetch` RPC protocol: requests to `/__rpc__/*` are
+          // dispatched to the matching shape method, everything else falls
+          // through to the user's `fetch` handler. The DO side talks to this
+          // via `makeFetchRpcStub` over the container's TCP port.
+          const finalHandler = options?.shape
+            ? serveRpc(options.shape, handler)
+            : handler;
           runners.push(
             Effect.gen(function* () {
               const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
                 Effect.map(Option.getOrUndefined),
               );
               if (httpServer) {
-                yield* httpServer.serve(handler);
+                yield* httpServer.serve(finalHandler);
                 yield* Effect.never;
               } else {
                 // this should only happen at plantime, validate?

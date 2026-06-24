@@ -7,6 +7,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -142,7 +143,28 @@ test.provider("list enumerates the deployed access application", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(Cloudflare.AccessApplication);
-    const all = yield* provider.list();
+
+    // `list()` enumerates every Access application in the account. Under a full
+    // concurrent run a sibling test may be mid-teardown of an application that
+    // still references a policy it just deleted, and Cloudflare rejects the
+    // whole list with a `BadRequest` ("policy ... not found") until that app is
+    // gone. The fresh scoped token can also 403 while it propagates. Retry the
+    // enumeration on either, and poll until our own app appears.
+    const all = yield* provider.list().pipe(
+      Effect.flatMap((rows) =>
+        rows.some((a) => a.applicationId === app.applicationId)
+          ? Effect.succeed(rows)
+          : Effect.fail({ _tag: "AppNotListed" as const }),
+      ),
+      Effect.retry({
+        while: (e) =>
+          e._tag === "BadRequest" ||
+          e._tag === "Forbidden" ||
+          e._tag === "AppNotListed",
+        schedule: Schedule.spaced("2 seconds"),
+        times: 15,
+      }),
+    );
 
     const match = all.find((a) => a.applicationId === app.applicationId);
     expect(match).toBeDefined();

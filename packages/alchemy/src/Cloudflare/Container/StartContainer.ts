@@ -7,6 +7,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
+import { makeFetchRpcStub } from "../../Rpc.ts";
 import { type Fetcher } from "../Fetcher.ts";
 import {
   ContainerBindEff,
@@ -123,9 +124,21 @@ export const startContainer = Effect.fn(function* <
     yield* ensureRunning as Effect.Effect<void>;
   }
 
-  return {
+  // The container exposes its non-`fetch` shape methods (declared on the
+  // Container class) over the plain-`fetch` RPC protocol served by the
+  // container runtime (`serveRpc`). Wrap the instance so that any method that
+  // isn't one of the built-in handle methods (`running`/`start`/`getTcpPort`/…)
+  // is dispatched as `POST http://container/__rpc__/{name}` over the
+  // container's port-3000 server.
+  const base = {
     ...container,
     getTcpPort,
     fetch: getTcpPort(3000),
-  } as Container.Instance<InstanceType<Image>>;
+  };
+  return makeFetchRpcStub<Container.Instance<InstanceType<Image>>>({
+    fetch: (request) =>
+      getTcpPort(3000).pipe(Effect.flatMap((port) => port.fetch(request))),
+    baseUrl: "http://container",
+    base: base as Record<string, unknown>,
+  });
 });

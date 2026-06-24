@@ -1,4 +1,5 @@
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -96,6 +97,74 @@ export type AiGatewayStripe = {
   }[];
 };
 
+/**
+ * A single spend-limit rule. Caps cumulative spend (in cents) routed through
+ * the gateway over a rolling `window` (in seconds), optionally scoped to a set
+ * of models or providers.
+ */
+export type AiGatewaySpendLimitRule = {
+  /**
+   * Spend cap for this rule. The amount is in cents (`limitType: "cost"`).
+   */
+  limit: number;
+  /**
+   * The kind of limit. Only `"cost"` is currently supported.
+   */
+  limitType: "cost";
+  /**
+   * Rolling window over which `limit` accumulates. Accepts an Effect
+   * `Duration.Input` — e.g. `"1 minute"`, `"1 day"`, or a `Duration` — and is
+   * sent to Cloudflare as whole seconds.
+   */
+  window: Duration.Input;
+  /**
+   * Stable identifier for the rule. Cloudflare assigns one if omitted; pass
+   * it back to update an existing rule in place.
+   */
+  id?: string;
+  /**
+   * Whether this rule is enforced.
+   *
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Arbitrary metadata attached to the rule.
+   */
+  metadata?: Record<string, unknown>;
+  /**
+   * Restrict the rule to a set of model ids.
+   */
+  model?: { mode: "filter"; values: string[] };
+  /**
+   * Restrict the rule to a set of providers.
+   */
+  provider?: { mode: "filter"; values: string[] };
+  /**
+   * Enforcement algorithm — `fixed` resets on the window boundary, `sliding`
+   * tracks a rolling window.
+   */
+  technique?: AiGatewayRateLimitingTechnique;
+};
+
+/**
+ * Per-gateway spend limits — Cloudflare's replacement for the deprecated
+ * account-level AI Gateway spending limit. Attach cost caps directly to a
+ * gateway via {@link AiGatewayProps.spendLimits}.
+ *
+ * @see https://developers.cloudflare.com/ai-gateway/features/spend-limits/
+ */
+export type AiGatewaySpendLimits = {
+  /**
+   * Whether spend limiting is enabled for the gateway.
+   */
+  enabled?: boolean;
+  /**
+   * The cost-cap rules applied to requests routed through the gateway.
+   */
+  rules?: AiGatewaySpendLimitRule[];
+};
+
 export type AiGatewayProps = {
   /**
    * Gateway identifier. If omitted, a unique ID will be generated.
@@ -185,6 +254,12 @@ export type AiGatewayProps = {
    */
   stripe?: AiGatewayStripe | null;
   /**
+   * Per-gateway spend limits (Cloudflare's replacement for the deprecated
+   * account-level spending limit). Applied through the update API after
+   * gateway creation.
+   */
+  spendLimits?: AiGatewaySpendLimits | null;
+  /**
    * Whether Zero Data Retention is enabled.
    */
   zdr?: boolean;
@@ -214,6 +289,7 @@ export type AiGateway = Resource<
     otel: AiGatewayOtel[] | undefined;
     storeId: string;
     stripe: AiGatewayStripe | undefined;
+    spendLimits: AiGatewaySpendLimits | undefined;
     zdr: boolean;
   },
   never,
@@ -379,6 +455,22 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  *   authentication: true,
  * });
  * ```
+ *
+ * @section Spend Limits
+ * @example Cap cost per rolling window
+ * Per-gateway spend limits replace the deprecated account-level spending
+ * limit. Each rule caps cumulative cost (in cents) over a rolling `window`
+ * (in seconds), optionally scoped to specific models or providers.
+ * ```typescript
+ * const gateway = yield* Cloudflare.AiGateway("Gateway", {
+ *   spendLimits: {
+ *     enabled: true,
+ *     rules: [
+ *       { limitType: "cost", limit: 500_00, window: "1 day" }, // $500/day
+ *     ],
+ *   },
+ * });
+ * ```
  */
 export const AiGateway = Resource<AiGateway>("Cloudflare.AiGateway")({
   /**
@@ -528,9 +620,28 @@ const desired = (id: string, props: AiGatewayProps | undefined) =>
       otel: props?.otel ?? undefined,
       storeId: props?.storeId ?? "",
       stripe: props?.stripe ?? undefined,
+      spendLimits: resolveSpendLimits(props?.spendLimits),
       zdr: props?.zdr ?? false,
     };
   });
+
+// Resolve the user-facing spend limits into the API request shape: each rule's
+// `window` is decoded from an Effect `Duration.Input` (e.g. `"1 day"`) into
+// whole seconds. Done once here so both the create/update request body and the
+// diff baseline carry seconds (matching what the API echoes back), keeping the
+// reconciler's diff stable.
+const resolveSpendLimits = (
+  spendLimits: AiGatewaySpendLimits | null | undefined,
+) => {
+  if (spendLimits == null) return undefined;
+  return {
+    enabled: spendLimits.enabled,
+    rules: spendLimits.rules?.map((rule) => ({
+      ...rule,
+      window: Math.round(Duration.toSeconds(rule.window)),
+    })),
+  };
+};
 
 const mapGateway = (
   gateway:
@@ -573,8 +684,58 @@ const mapGateway = (
   ),
   storeId: gateway.storeId ?? "",
   stripe: gateway.stripe ?? undefined,
+  spendLimits: normalizeSpendLimits(gateway.spendLimits),
   zdr: gateway.zdr ?? false,
 });
+
+// Normalize spend limits into the user-facing shape and drop server-managed
+// noise so attributes diff cleanly against props. Cloudflare assigns a stable
+// `id` to each rule and echoes back an explicit `enabled` flag — fold the
+// per-rule `enabled` default (`true`) and `null`s away so a gateway the user
+// configured without ids converges to a no-op instead of perpetual drift.
+const normalizeSpendLimits = (
+  spendLimits:
+    | {
+        enabled?: boolean | null;
+        rules?:
+          | {
+              limit: number;
+              limitType: "cost";
+              window: number;
+              id?: string | null;
+              enabled?: boolean | null;
+              metadata?: Record<string, unknown> | null;
+              model?: { mode: "filter"; values: string[] } | null;
+              provider?: { mode: "filter"; values: string[] } | null;
+              technique?: string | null;
+            }[]
+          | null;
+      }
+    | null
+    | undefined,
+): AiGatewaySpendLimits | undefined => {
+  if (spendLimits == null) return undefined;
+  return {
+    enabled: spendLimits.enabled ?? false,
+    rules: (spendLimits.rules ?? []).map(
+      (rule): AiGatewaySpendLimitRule => ({
+        limit: rule.limit,
+        limitType: rule.limitType,
+        window: rule.window,
+        enabled: rule.enabled ?? true,
+        ...(rule.id != null ? { id: rule.id } : {}),
+        ...(rule.metadata != null && Object.keys(rule.metadata).length > 0
+          ? { metadata: rule.metadata }
+          : {}),
+        ...(rule.model != null ? { model: rule.model } : {}),
+        ...(rule.provider != null ? { provider: rule.provider } : {}),
+        ...(rule.technique != null
+          ? { technique: rule.technique as AiGatewayRateLimitingTechnique }
+          : {}),
+      }),
+    ),
+  };
+};
 
 const mutable = (gateway: AiGateway["Attributes"]) => ({
   cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
@@ -593,8 +754,32 @@ const mutable = (gateway: AiGateway["Attributes"]) => ({
   otel: gateway.otel,
   storeId: gateway.storeId,
   stripe: gateway.stripe,
+  spendLimits: spendLimitsForDiff(gateway.spendLimits),
   zdr: gateway.zdr,
 });
+
+// Compare spend limits by their user-meaningful shape: drop the
+// server-assigned rule `id` (absent on freshly-declared props) and apply the
+// per-rule `enabled` default so desired (from props) and observed (from the
+// API) converge to a no-op when semantically equal.
+const spendLimitsForDiff = (spendLimits: AiGatewaySpendLimits | undefined) => {
+  if (spendLimits == null) return undefined;
+  return {
+    enabled: spendLimits.enabled ?? false,
+    rules: (spendLimits.rules ?? []).map((rule) => ({
+      limit: rule.limit,
+      limitType: rule.limitType,
+      window: rule.window,
+      enabled: rule.enabled ?? true,
+      ...(rule.metadata != null && Object.keys(rule.metadata).length > 0
+        ? { metadata: rule.metadata }
+        : {}),
+      ...(rule.model != null ? { model: rule.model } : {}),
+      ...(rule.provider != null ? { provider: rule.provider } : {}),
+      ...(rule.technique != null ? { technique: rule.technique } : {}),
+    })),
+  };
+};
 const createRequest = Effect.fn(function* (
   id: string,
   props: AiGatewayProps | undefined,
@@ -644,6 +829,7 @@ const updateRequest = Effect.fn(function* (
     otel: next.otel,
     storeId: next.storeId,
     stripe: next.stripe,
+    spendLimits: next.spendLimits,
     zdr: next.zdr,
   } satisfies aiGateway.UpdateAiGatewayRequest;
 });

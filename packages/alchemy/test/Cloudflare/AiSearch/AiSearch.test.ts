@@ -6,6 +6,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -121,7 +122,11 @@ const crawlerProgram = () =>
     const search = yield* Cloudflare.AiSearch("Search", {
       source: target.url.as<string>(),
       parse: { type: "crawl", useBrowserRendering: false },
-      crawl: { depth: 2, includeSubdomains: false },
+      // Discover URLs by following links only. Without `source: "links"`,
+      // crawl link-discovery also reads the seed's sitemap, and a
+      // freshly-deployed `workers.dev` URL serves none — Cloudflare rejects
+      // the create with `missing_sitemap`.
+      crawl: { depth: 2, includeSubdomains: false, source: "links" },
     });
     return { target, search, serviceToken: search.serviceToken };
   });
@@ -133,6 +138,27 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
+
+      // Deploy the crawl target first and wait until its `workers.dev` URL is
+      // actually serving. AI Search fetches the seed synchronously when it
+      // validates a web-crawler at create time; against a URL that isn't live
+      // yet it finds no content and rejects with `missing_sitemap`.
+      const warmed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AiSearchCrawlTargetWorker;
+        }),
+      );
+      const client = yield* HttpClient.HttpClient;
+      const targetUrl = warmed.url;
+      expect(targetUrl).toBeTypeOf("string");
+      yield* client.get(targetUrl as string).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? Effect.succeed(res)
+            : Effect.fail(new Error(`crawl target not ready: ${res.status}`)),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
+      );
 
       const deployed = yield* stack.deploy(crawlerProgram());
 
