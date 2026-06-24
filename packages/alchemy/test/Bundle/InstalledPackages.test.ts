@@ -1,12 +1,12 @@
 import {
-  hashExternalPackageIdentity,
-  installExternalPackages,
+  hashPackageInstallIdentity,
+  installPackages,
   npmInstallArgs,
   parsePackageRoot,
   parsePackageRootFromSpecifier,
-  resolveExternalPackageIdentity,
-  validateInstallExternalTargets,
-} from "@/Bundle/ExternalPackages";
+  resolvePackageInstallIdentity,
+  validateInstallTargets,
+} from "@/Bundle/InstalledPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -41,26 +41,20 @@ describe("Lambda external packages", () => {
     expect(parsePackageRootFromSpecifier("./local.js")).toBeUndefined();
   });
 
-  it.effect("rejects subpaths in build.installExternal", () =>
+  it.effect("rejects subpaths in build.install", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        validateInstallExternalTargets(["sharp/lib"]),
-      );
+      const error = yield* Effect.flip(validateInstallTargets(["sharp/lib"]));
       expect(error.message).toMatch(/Invalid package name/);
     }),
   );
 
-  it.effect("validates and normalizes installExternal targets", () =>
+  it.effect("validates and normalizes install targets", () =>
     Effect.gen(function* () {
-      expect(
-        yield* validateInstallExternalTargets(["sharp", "pg-native"]),
-      ).toEqual({
+      expect(yield* validateInstallTargets(["sharp", "pg-native"])).toEqual({
         sharp: "*",
         "pg-native": "*",
       });
-      expect(
-        yield* validateInstallExternalTargets({ sharp: "^0.33.5" }),
-      ).toEqual({
+      expect(yield* validateInstallTargets({ sharp: "^0.33.5" })).toEqual({
         sharp: "^0.33.5",
       });
     }),
@@ -76,7 +70,15 @@ describe("Lambda external packages", () => {
       "--cpu=arm64",
       "--libc=glibc",
     ]);
-    expect(npmInstallArgs("x86_64", ["other"])).toContain("--arch=x64");
+    expect(npmInstallArgs("x86_64", ["other"])).toEqual([
+      "install",
+      "--force",
+      "--platform=linux",
+      "--os=linux",
+      "--arch=x64",
+      "--cpu=x64",
+      "--libc=glibc",
+    ]);
   });
 
   it.effect("resolves catalog versions from pnpm-workspace.yaml", () =>
@@ -99,9 +101,9 @@ describe("Lambda external packages", () => {
           JSON.stringify({ dependencies: { sharp: "catalog:" } }),
         );
 
-        const files = yield* installExternalPackages({
+        const files = yield* installPackages({
           cwd: root,
-          installExternal: ["sharp"],
+          install: ["sharp"],
           architecture: "arm64",
           runNpmInstall: (directory) =>
             Effect.gen(function* () {
@@ -136,9 +138,9 @@ describe("Lambda external packages", () => {
           JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
         );
 
-        const files = yield* installExternalPackages({
+        const files = yield* installPackages({
           cwd: root,
-          installExternal: ["sharp"],
+          install: ["sharp"],
           architecture: "arm64",
           runNpmInstall: (directory, args) =>
             Effect.gen(function* () {
@@ -238,7 +240,7 @@ describe("Lambda external packages", () => {
           JSON.stringify({ dependencies: { "heic-convert": "^2.1.0" } }),
         );
 
-        const files = yield* installExternalPackages({
+        const files = yield* installPackages({
           cwd: root,
           architecture: "arm64",
           runNpmInstall: () =>
@@ -275,11 +277,11 @@ describe("Lambda external packages", () => {
             "sharp@0.34.5",
           );
 
-          const first = yield* resolveExternalPackageIdentity({
+          const first = yield* resolvePackageInstallIdentity({
             cwd: root,
             requested: { sharp: "*" },
           });
-          const firstHash = yield* hashExternalPackageIdentity({
+          const firstHash = yield* hashPackageInstallIdentity({
             bundleHash: "bundle",
             identity: first,
             architecture: "arm64",
@@ -290,11 +292,11 @@ describe("Lambda external packages", () => {
             "sharp@0.34.6",
           );
 
-          const second = yield* resolveExternalPackageIdentity({
+          const second = yield* resolvePackageInstallIdentity({
             cwd: root,
             requested: { sharp: "*" },
           });
-          const secondHash = yield* hashExternalPackageIdentity({
+          const secondHash = yield* hashPackageInstallIdentity({
             bundleHash: "bundle",
             identity: second,
             architecture: "arm64",
@@ -331,9 +333,9 @@ describe.skipIf(!integrationEnabled)(
               JSON.stringify({ dependencies: { sharp: "^0.33.5" } }),
             );
 
-            const files = yield* installExternalPackages({
+            const files = yield* installPackages({
               cwd: root,
-              installExternal: ["sharp"],
+              install: ["sharp"],
               architecture: "arm64",
             });
 

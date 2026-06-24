@@ -9,12 +9,12 @@ import { exec } from "../Util/exec.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { BundleError } from "./Bundle.ts";
 
-export interface ExternalPackageFile {
+export interface InstalledPackageFile {
   readonly path: string;
   readonly content: Uint8Array<ArrayBufferLike>;
 }
 
-export type InstallExternalPackages =
+export type PackageInstall =
   | ReadonlyArray<string>
   | Readonly<Record<string, string>>;
 
@@ -25,11 +25,11 @@ export type NpmInstallRunner = (
 
 export interface ResolveInstallTargetsOptions {
   readonly cwd: string;
-  /** Validated package-root → requested version map (from {@link validateInstallExternalTargets}). */
+  /** Validated package-root → requested version map (from {@link validateInstallTargets}). */
   readonly requested: Readonly<Record<string, string>>;
 }
 
-export interface ExternalPackageIdentity {
+export interface PackageInstallIdentity {
   readonly resolved: Readonly<Record<string, string>>;
   readonly lockfile?: {
     readonly name: string;
@@ -37,9 +37,9 @@ export interface ExternalPackageIdentity {
   };
 }
 
-export interface HashExternalPackageIdentityOptions {
+export interface HashPackageInstallIdentityOptions {
   readonly bundleHash: string;
-  readonly identity: ExternalPackageIdentity;
+  readonly identity: PackageInstallIdentity;
   readonly architecture: "x86_64" | "arm64";
 }
 
@@ -50,9 +50,9 @@ export interface InstallResolvedPackagesOptions {
   readonly runNpmInstall?: NpmInstallRunner;
 }
 
-export interface InstallExternalPackagesOptions {
+export interface InstallPackagesOptions {
   readonly cwd: string;
-  readonly installExternal?: InstallExternalPackages;
+  readonly install?: PackageInstall;
   readonly architecture: "x86_64" | "arm64";
   readonly runNpmInstall?: NpmInstallRunner;
 }
@@ -135,7 +135,7 @@ export function matchesPackageRoot(moduleId: string, root: string): boolean {
 
 export function npmInstallArgs(
   architecture: "x86_64" | "arm64",
-  packageNames: ReadonlyArray<string>,
+  _packageNames: ReadonlyArray<string>,
 ): ReadonlyArray<string> {
   const npmArchitecture = architecture === "arm64" ? "arm64" : "x64";
   return [
@@ -145,23 +145,23 @@ export function npmInstallArgs(
     "--os=linux",
     `--arch=${npmArchitecture}`,
     `--cpu=${npmArchitecture}`,
-    ...(packageNames.includes("sharp") ? ["--libc=glibc"] : []),
+    "--libc=glibc",
   ];
 }
 
 /**
- * Validates a `build.installExternal` declaration and normalizes it to a
+ * Validates a `build.install` declaration and normalizes it to a
  * package-root → requested-version map. Array entries default to `"*"`.
  */
-export function validateInstallExternalTargets(
-  installExternal: InstallExternalPackages | undefined,
+export function validateInstallTargets(
+  install: PackageInstall | undefined,
 ): Effect.Effect<Record<string, string>, BundleError> {
-  if (!installExternal) return Effect.succeed({});
+  if (!install) return Effect.succeed({});
   const entries: ReadonlyArray<readonly [string, string]> = Array.isArray(
-    installExternal,
+    install,
   )
-    ? installExternal.map((dep) => [dep, "*"] as const)
-    : Object.entries(installExternal);
+    ? install.map((dep) => [dep, "*"] as const)
+    : Object.entries(install);
 
   const requested: Record<string, string> = {};
   for (const [dep, version] of entries) {
@@ -169,7 +169,7 @@ export function validateInstallExternalTargets(
     if (root === undefined) {
       return Effect.fail(
         new BundleError({
-          message: `Invalid package name '${dep}' in build.installExternal. Use a package root like 'sharp', not a subpath or bare specifier.`,
+          message: `Invalid package name '${dep}' in build.install. Use a package root like 'sharp', not a subpath or bare specifier.`,
         }),
       );
     }
@@ -211,10 +211,10 @@ export function resolveInstallTargets(
  * Resolves the package install identity used by Lambda diffing. The lockfile
  * fingerprint makes range-preserving dependency updates trigger a new artifact.
  */
-export function resolveExternalPackageIdentity(
+export function resolvePackageInstallIdentity(
   options: ResolveInstallTargetsOptions,
 ): Effect.Effect<
-  ExternalPackageIdentity,
+  PackageInstallIdentity,
   BundleError,
   FileSystem.FileSystem | Path.Path
 > {
@@ -228,12 +228,12 @@ export function resolveExternalPackageIdentity(
   });
 }
 
-export function hashExternalPackageIdentity(
-  options: HashExternalPackageIdentityOptions,
+export function hashPackageInstallIdentity(
+  options: HashPackageInstallIdentityOptions,
 ): Effect.Effect<string> {
   return sha256Object({
     bundle: options.bundleHash,
-    installExternal: options.identity.resolved,
+    install: options.identity.resolved,
     lockfile: options.identity.lockfile,
     architecture: options.architecture,
   });
@@ -246,7 +246,7 @@ export function hashExternalPackageIdentity(
 export function installResolvedPackages(
   options: InstallResolvedPackagesOptions,
 ): Effect.Effect<
-  ReadonlyArray<ExternalPackageFile>,
+  ReadonlyArray<InstalledPackageFile>,
   BundleError,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner
 > {
@@ -294,17 +294,15 @@ export function installResolvedPackages(
 /**
  * Convenience flow for callers that do not need to defer installation.
  */
-export function installExternalPackages(
-  options: InstallExternalPackagesOptions,
+export function installPackages(
+  options: InstallPackagesOptions,
 ): Effect.Effect<
-  ReadonlyArray<ExternalPackageFile>,
+  ReadonlyArray<InstalledPackageFile>,
   BundleError,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner
 > {
   return Effect.gen(function* () {
-    const requested = yield* validateInstallExternalTargets(
-      options.installExternal,
-    );
+    const requested = yield* validateInstallTargets(options.install);
     const resolved = yield* resolveInstallTargets({
       cwd: options.cwd,
       requested,
@@ -336,8 +334,8 @@ const runNpmInstall = (
       const message = cause instanceof Error ? cause.message : String(cause);
       return new BundleError({
         message: message.includes("ENOENT")
-          ? "Failed to run 'npm install' for build.installExternal: 'npm' was not found on PATH. build.installExternal shells out to npm (even in Bun/pnpm projects), so Node.js/npm must be installed."
-          : `Failed to run 'npm install' for build.installExternal: ${message}`,
+          ? "Failed to run 'npm install' for build.install: 'npm' was not found on PATH. build.install shells out to npm (even in Bun/pnpm projects), so Node.js/npm must be installed."
+          : `Failed to run 'npm install' for build.install: ${message}`,
         cause,
       });
     }),
@@ -346,7 +344,7 @@ const runNpmInstall = (
         ? Effect.void
         : Effect.fail(
             new BundleError({
-              message: `npm install for build.installExternal failed with exit code ${exitCode}: ${stderr}`,
+              message: `npm install for build.install failed with exit code ${exitCode}: ${stderr}`,
             }),
           ),
     ),
@@ -392,7 +390,7 @@ const resolveInstallVersion = (
       if (version.startsWith(prefix)) {
         return yield* Effect.fail(
           new BundleError({
-            message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.installExternal.`,
+            message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.install.`,
           }),
         );
       }
@@ -466,7 +464,7 @@ const findUp = (
 const readNearestLockfileFingerprint = (
   cwd: string,
 ): Effect.Effect<
-  ExternalPackageIdentity["lockfile"],
+  PackageInstallIdentity["lockfile"],
   BundleError,
   FileSystem.FileSystem | Path.Path
 > =>
@@ -584,7 +582,7 @@ const readArtifactFiles = (directory: string) =>
     const relativePaths = yield* fs.readDirectory(directory, {
       recursive: true,
     });
-    const files: ExternalPackageFile[] = [];
+    const files: InstalledPackageFile[] = [];
     for (const relativePath of [...relativePaths].sort((a, b) =>
       a.localeCompare(b),
     )) {
