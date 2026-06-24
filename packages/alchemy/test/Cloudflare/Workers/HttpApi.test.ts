@@ -106,11 +106,23 @@ test(
     expect(fetched.id).toBe(created.id);
     expect(fetched.title).toBe("Write docs");
 
-    // No retry here: `TaskNotFound` is the expected domain result, not a
-    // transient readiness failure — retrying would just re-run the 404.
+    // The "missing task" path must surface the worker's domain `TaskNotFound`,
+    // not a transient edge `HttpClientError` (a cold PoP that returns a raw
+    // 404/500 placeholder before the script resolves). Retry every *non-domain*
+    // failure through the readiness window and stop the instant we observe
+    // `TaskNotFound` — so we never re-run the real domain 404, but we do ride
+    // out cold-start transport errors.
     const missing = yield* client.Tasks.getTask({
       params: { id: "does-not-exist" },
-    }).pipe(Effect.flip);
+    }).pipe(
+      Effect.timeout(requestTimeout),
+      Effect.retry({
+        while: (e) => e._tag !== "TaskNotFound",
+        schedule: readinessRetry.schedule,
+        times: readinessRetry.times,
+      }),
+      Effect.flip,
+    );
     expect(missing._tag).toBe("TaskNotFound");
     if (missing._tag === "TaskNotFound") {
       expect(missing.id).toBe("does-not-exist");
