@@ -209,10 +209,7 @@ export interface WorkerProps<
     previewsEnabled?: boolean;
   };
   /** @internal used by Cloudflare.Vite resource */
-  vite?: {
-    rootDir?: string;
-    memo?: MemoOptions;
-  };
+  vite?: ViteOptions;
   logpush?: boolean;
   /**
    * Cloudflare Workers Observability settings. Controls Workers Logs
@@ -364,6 +361,30 @@ export interface WorkerProps<
          */
         url?: string;
       };
+}
+
+export interface ViteOptions {
+  /**
+   * Root directory passed to Vite's `root` option.
+   * Defaults to the current working directory (`process.cwd()`).
+   */
+  rootDir?: string;
+  /**
+   * Controls which files are hashed to decide whether a rebuild is needed.
+   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
+   * lockfile. Provide explicit globs to narrow the scope.
+   *
+   * @see {@link MemoOptions}
+   */
+  memo?: MemoOptions;
+  /**
+   * Vite environments to build.
+   * @default { entry: "ssr" }
+   */
+  viteEnvironments?: {
+    entry: string;
+    children: string[];
+  };
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
@@ -1254,7 +1275,7 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { assetsDirectory, serverBundle } = yield* Vite.viteBuild(
+        const { assetsDir, server } = yield* Vite.viteBuild(
           props.vite?.rootDir,
           Object.fromEntries(
             (yield* Effect.all(
@@ -1278,26 +1299,29 @@ export const LiveWorkerProvider = () =>
           {
             compatibilityDate: compatibility.date,
             compatibilityFlags: compatibility.flags,
+            viteEnvironments: props.vite?.viteEnvironments,
           },
         );
 
-        if (!assetsDirectory && !serverBundle) {
+        if (!assetsDir && !server) {
           return yield* Effect.die(
             new Error("Vite build produced neither server nor client output"),
           );
         }
         const [assets, bundle] = yield* Effect.all(
           [
-            assetsDirectory
+            assetsDir
               ? readAssets({
                   ...(props.assets && typeof props.assets !== "string"
                     ? props.assets
                     : undefined),
-                  directory: assetsDirectory,
+                  directory: assetsDir,
                 })
               : Effect.succeed(undefined),
-            serverBundle
-              ? Bundle.bundleOutputFromRolldownOutputBundle(serverBundle)
+            server
+              ? Effect.forEach(server, Bundle.bundleFileFromOutputChunk).pipe(
+                  Effect.flatMap(Bundle.bundleOutputFromFiles),
+                )
               : Effect.succeed(undefined),
           ],
           { concurrency: "unbounded" },

@@ -335,7 +335,7 @@ export function bundleOutputFromFiles(
   );
 }
 
-function bundleFileFromOutputChunk(
+export function bundleFileFromOutputChunk(
   chunk: rolldown.OutputChunk | rolldown.OutputAsset,
 ): Effect.Effect<BundleFile> {
   switch (chunk.type) {

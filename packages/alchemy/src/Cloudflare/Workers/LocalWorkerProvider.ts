@@ -330,6 +330,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
           env: props.env,
           bundleOptions: {
@@ -421,6 +422,7 @@ export const LocalWorkerProvider = () =>
           {
             compatibilityDate: worker.compatibility.date,
             compatibilityFlags: worker.compatibility.flags,
+            viteEnvironments: worker.viteEnvironments,
             worker: {
               name: worker.name,
               bindings: worker.workerBindings,

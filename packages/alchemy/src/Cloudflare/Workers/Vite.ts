@@ -1,6 +1,8 @@
 import cloudflare, {
+  type BuildResult,
   type CloudflareVitePluginOptions,
 } from "@distilled.cloud/cloudflare-vite-plugin";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { createRequire } from "node:module";
@@ -36,35 +38,21 @@ export const viteBuild = (
   rootDir: string = process.cwd(),
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
-) =>
-  Effect.promise(async () => {
-    let serverBundle: vite.Rolldown.OutputBundle | undefined;
-    let assetsDirectory: string | undefined;
+): Effect.Effect<BuildResult> => {
+  const deferred = Deferred.makeUnsafe<BuildResult>();
+  return Effect.promise(async () => {
     const vite = await loadVite(rootDir);
     const builder = await vite.createBuilder(
       {
         root: rootDir,
         define: getDefine(env),
         plugins: [
-          cloudflare(pluginOptions),
-          {
-            name: "output:ssr",
-            applyToEnvironment(environment) {
-              return environment.name === "ssr";
+          cloudflare({
+            ...pluginOptions,
+            onBuildComplete: (result) => {
+              Deferred.doneUnsafe(deferred, Effect.succeed(result));
             },
-            generateBundle(_outputOptions, bundle) {
-              serverBundle = bundle;
-            },
-          },
-          {
-            name: "output:client",
-            applyToEnvironment(environment) {
-              return environment.name === "client";
-            },
-            generateBundle(outputOptions) {
-              assetsDirectory = outputOptions.dir;
-            },
-          },
+          }),
         ],
       },
       // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
@@ -73,11 +61,8 @@ export const viteBuild = (
       null,
     );
     await builder.buildApp();
-    return {
-      serverBundle,
-      assetsDirectory,
-    };
-  });
+  }).pipe(Effect.andThen(Deferred.await(deferred)));
+};
 
 // Emulate `vite build` env semantics for `props.env`: only
 // keys with Vite's default `VITE_` prefix are inlined into

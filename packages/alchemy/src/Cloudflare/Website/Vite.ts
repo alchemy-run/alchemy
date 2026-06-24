@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
@@ -7,26 +6,14 @@ import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
+  type ViteOptions,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
 } from "../Workers/Worker.ts";
-export interface ViteProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets"> {
-  /**
-   * Root directory passed to Vite's `root` option.
-   * Defaults to the current working directory (`process.cwd()`).
-   */
-  rootDir?: string;
-  /**
-   * Controls which files are hashed to decide whether a rebuild is needed.
-   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
-   * lockfile. Provide explicit globs to narrow the scope.
-   *
-   * @see {@link MemoOptions}
-   */
-  memo?: MemoOptions;
+
+export interface ViteProps<Bindings extends WorkerBindingProps = {}>
+  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -176,6 +163,7 @@ export const Vite: {
             vite: {
               rootDir: props?.rootDir,
               memo: props?.memo,
+              viteEnvironments: props?.viteEnvironments,
             },
           }),
         ),
