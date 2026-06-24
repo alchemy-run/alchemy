@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 
-import * as AI from "alchemy/Ai";
+import * as AI from "alchemy/AI";
 
 export const cmd = AI.Parameter("cmd")(
   S.String.pipe(S.optional),

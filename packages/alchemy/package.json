@@ -43,11 +43,11 @@
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
     },
-    "./Ai": {
-      "types": "./lib/Ai/index.d.ts",
-      "bun": "./src/Ai/index.ts",
-      "worker": "./src/Ai/index.ts",
-      "import": "./lib/Ai/index.js"
+    "./AI": {
+      "types": "./lib/AI/index.d.ts",
+      "bun": "./src/AI/index.ts",
+      "worker": "./src/AI/index.ts",
+      "import": "./lib/AI/index.js"
     },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",

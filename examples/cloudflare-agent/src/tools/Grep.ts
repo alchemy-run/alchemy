@@ -3,7 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 
-import * as AI from "alchemy/Ai";
+import * as AI from "alchemy/AI";
 
 export const regex = AI.Parameter("regex")(
   S.String,

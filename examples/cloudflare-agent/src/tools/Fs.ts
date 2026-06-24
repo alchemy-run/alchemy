@@ -4,7 +4,7 @@ import * as S from "effect/Schema";
 
 import * as Cloudflare from "alchemy/Cloudflare";
 
-import * as AI from "alchemy/Ai";
+import * as AI from "alchemy/AI";
 import { DevBox } from "../DevBox.ts";
 
 export const path = AI.Parameter("path", S.String)`

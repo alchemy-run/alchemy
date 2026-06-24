@@ -3,7 +3,7 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { HttpClientRequest } from "effect/unstable/http";
 
-import * as AI from "alchemy/Ai";
+import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { dedent } from "alchemy/Util";
 
