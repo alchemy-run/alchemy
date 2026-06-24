@@ -114,19 +114,17 @@ test.provider(
 );
 
 test.provider(
-  "installs configured external packages into the deployment artifact",
+  "installs explicit external packages into the deployment artifact",
   (stack) =>
     Effect.gen(function* () {
       const { functionUrl } = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("ConfiguredExternalFn", {
+        AWS.Lambda.Function<{}>()("InstallExternalFn", {
           main: externalPackageHandlerPath,
           handler: "handler",
           isExternal: true,
           url: true,
           build: {
-            input: {
-              external: ["uuid"],
-            },
+            installExternal: ["uuid"],
           },
         }),
       );

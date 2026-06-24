@@ -14,13 +14,7 @@ export interface ExternalPackageFile {
   readonly content: Uint8Array<ArrayBufferLike>;
 }
 
-/**
- * Packages that must stay external during bundling because they ship native
- * binaries that cannot be bundled.
- */
-export const FORCE_EXTERNAL_PACKAGES = ["sharp", "pg-native"] as const;
-
-export type ExternalPackageInstall =
+export type InstallExternalPackages =
   | ReadonlyArray<string>
   | Readonly<Record<string, string>>;
 
@@ -31,10 +25,8 @@ export type NpmInstallRunner = (
 
 export interface ResolveInstallTargetsOptions {
   readonly cwd: string;
-  /** Validated package-root → requested version map (from {@link validateInstallTargets}). */
+  /** Validated package-root → requested version map (from {@link validateInstallExternalTargets}). */
   readonly requested: Readonly<Record<string, string>>;
-  /** Package roots detected as externalized during bundling. */
-  readonly detected?: ReadonlyArray<string>;
 }
 
 export interface ExternalPackageIdentity {
@@ -58,10 +50,9 @@ export interface InstallResolvedPackagesOptions {
   readonly runNpmInstall?: NpmInstallRunner;
 }
 
-export interface ExternalPackageInstallOptions {
+export interface InstallExternalPackagesOptions {
   readonly cwd: string;
-  readonly install?: ExternalPackageInstall;
-  readonly detected?: ReadonlyArray<string>;
+  readonly installExternal?: InstallExternalPackages;
   readonly architecture: "x86_64" | "arm64";
   readonly runNpmInstall?: NpmInstallRunner;
 }
@@ -142,17 +133,6 @@ export function matchesPackageRoot(moduleId: string, root: string): boolean {
   return moduleId === root || moduleId.startsWith(`${root}/`);
 }
 
-/** The {@link FORCE_EXTERNAL_PACKAGES} root that `moduleId` belongs to, if any. */
-export function forceExternalRoot(moduleId: string): string | undefined {
-  return FORCE_EXTERNAL_PACKAGES.find((pkg) =>
-    matchesPackageRoot(moduleId, pkg),
-  );
-}
-
-export function isForceExternalModule(moduleId: string): boolean {
-  return forceExternalRoot(moduleId) !== undefined;
-}
-
 export function npmInstallArgs(
   architecture: "x86_64" | "arm64",
   packageNames: ReadonlyArray<string>,
@@ -170,18 +150,18 @@ export function npmInstallArgs(
 }
 
 /**
- * Validates a `build.install` declaration and normalizes it to a
+ * Validates a `build.installExternal` declaration and normalizes it to a
  * package-root → requested-version map. Array entries default to `"*"`.
  */
-export function validateInstallTargets(
-  install: ExternalPackageInstall | undefined,
+export function validateInstallExternalTargets(
+  installExternal: InstallExternalPackages | undefined,
 ): Effect.Effect<Record<string, string>, BundleError> {
-  if (!install) return Effect.succeed({});
+  if (!installExternal) return Effect.succeed({});
   const entries: ReadonlyArray<readonly [string, string]> = Array.isArray(
-    install,
+    installExternal,
   )
-    ? install.map((dep) => [dep, "*"] as const)
-    : Object.entries(install);
+    ? installExternal.map((dep) => [dep, "*"] as const)
+    : Object.entries(installExternal);
 
   const requested: Record<string, string> = {};
   for (const [dep, version] of entries) {
@@ -189,7 +169,7 @@ export function validateInstallTargets(
     if (root === undefined) {
       return Effect.fail(
         new BundleError({
-          message: `Invalid package name '${dep}' in build.install. Use a package root like 'sharp', not a subpath or bare specifier.`,
+          message: `Invalid package name '${dep}' in build.installExternal. Use a package root like 'sharp', not a subpath or bare specifier.`,
         }),
       );
     }
@@ -199,9 +179,8 @@ export function validateInstallTargets(
 }
 
 /**
- * Resolves the npm-compatible version for every requested and detected package,
- * reading the nearest source `package.json` and pnpm/Bun catalogs. Does not run
- * npm.
+ * Resolves the npm-compatible version for every requested package, reading the
+ * nearest source `package.json` and pnpm/Bun catalogs. Does not run npm.
  */
 export function resolveInstallTargets(
   options: ResolveInstallTargetsOptions,
@@ -210,12 +189,7 @@ export function resolveInstallTargets(
   BundleError,
   FileSystem.FileSystem | Path.Path
 > {
-  const packageNames = [
-    ...new Set([
-      ...Object.keys(options.requested),
-      ...(options.detected ?? []),
-    ]),
-  ].sort();
+  const packageNames = Object.keys(options.requested).sort();
   if (packageNames.length === 0) return Effect.succeed({});
 
   return Effect.gen(function* () {
@@ -259,7 +233,7 @@ export function hashExternalPackageIdentity(
 ): Effect.Effect<string> {
   return sha256Object({
     bundle: options.bundleHash,
-    install: options.identity.resolved,
+    installExternal: options.identity.resolved,
     lockfile: options.identity.lockfile,
     architecture: options.architecture,
   });
@@ -321,18 +295,19 @@ export function installResolvedPackages(
  * Convenience flow for callers that do not need to defer installation.
  */
 export function installExternalPackages(
-  options: ExternalPackageInstallOptions,
+  options: InstallExternalPackagesOptions,
 ): Effect.Effect<
   ReadonlyArray<ExternalPackageFile>,
   BundleError,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner
 > {
   return Effect.gen(function* () {
-    const requested = yield* validateInstallTargets(options.install);
+    const requested = yield* validateInstallExternalTargets(
+      options.installExternal,
+    );
     const resolved = yield* resolveInstallTargets({
       cwd: options.cwd,
       requested,
-      detected: options.detected,
     });
     return yield* installResolvedPackages({
       resolved,
@@ -361,8 +336,8 @@ const runNpmInstall = (
       const message = cause instanceof Error ? cause.message : String(cause);
       return new BundleError({
         message: message.includes("ENOENT")
-          ? "Failed to run 'npm install' for build.install: 'npm' was not found on PATH. build.install shells out to npm (even in Bun/pnpm projects), so Node.js/npm must be installed."
-          : `Failed to run 'npm install' for build.install: ${message}`,
+          ? "Failed to run 'npm install' for build.installExternal: 'npm' was not found on PATH. build.installExternal shells out to npm (even in Bun/pnpm projects), so Node.js/npm must be installed."
+          : `Failed to run 'npm install' for build.installExternal: ${message}`,
         cause,
       });
     }),
@@ -371,7 +346,7 @@ const runNpmInstall = (
         ? Effect.void
         : Effect.fail(
             new BundleError({
-              message: `npm install for build.install failed with exit code ${exitCode}: ${stderr}`,
+              message: `npm install for build.installExternal failed with exit code ${exitCode}: ${stderr}`,
             }),
           ),
     ),
@@ -417,7 +392,7 @@ const resolveInstallVersion = (
       if (version.startsWith(prefix)) {
         return yield* Effect.fail(
           new BundleError({
-            message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.install.`,
+            message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.installExternal.`,
           }),
         );
       }

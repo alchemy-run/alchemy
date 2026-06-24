@@ -1,12 +1,11 @@
 import {
   hashExternalPackageIdentity,
   installExternalPackages,
-  isForceExternalModule,
   npmInstallArgs,
   parsePackageRoot,
   parsePackageRootFromSpecifier,
   resolveExternalPackageIdentity,
-  validateInstallTargets,
+  validateInstallExternalTargets,
 } from "@/Bundle/ExternalPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
@@ -42,31 +41,30 @@ describe("Lambda external packages", () => {
     expect(parsePackageRootFromSpecifier("./local.js")).toBeUndefined();
   });
 
-  it.effect("rejects subpaths in build.install", () =>
+  it.effect("rejects subpaths in build.installExternal", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(validateInstallTargets(["sharp/lib"]));
+      const error = yield* Effect.flip(
+        validateInstallExternalTargets(["sharp/lib"]),
+      );
       expect(error.message).toMatch(/Invalid package name/);
     }),
   );
 
-  it.effect("validates and normalizes install targets", () =>
+  it.effect("validates and normalizes installExternal targets", () =>
     Effect.gen(function* () {
-      expect(yield* validateInstallTargets(["sharp", "pg-native"])).toEqual({
+      expect(
+        yield* validateInstallExternalTargets(["sharp", "pg-native"]),
+      ).toEqual({
         sharp: "*",
         "pg-native": "*",
       });
-      expect(yield* validateInstallTargets({ sharp: "^0.33.5" })).toEqual({
+      expect(
+        yield* validateInstallExternalTargets({ sharp: "^0.33.5" }),
+      ).toEqual({
         sharp: "^0.33.5",
       });
     }),
   );
-
-  it("always force-externalizes sharp and pg-native", () => {
-    expect(isForceExternalModule("sharp")).toBe(true);
-    expect(isForceExternalModule("sharp/lib/index.js")).toBe(true);
-    expect(isForceExternalModule("pg-native")).toBe(true);
-    expect(isForceExternalModule("sharpish")).toBe(false);
-  });
 
   it("targets Linux and the Lambda architecture", () => {
     expect(npmInstallArgs("arm64", ["sharp"])).toEqual([
@@ -103,7 +101,7 @@ describe("Lambda external packages", () => {
 
         const files = yield* installExternalPackages({
           cwd: root,
-          install: ["sharp"],
+          installExternal: ["sharp"],
           architecture: "arm64",
           runNpmInstall: (directory) =>
             Effect.gen(function* () {
@@ -140,7 +138,7 @@ describe("Lambda external packages", () => {
 
         const files = yield* installExternalPackages({
           cwd: root,
-          install: ["sharp"],
+          installExternal: ["sharp"],
           architecture: "arm64",
           runNpmInstall: (directory, args) =>
             Effect.gen(function* () {
@@ -225,14 +223,14 @@ describe("Lambda external packages", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("installs detected configured externals", () =>
+  it.effect("does not install package.json dependencies unless requested", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fs.makeTempDirectory({
-        prefix: "alchemy-external-detected-",
+        prefix: "alchemy-external-unrequested-",
       });
-      let artifactPackageJson: unknown;
+      let installed = false;
 
       try {
         yield* fs.writeFileString(
@@ -242,33 +240,15 @@ describe("Lambda external packages", () => {
 
         const files = yield* installExternalPackages({
           cwd: root,
-          detected: ["heic-convert"],
           architecture: "arm64",
-          runNpmInstall: (directory) =>
-            Effect.gen(function* () {
-              artifactPackageJson = JSON.parse(
-                yield* fs.readFileString(path.join(directory, "package.json")),
-              );
-              const packageRoot = path.join(
-                directory,
-                "node_modules",
-                "heic-convert",
-              );
-              yield* fs.makeDirectory(packageRoot, { recursive: true });
-              yield* fs.writeFileString(
-                path.join(packageRoot, "package.json"),
-                JSON.stringify({ name: "heic-convert", version: "2.1.0" }),
-              );
+          runNpmInstall: () =>
+            Effect.sync(() => {
+              installed = true;
             }),
         });
 
-        expect(artifactPackageJson).toEqual({
-          private: true,
-          dependencies: { "heic-convert": "^2.1.0" },
-        });
-        expect(files.map((file) => file.path)).toContain(
-          "node_modules/heic-convert/package.json",
-        );
+        expect(installed).toBe(false);
+        expect(files).toEqual([]);
       } finally {
         yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
       }
@@ -353,7 +333,7 @@ describe.skipIf(!integrationEnabled)(
 
             const files = yield* installExternalPackages({
               cwd: root,
-              install: ["sharp"],
+              installExternal: ["sharp"],
               architecture: "arm64",
             });
 

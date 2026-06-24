@@ -17,14 +17,12 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
-  forceExternalRoot,
   hashExternalPackageIdentity,
   installResolvedPackages,
+  type InstallExternalPackages,
   matchesPackageRoot,
-  parsePackageRootFromSpecifier,
   resolveExternalPackageIdentity,
-  validateInstallTargets,
-  type ExternalPackageInstall,
+  validateInstallExternalTargets,
 } from "../../Bundle/ExternalPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -77,15 +75,15 @@ export interface FunctionBuildOptions {
    *
    * @example
    * ```typescript
-   * build: { install: ["sharp"] }
+   * build: { installExternal: ["sharp"] }
    * ```
    *
    * @example
    * ```typescript
-   * build: { install: { sharp: "^0.33.5" } }
+   * build: { installExternal: { sharp: "^0.33.5" } }
    * ```
    */
-  readonly install?: ExternalPackageInstall;
+  readonly installExternal?: InstallExternalPackages;
   /**
    * Rolldown input options.
    */
@@ -314,7 +312,7 @@ const matchesConfiguredExternal = (
  *   main: "./src/handler.ts",
  *   architecture: "arm64",
  *   build: {
- *     install: ["sharp"],
+ *     installExternal: ["sharp"],
  *   },
  * });
  * ```
@@ -810,11 +808,13 @@ export const FunctionProvider = () =>
         const rolldownSourcemap = sourcemap;
         const architecture = props.architecture ?? "x86_64";
 
-        // External package roots discovered in the bundle graph are installed
-        // into the deployment artifact.
-        const requested = yield* validateInstallTargets(props.build?.install);
+        // Explicit installExternal roots are excluded from the bundle and
+        // installed into the deployment artifact. build.input.external stays a
+        // pure Rolldown escape hatch and is not installed by Alchemy.
+        const requested = yield* validateInstallExternalTargets(
+          props.build?.installExternal,
+        );
         const installRoots = new Set(Object.keys(requested));
-        const detectedExternals = new Set<string>();
         const configuredExternal = props.build?.input?.external;
         const externalOption = (
           moduleId: string,
@@ -822,28 +822,15 @@ export const FunctionProvider = () =>
           isResolved: boolean,
         ): boolean => {
           if (moduleId.startsWith("@aws-sdk/")) return true;
-          const forced = forceExternalRoot(moduleId);
-          if (forced !== undefined) {
-            detectedExternals.add(forced);
-            return true;
-          }
           for (const root of installRoots) {
             if (matchesPackageRoot(moduleId, root)) return true;
           }
-          const isConfiguredExternal = matchesConfiguredExternal(
+          return matchesConfiguredExternal(
             configuredExternal,
             moduleId,
             parentId,
             isResolved,
           );
-          if (isConfiguredExternal) {
-            const root = parsePackageRootFromSpecifier(moduleId);
-            if (root !== undefined) {
-              detectedExternals.add(root);
-            }
-            return true;
-          }
-          return false;
         };
 
         const buildBundle = Effect.fnUntraced(function* (
@@ -973,7 +960,6 @@ export default await Effect.runPromise(handlerEffect)
         const installIdentity = yield* resolveExternalPackageIdentity({
           cwd,
           requested,
-          detected: [...detectedExternals],
         });
         const resolved = installIdentity.resolved;
         const hasExternalPackages = Object.keys(resolved).length > 0;
