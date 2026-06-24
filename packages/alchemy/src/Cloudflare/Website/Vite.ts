@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { MemoOptions } from "../../Build/Memo.ts";
+import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";

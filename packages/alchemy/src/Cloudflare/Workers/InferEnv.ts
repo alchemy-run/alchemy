@@ -56,8 +56,8 @@ export type GetBindingType<T> =
                                       ? Hyperdrive
                                       : T extends Cloudflare.VersionMetadata
                                         ? WorkerVersionMetadata
-                                        : T extends Cloudflare.DynamicWorkerLoader
-                                          ? Cloudflare.DynamicWorkerLoaderBinding
+                                        : T extends Cloudflare.WorkerLoader
+                                          ? WorkerLoader
                                           : T extends Cloudflare.DurableObjectNamespaceLike
                                             ? DurableObjectNamespace<
                                                 Exclude<T["Shape"], undefined>

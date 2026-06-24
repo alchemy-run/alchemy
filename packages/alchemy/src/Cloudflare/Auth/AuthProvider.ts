@@ -664,6 +664,8 @@ export const ALL_SCOPES = {
     "See and change Cloudflare Workers KV Storage data such as keys and namespaces",
   "workers_observability:read":
     "Grants read access to Cloudflare Workers Observability",
+  "workers_observability:write":
+    "Grants read and write access to Cloudflare Workers Observability",
   "workers_observability_telemetry:write":
     "Grants write access to Cloudflare Workers Observability Telemetry API",
   "workers_routes:write":
@@ -694,6 +696,7 @@ export const DEFAULT_SCOPES = [
   "vectorize:write",
   "workers_kv:write",
   "workers_observability:read",
+  "workers_observability:write",
   "workers_observability_telemetry:write",
   "workers_routes:write",
   "workers_scripts:write",

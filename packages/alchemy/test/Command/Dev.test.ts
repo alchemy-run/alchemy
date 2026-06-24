@@ -1,6 +1,7 @@
-import { DevServer, DevServerProvider } from "@/Build/DevServer.ts";
+import * as Command from "@/Command/index.ts";
+import * as Provider from "@/Provider.ts";
 import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import { assert, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
@@ -9,13 +10,14 @@ import * as pathe from "pathe";
 const { test } = Test.make({
   // DevServer is provider-agnostic — register it directly without dragging
   // in a cloud provider's auth chain.
-  providers: DevServerProvider(),
+  providers: Command.providers(),
   dev: true,
 });
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixture");
 const fixtureScript = pathe.join(fixtureDir, "long-running.cjs");
 const urlServerScript = pathe.join(fixtureDir, "url-server.cjs");
+const dieScript = pathe.join(fixtureDir, "die.cjs");
 
 // The provider runs `command.split(" ")` and uses `shell: false`, so the
 // fixture path must not contain spaces. The in-repo path doesn't, but a CI
@@ -80,6 +82,20 @@ const waitForDeath = (pid: number) =>
   );
 
 test.provider(
+  "list returns [] (non-listable local dev-server process)",
+  () =>
+    Effect.gen(function* () {
+      // DevServer is a local dev-server child process, not a cloud resource —
+      // there is no remote enumeration API, so list() is the non-listable
+      // pattern and always returns []. No deploy is needed to observe this.
+      const provider = yield* Provider.findProvider(Command.Dev);
+      const all = yield* provider.list();
+      expect(all).toEqual([]);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
   "starts the process",
   (stack) =>
     Effect.gen(function* () {
@@ -88,7 +104,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "start" },
         }),
@@ -104,6 +120,42 @@ test.provider(
 );
 
 test.provider(
+  "runs multiple distinct dev servers concurrently",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFileA = pathe.join(tmp, "pid-a.json");
+      const pidFileB = pathe.join(tmp, "pid-b.json");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Command.Dev("Alpha", {
+            command: `node ${fixtureScript}`,
+            env: { PID_FILE: pidFileA, MARKER: "alpha" },
+          });
+          yield* Command.Dev("Beta", {
+            command: `node ${fixtureScript}`,
+            env: { PID_FILE: pidFileB, MARKER: "beta" },
+          });
+        }),
+      );
+
+      const alpha = yield* waitForPidFile(pidFileA, "alpha");
+      const beta = yield* waitForPidFile(pidFileB, "beta");
+
+      expect(alpha.pid).not.toBe(beta.pid);
+      expect(yield* isAlive(alpha.pid)).toBe(true);
+      expect(yield* isAlive(beta.pid)).toBe(true);
+
+      yield* stack.destroy();
+      yield* waitForDeath(alpha.pid);
+      yield* waitForDeath(beta.pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
   "keeps the process running across an unchanged update",
   (stack) =>
     Effect.gen(function* () {
@@ -111,7 +163,7 @@ test.provider(
       const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
       const pidFile = pathe.join(tmp, "pid.json");
 
-      const program = DevServer("Dev", {
+      const program = Command.Dev("Dev", {
         command: `node ${fixtureScript}`,
         env: { PID_FILE: pidFile, MARKER: "stable" },
       });
@@ -144,7 +196,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "v1" },
         }),
@@ -155,7 +207,7 @@ test.provider(
       // Change the env (and therefore the hash) — provider should kill the
       // running process and spawn a fresh one with the new marker.
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "v2" },
         }),
@@ -181,7 +233,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -209,7 +261,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -244,7 +296,7 @@ test.provider(
       const line = `  ➜  ${ansi("32", "Local:")}   ${ansi("36", "http://localhost:5173/")}`;
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -272,7 +324,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -303,7 +355,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "stop" },
         }),
@@ -316,4 +368,20 @@ test.provider(
       expect(yield* isAlive(pid)).toBe(false);
     }),
   { timeout: 30_000 },
+);
+
+test.provider("errors when the command fails in first 5 seconds", (stack) =>
+  Effect.gen(function* () {
+    const error = yield* stack
+      .deploy(
+        Command.Dev("Dev", {
+          command: `node ${dieScript}`,
+        }),
+      )
+      .pipe(Effect.flip);
+    assert(Command.isCommandError(error));
+    assert(error.reason._tag === "UnexpectedExit");
+    expect(error.reason.exitCode).toBe(1);
+    expect(error.reason.stderr).toContain("I'm not feeling it...");
+  }),
 );

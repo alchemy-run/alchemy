@@ -4,8 +4,6 @@ import * as fs from "node:fs/promises";
 import * as path from "pathe";
 import { rootDir } from "./Profile.ts";
 
-const lockDir = path.join(rootDir, "lock");
-
 /**
  * Serialise execution of `effect` so no two callers ever run inside the
  * critical section concurrently for the same `key`, both within this
@@ -20,6 +18,10 @@ export const withLock = <A, E, R>(
   key: string,
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> => {
+  // Computed lazily (not at module-eval time) so that the
+  // `Profile -> AuthProvider -> Lock -> Profile` import cycle never reads
+  // `rootDir` before `Profile.ts` has finished initialising it.
+  const lockDir = path.join(rootDir, "lock");
   const lockPath = path.join(lockDir, `${key}.lock`);
   return Effect.acquireUseRelease(
     Effect.promise(async () => {

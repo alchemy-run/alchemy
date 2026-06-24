@@ -404,6 +404,74 @@ describe("basic operations", () => {
   );
 });
 
+// Regression: a logical ID may legitimately contain the FQN separator ("/").
+// The GitHub event source registers a webhook keyed by `${owner}/${repository}`
+// (e.g. "alchemy-run/alchemy-effect"). During destroy the deletion path used to
+// recompute the state key via `toFqn(namespace, logicalId)`, but `logicalId`
+// came from `parseFqn` which splits on "/" and keeps only the last segment
+// ("alchemy-effect"). The recomputed key missed the real state row, so the
+// resource was deleted from the cloud yet never removed from state — resurfacing
+// as an orphan deletion on every subsequent destroy, forever.
+describe("FQN separator in logical ID", () => {
+  test.provider(
+    "destroy clears state for a top-level logical ID containing '/'",
+    (stack) =>
+      Effect.gen(function* () {
+        const fqn = "alchemy-run/alchemy-effect";
+
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* TestResource(fqn, { string: "v1" });
+          }),
+        );
+
+        // The row is persisted under the full FQN (separator and all).
+        expect((yield* getState(fqn))?.status).toEqual("created");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id: string) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        // provider.delete ran exactly once, AND the state row was removed
+        // (the pre-fix bug deleted the cloud resource but missed the row).
+        expect(deleted).toHaveLength(1);
+        expect(yield* getState(fqn)).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "destroy clears state for a namespaced logical ID containing '/'",
+    (stack) =>
+      Effect.gen(function* () {
+        // Mirrors the GitHub webhook: a host construct (the Worker) whose
+        // child resource's logical ID is "owner/repo".
+        const fqn = "ReleaseService/alchemy-run/alchemy-effect";
+
+        const Host = Construct.fn(function* (_id: string, _props: {}) {
+          return yield* TestResource("alchemy-run/alchemy-effect", {
+            string: "v1",
+          });
+        });
+
+        yield* stack.deploy(Host("ReleaseService", {}));
+
+        expect((yield* getState(fqn))?.status).toEqual("created");
+
+        yield* stack.destroy();
+
+        expect(yield* getState(fqn)).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
 describe("linear update propagation", () => {
   // Regression: in a linear chain (A -> B with no cycle), an update to A
   // followed by an update to B must let B see A's *post-update* attr, never

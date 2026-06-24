@@ -37,6 +37,33 @@ test.provider("create and delete project with default props", (stack) =>
   }).pipe(logLevel),
 );
 
+test.provider("project with default props does not change on update", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deploy = stack.deploy(Neon.Project("DefaultProjectUpdate"));
+
+    const created = yield* deploy;
+
+    expect(created.projectId).toBeDefined();
+    expect(created.projectName).toBeDefined();
+    expect(created.defaultBranchId).toBeDefined();
+    expect(created.connectionUri).toContain("postgres");
+
+    const fetched = yield* getProject({ project_id: created.projectId });
+    expect(fetched.project.id).toEqual(created.projectId);
+
+    const updated = yield* deploy;
+
+    expect(updated.projectId).toEqual(created.projectId);
+    expect(updated.projectName).toEqual(created.projectName);
+    expect(updated.defaultBranchId).toEqual(created.defaultBranchId);
+    expect(updated.connectionUri).toEqual(created.connectionUri);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
 test.provider("enable logical replication on update", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();

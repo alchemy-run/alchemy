@@ -543,7 +543,7 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     hash?: {
       image: string;
     };
-    dev: ContainerImage | undefined;
+    dev: DevContainerImage | undefined;
   },
   {
     /**
@@ -562,6 +562,8 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   /** @internal phantom */
   Shape: Shape;
 }
+
+export type DevContainerImage = ContainerImage;
 
 const resolveDurableObjectApplicationRecovery = ({
   namespaceId,

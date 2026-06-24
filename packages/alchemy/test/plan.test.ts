@@ -2236,6 +2236,110 @@ describe("stable properties should not cause downstream changes", () => {
   );
 });
 
+describe("whole-resource refs resolve to the upstream's stable attributes", () => {
+  // Regression: when a resource is referenced *whole* (e.g. `object: A`)
+  // rather than via a single prop (`A.stableString`), and the upstream is
+  // being updated in place, `resolveResource` returns a `ResourceExpr`
+  // carrying only the stable attributes. Previously `resolveInput` handed
+  // that `ResourceExpr` to the downstream verbatim, so its `news` looked
+  // unresolved (`isResolved(news) === false`) and the stable values never
+  // reached the downstream `diff`. This forced the Neon `Branch` to manually
+  // extract `project.projectId` as a workaround. The engine must instead
+  // materialize the known stable attributes into a plain object so the
+  // stable values flow into the diff and the downstream can no-op.
+  const seedUpdatingUpstream = () =>
+    seed({
+      A: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "A",
+        fqn: "A",
+        namespace: undefined,
+        resourceType: "Test.TestResource",
+        status: "created",
+        props: {
+          string: "old-value",
+        },
+        attr: {
+          string: "old-value",
+          stableString: "A",
+          stableArray: ["A"],
+        },
+        downstream: [],
+        bindings: [],
+      },
+    });
+
+  test(
+    "the whole-resource ref resolves to the upstream's stable attributes (not an Expr)",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+
+      let A: TestResource;
+      const plan = yield* Effect.gen(function* () {
+        // A is updated in place: `string` changes, but `stableString` /
+        // `stableArray` are declared stable by its diff.
+        A = yield* TestResource("A", { string: "new-value" });
+        // B (created fresh) references the WHOLE upstream resource, not a
+        // single prop — so its plan node carries the resolved `props`.
+        yield* TestResource("B", { object: A as any });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+
+      const bProps = (plan.resources.B as any).props as TestResourceProps;
+      // The whole-resource ref must resolve to a fully-resolved plain object
+      // of the upstream's stable attributes — NOT an unresolved Expr.
+      expect(Output.isExpr(bProps.object)).toBe(false);
+      expect(bProps.object).toEqual({
+        stableString: "A",
+        stableArray: ["A"],
+      });
+    }),
+  );
+
+  test(
+    "a whole-resource ref to an updating upstream does not drag the downstream into an update",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+      yield* seed({
+        B: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "B",
+          fqn: "B",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          // B's prior props captured the upstream's stable attributes —
+          // exactly what a materialized whole-resource ref resolves to.
+          props: {
+            object: { stableString: "A", stableArray: ["A"] } as any,
+          },
+          attr: {
+            string: "B",
+            stableString: "B",
+            stableArray: ["B"],
+          },
+          downstream: [],
+          bindings: [],
+        },
+      });
+
+      let A: TestResource;
+      const plan = yield* Effect.gen(function* () {
+        A = yield* TestResource("A", { string: "new-value" });
+        yield* TestResource("B", { object: A as any });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+      // Only stable attributes flow in and they are unchanged, so the
+      // downstream no-ops instead of being dragged into a needless update.
+      expect(plan.resources.B!.action).toBe("noop");
+    }),
+  );
+});
+
 describe("diff.stables overrides provider.stables", () => {
   // `A` is an OverrideStablesResource: provider `stables` is
   // ["providerStable", "sharedStable"], but its `diff` returns

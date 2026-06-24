@@ -1,5 +1,4 @@
 import type * as cf from "@cloudflare/workers-types";
-import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Config from "effect/Config";
@@ -15,9 +14,9 @@ import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import type { InputProps } from "../../Input.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
@@ -26,6 +25,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { DevContainerImage } from "../Container/ContainerApplication.ts";
 import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
@@ -324,14 +324,17 @@ export interface WorkerProps<
    * Options for the local dev server that runs this Worker under `alchemy dev`.
    * Each Worker is served on its own port.
    *
-   * Set to `false` to skip starting a local Worker entirely — useful when an
-   * external dev server (e.g. one spawned via `Build.DevCommand`) is
-   * serving the content this Worker would otherwise host.
+   * Use `{ mode: "external" }` to skip starting a local Worker entirely —
+   * useful when an external dev server (e.g. one spawned via `Command.Dev`)
+   * is serving the content this Worker would otherwise host.
    */
   dev?:
-    | false
-    | string
     | {
+        /**
+         * Run this Worker in `workerd` locally (the default).
+         * @default "worker"
+         */
+        mode?: "worker";
         /**
          * Host the local dev server binds to.
          * @default "localhost"
@@ -349,6 +352,17 @@ export interface WorkerProps<
          * @default false
          */
         strictPort?: boolean;
+      }
+    | {
+        /**
+         * Don't start a local Worker; an external dev server is running instead.
+         */
+        mode: "external";
+        /**
+         * URL the external dev server is reachable at, if applicable.
+         * This will be returned as the `url` attribute of the Worker resource.
+         */
+        url?: string;
       };
 }
 
@@ -373,7 +387,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   },
   {
     bindings?: WorkerBinding[];
-    containers?: { className: string; dev: ContainerImage | undefined }[];
+    containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },
@@ -726,18 +740,18 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section Dynamic Workers
- * `DynamicWorkerLoader` lets you spin up ephemeral Workers at runtime
+ * `WorkerLoader` lets you spin up ephemeral Workers at runtime
  * from inline JavaScript modules. This is useful for sandboxing
  * user-provided code or running untrusted scripts in isolation.
  *
  * @example Loading a dynamic Worker
  * ```typescript
  * // init
- * const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
+ * const loader = yield* Cloudflare.WorkerLoader("Loader");
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     const worker = loader.load({
+ *     const worker = yield* loader.load({
  *       compatibilityDate: "2026-01-28",
  *       mainModule: "worker.js",
  *       modules: {
@@ -1402,7 +1416,7 @@ export const LiveWorkerProvider = () =>
           skipAssetsRead: prebuiltAssets?.skip,
         });
         // When the caller supplied a precomputed hash (e.g. via
-        // `Build.Command`), store *that* hash in output state so the
+        // `Command.Build`), store *that* hash in output state so the
         // next diff can short-circuit by comparing it directly. The
         // hash that `readAssets` produces is the manifest-derived
         // hash, which is shaped differently from any upstream
@@ -1862,7 +1876,7 @@ export const LiveWorkerProvider = () =>
         }
         // We deliberately don't read the assets directory during diff.
         // For `AssetsWithHash` (the documented contract) the upstream
-        // `Build.Command` already gave us an authoritative hash — we
+        // `Command.Build` already gave us an authoritative hash — we
         // just compare strings. Reading the directory here would
         // (a) hash the same tree twice per apply (`putWorker` reads
         // again when an upload is actually required), and (b) crash

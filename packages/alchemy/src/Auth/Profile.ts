@@ -7,11 +7,9 @@ import * as Layer from "effect/Layer";
 import type { PlatformError } from "effect/PlatformError";
 import os from "node:os";
 import path from "pathe";
-import type {
-  AuthError,
-  AuthProvider,
-  ConfigureContext,
-} from "./AuthProvider.ts";
+import { isNonInteractive } from "../Util/interactive.ts";
+import { AuthError } from "./AuthProvider.ts";
+import type { AuthProvider, ConfigureContext } from "./AuthProvider.ts";
 
 export const rootDir = path.join(os.homedir(), ".alchemy");
 export const configFilePath = path.join(rootDir, "profiles.json");
@@ -161,13 +159,37 @@ export const ProfileLive = Layer.effect(
       profileName: string,
       ctx: ConfigureContext,
     ) =>
-      Effect.flatMap(getProfile(profileName), (existing) =>
-        existing?.[auth.name]
-          ? Effect.succeed(existing[auth.name] as Config)
-          : Effect.tap(auth.configure(profileName, ctx), (config) =>
-              setProfile(profileName, { ...existing, [auth.name]: config }),
-            ),
-      );
+      Effect.flatMap(getProfile(profileName), (existing) => {
+        const stored = existing?.[auth.name];
+        if (stored) {
+          return Effect.succeed(stored as Config);
+        }
+        // No credentials are configured for this provider+profile. Driving
+        // `auth.configure` requires an interactive terminal (clack prompts,
+        // browser-based OAuth, ...). In a non-interactive, non-CI context
+        // (e.g. a `vitest` run or piped stdout) there is no TTY to drive
+        // those prompts, so bail *before* calling `auth.configure`.
+        //
+        // This matters beyond just avoiding a hang: `configure` is a locked
+        // method, so entering it acquires a cross-process auth lockfile. We
+        // must avoid creating that lock when we can't actually configure —
+        // for OAuth providers a refresh token is typically single-use, so a
+        // stray lock left by a doomed configure can wedge concurrent refreshes.
+        if (!ctx.ci && isNonInteractive()) {
+          return Effect.fail(
+            new AuthError({
+              message:
+                `No credentials configured for '${auth.name}' in profile '${profileName}', ` +
+                `and this process is non-interactive so it can't be configured interactively. ` +
+                `Run \`alchemy login --profile ${profileName}\` to configure it, ` +
+                `or set CI=1 to use environment-variable credentials.`,
+            }),
+          );
+        }
+        return Effect.tap(auth.configure(profileName, ctx), (config) =>
+          setProfile(profileName, { ...existing, [auth.name]: config }),
+        );
+      });
 
     return {
       readConfig,

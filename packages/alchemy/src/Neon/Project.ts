@@ -236,9 +236,9 @@ export const ProjectProvider = () =>
         : yield* createProjectName(id, olds.name);
       if (
         oldName !== name ||
-        (news.region ?? DEFAULT_REGION) !==
+        (news.region ?? output?.region ?? DEFAULT_REGION) !==
           (output?.region ?? olds.region ?? DEFAULT_REGION) ||
-        (news.pgVersion ?? DEFAULT_PG_VERSION) !==
+        (news.pgVersion ?? output?.pgVersion ?? DEFAULT_PG_VERSION) !==
           (output?.pgVersion ?? olds.pgVersion ?? DEFAULT_PG_VERSION) ||
         (news.defaultBranchName ?? output?.defaultBranchName) !==
           output?.defaultBranchName
