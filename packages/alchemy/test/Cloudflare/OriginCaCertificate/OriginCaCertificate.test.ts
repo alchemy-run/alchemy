@@ -18,8 +18,13 @@ const logLevel = Effect.provideService(
 );
 
 const zoneName = "alchemy-test-2.us";
-const hostname = `origin.${zoneName}`;
-const altHostname = `origin2.${zoneName}`;
+// Each test owns a DISTINCT hostname. Adoption keys purely off the hostname
+// set (the engine probes `read` with `olds: news` even on a fresh deploy, so
+// `findByHostnames` runs every time), and Origin CA certs carry no other
+// identity. A shared hostname therefore couples the tests: a leftover cert
+// from another test or a prior crashed run can be adopted, and a sibling's
+// destroy can revoke a cert this test is mid-verifying. Per-test hostnames
+// make each test fully self-contained.
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
@@ -54,6 +59,7 @@ const expectRevoked = (certificateId: string) =>
 
 test.provider("issue, verify, and revoke a certificate", (stack) =>
   Effect.gen(function* () {
+    const hostname = `originissue.${zoneName}`;
     yield* stack.destroy();
 
     const cert = yield* stack.deploy(
@@ -100,6 +106,7 @@ test.provider("issue, verify, and revoke a certificate", (stack) =>
 
 test.provider("list enumerates issued certificates", (stack) =>
   Effect.gen(function* () {
+    const hostname = `originlist.${zoneName}`;
     yield* stack.destroy();
 
     const cert = yield* stack.deploy(
@@ -136,6 +143,7 @@ test.provider("list enumerates issued certificates", (stack) =>
 
 test.provider("replacement on requestedValidity change", (stack) =>
   Effect.gen(function* () {
+    const hostname = `originvalidity.${zoneName}`;
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
@@ -173,6 +181,8 @@ test.provider("replacement on requestedValidity change", (stack) =>
 
 test.provider("replacement on hostnames change", (stack) =>
   Effect.gen(function* () {
+    const hostname = `originhostsa.${zoneName}`;
+    const altHostname = `originhostsb.${zoneName}`;
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(

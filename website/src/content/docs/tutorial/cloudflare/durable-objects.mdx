@@ -16,8 +16,8 @@ caller.
 
 A Durable Object is a globally-unique stateful instance addressed
 by name (or by id). Like Workers, it has two `Effect.gen` blocks:
-the outer one runs at init time, and the inner one runs every time
-a new instance starts up and returns the public API.
+the outer one resolves the instance's `state` and any shared
+dependencies, and the inner one returns the public API.
 
 Create `src/counter.ts` with the smallest possible DO — empty
 public API, no state yet:
@@ -30,11 +30,10 @@ import * as Effect from "effect/Effect";
 export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
   "Counter",
   Effect.gen(function* () {
-    // Outer (init): runs once when the DO class is bound to a
-    // Worker. Resolve shared dependencies here.
+    // Outer (init): resolve the instance state and shared
+    // dependencies here.
     return Effect.gen(function* () {
-      // Inner (per-instance): runs every time a new DO instance is
-      // constructed. Returns the public API for that instance.
+      // Inner: return the public API for this instance.
       return {};
     });
   }),
@@ -50,20 +49,31 @@ ceremony — the rest of your DO code looks completely normal.
 ## Persist the count
 
 Each DO instance has its own key/value storage, backed by SQLite.
-Pull the current count out of storage in the inner init so it
+Resolve `Cloudflare.DurableObjectState` in the **outer** Effect,
+then pull the current count out of storage in the inner init so it
 survives restarts and hibernation:
 
 ```diff lang="typescript"
-return Effect.gen(function* () {
+Effect.gen(function* () {
 +  const state = yield* Cloudflare.DurableObjectState;
-+  let count = (yield* state.storage.get<number>("count")) ?? 0;
-  return {};
+  return Effect.gen(function* () {
++    let count = (yield* state.storage.get<number>("count")) ?? 0;
+    return {};
+  });
 });
 ```
 
 `Cloudflare.DurableObjectState` is the same per-instance handle
 Cloudflare exposes for `storage`, `setAlarm`, `acceptWebSocket`,
 and friends. We'll use it more in the next part for WebSockets.
+
+:::note
+You resolve the *reference* to `state` in the outer (init) Effect,
+but its methods — like `storage.get` — are
+[colored with `RuntimeContext`](/concepts/layers#runtime-as-a-colored-function),
+so you can only *use* them in the inner (runtime) Effect. That's why
+`state` is yielded above but `state.storage.get(...)` lives below.
+:::
 
 ## Add `increment` and `get`
 
@@ -72,19 +82,21 @@ Any function you return from the inner Effect that produces an
 and one to read it:
 
 ```diff lang="typescript"
-return Effect.gen(function* () {
+Effect.gen(function* () {
   const state = yield* Cloudflare.DurableObjectState;
-  let count = (yield* state.storage.get<number>("count")) ?? 0;
--  return {};
-+  return {
-+    increment: () =>
-+      Effect.gen(function* () {
-+        count += 1;
-+        yield* state.storage.put("count", count);
-+        return count;
-+      }),
-+    get: () => Effect.succeed(count),
-+  };
+  return Effect.gen(function* () {
+    let count = (yield* state.storage.get<number>("count")) ?? 0;
+-    return {};
++    return {
++      increment: () =>
++        Effect.gen(function* () {
++          count += 1;
++          yield* state.storage.put("count", count);
++          return count;
++        }),
++      get: () => Effect.succeed(count),
++    };
+  });
 });
 ```
 
@@ -233,8 +245,8 @@ import * as Effect from "effect/Effect";
 export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
   "Counter",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       let count = (yield* state.storage.get<number>("count")) ?? 0;
 
       return {

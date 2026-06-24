@@ -76,6 +76,34 @@ export const fromCloudflareFetcher = (
       (fetcher as globalThis.Fetcher).fetch(request, {
         signal: signal,
       }),
+    ).pipe(
+      // The "Handler does not export a fetch()" window is a property of
+      // invoking a freshly-deployed Cloudflare binding, so it is ridden out
+      // HERE — the one adapter every binding flows through — rather than in any
+      // single higher-level wrapper (`toHttpClient`, the client/server
+      // overloads, the RPC DO transport all go through this). `Effect.promise`
+      // surfaces the rejection as a defect; lift it to a typed retryable error
+      // and back off until the new version propagates. The request never
+      // reached a handler, so nothing committed — safe to retry. This wraps
+      // only the promise, leaving the response (and its streaming body)
+      // untouched, so RPC/stream decoding is unaffected. After the budget is
+      // exhausted, re-raise the original defect unchanged.
+      Effect.catchCause((cause) => {
+        const squashed = Cause.squash(cause);
+        return isHandlerNotReady(squashed)
+          ? Effect.fail(new HandlerNotReady(squashed))
+          : Effect.failCause(cause);
+      }),
+      Effect.retry({
+        while: (error) => error instanceof HandlerNotReady,
+        schedule: Schedule.exponential("100 millis"),
+        times: 8,
+      }),
+      Effect.catch((error) =>
+        error instanceof HandlerNotReady
+          ? Effect.die(error.cause)
+          : Effect.failCause(Cause.fail(error)),
+      ),
     );
 
   return {
@@ -177,32 +205,26 @@ export const toHttpClient = (fetcher: {
           ),
         ),
     ).pipe(
-      // The not-ready window surfaces as a defect (a rejected `fetch` promise),
-      // so inspect the whole cause and re-raise it as a typed, retryable error;
-      // anything else is re-raised faithfully.
-      Effect.catchCause(
-        (cause): Effect.Effect<never, HandlerNotReady | HttpServerError> => {
-          const squashed = Cause.squash(cause);
-          return isHandlerNotReady(squashed)
-            ? Effect.fail(new HandlerNotReady(squashed))
-            : Effect.failCause(cause);
-        },
-      ),
-      Effect.retry({
-        while: (error) => error instanceof HandlerNotReady,
-        schedule: Schedule.exponential("100 millis"),
-        times: 8,
-      }),
-      Effect.mapError(
-        (error) =>
+      // The handler-not-ready window is already ridden out at the lowest level
+      // (the `fromCloudflareFetcher` promise retries `HandlerNotReady` before
+      // it ever reaches here). A `HandlerNotReady` still surfacing means the
+      // budget was exhausted — it arrives as a defect (re-raised rejected
+      // promise), so convert it (and any other failure cause) into a typed
+      // transport error rather than retrying again.
+      Effect.catchCause((cause) => {
+        const squashed = Cause.squash(cause);
+        return Effect.fail(
           new HttpClientError({
             reason: new TransportError({
               request,
-              cause: error instanceof HandlerNotReady ? error.cause : error,
+              cause: isHandlerNotReady(squashed)
+                ? (squashed as { message?: unknown })
+                : squashed,
               description: "Fetcher-backed HttpClient request failed",
             }),
           }),
-      ),
+        );
+      }),
     );
   });
 

@@ -230,10 +230,11 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
  *   "Counter",
  *   { schema: CounterRpcs },
  *   Effect.gen(function* () {
- *     // outer init: shared deps for all instances
+ *     // outer init: shared deps + the instance state reference
+ *     const state = yield* Cloudflare.DurableObjectState;
  *     return Effect.gen(function* () {
- *       // per-instance init: state + handlers
- *       const state = yield* Cloudflare.DurableObjectState;
+ *       // inner (runtime): state.storage is RuntimeContext-colored, so
+ *       // the handler closures that call it live here
  *       const handlers = CounterRpcs.toLayer({
  *         setTitle: ({ title }) => state.storage.put("title", title),
  *         getTitle: () =>
@@ -289,8 +290,8 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
  * // Only the host script imports this default export.
  * export default Counter.make(
  *   Effect.gen(function* () {
+ *     const state = yield* Cloudflare.DurableObjectState;
  *     return Effect.gen(function* () {
- *       const state = yield* Cloudflare.DurableObjectState;
  *       const handlers = CounterRpcs.toLayer({
  *         setTitle: ({ title }) => state.storage.put("title", title),
  *         getTitle: () =>

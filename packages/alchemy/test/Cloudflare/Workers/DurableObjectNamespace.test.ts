@@ -86,6 +86,15 @@ test(
               Stream.filter((line) => line.length > 0),
               Stream.runCollect,
               Effect.map((chunk) => [...chunk]),
+              // A cold edge can answer 200 with an empty/placeholder body
+              // (the script isn't serving yet), which collects to `[]`
+              // instead of failing — fail so the readiness retry rides it out
+              // rather than asserting against an empty stream.
+              Effect.flatMap((rows) =>
+                rows.length > 0
+                  ? Effect.succeed(rows)
+                  : Effect.fail(new Error("Worker not ready: empty stream")),
+              ),
             )
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),

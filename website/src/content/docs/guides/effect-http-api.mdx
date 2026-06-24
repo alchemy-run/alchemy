@@ -470,9 +470,8 @@ import { Task } from "./task.ts";
 export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       const tasksGroup = HttpApiBuilder.group(TaskDOApi, "TasksDO", (handlers) =>
         handlers
           .handle("getTask", ({ path }) =>

@@ -5,17 +5,22 @@ sidebar:
   order: 12
 ---
 
-The [Durable Objects tutorial](/tutorial/cloudflare/durable-objects)
-uses alchemy's built-in DO method bridge: any function returned from
-the inner Effect becomes a typed method on the stub. That bridge
-`JSON.stringify`s each return value, which strips class identity —
-fine for primitives, but a problem when values contain `Schema.Class`
-instances. `Cloudflare.RpcDurableObjectNamespace` runs an Effect RPC
-server on the DO's `fetch` so both ends share one codec.
+`Cloudflare.RpcDurableObjectNamespace` lets you define a Durable
+Object's API as an [Effect RPC](/guides/effect-rpc) group — the same
+schema-typed `RpcGroup` you'd use anywhere else in Effect, served on
+the DO's `fetch`.
 
 This tutorial walks through a single typed DO end-to-end: declare the
 schema, implement the DO, wire a thin Worker driver, deploy it, and
 test it.
+
+:::note
+The [Durable Objects tutorial](/tutorial/cloudflare/durable-objects)
+uses alchemy's built-in method bridge, which `JSON.stringify`s each
+return value and strips class identity. `RpcDurableObjectNamespace`
+runs an Effect RPC server on the DO's `fetch` instead, so both ends
+share one codec.
+:::
 
 ## Declare a procedure
 
@@ -91,10 +96,12 @@ Effect runs once per DO instance.
 
 ## Pull `state` out of context
 
+Resolve `Cloudflare.DurableObjectState` in the **outer** Effect:
+
 ```diff lang="typescript"
  Effect.gen(function* () {
++  const state = yield* Cloudflare.DurableObjectState;
    return Effect.gen(function* () {
-+    const state = yield* Cloudflare.DurableObjectState;
 -    return Effect.succeed(undefined as never);
    });
  }),
@@ -104,12 +111,21 @@ Effect runs once per DO instance.
 Cloudflare exposes for `storage`, `setAlarm`, `acceptWebSocket`, and
 friends.
 
+:::note
+You resolve the *reference* to `state` in the outer (init) Effect,
+but its methods — like `storage.put` / `storage.get` — are
+[colored with `RuntimeContext`](/concepts/layers#runtime-as-a-colored-function),
+so you can only *use* them in the inner (runtime) Effect. That's why
+`state` is yielded in the outer block but the handler closures that
+call `state.storage` live in the inner one.
+:::
+
 ## Wire the handlers
 
 ```diff lang="typescript"
  Effect.gen(function* () {
+   const state = yield* Cloudflare.DurableObjectState;
    return Effect.gen(function* () {
-     const state = yield* Cloudflare.DurableObjectState;
 +    const handlers = CounterRpcs.toLayer({
 +      setTitle: ({ title }) => state.storage.put("title", title),
 +      getTitle: () =>
@@ -322,8 +338,8 @@ this:
 
 +export default Counter.make(
 +  Effect.gen(function* () {
++    const state = yield* Cloudflare.DurableObjectState;
 +    return Effect.gen(function* () {
-+      const state = yield* Cloudflare.DurableObjectState;
 +      const handlers = CounterRpcs.toLayer({
 +        setTitle: ({ title }) => state.storage.put("title", title),
 +        getTitle: () =>
@@ -354,14 +370,16 @@ publishes for cross-script binding):
 +import { Counter } from "./counter.ts";
 
 -export default class Worker extends Cloudflare.Worker<Worker>()(
-+export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
-   "Worker",
-   { main: import.meta.filename },
+-  "Worker",
+-  { main: import.meta.filename },
 -  Effect.gen(function* () {
 -    const counters = yield* Counter;
 -    ...
 -  }),
- ) {}
+-) {}
++export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
++  "Worker",
++) {}
 ```
 
 `Worker<WorkerA, {}, Counter>` declares that WorkerA publishes
@@ -377,6 +395,7 @@ actually ships in WorkerA's bundle:
 ```typescript
 // src/worker.ts
 export default WorkerA.make(
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const counters = yield* Counter;
     return {
@@ -450,10 +469,10 @@ which script's namespace you're binding to:
 // src/workerC.ts
 export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
   "WorkerC",
-  { main: import.meta.filename },
 ) {}
 
 export default WorkerC.make(
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const counters = yield* Counter.from(WorkerC);
     // ... fetch handler ...

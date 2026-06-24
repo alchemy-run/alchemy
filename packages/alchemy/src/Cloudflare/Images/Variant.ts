@@ -1,6 +1,7 @@
 import * as images from "@distilled.cloud/cloudflare/images";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -246,14 +247,14 @@ export const ImagesVariantProvider = () =>
       return output?.variantName ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const acct = (news.accountId as string | undefined) ?? accountId;
       const name = news.name ?? id;
 
-      // 1. Observe — cloud state is authoritative. `output` is only a hint;
-      //    a missing variant falls through to create.
+      // 1. Observe — cloud state is authoritative. The cached output is only
+      //    a hint; a missing variant falls through to create.
       let observed = yield* getVariant(acct, name);
 
       // 2. Ensure — create when missing. A concurrent create surfaces as
@@ -318,6 +319,22 @@ export const ImagesVariantProvider = () =>
           variantId: output.variantName,
         })
         .pipe(Effect.catchTag("VariantNotFound", () => Effect.void));
+
+      // Cloudflare's variant DELETE is eventually consistent: the GET
+      // endpoint keeps returning the variant for a short window after a
+      // successful delete. Confirm it is actually gone before reporting
+      // success, so the engine's replacement GC (which deletes the OLD
+      // generation as the new one is created) leaves a genuinely clean slate
+      // rather than an orphan that lingers past the caller's verification.
+      // Bounded — if it never clears we stop polling and proceed.
+      yield* getVariant(output.accountId, output.variantName).pipe(
+        Effect.repeat({
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.both(Schedule.recurs(12)),
+          ),
+          until: (observed) => observed === undefined,
+        }),
+      );
     }),
   });
 

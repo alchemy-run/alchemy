@@ -1,3 +1,4 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
@@ -18,15 +19,34 @@ const logLevel = Effect.provideService(
 // Out-of-band read of a variant, riding out eventual-consistency blips
 // where the freshly created variant is not yet visible (`VariantNotFound`,
 // Cloudflare error code 5401).
-const getVariant = (accountId: string, variantId: string) =>
+const getVariant = (
+  accountId: string,
+  variantId: string,
+  // Optional read-after-write predicate. Cloudflare's variant GET is
+  // eventually consistent, so an immediate read after a create/PATCH can
+  // return stale options; keep polling until the observed variant satisfies
+  // this before asserting on it.
+  until?: (res: images.GetV1VariantResponse) => boolean,
+) =>
   images.getV1Variant({ accountId, variantId }).pipe(
+    Effect.flatMap((res) =>
+      !until || until(res)
+        ? Effect.succeed(res)
+        : Effect.fail({ _tag: "VariantStale" as const }),
+    ),
     Effect.retry({
-      while: (e) => e._tag === "VariantNotFound",
-      // Bounded fixed spacing (~20s). An uncapped `Schedule.exponential`
-      // reaches a 64s single delay by the 8th retry (~128s total), which on
-      // its own blows the 120s test timeout when consistency is slow.
+      // Ride out both "not yet visible" (`VariantNotFound`) and "visible but
+      // stale options" (`VariantStale`) read-after-write windows. Cloudflare's
+      // variant GET is served from an eventually-consistent read replica that,
+      // under full-suite load, can lag a freshly created/patched variant for
+      // the better part of a minute — so the budget is generous (~50s).
+      while: (e) => e._tag === "VariantNotFound" || e._tag === "VariantStale",
+      // Bounded fixed spacing — fixed (not exponential) so a slow-but-bounded
+      // replica lag is polled steadily instead of an uncapped exponential
+      // (which reaches a 64s single delay by the 8th retry, ~128s total, and
+      // blows the test timeout).
       schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
+        Schedule.both(Schedule.recurs(25)),
       ),
     }),
   );
@@ -55,12 +75,18 @@ test.provider("create, update in place, and delete a variant", (stack) =>
 
     // Variant names are alphanumeric only (no hyphens/underscores) — use
     // the logical ID verbatim as the deterministic name.
+    //
+    // Adopt: variants carry no ownership markers, so a variant left in the
+    // cloud by a previously crashed run (state never persisted) is
+    // indistinguishable from a foreign one and `read` reports it `Unowned`.
+    // These tests use fixed names and always run the same way, so take over
+    // any such leftover rather than failing with `OwnedBySomeoneElse`.
     const created = yield* stack.deploy(
       Cloudflare.ImagesVariant("alchemytestvariant", {
         fit: "cover",
         width: 100,
         height: 100,
-      }),
+      }).pipe(adopt(true)),
     );
 
     expect(created.variantName).toEqual("alchemytestvariant");
@@ -71,8 +97,14 @@ test.provider("create, update in place, and delete a variant", (stack) =>
     expect(created.metadata).toEqual("none");
     expect(created.neverRequireSignedURLs).toEqual(false);
 
-    // Out-of-band verification against the live API.
-    const live = yield* getVariant(accountId, created.variantName);
+    // Out-of-band verification against the live API (ride out read-after-write
+    // lag until the created options are observable).
+    const live = yield* getVariant(
+      accountId,
+      created.variantName,
+      (r) =>
+        r.variant?.options.fit === "cover" && r.variant?.options.width === 100,
+    );
     expect(live.variant?.id).toEqual("alchemytestvariant");
     expect(live.variant?.options.fit).toEqual("cover");
     expect(live.variant?.options.width).toEqual(100);
@@ -86,7 +118,7 @@ test.provider("create, update in place, and delete a variant", (stack) =>
         height: 100,
         metadata: "copyright",
         neverRequireSignedURLs: true,
-      }),
+      }).pipe(adopt(true)),
     );
 
     expect(updated.variantName).toEqual("alchemytestvariant");
@@ -96,7 +128,15 @@ test.provider("create, update in place, and delete a variant", (stack) =>
     expect(updated.metadata).toEqual("copyright");
     expect(updated.neverRequireSignedURLs).toEqual(true);
 
-    const patched = yield* getVariant(accountId, updated.variantName);
+    const patched = yield* getVariant(
+      accountId,
+      updated.variantName,
+      (r) =>
+        r.variant?.options.fit === "contain" &&
+        r.variant?.options.width === 200 &&
+        r.variant?.options.metadata === "copyright" &&
+        r.variant?.neverRequireSignedURLs === true,
+    );
     expect(patched.variant?.options.fit).toEqual("contain");
     expect(patched.variant?.options.width).toEqual(200);
     expect(patched.variant?.options.metadata).toEqual("copyright");
@@ -110,7 +150,7 @@ test.provider("create, update in place, and delete a variant", (stack) =>
         height: 100,
         metadata: "copyright",
         neverRequireSignedURLs: true,
-      }),
+      }).pipe(adopt(true)),
     );
     expect(noop.variantName).toEqual("alchemytestvariant");
 
@@ -135,7 +175,7 @@ test.provider("replace a variant when the name changes", (stack) =>
         fit: "cover",
         width: 64,
         height: 64,
-      }),
+      }).pipe(adopt(true)),
     );
     expect(initial.variantName).toEqual("alchemyreplacea");
 
@@ -146,7 +186,7 @@ test.provider("replace a variant when the name changes", (stack) =>
         fit: "cover",
         width: 64,
         height: 64,
-      }),
+      }).pipe(adopt(true)),
     );
     expect(replaced.variantName).toEqual("alchemyreplaceb");
 
@@ -185,7 +225,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_IMAGES_LIST)(
           fit: "cover",
           width: 120,
           height: 120,
-        }),
+        }).pipe(adopt(true)),
       );
 
       const provider = yield* Provider.findProvider(Cloudflare.ImagesVariant);

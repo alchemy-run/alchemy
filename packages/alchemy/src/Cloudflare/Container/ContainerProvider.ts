@@ -90,6 +90,25 @@ export const LiveContainerProvider = () =>
         );
       });
 
+      // After deleting an application by id, Cloudflare's account-scoped
+      // `list` endpoint stays eventually-consistent for a short window and can
+      // keep returning the now-deleted row. A subsequent recreate that
+      // re-discovers the application by name (`createApplication`) would then
+      // "adopt" that stale row and try to UPDATE it — which fails permanently
+      // with `ContainerApplicationNotFound` (the app is really gone) and
+      // exhausts the readiness retry. Block until the deleted id no longer
+      // appears under that name (or a different id has taken the name, i.e. a
+      // concurrent recreate) before proceeding. Bounded by the readiness
+      // schedule; if it never clears we fall through and let create handle it.
+      const waitForApplicationDeleted = (name: string, deletedId: string) =>
+        findApplicationByName(name).pipe(
+          Effect.repeat({
+            schedule: containerApplicationReadinessSchedule,
+            until: (app) => app?.id !== deletedId,
+          }),
+          Effect.asVoid,
+        );
+
       const desiredConfiguration = (
         props: ContainerApplicationProps,
         imageRef: string,
@@ -383,6 +402,7 @@ export const LiveContainerProvider = () =>
             id,
             news,
             existing: toAttributes(existingByName),
+            durableObjects,
             session,
           });
         }
@@ -407,6 +427,7 @@ export const LiveContainerProvider = () =>
             id,
             news,
             existing: toAttributes(existing),
+            durableObjects,
             session,
           });
         });
@@ -447,6 +468,7 @@ export const LiveContainerProvider = () =>
                     id,
                     news,
                     existing: toAttributes(existing),
+                    durableObjects,
                     session,
                   });
                 })
@@ -478,11 +500,16 @@ export const LiveContainerProvider = () =>
         id,
         news,
         existing,
+        durableObjects,
         session,
       }: {
         id: string;
         news: ContainerApplicationProps;
         existing: ContainerApplication["Attributes"];
+        // The DO attachment to (re)create with if the "existing" application
+        // turns out to be gone. Threaded through so the update→create fallback
+        // below preserves the binding.
+        durableObjects: { namespaceId: string } | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -513,6 +540,35 @@ export const LiveContainerProvider = () =>
             affinities: news.affinities,
             configuration,
           }),
+        ).pipe(
+          // The "existing" application was observed from an eventually-
+          // consistent list/get but is actually gone — e.g. a stale row that
+          // lingered after a replacement/DO-recreate delete, surfaced by
+          // either the by-name or by-namespace lookup. Updating a ghost
+          // exhausts the readiness window and then fails permanently with
+          // `ContainerApplicationNotFound`. Instead, create it fresh so
+          // reconcile converges regardless of the stale observation. By the
+          // time the bounded readiness retry has elapsed, the deleted row has
+          // fallen out of the eventually-consistent views, so this create
+          // does not re-collide.
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.gen(function* () {
+              yield* Effect.logInfo(
+                `Cloudflare Container update: ${existing.applicationName} no longer exists, creating fresh`,
+              );
+              return yield* Containers.createContainerApplication({
+                accountId,
+                name: existing.applicationName,
+                instances: news.instances ?? 1,
+                maxInstances: news.maxInstances ?? 1,
+                schedulingPolicy: news.schedulingPolicy ?? "default",
+                constraints: news.constraints ?? {},
+                affinities: news.affinities,
+                configuration,
+                durableObjects,
+              });
+            }),
+          ),
         );
         const updated = toAttributes(application);
         if (!deepEqual(existing.configuration, configuration)) {
@@ -713,6 +769,7 @@ export const LiveContainerProvider = () =>
                   id,
                   news,
                   existing: toAttributes(owner),
+                  durableObjects,
                   session,
                 });
               }
@@ -732,6 +789,10 @@ export const LiveContainerProvider = () =>
                 () => Effect.void,
               ),
             );
+            // Wait out the eventually-consistent `list` so the recreate below
+            // doesn't re-adopt the just-deleted application and then try to
+            // update a now-gone id (see `waitForApplicationDeleted`).
+            yield* waitForApplicationDeleted(name, existing.applicationId);
             if (imageHash !== existing.hash?.image) {
               yield* buildAndPushImage(id, news, build, imageRef, session);
             }
@@ -759,6 +820,7 @@ export const LiveContainerProvider = () =>
               id,
               news,
               existing,
+              durableObjects,
               session,
             });
           }
@@ -923,7 +985,12 @@ const resolveDurableObjectApplicationRecovery = ({
   };
 };
 
+// Cap each delay at 3s so the readiness window is ~30s over 10 attempts; an
+// uncapped `Schedule.exponential(150)` reaches a ~76s single delay by the 10th
+// retry (~150s total), which both blows test budgets and needlessly stalls the
+// update→create fallback when the target is genuinely gone.
 const containerApplicationReadinessSchedule = Schedule.exponential(150).pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
   Schedule.both(Schedule.recurs(10)),
 );
 

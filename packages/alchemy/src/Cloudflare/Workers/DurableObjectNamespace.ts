@@ -207,18 +207,22 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * A Durable Object uses a two-phase pattern with two nested `Effect.gen`
  * blocks. The outer Effect resolves shared dependencies (other DOs,
- * containers, etc.). The inner Effect runs once per instance and returns
- * the object's public methods and WebSocket handlers.
+ * containers, etc.) and the instance state *reference*
+ * (`Cloudflare.DurableObjectState`). The inner Effect returns the
+ * object's public methods and WebSocket handlers — and is the only
+ * place the state's `RuntimeContext`-colored methods (`storage.get`,
+ * `storage.put`, …) can actually run.
  *
  * ```typescript
  * Effect.gen(function* () {
- *   // Phase 1: resolve shared dependencies
+ *   // Phase 1: resolve shared dependencies + the instance state ref
  *   const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *   const state = yield* Cloudflare.DurableObjectState;
  *
  *   return Effect.gen(function* () {
- *     // Phase 2: per-instance setup and public API
- *     const state = yield* Cloudflare.DurableObjectState;
- *
+ *     // Phase 2: per-instance setup and public API. `state`'s methods
+ *     // (storage.get/put, …) are RuntimeContext-colored, so the actual
+ *     // I/O happens here, in the runtime closure.
  *     return {
  *       save: (data: string) => db.exec("INSERT ..."),
  *       fetch: Effect.gen(function* () { ... }),
@@ -250,15 +254,16 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
  *   "Counter",
  *   Effect.gen(function* () {
- *     // init: bind resources
+ *     // init: bind resources + resolve the instance state ref
  *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *     const state = yield* Cloudflare.DurableObjectState;
  *
  *     return Effect.gen(function* () {
- *       const state = yield* Cloudflare.DurableObjectState;
+ *       // runtime: state's storage methods are RuntimeContext-colored,
+ *       // so the reads/writes live here
  *       const count = (yield* state.storage.get<number>("count")) ?? 0;
  *
  *       return {
- *         // runtime: use them
  *         increment: () =>
  *           Effect.gen(function* () {
  *             const next = count + 1;
@@ -292,15 +297,16 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * export default Counter.make(
  *   Effect.gen(function* () {
- *     // init: bind resources
+ *     // init: bind resources + resolve the instance state ref
  *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *     const state = yield* Cloudflare.DurableObjectState;
  *
  *     return Effect.gen(function* () {
- *       const state = yield* Cloudflare.DurableObjectState;
+ *       // runtime: state's storage methods are RuntimeContext-colored,
+ *       // so the reads/writes live here
  *       const count = (yield* state.storage.get<number>("count")) ?? 0;
  *
  *       return {
- *         // runtime: use them
  *         increment: () =>
  *           Effect.gen(function* () {
  *             const next = count + 1;
@@ -502,14 +508,15 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * @section Accessing Instance State
  * Each Durable Object instance has its own transactional key-value
- * storage via `Cloudflare.DurableObjectState`. Use `storage.get` and
- * `storage.put` inside the inner Effect to persist data across requests
- * and restarts.
+ * storage via `Cloudflare.DurableObjectState`. Resolve the `state`
+ * *reference* in the outer (init) Effect, but call its methods —
+ * `storage.get`, `storage.put`, … — only from the inner (runtime)
+ * Effect: those methods are `RuntimeContext`-colored, so the type
+ * system only allows them inside the runtime closure.
  *
  * @example Reading and writing durable storage
  * ```typescript
- * const state = yield* Cloudflare.DurableObjectState;
- *
+ * // inner (runtime) Effect — `state` was resolved in the outer Effect
  * yield* state.storage.put("counter", 42);
  * const value = yield* state.storage.get("counter");
  * ```
@@ -555,37 +562,42 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * ```
  *
  * @example Recovering sessions after hibernation
- * Place the rehydration loop **inside the inner `Effect.gen`** so
- * it runs every time the DO instance is reconstructed (including
- * after Cloudflare wakes the DO from hibernation).
+ * Resolve the `state` reference in the outer Effect, but place the
+ * rehydration loop (`state.getWebSockets()` is `RuntimeContext`-colored)
+ * **inside the inner `Effect.gen`** so it runs every time the DO
+ * instance is reconstructed (including after Cloudflare wakes the DO
+ * from hibernation).
  *
  * ```typescript
- * return Effect.gen(function* () {
+ * Effect.gen(function* () {
  *   const state = yield* Cloudflare.DurableObjectState;
- *   const sessions = new Map<string, Cloudflare.DurableWebSocket>();
  *
- *   // Rehydrate the in-memory session map after hibernation.
- *   for (const socket of yield* state.getWebSockets()) {
- *     const data = socket.deserializeAttachment<{ id: string }>();
- *     if (data) sessions.set(data.id, socket);
- *   }
+ *   return Effect.gen(function* () {
+ *     const sessions = new Map<string, Cloudflare.DurableWebSocket>();
  *
- *   return {
- *     fetch: Effect.gen(function* () {
- *       const [response, socket] = yield* Cloudflare.upgrade();
- *       const id = crypto.randomUUID();
- *       socket.serializeAttachment({ id });
- *       sessions.set(id, socket);
- *       return response;
- *     }),
- *     webSocketMessage: Effect.fnUntraced(function* (socket, message) {
- *       const text =
- *         typeof message === "string" ? message : new TextDecoder().decode(message);
- *       for (const peer of sessions.values()) {
- *         yield* peer.send(text);
- *       }
- *     }),
- *   };
+ *     // Rehydrate the in-memory session map after hibernation.
+ *     for (const socket of yield* state.getWebSockets()) {
+ *       const data = socket.deserializeAttachment<{ id: string }>();
+ *       if (data) sessions.set(data.id, socket);
+ *     }
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const [response, socket] = yield* Cloudflare.upgrade();
+ *         const id = crypto.randomUUID();
+ *         socket.serializeAttachment({ id });
+ *         sessions.set(id, socket);
+ *         return response;
+ *       }),
+ *       webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+ *         const text =
+ *           typeof message === "string" ? message : new TextDecoder().decode(message);
+ *         for (const peer of sessions.values()) {
+ *           yield* peer.send(text);
+ *         }
+ *       }),
+ *     };
+ *   });
  * });
  * ```
  *

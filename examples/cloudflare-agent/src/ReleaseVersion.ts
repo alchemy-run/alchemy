@@ -12,23 +12,11 @@ export class ReleaseVersion extends Cloudflare.DurableObjectNamespace<ReleaseVer
   "ReleaseBlogger",
   Effect.gen(function* () {
     const blogger = yield* ReleaseBlogger;
-    const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      // RuntimeContext
-      const sockets = yield* state.getWebSockets();
-
       return {
         generateBlog: Effect.fn(function* (request: { input: any }) {
-          const isStarted = yield* state.storage.get<boolean>("isStarted");
-          // request
-          if (!isStarted) {
-            yield* blogger.send(request);
-            yield* state.storage.put("isStarted", true);
-            for (const socket of sockets) {
-              yield* socket.send("Blog generated");
-            }
-          }
+          yield* blogger.send(request);
         }),
       };
     });

@@ -114,11 +114,17 @@ export const WaitingRoomSettingsProvider = () =>
           waitingRooms.getSetting({ zoneId }).pipe(
             // A freshly-minted scoped token propagates eventually-
             // consistently across Cloudflare's edge — ride out transient
-            // 403 blips before giving up on a zone.
+            // 403 blips before giving up on a zone. The backoff is CAPPED at
+            // 5s and bounded to ~8 attempts (~40s): an uncapped
+            // `Schedule.exponential` reaches a 64s single delay by the 8th
+            // retry (~128s total) which, fanned across every zone, blows the
+            // test timeout when a zone is persistently 403.
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
-              schedule: Schedule.exponential("500 millis"),
-              times: 8,
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.either(Schedule.spaced("5 seconds")),
+                Schedule.both(Schedule.recurs(8)),
+              ),
             }),
             Effect.map((observed) =>
               toAttributes(

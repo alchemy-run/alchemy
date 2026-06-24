@@ -499,13 +499,15 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *
  * @example Worker Layer (class + .make() in one file)
  * ```typescript
- * // src/WorkerB.ts
- * export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
- *   "WorkerB",
- *   { main: import.meta.filename },
- * ) {}
+ * // src/WorkerB.ts — the tag carries the name + RPC shape; props live
+ * // on `.make()`.
+ * export class WorkerB extends Cloudflare.Worker<
+ *   WorkerB,
+ *   { greet: (name: string) => Effect.Effect<string> }
+ * >()("WorkerB") {}
  *
  * export default WorkerB.make(
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);

@@ -155,24 +155,27 @@ the DO is reconstructed: the inner `Effect.gen` runs again, and
 your `sessions` map starts empty — but the open sockets are still
 there.
 
-Rehydrate the map at the top of the inner init by reading every
-attached socket back from the runtime:
+Resolve `Cloudflare.DurableObjectState` in the **outer** Effect,
+then rehydrate the map at the top of the inner init by reading
+every attached socket back from the runtime:
 
 ```diff lang="typescript"
 Effect.gen(function* () {
 +  const state = yield* Cloudflare.DurableObjectState;
-  const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+  return Effect.gen(function* () {
+    const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
-+  for (const socket of yield* state.getWebSockets()) {
-+    const data = socket.deserializeAttachment<{ id: string }>();
-+    if (data) sessions.set(data.id, socket);
-+  }
++    for (const socket of yield* state.getWebSockets()) {
++      const data = socket.deserializeAttachment<{ id: string }>();
++      if (data) sessions.set(data.id, socket);
++    }
 
-  return {
-    fetch: /* ... */,
-    webSocketMessage: /* ... */,
-    webSocketClose: /* ... */,
-  };
+    return {
+      fetch: /* ... */,
+      webSocketMessage: /* ... */,
+      webSocketClose: /* ... */,
+    };
+  });
 });
 ```
 
@@ -180,6 +183,15 @@ Effect.gen(function* () {
 current instance, and `deserializeAttachment` recovers the
 `{ id }` we stashed in the upgrade step. Without this loop the
 first message after hibernation would broadcast to nobody.
+
+:::note
+The `state` *reference* is resolved in the outer (init) Effect, but
+`state.getWebSockets()` is
+[colored with `RuntimeContext`](/concepts/layers#runtime-as-a-colored-function),
+so it can only run in the inner (runtime) Effect — which is exactly
+where it needs to be, since it must re-run every time Cloudflare
+reconstructs the instance after hibernation.
+:::
 
 ## Extract a broadcast helper
 
@@ -190,36 +202,38 @@ reminders below:
 ```diff lang="typescript"
 Effect.gen(function* () {
   const state = yield* Cloudflare.DurableObjectState;
-  const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+  return Effect.gen(function* () {
+    const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
-  for (const socket of yield* state.getWebSockets()) {
-    const data = socket.deserializeAttachment<{ id: string }>();
-    if (data) sessions.set(data.id, socket);
-  }
+    for (const socket of yield* state.getWebSockets()) {
+      const data = socket.deserializeAttachment<{ id: string }>();
+      if (data) sessions.set(data.id, socket);
+    }
 
-+  const broadcast = (text: string) =>
-+    Effect.gen(function* () {
-+      for (const peer of sessions.values()) {
-+        yield* peer.send(text);
-+      }
-+    });
++    const broadcast = (text: string) =>
++      Effect.gen(function* () {
++        for (const peer of sessions.values()) {
++          yield* peer.send(text);
++        }
++      });
 
-  return {
-    fetch: /* ... */,
-    webSocketMessage: Effect.fnUntraced(function* (socket, message) {
-      const attachment = socket.deserializeAttachment<{ id: string }>();
-      if (!attachment) return;
-      const text = typeof message === "string"
-        ? message
-        : new TextDecoder().decode(message);
--      for (const peer of sessions.values()) {
--        yield* peer.send(`[${attachment.id.slice(0, 8)}] ${text}`);
--      }
-+      yield* broadcast(`[${attachment.id.slice(0, 8)}] ${text}`);
-    }),
-    webSocketClose: /* ... */,
-+    broadcast,
-  };
+    return {
+      fetch: /* ... */,
+      webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+        const attachment = socket.deserializeAttachment<{ id: string }>();
+        if (!attachment) return;
+        const text = typeof message === "string"
+          ? message
+          : new TextDecoder().decode(message);
+-        for (const peer of sessions.values()) {
+-          yield* peer.send(`[${attachment.id.slice(0, 8)}] ${text}`);
+-        }
++        yield* broadcast(`[${attachment.id.slice(0, 8)}] ${text}`);
+      }),
+      webSocketClose: /* ... */,
++      broadcast,
+    };
+  });
 });
 ```
 

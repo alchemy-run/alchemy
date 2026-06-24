@@ -136,7 +136,8 @@ export type Container<Id extends string = string> = Named<Id> & {
  *
  * @example Container class
  * ```typescript
- * // src/Sandbox.ts
+ * // src/Sandbox.ts — the tag carries only the name + typed shape;
+ * // configuration lives on `.make()`.
  * export class Sandbox extends Cloudflare.Container<
  *   Sandbox,
  *   {
@@ -146,16 +147,14 @@ export type Container<Id extends string = string> = Named<Id> & {
  *       stderr: string;
  *     }>;
  *   }
- * >()(
- *   "Sandbox",
- *   { main: import.meta.filename },
- * ) {}
+ * >()("Sandbox") {}
  * ```
  *
  * @example Container .make()
  * ```typescript
- * // src/Sandbox.runtime.ts
+ * // src/Sandbox.runtime.ts — props are the first argument to `.make()`
  * export default Sandbox.make(
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const cp = yield* ChildProcessSpawner;
  *
@@ -187,9 +186,11 @@ export type Container<Id extends string = string> = Named<Id> & {
  * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
  * - `image` — pull a pre-built remote image and re-push it.
  *
- * Only the `main` source bundles and injects an Effect runtime. The other
- * two ship an arbitrary image as-is, so `.make()` just registers the
- * container's identity (it has no Effect implementation to run).
+ * Only the `main` source bundles and injects an Effect runtime — so it
+ * has a typed shape and a `.make(props, impl)` runtime. The other two
+ * ship an arbitrary image as-is: they have no runtime to provide, so
+ * you declare the class with its props inline and register it purely
+ * via `Cloudflare.layerContainer` from the hosting Durable Object.
  *
  * @example Effect-native image (`main`)
  * ```typescript
@@ -198,9 +199,10 @@ export type Container<Id extends string = string> = Named<Id> & {
  * export class Sandbox extends Cloudflare.Container<
  *   Sandbox,
  *   { ping: () => Effect.Effect<string> }
- * >()("Sandbox", { main: import.meta.filename }) {}
+ * >()("Sandbox") {}
  *
  * export default Sandbox.make(
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     return Sandbox.of({
  *       ping: () => Effect.succeed("pong"),
@@ -213,24 +215,20 @@ export type Container<Id extends string = string> = Named<Id> & {
  * @example Build your own Dockerfile (`context` / `dockerfile`)
  * ```typescript
  * // Alchemy builds the Dockerfile against the context directory — no
- * // Effect bundling. `dockerfile` defaults to `<context>/Dockerfile`.
+ * // Effect bundling, no `.make()`. `dockerfile` defaults to
+ * // `<context>/Dockerfile`. The props are declared inline on the tag.
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   context: `${import.meta.dirname}/context`,
  * }) {}
- *
- * // No Effect runtime to provide — `.make()` only registers identity.
- * export default Web.make(Effect.succeed(undefined));
  * ```
  *
  * @example Remote image (`image`)
  * ```typescript
  * // Alchemy pulls the public image and re-pushes it to Cloudflare's
- * // registry — no build, no bundling.
+ * // registry — no build, no bundling, no `.make()`.
  * export class Echo extends Cloudflare.Container<Echo>()("Echo", {
  *   image: "mendhak/http-https-echo:latest",
  * }) {}
- *
- * export default Echo.make(Effect.succeed(undefined));
  * ```
  *
  * @example Reaching an arbitrary image's port from a Durable Object
@@ -240,40 +238,41 @@ export type Container<Id extends string = string> = Named<Id> & {
  * export class WebObject extends Cloudflare.DurableObjectNamespace<WebObject>()(
  *   "WebObject",
  *   Effect.gen(function* () {
- *     const bound = yield* Cloudflare.Container.bind(Web);
+ *     const web = yield* Web;
  *     return Effect.gen(function* () {
- *       const container = yield* Cloudflare.start(bound);
  *       return {
  *         hello: () =>
  *           Effect.gen(function* () {
- *             const { fetch } = yield* container.getTcpPort(8080);
+ *             const { fetch } = yield* web.getTcpPort(8080);
  *             const res = yield* fetch(HttpClientRequest.get("http://container/"));
  *             return yield* res.text;
  *           }),
  *       };
  *     });
- *   }),
+ *   }).pipe(Effect.provide(Cloudflare.layerContainer(Web))),
  * ) {}
  * ```
  *
  * @section Configuration
- * The props object accepts `main` (entrypoint file), `instanceType`
- * (compute size), `runtime` (`"bun"` or `"node"`), and
- * `observability` settings. Use `Stack.useSync` to read the
- * surrounding stack at declaration time and pick a beefier
+ * The props object — the first argument to `.make()` — accepts `main`
+ * (entrypoint file), `instanceType` (compute size), `runtime`
+ * (`"bun"` or `"node"`), and `observability` settings. Use
+ * `Stack.useSync` to read the surrounding stack and pick a beefier
  * `instanceType` in prod while keeping the cheap `dev` instance for
  * preview environments.
  *
  * @example Stage-dependent configuration
  * ```typescript
- * export class Sandbox extends Cloudflare.Container<Sandbox>()(
- *   "Sandbox",
+ * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
  *     main: import.meta.filename,
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
  *   })),
- * ) {}
+ *   Effect.gen(function* () {
+ *     return Sandbox.of({ exec: (cmd) => ... });
+ *   }),
+ * );
  * ```
  *
  * @section Stack-level wiring
@@ -298,70 +297,65 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```
  *
  * @section Calling from a Durable Object
- * Use `Cloudflare.Container.bind(Sandbox)` in the **outer** init
- * phase of a Durable Object — only the class is imported, so the
- * DO bundle stays tiny. Then `Cloudflare.start(sandbox)` in the
- * **inner** per-instance phase ensures the container is running
- * and gives you a typed handle that exposes every method declared
- * on the container's shape **plus** a `getTcpPort` helper.
+ * `yield* Sandbox` resolves a **running** container instance — every
+ * method declared on the container's shape **plus** a `getTcpPort`
+ * helper. Provide `Cloudflare.layerContainer(Sandbox, …)` on the
+ * DO's init to configure how the container runs; that layer binds,
+ * starts, and monitors it and satisfies the `Sandbox` tag. Because
+ * only the class is imported, the runtime implementation in
+ * `Sandbox.runtime.ts` is tree-shaken out of the DO's bundle.
  *
- * @example Binding and starting a container from a DO
+ * @example Running a container from a DO
  * ```typescript
  * export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
  *   "Agents",
  *   Effect.gen(function* () {
- *     // OUTER (init): only the class is referenced — the runtime
- *     // implementation in `Sandbox.runtime.ts` is tree-shaken out
- *     // of this DO's bundle.
- *     const sandbox = yield* Cloudflare.Container.bind(Sandbox);
+ *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
- *       // INNER (per-instance): start the container and expose RPC.
- *       const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- *
  *       return {
- *         exec: (cmd: string) => container.exec(cmd),
+ *         exec: (cmd: string) => sandbox.exec(cmd),
  *       };
  *     });
- *   }),
+ *   }).pipe(
+ *     Effect.provide(
+ *       Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
+ *     ),
+ *   ),
  * ) {}
  * ```
  *
- * @section Starting from a Durable Object
- * Use `Cloudflare.Container.bind` in the outer init phase to bind
- * the container class, then `Cloudflare.start` in the inner
- * per-instance phase to start it. Because the DO only imports the
- * class, the runtime implementation is completely excluded from the
- * DO's bundle.
- *
- * @example Binding and starting a container
- * ```typescript
- * // init (outer Effect) — only imports the class
- * const sandbox = yield* Cloudflare.Container.bind(Sandbox);
- *
- * // per-instance (inner Effect)
- * return Effect.gen(function* () {
- *   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- *
- *   return {
- *     exec: (cmd: string) => container.exec(cmd),
- *   };
- * });
- * ```
- *
  * @section HTTP Requests to Container Ports
- * Use `getTcpPort` to get a `fetch` handle for a specific port on
- * the running container. This lets you make HTTP requests to
+ * Use `getTcpPort` on the running container instance to get a `fetch`
+ * handle for a specific port. This lets you make HTTP requests to
  * servers running inside the container process.
  *
  * @example Fetching from a container port
  * ```typescript
- * const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- * const { fetch } = yield* container.getTcpPort(3000);
+ * export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
  *
- * const response = yield* fetch(
- *   HttpClientRequest.get("http://container/health"),
- * );
+ *     return Effect.gen(function* () {
+ *       const { fetch } = yield* sandbox.getTcpPort(3000);
+ *
+ *       return {
+ *         health: () =>
+ *           Effect.gen(function* () {
+ *             const response = yield* fetch(
+ *               HttpClientRequest.get("http://container/health"),
+ *             );
+ *             return yield* response.text;
+ *           }),
+ *       };
+ *     });
+ *   }).pipe(
+ *     Effect.provide(
+ *       Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
+ *     ),
+ *   ),
+ * ) {}
  * ```
  */
 export const Container: ResourceClassLike<ContainerApplication> & {

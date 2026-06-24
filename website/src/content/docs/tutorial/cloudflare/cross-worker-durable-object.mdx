@@ -59,8 +59,8 @@ when imported by name.
 
 +export default Counter.make(
 +  Effect.gen(function* () {
++    const state = yield* Cloudflare.DurableObjectState;
 +    return Effect.gen(function* () {
-+      const state = yield* Cloudflare.DurableObjectState;
 +      let count = (yield* state.storage.get<number>("count")) ?? 0;
 +
 +      return {
@@ -76,6 +76,13 @@ when imported by name.
 +  }),
 +);
 ```
+
+:::note
+The `state` *reference* is resolved in the outer (init) Effect, but
+`state.storage` is
+[colored with `RuntimeContext`](/concepts/layers#runtime-as-a-colored-function)
+— so the storage reads/writes stay in the inner (runtime) Effect.
+:::
 
 Only Workers that import this file as `import CounterLive from "./object.ts"`
 will pull in the runtime. Workers that only import the class
@@ -95,7 +102,6 @@ import { Counter } from "./object.ts";
 
 export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
   "WorkerA",
-  { main: import.meta.filename },
 ) {}
 ```
 
@@ -128,10 +134,10 @@ WorkerA's bundle actually contains the DO class:
 
  export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
    "WorkerA",
-   { main: import.meta.filename },
  ) {}
 
 +export default WorkerA.make(
++  { main: import.meta.filename },
 +  Effect.gen(function* () {
 +    const counters = yield* Counter;
 +    return {
@@ -276,6 +282,7 @@ namespace as `yield* Counter`:
 ```diff lang="typescript"
 // src/workerA.ts
  export default WorkerA.make(
+   { main: import.meta.filename },
    Effect.gen(function* () {
 -    const counters = yield* Counter;
 +    const counters = yield* Counter.from(WorkerA);

@@ -11,9 +11,8 @@ import * as Effect from "effect/Effect";
 export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
   "Rooms",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
