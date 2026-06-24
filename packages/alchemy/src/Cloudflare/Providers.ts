@@ -7,9 +7,7 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
-import { Command } from "../Build/Command.ts";
-import { DevServer, DevServerProvider } from "../Build/DevServer.ts";
-import * as Build from "../Build/index.ts";
+import * as Command from "../Command/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -215,7 +213,6 @@ export const providers = () =>
       ClientCertificate.ClientCertificate,
       CloudConnector.CloudConnectorRules,
       CloudforceOne.CloudforceOneScanConfig,
-      Command,
       Connectivity.DirectoryService,
       Containers.ContainerPlatform,
       ContentScanning.ContentScanning,
@@ -238,7 +235,6 @@ export const providers = () =>
       Devices.DevicePostureIntegration,
       Devices.DevicePostureRule,
       Devices.DeviceSettings,
-      DevServer,
       Diagnostics.EndpointHealthcheck,
       Dlp.DlpEntry,
       Dlp.DlpProfile,
@@ -443,7 +439,6 @@ export const providers = () =>
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
         Devices.DeviceDefaultProfileProvider(),
-        DevServerProvider(),
         Dns.DnsReadPolicyLive,
         Dns.DnsReadWritePolicyLive,
         Dns.DnsRecordProvider(),
@@ -573,7 +568,6 @@ export const providers = () =>
           Devices.DevicePostureIntegrationProvider(),
           Devices.DevicePostureRuleProvider(),
           Devices.DeviceSettingsProvider(),
-          DevServerProvider(),
           Diagnostics.EndpointHealthcheckProvider(),
           Dlp.DlpEntryProvider(),
           Dlp.DlpProfileProvider(),
@@ -765,7 +759,7 @@ export const providers = () =>
         LoadBalancer.LoadBalancerMonitorProvider(),
         LoadBalancer.LoadBalancerMonitorGroupProvider(),
         LoadBalancer.LoadBalancerPoolProvider(),
-        Build.CommandProvider(),
+        Command.providers(),
         KeyPairProvider(),
         RandomProvider(),
       ),

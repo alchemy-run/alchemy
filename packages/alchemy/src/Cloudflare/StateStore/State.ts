@@ -615,6 +615,7 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
     return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
       Effect.map((setting) => setting !== undefined),
       Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
+      Effect.catchTag("InvalidRoute", () => Effect.succeed(false)),
     );
   });
 

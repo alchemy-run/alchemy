@@ -6,7 +6,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { type MemoOptions } from "../../Build/Memo.ts";
+import { type MemoOptions } from "../../Command/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
@@ -307,14 +307,17 @@ export interface WorkerProps<
    * Options for the local dev server that runs this Worker under `alchemy dev`.
    * Each Worker is served on its own port.
    *
-   * Set to `false` to skip starting a local Worker entirely — useful when an
-   * external dev server (e.g. one spawned via `Build.DevCommand`) is
-   * serving the content this Worker would otherwise host.
+   * Use `{ mode: "external" }` to skip starting a local Worker entirely —
+   * useful when an external dev server (e.g. one spawned via `Command.Dev`)
+   * is serving the content this Worker would otherwise host.
    */
   dev?:
-    | false
-    | string
     | {
+        /**
+         * Run this Worker in `workerd` locally (the default).
+         * @default "worker"
+         */
+        mode?: "worker";
         /**
          * Host the local dev server binds to.
          * @default "localhost"
@@ -332,6 +335,17 @@ export interface WorkerProps<
          * @default false
          */
         strictPort?: boolean;
+      }
+    | {
+        /**
+         * Don't start a local Worker; an external dev server is running instead.
+         */
+        mode: "external";
+        /**
+         * URL the external dev server is reachable at, if applicable.
+         * This will be returned as the `url` attribute of the Worker resource.
+         */
+        url?: string;
       };
 }
 

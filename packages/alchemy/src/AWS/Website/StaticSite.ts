@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
 import { readdirSync } from "node:fs";
 import path from "node:path";
-import { Command } from "../../Build/Command.ts";
+import * as Command from "../../Command/index.ts";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -179,7 +179,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     }
 
     const build = props.build
-      ? yield* Command("Build", {
+      ? yield* Command.Build("Build", {
           command: props.build.command,
           cwd: sitePath,
           memo: {

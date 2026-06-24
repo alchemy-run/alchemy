@@ -17,7 +17,7 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { Command, CommandProvider } from "../Build/Command.ts";
+import * as Command from "../Command/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -64,7 +64,6 @@ export const providers = () =>
   Layer.effect(
     Providers,
     Provider.collection([
-      Command,
       KeyPair,
       Random,
       ACM.Certificate,
@@ -589,7 +588,7 @@ export const providers = () =>
     ),
     Layer.provideMerge(
       Layer.mergeAll(
-        CommandProvider(),
+        Command.providers(),
         KeyPairProvider(),
         RandomProvider(),
         Assets.AssetsLive,

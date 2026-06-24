@@ -5,7 +5,7 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { hashDirectory } from "../../Build/Memo.ts";
+import { hashDirectory } from "../../Command/Memo.ts";
 import {
   dockerBuild,
   dockerTag,
