@@ -1,26 +1,57 @@
 import {
-  externalPackageNames,
   installExternalPackages,
+  isForceExternalModule,
+  isInstallExternalModule,
+  normalizeInstallPackages,
   npmInstallArgs,
+  parsePackageRoot,
 } from "@/Bundle/ExternalPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { spawnSync } from "node:child_process";
 import { zipCode } from "@/Util/zip";
 
+const integrationEnabled =
+  process.env.ALCHEMY_TEST_LAMBDA_EXTERNAL_PACKAGES === "1" &&
+  spawnSync("npm", ["--version"], { stdio: "ignore" }).status === 0;
+
 describe("Lambda external packages", () => {
-  it("extracts only finite package names", () => {
-    expect(
-      externalPackageNames([
-        "sharp",
-        "@img/sharp-linux-arm64/lib",
-        "node:fs",
-        "./local.js",
-        /^native-/,
-      ]),
-    ).toEqual(["@img/sharp-linux-arm64", "sharp"]);
+  it("accepts only package roots, not subpaths", () => {
+    expect(parsePackageRoot("sharp")).toBe("sharp");
+    expect(parsePackageRoot("@img/tool")).toBe("@img/tool");
+    expect(parsePackageRoot("sharp/lib/index.js")).toBeUndefined();
+    expect(parsePackageRoot("@img/sharp-linux-arm64/lib")).toBeUndefined();
+    expect(parsePackageRoot("node:fs")).toBeUndefined();
+    expect(parsePackageRoot("./local.js")).toBeUndefined();
+  });
+
+  it("rejects subpaths in build.install", () => {
+    expect(() => normalizeInstallPackages(["sharp/lib"])).toThrow(
+      /Invalid package name/,
+    );
+  });
+
+  it("normalizes install arrays to wildcard versions", () => {
+    expect(normalizeInstallPackages(["sharp", "pg-native"])).toEqual({
+      sharp: "*",
+      "pg-native": "*",
+    });
+    expect(normalizeInstallPackages({ sharp: "^0.33.5" })).toEqual({
+      sharp: "^0.33.5",
+    });
+  });
+
+  it("always externalizes sharp and pg-native during bundling", () => {
+    expect(isForceExternalModule("sharp")).toBe(true);
+    expect(isForceExternalModule("sharp/lib/index.js")).toBe(true);
+    expect(isForceExternalModule("pg-native")).toBe(true);
+    expect(isForceExternalModule("sharpish")).toBe(false);
+    expect(isInstallExternalModule("sharp", undefined)).toBe(true);
+    expect(isInstallExternalModule("lodash", undefined)).toBe(false);
+    expect(isInstallExternalModule("lodash", ["lodash"])).toBe(true);
   });
 
   it("targets Linux and the Lambda architecture", () => {
@@ -35,6 +66,46 @@ describe("Lambda external packages", () => {
     ]);
     expect(npmInstallArgs("x86_64", ["other"])).toContain("--arch=x64");
   });
+
+  it.effect("resolves catalog versions from pnpm-workspace.yaml", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-catalog-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "pnpm-workspace.yaml"),
+          ["packages:", "  - packages/*", "catalog:", "  sharp: ^0.33.5"].join(
+            "\n",
+          ),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "catalog:" } }),
+        );
+
+        const files = yield* installExternalPackages({
+          cwd: root,
+          install: ["sharp"],
+          architecture: "arm64",
+          runNpmInstall: (directory) =>
+            Effect.gen(function* () {
+              const packageJson = JSON.parse(
+                yield* fs.readFileString(path.join(directory, "package.json")),
+              );
+              expect(packageJson.dependencies.sharp).toBe("^0.33.5");
+            }),
+        });
+
+        expect(files.map((file) => file.path)).toContain("package.json");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
 
   it.effect("installs into an isolated artifact and returns its files", () =>
     Effect.gen(function* () {
@@ -55,7 +126,7 @@ describe("Lambda external packages", () => {
 
         const files = yield* installExternalPackages({
           cwd: root,
-          external: ["sharp", /^ignored$/],
+          install: ["sharp"],
           architecture: "arm64",
           runNpmInstall: (directory, args) =>
             Effect.gen(function* () {
@@ -140,3 +211,53 @@ describe("Lambda external packages", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
+
+describe.skipIf(!integrationEnabled)(
+  "Lambda external packages integration",
+  () => {
+    it.effect(
+      "npm-installs sharp with linux arm64 native binaries",
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectory({
+            prefix: "alchemy-external-sharp-",
+          });
+
+          try {
+            yield* fs.writeFileString(
+              path.join(root, "package.json"),
+              JSON.stringify({ dependencies: { sharp: "^0.33.5" } }),
+            );
+
+            const files = yield* installExternalPackages({
+              cwd: root,
+              install: ["sharp"],
+              architecture: "arm64",
+            });
+
+            const paths = files.map((file) => file.path);
+            expect(paths).toContain("node_modules/sharp/package.json");
+            expect(
+              paths.some((filePath) =>
+                filePath.includes(
+                  "node_modules/@img/sharp-linux-arm64/lib/sharp-linux-arm64.node",
+                ),
+              ),
+            ).toBe(true);
+            expect(
+              paths.some((filePath) =>
+                filePath.includes(
+                  "node_modules/@img/sharp-libvips-linux-arm64/lib/libvips",
+                ),
+              ),
+            ).toBe(true);
+          } finally {
+            yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+          }
+        }).pipe(Effect.provide(NodeServices.layer)),
+      { timeout: 120_000 },
+    );
+  },
+);

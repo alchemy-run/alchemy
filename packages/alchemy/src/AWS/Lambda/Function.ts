@@ -16,7 +16,12 @@ import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import { installExternalPackages } from "../../Bundle/ExternalPackages.ts";
+import {
+  installExternalPackages,
+  installExternalEntries,
+  isInstallExternalModule,
+  type ExternalPackageInstall,
+} from "../../Bundle/ExternalPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
@@ -63,8 +68,23 @@ export const isFunction = (value: any): value is Function => {
 
 export interface FunctionBuildOptions {
   /**
-   * Rolldown input options. String package entries in `external` are installed
-   * into the Lambda artifact for Linux and the function's architecture.
+   * Native or Node-only packages to install into the Lambda artifact with npm,
+   * targeting Linux and the function's architecture. Equivalent to SST's
+   * `nodejs.install`.
+   *
+   * @example
+   * ```typescript
+   * build: { install: ["sharp"] }
+   * ```
+   *
+   * @example
+   * ```typescript
+   * build: { install: { sharp: "^0.33.5" } }
+   * ```
+   */
+  readonly install?: ExternalPackageInstall;
+  /**
+   * Rolldown input options.
    */
   readonly input?: Partial<rolldown.InputOptions>;
   readonly output?: Partial<rolldown.OutputOptions>;
@@ -265,15 +285,13 @@ const normalizeFunctionUrl = (
  * });
  * ```
  *
- * @example Function with an external native package
+ * @example Function with a native package (Sharp)
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ImageProcessor", {
  *   main: "./src/handler.ts",
  *   architecture: "arm64",
  *   build: {
- *     input: {
- *       external: ["sharp"],
- *     },
+ *     install: ["sharp"],
  *   },
  * });
  * ```
@@ -773,6 +791,7 @@ export const FunctionProvider = () =>
           plugins?: rolldown.RolldownPluginOption,
         ) {
           const configuredExternal = props.build?.input?.external;
+          const install = props.build?.install;
           return yield* Bundle.build(
             {
               ...props.build?.input,
@@ -782,9 +801,11 @@ export const FunctionProvider = () =>
                 typeof configuredExternal === "function"
                   ? (moduleId, parentId, isResolved) =>
                       moduleId.startsWith("@aws-sdk/") ||
+                      isInstallExternalModule(moduleId, install) ||
                       configuredExternal(moduleId, parentId, isResolved)
                   : [
                       /^@aws-sdk\//,
+                      ...installExternalEntries(install),
                       ...(Array.isArray(configuredExternal)
                         ? configuredExternal
                         : configuredExternal === undefined
@@ -905,7 +926,7 @@ export default await Effect.runPromise(handlerEffect)
 
         const externalPackageFiles = yield* installExternalPackages({
           cwd,
-          external: props.build?.input?.external,
+          install: props.build?.install,
           architecture: props.architecture ?? "x86_64",
         });
         const archiveFiles = [...extraFiles, ...externalPackageFiles];
