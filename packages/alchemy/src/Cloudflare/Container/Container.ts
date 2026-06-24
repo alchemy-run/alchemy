@@ -1,5 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -25,6 +26,35 @@ import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";
 export type ContainerTypeId = typeof ContainerTypeId;
+
+/**
+ * The `Context` tag under which a *started* container instance is published.
+ *
+ * `yield* MyContainer` resolves this tag, and `layerContainer(MyContainer)`
+ * provides it (running `startContainer`, which registers the container's
+ * bindings, resolves the runtime handle, and ensures the container is
+ * running). Both sides key the tag by the container's logical id so they
+ * resolve to the same service — `Context` matches services by their string
+ * `key`, so a memoized identity is not strictly required, but we cache it so
+ * the same tag object is shared.
+ */
+const containerInstanceTags = new Map<
+  string,
+  Context.Key<Container.Instance, Container.Instance>
+>();
+export const containerInstanceTag = (
+  id: string,
+): Context.Key<Container.Instance, Container.Instance> => {
+  let tag = containerInstanceTags.get(id);
+  if (!tag) {
+    tag = Context.Service<Container.Instance>(`Container<${id}>`);
+    containerInstanceTags.set(id, tag);
+  }
+  return tag;
+};
+
+/** @internal Key under which the Container class stashes its bind effect. */
+export const ContainerBindEff = "~alchemy/Container/bindEff";
 
 export const isContainer = <T>(value: T): value is T & Container =>
   typeof value === "object" &&
@@ -377,36 +407,44 @@ export const Container: ResourceClassLike<ContainerApplication> & {
       id: Id,
     ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
   };
-} = ((...args: any[]) => {
-  if (args.length === 0) {
-    return (...args: any[]) => {
-      if (args.length === 1) {
-        const [id] = args as [string];
-        const tag = ContainerPlatform()(id);
-        // for containers, we want the `yield* ContainerTag` to act as the Binding
-        const eff = ContainerPlatform.bind(tag);
-        return Object.assign(effectClass(eff), {
-          "~alchemy/Id": id,
-          make: (props: any, impl: any) => tag.make(props, impl),
-          // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
-          Application: tag,
-        });
-      } else {
-        return Container(...(args as [string, any]));
-      }
-    };
-  } else {
-    const [id, props] = args as [string, any];
-    const resource = ContainerPlatform(id, props);
-    // for containers, we want the `yield* ContainerTag` to act as the Binding
-    const eff = effectClass(ContainerPlatform.bind(resource));
-    return Object.assign(eff, {
-      "~alchemy/Id": id,
-      // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
-      Application: resource,
-    });
-  }
-}) as any;
+} = Object.assign(
+  (...args: any[]) => {
+    if (args.length === 0) {
+      return (...args: any[]) => {
+        if (args.length === 1) {
+          const [id] = args as [string];
+          const tag = ContainerPlatform()(id);
+          // `yield* MyContainer` resolves the *started* instance tag, which is
+          // provided by `layerContainer(MyContainer)`. The bind effect (which
+          // registers the DO + Worker bindings and produces the runtime
+          // handle) is stashed so `startContainer` can run it from inside that
+          // layer — see ContainerPlatform.bind / StartContainer.ts.
+          return Object.assign(effectClass(containerInstanceTag(id)), {
+            "~alchemy/Id": id,
+            [ContainerBindEff]: ContainerPlatform.bind(tag),
+            make: (props: any, impl: any) => tag.make(props, impl),
+            // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
+            Application: tag,
+          });
+        } else {
+          return Container(...(args as [string, any]));
+        }
+      };
+    } else {
+      const [id, props] = args as [string, any];
+      const resource = ContainerPlatform(id, props);
+      return Object.assign(effectClass(containerInstanceTag(id)), {
+        "~alchemy/Id": id,
+        [ContainerBindEff]: ContainerPlatform.bind(resource),
+        // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
+        Application: resource,
+      });
+    }
+  },
+  {
+    Type: ContainerTypeId,
+  },
+) as any;
 
 export declare namespace Container {
   export interface Decl<

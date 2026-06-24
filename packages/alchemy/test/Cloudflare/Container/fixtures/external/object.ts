@@ -2,12 +2,17 @@ import * as Cloudflare from "@/Cloudflare";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import path from "node:path";
 
 class ExternalContainer extends Cloudflare.Container<ExternalContainer>()(
   "ExternalContainer",
   {
-    context: path.join(import.meta.dirname, "context"),
+    // Use a template string rather than `path.join(import.meta.dirname, …)`:
+    // this module is bundled into the Worker (it defines the DO), and
+    // `import.meta.dirname` is `undefined` in the Worker runtime — calling
+    // `path.join(undefined, …)` there throws a ScriptStartupError at module
+    // load. `context` is only consumed at build time, so a plain string is
+    // sufficient and never evaluates `path.join` at runtime.
+    context: `${import.meta.dirname}/context`,
     observability: { logs: { enabled: true } },
   },
 ) {}

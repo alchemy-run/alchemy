@@ -76,10 +76,36 @@ const fetchReady = (url: string, expected: string) =>
     );
   });
 
+// Seed a value into R2 via the worker's `/seed` route (DO native binding),
+// retrying through cold-start until the producer accepts it (200).
+const seed = (url: string, key: string, value: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    return yield* client
+      .execute(
+        HttpClientRequest.put(
+          `${url}/seed?key=${encodeURIComponent(key)}`,
+        ).pipe(HttpClientRequest.bodyText(value)),
+      )
+      .pipe(
+        Effect.flatMap((r) =>
+          r.status === 200
+            ? Effect.succeed(r)
+            : Effect.fail(new Error(`seed not ready: ${r.status}`)),
+        ),
+        Effect.timeout("30 seconds"),
+        Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+      );
+  });
+
 /**
  * Effect-native container (`main`): the entrypoint Effect is bundled into a
- * generated image. Exercises an HTTP round-trip to its port-3000 server
- * (`/hello`) via the Durable Object's `getTcpPort` proxy.
+ * generated image. The Durable Object proxies into the container two ways —
+ * RPC (`container.ping()` / `container.readObject()`) and HTTP over its
+ * port-3000 server (`getTcpPort(3000).fetch`). The bucket tests prove the
+ * full end-to-end R2 path: a value written through the DO's NATIVE binding is
+ * read back from inside the container over its scoped HTTP token, surfaced
+ * both via RPC and via fetch.
  */
 describe("effectful container (main)", () => {
   const stack = beforeAll(deploy(EffectfulStack), { timeout: HOOK_TIMEOUT });
@@ -88,12 +114,50 @@ describe("effectful container (main)", () => {
   });
 
   test.skipIf(!!process.env.FAST)(
-    "deploys and serves over its TCP port",
+    "RPC: ping round-trips into the container",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+
+      const pong = yield* fetchReady(`${url}/ping`, "pong");
+      expect(pong).toContain("pong");
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
+
+  test.skipIf(!!process.env.FAST)(
+    "fetch: serves over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;
 
       const hello = yield* fetchReady(`${url}/hello`, "effectful container");
       expect(hello).toContain("effectful container");
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
+
+  test.skipIf(!!process.env.FAST)(
+    "RPC: reads an R2 object from inside the container",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+
+      yield* seed(url, "rpc.txt", "hello-rpc");
+      const body = yield* fetchReady(`${url}/rpc?key=rpc.txt`, "hello-rpc");
+      expect(body).toContain("hello-rpc");
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
+
+  test.skipIf(!!process.env.FAST)(
+    "fetch: reads an R2 object from inside the container",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+
+      yield* seed(url, "fetch.txt", "hello-fetch");
+      const body = yield* fetchReady(
+        `${url}/fetch?key=fetch.txt`,
+        "hello-fetch",
+      );
+      expect(body).toContain("hello-fetch");
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );

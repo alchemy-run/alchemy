@@ -17,16 +17,38 @@ export default Cloudflare.Worker(
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
 
+        const object = objects.getByName("default");
+
+        // Plain RPC into the container (no bucket).
         if (url.pathname === "/ping") {
-          const pong = yield* objects.getByName("default").ping();
+          const pong = yield* object.ping();
           return HttpServerResponse.text(pong);
         }
 
+        // Seed R2 through the DO's native binding.
+        if (request.method === "PUT" && url.pathname === "/seed") {
+          const key = url.searchParams.get("key") ?? "";
+          const value = yield* request.text;
+          yield* object.put(key, value);
+          return HttpServerResponse.json({ ok: true });
+        }
+
+        // Bucket read end-to-end through the container over RPC.
+        if (url.pathname === "/rpc") {
+          const key = url.searchParams.get("key") ?? "";
+          const value = yield* object.readObjectRpc(key).pipe(Effect.orDie);
+          return HttpServerResponse.json({ value });
+        }
+
+        // Bucket read end-to-end through the container over fetch (TCP port).
+        if (url.pathname === "/fetch") {
+          const key = url.searchParams.get("key") ?? "";
+          const result = yield* object.readObjectFetch(key);
+          return HttpServerResponse.json(result);
+        }
+
         if (url.pathname === "/hello") {
-          const text = yield* objects
-            .getByName("default")
-            .hello()
-            .pipe(Effect.orDie);
+          const text = yield* object.hello().pipe(Effect.orDie);
           return HttpServerResponse.text(text);
         }
 

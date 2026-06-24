@@ -1,6 +1,7 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { Platform } from "../../Platform.ts";
@@ -56,29 +57,60 @@ export const ContainerPlatform: Platform<
         set: (bindingId: string, output: Output.Output) =>
           Effect.sync(() => {
             const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+            // Preserve `Redacted`-ness across the Output → env → Cloudflare
+            // boundary so the provider can deploy secrets through the
+            // Secrets Store (referenced via `secrets`) instead of leaking
+            // them as plain `environmentVariables`. The JSON payload carries
+            // a `{_tag: "Redacted", …}` marker so the runtime `get` accessor
+            // can rebuild the wrapper after Cloudflare hands the value back
+            // as a plain env-var string. Mirrors `makeWorkerRuntimeContext`.
             env[key] = output.pipe(
-              Output.map((value) => JSON.stringify(value)),
+              Output.map((value) =>
+                Redacted.isRedacted(value)
+                  ? Redacted.make(
+                      JSON.stringify({
+                        _tag: "Redacted",
+                        value: Redacted.value(value),
+                      }),
+                    )
+                  : JSON.stringify(value),
+              ),
             );
             return key;
           }),
         get: <T>(key: string) =>
-          Config.string(key)
-
-            .pipe(
-              Effect.flatMap((value) =>
-                Effect.try({
-                  try: () => JSON.parse(value) as T,
-                  catch: (error) => error as Error,
+          Config.string(key).pipe(
+            Effect.flatMap((value) =>
+              Effect.try({
+                try: () => {
+                  const parsed = JSON.parse(value) as T;
+                  // The `set` path serializes Redacted values as
+                  // `{_tag: "Redacted", value: ...}`. After JSON.parse the
+                  // result is a plain object — detect the marker shape and
+                  // rebuild the Redacted wrapper. Plain values pass through.
+                  if (
+                    typeof parsed === "object" &&
+                    parsed !== null &&
+                    (parsed as { _tag?: unknown })._tag === "Redacted" &&
+                    "value" in parsed
+                  ) {
+                    return Redacted.make(
+                      (parsed as { value: unknown }).value,
+                    ) as T;
+                  }
+                  return parsed;
+                },
+                catch: (error) => error as Error,
+              }),
+            ),
+            Effect.catch((cause) =>
+              Effect.die(
+                new Error(`Failed to get environment variable: ${key}`, {
+                  cause,
                 }),
               ),
-              Effect.catch((cause) =>
-                Effect.die(
-                  new Error(`Failed to get environment variable: ${key}`, {
-                    cause,
-                  }),
-                ),
-              ),
             ),
+          ),
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);

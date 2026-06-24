@@ -8,18 +8,19 @@ import {
   toQueueSendError,
   type QueueHttpToken,
 } from "./QueueHttp.ts";
-import {
-  QueueSendError,
-  type QueueSendMessage,
-  type QueueSendOptions,
-} from "./QueueTypes.ts";
+import { QueueSendError, type QueueSendMessage } from "./QueueTypes.ts";
 import { QueueWrite, type WriteQueueClient } from "./QueueWrite.ts";
 
 /**
  * HTTP-backed implementation of the {@link QueueWrite} service.
  *
  * It creates a scoped {@link AccountApiToken} with the `Queues Write`
- * permission and pushes messages via the Cloudflare Queues HTTP API.
+ * permission and pushes messages via the Cloudflare Queues bulk-push
+ * HTTP API (`POST /messages/batch`). The bulk endpoint takes the raw
+ * JSON value as the message `body` (the single-message endpoint
+ * expects a pre-encoded string), so it round-trips arbitrary
+ * JSON-serializable payloads the same way the native producer binding
+ * does — `send` is just a batch of one.
  */
 export const WriteQueueHttp = Layer.effect(
   QueueWrite,
@@ -31,18 +32,19 @@ export const WriteQueueHttp = Layer.effect(
   ),
 );
 
-/** Encode a message body for the HTTP push API. */
-const encodeBody = (
-  body: unknown,
-  contentType: "json" | "text" | undefined,
-): string =>
-  contentType === "text"
-    ? typeof body === "string"
-      ? body
-      : String(body)
-    : JSON.stringify(body);
+/** Convert a message into the Cloudflare bulk-push `messages[]` shape. */
+const toMessage = (message: QueueSendMessage) =>
+  message.contentType === "text"
+    ? {
+        body:
+          typeof message.body === "string"
+            ? message.body
+            : String(message.body),
+        contentType: "text" as const,
+      }
+    : { body: message.body, contentType: "json" as const };
 
-/** Build the producer client over the Queues HTTP push API. */
+/** Build the producer client over the Queues bulk-push HTTP API. */
 export const makeWriteQueueHttpClient = (
   token: QueueHttpToken,
   queueId: Effect.Effect<string>,
@@ -50,15 +52,14 @@ export const makeWriteQueueHttpClient = (
   const authorize = authorizeWith(token);
   const scope = makeQueueHttpScope(token, queueId);
 
-  const push = (message: QueueSendMessage) =>
+  const push = (messages: ReadonlyArray<QueueSendMessage>) =>
     scope.pipe(
       Effect.flatMap(({ accountId, queueId }) =>
         authorize(
-          queues.pushMessage({
+          queues.bulkPushMessages({
             accountId,
             queueId,
-            body: encodeBody(message.body, message.contentType),
-            contentType: message.contentType ?? "json",
+            messages: messages.map(toMessage),
           }),
         ),
       ),
@@ -74,9 +75,8 @@ export const makeWriteQueueHttpClient = (
         cause: new Error("unsupported"),
       }),
     ),
-    send: (body: unknown, options?: QueueSendOptions) =>
-      push({ body, contentType: options?.contentType }),
-    sendBatch: (messages: ReadonlyArray<QueueSendMessage>) =>
-      Effect.forEach(messages, push, { discard: true }),
+    send: (body: unknown, options?: { contentType?: "json" | "text" }) =>
+      push([{ body, contentType: options?.contentType }]),
+    sendBatch: (messages: ReadonlyArray<QueueSendMessage>) => push(messages),
   };
 };

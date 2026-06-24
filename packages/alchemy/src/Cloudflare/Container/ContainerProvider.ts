@@ -31,6 +31,7 @@ import {
   buildFinalDockerfile,
   bundleContainerProgram,
   createContainerApplicationName,
+  foldEnvIntoEnvironmentVariables,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
@@ -92,6 +93,7 @@ export const LiveContainerProvider = () =>
       const desiredConfiguration = (
         props: ContainerApplicationProps,
         imageRef: string,
+        accountId: string,
       ) =>
         normalizeNulls({
           image: imageRef,
@@ -102,7 +104,10 @@ export const LiveContainerProvider = () =>
           vcpu: props.vcpu,
           memory: props.memory,
           disk: props.disk,
-          environmentVariables: props.environmentVariables,
+          environmentVariables: foldEnvIntoEnvironmentVariables(
+            props,
+            accountId,
+          ),
           labels: props.labels,
           network: props.network,
           command: props.command,
@@ -486,7 +491,7 @@ export const LiveContainerProvider = () =>
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
         const { build, imageRef, imageHash } = yield* computeImage(id, news);
-        const configuration = desiredConfiguration(news, imageRef);
+        const configuration = desiredConfiguration(news, imageRef, accountId);
 
         if (imageHash !== existing.hash?.image) {
           yield* buildAndPushImage(id, news, build, imageRef, session);
@@ -606,8 +611,9 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container precreate: starting ${name}`,
           );
 
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const { build, imageRef, imageHash } = yield* computeImage(id, news);
-          const configuration = desiredConfiguration(news, imageRef);
+          const configuration = desiredConfiguration(news, imageRef, accountId);
           yield* buildAndPushImage(id, news, build, imageRef, session);
 
           // Precreate intentionally omits the Durable Object attachment so the
@@ -643,8 +649,9 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container reconcile: starting ${name}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const { build, imageRef, imageHash } = yield* computeImage(id, news);
-          const configuration = desiredConfiguration(news, imageRef);
+          const configuration = desiredConfiguration(news, imageRef, accountId);
 
           // Observe — re-fetch the cached application to confirm it still
           // exists. Cloudflare reports a deleted container application as

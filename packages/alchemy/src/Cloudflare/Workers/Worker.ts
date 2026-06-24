@@ -22,6 +22,7 @@ import {
 import { Resource, type ResourceClassLike } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { Self } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Container/Container.ts";
 import type { DevContainerImage } from "../Container/ContainerApplication.ts";
@@ -123,7 +124,8 @@ export type WorkerServices =
   | WorkerExecutionContext
   | WorkerEnvironment
   | CloudflareEnvironment
-  | Container.Application<any>;
+  | Container.Application<any>
+  | Self;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> &
   MainRpc<WorkerServices | Req>;

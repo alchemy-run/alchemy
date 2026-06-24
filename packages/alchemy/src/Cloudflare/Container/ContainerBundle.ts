@@ -1,11 +1,72 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
+import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import type {
+  ContainerApplication,
+  ContainerApplicationProps,
+} from "./ContainerApplication.ts";
+
+/**
+ * Fold the runtime-context `env` map (populated by `Binding.Service`s and
+ * `Config` injection — see `ContainerPlatform.set`) into the application's
+ * `environmentVariables`.
+ *
+ * Unlike Cloudflare Workers, container `secrets` are *references to the
+ * account Secrets Store by name* — they cannot carry an inline value — so
+ * runtime-bound values (e.g. a minted API token) must travel as plain
+ * `environmentVariables`. The value is the JSON-encoded payload produced by
+ * `ContainerPlatform.set` (a `{_tag:"Redacted",value}` marker for secrets,
+ * a JSON string otherwise), which `ContainerPlatform.get` parses back into
+ * the original `Redacted`/plain value at runtime.
+ *
+ * `precreate` receives the raw, unevaluated props (the engine only resolves
+ * Output expressions for the real `reconcile`/create), so env values that
+ * reference other resources are still unresolved `Output`s there — skip them.
+ * They are applied when reconcile runs against the resolved props.
+ *
+ * When `accountId` is provided it is injected as `ALCHEMY_CLOUDFLARE_ACCOUNT_ID`
+ * (mirroring the Worker runtime) so the container bootstrap can build
+ * `CloudflareEnvironment` for HTTP capability bindings (R2/KV/Queue `*Http`).
+ *
+ * Explicit `props.environmentVariables` win on a name collision.
+ */
+export const foldEnvIntoEnvironmentVariables = (
+  props: ContainerApplicationProps,
+  accountId?: string,
+): ContainerApplication.EnvironmentVariable[] | undefined => {
+  const explicitNames = new Set(
+    (props.environmentVariables ?? []).map((e) => e.name),
+  );
+  const environmentVariables: ContainerApplication.EnvironmentVariable[] = [
+    ...(props.environmentVariables ?? []),
+    ...(accountId !== undefined &&
+    !explicitNames.has("ALCHEMY_CLOUDFLARE_ACCOUNT_ID")
+      ? [{ name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID", value: accountId }]
+      : []),
+    ...Object.entries(props.env ?? {})
+      .filter(
+        ([name, value]) =>
+          value !== undefined &&
+          !Output.isOutput(value) &&
+          !explicitNames.has(name) &&
+          name !== "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
+      )
+      .map(([name, value]) => ({
+        name,
+        value: Redacted.isRedacted(value)
+          ? Redacted.value(value as Redacted.Redacted<string>)
+          : (value as string),
+      })),
+  ];
+  return environmentVariables.length > 0 ? environmentVariables : undefined;
+};
 
 /**
  * Derive the physical name for a container application. Shared between the
@@ -147,6 +208,7 @@ const HttpServer = NodeHttpServer;
 }
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer } from "alchemy/Runtime";
+import { CloudflareEnvironment } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -180,6 +242,20 @@ const serverEffect = tag.pipe(
     layer.pipe(
       Layer.provideMerge(stack),
       Layer.provideMerge(HttpServer()),
+      // Capability bindings that talk to Cloudflare's HTTP API from inside the
+      // container (e.g. R2/KV/Queue \`*Http\` bindings) resolve their account via
+      // \`CloudflareEnvironment\` at runtime, exactly like the Worker bridge does
+      // (the service value is an \`Effect\` of the resolved credentials). The
+      // per-operation account/token are read from the container's env (the bound
+      // token outputs), so an absent account id here is harmless.
+      Layer.provideMerge(
+        Layer.succeed(
+          CloudflareEnvironment,
+          Effect.succeed({
+            account: process.env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
+          }),
+        )
+      ),
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(

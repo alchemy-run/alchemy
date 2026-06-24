@@ -1,4 +1,3 @@
-import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -10,6 +9,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { type Fetcher } from "../Fetcher.ts";
 import {
+  ContainerBindEff,
+  containerInstanceTag,
   type Container,
   ContainerError,
   type ContainerStartupOptions,
@@ -19,13 +20,13 @@ export const layerContainer = <Image extends Container.Decl.Any>(
   container: Image,
   options?: ContainerStartupOptions,
 ): Layer.Layer<InstanceType<Image>> => {
-  //
-  const id = container["~alchemy/Id"];
-  class Tag extends Context.Service<
-    InstanceType<Image>,
-    Container.Instance<InstanceType<Image>>
-  >()(`Container<${id}>`) {}
-  return Layer.effect(Tag, startContainer(container, options));
+  const id = (container as any)["~alchemy/Id"] as string;
+  // Provide the *started* instance under the same tag `yield* MyContainer`
+  // resolves (keyed by logical id) so the two compose.
+  return Layer.effect(
+    containerInstanceTag(id) as any,
+    startContainer(container, options),
+  ) as Layer.Layer<InstanceType<Image>>;
 };
 
 /**
@@ -34,11 +35,21 @@ export const layerContainer = <Image extends Container.Decl.Any>(
 export const startContainer = Effect.fn(function* <
   Image extends Container.Decl.Any,
 >(containerEff: Image, options?: ContainerStartupOptions) {
-  const container: Container = yield* containerEff as any as Effect.Effect<
-    any,
-    never,
-    never
-  >;
+  // Resolve the runtime handle. `ContainerPlatform.bind` is a two-phase
+  // effect: the outer (init) pass registers the DO + Worker bindings and
+  // returns an inner effect that, once `DurableObjectState` is available,
+  // produces the actual handle (`running`/`start`/`getTcpPort`/…). The bind
+  // effect is stashed on the Container class so `yield* MyContainer` itself can
+  // resolve the started instance from this layer without re-running bind.
+  const bindEff = (containerEff as any)[ContainerBindEff] as
+    | Effect.Effect<Effect.Effect<Container>, never, any>
+    | undefined;
+  const bound = yield* (
+    bindEff ?? (containerEff as any as Effect.Effect<any, never, never>)
+  );
+  const container: Container = Effect.isEffect(bound)
+    ? yield* bound as Effect.Effect<Container>
+    : (bound as Container);
 
   const ensureRunning = Effect.gen(function* () {
     if (yield* container.running) return;

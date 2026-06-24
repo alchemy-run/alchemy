@@ -62,7 +62,6 @@ export const makeReadR2HttpClient = (
             }),
           ),
         ),
-        Effect.mapError(toR2Error),
         // The HTTP body is lazy, so reading headers does not download it.
         Effect.map((res) =>
           baseObject(key, httpMetadataOf(res), {
@@ -72,6 +71,10 @@ export const makeReadR2HttpClient = (
             storageClass: res.cfR2StorageClass,
           }),
         ),
+        // Native R2 `head` resolves to `null` for a missing object rather
+        // than failing — mirror that for the HTTP-backed client.
+        Effect.catchTag("NoSuchKey", () => Effect.succeed(null)),
+        Effect.mapError(toR2Error),
       ),
     get: ((key: string, _options?: R2GetOptions) =>
       scope.pipe(
@@ -85,8 +88,10 @@ export const makeReadR2HttpClient = (
             }),
           ),
         ),
-        Effect.mapError(toR2Error),
         Effect.map((res) => objectBodyFromResponse(key, res)),
+        // Native R2 `get` resolves to `null` for a missing object.
+        Effect.catchTag("NoSuchKey", () => Effect.succeed(null)),
+        Effect.mapError(toR2Error),
       )) as any,
     list: (options?: R2ListOptions) =>
       scope.pipe(
