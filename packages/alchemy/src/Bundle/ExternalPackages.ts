@@ -15,25 +15,43 @@ export interface ExternalPackageFile {
 
 /**
  * Packages that must stay external during bundling because they ship native
- * binaries. Matches SST's `forceExternal` list.
+ * binaries that cannot be bundled. Matches SST's `forceExternal` list. They are
+ * installed into the Lambda artifact only when they are actually imported by the
+ * handler (detected during bundling), mirroring SST's metafile-driven behavior.
  */
 export const FORCE_EXTERNAL_PACKAGES = ["sharp", "pg-native"] as const;
 
 export type ExternalPackageInstall =
   | ReadonlyArray<string>
-  | ReadonlyRecord<string, string>;
-
-export interface ExternalPackageInstallOptions {
-  readonly cwd: string;
-  readonly install?: ExternalPackageInstall;
-  readonly architecture: "x86_64" | "arm64";
-  readonly runNpmInstall?: NpmInstallRunner;
-}
+  | Readonly<Record<string, string>>;
 
 export type NpmInstallRunner = (
   directory: string,
   args: ReadonlyArray<string>,
 ) => Effect.Effect<void, unknown>;
+
+export interface ResolveInstallTargetsOptions {
+  readonly cwd: string;
+  /** Validated package-root → requested version map (from {@link validateInstallTargets}). */
+  readonly requested: Readonly<Record<string, string>>;
+  /** Force-external package roots detected as imported during bundling. */
+  readonly detected?: ReadonlyArray<string>;
+}
+
+export interface InstallResolvedPackagesOptions {
+  /** Package-root → concrete npm version map (from {@link resolveInstallTargets}). */
+  readonly resolved: Readonly<Record<string, string>>;
+  readonly architecture: "x86_64" | "arm64";
+  readonly runNpmInstall?: NpmInstallRunner;
+}
+
+export interface ExternalPackageInstallOptions {
+  readonly cwd: string;
+  readonly install?: ExternalPackageInstall;
+  readonly detected?: ReadonlyArray<string>;
+  readonly architecture: "x86_64" | "arm64";
+  readonly runNpmInstall?: NpmInstallRunner;
+}
 
 interface PackageJson {
   readonly dependencies?: Record<string, string>;
@@ -61,118 +79,15 @@ const incompatibleVersionPrefixes = [
   "patch:",
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Pure helpers
+// ---------------------------------------------------------------------------
+
 /**
- * Installs packages declared via `install` into an isolated, Lambda-targeted
- * npm artifact.
+ * Parses a module specifier into its package root, or `undefined` when the
+ * specifier is not a bare package import (relative path, builtin, glob, subpath
+ * with extra segments, etc.).
  */
-export function installExternalPackages(
-  options: ExternalPackageInstallOptions,
-): Effect.Effect<
-  ReadonlyArray<ExternalPackageFile>,
-  BundleError,
-  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
-> {
-  const installMap = normalizeInstallPackages(options.install);
-  const packageNames = Object.keys(installMap).sort();
-  if (packageNames.length === 0) return Effect.succeed([]);
-
-  const program = Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const pathService = yield* Path.Path;
-    const sourcePackageJson = yield* readSourcePackageJson(options.cwd);
-    const dependencies: Record<string, string> = {};
-    for (const packageName of packageNames) {
-      dependencies[packageName] = yield* resolveInstallVersion(
-        options.cwd,
-        sourcePackageJson,
-        packageName,
-        installMap[packageName],
-      );
-    }
-
-    return yield* Effect.acquireUseRelease(
-      fileSystem.makeTempDirectory({ prefix: "alchemy-lambda-packages-" }),
-      (directory) =>
-        Effect.gen(function* () {
-          yield* fileSystem.writeFileString(
-            pathService.join(directory, "package.json"),
-            `${JSON.stringify({ private: true, dependencies }, null, 2)}\n`,
-          );
-
-          const args = npmInstallArgs(options.architecture, packageNames);
-          yield* options.runNpmInstall === undefined
-            ? runNpmInstall(directory, args)
-            : options.runNpmInstall(directory, args);
-          return yield* readArtifactFiles(directory);
-        }),
-      (directory) =>
-        fileSystem.remove(directory, { recursive: true }).pipe(Effect.ignore),
-    );
-  });
-
-  return program.pipe(Effect.mapError(toBundleError));
-}
-
-export function normalizeInstallPackages(
-  install: ExternalPackageInstall | undefined,
-): Record<string, string> {
-  if (!install) return {};
-  if (Array.isArray(install)) {
-    return Object.fromEntries(
-      install.map((dep) => [requirePackageRoot(dep, "build.install"), "*"]),
-    );
-  }
-  return Object.fromEntries(
-    Object.entries(install).map(([dep, version]) => [
-      requirePackageRoot(dep, "build.install"),
-      version,
-    ]),
-  );
-}
-
-export function isForceExternalModule(moduleId: string): boolean {
-  return FORCE_EXTERNAL_PACKAGES.some(
-    (pkg) => moduleId === pkg || moduleId.startsWith(`${pkg}/`),
-  );
-}
-
-export function isInstallExternalModule(
-  moduleId: string,
-  install: ExternalPackageInstall | undefined,
-): boolean {
-  if (isForceExternalModule(moduleId)) return true;
-  return Object.keys(normalizeInstallPackages(install)).some(
-    (pkg) => moduleId === pkg || moduleId.startsWith(`${pkg}/`),
-  );
-}
-
-export function installExternalEntries(
-  install: ExternalPackageInstall | undefined,
-): ReadonlyArray<string> {
-  return [
-    ...new Set([
-      ...FORCE_EXTERNAL_PACKAGES,
-      ...Object.keys(normalizeInstallPackages(install)),
-    ]),
-  ];
-}
-
-export function npmInstallArgs(
-  architecture: "x86_64" | "arm64",
-  packageNames: ReadonlyArray<string>,
-): ReadonlyArray<string> {
-  const npmArchitecture = architecture === "arm64" ? "arm64" : "x64";
-  return [
-    "install",
-    "--force",
-    "--platform=linux",
-    "--os=linux",
-    `--arch=${npmArchitecture}`,
-    `--cpu=${npmArchitecture}`,
-    ...(packageNames.includes("sharp") ? ["--libc=glibc"] : []),
-  ];
-}
-
 export function parsePackageRoot(specifier: string): string | undefined {
   if (
     specifier.length === 0 ||
@@ -195,18 +110,203 @@ export function parsePackageRoot(specifier: string): string | undefined {
   return segments.length === 1 ? segments[0] : undefined;
 }
 
-function requirePackageRoot(specifier: string, context: string): string {
-  const packageName = parsePackageRoot(specifier);
-  if (packageName === undefined) {
-    throw new BundleError({
-      message: `Invalid package name '${specifier}' in ${context}. Use a package root like 'sharp', not a subpath or bare specifier.`,
-    });
-  }
-  return packageName;
+/** Whether `moduleId` is `root` itself or a subpath import of it. */
+export function matchesPackageRoot(moduleId: string, root: string): boolean {
+  return moduleId === root || moduleId.startsWith(`${root}/`);
 }
 
-const runNpmInstall = (directory: string, args: ReadonlyArray<string>) =>
-  exec(
+/** The {@link FORCE_EXTERNAL_PACKAGES} root that `moduleId` belongs to, if any. */
+export function forceExternalRoot(moduleId: string): string | undefined {
+  return FORCE_EXTERNAL_PACKAGES.find((pkg) =>
+    matchesPackageRoot(moduleId, pkg),
+  );
+}
+
+export function isForceExternalModule(moduleId: string): boolean {
+  return forceExternalRoot(moduleId) !== undefined;
+}
+
+export function npmInstallArgs(
+  architecture: "x86_64" | "arm64",
+  packageNames: ReadonlyArray<string>,
+): ReadonlyArray<string> {
+  const npmArchitecture = architecture === "arm64" ? "arm64" : "x64";
+  return [
+    "install",
+    "--force",
+    "--platform=linux",
+    "--os=linux",
+    `--arch=${npmArchitecture}`,
+    `--cpu=${npmArchitecture}`,
+    ...(packageNames.includes("sharp") ? ["--libc=glibc"] : []),
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Validation (fails in the typed error channel, never throws)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates a `build.install` declaration and normalizes it to a
+ * package-root → requested-version map. Array entries default to `"*"`. Fails
+ * with a {@link BundleError} (never throws) when an entry is not a bare package
+ * root.
+ */
+export function validateInstallTargets(
+  install: ExternalPackageInstall | undefined,
+): Effect.Effect<Record<string, string>, BundleError> {
+  if (!install) return Effect.succeed({});
+  const entries: ReadonlyArray<readonly [string, string]> = Array.isArray(
+    install,
+  )
+    ? install.map((dep) => [dep, "*"] as const)
+    : Object.entries(install);
+
+  const requested: Record<string, string> = {};
+  for (const [dep, version] of entries) {
+    const root = parsePackageRoot(dep);
+    if (root === undefined) {
+      return Effect.fail(
+        new BundleError({
+          message: `Invalid package name '${dep}' in build.install. Use a package root like 'sharp', not a subpath or bare specifier.`,
+        }),
+      );
+    }
+    requested[root] = version;
+  }
+  return Effect.succeed(requested);
+}
+
+// ---------------------------------------------------------------------------
+// Version resolution (no install — cheap, used for change detection)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the npm-compatible version for every requested and detected package,
+ * reading the nearest source `package.json` and pnpm/Bun catalogs. Does not run
+ * npm.
+ */
+export function resolveInstallTargets(
+  options: ResolveInstallTargetsOptions,
+): Effect.Effect<
+  Record<string, string>,
+  BundleError,
+  FileSystem.FileSystem | Path.Path
+> {
+  const packageNames = [
+    ...new Set([
+      ...Object.keys(options.requested),
+      ...(options.detected ?? []),
+    ]),
+  ].sort();
+  if (packageNames.length === 0) return Effect.succeed({});
+
+  return Effect.gen(function* () {
+    const sourcePackageJson = yield* readSourcePackageJson(options.cwd);
+    const resolved: Record<string, string> = {};
+    for (const packageName of packageNames) {
+      resolved[packageName] = yield* resolveInstallVersion(
+        options.cwd,
+        sourcePackageJson,
+        packageName,
+        options.requested[packageName],
+      );
+    }
+    return resolved;
+  }).pipe(Effect.mapError(toBundleError));
+}
+
+// ---------------------------------------------------------------------------
+// Install (runs npm into an isolated, Lambda-targeted artifact)
+// ---------------------------------------------------------------------------
+
+/**
+ * Installs already-resolved dependencies into an isolated npm artifact targeting
+ * Linux and the function's architecture, returning the artifact's files.
+ */
+export function installResolvedPackages(
+  options: InstallResolvedPackagesOptions,
+): Effect.Effect<
+  ReadonlyArray<ExternalPackageFile>,
+  BundleError,
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+> {
+  const packageNames = Object.keys(options.resolved).sort();
+  if (packageNames.length === 0) return Effect.succeed([]);
+
+  const runInstall = (
+    directory: string,
+    args: ReadonlyArray<string>,
+  ): Effect.Effect<void, BundleError, ChildProcessSpawner> =>
+    options.runNpmInstall === undefined
+      ? runNpmInstall(directory, args)
+      : options
+          .runNpmInstall(directory, args)
+          .pipe(Effect.mapError(toBundleError));
+
+  return Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const pathService = yield* Path.Path;
+
+    return yield* Effect.acquireUseRelease(
+      fileSystem.makeTempDirectory({ prefix: "alchemy-lambda-packages-" }),
+      (directory) =>
+        Effect.gen(function* () {
+          yield* fileSystem.writeFileString(
+            pathService.join(directory, "package.json"),
+            `${JSON.stringify(
+              { private: true, dependencies: options.resolved },
+              null,
+              2,
+            )}\n`,
+          );
+          yield* runInstall(
+            directory,
+            npmInstallArgs(options.architecture, packageNames),
+          );
+          return yield* readArtifactFiles(directory);
+        }),
+      (directory) =>
+        fileSystem.remove(directory, { recursive: true }).pipe(Effect.ignore),
+    );
+  }).pipe(Effect.mapError(toBundleError));
+}
+
+/**
+ * Convenience flow: validate → resolve → install. Useful for callers that do
+ * not need to thread detected externals or defer the install (see tests).
+ */
+export function installExternalPackages(
+  options: ExternalPackageInstallOptions,
+): Effect.Effect<
+  ReadonlyArray<ExternalPackageFile>,
+  BundleError,
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+> {
+  return Effect.gen(function* () {
+    const requested = yield* validateInstallTargets(options.install);
+    const resolved = yield* resolveInstallTargets({
+      cwd: options.cwd,
+      requested,
+      detected: options.detected,
+    });
+    return yield* installResolvedPackages({
+      resolved,
+      architecture: options.architecture,
+      runNpmInstall: options.runNpmInstall,
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Internals
+// ---------------------------------------------------------------------------
+
+const runNpmInstall = (
+  directory: string,
+  args: ReadonlyArray<string>,
+): Effect.Effect<void, BundleError, ChildProcessSpawner> =>
+  Effect.sync(() =>
     ChildProcess.setCwd(
       ChildProcess.make("npm", args, {
         shell: false,
@@ -215,14 +315,23 @@ const runNpmInstall = (directory: string, args: ReadonlyArray<string>) =>
       directory,
     ),
   ).pipe(
+    Effect.flatMap(exec),
     Effect.scoped,
-    Effect.mapError(toBundleError),
+    Effect.mapError((cause) => {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      return new BundleError({
+        message: message.includes("ENOENT")
+          ? "Failed to run 'npm install' for build.install: 'npm' was not found on PATH. build.install shells out to npm (even in Bun/pnpm projects), so Node.js/npm must be installed."
+          : `Failed to run 'npm install' for build.install: ${message}`,
+        cause,
+      });
+    }),
     Effect.flatMap(({ exitCode, stderr }) =>
       exitCode === 0
         ? Effect.void
         : Effect.fail(
             new BundleError({
-              message: `npm install failed with exit code ${exitCode}: ${stderr}`,
+              message: `npm install for build.install failed with exit code ${exitCode}: ${stderr}`,
             }),
           ),
     ),
@@ -284,7 +393,6 @@ const resolveCatalogVersion = (
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
     const workspacePath = yield* findUp(cwd, ["pnpm-workspace.yaml"]);
     if (workspacePath !== undefined) {
       const content = yield* fs.readFileString(workspacePath);
@@ -316,24 +424,29 @@ const resolveCatalogVersion = (
     );
   });
 
-const findUp = Effect.fn(function* (
+const findUp = (
   cwd: string,
   filenames: ReadonlyArray<string>,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  for (const filename of filenames) {
-    const candidate = path.join(cwd, filename);
-    if (yield* fs.exists(candidate)) {
-      return candidate;
+): Effect.Effect<
+  string | undefined,
+  BundleError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    for (const filename of filenames) {
+      const candidate = path.join(cwd, filename);
+      if (yield* fs.exists(candidate).pipe(Effect.mapError(toBundleError))) {
+        return candidate;
+      }
     }
-  }
-  const parent = path.dirname(cwd);
-  if (parent === cwd) {
-    return undefined;
-  }
-  return yield* findUp(parent, filenames);
-});
+    const parent = path.dirname(cwd);
+    if (parent === cwd) {
+      return undefined;
+    }
+    return yield* findUp(parent, filenames);
+  });
 
 const resolveBunCatalogVersion = (
   cwd: string,
@@ -374,21 +487,14 @@ const resolveBunCatalogVersion = (
 const parseBunCatalogSource = (
   manifest: PackageJson,
 ): CatalogSource | undefined => {
-  const source: CatalogSource = {
-    catalog: manifest.catalog,
-    catalogs: manifest.catalogs ? { ...manifest.catalogs } : undefined,
-  };
   const workspaceSource = parseBunWorkspacesCatalogSource(manifest.workspaces);
-  if (workspaceSource !== undefined) {
-    if (workspaceSource.catalog !== undefined) {
-      source.catalog = workspaceSource.catalog;
-    }
-    if (workspaceSource.catalogs !== undefined) {
-      source.catalogs = { ...source.catalogs, ...workspaceSource.catalogs };
-    }
-  }
-  return source.catalog !== undefined || source.catalogs !== undefined
-    ? source
+  const catalog = workspaceSource?.catalog ?? manifest.catalog;
+  const catalogs =
+    manifest.catalogs !== undefined || workspaceSource?.catalogs !== undefined
+      ? { ...manifest.catalogs, ...workspaceSource?.catalogs }
+      : undefined;
+  return catalog !== undefined || catalogs !== undefined
+    ? { catalog, catalogs }
     : undefined;
 };
 

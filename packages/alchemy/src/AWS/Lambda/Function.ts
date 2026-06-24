@@ -17,9 +17,11 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
-  installExternalPackages,
-  installExternalEntries,
-  isInstallExternalModule,
+  forceExternalRoot,
+  installResolvedPackages,
+  matchesPackageRoot,
+  resolveInstallTargets,
+  validateInstallTargets,
   type ExternalPackageInstall,
 } from "../../Bundle/ExternalPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
@@ -40,7 +42,7 @@ import {
   hasAlchemyTags,
   hasTags,
 } from "../../Tags.ts";
-import { sha256 } from "../../Util/sha256.ts";
+import { sha256, sha256Object } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -240,6 +242,26 @@ const normalizeFunctionUrl = (
     cors: url.cors,
     invokeMode: url.invokeMode ?? "BUFFERED",
   };
+};
+
+/**
+ * Evaluates a user-supplied Rolldown `external` option (string, RegExp, array,
+ * or predicate) for a single module id, preserving its original semantics.
+ */
+const matchesConfiguredExternal = (
+  external: rolldown.InputOptions["external"],
+  moduleId: string,
+  parentId: string | undefined,
+  isResolved: boolean,
+): boolean => {
+  if (external === undefined) return false;
+  if (typeof external === "function") {
+    return external(moduleId, parentId, isResolved) === true;
+  }
+  const matchers = Array.isArray(external) ? external : [external];
+  return matchers.some((matcher) =>
+    typeof matcher === "string" ? matcher === moduleId : matcher.test(moduleId),
+  );
 };
 
 /**
@@ -785,33 +807,48 @@ export const FunctionProvider = () =>
         const cwd = yield* TempRoot.findCwdForBundle(realMain);
 
         const rolldownSourcemap = sourcemap;
+        const architecture = props.architecture ?? "x86_64";
+
+        // `sharp`/`pg-native` ship native binaries and can never be bundled, so
+        // they are always external; packages declared in `build.install` are too.
+        // Force-external packages are recorded as the bundler encounters them so
+        // they are installed only when actually imported (SST metafile parity).
+        const requested = yield* validateInstallTargets(props.build?.install);
+        const installRoots = new Set(Object.keys(requested));
+        const detectedExternals = new Set<string>();
+        const configuredExternal = props.build?.input?.external;
+        const externalOption = (
+          moduleId: string,
+          parentId: string | undefined,
+          isResolved: boolean,
+        ): boolean => {
+          if (moduleId.startsWith("@aws-sdk/")) return true;
+          const forced = forceExternalRoot(moduleId);
+          if (forced !== undefined) {
+            detectedExternals.add(forced);
+            return true;
+          }
+          for (const root of installRoots) {
+            if (matchesPackageRoot(moduleId, root)) return true;
+          }
+          return matchesConfiguredExternal(
+            configuredExternal,
+            moduleId,
+            parentId,
+            isResolved,
+          );
+        };
 
         const buildBundle = Effect.fnUntraced(function* (
           entry: string,
           plugins?: rolldown.RolldownPluginOption,
         ) {
-          const configuredExternal = props.build?.input?.external;
-          const install = props.build?.install;
           return yield* Bundle.build(
             {
               ...props.build?.input,
               input: entry,
               cwd,
-              external:
-                typeof configuredExternal === "function"
-                  ? (moduleId, parentId, isResolved) =>
-                      moduleId.startsWith("@aws-sdk/") ||
-                      isInstallExternalModule(moduleId, install) ||
-                      configuredExternal(moduleId, parentId, isResolved)
-                  : [
-                      /^@aws-sdk\//,
-                      ...installExternalEntries(install),
-                      ...(Array.isArray(configuredExternal)
-                        ? configuredExternal
-                        : configuredExternal === undefined
-                          ? []
-                          : [configuredExternal]),
-                    ],
+              external: externalOption,
               platform: "node",
               plugins: [props.build?.input?.plugins, plugins],
             },
@@ -924,25 +961,46 @@ export default await Effect.runPromise(handlerEffect)
             content: f.content,
           }));
 
-        const externalPackageFiles = yield* installExternalPackages({
+        // Resolve install versions now (cheap, no npm) so the change-detection
+        // identity hash is available without installing. The npm install and
+        // archive build are deferred to `buildArchive`, keeping `diff` fast.
+        const resolved = yield* resolveInstallTargets({
           cwd,
-          install: props.build?.install,
-          architecture: props.architecture ?? "x86_64",
+          requested,
+          detected: [...detectedExternals],
         });
-        const archiveFiles = [...extraFiles, ...externalPackageFiles];
+        const hasExternalPackages = Object.keys(resolved).length > 0;
 
-        const archive = yield* zipCode(
-          code,
-          archiveFiles.length > 0 ? archiveFiles : undefined,
-        );
-        return {
-          archive,
-          code,
-          hash:
+        // Identity hash drives change detection in `diff`. With native packages,
+        // the installed bytes are not captured by the bundle hash, so fold the
+        // resolved versions and architecture in instead of installing.
+        const identityHash = hasExternalPackages
+          ? yield* sha256Object({
+              bundle: bundleOutput.hash,
+              install: resolved,
+              architecture,
+            })
+          : bundleOutput.hash;
+
+        const buildArchive = Effect.gen(function* () {
+          const externalPackageFiles = hasExternalPackages
+            ? yield* installResolvedPackages({ resolved, architecture })
+            : [];
+          const archiveFiles = [...extraFiles, ...externalPackageFiles];
+          const archive = yield* zipCode(
+            code,
+            archiveFiles.length > 0 ? archiveFiles : undefined,
+          );
+          // The S3 asset key is content-addressed, so the archive hash must be a
+          // true hash of the bytes when native packages are present.
+          const archiveHash =
             externalPackageFiles.length > 0
               ? yield* sha256(archive)
-              : bundleOutput.hash,
-        };
+              : bundleOutput.hash;
+          return { archive, archiveHash };
+        });
+
+        return { identityHash, buildArchive };
       });
 
       const withNodeSourceMaps = (
@@ -1380,7 +1438,7 @@ export default await Effect.runPromise(handlerEffect)
           ) {
             return { action: "update" };
           }
-          if (output.code.hash !== (yield* bundleCode(id, news)).hash) {
+          if (output.code.hash !== (yield* bundleCode(id, news)).identityHash) {
             // code changed
             return { action: "update" };
           }
@@ -1576,14 +1634,15 @@ export default await Effect.runPromise(handlerEffect)
             bindings,
           });
 
-          const { archive, hash } = yield* bundleCode(id, news);
+          const { identityHash, buildArchive } = yield* bundleCode(id, news);
+          const { archive, archiveHash } = yield* buildArchive;
 
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
             archive,
-            hash,
+            hash: archiveHash,
             env: {
               ...env,
               ...news.env,
@@ -1616,7 +1675,7 @@ export default await Effect.runPromise(handlerEffect)
             roleName,
             roleArn,
             code: {
-              hash,
+              hash: identityHash,
             },
             reservedConcurrentExecutions,
           };

@@ -1,10 +1,9 @@
 import {
   installExternalPackages,
   isForceExternalModule,
-  isInstallExternalModule,
-  normalizeInstallPackages,
   npmInstallArgs,
   parsePackageRoot,
+  validateInstallTargets,
 } from "@/Bundle/ExternalPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
@@ -28,30 +27,30 @@ describe("Lambda external packages", () => {
     expect(parsePackageRoot("./local.js")).toBeUndefined();
   });
 
-  it("rejects subpaths in build.install", () => {
-    expect(() => normalizeInstallPackages(["sharp/lib"])).toThrow(
-      /Invalid package name/,
-    );
-  });
+  it.effect("rejects subpaths in build.install", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(validateInstallTargets(["sharp/lib"]));
+      expect(error.message).toMatch(/Invalid package name/);
+    }),
+  );
 
-  it("normalizes install arrays to wildcard versions", () => {
-    expect(normalizeInstallPackages(["sharp", "pg-native"])).toEqual({
-      sharp: "*",
-      "pg-native": "*",
-    });
-    expect(normalizeInstallPackages({ sharp: "^0.33.5" })).toEqual({
-      sharp: "^0.33.5",
-    });
-  });
+  it.effect("validates and normalizes install targets", () =>
+    Effect.gen(function* () {
+      expect(yield* validateInstallTargets(["sharp", "pg-native"])).toEqual({
+        sharp: "*",
+        "pg-native": "*",
+      });
+      expect(yield* validateInstallTargets({ sharp: "^0.33.5" })).toEqual({
+        sharp: "^0.33.5",
+      });
+    }),
+  );
 
-  it("always externalizes sharp and pg-native during bundling", () => {
+  it("always force-externalizes sharp and pg-native", () => {
     expect(isForceExternalModule("sharp")).toBe(true);
     expect(isForceExternalModule("sharp/lib/index.js")).toBe(true);
     expect(isForceExternalModule("pg-native")).toBe(true);
     expect(isForceExternalModule("sharpish")).toBe(false);
-    expect(isInstallExternalModule("sharp", undefined)).toBe(true);
-    expect(isInstallExternalModule("lodash", undefined)).toBe(false);
-    expect(isInstallExternalModule("lodash", ["lodash"])).toBe(true);
   });
 
   it("targets Linux and the Lambda architecture", () => {
