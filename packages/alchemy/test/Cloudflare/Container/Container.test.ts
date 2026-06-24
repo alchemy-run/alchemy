@@ -113,7 +113,7 @@ describe("effectful container (main)", () => {
     timeout: HOOK_TIMEOUT,
   });
 
-  test.skipIf(!!process.env.FAST)(
+  test(
     "RPC: ping round-trips into the container",
     Effect.gen(function* () {
       const { url } = yield* stack;
@@ -124,7 +124,7 @@ describe("effectful container (main)", () => {
     { timeout: TEST_TIMEOUT },
   );
 
-  test.skipIf(!!process.env.FAST)(
+  test(
     "fetch: serves over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;
@@ -135,7 +135,7 @@ describe("effectful container (main)", () => {
     { timeout: TEST_TIMEOUT },
   );
 
-  test.skipIf(!!process.env.FAST)(
+  test(
     "RPC: reads an R2 object from inside the container",
     Effect.gen(function* () {
       const { url } = yield* stack;
@@ -147,7 +147,7 @@ describe("effectful container (main)", () => {
     { timeout: TEST_TIMEOUT },
   );
 
-  test.skipIf(!!process.env.FAST)(
+  test(
     "fetch: reads an R2 object from inside the container",
     Effect.gen(function* () {
       const { url } = yield* stack;
@@ -174,7 +174,7 @@ describe("external container (context/dockerfile)", () => {
     timeout: HOOK_TIMEOUT,
   });
 
-  test.skipIf(!!process.env.FAST)(
+  test(
     "builds the user Dockerfile and serves it over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;
@@ -197,7 +197,7 @@ describe("remote container (image)", () => {
     timeout: HOOK_TIMEOUT,
   });
 
-  test.skipIf(!!process.env.FAST)(
+  test(
     "pulls and re-pushes the remote image and serves it over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;

@@ -93,14 +93,17 @@ export const makeDurableObjectBridge =
                 const method = instance[prop as keyof DurableObjectShape];
                 if (typeof method === "function") {
                   const result = (method as any)(...args);
-                  // A streaming RPC method returns a `Stream` directly rather
-                  // than an `Effect`. Lift it into the success channel so the
-                  // resulting `Exit.value` is the `Stream` and `handleRpcExit`
-                  // can encode it as a stream envelope instead of trying to run
-                  // it as an effect.
-                  return Stream.isStream(result)
-                    ? Effect.succeed(result)
-                    : result;
+                  // Effects (including nested-RPC values built by
+                  // `asEffectOrStream`, which are Effects *branded* as Streams)
+                  // must be run as effects — their resolved value may itself be
+                  // a `Stream`, which `handleRpcExit` then encodes. Only a
+                  // *genuine* `Stream` (not an Effect) is lifted into the
+                  // success channel so `handleRpcExit` encodes it directly.
+                  return Effect.isEffect(result)
+                    ? result
+                    : Stream.isStream(result)
+                      ? Effect.succeed(result)
+                      : result;
                 } else if (Effect.isEffect(method)) {
                   return method;
                 } else {

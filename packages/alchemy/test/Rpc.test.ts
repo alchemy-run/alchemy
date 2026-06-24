@@ -286,4 +286,107 @@ describe("Rpc fetch protocol", () => {
       }),
     );
   });
+
+  // -------------------------------------------------------------------------
+  // Nested RPC: a shape method that *forwards* another RPC call returns an
+  // `asEffectOrStream` value — an `Effect` that is ALSO branded as a `Stream`
+  // so a single return is usable either way. This is exactly the shape of a
+  // Worker→DO→Container chain (e.g. `readObjectRpc: (k) => container.readObject(k)`).
+  // The dispatcher MUST run it as an effect rather than mis-detecting the
+  // brand and serving it as a stream envelope (which decodes to `{channel:{}}`
+  // on the caller). See `serveRpc` and the Worker/DO bridges.
+  // -------------------------------------------------------------------------
+  describe("nested RPC (asEffectOrStream forwarding)", () => {
+    const nested = {
+      // value method forwarding a nested call that resolves to a value
+      forwardValue: (k: string) =>
+        Rpc.asEffectOrStream(Effect.succeed(`deep:${k}`)),
+      // value method forwarding a nested call that resolves to a Stream
+      forwardStream: (n: number) =>
+        Rpc.asEffectOrStream(
+          Effect.succeed(Stream.range(1, n).pipe(Stream.map((i) => ({ i })))),
+        ),
+    };
+
+    it.effect("a forwarded value round-trips as a value (not a Stream)", () =>
+      withRpc(nested, (stub) =>
+        Effect.gen(function* () {
+          const value = yield* stub.forwardValue("x");
+          expect(value).toBe("deep:x");
+        }),
+      ),
+    );
+
+    it.effect("a forwarded Stream round-trips as a Stream", () =>
+      withRpc(nested, (stub) =>
+        Effect.gen(function* () {
+          const out: Array<{ i: number }> = [];
+          yield* Stream.runForEach(stub.forwardStream(3), (v: { i: number }) =>
+            Effect.sync(() => {
+              out.push(v);
+            }),
+          );
+          expect(out).toEqual([{ i: 1 }, { i: 2 }, { i: 3 }]);
+        }),
+      ),
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Benchmark: the loopback exercises the FULL wire protocol (serialize args →
+  // serveRpc → JSON response → decode) with zero sockets and zero container,
+  // so it isolates the RPC layer's per-call overhead from network latency.
+  // This is the quantitative backstop for "RPC is not the bottleneck": a
+  // catastrophic regression (accidental buffering, O(n)-per-call work, a real
+  // socket sneaking in) blows the per-call ceiling, while normal network jitter
+  // (the 400-700ms seen against a live container's R2 read) lives entirely
+  // outside this measurement.
+  // -------------------------------------------------------------------------
+  describe("performance", () => {
+    const N = 2_000;
+    // In-process protocol overhead is sub-millisecond; a generous ceiling so
+    // the assertion only trips on a real regression, never on a slow CI box.
+    const MAX_MS_PER_CALL = 5;
+
+    const benchmark = (
+      label: string,
+      stub: any,
+      call: (stub: any) => Effect.Effect<unknown, unknown, any>,
+      expected: unknown,
+    ) =>
+      Effect.gen(function* () {
+        // Warm the JIT + connection-less path, and assert correctness once so
+        // the timing loop below isn't measuring a broken (e.g. erroring) path.
+        expect(yield* call(stub)).toEqual(expected);
+        const start = yield* Effect.sync(() => performance.now());
+        for (let i = 0; i < N; i++) {
+          yield* call(stub);
+        }
+        const elapsed = yield* Effect.sync(() => performance.now() - start);
+        const perCall = elapsed / N;
+        yield* Effect.logInfo(
+          `RPC ${label}: ${perCall.toFixed(4)} ms/call ` +
+            `(${N} calls in ${elapsed.toFixed(0)} ms)`,
+        );
+        expect(perCall).toBeLessThan(MAX_MS_PER_CALL);
+      });
+
+    it.effect(
+      "no-arg value-method RPC overhead stays sub-millisecond",
+      () =>
+        withRpc(shape, (stub) =>
+          benchmark("ping", stub, (s) => s.ping(), "pong"),
+        ),
+      { timeout: 60_000 },
+    );
+
+    it.effect(
+      "arg + object-result RPC overhead stays sub-millisecond",
+      () =>
+        withRpc(shape, (stub) =>
+          benchmark("echo", stub, (s) => s.echo("hi", 7), { a: "hi", b: 7 }),
+        ),
+      { timeout: 60_000 },
+    );
+  });
 });

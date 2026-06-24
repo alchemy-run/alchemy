@@ -10,22 +10,21 @@ import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { makeFetchRpcStub } from "../../Rpc.ts";
 import { type Fetcher } from "../Fetcher.ts";
 import {
-  ContainerBindEff,
-  containerInstanceTag,
-  type Container,
   ContainerError,
+  ContainerTag,
+  type Container,
   type ContainerStartupOptions,
 } from "./Container.ts";
 
 export const layerContainer = <Image extends Container.Decl.Any>(
   container: Image,
   options?: ContainerStartupOptions,
-): Layer.Layer<InstanceType<Image>> => {
+) => {
   const id = (container as any)["~alchemy/Id"] as string;
   // Provide the *started* instance under the same tag `yield* MyContainer`
   // resolves (keyed by logical id) so the two compose.
   return Layer.effect(
-    containerInstanceTag(id) as any,
+    ContainerTag(id),
     startContainer(container, options),
   ) as Layer.Layer<InstanceType<Image>>;
 };
@@ -36,13 +35,7 @@ export const layerContainer = <Image extends Container.Decl.Any>(
 export const startContainer = Effect.fn(function* <
   Image extends Container.Decl.Any,
 >(containerEff: Image, options?: ContainerStartupOptions) {
-  // Resolve the runtime handle. `ContainerPlatform.bind` is a two-phase
-  // effect: the outer (init) pass registers the DO + Worker bindings and
-  // returns an inner effect that, once `DurableObjectState` is available,
-  // produces the actual handle (`running`/`start`/`getTcpPort`/…). The bind
-  // effect is stashed on the Container class so `yield* MyContainer` itself can
-  // resolve the started instance from this layer without re-running bind.
-  const bindEff = (containerEff as any)[ContainerBindEff] as
+  const bindEff = (containerEff as any)["~alchemy/Container/Binding"] as
     | Effect.Effect<Effect.Effect<Container>, never, any>
     | undefined;
   const bound = yield* (

@@ -537,23 +537,37 @@ export const serveRpc = <Req = never>(
 
     const invoked = (method as (...a: unknown[]) => unknown)(...args);
 
-    if (Stream.isStream(invoked)) {
-      // Fully-lazy NDJSON body: nothing is held open across the
-      // handler→body-streaming boundary, so the stream isn't truncated. The
-      // body's requirements are the shape method's phantom `R` (e.g.
-      // `RuntimeContext`), satisfied by the surrounding runtime; erase it for
-      // the response constructor.
-      return HttpServerResponse.stream(
-        encodeRpcResponseStream(invoked) as Stream.Stream<Uint8Array, never>,
+    // Fully-lazy NDJSON body: nothing is held open across the
+    // handler→body-streaming boundary, so the stream isn't truncated. The
+    // body's requirements are the shape method's phantom `R` (e.g.
+    // `RuntimeContext`), satisfied by the surrounding runtime; erase it for
+    // the response constructor.
+    const streamResponse = (stream: Stream.Stream<unknown, unknown, unknown>) =>
+      HttpServerResponse.stream(
+        encodeRpcResponseStream(stream) as Stream.Stream<Uint8Array, never>,
         { headers: { [RPC_STREAM_HEADER]: "ndjson" } },
       );
+
+    // A *genuine* `Stream` (not an Effect) is encoded directly. A nested-RPC
+    // value built by {@link asEffectOrStream} is BOTH an Effect and a Stream —
+    // it MUST be run as an effect (below), otherwise a forwarded value method
+    // (e.g. a DO method returning `container.readObject(key)`) would be
+    // mis-served as a stream envelope and decoded by the caller as a `Stream`
+    // instead of the value.
+    if (Stream.isStream(invoked) && !Effect.isEffect(invoked)) {
+      return streamResponse(invoked);
     }
 
     const result = yield* Effect.result(
       invoked as Effect.Effect<unknown, unknown>,
     );
     if (Result.isSuccess(result)) {
-      return yield* HttpServerResponse.json(result.success ?? null);
+      // The resolved value may itself be a `Stream` (e.g. a forwarded nested
+      // *streaming* RPC, where the inner call resolves to a `Stream`) — encode
+      // that as a stream body too.
+      return Stream.isStream(result.success)
+        ? streamResponse(result.success)
+        : yield* HttpServerResponse.json(result.success ?? null);
     }
     return yield* HttpServerResponse.json({
       _tag: ErrorTag,
