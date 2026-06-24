@@ -1315,7 +1315,10 @@ export const LiveWorkerProvider = () =>
                   ...(props.assets && typeof props.assets !== "string"
                     ? props.assets
                     : undefined),
-                  directory: assetsDir,
+                  directory: path.resolve(
+                    props.vite?.rootDir ?? process.cwd(),
+                    assetsDir,
+                  ),
                 })
               : Effect.succeed(undefined),
             server

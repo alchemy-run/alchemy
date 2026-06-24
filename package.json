@@ -118,6 +118,16 @@
       "oxfmt": "^0.36.0",
       "oxlint": "^1.51.0",
       "pathe": "^2.0.3"
+    },
+    "catalogs": {
+      "fixtures": {
+        "@tanstack/react-router": "^1.167.4",
+        "@vitejs/plugin-react": "^6.0.2",
+        "@vitejs/plugin-rsc": "^0.5.27",
+        "@tanstack/react-start": "^1.166.15",
+        "react-dom": "^19.2.7",
+        "react-router": "7.16.0"
+      }
     }
   },
   "devDependencies": {

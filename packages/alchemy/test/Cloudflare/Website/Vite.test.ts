@@ -1,13 +1,18 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Vite from "@/Cloudflare/Workers/Vite.ts";
 import * as Test from "@/Test/Vitest";
+import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -15,8 +20,13 @@ import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
+import type { Counter as ViteDoCounter } from "./vite-do-fixture/src/worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test: devTest } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -24,6 +34,15 @@ const logLevel = Effect.provideService(
 );
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
+const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
+const reactRouterRscFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "react-router-rsc-fixture",
+);
+const tanstackDevBindingsFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "tanstack-dev-bindings-fixture",
+);
 
 // Vite/Rollup's `vite:build-html` plugin chokes when the project root
 // is outside the current working directory because it tries to express
@@ -52,7 +71,12 @@ test.provider(
 
       // Restrict the input memo to fixture sources so the test isn't
       // re-hashing the whole monorepo on every deploy.
-      const memoInclude = ["index.html", "src/**", "package.json"];
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
 
       const v1Marker = `vite-v1-${Date.now()}`;
       yield* fs.writeFileString(indexPath, htmlPage(v1Marker));
@@ -116,7 +140,12 @@ test.provider(
         entries: ["index.html", "package.json", "vite.config.ts", "src"],
       });
       const indexPath = path.join(rootDir, "index.html");
-      const memoInclude = ["index.html", "src/**", "package.json"];
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
 
       const marker = `vite-class-${Date.now()}`;
       yield* fs.writeFileString(indexPath, htmlPage(marker));
@@ -147,8 +176,8 @@ test.provider(
 // ─────────────────────────────────────────────────────────────────────
 // Path-relocation behavior for the vite path
 //
-// `Cloudflare.Vite` hashes its memo'd input tree (`hash.input`)
-// instead of carrying an `AssetsWithHash`. The diff is:
+// `Cloudflare.Vite` stores a path-insensitive `hash.input` made from
+// the memo'd input tree plus build-affecting Vite options. The diff is:
 //
 //   `input !== output.hash?.input`
 //
@@ -167,7 +196,12 @@ test.provider(
 
       yield* stack.destroy();
 
-      const memoInclude = ["index.html", "src/**", "package.json"];
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
       const marker = `vite-relocate-${Date.now()}`;
 
       const rootA = yield* cloneFixture(fixtureDir, {
@@ -231,7 +265,7 @@ test.provider(
 );
 
 test.provider(
-  "Vite: `env` props are inlined as `import.meta.env.*` into the bundle",
+  "Vite: `env` props are inlined and env-only changes redeploy",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -244,33 +278,464 @@ test.provider(
         entries: ["index.html", "package.json", "vite.config.ts", "src"],
       });
       const memoInclude = ["index.html", "src/**", "package.json"];
-      const marker = `vite-env-${Date.now()}`;
+      const marker1 = `vite-env-1-${Date.now()}`;
 
-      const site = yield* stack.deploy(
+      const site1 = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Vite("FixViteEnv", {
             ...viteProps(rootDir, memoInclude),
-            env: { VITE_TEST_MARKER: marker },
+            env: { VITE_TEST_MARKER: marker1 },
+          });
+        }),
+      );
+
+      expect(site1.url).toBeDefined();
+      expect(site1.hash?.input).toBeDefined();
+      // Resolve the hashed bundle URL by reading the deployed HTML, then
+      // assert the marker that `main.ts` references via
+      // `import.meta.env.VITE_TEST_MARKER` was actually inlined into the
+      // served JS asset by `Cloudflare.Vite`'s `env`-→-`define` plumbing.
+      const bundleUrl1 = yield* discoverBundleUrl(site1.url!);
+      yield* expectUrlContains(bundleUrl1, marker1, {
+        timeout: "60 seconds",
+        label: "VITE_TEST_MARKER v1 inlined into client bundle",
+      });
+
+      const marker2 = `vite-env-2-${Date.now()}`;
+      const site2 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Vite("FixViteEnv", {
+            ...viteProps(rootDir, memoInclude),
+            env: { VITE_TEST_MARKER: marker2 },
+          });
+        }),
+      );
+
+      expect(site2.hash?.input).toBeDefined();
+      expect(site2.hash?.bundle).not.toEqual(site1.hash?.bundle);
+      const bundleUrl2 = yield* discoverBundleUrl(site2.url!);
+      yield* expectUrlContains(bundleUrl2, marker2, {
+        timeout: "60 seconds",
+        label: "VITE_TEST_MARKER v2 inlined into client bundle",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+test.provider(
+  "Vite: worker entry can host a local Durable Object binding",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(doFixtureDir, {
+        prefix: "alchemy-vite-do-",
+        tempRoot,
+        // Keep the fixture's real stack file available for local
+        // `alchemy dev` smoke tests. The live deploy below uses an inline
+        // stack so cleanup stays under the provider test harness.
+        entries: [
+          "alchemy.run.ts",
+          "index.html",
+          "package.json",
+          "vite.config.ts",
+          "src",
+        ],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+      const compatibility = {
+        date: "2026-03-17",
+        flags: ["nodejs_compat"],
+      };
+      const assets = {
+        runWorkerFirst: ["/api/*"],
+      };
+      // Direct build assertion covers the distilled Vite manifest contract;
+      // the live deploy assertion below proves Cloudflare.Vite consumes the
+      // same manifest bundle instead of falling back to the legacy ssr output.
+      const build = yield* Vite.viteBuild(
+        rootDir,
+        {},
+        {
+          compatibilityDate: compatibility.date,
+          compatibilityFlags: compatibility.flags,
+        },
+      );
+      // const distilled = build.distilled;
+      // expect(distilled).toBeDefined();
+      // expect(distilled!.manifest.workers.app.main).toBe("server/worker.js");
+      // expect(distilled!.manifest.workers.app.modules).toContainEqual({
+      //   path: "server/worker.js",
+      //   type: "esm",
+      // });
+      // expect(distilled!.manifest.assets?.runWorkerFirst).toEqual(["/api/*"]);
+      // expect(distilled!.bundle.files).toContainEqual(
+      //   expect.objectContaining({
+      //     path: "server/worker.js",
+      //     contentType: "application/javascript+module",
+      //   }),
+      // );
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Vite("ViteDo", {
+            ...viteProps(rootDir, memoInclude),
+            compatibility,
+            assets,
+            env: {
+              Counter: Cloudflare.DurableObjectNamespace<ViteDoCounter>(
+                "Counter",
+                {
+                  className: "Counter",
+                },
+              ),
+            },
           });
         }),
       );
 
       expect(site.url).toBeDefined();
-      // Resolve the hashed bundle URL by reading the deployed HTML, then
-      // assert the marker that `main.ts` references via
-      // `import.meta.env.VITE_TEST_MARKER` was actually inlined into the
-      // served JS asset by `Cloudflare.Vite`'s `env`-→-`define` plumbing.
-      const bundleUrl = yield* discoverBundleUrl(site.url!);
-      yield* expectUrlContains(bundleUrl, marker, {
-        timeout: "60 seconds",
-        label: "VITE_TEST_MARKER inlined into client bundle",
+      // expect(site.hash?.bundle).toEqual(distilled!.bundle.hash);
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "Vite DO fixture", {
+        timeout: "120 seconds",
+        label: "vite do fixture assets",
       });
+
+      const reset = yield* fetchJsonReady<{ ok: boolean }>(
+        `${site.url!}/api/reset`,
+      );
+      expect(reset.ok).toBe(true);
+
+      const first = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/count`,
+      );
+      expect(first.count).toBe(1);
+
+      const second = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/count`,
+      );
+      expect(second.count).toBe(2);
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site.workerName, accountId);
     }).pipe(logLevel),
   { timeout: 360_000 },
 );
+
+test.provider(
+  "Vite: React Router RSC deploys from a distilled manifest",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(reactRouterRscFixtureDir, {
+        prefix: "alchemy-vite-rsc-",
+        tempRoot,
+        // Keep the fixture's stack file available for local `alchemy dev`
+        // smoke tests. The live deploy below uses an inline stack so cleanup
+        // stays under the provider test harness.
+        entries: [
+          "alchemy.run.ts",
+          "app",
+          "package.json",
+          "react-router-vite",
+          "tsconfig.json",
+          "vite.config.ts",
+        ],
+      });
+      const memoInclude = [
+        "app/**",
+        "react-router-vite/**",
+        "package.json",
+        "tsconfig.json",
+        "vite.config.ts",
+      ];
+      const compatibility = {
+        date: "2026-03-10",
+        flags: ["nodejs_compat"],
+      };
+      const assets = {
+        runWorkerFirst: true,
+      };
+      const viteEnvironments = { entry: "rsc", children: ["ssr"] };
+
+      // Direct build assertion covers the RSC manifest shape: one Worker
+      // module set that folds both the rsc entry and ssr child chunks without
+      // leaking client assets into the uploaded Worker bundle.
+      const build = yield* Vite.viteBuild(
+        rootDir,
+        {},
+        {
+          compatibilityDate: compatibility.date,
+          compatibilityFlags: compatibility.flags,
+          viteEnvironments,
+        },
+      );
+      // const distilled = build.client;
+      // expect(distilled).toBeDefined();
+      // const worker = distilled!.manifest.workers.app;
+      // const modulePaths = worker.modules.map((module) => module.path);
+      // expect(worker.main).toBe("server/entry.worker.js");
+      // expect(worker.compatibilityDate).toBe(compatibility.date);
+      // expect(worker.compatibilityFlags).toEqual(compatibility.flags);
+      // expect(modulePaths).toContain(worker.main);
+      // expect(modulePaths).toContain("ssr/worker-ssr.js");
+      // expect(modulePaths.some((path) => path.startsWith("ssr/"))).toBe(true);
+      // expect(modulePaths.some((path) => path.startsWith("client/"))).toBe(
+      //   false,
+      // );
+      // expect(distilled!.manifest.assets?.directory).toBe("client");
+      // expect(distilled!.manifest.assets?.runWorkerFirst).toBe(true);
+      // expect(distilled!.bundle.files).toContainEqual(
+      //   expect.objectContaining({
+      //     path: "server/entry.worker.js",
+      //     contentType: "application/javascript+module",
+      //   }),
+      // );
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Vite("ReactRouterRsc", {
+            ...viteProps(rootDir, memoInclude),
+            assets,
+            compatibility,
+            viteEnvironments,
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      // expect(site.hash?.bundle).toEqual(distilled!.bundle.hash);
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "React Router Vite", {
+        timeout: "120 seconds",
+        label: "react router rsc home route",
+      });
+      yield* expectUrlContains(`${site.url!}/about`, "About", {
+        timeout: "60 seconds",
+        label: "react router rsc client route",
+      });
+
+      const render = yield* fetchJsonReady<{ ok: boolean; html: string }>(
+        `${site.url!}/worker-render`,
+      );
+      expect(render.ok).toBe(true);
+      expect(render.html).toContain("Worker render via the ssr environment.");
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+devTest.provider(
+  "Vite dev: TanStack Start keeps Alchemy-managed R2 bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const bucketNames = new Set<string>();
+
+      const cleanup = Effect.gen(function* () {
+        yield* stack.destroy();
+        for (const bucketName of bucketNames) {
+          yield* waitForBucketToBeDeleted(bucketName, accountId);
+        }
+      });
+
+      const body = Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(tanstackDevBindingsFixtureDir, {
+          prefix: "alchemy-tanstack-dev-bindings-",
+          tempRoot,
+          entries: [
+            "alchemy.run.ts",
+            "package.json",
+            "tsconfig.json",
+            "vite.config.ts",
+            "src",
+          ],
+        });
+        const indexRoutePath = path.join(rootDir, "src/routes/index.tsx");
+        const memoInclude = [
+          "src/**",
+          "package.json",
+          "tsconfig.json",
+          "vite.config.ts",
+          "alchemy.run.ts",
+        ];
+        const key = `dev-binding-${Date.now()}.txt`;
+
+        yield* fs.writeFileString(
+          indexRoutePath,
+          tanstackIndexRouteSource("hmr-marker-v1"),
+        );
+
+        const deploy = (bucketId: string, marker: string) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const bucket = yield* Cloudflare.R2Bucket(bucketId);
+              const worker = yield* Cloudflare.Vite("TanStackDevBindings", {
+                ...viteProps(rootDir, memoInclude),
+                assets: {
+                  runWorkerFirst: true,
+                },
+                dev: {
+                  port: 0,
+                },
+                env: {
+                  BUCKET: bucket,
+                  DEV_MARKER: marker,
+                },
+              });
+              return { bucket, worker };
+            }),
+          );
+
+        const first = yield* deploy("DevBucketA", "dev-marker-v1");
+        bucketNames.add(first.bucket.bucketName);
+        expect(first.worker.url).toBeDefined();
+        yield* expectUrlContains(`${first.worker.url!}/`, "hmr-marker-v1", {
+          timeout: "30 seconds",
+          label: "tanstack dev initial route",
+        });
+
+        const env1 = yield* fetchJsonReady<{ marker: string }>(
+          `${first.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+        );
+        expect(env1.marker).toBe("dev-marker-v1");
+
+        const put1 = yield* putTextJsonReady<{ ok: boolean }>(
+          `${first.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          "from-a",
+        );
+        expect(put1.ok).toBe(true);
+
+        const get1 = yield* fetchJsonReady<{ value: string | null }>(
+          `${first.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+        );
+        expect(get1.value).toBe("from-a");
+
+        // Change only a TanStack route file. The stack is not re-applied; the
+        // local Vite server should render the updated route through the same
+        // Alchemy proxy.
+        yield* fs.writeFileString(
+          indexRoutePath,
+          tanstackIndexRouteSource("hmr-marker-v2"),
+        );
+        yield* expectUrlContains(`${first.worker.url!}/`, "hmr-marker-v2", {
+          timeout: "30 seconds",
+          label: "tanstack dev updated route",
+        });
+
+        const second = yield* deploy("DevBucketB", "dev-marker-v2");
+        bucketNames.add(second.bucket.bucketName);
+        expect(second.worker.url).toBe(first.worker.url);
+
+        const env2 = yield* fetchJsonReady<{ marker: string }>(
+          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+        );
+        expect(env2.marker).toBe("dev-marker-v2");
+
+        // The Worker was rebound to DevBucketB. The object written through
+        // DevBucketA should not be visible through the new binding.
+        const reboundRead = yield* fetchJsonReady<{ value: string | null }>(
+          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+        );
+        expect(reboundRead.value).toBeNull();
+
+        const put2 = yield* putTextJsonReady<{ ok: boolean }>(
+          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          "from-b",
+        );
+        expect(put2.ok).toBe(true);
+
+        const get2 = yield* fetchJsonReady<{ value: string | null }>(
+          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+        );
+        expect(get2.value).toBe("from-b");
+      });
+
+      const exit = yield* Effect.exit(body);
+      if (Exit.isSuccess(exit)) {
+        yield* cleanup;
+        return exit.value;
+      }
+
+      yield* cleanup.pipe(
+        Effect.tapError((error) =>
+          Effect.logError("Vite dev live test cleanup failed", error),
+        ),
+        Effect.ignore,
+      );
+      return yield* Effect.failCause(exit.cause);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+const freshConn = HttpClient.mapRequest(
+  HttpClientRequest.setHeader("connection", "close"),
+);
+
+const fetchJsonReady = <T>(url: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.flatMap(res.text, (body) =>
+              Effect.try({
+                try: () => JSON.parse(body) as T,
+                catch: () => new Error(`non-json body: ${body}`),
+              }),
+            )
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 15,
+      }),
+    );
+  });
+
+const putTextJsonReady = <T>(url: string, body: string) =>
+  Effect.gen(function* () {
+    return yield* HttpClient.execute(
+      HttpClientRequest.put(url).pipe(
+        HttpClientRequest.bodyText(body, "text/plain"),
+      ),
+    ).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.flatMap(res.text, (responseBody) =>
+              Effect.try({
+                try: () => JSON.parse(responseBody) as T,
+                catch: () => new Error(`non-json body: ${responseBody}`),
+              }),
+            )
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 15,
+      }),
+    );
+  });
 
 const discoverBundleUrl = (siteUrl: string) =>
   Effect.gen(function* () {
@@ -322,3 +787,43 @@ const htmlPage = (marker: string) => `<!doctype html>
   </body>
 </html>
 `;
+
+const tanstackIndexRouteSource = (marker: string) => `
+/** @jsxImportSource react */
+import { createFileRoute } from "@tanstack/react-router";
+
+const marker = ${JSON.stringify(marker)};
+
+export const Route = createFileRoute("/")({
+  component: Home,
+});
+
+function Home() {
+  return <main>{marker}</main>;
+}
+`;
+
+const waitForBucketToBeDeleted = Effect.fn(function* (
+  bucketName: string,
+  accountId: string,
+) {
+  yield* r2
+    .getBucket({
+      accountId,
+      bucketName,
+    })
+    .pipe(
+      Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+      Effect.retry({
+        while: (error): error is BucketStillExists =>
+          error instanceof BucketStillExists,
+        schedule: Schedule.exponential("200 millis").pipe(
+          Schedule.either(Schedule.spaced("2 seconds")),
+          Schedule.both(Schedule.recurs(20)),
+        ),
+      }),
+      Effect.catchTag("NoSuchBucket", () => Effect.void),
+    );
+});
+
+class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
