@@ -1,11 +1,11 @@
 import {
   hashPackageInstallIdentity,
   installPackages,
+  normalizeInstallTargets,
   npmInstallArgs,
   parsePackageRoot,
   parsePackageRootFromSpecifier,
   resolvePackageInstallIdentity,
-  validateInstallTargets,
 } from "@/Bundle/InstalledPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
@@ -43,18 +43,18 @@ describe("Lambda external packages", () => {
 
   it.effect("rejects subpaths in build.install", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(validateInstallTargets(["sharp/lib"]));
+      const error = yield* Effect.flip(normalizeInstallTargets(["sharp/lib"]));
       expect(error.message).toMatch(/Invalid package name/);
     }),
   );
 
-  it.effect("validates and normalizes install targets", () =>
+  it.effect("normalizes and validates install targets", () =>
     Effect.gen(function* () {
-      expect(yield* validateInstallTargets(["sharp", "pg-native"])).toEqual({
+      expect(yield* normalizeInstallTargets(["sharp", "pg-native"])).toEqual({
         sharp: "*",
         "pg-native": "*",
       });
-      expect(yield* validateInstallTargets({ sharp: "^0.33.5" })).toEqual({
+      expect(yield* normalizeInstallTargets({ sharp: "^0.33.5" })).toEqual({
         sharp: "^0.33.5",
       });
     }),
@@ -115,6 +115,174 @@ describe("Lambda external packages", () => {
         });
 
         expect(files.map((file) => file.path)).toContain("package.json");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("resolves named catalog versions from pnpm-workspace.yaml", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-pnpm-named-catalog-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "pnpm-workspace.yaml"),
+          [
+            "packages:",
+            "  - packages/*",
+            "catalogs:",
+            "  native:",
+            "    sharp: ^0.34.5",
+          ].join("\n"),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "catalog:native" } }),
+        );
+
+        const files = yield* installPackages({
+          cwd: root,
+          install: ["sharp"],
+          architecture: "arm64",
+          runNpmInstall: (directory) =>
+            Effect.gen(function* () {
+              const packageJson = JSON.parse(
+                yield* fs.readFileString(path.join(directory, "package.json")),
+              );
+              expect(packageJson.dependencies.sharp).toBe("^0.34.5");
+            }),
+        });
+
+        expect(files.map((file) => file.path)).toContain("package.json");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("resolves catalog versions from Bun workspace metadata", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-bun-catalog-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({
+            workspaces: {
+              packages: ["packages/*"],
+              catalogs: {
+                native: {
+                  sharp: "^0.34.5",
+                },
+              },
+            },
+            dependencies: { sharp: "catalog:native" },
+          }),
+        );
+
+        const files = yield* installPackages({
+          cwd: root,
+          install: ["sharp"],
+          architecture: "arm64",
+          runNpmInstall: (directory) =>
+            Effect.gen(function* () {
+              const packageJson = JSON.parse(
+                yield* fs.readFileString(path.join(directory, "package.json")),
+              );
+              expect(packageJson.dependencies.sharp).toBe("^0.34.5");
+            }),
+        });
+
+        expect(files.map((file) => file.path)).toContain("package.json");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("falls back to optional and dev dependency versions", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-dependency-sections-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({
+            optionalDependencies: { sharp: "^0.34.5" },
+            devDependencies: { "pg-native": "^3.2.0" },
+          }),
+        );
+
+        const files = yield* installPackages({
+          cwd: root,
+          install: ["sharp", "pg-native"],
+          architecture: "x86_64",
+          runNpmInstall: (directory) =>
+            Effect.gen(function* () {
+              const packageJson = JSON.parse(
+                yield* fs.readFileString(path.join(directory, "package.json")),
+              );
+              expect(packageJson.dependencies).toEqual({
+                "pg-native": "^3.2.0",
+                sharp: "^0.34.5",
+              });
+            }),
+        });
+
+        expect(files.map((file) => file.path)).toContain("package.json");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("rejects workspace and file dependency protocols", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-incompatible-protocol-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({
+            dependencies: {
+              sharp: "workspace:*",
+              "pg-native": "file:../pg-native",
+            },
+          }),
+        );
+
+        const workspaceError = yield* installPackages({
+          cwd: root,
+          install: ["sharp"],
+          architecture: "arm64",
+          runNpmInstall: () => Effect.void,
+        }).pipe(Effect.flip);
+        expect(workspaceError.message).toContain("workspace:*");
+
+        const fileError = yield* installPackages({
+          cwd: root,
+          install: ["pg-native"],
+          architecture: "arm64",
+          runNpmInstall: () => Effect.void,
+        }).pipe(Effect.flip);
+        expect(fileError.message).toContain("file:../pg-native");
       } finally {
         yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
       }
@@ -258,57 +426,66 @@ describe("Lambda external packages", () => {
   );
 
   it.effect(
-    "includes the nearest lockfile in the external package identity",
+    "includes package-manager lockfiles in the external package identity",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-external-lockfile-",
-        });
 
-        try {
-          yield* fs.writeFileString(
-            path.join(root, "package.json"),
-            JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
-          );
-          yield* fs.writeFileString(
-            path.join(root, "bun.lock"),
-            "sharp@0.34.5",
-          );
-
-          const first = yield* resolvePackageInstallIdentity({
-            cwd: root,
-            requested: { sharp: "*" },
-          });
-          const firstHash = yield* hashPackageInstallIdentity({
-            bundleHash: "bundle",
-            identity: first,
-            architecture: "arm64",
+        for (const lockfileName of [
+          "bun.lock",
+          "bun.lockb",
+          "package-lock.json",
+          "pnpm-lock.yaml",
+          "yarn.lock",
+        ] as const) {
+          const root = yield* fs.makeTempDirectory({
+            prefix: "alchemy-external-lockfile-",
           });
 
-          yield* fs.writeFileString(
-            path.join(root, "bun.lock"),
-            "sharp@0.34.6",
-          );
+          try {
+            yield* fs.writeFileString(
+              path.join(root, "package.json"),
+              JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+            );
+            yield* fs.writeFileString(
+              path.join(root, lockfileName),
+              "sharp@0.34.5",
+            );
 
-          const second = yield* resolvePackageInstallIdentity({
-            cwd: root,
-            requested: { sharp: "*" },
-          });
-          const secondHash = yield* hashPackageInstallIdentity({
-            bundleHash: "bundle",
-            identity: second,
-            architecture: "arm64",
-          });
+            const first = yield* resolvePackageInstallIdentity({
+              cwd: root,
+              requested: { sharp: "*" },
+            });
+            const firstHash = yield* hashPackageInstallIdentity({
+              bundleHash: "bundle",
+              identity: first,
+              architecture: "arm64",
+            });
 
-          expect(first.resolved).toEqual(second.resolved);
-          expect(first.lockfile?.name).toBe("bun.lock");
-          expect(second.lockfile?.name).toBe("bun.lock");
-          expect(first.lockfile?.hash).not.toBe(second.lockfile?.hash);
-          expect(firstHash).not.toBe(secondHash);
-        } finally {
-          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+            yield* fs.writeFileString(
+              path.join(root, lockfileName),
+              "sharp@0.34.6",
+            );
+
+            const second = yield* resolvePackageInstallIdentity({
+              cwd: root,
+              requested: { sharp: "*" },
+            });
+            const secondHash = yield* hashPackageInstallIdentity({
+              bundleHash: "bundle",
+              identity: second,
+              architecture: "arm64",
+            });
+
+            expect(first.resolved).toEqual(second.resolved);
+            expect(first.lockfile?.name).toBe(lockfileName);
+            expect(second.lockfile?.name).toBe(lockfileName);
+            expect(first.lockfile?.hash).not.toBe(second.lockfile?.hash);
+            expect(firstHash).not.toBe(secondHash);
+          } finally {
+            yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+          }
         }
       }).pipe(Effect.provide(NodeServices.layer)),
   );

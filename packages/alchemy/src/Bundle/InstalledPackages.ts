@@ -25,7 +25,7 @@ export type NpmInstallRunner = (
 
 export interface ResolveInstallTargetsOptions {
   readonly cwd: string;
-  /** Validated package-root → requested version map (from {@link validateInstallTargets}). */
+  /** Normalized package-root → requested version map (from {@link normalizeInstallTargets}). */
   readonly requested: Readonly<Record<string, string>>;
 }
 
@@ -150,10 +150,10 @@ export function npmInstallArgs(
 }
 
 /**
- * Validates a `build.install` declaration and normalizes it to a
+ * Normalizes and validates a `build.install` declaration to a
  * package-root → requested-version map. Array entries default to `"*"`.
  */
-export function validateInstallTargets(
+export function normalizeInstallTargets(
   install: PackageInstall | undefined,
 ): Effect.Effect<Record<string, string>, BundleError> {
   if (!install) return Effect.succeed({});
@@ -302,7 +302,7 @@ export function installPackages(
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner
 > {
   return Effect.gen(function* () {
-    const requested = yield* validateInstallTargets(options.install);
+    const requested = yield* normalizeInstallTargets(options.install);
     const resolved = yield* resolveInstallTargets({
       cwd: options.cwd,
       requested,

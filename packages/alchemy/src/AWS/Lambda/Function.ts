@@ -20,9 +20,9 @@ import {
   hashPackageInstallIdentity,
   installResolvedPackages,
   matchesPackageRoot,
+  normalizeInstallTargets,
   type PackageInstall,
   resolvePackageInstallIdentity,
-  validateInstallTargets,
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -812,7 +812,7 @@ export const FunctionProvider = () =>
         // Explicit install roots are excluded from the bundle and installed
         // into the deployment artifact. build.external stays a pure Rolldown
         // escape hatch and is not installed by Alchemy.
-        const requested = yield* validateInstallTargets(install);
+        const requested = yield* normalizeInstallTargets(install);
         const installRoots = new Set(Object.keys(requested));
         const configuredExternal = inputOptions.external;
         const externalOption = (
