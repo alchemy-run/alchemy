@@ -412,7 +412,17 @@ export const LiveWorkerProvider = () =>
             }),
             Effect.flatten,
             Effect.retry({
-              while: (error) => error._tag === "MissingDurableObjectNamespaces",
+              // `MissingDurableObjectNamespaces`: the DO bindings haven't
+              // surfaced in the version settings yet. `WorkerHasNoVersions` /
+              // `WorkerNotFound`: right after the first `putScript`, the
+              // version-settings read can race the script registry — under a
+              // busy account this read can briefly 404 with "has no versions"
+              // (or the worker itself as not-yet-found) before the upload
+              // propagates. All three are eventual-consistency blips.
+              while: (error) =>
+                error._tag === "MissingDurableObjectNamespaces" ||
+                error._tag === "WorkerHasNoVersions" ||
+                error._tag === "WorkerNotFound",
               schedule: Schedule.exponential(100).pipe(
                 Schedule.both(Schedule.recurs(20)),
               ),
@@ -1316,7 +1326,13 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
             })
             .pipe(
+              // A freshly pre-created stub can briefly report "has no
+              // versions" before its first version registers — treat it the
+              // same as a missing worker (nothing to adopt yet).
               Effect.catchTag("WorkerNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.catchTag("WorkerHasNoVersions", () =>
                 Effect.succeed(undefined),
               ),
             );
@@ -1509,7 +1525,12 @@ export const LiveWorkerProvider = () =>
           },
           (effect) =>
             effect.pipe(
+              // A worker that exists but hasn't registered a version yet reads
+              // as "not deployed" — fall through to (re)create like NotFound.
               Effect.catchTag("WorkerNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.catchTag("WorkerHasNoVersions", () =>
                 Effect.succeed(undefined),
               ),
             ),
@@ -1551,7 +1572,14 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
             })
             .pipe(
+              // After a pre-create stub (or under a busy account right after
+              // the first upload) the settings read can race the script
+              // registry and 404 with "has no versions". Treat it as "no
+              // existing settings" so reconcile proceeds to upload/converge.
               Effect.catchTag("WorkerNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.catchTag("WorkerHasNoVersions", () =>
                 Effect.succeed(undefined),
               ),
             );
