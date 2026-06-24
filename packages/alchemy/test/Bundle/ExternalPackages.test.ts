@@ -1,9 +1,11 @@
 import {
+  hashExternalPackageIdentity,
   installExternalPackages,
   isForceExternalModule,
   npmInstallArgs,
   parsePackageRoot,
   parsePackageRootFromSpecifier,
+  resolveExternalPackageIdentity,
   validateInstallTargets,
 } from "@/Bundle/ExternalPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -271,6 +273,62 @@ describe("Lambda external packages", () => {
         yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
       }
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "includes the nearest lockfile in the external package identity",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-external-lockfile-",
+        });
+
+        try {
+          yield* fs.writeFileString(
+            path.join(root, "package.json"),
+            JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+          );
+          yield* fs.writeFileString(
+            path.join(root, "bun.lock"),
+            "sharp@0.34.5",
+          );
+
+          const first = yield* resolveExternalPackageIdentity({
+            cwd: root,
+            requested: { sharp: "*" },
+          });
+          const firstHash = yield* hashExternalPackageIdentity({
+            bundleHash: "bundle",
+            identity: first,
+            architecture: "arm64",
+          });
+
+          yield* fs.writeFileString(
+            path.join(root, "bun.lock"),
+            "sharp@0.34.6",
+          );
+
+          const second = yield* resolveExternalPackageIdentity({
+            cwd: root,
+            requested: { sharp: "*" },
+          });
+          const secondHash = yield* hashExternalPackageIdentity({
+            bundleHash: "bundle",
+            identity: second,
+            architecture: "arm64",
+          });
+
+          expect(first.resolved).toEqual(second.resolved);
+          expect(first.lockfile?.name).toBe("bun.lock");
+          expect(second.lockfile?.name).toBe("bun.lock");
+          expect(first.lockfile?.hash).not.toBe(second.lockfile?.hash);
+          expect(firstHash).not.toBe(secondHash);
+        } finally {
+          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
 

@@ -6,6 +6,7 @@ import { parse as parseYaml } from "yaml";
 import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { exec } from "../Util/exec.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 import { BundleError } from "./Bundle.ts";
 
 export interface ExternalPackageFile {
@@ -34,6 +35,20 @@ export interface ResolveInstallTargetsOptions {
   readonly requested: Readonly<Record<string, string>>;
   /** Package roots detected as externalized during bundling. */
   readonly detected?: ReadonlyArray<string>;
+}
+
+export interface ExternalPackageIdentity {
+  readonly resolved: Readonly<Record<string, string>>;
+  readonly lockfile?: {
+    readonly name: string;
+    readonly hash: string;
+  };
+}
+
+export interface HashExternalPackageIdentityOptions {
+  readonly bundleHash: string;
+  readonly identity: ExternalPackageIdentity;
+  readonly architecture: "x86_64" | "arm64";
 }
 
 export interface InstallResolvedPackagesOptions {
@@ -75,6 +90,14 @@ const incompatibleVersionPrefixes = [
   "link:",
   "portal:",
   "patch:",
+] as const;
+
+const lockfileNames = [
+  "bun.lock",
+  "bun.lockb",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
 ] as const;
 
 /**
@@ -208,6 +231,38 @@ export function resolveInstallTargets(
     }
     return resolved;
   }).pipe(Effect.mapError(toBundleError));
+}
+
+/**
+ * Resolves the package install identity used by Lambda diffing. The lockfile
+ * fingerprint makes range-preserving dependency updates trigger a new artifact.
+ */
+export function resolveExternalPackageIdentity(
+  options: ResolveInstallTargetsOptions,
+): Effect.Effect<
+  ExternalPackageIdentity,
+  BundleError,
+  FileSystem.FileSystem | Path.Path
+> {
+  return Effect.gen(function* () {
+    const resolved = yield* resolveInstallTargets(options);
+    if (Object.keys(resolved).length === 0) {
+      return { resolved };
+    }
+    const lockfile = yield* readNearestLockfileFingerprint(options.cwd);
+    return { resolved, lockfile };
+  });
+}
+
+export function hashExternalPackageIdentity(
+  options: HashExternalPackageIdentityOptions,
+): Effect.Effect<string> {
+  return sha256Object({
+    bundle: options.bundleHash,
+    install: options.identity.resolved,
+    lockfile: options.identity.lockfile,
+    architecture: options.architecture,
+  });
 }
 
 /**
@@ -432,6 +487,35 @@ const findUp = (
     }
     return yield* findUp(parent, filenames);
   });
+
+const readNearestLockfileFingerprint = (
+  cwd: string,
+): Effect.Effect<
+  ExternalPackageIdentity["lockfile"],
+  BundleError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const lockfilePath = yield* findUp(cwd, lockfileNames);
+    if (lockfilePath === undefined) {
+      return undefined;
+    }
+    const content = yield* fs.readFile(lockfilePath);
+    return {
+      name: path.basename(lockfilePath),
+      hash: yield* sha256(content),
+    };
+  }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new BundleError({
+          message: `Failed to read package-manager lockfile for Lambda externals from '${cwd}'`,
+          cause,
+        }),
+    ),
+  );
 
 const resolveBunCatalogVersion = (
   cwd: string,

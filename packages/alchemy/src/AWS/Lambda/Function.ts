@@ -18,10 +18,11 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   forceExternalRoot,
+  hashExternalPackageIdentity,
   installResolvedPackages,
   matchesPackageRoot,
   parsePackageRootFromSpecifier,
-  resolveInstallTargets,
+  resolveExternalPackageIdentity,
   validateInstallTargets,
   type ExternalPackageInstall,
 } from "../../Bundle/ExternalPackages.ts";
@@ -43,7 +44,7 @@ import {
   hasAlchemyTags,
   hasTags,
 } from "../../Tags.ts";
-import { sha256, sha256Object } from "../../Util/sha256.ts";
+import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -969,20 +970,22 @@ export default await Effect.runPromise(handlerEffect)
 
         // Resolve install versions without running npm so `diff` can compare a
         // stable identity hash. The archive build performs the install.
-        const resolved = yield* resolveInstallTargets({
+        const installIdentity = yield* resolveExternalPackageIdentity({
           cwd,
           requested,
           detected: [...detectedExternals],
         });
+        const resolved = installIdentity.resolved;
         const hasExternalPackages = Object.keys(resolved).length > 0;
 
         // Identity hash drives change detection in `diff`. With native packages,
         // the installed bytes are not captured by the bundle hash, so fold the
-        // resolved versions and architecture in instead of installing.
+        // resolved versions, package-manager lockfile, and architecture in
+        // instead of installing.
         const identityHash = hasExternalPackages
-          ? yield* sha256Object({
-              bundle: bundleOutput.hash,
-              install: resolved,
+          ? yield* hashExternalPackageIdentity({
+              bundleHash: bundleOutput.hash,
+              identity: installIdentity,
               architecture,
             })
           : bundleOutput.hash;
