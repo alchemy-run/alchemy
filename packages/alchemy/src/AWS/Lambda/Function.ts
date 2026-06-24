@@ -20,6 +20,7 @@ import {
   forceExternalRoot,
   installResolvedPackages,
   matchesPackageRoot,
+  parsePackageRootFromSpecifier,
   resolveInstallTargets,
   validateInstallTargets,
   type ExternalPackageInstall,
@@ -71,8 +72,7 @@ export const isFunction = (value: any): value is Function => {
 export interface FunctionBuildOptions {
   /**
    * Native or Node-only packages to install into the Lambda artifact with npm,
-   * targeting Linux and the function's architecture. Equivalent to SST's
-   * `nodejs.install`.
+   * targeting Linux and the function's architecture.
    *
    * @example
    * ```typescript
@@ -809,10 +809,8 @@ export const FunctionProvider = () =>
         const rolldownSourcemap = sourcemap;
         const architecture = props.architecture ?? "x86_64";
 
-        // `sharp`/`pg-native` ship native binaries and can never be bundled, so
-        // they are always external; packages declared in `build.install` are too.
-        // Force-external packages are recorded as the bundler encounters them so
-        // they are installed only when actually imported (SST metafile parity).
+        // External package roots discovered in the bundle graph are installed
+        // into the deployment artifact.
         const requested = yield* validateInstallTargets(props.build?.install);
         const installRoots = new Set(Object.keys(requested));
         const detectedExternals = new Set<string>();
@@ -831,12 +829,20 @@ export const FunctionProvider = () =>
           for (const root of installRoots) {
             if (matchesPackageRoot(moduleId, root)) return true;
           }
-          return matchesConfiguredExternal(
+          const isConfiguredExternal = matchesConfiguredExternal(
             configuredExternal,
             moduleId,
             parentId,
             isResolved,
           );
+          if (isConfiguredExternal) {
+            const root = parsePackageRootFromSpecifier(moduleId);
+            if (root !== undefined) {
+              detectedExternals.add(root);
+            }
+            return true;
+          }
+          return false;
         };
 
         const buildBundle = Effect.fnUntraced(function* (
@@ -961,9 +967,8 @@ export default await Effect.runPromise(handlerEffect)
             content: f.content,
           }));
 
-        // Resolve install versions now (cheap, no npm) so the change-detection
-        // identity hash is available without installing. The npm install and
-        // archive build are deferred to `buildArchive`, keeping `diff` fast.
+        // Resolve install versions without running npm so `diff` can compare a
+        // stable identity hash. The archive build performs the install.
         const resolved = yield* resolveInstallTargets({
           cwd,
           requested,

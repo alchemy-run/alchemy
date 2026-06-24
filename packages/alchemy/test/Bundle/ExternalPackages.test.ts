@@ -3,6 +3,7 @@ import {
   isForceExternalModule,
   npmInstallArgs,
   parsePackageRoot,
+  parsePackageRootFromSpecifier,
   validateInstallTargets,
 } from "@/Bundle/ExternalPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -25,6 +26,18 @@ describe("Lambda external packages", () => {
     expect(parsePackageRoot("@img/sharp-linux-arm64/lib")).toBeUndefined();
     expect(parsePackageRoot("node:fs")).toBeUndefined();
     expect(parsePackageRoot("./local.js")).toBeUndefined();
+  });
+
+  it("extracts package roots from externalized module ids", () => {
+    expect(parsePackageRootFromSpecifier("heic-convert")).toBe("heic-convert");
+    expect(parsePackageRootFromSpecifier("heic-convert/lib")).toBe(
+      "heic-convert",
+    );
+    expect(parsePackageRootFromSpecifier("@scope/pkg/subpath")).toBe(
+      "@scope/pkg",
+    );
+    expect(parsePackageRootFromSpecifier("node:fs")).toBeUndefined();
+    expect(parsePackageRootFromSpecifier("./local.js")).toBeUndefined();
   });
 
   it.effect("rejects subpaths in build.install", () =>
@@ -204,6 +217,56 @@ describe("Lambda external packages", () => {
         ).not.toBeNull();
         expect(installDirectory).toBeDefined();
         expect(yield* fs.exists(installDirectory!)).toBe(false);
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("installs detected configured externals", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-detected-",
+      });
+      let artifactPackageJson: unknown;
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { "heic-convert": "^2.1.0" } }),
+        );
+
+        const files = yield* installExternalPackages({
+          cwd: root,
+          detected: ["heic-convert"],
+          architecture: "arm64",
+          runNpmInstall: (directory) =>
+            Effect.gen(function* () {
+              artifactPackageJson = JSON.parse(
+                yield* fs.readFileString(path.join(directory, "package.json")),
+              );
+              const packageRoot = path.join(
+                directory,
+                "node_modules",
+                "heic-convert",
+              );
+              yield* fs.makeDirectory(packageRoot, { recursive: true });
+              yield* fs.writeFileString(
+                path.join(packageRoot, "package.json"),
+                JSON.stringify({ name: "heic-convert", version: "2.1.0" }),
+              );
+            }),
+        });
+
+        expect(artifactPackageJson).toEqual({
+          private: true,
+          dependencies: { "heic-convert": "^2.1.0" },
+        });
+        expect(files.map((file) => file.path)).toContain(
+          "node_modules/heic-convert/package.json",
+        );
       } finally {
         yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
       }

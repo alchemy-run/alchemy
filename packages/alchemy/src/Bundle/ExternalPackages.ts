@@ -15,9 +15,7 @@ export interface ExternalPackageFile {
 
 /**
  * Packages that must stay external during bundling because they ship native
- * binaries that cannot be bundled. Matches SST's `forceExternal` list. They are
- * installed into the Lambda artifact only when they are actually imported by the
- * handler (detected during bundling), mirroring SST's metafile-driven behavior.
+ * binaries that cannot be bundled.
  */
 export const FORCE_EXTERNAL_PACKAGES = ["sharp", "pg-native"] as const;
 
@@ -34,7 +32,7 @@ export interface ResolveInstallTargetsOptions {
   readonly cwd: string;
   /** Validated package-root → requested version map (from {@link validateInstallTargets}). */
   readonly requested: Readonly<Record<string, string>>;
-  /** Force-external package roots detected as imported during bundling. */
+  /** Package roots detected as externalized during bundling. */
   readonly detected?: ReadonlyArray<string>;
 }
 
@@ -79,16 +77,22 @@ const incompatibleVersionPrefixes = [
   "patch:",
 ] as const;
 
-// ---------------------------------------------------------------------------
-// Pure helpers
-// ---------------------------------------------------------------------------
-
 /**
  * Parses a module specifier into its package root, or `undefined` when the
  * specifier is not a bare package import (relative path, builtin, glob, subpath
- * with extra segments, etc.).
+ * imports, etc.).
  */
 export function parsePackageRoot(specifier: string): string | undefined {
+  const root = parsePackageRootFromSpecifier(specifier);
+  return root === specifier ? root : undefined;
+}
+
+/**
+ * Parses a bare package specifier or subpath import into its package root.
+ */
+export function parsePackageRootFromSpecifier(
+  specifier: string,
+): string | undefined {
   if (
     specifier.length === 0 ||
     builtins.has(specifier) ||
@@ -105,9 +109,9 @@ export function parsePackageRoot(specifier: string): string | undefined {
 
   const segments = specifier.split("/");
   if (specifier.startsWith("@")) {
-    return segments.length === 2 ? `${segments[0]}/${segments[1]}` : undefined;
+    return segments.length >= 2 ? `${segments[0]}/${segments[1]}` : undefined;
   }
-  return segments.length === 1 ? segments[0] : undefined;
+  return segments[0];
 }
 
 /** Whether `moduleId` is `root` itself or a subpath import of it. */
@@ -142,15 +146,9 @@ export function npmInstallArgs(
   ];
 }
 
-// ---------------------------------------------------------------------------
-// Validation (fails in the typed error channel, never throws)
-// ---------------------------------------------------------------------------
-
 /**
  * Validates a `build.install` declaration and normalizes it to a
- * package-root → requested-version map. Array entries default to `"*"`. Fails
- * with a {@link BundleError} (never throws) when an entry is not a bare package
- * root.
+ * package-root → requested-version map. Array entries default to `"*"`.
  */
 export function validateInstallTargets(
   install: ExternalPackageInstall | undefined,
@@ -176,10 +174,6 @@ export function validateInstallTargets(
   }
   return Effect.succeed(requested);
 }
-
-// ---------------------------------------------------------------------------
-// Version resolution (no install — cheap, used for change detection)
-// ---------------------------------------------------------------------------
 
 /**
  * Resolves the npm-compatible version for every requested and detected package,
@@ -215,10 +209,6 @@ export function resolveInstallTargets(
     return resolved;
   }).pipe(Effect.mapError(toBundleError));
 }
-
-// ---------------------------------------------------------------------------
-// Install (runs npm into an isolated, Lambda-targeted artifact)
-// ---------------------------------------------------------------------------
 
 /**
  * Installs already-resolved dependencies into an isolated npm artifact targeting
@@ -273,8 +263,7 @@ export function installResolvedPackages(
 }
 
 /**
- * Convenience flow: validate → resolve → install. Useful for callers that do
- * not need to thread detected externals or defer the install (see tests).
+ * Convenience flow for callers that do not need to defer installation.
  */
 export function installExternalPackages(
   options: ExternalPackageInstallOptions,
@@ -297,10 +286,6 @@ export function installExternalPackages(
     });
   });
 }
-
-// ---------------------------------------------------------------------------
-// Internals
-// ---------------------------------------------------------------------------
 
 const runNpmInstall = (
   directory: string,
