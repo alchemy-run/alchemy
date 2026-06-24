@@ -1,10 +1,13 @@
 import {
   hashPackageInstallIdentity,
   installPackages,
+  installResolvedPackages,
+  matchesPackageRoot,
   normalizeInstallTargets,
   npmInstallArgs,
   parsePackageRoot,
   parsePackageRootFromSpecifier,
+  resolveInstallTargets,
   resolvePackageInstallIdentity,
 } from "@/Bundle/InstalledPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -39,6 +42,16 @@ describe("Lambda external packages", () => {
     );
     expect(parsePackageRootFromSpecifier("node:fs")).toBeUndefined();
     expect(parsePackageRootFromSpecifier("./local.js")).toBeUndefined();
+    expect(parsePackageRootFromSpecifier("")).toBeUndefined();
+    expect(parsePackageRootFromSpecifier("@scope")).toBeUndefined();
+  });
+
+  it("matches package roots and subpath imports", () => {
+    expect(matchesPackageRoot("sharp", "sharp")).toBe(true);
+    expect(matchesPackageRoot("sharp/lib/index.js", "sharp")).toBe(true);
+    expect(matchesPackageRoot("sharpish", "sharp")).toBe(false);
+    expect(matchesPackageRoot("@scope/pkg", "@scope/pkg")).toBe(true);
+    expect(matchesPackageRoot("@scope/pkg/sub", "@scope/pkg")).toBe(true);
   });
 
   it.effect("rejects subpaths in build.install", () =>
@@ -419,6 +432,389 @@ describe("Lambda external packages", () => {
 
         expect(installed).toBe(false);
         expect(files).toEqual([]);
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("returns an empty install identity when nothing is requested", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-empty-identity-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "package-lock.json"),
+          "sharp@0.34.5",
+        );
+
+        expect(
+          yield* resolvePackageInstallIdentity({
+            cwd: root,
+            requested: {},
+          }),
+        ).toEqual({ resolved: {} });
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("fails when the source package.json is missing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-missing-manifest-",
+      });
+
+      try {
+        const error = yield* installPackages({
+          cwd: root,
+          install: ["sharp"],
+          architecture: "arm64",
+          runNpmInstall: () => Effect.void,
+        }).pipe(Effect.flip);
+        expect(error.message).toContain(
+          `Failed to read package.json for Lambda externals from '${root}'`,
+        );
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("fails when the nearest lockfile cannot be read", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-lockfile-read-error-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+        );
+        yield* fs.makeDirectory(path.join(root, "package-lock.json"));
+
+        const error = yield* resolvePackageInstallIdentity({
+          cwd: root,
+          requested: { sharp: "*" },
+        }).pipe(Effect.flip);
+        expect(error.message).toContain(
+          `Failed to read package-manager lockfile for Lambda externals from '${root}'`,
+        );
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("resolves catalog versions from a top-level Bun catalog", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-bun-top-level-catalog-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({
+            workspaces: ["packages/*"],
+            catalog: { sharp: "^0.33.5" },
+            dependencies: { sharp: "catalog:" },
+          }),
+        );
+
+        const files = yield* installPackages({
+          cwd: root,
+          install: ["sharp"],
+          architecture: "arm64",
+          runNpmInstall: (directory) =>
+            Effect.gen(function* () {
+              const packageJson = JSON.parse(
+                yield* fs.readFileString(path.join(directory, "package.json")),
+              );
+              expect(packageJson.dependencies.sharp).toBe("^0.33.5");
+            }),
+        });
+
+        expect(files.map((file) => file.path)).toContain("package.json");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "resolves catalog versions from manifest catalogs with package-only workspaces",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-external-bun-workspace-packages-only-",
+        });
+
+        try {
+          yield* fs.writeFileString(
+            path.join(root, "package.json"),
+            JSON.stringify({
+              workspaces: { packages: ["packages/*"] },
+              catalog: { sharp: "^0.34.5" },
+              dependencies: { sharp: "catalog:" },
+            }),
+          );
+
+          const files = yield* installPackages({
+            cwd: root,
+            install: ["sharp"],
+            architecture: "arm64",
+            runNpmInstall: (directory) =>
+              Effect.gen(function* () {
+                const packageJson = JSON.parse(
+                  yield* fs.readFileString(
+                    path.join(directory, "package.json"),
+                  ),
+                );
+                expect(packageJson.dependencies.sharp).toBe("^0.34.5");
+              }),
+          });
+
+          expect(files.map((file) => file.path)).toContain("package.json");
+        } finally {
+          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("fails when a catalog reference cannot be resolved", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-unresolved-catalog-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "catalog:" } }),
+        );
+
+        const error = yield* resolveInstallTargets({
+          cwd: root,
+          requested: { sharp: "*" },
+        }).pipe(Effect.flip);
+        expect(error.message).toContain(
+          "Could not resolve catalog version for 'sharp'",
+        );
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("fails when a pnpm catalog entry is missing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-missing-pnpm-catalog-entry-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "pnpm-workspace.yaml"),
+          ["packages:", "  - packages/*", "catalog:", "  other: ^1.0.0"].join(
+            "\n",
+          ),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "catalog:" } }),
+        );
+
+        const error = yield* resolveInstallTargets({
+          cwd: root,
+          requested: { sharp: "*" },
+        }).pipe(Effect.flip);
+        expect(error.message).toContain(
+          "Could not resolve catalog version for 'sharp' (catalog:)",
+        );
+        expect(error.message).toContain("pnpm-workspace.yaml");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("omits lockfile fingerprints when no lockfile exists", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-no-lockfile-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+        );
+
+        expect(
+          yield* resolvePackageInstallIdentity({
+            cwd: root,
+            requested: { sharp: "*" },
+          }),
+        ).toEqual({
+          resolved: { sharp: "^0.34.5" },
+          lockfile: undefined,
+        });
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("fails when a Bun workspace catalog entry is missing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-missing-bun-catalog-entry-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({
+            workspaces: {
+              packages: ["packages/*"],
+              catalogs: {
+                native: {
+                  other: "^1.0.0",
+                },
+              },
+            },
+            dependencies: { sharp: "catalog:native" },
+          }),
+        );
+
+        const error = yield* resolveInstallTargets({
+          cwd: root,
+          requested: { sharp: "*" },
+        }).pipe(Effect.flip);
+        expect(error.message).toContain(
+          "Could not resolve catalog version for 'sharp' (catalog:native)",
+        );
+        expect(error.message).toContain("package.json");
+      } finally {
+        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  describe.sequential("npm install failures", () => {
+    it.effect("fails when npm is missing from PATH", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-external-missing-npm-",
+        });
+        const originalPath = process.env.PATH;
+
+        try {
+          process.env.PATH = "";
+          yield* fs.writeFileString(
+            path.join(root, "package.json"),
+            JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+          );
+
+          const error = yield* installResolvedPackages({
+            resolved: { sharp: "^0.34.5" },
+            architecture: "arm64",
+          }).pipe(Effect.flip);
+          expect(error.message).toContain(
+            "Failed to run 'npm install' for build.install:",
+          );
+          expect(error.message).toMatch(/NotFound|ENOENT/);
+        } finally {
+          process.env.PATH = originalPath;
+          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect(
+      "fails when npm install exits non-zero",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* installResolvedPackages({
+            resolved: {
+              "alchemy-nonexistent-external-package-xyz": "1.0.0",
+            },
+            architecture: "arm64",
+          }).pipe(Effect.flip);
+          expect(error.message).toMatch(
+            /npm install for build\.install failed with exit code \d+:/,
+          );
+        }).pipe(Effect.provide(NodeServices.layer)),
+      { timeout: 120_000 },
+    );
+  });
+
+  it.effect("fails when installed package files cannot be read", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-external-artifact-read-error-",
+      });
+
+      try {
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+        );
+
+        const error = yield* installPackages({
+          cwd: root,
+          install: ["sharp"],
+          architecture: "arm64",
+          runNpmInstall: (directory) =>
+            Effect.gen(function* () {
+              yield* fs.writeFileString(
+                path.join(directory, "package.json"),
+                JSON.stringify({
+                  private: true,
+                  dependencies: { sharp: "^0.34.5" },
+                }),
+              );
+              yield* fs.writeFileString(
+                path.join(directory, "package-lock.json"),
+                "{}",
+              );
+              yield* fs.chmod(directory, 0o000);
+            }),
+        }).pipe(Effect.flip);
+        expect(error.message).toBe(
+          "Failed to read installed Lambda external packages",
+        );
       } finally {
         yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
       }
