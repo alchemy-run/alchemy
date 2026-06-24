@@ -425,6 +425,7 @@ export const Container: ResourceClassLike<ContainerApplication> & {
             make: (props: any, impl: any) => tag.make(props, impl),
             // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
             Application: tag,
+            of: (shape: any) => shape,
           });
         } else {
           return Container(...(args as [string, any]));
@@ -438,6 +439,7 @@ export const Container: ResourceClassLike<ContainerApplication> & {
         [ContainerBindEff]: ContainerPlatform.bind(resource),
         // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
         Application: resource,
+        of: (shape: any) => shape,
       });
     }
   },
