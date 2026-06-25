@@ -6,7 +6,7 @@ import * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type * as Serverless from "../../Serverless/index.ts";
-import type { DurableObjectExport } from "./DurableObjectNamespace.ts";
+import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import {
   ExportedHandlerMethods,

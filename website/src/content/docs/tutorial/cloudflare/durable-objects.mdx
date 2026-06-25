@@ -27,7 +27,7 @@ public API, no state yet:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
+export default class Counter extends Cloudflare.DurableObject<Counter>()(
   "Counter",
   Effect.gen(function* () {
     // Outer (init): resolve the instance state and shared
@@ -242,7 +242,7 @@ import * as Effect from "effect/Effect";
 +import * as Schedule from "effect/Schedule";
 +import * as Stream from "effect/Stream";
 
-export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
+export default class Counter extends Cloudflare.DurableObject<Counter>()(
   "Counter",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

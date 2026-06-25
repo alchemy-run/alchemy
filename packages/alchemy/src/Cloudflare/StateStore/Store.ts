@@ -8,11 +8,11 @@ import type {
 } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
 import * as Secret from "../SecretsStore/index.ts";
-import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
+import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { EncryptionKey } from "./Token.ts";
 
-export default class Store extends DurableObjectNamespace<Store>()(
+export default class Store extends DurableObject<Store>()(
   "Store",
   Effect.gen(function* () {
     // Outer (class-level) phase — resolve the binding factory once.

@@ -112,10 +112,10 @@ export * as Zone from "./Zone/index.ts";
 export {
   Worker,
   isWorker,
-  DurableObjectNamespace,
+  DurableObject,
   DurableObjectState,
   RpcWorker,
-  RpcDurableObjectNamespace,
+  RpcDurableObject,
   Workflow,
   WorkerLoader,
   Browser,

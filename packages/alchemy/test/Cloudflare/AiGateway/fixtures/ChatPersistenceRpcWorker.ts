@@ -10,7 +10,7 @@ import { ChatRpcs } from "./ChatRpcs.ts";
 // Same role as `ChatPersistenceWorker` (host the chat DO, route by
 // thread id) but the whole `fetch` surface is a typed Effect
 // `RpcGroup`. Each procedure proxies straight through the typed
-// `getByName(id)` client returned by `RpcDurableObjectNamespace`.
+// `getByName(id)` client returned by `RpcDurableObject`.
 export default class ChatPersistenceRpcWorker extends Cloudflare.RpcWorker<ChatPersistenceRpcWorker>()(
   "ChatPersistenceRpcWorker",
   {

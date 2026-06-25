@@ -37,7 +37,7 @@ export class Sandbox extends Cloudflare.Container<
 ```
 
 The `Cloudflare.Container<Sandbox, { ... }>()(...)` shape is the same
-ceremony as `DurableObjectNamespace` — the empty `()` lets TypeScript
+ceremony as `DurableObject` — the empty `()` lets TypeScript
 capture the class identity for the typed RPC stub. Anything that
 binds `Sandbox` now sees `exec(command)` as a typed RPC method
 returning `Effect<{ exitCode, stdout, stderr }, PlatformError>`.
@@ -221,7 +221,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     return Effect.gen(function* () {
@@ -242,7 +242,7 @@ helper. Resolve it in the **outer** init phase and expose `exec`
 from the inner phase as an RPC method:
 
 ```diff lang="typescript"
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
 +   const sandbox = yield* Sandbox;
@@ -270,7 +270,7 @@ container, then satisfies the `Sandbox` tag with the running
 instance:
 
 ```diff lang="typescript"
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     const sandbox = yield* Sandbox;
@@ -428,7 +428,7 @@ import * as Effect from "effect/Effect";
 +import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Sandbox } from "./Sandbox.ts";
 
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     const sandbox = yield* Sandbox;

@@ -13,7 +13,7 @@ import { highlightTS } from "../marketing/highlightTS";
  * Tabs:
  *   - IAM bindings   — `S3.GetObject.bind(...)` → permissions + env vars
  *   - Event sources  — `DynamoDB.stream(...).process(...)` → EventSourceMapping
- *   - Durable Objects — `Cloudflare.DurableObjectNamespace`
+ *   - Durable Objects — `Cloudflare.DurableObject`
  *   - Containers     — `Cloudflare.Container`
  *   - Workflows      — `Cloudflare.Workflow`
  *   - Layers         — `Layer.effect(JobStorage, ...)`
@@ -64,7 +64,7 @@ const STREAM_CODE = `export default AWS.Lambda.Function(
   }),
 );`;
 
-const DO_CODE = `export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+const DO_CODE = `export default class Room extends Cloudflare.DurableObject<Room>()(
   "Rooms",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
@@ -436,7 +436,7 @@ function DurableObjectPanel() {
   const FEATURES = [
     {
       icon: "logos:cloudflare-icon",
-      label: "Cloudflare.DurableObjectNamespace",
+      label: "Cloudflare.DurableObject",
       sub: "one instance per name · single-threaded",
     },
     {

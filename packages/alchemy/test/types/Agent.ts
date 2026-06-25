@@ -38,7 +38,7 @@ const _gen = Effect.gen(function* () {
   );
 });
 
-export const Agent2 = Cloudflare.DurableObjectNamespace(
+export const Agent2 = Cloudflare.DurableObject(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
@@ -62,7 +62,7 @@ export const Agent2 = Cloudflare.DurableObjectNamespace(
   ),
 );
 
-export class Agent3 extends Cloudflare.DurableObjectNamespace<Agent3>()(
+export class Agent3 extends Cloudflare.DurableObject<Agent3>()(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
@@ -87,7 +87,7 @@ export class Agent3 extends Cloudflare.DurableObjectNamespace<Agent3>()(
   ),
 ) {}
 
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO

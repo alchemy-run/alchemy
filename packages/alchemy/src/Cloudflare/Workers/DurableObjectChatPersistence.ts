@@ -43,7 +43,7 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * import { Chat, LanguageModel } from "effect/unstable/ai";
  * import { Persistence } from "effect/unstable/persistence";
  *
- * export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatBackend>()(
+ * export default class ChatBackend extends Cloudflare.DurableObject<ChatBackend>()(
  *   "ChatBackend",
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {

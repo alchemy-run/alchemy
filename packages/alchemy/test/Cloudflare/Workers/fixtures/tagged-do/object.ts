@@ -9,7 +9,7 @@ const DO_COUNT_KEY = "do_count";
 // Tag — D1 RPC methods take an explicit row `key` so the shared D1 table
 // can be partitioned per-caller. The DO storage methods don't need one
 // because per-instance storage is already isolated by `getByName(name)`.
-export class Counter extends Cloudflare.DurableObjectNamespace<
+export class Counter extends Cloudflare.DurableObject<
   Counter,
   {
     incrementD1: (key: string) => Effect.Effect<number, never, RuntimeContext>;

@@ -9,7 +9,7 @@ import { type Rpc, serveRpc } from "../../Rpc.ts";
 import * as Server from "../../Server/index.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
-import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
+import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
 import { ContainerTypeId } from "./Container.ts";
@@ -155,7 +155,7 @@ export const ContainerPlatform: Platform<
         | (ContainerApplication & Rpc<Shape>)
         | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
     ) {
-      const namespace = yield* DurableObjectNamespace;
+      const namespace = yield* DurableObject;
 
       const container = Effect.isEffect(containerEff)
         ? yield* containerEff as unknown as Effect.Effect<

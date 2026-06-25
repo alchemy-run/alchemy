@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Sandbox } from "./Sandbox.ts";
 
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     const container = yield* Sandbox;

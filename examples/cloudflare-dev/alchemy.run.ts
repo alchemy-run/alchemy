@@ -17,11 +17,11 @@ const AsyncWorker = Effect.gen(function* () {
       runWorkerFirst: true,
     },
     env: {
-      COUNTER: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+      COUNTER: Cloudflare.DurableObject<Counter>("Counter", {
         className: "Counter",
       }),
       QUEUE: queue,
-      MESSAGES: Cloudflare.DurableObjectNamespace<QueueMessages>(
+      MESSAGES: Cloudflare.DurableObject<QueueMessages>(
         "QueueMessages",
         { className: "QueueMessages" },
       ),

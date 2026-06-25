@@ -10,7 +10,7 @@ import { Gateway } from "./Gateway.ts";
 // `DurableObjectChatPersistence`, so it survives hibernation and DO
 // eviction. The Worker routes `/chat?id=<thread>` to the matching DO
 // instance by name.
-export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatBackend>()(
+export default class ChatBackend extends Cloudflare.DurableObject<ChatBackend>()(
   "ChatBackend",
   Effect.gen(function* () {
     // Init phase: bind the AI Gateway and build the LanguageModel layer.

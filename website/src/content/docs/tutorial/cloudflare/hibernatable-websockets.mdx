@@ -26,7 +26,7 @@ the WebSocket handshake. Create `src/room.ts`:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+export default class Room extends Cloudflare.DurableObject<Room>()(
   "Rooms",
   Effect.gen(function* () {
     return Effect.gen(function* () {
@@ -61,7 +61,7 @@ what later:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+export default class Room extends Cloudflare.DurableObject<Room>()(
   "Rooms",
   Effect.gen(function* () {
     return Effect.gen(function* () {

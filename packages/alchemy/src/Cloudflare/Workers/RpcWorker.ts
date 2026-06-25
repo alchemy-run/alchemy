@@ -283,7 +283,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * @example Pure schema description
  * The rpc group and its schemas live outside any worker so both the
  * server (`RpcWorker`) and any consumers (`RpcClient.make` /
- * `RpcDurableObjectNamespace`) import the same value.
+ * `RpcDurableObject`) import the same value.
  * ```typescript
  * import * as Schema from "effect/Schema";
  * import { Rpc, RpcGroup } from "effect/unstable/rpc";
@@ -382,7 +382,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  *   { main: import.meta.filename, schema: TaskRpcs },
  * ) {}
  * ```
- * See {@link RpcDurableObjectNamespace} for the consumer side
+ * See {@link RpcDurableObject} for the consumer side
  * (`Counter.from(TaskWorker)`).
  *
  * @section Binding it from another worker
@@ -464,7 +464,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  *
  * @section Yielding the surrounding worker from inside the impl
  * @example `yield* RpcWorker` inside the init effect
- * Mirrors `yield* DurableObjectNamespace` — yield the tag to access
+ * Mirrors `yield* DurableObject` — yield the tag to access
  * the surrounding worker.
  * ```typescript
  * Effect.gen(function* () {

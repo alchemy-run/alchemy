@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
  * Also demonstrates scheduled events: send `/remind <seconds> <message>` to
  * schedule a broadcast that fires after the given delay.
  */
-export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+export default class Room extends Cloudflare.DurableObject<Room>()(
   "Rooms",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

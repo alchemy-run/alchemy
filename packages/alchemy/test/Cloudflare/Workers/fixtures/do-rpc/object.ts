@@ -7,7 +7,7 @@ const KV = Cloudflare.KV.Namespace("DurableObjectWorkerEnvironmentKV", {
   title: "durable-object-worker-environment-kv",
 });
 
-export class WorkerEnvironmentKVObject extends Cloudflare.DurableObjectNamespace<WorkerEnvironmentKVObject>()(
+export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEnvironmentKVObject>()(
   "WorkerEnvironmentKVObject",
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);

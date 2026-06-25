@@ -8,7 +8,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * The test polls `snapshot()` via the worker's `GET /times` route to verify
  * the cron actually fired.
  */
-export class CronCounter extends Cloudflare.DurableObjectNamespace<CronCounter>()(
+export class CronCounter extends Cloudflare.DurableObject<CronCounter>()(
   "CronCounter",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

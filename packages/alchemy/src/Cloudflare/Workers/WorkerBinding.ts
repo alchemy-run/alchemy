@@ -25,7 +25,7 @@ import type { RateLimitMarker } from "./RateLimit.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
-import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
+import type { DurableObjectLike } from "./DurableObject.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import type { VersionMetadata } from "./VersionMetadata.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
@@ -68,7 +68,7 @@ export type WorkerBindingResource =
   | Worker
   | WorkerLoader
   | VersionMetadata
-  | DurableObjectNamespaceLike<any>;
+  | DurableObjectLike<any>;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;

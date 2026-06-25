@@ -235,7 +235,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```typescript
  * // `external` and `remote` images expose no RPC methods, so the DO
  * // talks to them purely over their TCP port via `getTcpPort`.
- * export class WebObject extends Cloudflare.DurableObjectNamespace<WebObject>()(
+ * export class WebObject extends Cloudflare.DurableObject<WebObject>()(
  *   "WebObject",
  *   Effect.gen(function* () {
  *     const web = yield* Web;
@@ -307,7 +307,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *
  * @example Running a container from a DO
  * ```typescript
- * export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+ * export default class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agents",
  *   Effect.gen(function* () {
  *     const sandbox = yield* Sandbox;
@@ -332,7 +332,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *
  * @example Fetching from a container port
  * ```typescript
- * export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+ * export default class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agents",
  *   Effect.gen(function* () {
  *     const sandbox = yield* Sandbox;

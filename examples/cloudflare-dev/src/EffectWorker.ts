@@ -108,7 +108,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   ),
 ) {}
 
-export class QueueMessages extends Cloudflare.DurableObjectNamespace<QueueMessages>()(
+export class QueueMessages extends Cloudflare.DurableObject<QueueMessages>()(
   "QueueMessages",
   Effect.succeed(
     Effect.gen(function* () {

@@ -16,7 +16,7 @@ import { Gateway } from "./Gateway.ts";
 // procedure can hand back real `effect/ai` `Response.StreamPart`
 // instances (the built-in bridge would `JSON.stringify` them and strip
 // the `Schema.Class` identity).
-export default class ChatBackendRpc extends Cloudflare.RpcDurableObjectNamespace<ChatBackendRpc>()(
+export default class ChatBackendRpc extends Cloudflare.RpcDurableObject<ChatBackendRpc>()(
   "ChatBackendRpc",
   { schema: ChatBackendRpcs },
   Effect.gen(function* () {

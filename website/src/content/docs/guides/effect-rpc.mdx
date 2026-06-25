@@ -438,7 +438,7 @@ import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { InnerRpcs } from "./rpcs.ts";
 import { Task, TaskNotFound } from "./task.ts";
 
-export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
+export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
@@ -634,15 +634,15 @@ argument — `RpcWorker<Self, Deps>()` mirrors
 `Cloudflare.Worker<Self, Bindings, Deps>` so cross-script
 `Counter.from(TaskWorker)` type-checks.
 
-## Sugar: `Cloudflare.RpcDurableObjectNamespace`
+## Sugar: `Cloudflare.RpcDurableObject`
 
 The same shape applies to Durable Objects.
-`Cloudflare.RpcDurableObjectNamespace<Self>()(...)` mirrors the
+`Cloudflare.RpcDurableObject<Self>()(...)` mirrors the
 regular DO class but the inner Effect returns the piped
 `RpcServer.toHttpEffect(schema)` Effect directly:
 
 ```typescript
-export default class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+export default class Counter extends Cloudflare.RpcDurableObject<Counter>()(
   "Counter",
   { schema: CounterRpcs },
   Effect.gen(function* () {
@@ -670,7 +670,7 @@ to it cross-script:
 
 ```typescript
 // counter.ts — class declaration carries no impl.
-export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+export class Counter extends Cloudflare.RpcDurableObject<Counter>()(
   "Counter",
   { schema: CounterRpcs },
 ) {}

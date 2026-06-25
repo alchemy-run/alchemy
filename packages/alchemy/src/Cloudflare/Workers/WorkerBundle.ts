@@ -14,7 +14,7 @@ import { sha256 } from "../../Util/sha256.ts";
 import {
   isDurableObjectExport,
   type DurableObjectExport,
-} from "./DurableObjectNamespace.ts";
+} from "./DurableObject.ts";
 import { isWorkflowExport, type WorkflowExport } from "./Workflow.ts";
 
 export interface WorkerBundleOptions {

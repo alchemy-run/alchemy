@@ -8,7 +8,7 @@ import { WriteFileDevBox } from "./tools/Fs.ts";
 import { GrepLive } from "./tools/Grep.ts";
 import { SqlDurableObjectLive } from "./tools/Sql.ts";
 
-export class ReleaseVersion extends Cloudflare.DurableObjectNamespace<ReleaseVersion>()(
+export class ReleaseVersion extends Cloudflare.DurableObject<ReleaseVersion>()(
   "ReleaseBlogger",
   Effect.gen(function* () {
     const blogger = yield* ReleaseBlogger;

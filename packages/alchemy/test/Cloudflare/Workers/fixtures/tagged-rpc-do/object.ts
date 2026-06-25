@@ -9,13 +9,12 @@ export const MyDB = Cloudflare.D1.Database("MyDB");
 
 const DO_COUNT_KEY = "do_count";
 
-// Tag — modular `RpcDurableObjectNamespace` declaration. The runtime
+// Tag — modular `RpcDurableObject` declaration. The runtime
 // (D1 setup, handler bodies) lives in `CounterLive` below; consumers
 // only need this class identifier to bind via `Counter.from(WorkerA)`.
-export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
-  "Counter",
-  { schema: CounterRpcs },
-) {}
+export class Counter extends Cloudflare.RpcDurableObject<Counter>()("Counter", {
+  schema: CounterRpcs,
+}) {}
 
 // Layer — outer Effect resolves shared deps (D1), inner Effect runs
 // once per instance and returns the piped `RpcServer.toHttpEffect`

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { HttpClientRequest, HttpServerResponse } from "effect/unstable/http";
 import { SandboxContainer } from "./SandboxContainer.ts";
 
-export default class SandboxDO extends Cloudflare.DurableObjectNamespace<SandboxDO>()(
+export default class SandboxDO extends Cloudflare.DurableObject<SandboxDO>()(
   "SandboxDO",
   Effect.gen(function* () {
     const sandbox = yield* Cloudflare.Container(SandboxContainer);

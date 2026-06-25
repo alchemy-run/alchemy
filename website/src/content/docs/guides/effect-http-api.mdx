@@ -467,7 +467,7 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { TaskDOApi, decodeTask, encodeTask } from "./api.ts";
 import { Task } from "./task.ts";
 
-export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
+export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

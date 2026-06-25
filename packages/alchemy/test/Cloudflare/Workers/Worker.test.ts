@@ -980,12 +980,10 @@ describe.concurrent("Cloudflare.Worker", () => {
           Effect.gen(function* () {
             const bindings: any = {};
             if (opts.dos.includes("Counter")) {
-              bindings.Counter =
-                Cloudflare.DurableObjectNamespace<Counter>("Counter");
+              bindings.Counter = Cloudflare.DurableObject<Counter>("Counter");
             }
             if (opts.dos.includes("Meter")) {
-              bindings.Meter =
-                Cloudflare.DurableObjectNamespace<Meter>("Meter");
+              bindings.Meter = Cloudflare.DurableObject<Meter>("Meter");
             }
 
             const worker = yield* Cloudflare.Worker("Upstream", {

@@ -11,7 +11,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * worker's `GET /count?name=...` route. Persists in DO storage so
  * the count survives DO hibernation.
  */
-export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
+export class Counter extends Cloudflare.DurableObject<Counter>()(
   "Counter",
   Effect.gen(function* () {
     return Effect.gen(function* () {

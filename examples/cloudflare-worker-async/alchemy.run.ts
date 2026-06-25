@@ -14,7 +14,7 @@ export const Bucket = Cloudflare.R2.Bucket("Bucket");
 // regression guard for the Queue, QueueWrite, and Consumer resources.
 export const Queue = Cloudflare.Queue.Queue("Queue");
 
-export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
+export const Counter = Cloudflare.DurableObject<CounterClass>(
   "Counter",
   {
     className: "Counter",

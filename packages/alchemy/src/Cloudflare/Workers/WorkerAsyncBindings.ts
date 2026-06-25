@@ -24,7 +24,7 @@ import { isRateLimit } from "./RateLimit.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
-import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
+import { isDurableObjectLike } from "./DurableObject.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
@@ -148,7 +148,7 @@ const toBinding = (
       allowedDestinationAddresses: binding.allowedDestinationAddresses,
       allowedSenderAddresses: binding.allowedSenderAddresses,
     };
-  } else if (isDurableObjectNamespaceLike(binding)) {
+  } else if (isDurableObjectLike(binding)) {
     return {
       type: "durable_object_namespace",
       name: bindingName,

@@ -29,7 +29,7 @@ import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { DevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import type { Providers } from "../Providers.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
-import { type DurableObjectExport } from "./DurableObjectNamespace.ts";
+import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
@@ -494,7 +494,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * them away entirely.
  *
  * The class and `.make()` can live in the same file. This is the
- * same pattern used by `Container` and `DurableObjectNamespace`,
+ * same pattern used by `Container` and `DurableObject`,
  * and is recommended for any cross-Worker or cross-DO bindings.
  *
  * @example Worker Layer (class + .make() in one file)
@@ -681,7 +681,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section Durable Objects
- * Yield a `DurableObjectNamespace` class in the init phase to get a
+ * Yield a `DurableObject` class in the init phase to get a
  * namespace handle. Call `getByName` or `getById` to get a typed RPC
  * stub, then call its methods from your runtime handlers.
  *
@@ -707,7 +707,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *
  * @example Binding and starting a Container
  * ```typescript
- * // init (inside a DurableObjectNamespace)
+ * // init (inside a DurableObject)
  * const sandbox = yield* Cloudflare.Container.bind(Sandbox);
  *
  * return Effect.gen(function* () {
