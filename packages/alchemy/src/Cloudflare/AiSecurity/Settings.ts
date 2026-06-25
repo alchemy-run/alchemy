@@ -69,7 +69,7 @@ export type AiSecuritySettings = Resource<
  * @section Enabling AI Security
  * @example Enable AI Security for Apps on a zone
  * ```typescript
- * const settings = yield* Cloudflare.AiSecuritySettings("AiSecurity", {
+ * const settings = yield* Cloudflare.AiSecurity.AiSecuritySettings("AiSecurity", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -77,7 +77,7 @@ export type AiSecuritySettings = Resource<
  *
  * @example Pin AI Security off
  * ```typescript
- * yield* Cloudflare.AiSecuritySettings("AiSecurity", {
+ * yield* Cloudflare.AiSecurity.AiSecuritySettings("AiSecurity", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

@@ -82,14 +82,14 @@ export type SchemaValidationOperationSetting = Resource<
  * @section Overriding an operation
  * @example Block non-conforming requests on one operation
  * ```typescript
- * const op = yield* Cloudflare.ApiShieldOperation("GetUser", {
+ * const op = yield* Cloudflare.ApiShield.ApiShieldOperation("GetUser", {
  *   zoneId: zone.zoneId,
  *   method: "GET",
  *   host: "api.example.com",
  *   endpoint: "/users/{id}",
  * });
  *
- * yield* Cloudflare.SchemaValidationOperationSetting("BlockGetUser", {
+ * yield* Cloudflare.SchemaValidation.SchemaValidationOperationSetting("BlockGetUser", {
  *   zoneId: zone.zoneId,
  *   operationId: op.operationId,
  *   mitigationAction: "block",
@@ -98,7 +98,7 @@ export type SchemaValidationOperationSetting = Resource<
  *
  * @example Exempt an operation from validation
  * ```typescript
- * yield* Cloudflare.SchemaValidationOperationSetting("SkipWebhook", {
+ * yield* Cloudflare.SchemaValidation.SchemaValidationOperationSetting("SkipWebhook", {
  *   zoneId: zone.zoneId,
  *   operationId: webhookOp.operationId,
  *   mitigationAction: "none",

@@ -11,7 +11,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancerMonitor,
+        Cloudflare.LoadBalancer.LoadBalancerMonitor,
       );
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);

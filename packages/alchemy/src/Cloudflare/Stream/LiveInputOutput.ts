@@ -100,9 +100,9 @@ export type StreamLiveInputOutput = Resource<
  * @section Creating an output
  * @example Restream a live input to YouTube
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {});
+ * const input = yield* Cloudflare.Stream.StreamLiveInput("Broadcast", {});
  *
- * const youtube = yield* Cloudflare.StreamLiveInputOutput("YouTube", {
+ * const youtube = yield* Cloudflare.Stream.StreamLiveInputOutput("YouTube", {
  *   liveInputId: input.liveInputId,
  *   url: "rtmps://a.rtmps.youtube.com/live2",
  *   streamKey: youtubeStreamKey,
@@ -112,7 +112,7 @@ export type StreamLiveInputOutput = Resource<
  * @section Managing an output
  * @example Pause restreaming without deleting the output
  * ```typescript
- * const youtube = yield* Cloudflare.StreamLiveInputOutput("YouTube", {
+ * const youtube = yield* Cloudflare.Stream.StreamLiveInputOutput("YouTube", {
  *   liveInputId: input.liveInputId,
  *   url: "rtmps://a.rtmps.youtube.com/live2",
  *   streamKey: youtubeStreamKey,

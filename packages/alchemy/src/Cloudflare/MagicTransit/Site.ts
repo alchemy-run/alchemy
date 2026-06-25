@@ -100,7 +100,7 @@ export type MagicSite = Resource<
  * @section Creating a site
  * @example Basic site
  * ```typescript
- * const site = yield* Cloudflare.MagicSite("hq", {
+ * const site = yield* Cloudflare.MagicTransit.MagicSite("hq", {
  *   description: "Headquarters",
  *   location: { lat: "37.7749", lon: "-122.4194" },
  * });
@@ -108,14 +108,14 @@ export type MagicSite = Resource<
  *
  * @example Site with LAN and WAN
  * ```typescript
- * const site = yield* Cloudflare.MagicSite("hq", {});
+ * const site = yield* Cloudflare.MagicTransit.MagicSite("hq", {});
  *
- * const wan = yield* Cloudflare.MagicSiteWan("hq-wan", {
+ * const wan = yield* Cloudflare.MagicTransit.MagicSiteWan("hq-wan", {
  *   siteId: site.siteId,
  *   physport: 1,
  * });
  *
- * const lan = yield* Cloudflare.MagicSiteLan("hq-lan", {
+ * const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("hq-lan", {
  *   siteId: site.siteId,
  *   physport: 2,
  *   vlanTag: 0,

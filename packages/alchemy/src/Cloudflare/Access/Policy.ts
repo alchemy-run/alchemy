@@ -108,7 +108,7 @@ export declare namespace AccessPolicy {
 }
 
 export type AccessPolicy = Resource<
-  "Cloudflare.AccessPolicy",
+  "Cloudflare.Access.AccessPolicy",
   AccessPolicyProps,
   {
     /** UUID of the policy assigned by Cloudflare. */
@@ -138,7 +138,7 @@ export type AccessPolicy = Resource<
  * @section Creating a Policy
  * @example Allow a single email domain
  * ```typescript
- * const policy = yield* Cloudflare.AccessPolicy("AllowExampleDomain", {
+ * const policy = yield* Cloudflare.Access.AccessPolicy("AllowExampleDomain", {
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
@@ -146,7 +146,7 @@ export type AccessPolicy = Resource<
  *
  * @example Allow everyone but require purpose justification
  * ```typescript
- * const policy = yield* Cloudflare.AccessPolicy("OpenWithJustification", {
+ * const policy = yield* Cloudflare.Access.AccessPolicy("OpenWithJustification", {
  *   decision: "allow",
  *   include: [{ everyone: {} }],
  *   purposeJustificationRequired: true,
@@ -157,7 +157,7 @@ export type AccessPolicy = Resource<
  * @section Combining rule groups
  * @example Include + exclude + require
  * ```typescript
- * const policy = yield* Cloudflare.AccessPolicy("EngineersExceptInterns", {
+ * const policy = yield* Cloudflare.Access.AccessPolicy("EngineersExceptInterns", {
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  *   exclude: [{ email: { email: "intern@example.com" } }],
@@ -165,7 +165,9 @@ export type AccessPolicy = Resource<
  * });
  * ```
  */
-export const AccessPolicy = Resource<AccessPolicy>("Cloudflare.AccessPolicy");
+export const AccessPolicy = Resource<AccessPolicy>(
+  "Cloudflare.Access.AccessPolicy",
+);
 
 export const AccessPolicyProvider = () =>
   Provider.succeed(AccessPolicy, {

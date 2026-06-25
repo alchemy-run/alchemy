@@ -70,7 +70,7 @@ export type WorkersSubdomain = Resource<
  * @section Managing the subdomain
  * @example Pin the account's workers.dev subdomain
  * ```typescript
- * const sub = yield* Cloudflare.WorkersSubdomain("Subdomain", {
+ * const sub = yield* Cloudflare.Workers.WorkersSubdomain("Subdomain", {
  *   subdomain: "my-team",
  * });
  * // Workers are now served from https://<script>.my-team.workers.dev

@@ -92,7 +92,7 @@ export type IamResourceGroup = Resource<
  * @example Scope a group to the whole account
  * ```typescript
  * const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
- * const group = yield* Cloudflare.IamResourceGroup("AllResources", {
+ * const group = yield* Cloudflare.Iam.IamResourceGroup("AllResources", {
  *   scope: {
  *     key: `com.cloudflare.api.account.${accountId}`,
  *     objects: [{ key: "*" }],
@@ -102,7 +102,7 @@ export type IamResourceGroup = Resource<
  *
  * @example Scope a group to a single zone
  * ```typescript
- * const group = yield* Cloudflare.IamResourceGroup("ZoneOnly", {
+ * const group = yield* Cloudflare.Iam.IamResourceGroup("ZoneOnly", {
  *   name: "my-zone-resources",
  *   scope: {
  *     key: `com.cloudflare.api.account.${accountId}`,
@@ -116,7 +116,7 @@ export type IamResourceGroup = Resource<
  * @section Using with User Groups
  * @example Attach to a user group policy
  * ```typescript
- * yield* Cloudflare.IamUserGroup("Readers", {
+ * yield* Cloudflare.Iam.IamUserGroup("Readers", {
  *   policies: [
  *     {
  *       access: "allow",

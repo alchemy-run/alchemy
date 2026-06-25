@@ -305,7 +305,7 @@ export const Platform = <
             hooks.onCreate
               ? Effect.flatMap(
                   // `props` may itself be an Effect (e.g. when wrapped by
-                  // `Cloudflare.Vite` via `Effect.map`); resolve it before
+                  // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
                   // handing it to the hook so `onCreate` always sees the
                   // plain props object — the second call site (in
                   // `cls.make`) already does this.

@@ -305,7 +305,7 @@ the credential set is reviewable, diffable, and reproducible.
 
 The stack uses `GitHub.Secret` and `GitHub.Variable` to write into
 your repository, and provider resources like
-`Cloudflare.AccountApiToken` or `AWS.IAM.Role` to mint the
+`Cloudflare.ApiToken.AccountApiToken` or `AWS.IAM.Role` to mint the
 credentials themselves.
 
 ### Set up an `admin` profile
@@ -384,7 +384,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
 
-    const apiToken = yield* Cloudflare.AccountApiToken("CIToken", {
+    const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("CIToken", {
       accountId,
       policies: [
         {
@@ -426,7 +426,7 @@ export default Alchemy.Stack(
 
 A few details worth knowing:
 
-- `Cloudflare.AccountApiToken` calls
+- `Cloudflare.ApiToken.AccountApiToken` calls
   `POST /accounts/{account_id}/tokens` and Cloudflare returns the
   freshly minted token value exactly once. Alchemy captures it,
   stores it in state, and pipes it straight into `GitHub.Secret` —
@@ -520,12 +520,12 @@ export default Alchemy.Stack(
       },
     ];
 
-    const testToken = yield* Cloudflare.AccountApiToken("TestApiToken", {
+    const testToken = yield* Cloudflare.ApiToken.AccountApiToken("TestApiToken", {
       accountId: testAccountId,
       policies: policies(testAccountId),
     });
 
-    const prodToken = yield* Cloudflare.AccountApiToken("ProdApiToken", {
+    const prodToken = yield* Cloudflare.ApiToken.AccountApiToken("ProdApiToken", {
       accountId: prodAccountId,
       policies: policies(prodAccountId),
     });

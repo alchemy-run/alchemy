@@ -73,7 +73,7 @@ export type ZoneTransferTsig = Resource<
  * @section Creating a TSIG
  * @example HMAC-SHA512 key
  * ```typescript
- * const tsig = yield* Cloudflare.ZoneTransferTsig("TransferKey", {
+ * const tsig = yield* Cloudflare.Dns.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
  *   secret: Redacted.make(process.env.TSIG_SECRET!),
  * });
@@ -82,7 +82,7 @@ export type ZoneTransferTsig = Resource<
  * @section Using with a Peer
  * @example Authenticate transfers from a primary nameserver
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.Dns.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  *   tsigId: tsig.tsigId,

@@ -91,7 +91,7 @@ export type NotificationWebhook = Resource<
  * @section Creating a Webhook destination
  * @example Generic webhook with a generated name
  * ```typescript
- * const webhook = yield* Cloudflare.NotificationWebhook("AlertsHook", {
+ * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   url: "https://alerts.example.com/cf",
  * });
  * ```
@@ -99,7 +99,7 @@ export type NotificationWebhook = Resource<
  * @example Webhook with an auth secret
  * The secret is sent in the `cf-webhook-auth` header on every dispatch.
  * ```typescript
- * const webhook = yield* Cloudflare.NotificationWebhook("AlertsHook", {
+ * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   name: "production-alerts",
  *   url: "https://alerts.example.com/cf",
  *   secret: alchemy.secret.env.WEBHOOK_SECRET,
@@ -109,7 +109,7 @@ export type NotificationWebhook = Resource<
  * @section Using with a Notification policy
  * @example Dispatch policy notifications to the webhook
  * ```typescript
- * yield* Cloudflare.NotificationPolicy("SslAlerts", {
+ * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   mechanisms: { webhooks: [{ id: webhook.webhookId }] },
  * });

@@ -49,7 +49,7 @@ export type TunnelRouteProps = {
 };
 
 export type TunnelRoute = Resource<
-  "Cloudflare.TunnelRoute",
+  "Cloudflare.Tunnel.TunnelRoute",
   TunnelRouteProps,
   {
     /**
@@ -96,8 +96,8 @@ export type TunnelRoute = Resource<
  * @section Creating a Route
  * @example Basic route
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("MyTunnel");
- * const route = yield* Cloudflare.TunnelRoute("PrivateNet", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
+ * const route = yield* Cloudflare.Tunnel.TunnelRoute("PrivateNet", {
  *   tunnelId: tunnel.tunnelId,
  *   network: "10.4.0.0/16",
  * });
@@ -105,7 +105,7 @@ export type TunnelRoute = Resource<
  *
  * @example Route with a comment and explicit virtual network
  * ```typescript
- * const route = yield* Cloudflare.TunnelRoute("DcRoute", {
+ * const route = yield* Cloudflare.Tunnel.TunnelRoute("DcRoute", {
  *   tunnelId: tunnel.tunnelId,
  *   network: "10.50.0.0/16",
  *   comment: "Datacenter A private subnet",
@@ -114,7 +114,9 @@ export type TunnelRoute = Resource<
  * });
  * ```
  */
-export const TunnelRoute = Resource<TunnelRoute>("Cloudflare.TunnelRoute");
+export const TunnelRoute = Resource<TunnelRoute>(
+  "Cloudflare.Tunnel.TunnelRoute",
+);
 
 export const TunnelRouteProvider = () =>
   Provider.succeed(TunnelRoute, {

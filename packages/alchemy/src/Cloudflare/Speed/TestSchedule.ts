@@ -124,7 +124,7 @@ export type SpeedTestSchedule = Resource<
  * @section Scheduling a test
  * @example Weekly test of the home page
  * ```typescript
- * yield* Cloudflare.SpeedTestSchedule("HomePageSpeed", {
+ * yield* Cloudflare.Speed.SpeedTestSchedule("HomePageSpeed", {
  *   zoneId: zone.zoneId,
  *   url: "example.com/",
  *   frequency: "WEEKLY",
@@ -133,7 +133,7 @@ export type SpeedTestSchedule = Resource<
  *
  * @example Daily test of a specific page from Europe
  * ```typescript
- * yield* Cloudflare.SpeedTestSchedule("PricingSpeedEU", {
+ * yield* Cloudflare.Speed.SpeedTestSchedule("PricingSpeedEU", {
  *   zoneId: zone.zoneId,
  *   url: "example.com/pricing",
  *   region: "europe-west2",

@@ -32,14 +32,14 @@ export type VpcServiceRef = VpcServiceAttributes;
  * @category Network
  * @example Reference by ID
  * ```typescript
- * const service = yield* Cloudflare.VpcServiceRef({
+ * const service = yield* Cloudflare.VpcService.VpcServiceRef({
  *   serviceId: "123e4567-e89b-12d3-a456-426614174000",
  * });
  * ```
  *
  * @example Reference by name
  * ```typescript
- * const service = yield* Cloudflare.VpcServiceRef({
+ * const service = yield* Cloudflare.VpcService.VpcServiceRef({
  *   name: "my-vpc-service",
  * });
  * ```

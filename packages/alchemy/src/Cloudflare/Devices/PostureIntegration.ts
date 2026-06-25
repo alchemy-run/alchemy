@@ -135,7 +135,7 @@ export type DevicePostureIntegration = Resource<
  * @section Creating a posture integration
  * @example CrowdStrike Falcon
  * ```typescript
- * const falcon = yield* Cloudflare.DevicePostureIntegration("Falcon", {
+ * const falcon = yield* Cloudflare.Devices.DevicePostureIntegration("Falcon", {
  *   type: "crowdstrike_s2s",
  *   interval: "10m",
  *   config: {
@@ -149,7 +149,7 @@ export type DevicePostureIntegration = Resource<
  *
  * @example Custom service-to-service provider behind Access
  * ```typescript
- * const custom = yield* Cloudflare.DevicePostureIntegration("Custom", {
+ * const custom = yield* Cloudflare.Devices.DevicePostureIntegration("Custom", {
  *   type: "custom_s2s",
  *   interval: "30m",
  *   config: {
@@ -163,7 +163,7 @@ export type DevicePostureIntegration = Resource<
  *
  * @example Reference the integration from a posture rule
  * ```typescript
- * yield* Cloudflare.DevicePostureRule("FalconScore", {
+ * yield* Cloudflare.Devices.DevicePostureRule("FalconScore", {
  *   type: "crowdstrike_s2s",
  *   input: { connectionId: falcon.integrationId, os: "windows" },
  * });

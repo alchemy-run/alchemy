@@ -77,7 +77,7 @@ export type EmailSecurityBlockSender = Resource<
  * @section Blocking Senders
  * @example Block a single email address
  * ```typescript
- * yield* Cloudflare.EmailSecurityBlockSender("KnownPhisher", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender("KnownPhisher", {
  *   pattern: "phisher@malicious.example.com",
  *   patternType: "EMAIL",
  *   comments: "reported in incident 1234",
@@ -86,7 +86,7 @@ export type EmailSecurityBlockSender = Resource<
  *
  * @example Block a whole sending domain
  * ```typescript
- * yield* Cloudflare.EmailSecurityBlockSender("SpamDomain", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender("SpamDomain", {
  *   pattern: "spam-source.example.net",
  *   patternType: "DOMAIN",
  * });
@@ -94,7 +94,7 @@ export type EmailSecurityBlockSender = Resource<
  *
  * @example Block by regular expression
  * ```typescript
- * yield* Cloudflare.EmailSecurityBlockSender("LookalikeSenders", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender("LookalikeSenders", {
  *   pattern: ".*@examp1e\\.com$",
  *   patternType: "EMAIL",
  *   isRegex: true,

@@ -95,7 +95,7 @@ export type AccessInfrastructureTarget = Resource<
  * @section Creating a Target
  * @example Basic IPv4 target
  * ```typescript
- * const target = yield* Cloudflare.AccessInfrastructureTarget("Bastion", {
+ * const target = yield* Cloudflare.Access.AccessInfrastructureTarget("Bastion", {
  *   hostname: "bastion.internal",
  *   ip: { ipv4: { ipAddr: "10.0.0.5" } },
  * });
@@ -103,8 +103,8 @@ export type AccessInfrastructureTarget = Resource<
  *
  * @example Target scoped to a virtual network
  * ```typescript
- * const vnet = yield* Cloudflare.TunnelVirtualNetwork("Staging", {});
- * const target = yield* Cloudflare.AccessInfrastructureTarget("DbHost", {
+ * const vnet = yield* Cloudflare.Tunnel.TunnelVirtualNetwork("Staging", {});
+ * const target = yield* Cloudflare.Access.AccessInfrastructureTarget("DbHost", {
  *   hostname: "db.staging.internal",
  *   ip: {
  *     ipv4: {
@@ -119,7 +119,7 @@ export type AccessInfrastructureTarget = Resource<
  * @example Re-point the target at a new address
  * ```typescript
  * // Hostname and IP update in place — same targetId, no replacement.
- * const target = yield* Cloudflare.AccessInfrastructureTarget("Bastion", {
+ * const target = yield* Cloudflare.Access.AccessInfrastructureTarget("Bastion", {
  *   hostname: "bastion.internal",
  *   ip: { ipv4: { ipAddr: "10.0.0.6" } },
  * });

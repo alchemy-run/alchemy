@@ -101,14 +101,14 @@ export type MagicStaticRoute = Resource<
  * @section Creating a static route
  * @example Route a prefix over a GRE tunnel
  * ```typescript
- * const tunnel = yield* Cloudflare.GreTunnel("office", {
+ * const tunnel = yield* Cloudflare.MagicTransit.GreTunnel("office", {
  *   name: "office-gre-1",
  *   cloudflareGreEndpoint: "203.0.113.1",
  *   customerGreEndpoint: "198.51.100.1",
  *   interfaceAddress: "10.213.0.8/31",
  * });
  *
- * yield* Cloudflare.MagicStaticRoute("office-route", {
+ * yield* Cloudflare.MagicTransit.MagicStaticRoute("office-route", {
  *   prefix: "10.100.0.0/24",
  *   nexthop: "10.213.0.9",
  *   priority: 100,
@@ -117,7 +117,7 @@ export type MagicStaticRoute = Resource<
  *
  * @example ECMP route scoped to a region
  * ```typescript
- * yield* Cloudflare.MagicStaticRoute("ecmp-route", {
+ * yield* Cloudflare.MagicTransit.MagicStaticRoute("ecmp-route", {
  *   prefix: "10.100.0.0/24",
  *   nexthop: "10.213.0.9",
  *   priority: 100,

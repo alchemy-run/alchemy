@@ -102,7 +102,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UaRule("LifecycleUaRule", {
+          return yield* Cloudflare.Firewall.UaRule("LifecycleUaRule", {
             zoneId,
             userAgent: UA_LIFECYCLE_V1,
             mode: "block",
@@ -127,7 +127,7 @@ test.provider(
       // softer mode, a new description, and pause the rule — all in place.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UaRule("LifecycleUaRule", {
+          return yield* Cloudflare.Firewall.UaRule("LifecycleUaRule", {
             zoneId,
             userAgent: UA_LIFECYCLE_V2,
             mode: "managed_challenge",
@@ -153,7 +153,7 @@ test.provider(
       // Redeploying identical props is a no-op (still the same rule).
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UaRule("LifecycleUaRule", {
+          return yield* Cloudflare.Firewall.UaRule("LifecycleUaRule", {
             zoneId,
             userAgent: UA_LIFECYCLE_V2,
             mode: "managed_challenge",
@@ -183,7 +183,7 @@ test.provider("list enumerates UA rules across all zones", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.UaRule("ListUaRule", {
+        return yield* Cloudflare.Firewall.UaRule("ListUaRule", {
           zoneId,
           userAgent: UA_LIST,
           mode: "block",
@@ -192,7 +192,7 @@ test.provider("list enumerates UA rules across all zones", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.UaRule);
+    const provider = yield* Provider.findProvider(Cloudflare.Firewall.UaRule);
     const all = yield* provider.list();
 
     const found = all.find((r) => r.uaRuleId === deployed.uaRuleId);

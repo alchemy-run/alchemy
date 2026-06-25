@@ -101,20 +101,20 @@ export type PageShieldPolicy = Resource<
  * non-entitled zones, creation fails with the typed `PolicyQuotaExceeded`
  * error ("exceeded the maximum number of rules in the phase
  * http_response_page_shield: 1 out of 0"). Page Shield itself should be
- * enabled on the zone first — see `Cloudflare.PageShieldSettings`.
+ * enabled on the zone first — see `Cloudflare.PageShield.PageShieldSettings`.
  * @resource
  * @product Page Shield
  * @category Application Security
  * @section Creating a Policy
  * @example Log-only CSP policy
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.PageShieldPolicy("LogScripts", {
+ * yield* Cloudflare.PageShield.PageShieldPolicy("LogScripts", {
  *   zoneId: zone.zoneId,
  *   action: "log",
  *   expression: 'http.host eq "example.com"',
@@ -124,7 +124,7 @@ export type PageShieldPolicy = Resource<
  *
  * @example Enforcing CSP policy with a description
  * ```typescript
- * yield* Cloudflare.PageShieldPolicy("EnforceScripts", {
+ * yield* Cloudflare.PageShield.PageShieldPolicy("EnforceScripts", {
  *   zoneId: zone.zoneId,
  *   description: "block third-party scripts on checkout",
  *   action: "allow",

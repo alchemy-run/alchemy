@@ -3,8 +3,8 @@ import * as Binding from "../../Binding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { type TunnelToken } from "./TunnelBinding.ts";
-import { readClient, type TunnelReadClient } from "./TunnelRead.ts";
-import { writeClient, type TunnelWriteClient } from "./TunnelWrite.ts";
+import { readClient, type ReadTunnelClient } from "./ReadTunnel.ts";
+import { writeClient, type WriteTunnelClient } from "./WriteTunnel.ts";
 
 /**
  * Binding that lets a Worker perform the full Cloudflare Tunnel CRUD surface at
@@ -19,15 +19,15 @@ import { writeClient, type TunnelWriteClient } from "./TunnelWrite.ts";
  * @product Tunnels
  * @category Cloudflare One (Zero Trust)
  *
- * `TunnelReadWrite` is a single identifier that is simultaneously the binding's
+ * `ReadWriteTunnel` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
- * `yield* Cloudflare.TunnelReadWrite()`.
+ * `yield* Cloudflare.Tunnel.ReadWriteTunnel()`.
  *
  * @section Managing tunnels at runtime
  * @example Create, configure, and delete a tunnel from a request handler
  * ```typescript
  * // init
- * const tunnels = yield* Cloudflare.TunnelReadWrite();
+ * const tunnels = yield* Cloudflare.Tunnel.ReadWriteTunnel();
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -45,31 +45,31 @@ import { writeClient, type TunnelWriteClient } from "./TunnelWrite.ts";
  * ```
  *
  * @section Runtime Layer
- * Provide {@link TunnelReadWriteBinding} in the Worker's runtime layer.
+ * Provide {@link ReadWriteTunnelBinding} in the Worker's runtime layer.
  * ```typescript
- * Effect.provide(Cloudflare.TunnelReadWriteBinding)
+ * Effect.provide(Cloudflare.Tunnel.ReadWriteTunnelBinding)
  * ```
  */
-export interface TunnelReadWrite extends Binding.Service<
-  TunnelReadWrite,
-  "Cloudflare.TunnelReadWrite",
+export interface ReadWriteTunnel extends Binding.Service<
+  ReadWriteTunnel,
+  "Cloudflare.Tunnel.ReadWriteTunnel",
   () => Effect.Effect<
-    TunnelReadWriteClient,
+    ReadWriteTunnelClient,
     never,
     Worker | CloudflareEnvironment
   >
 > {}
 
-export const TunnelReadWrite = Binding.Service<TunnelReadWrite>(
-  "Cloudflare.TunnelReadWrite",
+export const ReadWriteTunnel = Binding.Service<ReadWriteTunnel>(
+  "Cloudflare.Tunnel.ReadWriteTunnel",
 );
 
 /** Combined read + write tunnel operations. */
-export interface TunnelReadWriteClient
-  extends TunnelReadClient, TunnelWriteClient {}
+export interface ReadWriteTunnelClient
+  extends ReadTunnelClient, WriteTunnelClient {}
 
 /** Build the combined read + write client over a bound token. */
-export const readWriteClient = (token: TunnelToken): TunnelReadWriteClient => ({
+export const readWriteClient = (token: TunnelToken): ReadWriteTunnelClient => ({
   ...readClient(token),
   ...writeClient(token),
 });

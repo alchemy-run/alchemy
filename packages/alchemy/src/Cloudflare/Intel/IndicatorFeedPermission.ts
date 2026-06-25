@@ -60,11 +60,11 @@ export type IndicatorFeedPermission = Resource<
  * @section Granting Access
  * @example Grant a consumer account access to a feed
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("threat-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
  * });
  *
- * yield* Cloudflare.IndicatorFeedPermission("partner-access", {
+ * yield* Cloudflare.Intel.IndicatorFeedPermission("partner-access", {
  *   feedId: feed.feedId,
  *   accountTag: "023e105f4ecef8ad9ca31a8372d0c353",
  * });

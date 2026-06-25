@@ -231,9 +231,9 @@ export type PipelineSink = Resource<
  * the access key id is the token id and the secret is the SHA-256 hex
  * digest of the token value.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("events", {});
+ * const bucket = yield* Cloudflare.R2.R2Bucket("events", {});
  *
- * const sink = yield* Cloudflare.PipelineSink("events-sink", {
+ * const sink = yield* Cloudflare.Pipelines.PipelineSink("events-sink", {
  *   type: "r2",
  *   config: {
  *     bucket: bucket.bucketName,
@@ -249,7 +249,7 @@ export type PipelineSink = Resource<
  *
  * @example Parquet output
  * ```typescript
- * const sink = yield* Cloudflare.PipelineSink("parquet-sink", {
+ * const sink = yield* Cloudflare.Pipelines.PipelineSink("parquet-sink", {
  *   type: "r2",
  *   config: { bucket: bucket.bucketName, credentials },
  *   format: { type: "parquet", compression: "zstd" },
@@ -259,7 +259,7 @@ export type PipelineSink = Resource<
  * @section R2 Data Catalog
  * @example Iceberg table sink
  * ```typescript
- * const sink = yield* Cloudflare.PipelineSink("iceberg-sink", {
+ * const sink = yield* Cloudflare.Pipelines.PipelineSink("iceberg-sink", {
  *   type: "r2_data_catalog",
  *   config: {
  *     bucket: bucket.bucketName,

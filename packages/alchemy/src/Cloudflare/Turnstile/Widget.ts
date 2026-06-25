@@ -159,7 +159,7 @@ export type TurnstileWidget = Resource<
  * @section Creating a Widget
  * @example Managed widget
  * ```typescript
- * const widget = yield* Cloudflare.TurnstileWidget("signup-form", {
+ * const widget = yield* Cloudflare.Turnstile.TurnstileWidget("signup-form", {
  *   domains: ["example.com"],
  *   mode: "managed",
  * });
@@ -167,7 +167,7 @@ export type TurnstileWidget = Resource<
  *
  * @example Invisible widget with an explicit name
  * ```typescript
- * const widget = yield* Cloudflare.TurnstileWidget("api-guard", {
+ * const widget = yield* Cloudflare.Turnstile.TurnstileWidget("api-guard", {
  *   name: "api-guard",
  *   domains: ["example.com", "app.example.com"],
  *   mode: "invisible",

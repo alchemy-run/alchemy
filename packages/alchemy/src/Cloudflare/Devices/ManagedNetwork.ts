@@ -82,7 +82,7 @@ export type DeviceManagedNetwork = Resource<
  * @section Creating a managed network
  * @example Detect the office network by TLS fingerprint
  * ```typescript
- * const network = yield* Cloudflare.DeviceManagedNetwork("Office", {
+ * const network = yield* Cloudflare.Devices.DeviceManagedNetwork("Office", {
  *   config: {
  *     tlsSockaddr: "192.0.2.1:443",
  *     sha256:
@@ -93,7 +93,7 @@ export type DeviceManagedNetwork = Resource<
  *
  * @example Use the network in a custom device profile
  * ```typescript
- * yield* Cloudflare.DeviceCustomProfile("OnPrem", {
+ * yield* Cloudflare.Devices.DeviceCustomProfile("OnPrem", {
  *   match: `network == "${network.name}"`,
  *   precedence: 100,
  *   serviceModeV2: { mode: "proxy", port: 3000 },

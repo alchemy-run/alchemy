@@ -123,7 +123,7 @@ export type DevicePostureRule = Resource<
  * @section Infrastructure-free checks
  * @example Require a minimum Windows version
  * ```typescript
- * const rule = yield* Cloudflare.DevicePostureRule("WindowsOsVersion", {
+ * const rule = yield* Cloudflare.Devices.DevicePostureRule("WindowsOsVersion", {
  *   type: "os_version",
  *   description: "Require Windows 10.0.19045+",
  *   match: [{ platform: "windows" }],
@@ -138,7 +138,7 @@ export type DevicePostureRule = Resource<
  *
  * @example Require the OS firewall to be enabled
  * ```typescript
- * yield* Cloudflare.DevicePostureRule("Firewall", {
+ * yield* Cloudflare.Devices.DevicePostureRule("Firewall", {
  *   type: "firewall",
  *   match: [{ platform: "windows" }, { platform: "mac" }],
  *   input: { enabled: true, operatingSystem: "windows" },
@@ -147,7 +147,7 @@ export type DevicePostureRule = Resource<
  *
  * @example Require disk encryption on all drives
  * ```typescript
- * yield* Cloudflare.DevicePostureRule("DiskEncryption", {
+ * yield* Cloudflare.Devices.DevicePostureRule("DiskEncryption", {
  *   type: "disk_encryption",
  *   match: [{ platform: "mac" }],
  *   input: { requireAll: true },

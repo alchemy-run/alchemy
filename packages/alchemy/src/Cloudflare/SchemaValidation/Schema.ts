@@ -101,7 +101,7 @@ export type SchemaValidationSchema = Resource<
  * @section Uploading a Schema
  * @example Upload an OpenAPI v3 schema
  * ```typescript
- * const schema = yield* Cloudflare.SchemaValidationSchema("ApiSchema", {
+ * const schema = yield* Cloudflare.SchemaValidation.SchemaValidationSchema("ApiSchema", {
  *   zoneId: zone.zoneId,
  *   source: JSON.stringify({
  *     openapi: "3.0.0",
@@ -121,7 +121,7 @@ export type SchemaValidationSchema = Resource<
  *
  * @example Upload a schema without enabling validation
  * ```typescript
- * const schema = yield* Cloudflare.SchemaValidationSchema("DraftSchema", {
+ * const schema = yield* Cloudflare.SchemaValidation.SchemaValidationSchema("DraftSchema", {
  *   zoneId: zone.zoneId,
  *   source: openApiDocument,
  *   validationEnabled: false,
@@ -134,7 +134,7 @@ export type SchemaValidationSchema = Resource<
  * // Enabling (false → true) patches the schema in place. Disabling an
  * // enabled schema is rejected by Cloudflare, so `true` → `false` (like a
  * // `source` change) replaces the schema instead.
- * yield* Cloudflare.SchemaValidationSchema("DraftSchema", {
+ * yield* Cloudflare.SchemaValidation.SchemaValidationSchema("DraftSchema", {
  *   zoneId: zone.zoneId,
  *   source: openApiDocument,
  *   validationEnabled: true,

@@ -96,11 +96,11 @@ export type CustomRuleset = Resource<
  * Custom rulesets are the Enterprise WAF deployment workflow: define a
  * reusable ruleset once at the account level, then deploy it across zones
  * with an `execute` rule in a phase entrypoint (see
- * `Cloudflare.RulesetAccountEntrypoint`). Account-level WAF phases require
+ * `Cloudflare.Ruleset.RulesetAccountEntrypoint`). Account-level WAF phases require
  * an Enterprise plan — on lower plans, creation fails with the typed
  * `PhaseNotEntitled` error.
  *
- * For zone-level rules, use `Cloudflare.Ruleset` (the zone phase
+ * For zone-level rules, use `Cloudflare.Ruleset.Ruleset` (the zone phase
  * entrypoint) instead.
  * @resource
  * @product Rulesets
@@ -108,7 +108,7 @@ export type CustomRuleset = Resource<
  * @section Custom Rulesets
  * @example Define an account custom WAF ruleset
  * ```typescript
- * const ruleset = yield* Cloudflare.CustomRuleset("SharedWafRules", {
+ * const ruleset = yield* Cloudflare.Ruleset.CustomRuleset("SharedWafRules", {
  *   phase: "http_request_firewall_custom",
  *   description: "Org-wide exploit probes",
  *   rules: [
@@ -123,7 +123,7 @@ export type CustomRuleset = Resource<
  *
  * @example Deploy the custom ruleset via the account entrypoint
  * ```typescript
- * yield* Cloudflare.RulesetAccountEntrypoint("WafDeployment", {
+ * yield* Cloudflare.Ruleset.RulesetAccountEntrypoint("WafDeployment", {
  *   phase: "http_request_firewall_custom",
  *   rules: [
  *     {

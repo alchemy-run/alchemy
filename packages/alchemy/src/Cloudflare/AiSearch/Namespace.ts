@@ -77,12 +77,12 @@ export type Namespace = Resource<
  * @section Creating a Namespace
  * @example Generated name
  * ```typescript
- * const ns = yield* Cloudflare.Namespace("docs", {});
+ * const ns = yield* Cloudflare.AiSearch.Namespace("docs", {});
  * ```
  *
  * @example Explicit name and description
  * ```typescript
- * const ns = yield* Cloudflare.Namespace("docs", {
+ * const ns = yield* Cloudflare.AiSearch.Namespace("docs", {
  *   name: "docs-search",
  *   description: "Search over the product documentation",
  * });
@@ -92,7 +92,7 @@ export type Namespace = Resource<
  * @example Change the description in place
  * Only the `description` is mutable; changing `name` replaces the namespace.
  * ```typescript
- * const ns = yield* Cloudflare.Namespace("docs", {
+ * const ns = yield* Cloudflare.AiSearch.Namespace("docs", {
  *   name: "docs-search",
  *   description: "Search over docs and changelogs",
  * });
@@ -105,12 +105,12 @@ export type Namespace = Resource<
  * before it on destroy.
  * @example Two pipelines in one namespace
  * ```typescript
- * const ns = yield* Cloudflare.Namespace("docs", {});
- * const guides = yield* Cloudflare.AiSearch("guides", {
+ * const ns = yield* Cloudflare.AiSearch.Namespace("docs", {});
+ * const guides = yield* Cloudflare.AiSearch.AiSearch("guides", {
  *   source: guidesBucket,
  *   namespace: ns,
  * });
- * const api = yield* Cloudflare.AiSearch("api", {
+ * const api = yield* Cloudflare.AiSearch.AiSearch("api", {
  *   source: apiBucket,
  *   namespace: ns,
  * });

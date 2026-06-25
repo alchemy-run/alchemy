@@ -69,14 +69,14 @@ export type ZoneTransferAcl = Resource<
  * @section Creating an ACL
  * @example Allow a primary nameserver range
  * ```typescript
- * const acl = yield* Cloudflare.ZoneTransferAcl("PrimaryNs", {
+ * const acl = yield* Cloudflare.Dns.ZoneTransferAcl("PrimaryNs", {
  *   ipRange: "192.0.2.48/28",
  * });
  * ```
  *
  * @example ACL with an explicit name
  * ```typescript
- * const acl = yield* Cloudflare.ZoneTransferAcl("PrimaryNs", {
+ * const acl = yield* Cloudflare.Dns.ZoneTransferAcl("PrimaryNs", {
  *   name: "primary-nameservers",
  *   ipRange: "2001:db8::/64",
  * });

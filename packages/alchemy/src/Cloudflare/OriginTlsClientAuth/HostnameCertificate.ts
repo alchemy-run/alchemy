@@ -99,7 +99,7 @@ export type OriginTlsClientAuthHostnameCertificate = Resource<
  * @section Uploading a hostname certificate
  * @example Hostname client certificate
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
@@ -109,13 +109,13 @@ export type OriginTlsClientAuthHostnameCertificate = Resource<
  * @section Enabling AOP for a hostname
  * @example Upload the certificate and associate a hostname
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
  * });
  *
- * yield* Cloudflare.OriginTlsClientAuthHostnameAssociation("AopHost", {
+ * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameAssociation("AopHost", {
  *   zoneId: zone.zoneId,
  *   hostname: "api.example.com",
  *   certId: cert.certificateId,

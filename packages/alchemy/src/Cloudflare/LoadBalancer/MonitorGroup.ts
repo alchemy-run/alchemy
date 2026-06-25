@@ -91,7 +91,7 @@ export type LoadBalancerMonitorGroup = Resource<
  * @section Creating a Monitor Group
  * @example Group of two monitors
  * ```typescript
- * const group = yield* Cloudflare.LoadBalancerMonitorGroup("ApiChecks", {
+ * const group = yield* Cloudflare.LoadBalancer.LoadBalancerMonitorGroup("ApiChecks", {
  *   members: [
  *     { monitorId: httpsMonitor.monitorId },
  *     { monitorId: tcpMonitor.monitorId, mustBeHealthy: false },
@@ -102,7 +102,7 @@ export type LoadBalancerMonitorGroup = Resource<
  * @section Using with a Pool
  * @example Attach the group to a pool
  * ```typescript
- * yield* Cloudflare.LoadBalancerPool("ApiPool", {
+ * yield* Cloudflare.LoadBalancer.LoadBalancerPool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  *   monitorGroup: group.monitorGroupId,
  * });

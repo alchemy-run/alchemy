@@ -70,7 +70,7 @@ export interface GatewayConfigurationSettings {
   };
   /**
    * The Gateway-managed certificate used for TLS interception. Reference
-   * a `Cloudflare.GatewayCertificate`'s `certificateId` here.
+   * a `Cloudflare.Gateway.GatewayCertificate`'s `certificateId` here.
    */
   certificate?: { id: string };
   /** Match on both email aliases and the primary address. */
@@ -153,7 +153,7 @@ export type GatewayConfiguration = Resource<
  * @section Managing Gateway settings
  * @example Enable activity logging and TLS decryption
  * ```typescript
- * yield* Cloudflare.GatewayConfiguration("Gateway", {
+ * yield* Cloudflare.Gateway.GatewayConfiguration("Gateway", {
  *   settings: {
  *     activityLog: { enabled: true },
  *     tlsDecrypt: { enabled: true },
@@ -163,7 +163,7 @@ export type GatewayConfiguration = Resource<
  *
  * @example Custom block page
  * ```typescript
- * yield* Cloudflare.GatewayConfiguration("Gateway", {
+ * yield* Cloudflare.Gateway.GatewayConfiguration("Gateway", {
  *   settings: {
  *     blockPage: {
  *       enabled: true,
@@ -178,8 +178,8 @@ export type GatewayConfiguration = Resource<
  * @section TLS interception
  * @example Use a Gateway certificate for inspection
  * ```typescript
- * const cert = yield* Cloudflare.GatewayCertificate("InspectionCa", {});
- * yield* Cloudflare.GatewayConfiguration("Gateway", {
+ * const cert = yield* Cloudflare.Gateway.GatewayCertificate("InspectionCa", {});
+ * yield* Cloudflare.Gateway.GatewayConfiguration("Gateway", {
  *   settings: {
  *     tlsDecrypt: { enabled: true },
  *     certificate: { id: cert.certificateId },

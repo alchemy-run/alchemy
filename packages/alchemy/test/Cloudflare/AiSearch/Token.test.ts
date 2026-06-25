@@ -51,7 +51,7 @@ const program = (
   props?: Partial<Cloudflare.AiSearch.TokenProps>,
 ) =>
   Effect.gen(function* () {
-    const apiToken = yield* Cloudflare.AccountApiToken("TokenSource", {
+    const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("TokenSource", {
       policies: [
         {
           effect: "allow",
@@ -196,7 +196,10 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const { apiToken, token } = yield* program(accountId);
-          const bucket = yield* Cloudflare.R2Bucket("AiSearchTokenSource", {});
+          const bucket = yield* Cloudflare.R2.R2Bucket(
+            "AiSearchTokenSource",
+            {},
+          );
           const instance = yield* Cloudflare.AiSearch.Instance("Search", {
             source: bucket.bucketName,
             tokenId: token.id,

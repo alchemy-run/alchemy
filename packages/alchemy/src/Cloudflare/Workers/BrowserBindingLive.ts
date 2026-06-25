@@ -2,7 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
+import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { Browser as BrowserLike } from "./Browser.ts";
 import { BrowserBinding, makeBrowserClient } from "./BrowserBinding.ts";
 

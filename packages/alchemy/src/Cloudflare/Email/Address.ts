@@ -7,7 +7,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type EmailAddressProps = {
+export type AddressProps = {
   /**
    * The email address to register as a verified destination on the
    * account. Cloudflare sends a verification email to this address; the
@@ -19,9 +19,9 @@ export type EmailAddressProps = {
   email: string;
 };
 
-export type EmailAddress = Resource<
-  "Cloudflare.EmailAddress",
-  EmailAddressProps,
+export type Address = Resource<
+  "Cloudflare.Email.Address",
+  AddressProps,
   {
     addressId: string;
     email: string;
@@ -39,7 +39,7 @@ export type EmailAddress = Resource<
  * A verified destination email address on the account.
  *
  * Destination addresses are account-scoped (not zone-scoped). They are used
- * as forwarding targets in `EmailRule` actions and can also serve as the
+ * as forwarding targets in `Rule` actions and can also serve as the
  * `destinationAddress` on a `send_email` Worker binding.
  * @resource
  * @product Email
@@ -47,7 +47,7 @@ export type EmailAddress = Resource<
  * @section Registering an Address
  * @example Register a destination address
  * ```typescript
- * const ops = yield* Cloudflare.EmailAddress("Ops", {
+ * const ops = yield* Cloudflare.Email.Address("Ops", {
  *   email: "ops@example.com",
  * });
  * ```
@@ -55,7 +55,7 @@ export type EmailAddress = Resource<
  * Cloudflare sends a verification email when the address is first created.
  * The address must be verified before it can receive routed mail.
  */
-export const EmailAddress = Resource<EmailAddress>("Cloudflare.EmailAddress");
+export const Address = Resource<Address>("Cloudflare.Email.Address");
 
 const toAttrs = (
   accountId: string,
@@ -91,8 +91,8 @@ const findByEmail = (accountId: string, email: string) =>
     ),
   );
 
-export const EmailAddressProvider = () =>
-  Provider.succeed(EmailAddress, {
+export const AddressProvider = () =>
+  Provider.succeed(Address, {
     stables: ["addressId", "accountId", "email"],
     // Account collection: destination addresses are enumerable account-wide.
     list: Effect.fn(function* () {

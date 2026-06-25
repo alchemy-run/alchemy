@@ -97,7 +97,7 @@ export type CustomTrustStore = Resource<
  * @section Uploading a root CA
  * @example Trust a private root CA for origin pulls
  * ```typescript
- * const trustStore = yield* Cloudflare.CustomTrustStore("OriginRootCa", {
+ * const trustStore = yield* Cloudflare.Acm.CustomTrustStore("OriginRootCa", {
  *   zoneId: zone.zoneId,
  *   certificate: rootCaPem, // "-----BEGIN CERTIFICATE-----\n..."
  * });
@@ -107,7 +107,7 @@ export type CustomTrustStore = Resource<
  * ```typescript
  * const fs = yield* FileSystem.FileSystem;
  * const pem = yield* fs.readFileString("./certs/root-ca.pem");
- * yield* Cloudflare.CustomTrustStore("OriginRootCa", {
+ * yield* Cloudflare.Acm.CustomTrustStore("OriginRootCa", {
  *   zoneId: zone.zoneId,
  *   certificate: pem,
  * });

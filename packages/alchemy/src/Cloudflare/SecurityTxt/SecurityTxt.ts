@@ -9,7 +9,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SecurityTxtTypeId = "Cloudflare.SecurityTxt" as const;
+const SecurityTxtTypeId = "Cloudflare.SecurityTxt.SecurityTxt" as const;
 type SecurityTxtTypeId = typeof SecurityTxtTypeId;
 
 export type SecurityTxtProps = {
@@ -121,9 +121,9 @@ export type SecurityTxt = Resource<
  * @section Publishing a security.txt
  * @example Minimal security.txt
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.SecurityTxt("SecurityTxt", {
+ * yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
  *   zoneId: zone.zoneId,
  *   contact: ["mailto:security@example.com"],
  *   expires: "2027-01-01T00:00:00Z",
@@ -132,7 +132,7 @@ export type SecurityTxt = Resource<
  *
  * @example Full security.txt with policy and acknowledgments
  * ```typescript
- * yield* Cloudflare.SecurityTxt("SecurityTxt", {
+ * yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
  *   zoneId: zone.zoneId,
  *   contact: ["mailto:security@example.com", "https://example.com/report"],
  *   expires: "2027-01-01T00:00:00Z",
@@ -146,7 +146,7 @@ export type SecurityTxt = Resource<
  * @section Pausing without deleting
  * @example Keep the configuration but stop serving the file
  * ```typescript
- * yield* Cloudflare.SecurityTxt("SecurityTxt", {
+ * yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  *   contact: ["mailto:security@example.com"],

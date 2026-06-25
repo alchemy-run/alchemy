@@ -95,7 +95,7 @@ export interface RepositoryEventSourceProps<
  *
  * Wiring the webhook (delivery URL, secret, IAM/bindings) is handled by the
  * host-specific runtime layer — see
- * `Cloudflare.GitHubRepositoryEventSourceLive` for the Cloudflare Worker
+ * `Cloudflare.Workers.GitHubRepositoryEventSourceLive` for the Cloudflare Worker
  * implementation.
  * @binding
  * @example

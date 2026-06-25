@@ -11,7 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const KeylessCertificateTypeId = "Cloudflare.KeylessCertificate" as const;
+const KeylessCertificateTypeId =
+  "Cloudflare.KeylessCertificate.KeylessCertificate" as const;
 type KeylessCertificateTypeId = typeof KeylessCertificateTypeId;
 
 /**
@@ -163,7 +164,7 @@ export type KeylessCertificate = Resource<
  * @section Creating a Keyless SSL configuration
  * @example Basic key server over the public internet
  * ```typescript
- * const keyless = yield* Cloudflare.KeylessCertificate("SiteKeyless", {
+ * const keyless = yield* Cloudflare.KeylessCertificate.KeylessCertificate("SiteKeyless", {
  *   zoneId: zone.zoneId,
  *   certificate: certPem, // PEM, private key stays on your key server
  *   host: "keyless.example.com",
@@ -176,7 +177,7 @@ export type KeylessCertificate = Resource<
  * const fs = yield* FileSystem.FileSystem;
  * const certificate = yield* fs.readFileString("certs/site.pem");
  *
- * const keyless = yield* Cloudflare.KeylessCertificate("SiteKeyless", {
+ * const keyless = yield* Cloudflare.KeylessCertificate.KeylessCertificate("SiteKeyless", {
  *   zoneId: zone.zoneId,
  *   certificate,
  *   host: "keyless.example.com",
@@ -186,9 +187,9 @@ export type KeylessCertificate = Resource<
  * @section Reaching the key server through a Cloudflare Tunnel
  * @example Private key server on a tunnel virtual network
  * ```typescript
- * const vnet = yield* Cloudflare.TunnelVirtualNetwork("KeylessVnet", {});
+ * const vnet = yield* Cloudflare.Tunnel.TunnelVirtualNetwork("KeylessVnet", {});
  *
- * const keyless = yield* Cloudflare.KeylessCertificate("SiteKeyless", {
+ * const keyless = yield* Cloudflare.KeylessCertificate.KeylessCertificate("SiteKeyless", {
  *   zoneId: zone.zoneId,
  *   certificate: certPem,
  *   host: "keyless.internal",
@@ -205,7 +206,7 @@ export type KeylessCertificate = Resource<
  * ```typescript
  * // `certificate` is create-only — changing it replaces the configuration:
  * // the new one is created and the old one is deleted.
- * const keyless = yield* Cloudflare.KeylessCertificate("SiteKeyless", {
+ * const keyless = yield* Cloudflare.KeylessCertificate.KeylessCertificate("SiteKeyless", {
  *   zoneId: zone.zoneId,
  *   certificate: rotatedCertPem,
  *   host: "keyless.example.com",

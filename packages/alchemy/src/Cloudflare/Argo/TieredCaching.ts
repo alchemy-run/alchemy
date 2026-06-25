@@ -79,16 +79,16 @@ export type TieredCaching = Resource<
  * @section Enabling Tiered Caching
  * @example Enable Tiered Caching on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.TieredCaching("TieredCaching", {
+ * yield* Cloudflare.Argo.TieredCaching("TieredCaching", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Tiered Caching
  * ```typescript
- * yield* Cloudflare.TieredCaching("TieredCaching", {
+ * yield* Cloudflare.Argo.TieredCaching("TieredCaching", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

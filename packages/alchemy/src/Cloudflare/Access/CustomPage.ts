@@ -61,7 +61,7 @@ export type AccessCustomPage = Resource<
  * @section Creating a Custom Page
  * @example Custom forbidden page
  * ```typescript
- * const page = yield* Cloudflare.AccessCustomPage("Forbidden", {
+ * const page = yield* Cloudflare.Access.AccessCustomPage("Forbidden", {
  *   type: "forbidden",
  *   customHtml: "<html><body><h1>Access denied</h1></body></html>",
  * });
@@ -69,7 +69,7 @@ export type AccessCustomPage = Resource<
  *
  * @example Custom identity-denied page with an explicit name
  * ```typescript
- * const page = yield* Cloudflare.AccessCustomPage("Denied", {
+ * const page = yield* Cloudflare.Access.AccessCustomPage("Denied", {
  *   name: "corp-identity-denied",
  *   type: "identity_denied",
  *   customHtml: "<html><body><h1>Who are you?</h1></body></html>",
@@ -79,7 +79,7 @@ export type AccessCustomPage = Resource<
  * @section Updating the HTML
  * @example HTML and name converge in place
  * ```typescript
- * const page = yield* Cloudflare.AccessCustomPage("Forbidden", {
+ * const page = yield* Cloudflare.Access.AccessCustomPage("Forbidden", {
  *   type: "forbidden",
  *   customHtml: "<html><body><h1>Still denied</h1></body></html>",
  * });

@@ -119,7 +119,7 @@ export type GatewayList = Resource<
  * @section Creating a List
  * @example Domain list
  * ```typescript
- * const blocked = yield* Cloudflare.GatewayList("BlockedDomains", {
+ * const blocked = yield* Cloudflare.Gateway.GatewayList("BlockedDomains", {
  *   type: "DOMAIN",
  *   description: "domains blocked org-wide",
  *   items: [
@@ -131,7 +131,7 @@ export type GatewayList = Resource<
  *
  * @example IP list
  * ```typescript
- * const egress = yield* Cloudflare.GatewayList("OfficeEgress", {
+ * const egress = yield* Cloudflare.Gateway.GatewayList("OfficeEgress", {
  *   type: "IP",
  *   items: [{ value: "203.0.113.0/24" }],
  * });
@@ -140,7 +140,7 @@ export type GatewayList = Resource<
  * @section Referencing from a Gateway Rule
  * @example Block DNS lookups for every domain in the list
  * ```typescript
- * yield* Cloudflare.GatewayRule("BlockListedDomains", {
+ * yield* Cloudflare.Gateway.GatewayRule("BlockListedDomains", {
  *   action: "block",
  *   filters: ["dns"],
  *   traffic: `any(dns.domains[*] in $${blocked.listId})`,

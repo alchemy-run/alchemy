@@ -12,7 +12,7 @@ generation, all managed by Cloudflare.
 
 A working pipeline needs more than one resource: the instance itself,
 plus a scoped API token so the indexer can read your R2 bucket. The
-`Cloudflare.AiSearch` helper wires all of that up in a single call.
+`Cloudflare.AiSearch.AiSearch` helper wires all of that up in a single call.
 We'll use it here and unpack exactly what it creates.
 
 ## Create the R2 bucket
@@ -24,7 +24,7 @@ Create `src/Docs.ts` with a bucket definition.
 // src/Docs.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Docs = Cloudflare.R2Bucket("Docs", {});
+export const Docs = Cloudflare.R2.R2Bucket("Docs", {});
 ```
 
 This is the bucket you'll drop Markdown, PDFs, or text files into —
@@ -40,7 +40,7 @@ field selects R2 as the data source.
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Docs } from "./Docs.ts";
 
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AiSearch.AiSearch("Search", {
   source: Docs,
 });
 ```
@@ -63,7 +63,7 @@ Cloudflare only creates that token for you through the dashboard or
 Wrangler — never on a programmatic API create — so `AiSearch` provisions
 it as stable children of the construct:
 
-- a least-privilege `Cloudflare.AccountApiToken` scoped to the
+- a least-privilege `Cloudflare.ApiToken.AccountApiToken` scoped to the
   **AI Search Index Engine** permission group,
 - a `Cloudflare.AiSearchToken` that wraps that API token into the
   service-token shape AI Search expects,
@@ -74,7 +74,7 @@ So the single `AiSearch("Search", …)` call above is shorthand for
 roughly this:
 
 ```typescript
-const apiToken = yield* Cloudflare.AccountApiToken("Token", {
+const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("Token", {
   policies: [
     {
       effect: "allow",
@@ -106,7 +106,7 @@ scope indexing to one key prefix, and `include` / `exclude` glob patterns
 for finer control.
 
 ```diff lang="typescript"
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AiSearch.AiSearch("Search", {
   source: Docs,
 +  prefix: "docs/",
 +  include: ["/docs/**"],
@@ -127,7 +127,7 @@ its `tokenId` and `AiSearch` skips minting the `AccountApiToken` +
 `AiSearchToken` children, wiring your token into the instance instead.
 
 ```typescript
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AiSearch.AiSearch("Search", {
   source: Docs,
   tokenId: existingToken.id,
 });
@@ -145,7 +145,7 @@ pipelines under it instead of the account-provided `default` namespace.
 ```typescript
 const Knowledge = Cloudflare.AiSearchNamespace("Knowledge", {});
 
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AiSearch.AiSearch("Search", {
   source: Docs,
   namespace: Knowledge,
 });

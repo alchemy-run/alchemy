@@ -80,7 +80,7 @@ export type CloudforceOneScanConfig = Resource<
  * @section Creating a Scan Config
  * @example One-off scan of a single address
  * ```typescript
- * const scan = yield* Cloudflare.CloudforceOneScanConfig("edge-scan", {
+ * const scan = yield* Cloudflare.CloudforceOne.CloudforceOneScanConfig("edge-scan", {
  *   ips: ["203.0.113.7/32"],
  *   frequency: 0,
  * });
@@ -88,7 +88,7 @@ export type CloudforceOneScanConfig = Resource<
  *
  * @example Weekly scan of a CIDR block on specific ports
  * ```typescript
- * const scan = yield* Cloudflare.CloudforceOneScanConfig("perimeter", {
+ * const scan = yield* Cloudflare.CloudforceOne.CloudforceOneScanConfig("perimeter", {
  *   ips: ["203.0.113.0/24"],
  *   frequency: 7,
  *   ports: ["1-80", "443"],
@@ -98,7 +98,7 @@ export type CloudforceOneScanConfig = Resource<
  * @section Updating
  * @example Change the schedule and port list in place
  * ```typescript
- * const scan = yield* Cloudflare.CloudforceOneScanConfig("perimeter", {
+ * const scan = yield* Cloudflare.CloudforceOne.CloudforceOneScanConfig("perimeter", {
  *   ips: ["203.0.113.0/24"],
  *   frequency: 30,
  *   ports: ["all"],

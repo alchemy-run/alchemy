@@ -22,17 +22,17 @@ export type GetBindingType<T> =
     ? GetBindingType<A>
     : T extends Cloudflare.Flagship.App
       ? Flagship
-      : T extends Cloudflare.Assets
+      : T extends Cloudflare.Workers.Assets
         ? Service
         : T extends Rpc<infer Shape extends object>
           ? RpcWireShape<Shape> & Service
           : T extends Cloudflare.D1.Database
             ? D1Database
-            : T extends Cloudflare.R2Bucket
+            : T extends Cloudflare.R2.R2Bucket
               ? R2Bucket
-              : T extends Cloudflare.KVNamespace
+              : T extends Cloudflare.KV.KVNamespace
                 ? KVNamespace
-                : T extends Cloudflare.Queue
+                : T extends Cloudflare.Queue.Queue
                   ? Queue<unknown>
                   : T extends Cloudflare.AiGateway.Gateway
                     ? Ai
@@ -40,25 +40,25 @@ export type GetBindingType<T> =
                       ? AiSearchInstance
                       : T extends Cloudflare.AiSearch.Namespace
                         ? AiSearchNamespace
-                        : T extends Cloudflare.SendEmail
+                        : T extends Cloudflare.Email.SendEmail
                           ? SendEmail
-                          : T extends Cloudflare.AnalyticsEngineDataset
+                          : T extends Cloudflare.AnalyticsEngine.AnalyticsEngineDataset
                             ? AnalyticsEngineDataset
                             : T extends Cloudflare.Artifacts.Artifacts
                               ? Artifacts
-                              : T extends Cloudflare.RateLimitMarker
+                              : T extends Cloudflare.Workers.RateLimitMarker
                                 ? RateLimit
-                                : T extends Cloudflare.Images
+                                : T extends Cloudflare.Images.Images
                                   ? ImagesBinding
                                   : T extends Cloudflare.Browser
                                     ? BrowserRun
                                     : T extends Cloudflare.Hyperdrive.Connection
                                       ? Hyperdrive
-                                      : T extends Cloudflare.VersionMetadata
+                                      : T extends Cloudflare.Workers.VersionMetadata
                                         ? WorkerVersionMetadata
                                         : T extends Cloudflare.WorkerLoader
                                           ? WorkerLoader
-                                          : T extends Cloudflare.DurableObjectNamespaceLike
+                                          : T extends Cloudflare.Workers.DurableObjectNamespaceLike
                                             ? DurableObjectNamespace<
                                                 Exclude<T["Shape"], undefined>
                                               >

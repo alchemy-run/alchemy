@@ -8,7 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LeakedCredentialCheckTypeId = "Cloudflare.LeakedCredentialCheck" as const;
+const LeakedCredentialCheckTypeId =
+  "Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck" as const;
 type LeakedCredentialCheckTypeId = typeof LeakedCredentialCheckTypeId;
 
 export interface LeakedCredentialCheckProps {
@@ -73,16 +74,16 @@ export type LeakedCredentialCheck = Resource<
  * @section Managing the check
  * @example Enable Leaked Credential Checks on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.LeakedCredentialCheck("Lcc", {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly pin the check off
  * ```typescript
- * yield* Cloudflare.LeakedCredentialCheck("Lcc", {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

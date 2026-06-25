@@ -62,14 +62,14 @@ export type AccessKeyConfiguration = Resource<
  * @section Managing the rotation interval
  * @example Rotate Access service keys every 30 days
  * ```typescript
- * const keys = yield* Cloudflare.AccessKeyConfiguration("Keys", {
+ * const keys = yield* Cloudflare.Access.AccessKeyConfiguration("Keys", {
  *   keyRotationIntervalDays: 30,
  * });
  * ```
  *
  * @example Inspect rotation status
  * ```typescript
- * const keys = yield* Cloudflare.AccessKeyConfiguration("Keys", {
+ * const keys = yield* Cloudflare.Access.AccessKeyConfiguration("Keys", {
  *   keyRotationIntervalDays: 90,
  * });
  * // keys.daysUntilNextRotation, keys.lastKeyRotationAt

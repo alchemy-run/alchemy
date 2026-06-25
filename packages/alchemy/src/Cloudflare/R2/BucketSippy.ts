@@ -88,7 +88,7 @@ export interface R2BucketSippyDestination {
 export interface R2BucketSippyProps {
   /**
    * Name of the R2 bucket to enable incremental migration into. Pass
-   * `bucket.bucketName` from a `Cloudflare.R2Bucket`.
+   * `bucket.bucketName` from a `Cloudflare.R2.R2Bucket`.
    *
    * Immutable — changing the bucket triggers a replacement.
    */
@@ -155,9 +155,9 @@ export type R2BucketSippy = Resource<
  * @section Migrating from AWS S3
  * @example Enable Sippy on a bucket with an S3 source
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("Media");
+ * const bucket = yield* Cloudflare.R2.R2Bucket("Media");
  *
- * yield* Cloudflare.R2BucketSippy("MediaMigration", {
+ * yield* Cloudflare.R2.R2BucketSippy("MediaMigration", {
  *   bucketName: bucket.bucketName,
  *   source: {
  *     provider: "aws",
@@ -176,7 +176,7 @@ export type R2BucketSippy = Resource<
  * @section Migrating from Google Cloud Storage
  * @example Enable Sippy with a GCS source
  * ```typescript
- * yield* Cloudflare.R2BucketSippy("MediaMigration", {
+ * yield* Cloudflare.R2.R2BucketSippy("MediaMigration", {
  *   bucketName: bucket.bucketName,
  *   source: {
  *     provider: "gcs",

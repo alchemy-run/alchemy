@@ -74,7 +74,7 @@ export const isBrowser = (value: unknown): value is Browser =>
  *         return yield* browser.markdown({ url: "https://example.com" });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.BrowserBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.Workers.BrowserBindingLive)),
  * );
  * ```
  *
@@ -149,7 +149,7 @@ export const isBrowser = (value: unknown): value is Browser =>
  *         }
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.BrowserBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.Workers.BrowserBindingLive)),
  * );
  * ```
  *

@@ -47,11 +47,14 @@ test.provider.skipIf(!entitled)(
       // Trust a lookalike partner domain.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityTrustedDomain("Trusted", {
-            pattern,
-            isSimilarity: true,
-            comments: "v1",
-          });
+          return yield* Cloudflare.EmailSecurity.EmailSecurityTrustedDomain(
+            "Trusted",
+            {
+              pattern,
+              isSimilarity: true,
+              comments: "v1",
+            },
+          );
         }),
       );
       expect(created.trustedDomainId).toBeDefined();
@@ -69,12 +72,15 @@ test.provider.skipIf(!entitled)(
       // Update mutable fields in place — same physical entry.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityTrustedDomain("Trusted", {
-            pattern,
-            isSimilarity: true,
-            isRecent: true,
-            comments: "v2",
-          });
+          return yield* Cloudflare.EmailSecurity.EmailSecurityTrustedDomain(
+            "Trusted",
+            {
+              pattern,
+              isSimilarity: true,
+              isRecent: true,
+              comments: "v2",
+            },
+          );
         }),
       );
       expect(updated.trustedDomainId).toEqual(created.trustedDomainId);
@@ -108,7 +114,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSecurityTrustedDomain,
+        Cloudflare.EmailSecurity.EmailSecurityTrustedDomain,
       );
 
       if (!entitled) {
@@ -120,10 +126,13 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityTrustedDomain("ListTrusted", {
-            pattern,
-            isSimilarity: true,
-          });
+          return yield* Cloudflare.EmailSecurity.EmailSecurityTrustedDomain(
+            "ListTrusted",
+            {
+              pattern,
+              isSimilarity: true,
+            },
+          );
         }),
       );
 

@@ -105,7 +105,7 @@ export type ApiShieldOperation = Resource<
  * @section Registering an Operation
  * @example Register a GET endpoint
  * ```typescript
- * const op = yield* Cloudflare.ApiShieldOperation("GetUser", {
+ * const op = yield* Cloudflare.ApiShield.ApiShieldOperation("GetUser", {
  *   zoneId: zone.zoneId,
  *   method: "GET",
  *   host: "api.example.com",
@@ -116,7 +116,7 @@ export type ApiShieldOperation = Resource<
  *
  * @example Register a POST endpoint
  * ```typescript
- * yield* Cloudflare.ApiShieldOperation("CreateUser", {
+ * yield* Cloudflare.ApiShield.ApiShieldOperation("CreateUser", {
  *   zoneId: zone.zoneId,
  *   method: "POST",
  *   host: "api.example.com",

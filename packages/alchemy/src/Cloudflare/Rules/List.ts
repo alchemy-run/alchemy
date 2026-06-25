@@ -230,7 +230,7 @@ export type RulesList = Resource<
  * @section Creating a List
  * @example IP list with items
  * ```typescript
- * const blocklist = yield* Cloudflare.RulesList("blocklist", {
+ * const blocklist = yield* Cloudflare.Rules.RulesList("blocklist", {
  *   kind: "ip",
  *   description: "Known bad actors",
  *   items: [
@@ -242,7 +242,7 @@ export type RulesList = Resource<
  *
  * @example ASN list with an explicit name
  * ```typescript
- * const asns = yield* Cloudflare.RulesList("bad-asns", {
+ * const asns = yield* Cloudflare.Rules.RulesList("bad-asns", {
  *   name: "bad_asns",
  *   kind: "asn",
  *   items: [{ asn: 64496 }, { asn: 64511, comment: "spam network" }],
@@ -251,7 +251,7 @@ export type RulesList = Resource<
  *
  * @example Redirect list for Bulk Redirects
  * ```typescript
- * const redirects = yield* Cloudflare.RulesList("redirects", {
+ * const redirects = yield* Cloudflare.Rules.RulesList("redirects", {
  *   kind: "redirect",
  *   items: [
  *     {
@@ -268,7 +268,7 @@ export type RulesList = Resource<
  * @section Referencing a List from rules
  * @example Use the list name in a Ruleset expression
  * ```typescript
- * const list = yield* Cloudflare.RulesList("blocklist", { kind: "ip" });
+ * const list = yield* Cloudflare.Rules.RulesList("blocklist", { kind: "ip" });
  *
  * // The stable `name` attribute interpolates into rule expressions:
  * // `ip.src in $<name>`

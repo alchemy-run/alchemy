@@ -36,7 +36,7 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  *
  * @section Mutating DNS records at runtime
  * @example Create, update, and delete records from inside a Worker
- * Bind the client in the Worker's Init phase and provide {@link DnsWriteBinding}.
+ * Bind the client in the Worker's Init phase and provide {@link WriteDnsBinding}.
  * The zone is fixed by `.bind(zone)` — the provisioned token only grants
  * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
  * resource directly (it's an `Effect`), or `yield* Zone` for a resolved value.
@@ -45,14 +45,14 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  * import * as Effect from "effect/Effect";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * const Zone = Cloudflare.Zone("MyZone", { name: "example.com" });
+ * const Zone = Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
  *
- * export class DnsWriterWorker extends Cloudflare.Worker<DnsWriterWorker>()(
- *   "DnsWriterWorker",
+ * export class WriteDnsrWorker extends Cloudflare.Worker<WriteDnsrWorker>()(
+ *   "WriteDnsrWorker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // Init phase — bind the write client scoped to the zone.
- *     const dns = yield* Cloudflare.DnsWrite(Zone);
+ *     const dns = yield* Cloudflare.Dns.WriteDns(Zone);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -73,7 +73,7 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  *         return yield* HttpServerResponse.json({ id: result.id });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.DnsWriteBinding)),
+ *   }).pipe(Effect.provide(Cloudflare.Dns.WriteDnsBinding)),
  * ) {}
  * ```
  *
@@ -85,13 +85,13 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  * });
  * ```
  */
-export interface DnsWrite extends Binding.Service<
-  DnsWrite,
-  "Cloudflare.Dns.DnsWrite",
-  (zone: Zone) => Effect.Effect<DnsWriteClient>
+export interface WriteDns extends Binding.Service<
+  WriteDns,
+  "Cloudflare.Dns.WriteDns",
+  (zone: Zone) => Effect.Effect<WriteDnsClient>
 > {}
 
-export const DnsWrite = Binding.Service<DnsWrite>("Cloudflare.Dns.DnsWrite");
+export const WriteDns = Binding.Service<WriteDns>("Cloudflare.Dns.WriteDns");
 
 /** Create-record request, minus the zone id (bound at `.bind(zone)` time). */
 export type CreateRecordRequestInput = Omit<CreateRecordRequest, "zoneId">;
@@ -115,7 +115,7 @@ export type BatchRecordRequestInput = Omit<BatchRecordRequest, "zoneId">;
  * Mutating DNS record operations. Backed by the `DNS Write` permission group.
  * The zone is fixed when the client is bound, so no `zoneId` is passed per call.
  */
-export interface DnsWriteClient {
+export interface WriteDnsClient {
   /** Create a DNS record. */
   createDnsRecord(
     request: CreateRecordRequestInput,
@@ -144,7 +144,7 @@ export interface DnsWriteClient {
 export const dnsWriteClient = (
   token: DnsToken,
   zoneId: Effect.Effect<string>,
-): DnsWriteClient => {
+): WriteDnsClient => {
   const authorize = authorizeWith(token);
   return {
     createDnsRecord: Effect.fn("Cloudflare.Dns.createDnsRecord")(

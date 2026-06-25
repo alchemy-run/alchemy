@@ -76,14 +76,14 @@ export type LogsCmbConfig = Resource<
  * @section Restricting logs to a region
  * @example Keep all account logs in the EU
  * ```typescript
- * const cmb = yield* Cloudflare.LogsCmbConfig("EuLogs", {
+ * const cmb = yield* Cloudflare.LogsControl.LogsCmbConfig("EuLogs", {
  *   regions: "eu",
  * });
  * ```
  *
  * @example Allow out-of-region access
  * ```typescript
- * const cmb = yield* Cloudflare.LogsCmbConfig("EuLogs", {
+ * const cmb = yield* Cloudflare.LogsControl.LogsCmbConfig("EuLogs", {
  *   regions: "eu",
  *   allowOutOfRegionAccess: true,
  * });

@@ -18,7 +18,7 @@ import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
  */
 export interface Fetch extends Binding.Service<
   Fetch,
-  "Cloudflare.Fetch",
+  "Cloudflare.Workers.Fetch",
   (
     worker: Worker,
   ) => Effect.Effect<
@@ -31,7 +31,7 @@ export interface Fetch extends Binding.Service<
   >
 > {}
 
-export const Fetch = Binding.Service<Fetch>("Cloudflare.Fetch");
+export const Fetch = Binding.Service<Fetch>("Cloudflare.Workers.Fetch");
 
 export const FetchBinding = Layer.effect(
   Fetch,

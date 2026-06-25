@@ -62,7 +62,7 @@ export type R2DataCatalogSnapshotExpiration = {
 export type R2DataCatalogProps = {
   /**
    * Name of the R2 bucket to enable the Iceberg data catalog on. The bucket
-   * must already exist — pass `bucket.bucketName` from a `Cloudflare.R2Bucket`
+   * must already exist — pass `bucket.bucketName` from a `Cloudflare.R2.R2Bucket`
    * resource to order catalog-after-bucket. Changing the bucket replaces the
    * catalog (the old bucket's catalog is disabled; table data is untouched).
    */
@@ -160,9 +160,9 @@ export type R2DataCatalog = Resource<
  * @section Enabling a catalog
  * @example Enable the catalog on an R2 bucket
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("LakehouseBucket");
+ * const bucket = yield* Cloudflare.R2.R2Bucket("LakehouseBucket");
  *
- * const catalog = yield* Cloudflare.R2DataCatalog("Lakehouse", {
+ * const catalog = yield* Cloudflare.R2DataCatalog.R2DataCatalog("Lakehouse", {
  *   bucketName: bucket.bucketName,
  * });
  *
@@ -174,7 +174,7 @@ export type R2DataCatalog = Resource<
  * @section Maintenance
  * @example Configure compaction and snapshot expiration
  * ```typescript
- * const catalog = yield* Cloudflare.R2DataCatalog("Lakehouse", {
+ * const catalog = yield* Cloudflare.R2DataCatalog.R2DataCatalog("Lakehouse", {
  *   bucketName: bucket.bucketName,
  *   compaction: { state: "enabled", targetSizeMb: "256" },
  *   snapshotExpiration: {
@@ -188,7 +188,7 @@ export type R2DataCatalog = Resource<
  * @example Register a maintenance credential
  * ```typescript
  * // Maintenance jobs need an API token with R2 read/write on the bucket.
- * const catalog = yield* Cloudflare.R2DataCatalog("Lakehouse", {
+ * const catalog = yield* Cloudflare.R2DataCatalog.R2DataCatalog("Lakehouse", {
  *   bucketName: bucket.bucketName,
  *   compaction: { state: "enabled" },
  *   token: maintenanceToken, // Redacted<string>

@@ -9,7 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ContentScanningTypeId = "Cloudflare.ContentScanning" as const;
+const ContentScanningTypeId =
+  "Cloudflare.ContentScanning.ContentScanning" as const;
 type ContentScanningTypeId = typeof ContentScanningTypeId;
 
 /** The wire status values Cloudflare uses for Content Scanning. */
@@ -77,16 +78,16 @@ export type ContentScanning = Resource<
  * @section Enabling Content Scanning
  * @example Turn on malicious-upload scanning for a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.ContentScanning("UploadScanning", {
+ * yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Pin Content Scanning off
  * ```typescript
- * yield* Cloudflare.ContentScanning("UploadScanning", {
+ * yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -95,11 +96,11 @@ export type ContentScanning = Resource<
  * @section Custom scan expressions
  * @example Scan a JSON-embedded file field
  * ```typescript
- * const scanning = yield* Cloudflare.ContentScanning("UploadScanning", {
+ * const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.ContentScanningExpression("ScanJsonFile", {
+ * yield* Cloudflare.ContentScanning.ContentScanningExpression("ScanJsonFile", {
  *   zoneId: scanning.zoneId,
  *   payload: 'lookup_json_string(http.request.body.raw, "file")',
  * });

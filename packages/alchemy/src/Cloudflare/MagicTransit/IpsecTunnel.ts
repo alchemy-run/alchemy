@@ -135,7 +135,7 @@ export type IpsecTunnel = Resource<
  * @section Creating an IPsec tunnel
  * @example Basic tunnel with a provided PSK
  * ```typescript
- * const tunnel = yield* Cloudflare.IpsecTunnel("branch", {
+ * const tunnel = yield* Cloudflare.MagicTransit.IpsecTunnel("branch", {
  *   name: "branch-ipsec-1",
  *   cloudflareEndpoint: "203.0.113.1",
  *   customerEndpoint: "198.51.100.1",
@@ -146,7 +146,7 @@ export type IpsecTunnel = Resource<
  *
  * @example Tunnel with replay protection and health checks
  * ```typescript
- * const tunnel = yield* Cloudflare.IpsecTunnel("branch", {
+ * const tunnel = yield* Cloudflare.MagicTransit.IpsecTunnel("branch", {
  *   name: "branch-ipsec-1",
  *   cloudflareEndpoint: "203.0.113.1",
  *   interfaceAddress: "10.213.0.10/31",

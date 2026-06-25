@@ -198,7 +198,7 @@ export type OnRamp = Resource<
  * @section Connecting a single VPC
  * @example AWS VPC on-ramp
  * ```typescript
- * const onramp = yield* Cloudflare.OnRamp("ProdVpc", {
+ * const onramp = yield* Cloudflare.MagicCloudNetworking.OnRamp("ProdVpc", {
  *   cloudType: "AWS",
  *   type: "OnrampTypeSingle",
  *   region: "us-east-1",
@@ -212,7 +212,7 @@ export type OnRamp = Resource<
  * @section Hub topologies
  * @example Transit Gateway hub with attached VPCs
  * ```typescript
- * yield* Cloudflare.OnRamp("TgwHub", {
+ * yield* Cloudflare.MagicCloudNetworking.OnRamp("TgwHub", {
  *   cloudType: "AWS",
  *   type: "OnrampTypeHub",
  *   region: "us-east-1",
@@ -227,7 +227,7 @@ export type OnRamp = Resource<
  * @section Destroy behavior
  * @example Tear down cloud-side resources on destroy
  * ```typescript
- * yield* Cloudflare.OnRamp("ProdVpc", {
+ * yield* Cloudflare.MagicCloudNetworking.OnRamp("ProdVpc", {
  *   cloudType: "AWS",
  *   type: "OnrampTypeSingle",
  *   region: "us-east-1",

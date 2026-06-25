@@ -82,7 +82,7 @@ export type RiskScoringIntegration = Resource<
  * @section Creating a risk scoring integration
  * @example Push risk scores to an Okta tenant
  * ```typescript
- * const okta = yield* Cloudflare.RiskScoringIntegration("OktaSsf", {
+ * const okta = yield* Cloudflare.RiskScoring.RiskScoringIntegration("OktaSsf", {
  *   tenantUrl: "https://tenant.okta.com",
  *   referenceId: oktaIdp.identityProviderId,
  * });
@@ -90,7 +90,7 @@ export type RiskScoringIntegration = Resource<
  *
  * @example Pause exporting without deleting
  * ```typescript
- * const okta = yield* Cloudflare.RiskScoringIntegration("OktaSsf", {
+ * const okta = yield* Cloudflare.RiskScoring.RiskScoringIntegration("OktaSsf", {
  *   tenantUrl: "https://tenant.okta.com",
  *   active: false,
  * });

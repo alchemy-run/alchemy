@@ -258,9 +258,9 @@ export type RealtimeKitPreset = Resource<
  * @section Creating a Preset
  * @example Default group-call preset
  * ```typescript
- * const app = yield* Cloudflare.RealtimeKitApp("Meetings", {});
+ * const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("Meetings", {});
  *
- * const guest = yield* Cloudflare.RealtimeKitPreset("Guest", {
+ * const guest = yield* Cloudflare.RealtimeKit.RealtimeKitPreset("Guest", {
  *   appId: app.appId,
  *   name: "guest",
  * });
@@ -268,11 +268,11 @@ export type RealtimeKitPreset = Resource<
  *
  * @example Host preset with moderation permissions
  * ```typescript
- * const host = yield* Cloudflare.RealtimeKitPreset("Host", {
+ * const host = yield* Cloudflare.RealtimeKit.RealtimeKitPreset("Host", {
  *   appId: app.appId,
  *   name: "host",
  *   permissions: {
- *     ...Cloudflare.defaultRealtimeKitPresetPermissions(),
+ *     ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetPermissions(),
  *     canRecord: true,
  *     kickParticipant: true,
  *     pinParticipant: true,
@@ -284,11 +284,11 @@ export type RealtimeKitPreset = Resource<
  * @section Updating a Preset
  * @example Switch to a webinar layout
  * ```typescript
- * const preset = yield* Cloudflare.RealtimeKitPreset("Guest", {
+ * const preset = yield* Cloudflare.RealtimeKit.RealtimeKitPreset("Guest", {
  *   appId: app.appId,
  *   name: "guest",
  *   config: {
- *     ...Cloudflare.defaultRealtimeKitPresetConfig(),
+ *     ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetConfig(),
  *     viewType: "WEBINAR",
  *   },
  * });

@@ -4,7 +4,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
+import { Worker, WorkerEnvironment } from "./Worker.ts";
 import {
   RateLimit,
   type RateLimitMarker as RateLimitLike,
@@ -29,7 +29,7 @@ export interface RateLimitClient {
 /**
  * Native runtime layer for the Rate Limit binding.
  *
- * Provide it on the Worker effect (`Effect.provide(Cloudflare.RateLimitBinding)`)
+ * Provide it on the Worker effect (`Effect.provide(Cloudflare.Workers.RateLimitBinding)`)
  * so that yielding a {@link RateLimitLike} marker attaches the `ratelimit`
  * binding to the surrounding Worker and returns the runtime
  * {@link RateLimitClient}.
@@ -42,7 +42,7 @@ export interface RateLimitClient {
  *     simple: { limit: 10, period: 60 },
  *   });
  *   // ...
- * }).pipe(Effect.provide(Cloudflare.RateLimitBinding))
+ * }).pipe(Effect.provide(Cloudflare.Workers.RateLimitBinding))
  * ```
  */
 export const RateLimitBinding = Layer.effect(

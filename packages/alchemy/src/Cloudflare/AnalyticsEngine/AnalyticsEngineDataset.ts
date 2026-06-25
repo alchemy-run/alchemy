@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 
 type AnalyticsEngineDatasetTypeId = typeof AnalyticsEngineDatasetTypeId;
 const AnalyticsEngineDatasetTypeId =
-  "Cloudflare.AnalyticsEngineDataset" as const;
+  "Cloudflare.AnalyticsEngine.AnalyticsEngineDataset" as const;
 
 export type AnalyticsEngineDatasetProps = {
   /**
@@ -23,7 +23,7 @@ export type AnalyticsEngineDatasetProps = {
  * @section Binding to a Worker
  * @example Basic Analytics Engine binding
  * ```typescript
- * const Analytics = yield* Cloudflare.AnalyticsEngineDataset("Analytics", {
+ * const Analytics = yield* Cloudflare.AnalyticsEngine.AnalyticsEngineDataset("Analytics", {
  *   dataset: "app-events",
  * });
  *

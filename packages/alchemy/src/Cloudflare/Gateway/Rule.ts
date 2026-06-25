@@ -177,7 +177,7 @@ export type GatewayRule = Resource<
  * @section DNS override for a private app
  * @example Resolve an internal hostname through a Cloudflare Tunnel
  * ```typescript
- * const adminDns = yield* Cloudflare.GatewayRule("AdminMicroagiDns", {
+ * const adminDns = yield* Cloudflare.Gateway.GatewayRule("AdminMicroagiDns", {
  *   name: "research-admin-microagi-dns-override",
  *   action: "override",
  *   filters: ["dns"],
@@ -192,7 +192,7 @@ export type GatewayRule = Resource<
  * @section Block a category
  * @example Block known phishing on HTTP
  * ```typescript
- * yield* Cloudflare.GatewayRule("BlockPhishing", {
+ * yield* Cloudflare.Gateway.GatewayRule("BlockPhishing", {
  *   name: "block-phishing",
  *   action: "block",
  *   filters: ["http"],

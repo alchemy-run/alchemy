@@ -193,20 +193,20 @@ export type LoadBalancerPool = Resource<
  * @section Creating a Pool
  * @example Pool with one origin
  * ```typescript
- * const pool = yield* Cloudflare.LoadBalancerPool("ApiPool", {
+ * const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  * });
  * ```
  *
  * @example Health-checked pool
  * ```typescript
- * const monitor = yield* Cloudflare.LoadBalancerMonitor("ApiMonitor", {
+ * const monitor = yield* Cloudflare.LoadBalancer.LoadBalancerMonitor("ApiMonitor", {
  *   type: "https",
  *   path: "/health",
  *   expectedCodes: "2xx",
  * });
  *
- * const pool = yield* Cloudflare.LoadBalancerPool("ApiPool", {
+ * const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("ApiPool", {
  *   origins: [
  *     { name: "origin-1", address: "203.0.113.10", weight: 0.7 },
  *     { name: "origin-2", address: "203.0.113.11", weight: 0.3 },
@@ -219,7 +219,7 @@ export type LoadBalancerPool = Resource<
  * @section Using with a Load Balancer
  * @example Pool as default and fallback
  * ```typescript
- * yield* Cloudflare.LoadBalancer("ApiLb", {
+ * yield* Cloudflare.LoadBalancer.LoadBalancer("ApiLb", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   defaultPools: [pool.poolId],

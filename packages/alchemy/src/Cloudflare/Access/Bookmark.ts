@@ -75,14 +75,14 @@ export type AccessBookmark = Resource<
  * @section Creating a Bookmark
  * @example Basic bookmark
  * ```typescript
- * const bookmark = yield* Cloudflare.AccessBookmark("Wiki", {
+ * const bookmark = yield* Cloudflare.Access.AccessBookmark("Wiki", {
  *   domain: "wiki.example.com",
  * });
  * ```
  *
  * @example Bookmark with a logo, hidden from the App Launcher
  * ```typescript
- * const bookmark = yield* Cloudflare.AccessBookmark("Wiki", {
+ * const bookmark = yield* Cloudflare.Access.AccessBookmark("Wiki", {
  *   name: "internal-wiki",
  *   domain: "wiki.example.com",
  *   logoUrl: "https://example.com/logo.png",
@@ -93,7 +93,7 @@ export type AccessBookmark = Resource<
  * @section Preferred Alternative
  * @example Bookmark-type Access application (non-legacy)
  * ```typescript
- * const app = yield* Cloudflare.AccessApplication("Wiki", {
+ * const app = yield* Cloudflare.Access.AccessApplication("Wiki", {
  *   type: "bookmark",
  *   domain: "wiki.example.com",
  * });

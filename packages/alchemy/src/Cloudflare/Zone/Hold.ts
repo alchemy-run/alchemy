@@ -72,14 +72,14 @@ export type ZoneHold = Resource<
  * @section Holding a zone
  * @example Place a hold on a zone
  * ```typescript
- * const hold = yield* Cloudflare.ZoneHold("MyHold", {
+ * const hold = yield* Cloudflare.Zone.ZoneHold("MyHold", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Hold the zone and all of its subdomains
  * ```typescript
- * yield* Cloudflare.ZoneHold("MyHold", {
+ * yield* Cloudflare.Zone.ZoneHold("MyHold", {
  *   zoneId: zone.zoneId,
  *   includeSubdomains: true,
  * });
@@ -91,7 +91,7 @@ export type ZoneHold = Resource<
  * import { adopt } from "alchemy/AdoptPolicy";
  * // A hold carries no ownership markers, so the engine refuses to take
  * // over a pre-existing hold unless you opt in with `adopt(true)`.
- * const hold = yield* Cloudflare.ZoneHold("MyHold", {
+ * const hold = yield* Cloudflare.Zone.ZoneHold("MyHold", {
  *   zoneId: zone.zoneId,
  * }).pipe(adopt(true));
  * ```

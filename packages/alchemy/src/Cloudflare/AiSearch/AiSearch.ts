@@ -171,15 +171,15 @@ export type AiSearch = Instance & {
  * @example R2-backed instance (token provisioned for you)
  * Pass an {@link R2Bucket} as `source` — its presence selects R2.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("docs");
- * const search = yield* Cloudflare.AiSearch("docs-search", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("docs");
+ * const search = yield* Cloudflare.AiSearch.AiSearch("docs-search", {
  *   source: bucket,
  * });
  * ```
  *
  * @example Index only part of a bucket
  * ```typescript
- * const search = yield* Cloudflare.AiSearch("docs-search", {
+ * const search = yield* Cloudflare.AiSearch.AiSearch("docs-search", {
  *   source: bucket,
  *   prefix: "docs/",
  *   include: ["/docs/**"],
@@ -189,7 +189,7 @@ export type AiSearch = Instance & {
  *
  * @example Reuse an existing service token
  * ```typescript
- * const search = yield* Cloudflare.AiSearch("docs-search", {
+ * const search = yield* Cloudflare.AiSearch.AiSearch("docs-search", {
  *   source: bucket,
  *   tokenId: existingToken.id,
  * });
@@ -200,7 +200,7 @@ export type AiSearch = Instance & {
  * needed). `parse.type` defaults to `"sitemap"`; use `"crawl"` to follow
  * links from the seed instead.
  * ```typescript
- * const search = yield* Cloudflare.AiSearch("site-search", {
+ * const search = yield* Cloudflare.AiSearch.AiSearch("site-search", {
  *   source: "https://example.com",
  *   parse: { type: "crawl", contentSelector: [{ path: "/docs", selector: "main" }] },
  *   crawl: { depth: 3, includeSubdomains: true },
@@ -209,8 +209,8 @@ export type AiSearch = Instance & {
  *
  * @example Store crawl output in your own bucket
  * ```typescript
- * const store = yield* Cloudflare.R2Bucket("crawl-store");
- * const search = yield* Cloudflare.AiSearch("site-search", {
+ * const store = yield* Cloudflare.R2.R2Bucket("crawl-store");
+ * const search = yield* Cloudflare.AiSearch.AiSearch("site-search", {
  *   source: "https://example.com",
  *   parse: { type: "crawl" },
  *   store: { bucket: store },
@@ -237,8 +237,8 @@ export type AiSearch = Instance & {
  *   "api",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const bucket = yield* Cloudflare.R2Bucket("docs");
- *     const aiSearch = yield* Cloudflare.AiSearch("docs-search", {
+ *     const bucket = yield* Cloudflare.R2.R2Bucket("docs");
+ *     const aiSearch = yield* Cloudflare.AiSearch.AiSearch("docs-search", {
  *       source: bucket,
  *     });
  *     const search = yield* Cloudflare.AiSearch.Search(aiSearch);
@@ -268,8 +268,8 @@ export type AiSearch = Instance & {
  * @example Async Worker that answers from AI Search
  * ```typescript
  * // stack.ts
- * const bucket = yield* Cloudflare.R2Bucket("docs");
- * const search = yield* Cloudflare.AiSearch("docs-search", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("docs");
+ * const search = yield* Cloudflare.AiSearch.AiSearch("docs-search", {
  *   source: bucket,
  * });
  *

@@ -13,7 +13,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+      const sessions = new Map<string, Cloudflare.Workers.DurableWebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
         const attachment = socket.deserializeAttachment<{ id: string }>();
@@ -31,7 +31,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
 
       return {
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.upgrade();
+          const [response, socket] = yield* Cloudflare.Workers.upgrade();
           const id = crypto.randomUUID();
           socket.serializeAttachment({ id });
           sessions.set(id, socket);
@@ -40,14 +40,14 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
         broadcast,
         alarm: () =>
           Effect.gen(function* () {
-            const fired = yield* Cloudflare.processScheduledEvents;
+            const fired = yield* Cloudflare.Workers.processScheduledEvents;
             for (const event of fired) {
               const payload = event.payload as { message: string };
               yield* broadcast(`[reminder] ${payload.message}`);
             }
           }),
         webSocketMessage: Effect.fn(function* (
-          socket: Cloudflare.DurableWebSocket,
+          socket: Cloudflare.Workers.DurableWebSocket,
           message: string | ArrayBuffer,
         ) {
           const attachment = socket.deserializeAttachment<{ id: string }>();
@@ -63,7 +63,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
             const msg = remindMatch[2];
             const id = crypto.randomUUID();
             const runAt = new Date(Date.now() + delaySec * 1000);
-            yield* Cloudflare.scheduleEvent(id, runAt, { message: msg });
+            yield* Cloudflare.Workers.scheduleEvent(id, runAt, { message: msg });
             yield* socket.send(
               `[system] Reminder scheduled in ${delaySec}s: "${msg}"`,
             );
@@ -76,7 +76,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
           }
         }),
         webSocketClose: Effect.fn(function* (
-          ws: Cloudflare.DurableWebSocket,
+          ws: Cloudflare.Workers.DurableWebSocket,
           code: number,
           reason: string,
           _wasClean: boolean,

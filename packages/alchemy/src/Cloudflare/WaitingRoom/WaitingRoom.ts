@@ -11,7 +11,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const WaitingRoomTypeId = "Cloudflare.WaitingRoom" as const;
+const WaitingRoomTypeId = "Cloudflare.WaitingRoom.WaitingRoom" as const;
 type WaitingRoomTypeId = typeof WaitingRoomTypeId;
 
 /**
@@ -262,7 +262,7 @@ export type WaitingRoom = Resource<
  * @section Creating a Waiting Room
  * @example Basic waiting room on a host
  * ```typescript
- * const room = yield* Cloudflare.WaitingRoom("checkout", {
+ * const room = yield* Cloudflare.WaitingRoom.WaitingRoom("checkout", {
  *   zoneId: zone.zoneId,
  *   host: "shop.example.com",
  *   path: "/checkout",
@@ -273,7 +273,7 @@ export type WaitingRoom = Resource<
  *
  * @example Queue all traffic during an incident
  * ```typescript
- * yield* Cloudflare.WaitingRoom("incident-gate", {
+ * yield* Cloudflare.WaitingRoom.WaitingRoom("incident-gate", {
  *   zoneId: zone.zoneId,
  *   host: "example.com",
  *   totalActiveUsers: 500,
@@ -286,7 +286,7 @@ export type WaitingRoom = Resource<
  * @section Customizing behavior
  * @example Short sessions with a custom cookie suffix
  * ```typescript
- * yield* Cloudflare.WaitingRoom("flash-sale", {
+ * yield* Cloudflare.WaitingRoom.WaitingRoom("flash-sale", {
  *   zoneId: zone.zoneId,
  *   host: "example.com",
  *   path: "/sale",

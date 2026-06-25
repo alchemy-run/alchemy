@@ -12,7 +12,8 @@ import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
 export const isR2Bucket = (value: any): value is R2Bucket =>
-  typeof value === "object" && (value as any)?.Type === "Cloudflare.R2Bucket";
+  typeof value === "object" &&
+  (value as any)?.Type === "Cloudflare.R2.R2Bucket";
 
 export type R2BucketName = string;
 
@@ -26,7 +27,7 @@ export type R2BucketCustomDomain = {
   /**
    * Zone that contains the custom domain. If omitted, the zone is inferred
    * from `domain`. Pass a zone ID string, a hostname in the zone, or any object
-   * with a `zoneId` attribute such as `Cloudflare.Zone`.
+   * with a `zoneId` attribute such as `Cloudflare.Zone.Zone`.
    */
   zone?: R2BucketCustomDomainZone;
   /**
@@ -133,7 +134,7 @@ export type R2BucketProps = {
 };
 
 export type R2Bucket = Resource<
-  "Cloudflare.R2Bucket",
+  "Cloudflare.R2.R2Bucket",
   R2BucketProps,
   {
     bucketName: R2BucketName;
@@ -159,12 +160,12 @@ export type R2Bucket = Resource<
  * @section Creating a Bucket
  * @example Basic R2 bucket
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket");
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket");
  * ```
  *
  * @example Bucket with location hint
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   locationHint: "wnam",
  * });
  * ```
@@ -198,19 +199,19 @@ export type R2Bucket = Resource<
  * Attach one or more custom domains to serve bucket objects from a hostname
  * you control. The domain's zone must already exist in your Cloudflare
  * account; the zone is inferred from the hostname when omitted, or you can
- * pass a `Cloudflare.Zone` resource, a zone ID, or any hostname inside the
+ * pass a `Cloudflare.Zone.Zone` resource, a zone ID, or any hostname inside the
  * zone via the `zone` field.
  *
  * @example Single custom domain
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com" }],
  * });
  * ```
  *
  * @example Multiple custom domains
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   domains: [
  *     { name: "assets.example.com" },
  *     { name: "static.example.com" },
@@ -220,18 +221,18 @@ export type R2Bucket = Resource<
  *
  * @example Disable a custom domain without removing it
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com", enabled: false }],
  * });
  * ```
  *
  * @example Custom domain with explicit zone and TLS settings
  * ```typescript
- * const zone = yield* Cloudflare.Zone("ExampleZone", {
+ * const zone = yield* Cloudflare.Zone.Zone("ExampleZone", {
  *   name: "example.com",
  * });
  *
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   domains: [
  *     {
  *       name: "assets.example.com",
@@ -252,7 +253,7 @@ export type R2Bucket = Resource<
  *
  * @example Delete objects 30 days after upload
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   lifecycleRules: [
  *     {
  *       id: "expire-old-objects",
@@ -266,7 +267,7 @@ export type R2Bucket = Resource<
  *
  * @example Transition to InfrequentAccess after 60 days, delete after 365
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   lifecycleRules: [
  *     {
  *       id: "archive-then-delete",
@@ -287,7 +288,7 @@ export type R2Bucket = Resource<
  *
  * @example Abort incomplete multipart uploads after 7 days
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
  *   lifecycleRules: [
  *     {
  *       id: "abort-stale-uploads",
@@ -299,7 +300,7 @@ export type R2Bucket = Resource<
  * });
  * ```
  */
-export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket");
+export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2.R2Bucket");
 
 export declare namespace R2Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";

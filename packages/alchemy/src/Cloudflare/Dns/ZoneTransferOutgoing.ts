@@ -90,11 +90,11 @@ export type ZoneTransferOutgoing = Resource<
  * @section Configuring outgoing transfers
  * @example Serve a primary zone to an external secondary
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Secondary", {
+ * const peer = yield* Cloudflare.Dns.ZoneTransferPeer("Secondary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  * });
- * yield* Cloudflare.ZoneTransferOutgoing("Outgoing", {
+ * yield* Cloudflare.Dns.ZoneTransferOutgoing("Outgoing", {
  *   zoneId: zone.zoneId,
  *   name: "example.com.",
  *   peers: [peer.peerId],
@@ -103,7 +103,7 @@ export type ZoneTransferOutgoing = Resource<
  *
  * @example Configure transfers but keep them disabled
  * ```typescript
- * yield* Cloudflare.ZoneTransferOutgoing("Outgoing", {
+ * yield* Cloudflare.Dns.ZoneTransferOutgoing("Outgoing", {
  *   zoneId: zone.zoneId,
  *   name: "example.com.",
  *   peers: [peer.peerId],

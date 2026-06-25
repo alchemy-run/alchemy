@@ -10,7 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
-const OrganizationTypeId = "Cloudflare.Organization" as const;
+const OrganizationTypeId = "Cloudflare.Organization.Organization" as const;
 type OrganizationTypeId = typeof OrganizationTypeId;
 
 /**
@@ -149,14 +149,14 @@ export type Organization = Resource<
  * @section Creating an Organization
  * @example Basic organization
  * ```typescript
- * const org = yield* Cloudflare.Organization("Platform", {
+ * const org = yield* Cloudflare.Organization.Organization("Platform", {
  *   name: "acme-platform",
  * });
  * ```
  *
  * @example Organization with a business profile
  * ```typescript
- * const org = yield* Cloudflare.Organization("Platform", {
+ * const org = yield* Cloudflare.Organization.Organization("Platform", {
  *   name: "acme-platform",
  *   profile: {
  *     businessName: "Acme Corp",
@@ -171,11 +171,11 @@ export type Organization = Resource<
  * @section Hierarchies
  * @example Sub-organization under a parent
  * ```typescript
- * const parent = yield* Cloudflare.Organization("Root", {
+ * const parent = yield* Cloudflare.Organization.Organization("Root", {
  *   name: "acme-root",
  * });
  * // Changing `parent` later replaces the sub-organization.
- * const sub = yield* Cloudflare.Organization("Emea", {
+ * const sub = yield* Cloudflare.Organization.Organization("Emea", {
  *   name: "acme-emea",
  *   parent: parent.organizationId,
  * });

@@ -140,7 +140,7 @@ export type ObservabilityDestination = Resource<
  * @section Exporting Workers traces
  * @example Push traces to an OTLP collector
  * ```typescript
- * const traces = yield* Cloudflare.ObservabilityDestination("Traces", {
+ * const traces = yield* Cloudflare.Workers.ObservabilityDestination("Traces", {
  *   url: "https://otel.example.com/v1/traces",
  *   headers: { authorization: secret },
  *   logpushDataset: "opentelemetry-traces",
@@ -150,7 +150,7 @@ export type ObservabilityDestination = Resource<
  * @section Exporting Workers logs
  * @example Push logs, skipping the create-time preflight
  * ```typescript
- * const logs = yield* Cloudflare.ObservabilityDestination("Logs", {
+ * const logs = yield* Cloudflare.Workers.ObservabilityDestination("Logs", {
  *   name: "my-app-logs",
  *   url: "https://collector.example.com/v1/logs",
  *   logpushDataset: "opentelemetry-logs",
@@ -161,7 +161,7 @@ export type ObservabilityDestination = Resource<
  * @section Pausing an export
  * @example Disable the destination without deleting it
  * ```typescript
- * yield* Cloudflare.ObservabilityDestination("Logs", {
+ * yield* Cloudflare.Workers.ObservabilityDestination("Logs", {
  *   name: "my-app-logs",
  *   url: "https://collector.example.com/v1/logs",
  *   logpushDataset: "opentelemetry-logs",

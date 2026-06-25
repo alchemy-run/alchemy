@@ -18,7 +18,7 @@ import type { Providers } from "../Providers.ts";
 /**
  * Subscriber settings — the same shape Cloudflare's `QueueConsumer`
  * accepts. `messages(queue, props).subscribe(...)` passes these
- * through to the auto-created `Cloudflare.QueueConsumer` so a single
+ * through to the auto-created `Cloudflare.Queue.QueueConsumer` so a single
  * call captures both runtime and deploy-time intent.
  */
 export interface MessagesProps {
@@ -74,7 +74,7 @@ export type QueueMessage<Body = unknown> = cf.Message<Body>;
  *
  * - **Runtime**: registers a `queue` event listener on the Worker.
  *   Each batch is piped through `process` as a `Stream.Stream`.
- * - **Deploy-time**: yields a `Cloudflare.QueueConsumer` resource
+ * - **Deploy-time**: yields a `Cloudflare.Queue.QueueConsumer` resource
  *   so Cloudflare actually dispatches messages from `queue` to
  *   this Worker. No manual `QueueConsumer` wiring needed in
  *   `alchemy.run.ts`.
@@ -95,7 +95,7 @@ export type QueueMessage<Body = unknown> = cf.Message<Body>;
  * import * as Effect from "effect/Effect";
  * import * as Stream from "effect/Stream";
  *
- * yield* Cloudflare.messages<MyEvent>(queueResource, {
+ * yield* Cloudflare.Queue.messages<MyEvent>(queueResource, {
  *   batchSize: 25,
  *   maxRetries: 3,
  *   maxWaitTime: "5 seconds",
@@ -143,7 +143,7 @@ export class QueueEventSource extends Context.Service<
 >()("Cloudflare.Queue.QueueEventSource") {}
 
 /**
- * Deploy-time policy that yields a `Cloudflare.QueueConsumer`
+ * Deploy-time policy that yields a `Cloudflare.Queue.QueueConsumer`
  * resource pointing the host Worker at the queue. Provided in
  * `Cloudflare.providers()` and used by {@link QueueEventSourceLive}
  * via `yield* QueueEventSourcePolicy(...)`. At runtime the policy
@@ -167,7 +167,7 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(
     Effect.gen(function* () {
       if (!isWorker(host)) {
         return yield* Effect.die(
-          `Cloudflare.messages(...).subscribe(...) is only supported on ` +
+          `Cloudflare.Queue.messages(...).subscribe(...) is only supported on ` +
             `Cloudflare.Worker hosts (got '${host.Type}').`,
         );
       }
@@ -196,7 +196,7 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(
  * a `queue` event listener on the runtime context, and asks the
  * deploy-time policy ({@link QueueEventSourcePolicy}, provided in
  * `Cloudflare.providers()`) to yield the matching
- * `Cloudflare.QueueConsumer` resource.
+ * `Cloudflare.Queue.QueueConsumer` resource.
  *
  * Provide alongside other Cloudflare runtime layers (e.g.
  * `WriteQueueBinding`) on the Worker effect.

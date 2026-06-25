@@ -14,7 +14,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CustomCertificateTypeId = "Cloudflare.CustomCertificate" as const;
+const CustomCertificateTypeId =
+  "Cloudflare.CustomCertificate.CustomCertificate" as const;
 type CustomCertificateTypeId = typeof CustomCertificateTypeId;
 
 /**
@@ -197,7 +198,7 @@ export type CustomCertificate = Resource<
  * @section Uploading a certificate
  * @example Basic SNI certificate
  * ```typescript
- * const cert = yield* Cloudflare.CustomCertificate("EdgeCert", {
+ * const cert = yield* Cloudflare.CustomCertificate.CustomCertificate("EdgeCert", {
  *   zoneId: zone.zoneId,
  *   certificate: certPem,
  *   privateKey: Redacted.make(keyPem),
@@ -207,7 +208,7 @@ export type CustomCertificate = Resource<
  *
  * @example Optimal bundle with a Geo Key Manager region
  * ```typescript
- * yield* Cloudflare.CustomCertificate("EuCert", {
+ * yield* Cloudflare.CustomCertificate.CustomCertificate("EuCert", {
  *   zoneId: zone.zoneId,
  *   certificate: certPem,
  *   privateKey: Redacted.make(keyPem),
@@ -222,7 +223,7 @@ export type CustomCertificate = Resource<
  * ```typescript
  * // Changing `certificate`/`privateKey` PATCHes the same certificate id —
  * // no replacement, no coverage gap.
- * yield* Cloudflare.CustomCertificate("EdgeCert", {
+ * yield* Cloudflare.CustomCertificate.CustomCertificate("EdgeCert", {
  *   zoneId: zone.zoneId,
  *   certificate: renewedCertPem,
  *   privateKey: Redacted.make(renewedKeyPem),
@@ -234,7 +235,7 @@ export type CustomCertificate = Resource<
  * @example Explicit priority
  * ```typescript
  * // Higher priority breaks ties across overlapping legacy_custom certs.
- * yield* Cloudflare.CustomCertificate("PrimaryCert", {
+ * yield* Cloudflare.CustomCertificate.CustomCertificate("PrimaryCert", {
  *   zoneId: zone.zoneId,
  *   certificate: certPem,
  *   privateKey: Redacted.make(keyPem),

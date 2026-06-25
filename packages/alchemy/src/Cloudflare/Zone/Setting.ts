@@ -231,7 +231,7 @@ export type ZoneSetting = Resource<
  * @section Toggle settings
  * @example Force HTTPS on the whole zone
  * ```typescript
- * yield* Cloudflare.ZoneSetting("AlwaysUseHttps", {
+ * yield* Cloudflare.Zone.ZoneSetting("AlwaysUseHttps", {
  *   zoneId: zone.zoneId,
  *   settingId: "always_use_https",
  *   value: "on",
@@ -240,7 +240,7 @@ export type ZoneSetting = Resource<
  *
  * @example Disable Always Online
  * ```typescript
- * yield* Cloudflare.ZoneSetting("AlwaysOnline", {
+ * yield* Cloudflare.Zone.ZoneSetting("AlwaysOnline", {
  *   zoneId: zone.zoneId,
  *   settingId: "always_online",
  *   value: "off",
@@ -250,7 +250,7 @@ export type ZoneSetting = Resource<
  * @section Numeric settings
  * @example Browser cache TTL of one hour
  * ```typescript
- * yield* Cloudflare.ZoneSetting("BrowserCacheTtl", {
+ * yield* Cloudflare.Zone.ZoneSetting("BrowserCacheTtl", {
  *   zoneId: zone.zoneId,
  *   settingId: "browser_cache_ttl",
  *   value: 3600,
@@ -260,7 +260,7 @@ export type ZoneSetting = Resource<
  * @section TLS settings
  * @example Require at least TLS 1.2
  * ```typescript
- * yield* Cloudflare.ZoneSetting("MinTls", {
+ * yield* Cloudflare.Zone.ZoneSetting("MinTls", {
  *   zoneId: zone.zoneId,
  *   settingId: "min_tls_version",
  *   value: "1.2",

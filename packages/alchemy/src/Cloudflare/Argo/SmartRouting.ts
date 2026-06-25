@@ -78,16 +78,16 @@ export type SmartRouting = Resource<
  * @section Enabling Smart Routing
  * @example Enable Argo Smart Routing on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.SmartRouting("SmartRouting", {
+ * yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Argo Smart Routing
  * ```typescript
- * yield* Cloudflare.SmartRouting("SmartRouting", {
+ * yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

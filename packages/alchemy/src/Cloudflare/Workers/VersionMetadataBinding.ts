@@ -35,14 +35,14 @@ export type VersionMetadataAccessor = Effect.Effect<
  */
 export interface VersionMetadataBinding extends Binding.Service<
   VersionMetadataBinding,
-  "Cloudflare.VersionMetadata",
+  "Cloudflare.Workers.VersionMetadata",
   (
     versionMetadata: VersionMetadataLike,
   ) => Effect.Effect<VersionMetadataAccessor>
 > {}
 
 export const VersionMetadataBinding = Binding.Service<VersionMetadataBinding>(
-  "Cloudflare.VersionMetadata",
+  "Cloudflare.Workers.VersionMetadata",
 );
 
 export const VersionMetadataBindingLayer = Layer.effect(

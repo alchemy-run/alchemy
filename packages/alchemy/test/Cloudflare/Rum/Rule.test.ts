@@ -132,13 +132,13 @@ const cleanupLeftoverSites = (accountId: string, zoneTag: string) =>
 // destroy).
 const program = (
   zoneId: string,
-  rule: Omit<Cloudflare.RumRuleProps, "rulesetId">,
+  rule: Omit<Cloudflare.Rum.RumRuleProps, "rulesetId">,
 ) =>
   Effect.gen(function* () {
-    const site = yield* Cloudflare.RumSite("RuleSite", {
+    const site = yield* Cloudflare.Rum.RumSite("RuleSite", {
       zoneTag: zoneId,
     });
-    const ruleResource = yield* Cloudflare.RumRule("Rule", {
+    const ruleResource = yield* Cloudflare.Rum.RumRule("Rule", {
       rulesetId: site.rulesetId.as<string>(),
       ...rule,
     });
@@ -260,7 +260,7 @@ describe.sequential("RumRule", () => {
       );
       if (deployed === undefined) return yield* quotaExhausted(stack);
 
-      const provider = yield* Provider.findProvider(Cloudflare.RumRule);
+      const provider = yield* Provider.findProvider(Cloudflare.Rum.RumRule);
       const all = yield* provider.list();
 
       expect(

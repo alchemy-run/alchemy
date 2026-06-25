@@ -94,13 +94,16 @@ test.provider.skipIf(!lbEnabled)(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const monitor = yield* Cloudflare.LoadBalancerMonitor("Monitor", {
-            description: NAME_MONITOR,
-            type: "https",
-            path: "/health",
-            expectedCodes: "2xx",
-          });
-          const pool = yield* Cloudflare.LoadBalancerPool("Pool", {
+          const monitor = yield* Cloudflare.LoadBalancer.LoadBalancerMonitor(
+            "Monitor",
+            {
+              description: NAME_MONITOR,
+              type: "https",
+              path: "/health",
+              expectedCodes: "2xx",
+            },
+          );
+          const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("Pool", {
             name: NAME_LIFECYCLE,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
             monitor: monitor.monitorId,
@@ -127,13 +130,16 @@ test.provider.skipIf(!lbEnabled)(
       // engine never has to replace and drop a dependency in one deploy.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const monitor = yield* Cloudflare.LoadBalancerMonitor("Monitor", {
-            description: NAME_MONITOR,
-            type: "https",
-            path: "/health",
-            expectedCodes: "2xx",
-          });
-          const pool = yield* Cloudflare.LoadBalancerPool("Pool", {
+          const monitor = yield* Cloudflare.LoadBalancer.LoadBalancerMonitor(
+            "Monitor",
+            {
+              description: NAME_MONITOR,
+              type: "https",
+              path: "/health",
+              expectedCodes: "2xx",
+            },
+          );
+          const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("Pool", {
             name: NAME_LIFECYCLE,
             origins: [
               { name: "origin-1", address: "203.0.113.10", weight: 0.7 },
@@ -172,7 +178,7 @@ test.provider.skipIf(!lbEnabled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.LoadBalancerPool("ListPool", {
+          return yield* Cloudflare.LoadBalancer.LoadBalancerPool("ListPool", {
             name: NAME_LIFECYCLE,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
           });
@@ -180,7 +186,7 @@ test.provider.skipIf(!lbEnabled)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancerPool,
+        Cloudflare.LoadBalancer.LoadBalancerPool,
       );
       const all = yield* provider.list();
 

@@ -132,7 +132,7 @@ export type FirewallAccessRule = Resource<
  * @section Blocking an IP
  * @example Block a single IPv4 address on a zone
  * ```typescript
- * yield* Cloudflare.FirewallAccessRule("BlockBadActor", {
+ * yield* Cloudflare.Firewall.FirewallAccessRule("BlockBadActor", {
  *   zoneId: zone.zoneId,
  *   configuration: { target: "ip", value: "198.51.100.4" },
  *   mode: "block",
@@ -143,7 +143,7 @@ export type FirewallAccessRule = Resource<
  * @example Block a CIDR range account-wide
  * ```typescript
  * // No zoneId — the rule applies to every zone in the account.
- * yield* Cloudflare.FirewallAccessRule("BlockScannerRange", {
+ * yield* Cloudflare.Firewall.FirewallAccessRule("BlockScannerRange", {
  *   configuration: { target: "ip_range", value: "203.0.113.0/24" },
  *   mode: "block",
  * });
@@ -154,7 +154,7 @@ export type FirewallAccessRule = Resource<
  * ```typescript
  * // `block` for country targets is Enterprise-only; challenges work on
  * // all plans.
- * yield* Cloudflare.FirewallAccessRule("ChallengeCountry", {
+ * yield* Cloudflare.Firewall.FirewallAccessRule("ChallengeCountry", {
  *   zoneId: zone.zoneId,
  *   configuration: { target: "country", value: "KP" },
  *   mode: "managed_challenge",
@@ -164,7 +164,7 @@ export type FirewallAccessRule = Resource<
  * @section Whitelisting
  * @example Always allow an office IP
  * ```typescript
- * yield* Cloudflare.FirewallAccessRule("AllowOffice", {
+ * yield* Cloudflare.Firewall.FirewallAccessRule("AllowOffice", {
  *   zoneId: zone.zoneId,
  *   configuration: { target: "ip", value: "192.0.2.10" },
  *   mode: "whitelist",

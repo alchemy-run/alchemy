@@ -129,7 +129,7 @@ const DIFF_LINE = mkLine(
     </span>
     <span
       style={{ color: "var(--alc-code-comment)" }}
-    >{` (Cloudflare.Queue)`}</span>
+    >{` (Cloudflare.Queue.Queue)`}</span>
     <span style={{ color: "var(--alc-success)" }}> created</span>
   </>,
 );
@@ -339,10 +339,10 @@ export default function BrowserHotReload() {
 
           switch (next) {
             case "boot-photos":
-              push(bootLine("Photos", "Cloudflare.R2Bucket"));
+              push(bootLine("Photos", "Cloudflare.R2.R2Bucket"));
               break;
             case "boot-sessions":
-              push(bootLine("Sessions", "Cloudflare.KVNamespace"));
+              push(bootLine("Sessions", "Cloudflare.KV.KVNamespace"));
               break;
             case "boot-api":
               push(bootLine("Api", "Cloudflare.Worker · local → workerd"));

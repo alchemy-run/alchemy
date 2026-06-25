@@ -91,9 +91,9 @@ export type OriginCloudRegion = Resource<
  * @section Mapping origins to cloud regions
  * @example Map an origin IP to an AWS region
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.OriginCloudRegion("ApiOrigin", {
+ * yield* Cloudflare.Cache.OriginCloudRegion("ApiOrigin", {
  *   zoneId: zone.zoneId,
  *   ip: "192.0.2.10",
  *   vendor: "aws",
@@ -104,13 +104,13 @@ export type OriginCloudRegion = Resource<
  * @example Map several origins of the same zone
  * ```typescript
  * // One resource per origin IP — the IP is the mapping's identity.
- * yield* Cloudflare.OriginCloudRegion("UsOrigin", {
+ * yield* Cloudflare.Cache.OriginCloudRegion("UsOrigin", {
  *   zoneId: zone.zoneId,
  *   ip: "192.0.2.10",
  *   vendor: "gcp",
  *   region: "us-central1",
  * });
- * yield* Cloudflare.OriginCloudRegion("EuOrigin", {
+ * yield* Cloudflare.Cache.OriginCloudRegion("EuOrigin", {
  *   zoneId: zone.zoneId,
  *   ip: "192.0.2.20",
  *   vendor: "gcp",

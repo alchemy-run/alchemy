@@ -3,12 +3,12 @@ import { SingleShotGen } from "effect/Utils";
 import { ImagesBinding, type ImagesClient } from "./ImagesBinding.ts";
 
 type ImagesTypeId = typeof ImagesTypeId;
-const ImagesTypeId = "Cloudflare.Images" as const;
+const ImagesTypeId = "Cloudflare.Images.Images" as const;
 
 export type ImagesProps = {
   /**
    * Binding name used when `Images` is bound from inside a Worker init phase
-   * (`yield* Cloudflare.Images(...)`). When passed through
+   * (`yield* Cloudflare.Images.Images(...)`). When passed through
    * `Worker({ env: { ... } })`, the object key remains the binding name.
    *
    * @default "IMAGES"
@@ -30,7 +30,7 @@ const bindImages = (self: Images): BindEffect => ImagesBinding(self);
  *
  * It is a plain data structure (so it can be declared directly on a Worker's
  * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
- * (`yield* Cloudflare.Images(...)`) attaches the binding to the surrounding
+ * (`yield* Cloudflare.Images.Images(...)`) attaches the binding to the surrounding
  * Worker and returns the runtime {@link ImagesClient} — no separate `.bind(...)`
  * step required.
  *
@@ -72,7 +72,7 @@ export const isImages = (value: unknown): value is Images =>
  * Cloudflare.Worker("ImageWorker", { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // Attaches the binding to this Worker AND returns the runtime client.
- *     const images = yield* Cloudflare.Images({ name: "PIPELINE" });
+ *     const images = yield* Cloudflare.Images.Images({ name: "PIPELINE" });
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
@@ -81,7 +81,7 @@ export const isImages = (value: unknown): value is Images =>
  *         return yield* HttpServerResponse.json(info);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.ImagesBindingLayer)),
+ *   }).pipe(Effect.provide(Cloudflare.Images.ImagesBindingLayer)),
  * );
  * ```
  *
@@ -99,7 +99,7 @@ export const isImages = (value: unknown): value is Images =>
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
- *   env: { MEDIA: Cloudflare.Images({ name: "PIPELINE" }) },
+ *   env: { MEDIA: Cloudflare.Images.Images({ name: "PIPELINE" }) },
  * });
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;

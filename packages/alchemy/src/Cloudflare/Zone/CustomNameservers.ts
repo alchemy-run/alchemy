@@ -86,7 +86,7 @@ export type ZoneCustomNameservers = Resource<
  * @section Enabling account custom nameservers
  * @example Use the account's default nameserver set
  * ```typescript
- * yield* Cloudflare.ZoneCustomNameservers("CustomNs", {
+ * yield* Cloudflare.Zone.ZoneCustomNameservers("CustomNs", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -94,7 +94,7 @@ export type ZoneCustomNameservers = Resource<
  *
  * @example Pin a specific nameserver set
  * ```typescript
- * yield* Cloudflare.ZoneCustomNameservers("CustomNs", {
+ * yield* Cloudflare.Zone.ZoneCustomNameservers("CustomNs", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  *   nsSet: 2,
@@ -104,7 +104,7 @@ export type ZoneCustomNameservers = Resource<
  * @section Disabling
  * @example Explicitly pin the zone to Cloudflare-assigned nameservers
  * ```typescript
- * yield* Cloudflare.ZoneCustomNameservers("CustomNs", {
+ * yield* Cloudflare.Zone.ZoneCustomNameservers("CustomNs", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

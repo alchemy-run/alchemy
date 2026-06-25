@@ -83,15 +83,15 @@ export type TunnelVirtualNetwork = Resource<
  * @section Creating a Virtual Network
  * @example Basic virtual network
  * ```typescript
- * const vnet = yield* Cloudflare.TunnelVirtualNetwork("Staging", {
+ * const vnet = yield* Cloudflare.Tunnel.TunnelVirtualNetwork("Staging", {
  *   comment: "staging private network",
  * });
  * ```
  *
  * @example Route a tunnel CIDR through the virtual network
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("MyTunnel");
- * yield* Cloudflare.TunnelRoute("StagingNet", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
+ * yield* Cloudflare.Tunnel.TunnelRoute("StagingNet", {
  *   tunnelId: tunnel.tunnelId,
  *   network: "10.4.0.0/16",
  *   virtualNetworkId: vnet.virtualNetworkId,
@@ -102,7 +102,7 @@ export type TunnelVirtualNetwork = Resource<
  * @example Promote a virtual network to the account default
  * ```typescript
  * // Only one default per account — promoting demotes the previous one.
- * const vnet = yield* Cloudflare.TunnelVirtualNetwork("Primary", {
+ * const vnet = yield* Cloudflare.Tunnel.TunnelVirtualNetwork("Primary", {
  *   isDefaultNetwork: true,
  * });
  * ```

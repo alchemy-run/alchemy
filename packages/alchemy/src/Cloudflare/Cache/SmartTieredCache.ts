@@ -74,16 +74,16 @@ export type SmartTieredCache = Resource<
  * @section Managing Smart Tiered Cache
  * @example Enable Smart Tiered Cache on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.SmartTieredCache("SmartCache", {
+ * yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Smart Tiered Cache
  * ```typescript
- * yield* Cloudflare.SmartTieredCache("SmartCache", {
+ * yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

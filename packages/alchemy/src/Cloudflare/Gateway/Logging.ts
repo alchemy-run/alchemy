@@ -91,7 +91,7 @@ export type GatewayLogging = Resource<
  * @section Managing logging settings
  * @example Log everything, keep PII
  * ```typescript
- * yield* Cloudflare.GatewayLogging("Logging", {
+ * yield* Cloudflare.Gateway.GatewayLogging("Logging", {
  *   redactPii: false,
  *   settingsByRuleType: {
  *     dns: { logAll: true, logBlocks: true },
@@ -103,7 +103,7 @@ export type GatewayLogging = Resource<
  *
  * @example Only log blocked DNS queries, redacting PII
  * ```typescript
- * yield* Cloudflare.GatewayLogging("Logging", {
+ * yield* Cloudflare.Gateway.GatewayLogging("Logging", {
  *   redactPii: true,
  *   settingsByRuleType: {
  *     dns: { logAll: false, logBlocks: true },

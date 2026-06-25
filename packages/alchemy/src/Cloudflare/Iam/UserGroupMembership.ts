@@ -67,9 +67,9 @@ export type IamUserGroupMembership = Resource<
  * @section Adding a Member
  * @example Add an account member to a user group
  * ```typescript
- * const group = yield* Cloudflare.IamUserGroup("Operators", {});
+ * const group = yield* Cloudflare.Iam.IamUserGroup("Operators", {});
  *
- * yield* Cloudflare.IamUserGroupMembership("SamInOperators", {
+ * yield* Cloudflare.Iam.IamUserGroupMembership("SamInOperators", {
  *   userGroup: group.userGroupId,
  *   memberId: "b67b4c279ea0177a0ddff0a2ef64b11b",
  * });

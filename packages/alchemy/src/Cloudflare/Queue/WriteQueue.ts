@@ -22,7 +22,7 @@ import type {
  * @section Sending Messages
  * @example Producer route
  * ```typescript
- * const queue = yield* Cloudflare.Queues.WriteQueue(Queue);
+ * const queue = yield* Cloudflare.Queue.WriteQueue(Queue);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -47,7 +47,7 @@ import type {
  *
  * `WriteQueue` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
- * `yield* Cloudflare.Queues.WriteQueue(queue)`.
+ * `yield* Cloudflare.Queue.WriteQueue(queue)`.
  */
 export interface WriteQueue extends Binding.Service<
   WriteQueue,

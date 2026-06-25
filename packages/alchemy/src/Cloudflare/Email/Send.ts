@@ -10,14 +10,14 @@ import type { SendEmail } from "./SendEmail.ts";
  * Effect-native client for sending email.
  *
  * `Send` is a single identifier that is simultaneously the binding's Context
- * tag, its type, and the callable — `yield* Cloudflare.Send(EmailDescriptor)`.
+ * tag, its type, and the callable — `yield* Cloudflare.Email.Send(EmailDescriptor)`.
  *
  * @example Send to any verified destination
  * ```typescript
- * const Email = Cloudflare.SendEmail("Email");
+ * const Email = Cloudflare.Email.SendEmail("Email");
  *
  * // in the Worker effect:
- * const email = yield* Cloudflare.Send(Email);
+ * const email = yield* Cloudflare.Email.Send(Email);
  * yield* email.send({
  *   from: "noreply@example.com",
  *   to: "user@example.com",
@@ -32,11 +32,11 @@ import type { SendEmail } from "./SendEmail.ts";
  */
 export interface Send extends Binding.Service<
   Send,
-  "Cloudflare.SendEmail",
+  "Cloudflare.Email.SendEmail",
   (sender: SendEmail) => Effect.Effect<SendClient>
 > {}
 
-export const Send = Binding.Service<Send>("Cloudflare.SendEmail");
+export const Send = Binding.Service<Send>("Cloudflare.Email.SendEmail");
 
 /**
  * Email body shape for the builder-form `send` call. Either `text`, `html`,

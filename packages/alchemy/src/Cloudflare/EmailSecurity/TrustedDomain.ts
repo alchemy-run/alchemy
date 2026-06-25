@@ -87,7 +87,7 @@ export type EmailSecurityTrustedDomain = Resource<
  * @section Trusting Domains
  * @example Trust a partner domain with similar spelling
  * ```typescript
- * yield* Cloudflare.EmailSecurityTrustedDomain("PartnerLookalike", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityTrustedDomain("PartnerLookalike", {
  *   pattern: "examp1e-partner.com",
  *   isSimilarity: true,
  *   comments: "legitimate partner domain",
@@ -96,7 +96,7 @@ export type EmailSecurityTrustedDomain = Resource<
  *
  * @example Trust a recently registered domain
  * ```typescript
- * yield* Cloudflare.EmailSecurityTrustedDomain("NewSubsidiary", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityTrustedDomain("NewSubsidiary", {
  *   pattern: "brand-new-subsidiary.example",
  *   isRecent: true,
  * });

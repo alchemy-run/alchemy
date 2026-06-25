@@ -113,7 +113,7 @@ export type ShareResource = Resource<
  * @section Adding a Resource to a Share
  * @example Share an additional gateway policy
  * ```typescript
- * const entry = yield* Cloudflare.ShareResource("ExtraPolicy", {
+ * const entry = yield* Cloudflare.ResourceSharing.ShareResource("ExtraPolicy", {
  *   shareId: share.shareId,
  *   resourceType: "gateway-policy",
  *   resourceId: policy.ruleId,
@@ -123,7 +123,7 @@ export type ShareResource = Resource<
  * @section Updating Metadata
  * @example Update `meta` in place
  * ```typescript
- * const entry = yield* Cloudflare.ShareResource("ExtraPolicy", {
+ * const entry = yield* Cloudflare.ResourceSharing.ShareResource("ExtraPolicy", {
  *   shareId: share.shareId,
  *   resourceType: "gateway-policy",
  *   resourceId: policy.ruleId,

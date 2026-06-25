@@ -29,7 +29,7 @@ export default class AsyncSecretWorker extends Cloudflare.Worker<AsyncSecretWork
         const request = yield* HttpServerRequest;
         const pathname = new URL(request.originalUrl, "http://x").pathname;
         if (pathname === "/secret") {
-          const env = yield* Cloudflare.WorkerEnvironment;
+          const env = yield* Cloudflare.Workers.WorkerEnvironment;
           const secret = (env as Record<string, runtime.SecretsStoreSecret>)
             .MY_SECRET;
           const value = yield* Effect.promise(() => secret.get());

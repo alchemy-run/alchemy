@@ -152,9 +152,9 @@ export type QueueSubscription = Resource<
  * @section Creating a Subscription
  * @example R2 bucket events into a Queue
  * ```typescript
- * const queue = yield* Cloudflare.Queue("EventsQueue");
+ * const queue = yield* Cloudflare.Queue.Queue("EventsQueue");
  *
- * const subscription = yield* Cloudflare.QueueSubscription("R2Events", {
+ * const subscription = yield* Cloudflare.Queue.QueueSubscription("R2Events", {
  *   source: { type: "r2" },
  *   events: ["bucket.created", "bucket.deleted"],
  *   queueId: queue.queueId,
@@ -163,7 +163,7 @@ export type QueueSubscription = Resource<
  *
  * @example KV namespace events with an explicit name
  * ```typescript
- * const subscription = yield* Cloudflare.QueueSubscription("KvEvents", {
+ * const subscription = yield* Cloudflare.Queue.QueueSubscription("KvEvents", {
  *   name: "kv-events",
  *   source: { type: "kv" },
  *   events: ["namespace.created"],
@@ -173,7 +173,7 @@ export type QueueSubscription = Resource<
  *
  * @example Workers Builds events for one Worker
  * ```typescript
- * const subscription = yield* Cloudflare.QueueSubscription("BuildEvents", {
+ * const subscription = yield* Cloudflare.Queue.QueueSubscription("BuildEvents", {
  *   source: { type: "workersBuilds.worker", workerName: "my-worker" },
  *   events: ["build.started", "build.completed"],
  *   queueId: queue.queueId,
@@ -183,7 +183,7 @@ export type QueueSubscription = Resource<
  * @section Pausing delivery
  * @example Disable a subscription without deleting it
  * ```typescript
- * const subscription = yield* Cloudflare.QueueSubscription("R2Events", {
+ * const subscription = yield* Cloudflare.Queue.QueueSubscription("R2Events", {
  *   source: { type: "r2" },
  *   events: ["bucket.created"],
  *   queueId: queue.queueId,

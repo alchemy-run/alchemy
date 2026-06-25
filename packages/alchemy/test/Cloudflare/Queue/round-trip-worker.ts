@@ -42,11 +42,11 @@ export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
  * waits for the consumer to push them through to the Counter DO,
  * and polls `GET /count?name=K` until the count matches.
  *
- * `Cloudflare.messages(...).subscribe(...)` (in QueueWorker below)
- * auto-creates the matching `Cloudflare.QueueConsumer` resource at
+ * `Cloudflare.Queue.messages(...).subscribe(...)` (in QueueWorker below)
+ * auto-creates the matching `Cloudflare.Queue.QueueConsumer` resource at
  * deploy time, so this fixture has no separate consumer wiring.
  */
-export const RoundTripQueue = Cloudflare.Queue("RoundTripQueue");
+export const RoundTripQueue = Cloudflare.Queue.Queue("RoundTripQueue");
 
 interface QueueMessageBody {
   name: string;
@@ -61,7 +61,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
   Effect.gen(function* () {
     const counters = yield* Counter;
     const queueResource = yield* RoundTripQueue;
-    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
+    const queue = yield* Cloudflare.Queue.WriteQueue(queueResource);
 
     // Effect-style queue consumer. The handler delegates to the
     // Counter DO so the test can verify the message landed by
@@ -70,11 +70,11 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     // Mixed `Duration.Input` forms are intentional: the e2e test
     // exercises that a `Duration` value (`maxWaitTime`) and a
     // string (`retryDelay: "1 second"`) both type-check at the
-    // `Cloudflare.messages(...)` call site and survive the convert-
+    // `Cloudflare.Queue.messages(...)` call site and survive the convert-
     // and-forward path into Cloudflare's QueueConsumer settings.
     // Values are kept small so the round-trip latency stays well
     // under the test's 240s timeout.
-    yield* Cloudflare.messages<QueueMessageBody>(queueResource, {
+    yield* Cloudflare.Queue.messages<QueueMessageBody>(queueResource, {
       batchSize: 10,
       maxRetries: 3,
       maxWaitTime: Duration.millis(500),
@@ -110,7 +110,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
       }),
     };
   }).pipe(
-    Effect.provide(Cloudflare.Queues.WriteQueueBinding),
-    Effect.provide(Cloudflare.QueueEventSourceLive),
+    Effect.provide(Cloudflare.Queue.WriteQueueBinding),
+    Effect.provide(Cloudflare.Queue.QueueEventSourceLive),
   ),
 ) {}

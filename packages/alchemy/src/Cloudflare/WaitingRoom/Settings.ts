@@ -69,7 +69,7 @@ export type WaitingRoomSettings = Resource<
  * @section Managing settings
  * @example Let search engine crawlers bypass waiting rooms
  * ```typescript
- * yield* Cloudflare.WaitingRoomSettings("CrawlerBypass", {
+ * yield* Cloudflare.WaitingRoom.WaitingRoomSettings("CrawlerBypass", {
  *   zoneId: zone.zoneId,
  *   searchEngineCrawlerBypass: true,
  * });
@@ -77,7 +77,7 @@ export type WaitingRoomSettings = Resource<
  *
  * @example Pin the settings to their defaults
  * ```typescript
- * yield* Cloudflare.WaitingRoomSettings("Defaults", {
+ * yield* Cloudflare.WaitingRoom.WaitingRoomSettings("Defaults", {
  *   zoneId: zone.zoneId,
  *   searchEngineCrawlerBypass: false,
  * });

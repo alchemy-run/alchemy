@@ -72,7 +72,7 @@ describe.sequential("Setting", () => {
         yield* setBaseline(zoneId, false);
 
         const setting = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthSetting("Aop", {
+          Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting("Aop", {
             zoneId,
             enabled: true,
           }),
@@ -102,7 +102,7 @@ describe.sequential("Setting", () => {
       yield* setBaseline(zoneId, false);
 
       const enabled = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
+        Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting("AopUpdate", {
           zoneId,
           enabled: true,
         }),
@@ -112,7 +112,7 @@ describe.sequential("Setting", () => {
 
       // In-place update — the singleton is never replaced.
       const disabled = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
+        Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting("AopUpdate", {
           zoneId,
           enabled: false,
         }),
@@ -140,7 +140,7 @@ describe.sequential("Setting", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.OriginTlsClientAuthSetting,
+        Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting,
       );
       // Ride out fresh-token 403 blips on the account-wide enumeration, like
       // every other out-of-band call in this suite.

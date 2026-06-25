@@ -40,9 +40,12 @@ test.provider.skipIf(external)(
       // validation step (dummy Access creds would fail earlier).
       const { token } = yield* stack.deploy(
         Effect.gen(function* () {
-          const token = yield* Cloudflare.AccessServiceToken("ProbeToken", {
-            name: "alchemy-test-posture-probe-token",
-          });
+          const token = yield* Cloudflare.Access.AccessServiceToken(
+            "ProbeToken",
+            {
+              name: "alchemy-test-posture-probe-token",
+            },
+          );
           return { token };
         }),
       );
@@ -87,12 +90,14 @@ test.provider.skipIf(!external)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const token = yield* Cloudflare.AccessServiceToken("S2sToken", {
-            name: "alchemy-test-posture-s2s-token",
-          });
-          const integration = yield* Cloudflare.DevicePostureIntegration(
-            "Custom",
+          const token = yield* Cloudflare.Access.AccessServiceToken(
+            "S2sToken",
             {
+              name: "alchemy-test-posture-s2s-token",
+            },
+          );
+          const integration =
+            yield* Cloudflare.Devices.DevicePostureIntegration("Custom", {
               name: "alchemy-test-posture-integration",
               type: "custom_s2s",
               interval: "10m",
@@ -102,8 +107,7 @@ test.provider.skipIf(!external)(
                 accessClientId: token.clientId,
                 accessClientSecret: token.clientSecret!,
               },
-            },
-          );
+            });
           return { token, integration };
         }),
       );
@@ -144,7 +148,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.DevicePostureIntegration,
+        Cloudflare.Devices.DevicePostureIntegration,
       );
       const all = yield* provider.list();
 
@@ -173,12 +177,14 @@ test.provider.skipIf(!external)(
 
       const { integration } = yield* stack.deploy(
         Effect.gen(function* () {
-          const token = yield* Cloudflare.AccessServiceToken("ListS2sToken", {
-            name: "alchemy-test-posture-list-token",
-          });
-          const integration = yield* Cloudflare.DevicePostureIntegration(
-            "ListCustom",
+          const token = yield* Cloudflare.Access.AccessServiceToken(
+            "ListS2sToken",
             {
+              name: "alchemy-test-posture-list-token",
+            },
+          );
+          const integration =
+            yield* Cloudflare.Devices.DevicePostureIntegration("ListCustom", {
               name: "alchemy-test-posture-list-integration",
               type: "custom_s2s",
               interval: "10m",
@@ -188,14 +194,13 @@ test.provider.skipIf(!external)(
                 accessClientId: token.clientId,
                 accessClientSecret: token.clientSecret!,
               },
-            },
-          );
+            });
           return { integration };
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.DevicePostureIntegration,
+        Cloudflare.Devices.DevicePostureIntegration,
       );
       const all = yield* provider.list();
 

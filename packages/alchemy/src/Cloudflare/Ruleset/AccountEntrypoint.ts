@@ -35,7 +35,7 @@ export type RulesetAccountEntrypointProps = {
    * The full list of rules in the phase entrypoint. This resource owns the
    * entire entrypoint — rules managed elsewhere in the same phase are
    * overwritten on deploy. For the Enterprise WAF deployment workflow, use
-   * `execute` rules referencing `Cloudflare.CustomRuleset` ids.
+   * `execute` rules referencing `Cloudflare.Ruleset.CustomRuleset` ids.
    */
   rules: AccountEntrypointRule[];
   /**
@@ -84,7 +84,7 @@ export type RulesetAccountEntrypoint = Resource<
 /**
  * A Cloudflare Ruleset phase entrypoint for an account.
  *
- * The account-level counterpart of `Cloudflare.Ruleset`: it owns the entire
+ * The account-level counterpart of `Cloudflare.Ruleset.Ruleset`: it owns the entire
  * ruleset for an account phase entrypoint (e.g. deploying custom WAF
  * rulesets across zones with `execute` rules, or configuring `ddos_l4` /
  * `magic_transit` rules). The entrypoint is a per-phase singleton — destroy
@@ -98,7 +98,7 @@ export type RulesetAccountEntrypoint = Resource<
  * @section Account WAF Deployment
  * @example Deploy a custom ruleset across all zones
  * ```typescript
- * const ruleset = yield* Cloudflare.CustomRuleset("SharedWafRules", {
+ * const ruleset = yield* Cloudflare.Ruleset.CustomRuleset("SharedWafRules", {
  *   phase: "http_request_firewall_custom",
  *   rules: [
  *     {
@@ -109,7 +109,7 @@ export type RulesetAccountEntrypoint = Resource<
  *   ],
  * });
  *
- * yield* Cloudflare.RulesetAccountEntrypoint("WafDeployment", {
+ * yield* Cloudflare.Ruleset.RulesetAccountEntrypoint("WafDeployment", {
  *   phase: "http_request_firewall_custom",
  *   rules: [
  *     {
@@ -206,7 +206,7 @@ export const RulesetAccountEntrypointProvider = () =>
       if (phase === undefined) return undefined;
       // The entrypoint is a per-phase singleton that Cloudflare creates
       // lazily — there is nothing to "own", so a cold read adopts freely
-      // (mirrors the zone-level `Cloudflare.Ruleset`).
+      // (mirrors the zone-level `Cloudflare.Ruleset.Ruleset`).
       return yield* rulesets
         .getPhasForAccount({ accountId, rulesetPhase: phase })
         .pipe(

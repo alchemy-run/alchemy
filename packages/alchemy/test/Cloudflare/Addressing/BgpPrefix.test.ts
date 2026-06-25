@@ -39,7 +39,7 @@ test.provider("list enumerates BGP prefixes across BYOIP prefixes", (stack) =>
     yield* stack.destroy();
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AddressingBgpPrefix,
+      Cloudflare.Addressing.AddressingBgpPrefix,
     );
     const all = yield* retryForbidden(provider.list());
 

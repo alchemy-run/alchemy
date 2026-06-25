@@ -145,7 +145,7 @@ export type ZoneProps = {
 };
 
 export type Zone = Resource<
-  "Cloudflare.Zone",
+  "Cloudflare.Zone.Zone",
   ZoneProps,
   ZoneAttributes,
   never,
@@ -165,7 +165,7 @@ export type Zone = Resource<
  * @section Creating a Zone
  * @example Create a new zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("MyZone", {
+ * const zone = yield* Cloudflare.Zone.Zone("MyZone", {
  *   name: "example.com",
  * });
  * ```
@@ -173,7 +173,7 @@ export type Zone = Resource<
  * @example Allow destruction
  * ```typescript
  * import { destroy } from "alchemy/RemovalPolicy";
- * yield* Cloudflare.Zone("MyZone", { name: "example.com" }).pipe(destroy());
+ * yield* Cloudflare.Zone.Zone("MyZone", { name: "example.com" }).pipe(destroy());
  * ```
  *
  * @section Adopting an existing Zone
@@ -182,13 +182,13 @@ export type Zone = Resource<
  * import { adopt } from "alchemy/AdoptPolicy";
  * // A zone carries no ownership markers, so the engine refuses to take over a
  * // pre-existing zone unless you opt in with `adopt(true)`.
- * const zone = yield* Cloudflare.Zone("MyZone", {
+ * const zone = yield* Cloudflare.Zone.Zone("MyZone", {
  *   name: "example.com",
  * }).pipe(adopt(true));
  * // zone.zoneId, zone.nameServers, zone.accountId, ...
  * ```
  */
-export const Zone = Resource<Zone>("Cloudflare.Zone", {
+export const Zone = Resource<Zone>("Cloudflare.Zone.Zone", {
   defaultRemovalPolicy: "retain",
 });
 

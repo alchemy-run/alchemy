@@ -104,9 +104,9 @@ export type TotalTls = Resource<
  * @section Managing Total TLS
  * @example Enable Total TLS on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.TotalTls("TotalTls", {
+ * yield* Cloudflare.Acm.TotalTls("TotalTls", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -114,7 +114,7 @@ export type TotalTls = Resource<
  *
  * @example Pin the issuing Certificate Authority
  * ```typescript
- * yield* Cloudflare.TotalTls("TotalTls", {
+ * yield* Cloudflare.Acm.TotalTls("TotalTls", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  *   certificateAuthority: "lets_encrypt",

@@ -98,7 +98,7 @@ test.provider(
 test.provider("list enumerates the configuration across all zones", (stack) =>
   Effect.gen(function* () {
     const provider = yield* Provider.findProvider(
-      Cloudflare.ApiShieldConfiguration,
+      Cloudflare.ApiShield.ApiShieldConfiguration,
     );
     const all = yield* provider.list();
 
@@ -126,10 +126,15 @@ test.provider.skipIf(!entitledZoneId)(
 
       const config = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldConfiguration("SessionIds", {
-            zoneId,
-            authIdCharacteristics: [{ name: "authorization", type: "header" }],
-          });
+          return yield* Cloudflare.ApiShield.ApiShieldConfiguration(
+            "SessionIds",
+            {
+              zoneId,
+              authIdCharacteristics: [
+                { name: "authorization", type: "header" },
+              ],
+            },
+          );
         }),
       );
 
@@ -149,10 +154,13 @@ test.provider.skipIf(!entitledZoneId)(
       // Update in place — same singleton, the captured baseline survives.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldConfiguration("SessionIds", {
-            zoneId,
-            authIdCharacteristics: [{ name: "session_id", type: "cookie" }],
-          });
+          return yield* Cloudflare.ApiShield.ApiShieldConfiguration(
+            "SessionIds",
+            {
+              zoneId,
+              authIdCharacteristics: [{ name: "session_id", type: "cookie" }],
+            },
+          );
         }),
       );
       expect(updated.authIdCharacteristics).toEqual([

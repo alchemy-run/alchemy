@@ -40,7 +40,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AddressingServiceBinding,
+        Cloudflare.Addressing.AddressingServiceBinding,
       );
       const all = yield* retryForbidden(provider.list());
 

@@ -6,12 +6,12 @@ import {
 } from "./VersionMetadataBinding.ts";
 
 type VersionMetadataTypeId = typeof VersionMetadataTypeId;
-const VersionMetadataTypeId = "Cloudflare.VersionMetadata" as const;
+const VersionMetadataTypeId = "Cloudflare.Workers.VersionMetadata" as const;
 
 export type VersionMetadataProps = {
   /**
    * Binding name used when `VersionMetadata` is bound from inside a Worker init
-   * phase (`yield* Cloudflare.VersionMetadata(...)`). When passed through
+   * phase (`yield* Cloudflare.Workers.VersionMetadata(...)`). When passed through
    * `Worker({ env: { ... } })`, the object key remains the binding name.
    *
    * @default "CF_VERSION_METADATA"
@@ -35,7 +35,7 @@ type BindEffect = Effect.Effect<
  *
  * It is a plain data structure (so it can be declared directly on a Worker's
  * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
- * (`yield* Cloudflare.VersionMetadata(...)`) attaches the binding to the
+ * (`yield* Cloudflare.Workers.VersionMetadata(...)`) attaches the binding to the
  * surrounding Worker and returns a deferred accessor for the runtime
  * {@link import("./VersionMetadataBinding.ts").WorkerVersionMetadata}.
  *
@@ -77,7 +77,7 @@ export const isVersionMetadata = (value: unknown): value is VersionMetadata =>
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // Attaches the binding to this Worker AND returns a deferred accessor.
- *     const versionMetadata = yield* Cloudflare.VersionMetadata();
+ *     const versionMetadata = yield* Cloudflare.Workers.VersionMetadata();
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -85,7 +85,7 @@ export const isVersionMetadata = (value: unknown): value is VersionMetadata =>
  *         return Response.json({ id, tag, timestamp });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.VersionMetadataBindingLayer)),
+ *   }).pipe(Effect.provide(Cloudflare.Workers.VersionMetadataBindingLayer)),
  * );
  * ```
  *
@@ -95,7 +95,7 @@ export const isVersionMetadata = (value: unknown): value is VersionMetadata =>
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
  *   env: {
- *     CF_VERSION_METADATA: Cloudflare.VersionMetadata(),
+ *     CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
  *   },
  * });
  *

@@ -158,7 +158,7 @@ export type LoadBalancerMonitor = Resource<
  * @section Creating a Monitor
  * @example HTTPS health check
  * ```typescript
- * const monitor = yield* Cloudflare.LoadBalancerMonitor("ApiMonitor", {
+ * const monitor = yield* Cloudflare.LoadBalancer.LoadBalancerMonitor("ApiMonitor", {
  *   type: "https",
  *   path: "/health",
  *   expectedCodes: "2xx",
@@ -167,7 +167,7 @@ export type LoadBalancerMonitor = Resource<
  *
  * @example TCP port check
  * ```typescript
- * const tcp = yield* Cloudflare.LoadBalancerMonitor("DbMonitor", {
+ * const tcp = yield* Cloudflare.LoadBalancer.LoadBalancerMonitor("DbMonitor", {
  *   type: "tcp",
  *   port: 5432,
  * });
@@ -176,7 +176,7 @@ export type LoadBalancerMonitor = Resource<
  * @section Using with a Pool
  * @example Attach the monitor to a pool
  * ```typescript
- * const pool = yield* Cloudflare.LoadBalancerPool("ApiPool", {
+ * const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  *   monitor: monitor.monitorId,
  * });

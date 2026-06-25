@@ -126,7 +126,7 @@ export type SynProtectionRule = Resource<
  * @section Creating a rule
  * @example Global SYN protection in monitoring mode
  * ```typescript
- * const rule = yield* Cloudflare.SynProtectionRule("GlobalSyn", {
+ * const rule = yield* Cloudflare.DdosProtection.SynProtectionRule("GlobalSyn", {
  *   scope: "global",
  *   mode: "monitoring",
  *   burstSensitivity: "medium",
@@ -136,7 +136,7 @@ export type SynProtectionRule = Resource<
  *
  * @example Data-center scoped rule with retransmit mitigation
  * ```typescript
- * yield* Cloudflare.SynProtectionRule("SjcSyn", {
+ * yield* Cloudflare.DdosProtection.SynProtectionRule("SjcSyn", {
  *   scope: "datacenter",
  *   name: "SJC",
  *   mode: "enabled",

@@ -61,14 +61,14 @@ export interface R2BucketEventNotificationRule {
 export interface R2BucketEventNotificationProps {
   /**
    * Name of the R2 bucket that produces the events. Pass
-   * `bucket.bucketName` from a `Cloudflare.R2Bucket`.
+   * `bucket.bucketName` from a `Cloudflare.R2.R2Bucket`.
    *
    * Immutable — changing the bucket triggers a replacement.
    */
   bucketName: string;
   /**
    * ID of the Queue that receives the event messages. Pass
-   * `queue.queueId` from a `Cloudflare.Queue`.
+   * `queue.queueId` from a `Cloudflare.Queue.Queue`.
    *
    * Immutable — changing the queue triggers a replacement.
    */
@@ -134,10 +134,10 @@ export type R2BucketEventNotification = Resource<
  * @section Notifying a Queue
  * @example Notify on every upload and delete
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("Uploads");
- * const queue = yield* Cloudflare.Queue("UploadEvents");
+ * const bucket = yield* Cloudflare.R2.R2Bucket("Uploads");
+ * const queue = yield* Cloudflare.Queue.Queue("UploadEvents");
  *
- * yield* Cloudflare.R2BucketEventNotification("UploadNotifications", {
+ * yield* Cloudflare.R2.R2BucketEventNotification("UploadNotifications", {
  *   bucketName: bucket.bucketName,
  *   queueId: queue.queueId,
  *   rules: [
@@ -150,7 +150,7 @@ export type R2BucketEventNotification = Resource<
  *
  * @example Scope notifications to a key prefix and suffix
  * ```typescript
- * yield* Cloudflare.R2BucketEventNotification("ImageNotifications", {
+ * yield* Cloudflare.R2.R2BucketEventNotification("ImageNotifications", {
  *   bucketName: bucket.bucketName,
  *   queueId: queue.queueId,
  *   rules: [
@@ -169,7 +169,7 @@ export type R2BucketEventNotification = Resource<
  * ```typescript
  * // Rules must cover non-overlapping key ranges — Cloudflare rejects
  * // overlapping prefixes/suffixes even when the actions are disjoint.
- * yield* Cloudflare.R2BucketEventNotification("Notifications", {
+ * yield* Cloudflare.R2.R2BucketEventNotification("Notifications", {
  *   bucketName: bucket.bucketName,
  *   queueId: queue.queueId,
  *   rules: [

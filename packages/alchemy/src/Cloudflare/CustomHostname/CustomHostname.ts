@@ -209,7 +209,7 @@ export interface CustomHostnameAttributes {
 }
 
 export type CustomHostname = Resource<
-  "Cloudflare.CustomHostname",
+  "Cloudflare.CustomHostname.CustomHostname",
   CustomHostnameProps,
   CustomHostnameAttributes,
   never,
@@ -239,7 +239,7 @@ export type CustomHostname = Resource<
  * @section Creating a Custom Hostname
  * @example Basic custom hostname with TXT validation
  * ```typescript
- * const hostname = yield* Cloudflare.CustomHostname("CustomerApp", {
+ * const hostname = yield* Cloudflare.CustomHostname.CustomHostname("CustomerApp", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.customer.com",
  * });
@@ -249,7 +249,7 @@ export type CustomHostname = Resource<
  *
  * @example HTTP validation with a specific certificate authority
  * ```typescript
- * yield* Cloudflare.CustomHostname("CustomerApp", {
+ * yield* Cloudflare.CustomHostname.CustomHostname("CustomerApp", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.customer.com",
  *   ssl: {
@@ -263,30 +263,30 @@ export type CustomHostname = Resource<
  * @section Pairing with a Fallback Origin
  * @example Route custom hostname traffic to your origin
  * ```typescript
- * const record = yield* Cloudflare.DnsRecord("Origin", {
+ * const record = yield* Cloudflare.Dns.DnsRecord("Origin", {
  *   zoneId: zone.zoneId,
  *   name: "origin.my-saas.com",
  *   type: "A",
  *   content: "203.0.113.1",
  *   proxied: true,
  * });
- * yield* Cloudflare.FallbackOrigin("Fallback", {
+ * yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
  *   zoneId: zone.zoneId,
  *   origin: record.name,
  * });
- * yield* Cloudflare.CustomHostname("CustomerApp", {
+ * yield* Cloudflare.CustomHostname.CustomHostname("CustomerApp", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.customer.com",
  * });
  * ```
  */
 export const CustomHostname = Resource<CustomHostname>(
-  "Cloudflare.CustomHostname",
+  "Cloudflare.CustomHostname.CustomHostname",
 );
 
 export const isCustomHostname = (value: unknown): value is CustomHostname =>
   Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.CustomHostname";
+  value.Type === "Cloudflare.CustomHostname.CustomHostname";
 
 export const CustomHostnameProvider = () =>
   Provider.succeed(CustomHostname, {

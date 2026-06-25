@@ -66,7 +66,7 @@ export type StreamWebhook = Resource<
  * @section Configuring the webhook
  * @example Receive Stream notifications
  * ```typescript
- * const webhook = yield* Cloudflare.StreamWebhook("Notifications", {
+ * const webhook = yield* Cloudflare.Stream.StreamWebhook("Notifications", {
  *   notificationUrl: "https://example.com/hooks/stream",
  * });
  *

@@ -112,9 +112,9 @@ export type RealtimeKitWebhook = Resource<
  * @section Creating a Webhook
  * @example Meeting lifecycle events
  * ```typescript
- * const app = yield* Cloudflare.RealtimeKitApp("Meetings", {});
+ * const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("Meetings", {});
  *
- * const webhook = yield* Cloudflare.RealtimeKitWebhook("Lifecycle", {
+ * const webhook = yield* Cloudflare.RealtimeKit.RealtimeKitWebhook("Lifecycle", {
  *   appId: app.appId,
  *   url: "https://example.com/webhook",
  *   events: ["meeting.started", "meeting.ended"],
@@ -123,7 +123,7 @@ export type RealtimeKitWebhook = Resource<
  *
  * @example Recording events to a Worker
  * ```typescript
- * const webhook = yield* Cloudflare.RealtimeKitWebhook("Recordings", {
+ * const webhook = yield* Cloudflare.RealtimeKit.RealtimeKitWebhook("Recordings", {
  *   appId: app.appId,
  *   url: worker.url,
  *   events: ["recording.statusUpdate"],
@@ -133,7 +133,7 @@ export type RealtimeKitWebhook = Resource<
  * @section Updating a Webhook
  * @example Pause delivery without deleting
  * ```typescript
- * const webhook = yield* Cloudflare.RealtimeKitWebhook("Lifecycle", {
+ * const webhook = yield* Cloudflare.RealtimeKit.RealtimeKitWebhook("Lifecycle", {
  *   appId: app.appId,
  *   url: "https://example.com/webhook",
  *   events: ["meeting.started", "meeting.ended"],

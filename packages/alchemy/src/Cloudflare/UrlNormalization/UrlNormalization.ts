@@ -9,7 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const UrlNormalizationTypeId = "Cloudflare.UrlNormalization" as const;
+const UrlNormalizationTypeId =
+  "Cloudflare.UrlNormalization.UrlNormalization" as const;
 type UrlNormalizationTypeId = typeof UrlNormalizationTypeId;
 
 /**
@@ -94,7 +95,7 @@ export type UrlNormalization = Resource<
  * @section Managing URL normalization
  * @example Normalize URLs sent to the origin too
  * ```typescript
- * yield* Cloudflare.UrlNormalization("UrlNormalization", {
+ * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
  *   scope: "both",
  * });
@@ -102,7 +103,7 @@ export type UrlNormalization = Resource<
  *
  * @example Strict RFC 3986 normalization
  * ```typescript
- * yield* Cloudflare.UrlNormalization("UrlNormalization", {
+ * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
  *   scope: "incoming",
  *   type: "rfc3986",
@@ -111,7 +112,7 @@ export type UrlNormalization = Resource<
  *
  * @example Disable URL normalization
  * ```typescript
- * yield* Cloudflare.UrlNormalization("UrlNormalization", {
+ * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
  *   scope: "none",
  * });

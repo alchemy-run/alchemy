@@ -135,12 +135,12 @@ export type StreamLiveInput = Resource<
  * @section Creating a live input
  * @example Basic live input
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {});
+ * const input = yield* Cloudflare.Stream.StreamLiveInput("Broadcast", {});
  * ```
  *
  * @example Live input with automatic recording
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {
+ * const input = yield* Cloudflare.Stream.StreamLiveInput("Broadcast", {
  *   meta: { name: "town-hall" },
  *   recording: {
  *     mode: "automatic",
@@ -153,7 +153,7 @@ export type StreamLiveInput = Resource<
  * @section Managing a live input
  * @example Disable ingest without deleting the input
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {
+ * const input = yield* Cloudflare.Stream.StreamLiveInput("Broadcast", {
  *   enabled: false,
  * });
  * ```

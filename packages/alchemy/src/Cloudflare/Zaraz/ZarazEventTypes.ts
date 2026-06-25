@@ -140,7 +140,7 @@ export type ZarazEventContract<
  *   Login: { method: "google" | "email" | "email-link" };
  * }>({ ecommerce: true });
  *
- * export type AppZarazEvents = Cloudflare.InferZarazEvents<typeof zaraz>;
+ * export type AppZarazEvents = Cloudflare.Zaraz.InferZarazEvents<typeof zaraz>;
  * ```
  */
 export function defineZarazEvents<const Events extends ZarazEventMap>(options: {

@@ -8,12 +8,12 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
-import type { EmailAction } from "./EmailRule.ts";
+import type { Action } from "./Rule.ts";
 
-const EmailCatchAllTypeId = "Cloudflare.EmailCatchAll" as const;
-type EmailCatchAllTypeId = typeof EmailCatchAllTypeId;
+const CatchAllTypeId = "Cloudflare.Email.CatchAll" as const;
+type CatchAllTypeId = typeof CatchAllTypeId;
 
-export type EmailCatchAllProps = {
+export type CatchAllProps = {
   /**
    * Zone whose catch-all rule to manage. Accepts a zone id, a zone name
    * (`example.com`), or a `{ zoneId, name? }` object. Stable — the
@@ -38,10 +38,10 @@ export type EmailCatchAllProps = {
    * (`drop`, `forward` to verified destination addresses, or `worker`).
    * Matchers are fixed to `[{ type: "all" }]` by the API.
    */
-  actions: EmailAction[];
+  actions: Action[];
 };
 
-export type EmailCatchAllAttributes = {
+export type CatchAllAttributes = {
   /** Routing rule identifier of the zone's catch-all rule. */
   ruleId: string;
   /** Zone the catch-all rule belongs to. */
@@ -51,7 +51,7 @@ export type EmailCatchAllAttributes = {
   /** Whether the catch-all rule is active. */
   enabled: boolean;
   /** Actions taken for emails that match no other routing rule. */
-  actions: EmailAction[];
+  actions: Action[];
   /**
    * The name the catch-all rule had before Alchemy first managed it.
    * Restored on destroy.
@@ -66,13 +66,13 @@ export type EmailCatchAllAttributes = {
    * The actions the catch-all rule had before Alchemy first managed it.
    * Restored on destroy.
    */
-  initialActions: EmailAction[];
+  initialActions: Action[];
 };
 
-export type EmailCatchAll = Resource<
-  EmailCatchAllTypeId,
-  EmailCatchAllProps,
-  EmailCatchAllAttributes,
+export type CatchAll = Resource<
+  CatchAllTypeId,
+  CatchAllProps,
+  CatchAllAttributes,
   never,
   Providers
 >;
@@ -88,19 +88,19 @@ export type EmailCatchAll = Resource<
  * before Alchemy first managed it.
  *
  * Email Routing must be enabled on the zone first (see
- * `Cloudflare.EmailRouting`), and `forward` actions require the destination
- * address to be verified (see `Cloudflare.EmailAddress`).
+ * `Cloudflare.Email.Routing`), and `forward` actions require the destination
+ * address to be verified (see `Cloudflare.Email.Address`).
  * @resource
  * @product Email
  * @category Email
  * @section Catching unmatched mail
  * @example Forward everything else to a verified destination
  * ```typescript
- * const routing = yield* Cloudflare.EmailRouting("Routing", {
+ * const routing = yield* Cloudflare.Email.Routing("Routing", {
  *   zone: "example.com",
  * });
  *
- * yield* Cloudflare.EmailCatchAll("CatchAll", {
+ * yield* Cloudflare.Email.CatchAll("CatchAll", {
  *   zone: routing.zoneId,
  *   actions: [{ type: "forward", value: ["ops@example.com"] }],
  * });
@@ -108,7 +108,7 @@ export type EmailCatchAll = Resource<
  *
  * @example Silently drop unmatched mail
  * ```typescript
- * yield* Cloudflare.EmailCatchAll("DropTheRest", {
+ * yield* Cloudflare.Email.CatchAll("DropTheRest", {
  *   zone: routing.zoneId,
  *   name: "drop unmatched",
  *   actions: [{ type: "drop" }],
@@ -118,22 +118,22 @@ export type EmailCatchAll = Resource<
  * @section Workers
  * @example Hand unmatched mail to an email Worker
  * ```typescript
- * yield* Cloudflare.EmailCatchAll("CatchAllWorker", {
+ * yield* Cloudflare.Email.CatchAll("CatchAllWorker", {
  *   zone: routing.zoneId,
  *   actions: [{ type: "worker", value: ["my-email-worker"] }],
  * });
  * ```
  */
-export const EmailCatchAll = Resource<EmailCatchAll>(EmailCatchAllTypeId);
+export const CatchAll = Resource<CatchAll>(CatchAllTypeId);
 
 /**
- * Returns true if the given value is an EmailCatchAll resource.
+ * Returns true if the given value is an CatchAll resource.
  */
-export const isEmailCatchAll = (value: unknown): value is EmailCatchAll =>
-  Predicate.hasProperty(value, "Type") && value.Type === EmailCatchAllTypeId;
+export const isCatchAll = (value: unknown): value is CatchAll =>
+  Predicate.hasProperty(value, "Type") && value.Type === CatchAllTypeId;
 
-export const EmailCatchAllProvider = () =>
-  Provider.succeed(EmailCatchAll, {
+export const CatchAllProvider = () =>
+  Provider.succeed(CatchAll, {
     nuke: { singleton: true },
     stables: [
       "ruleId",
@@ -162,9 +162,7 @@ export const EmailCatchAllProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is EmailCatchAllAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is CatchAllAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -284,11 +282,9 @@ type ObservedCatchAll =
   | emailRouting.GetRuleCatchAllResponse
   | emailRouting.PutRuleCatchAllResponse;
 
-const normalizeActions = (
-  actions: ObservedCatchAll["actions"],
-): EmailAction[] =>
+const normalizeActions = (actions: ObservedCatchAll["actions"]): Action[] =>
   (actions ?? []).map(
-    (a): EmailAction =>
+    (a): Action =>
       a.type === "drop"
         ? { type: "drop" }
         : a.type === "forward"
@@ -296,7 +292,7 @@ const normalizeActions = (
           : { type: "worker", value: [...(a.value ?? [])] },
   );
 
-const actionsEqual = (a: EmailAction[], b: EmailAction[]): boolean =>
+const actionsEqual = (a: Action[], b: Action[]): boolean =>
   a.length === b.length &&
   a.every((x, i) => {
     const y = b[i]!;
@@ -318,9 +314,9 @@ const toAttributes = (
   initial: {
     initialName: string;
     initialEnabled: boolean;
-    initialActions: EmailAction[];
+    initialActions: Action[];
   },
-): EmailCatchAllAttributes => ({
+): CatchAllAttributes => ({
   ruleId: observed.id ?? "",
   zoneId,
   name: observed.name ?? "",

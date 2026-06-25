@@ -32,7 +32,7 @@ export class WorkflowEvent extends Context.Service<
     timestamp: Date;
     instanceId: string;
   }
->()("Cloudflare.WorkflowEvent") {}
+>()("Cloudflare.Workers.WorkflowEvent") {}
 
 /**
  * Internal service that wraps the Cloudflare `WorkflowStep` object.
@@ -45,7 +45,7 @@ export class WorkflowStep extends Context.Service<
     sleep(name: string, duration: string | number): Effect.Effect<void>;
     sleepUntil(name: string, timestamp: Date | number): Effect.Effect<void>;
   }
->()("Cloudflare.WorkflowStep") {}
+>()("Cloudflare.Workers.WorkflowStep") {}
 
 // ---------------------------------------------------------------------------
 // User-facing step primitives
@@ -232,8 +232,8 @@ export class WorkflowScope extends Context.Service<
  *
  *   return Effect.fn(function* (input: { orderId: string }) {
  *     // Phase 2: workflow body (durable steps)
- *     const result = yield* Cloudflare.task("process", doWork(input.orderId));
- *     yield* Cloudflare.sleep("cooldown", "10 seconds");
+ *     const result = yield* Cloudflare.Workers.task("process", doWork(input.orderId));
+ *     yield* Cloudflare.Workers.sleep("cooldown", "10 seconds");
  *     return result;
  *   });
  * })
@@ -259,7 +259,7 @@ export class WorkflowScope extends Context.Service<
  * @section Step Primitives
  * @example Running a named task
  * ```typescript
- * const result = yield* Cloudflare.task(
+ * const result = yield* Cloudflare.Workers.task(
  *   "process-order",
  *   Effect.succeed({ orderId: "abc", total: 42 }),
  * );
@@ -267,7 +267,7 @@ export class WorkflowScope extends Context.Service<
  *
  * @example Sleeping between steps
  * ```typescript
- * yield* Cloudflare.sleep("cooldown", "30 seconds");
+ * yield* Cloudflare.Workers.sleep("cooldown", "30 seconds");
  * ```
  *
  * @example Accessing env bindings inside a task
@@ -284,7 +284,7 @@ export class WorkflowScope extends Context.Service<
  *   return Effect.fn(function* (input: { roomId: string; message: string }) {
  *     const { roomId, message } = input;
  *
- *     const stored = yield* Cloudflare.task(
+ *     const stored = yield* Cloudflare.Workers.task(
  *       "kv-roundtrip",
  *       Effect.gen(function* () {
  *         const key = `workflow:${roomId}`;

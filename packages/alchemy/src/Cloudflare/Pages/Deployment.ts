@@ -124,9 +124,9 @@ export type PagesDeployment = Resource<
  * @section Creating a Deployment
  * @example Production deployment on a direct-upload project
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {});
+ * const project = yield* Cloudflare.Pages.PagesProject("site", {});
  *
- * const deployment = yield* Cloudflare.PagesDeployment("site-deploy", {
+ * const deployment = yield* Cloudflare.Pages.PagesDeployment("site-deploy", {
  *   projectName: project.name,
  * });
  * // deployment.url === "https://<shortId>.<project>.pages.dev"
@@ -135,7 +135,7 @@ export type PagesDeployment = Resource<
  *
  * @example Preview deployment from a non-production branch
  * ```typescript
- * const preview = yield* Cloudflare.PagesDeployment("site-preview", {
+ * const preview = yield* Cloudflare.Pages.PagesDeployment("site-preview", {
  *   projectName: project.name,
  *   branch: "feature-x",
  * });

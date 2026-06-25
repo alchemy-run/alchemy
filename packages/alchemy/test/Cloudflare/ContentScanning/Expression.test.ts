@@ -97,16 +97,19 @@ describe.sequential("Expression", () => {
         // on the singleton through its zoneId output.
         const first = yield* stack.deploy(
           Effect.gen(function* () {
-            const scanning = yield* Cloudflare.ContentScanning(
+            const scanning = yield* Cloudflare.ContentScanning.ContentScanning(
               "UploadScanning",
               {
                 zoneId,
               },
             );
-            return yield* Cloudflare.ContentScanningExpression("ScanField", {
-              zoneId: scanning.zoneId,
-              payload: firstPayload,
-            });
+            return yield* Cloudflare.ContentScanning.ContentScanningExpression(
+              "ScanField",
+              {
+                zoneId: scanning.zoneId,
+                payload: firstPayload,
+              },
+            );
           }),
         );
 
@@ -122,16 +125,19 @@ describe.sequential("Expression", () => {
         // endpoint, so a new expression is created and the old one deleted.
         const replaced = yield* stack.deploy(
           Effect.gen(function* () {
-            const scanning = yield* Cloudflare.ContentScanning(
+            const scanning = yield* Cloudflare.ContentScanning.ContentScanning(
               "UploadScanning",
               {
                 zoneId,
               },
             );
-            return yield* Cloudflare.ContentScanningExpression("ScanField", {
-              zoneId: scanning.zoneId,
-              payload: secondPayload,
-            });
+            return yield* Cloudflare.ContentScanning.ContentScanningExpression(
+              "ScanField",
+              {
+                zoneId: scanning.zoneId,
+                payload: secondPayload,
+              },
+            );
           }),
         );
 
@@ -175,7 +181,7 @@ describe.sequential("Expression", () => {
         yield* stack.destroy();
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.ContentScanningExpression,
+          Cloudflare.ContentScanning.ContentScanningExpression,
         );
         const all = yield* provider.list();
 
@@ -206,19 +212,22 @@ describe.sequential("Expression", () => {
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const scanning = yield* Cloudflare.ContentScanning(
+            const scanning = yield* Cloudflare.ContentScanning.ContentScanning(
               "UploadScanning",
               { zoneId },
             );
-            return yield* Cloudflare.ContentScanningExpression("ListField", {
-              zoneId: scanning.zoneId,
-              payload,
-            });
+            return yield* Cloudflare.ContentScanning.ContentScanningExpression(
+              "ListField",
+              {
+                zoneId: scanning.zoneId,
+                payload,
+              },
+            );
           }),
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.ContentScanningExpression,
+          Cloudflare.ContentScanning.ContentScanningExpression,
         );
         const all = yield* provider.list();
 

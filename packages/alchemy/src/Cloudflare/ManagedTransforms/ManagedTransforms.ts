@@ -8,7 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ManagedTransformsTypeId = "Cloudflare.ManagedTransforms" as const;
+const ManagedTransformsTypeId =
+  "Cloudflare.ManagedTransforms.ManagedTransforms" as const;
 type ManagedTransformsTypeId = typeof ManagedTransformsTypeId;
 
 /**
@@ -134,7 +135,7 @@ export type ManagedTransforms = Resource<
  * @section Request transforms
  * @example Add visitor location headers
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   requestHeaders: { add_visitor_location_headers: true },
  * });
@@ -142,7 +143,7 @@ export type ManagedTransforms = Resource<
  *
  * @example Remove visitor IP headers
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   requestHeaders: { remove_visitor_ip_headers: true },
  * });
@@ -151,7 +152,7 @@ export type ManagedTransforms = Resource<
  * @section Response transforms
  * @example Harden responses
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   responseHeaders: {
  *     add_security_headers: true,
@@ -163,7 +164,7 @@ export type ManagedTransforms = Resource<
  * @section Mixed
  * @example Manage request and response transforms together
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   requestHeaders: { add_true_client_ip_headers: true },
  *   responseHeaders: { "remove_x-powered-by_header": false },

@@ -87,7 +87,7 @@ export type VpcServiceAttributes = {
 };
 
 export type VpcService = Resource<
-  "Cloudflare.VpcService",
+  "Cloudflare.VpcService.VpcService",
   VpcServiceProps,
   VpcServiceAttributes,
   never,
@@ -103,8 +103,8 @@ export type VpcService = Resource<
  * @section Creating a VPC Service
  * @example Hostname through a tunnel
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("MyTunnel");
- * const service = yield* Cloudflare.VpcService("Internal", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
+ * const service = yield* Cloudflare.VpcService.VpcService("Internal", {
  *   host: {
  *     hostname: "internal.example.com",
  *     resolverNetwork: { tunnelId: tunnel.tunnelId, resolverIps: ["10.0.0.53"] },
@@ -114,13 +114,15 @@ export type VpcService = Resource<
  *
  * @example IPv4 with explicit ports
  * ```typescript
- * const service = yield* Cloudflare.VpcService("DevServer", {
+ * const service = yield* Cloudflare.VpcService.VpcService("DevServer", {
  *   httpPort: 5173,
  *   host: { ipv4: "192.168.1.100", network: { tunnelId: tunnel.tunnelId } },
  * });
  * ```
  */
-export const VpcService = Resource<VpcService>("Cloudflare.VpcService");
+export const VpcService = Resource<VpcService>(
+  "Cloudflare.VpcService.VpcService",
+);
 
 const createServiceName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

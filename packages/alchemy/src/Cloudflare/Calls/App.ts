@@ -75,12 +75,12 @@ export type CallsApp = Resource<
  * @section Creating an App
  * @example App with a generated name
  * ```typescript
- * const app = yield* Cloudflare.CallsApp("realtime", {});
+ * const app = yield* Cloudflare.Calls.CallsApp("realtime", {});
  * ```
  *
  * @example App with an explicit name
  * ```typescript
- * const app = yield* Cloudflare.CallsApp("realtime", {
+ * const app = yield* Cloudflare.Calls.CallsApp("realtime", {
  *   name: "my-realtime-app",
  * });
  * ```

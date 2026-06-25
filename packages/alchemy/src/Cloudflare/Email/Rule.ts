@@ -9,16 +9,16 @@ import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-export type EmailMatcher =
+export type Matcher =
   | { type: "all" }
   | { type: "literal"; field: "to"; value: string };
 
-export type EmailAction =
+export type Action =
   | { type: "drop" }
   | { type: "forward"; value: string[] }
   | { type: "worker"; value: string[] };
 
-export type EmailRuleProps = {
+export type RuleProps = {
   /**
    * Zone the rule lives on.
    */
@@ -43,24 +43,24 @@ export type EmailRuleProps = {
   /**
    * Matchers that define which inbound emails trigger this rule.
    */
-  matchers: EmailMatcher[];
+  matchers: Matcher[];
   /**
    * Actions to take for matched emails.
    */
-  actions: EmailAction[];
+  actions: Action[];
 };
 
-export type EmailRule = Resource<
-  "Cloudflare.EmailRule",
-  EmailRuleProps,
+export type Rule = Resource<
+  "Cloudflare.Email.Rule",
+  RuleProps,
   {
     ruleId: string;
     zoneId: string;
     name: string;
     enabled: boolean;
     priority: number;
-    matchers: EmailMatcher[];
-    actions: EmailAction[];
+    matchers: Matcher[];
+    actions: Action[];
   },
   never,
   Providers
@@ -77,17 +77,17 @@ export type EmailRule = Resource<
  * @section Forwarding Mail
  * @example Forward `info@` to a verified destination
  * ```typescript
- * const rule = yield* Cloudflare.EmailRule("InfoForward", {
+ * const rule = yield* Cloudflare.Email.Rule("InfoForward", {
  *   zone: "example.com",
  *   matchers: [{ type: "literal", field: "to", value: "info@example.com" }],
  *   actions: [{ type: "forward", value: ["ops@example.com"] }],
  * });
  * ```
  */
-export const EmailRule = Resource<EmailRule>("Cloudflare.EmailRule");
+export const Rule = Resource<Rule>("Cloudflare.Email.Rule");
 
-export const EmailRuleProvider = () =>
-  Provider.succeed(EmailRule, {
+export const RuleProvider = () =>
+  Provider.succeed(Rule, {
     stables: ["ruleId", "zoneId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -104,7 +104,7 @@ export const EmailRuleProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? [])
                   // Cloudflare returns the zone's catch-all rule in this list,
-                  // but it's a managed singleton (owned by `EmailCatchAll`, via
+                  // but it's a managed singleton (owned by `CatchAll`, via
                   // `/rules/catch_all`) and rejects deletion through the regular
                   // rule endpoint ("Invalid rule operation"). Identify it by its
                   // sole `{ type: "all" }` matcher and exclude it.
@@ -200,8 +200,8 @@ export const EmailRuleProvider = () =>
 /**
  * The zone catch-all rule is surfaced by `listRules` but is a managed
  * singleton — its sole matcher is `{ type: "all" }`. It can only be mutated
- * via `/rules/catch_all` (the `EmailCatchAll` resource), so it must be
- * excluded from the deletable `EmailRule` enumeration.
+ * via `/rules/catch_all` (the `CatchAll` resource), so it must be
+ * excluded from the deletable `Rule` enumeration.
  */
 const isCatchAllRule = (rule: {
   matchers?: { type: string }[] | null;
@@ -233,13 +233,13 @@ const normalize = (
   enabled: rule.enabled ?? true,
   priority: rule.priority ?? 0,
   matchers: (rule.matchers ?? []).map(
-    (m): EmailMatcher =>
+    (m): Matcher =>
       m.type === "all"
         ? { type: "all" }
         : { type: "literal", field: "to", value: m.value ?? "" },
   ),
   actions: (rule.actions ?? []).map(
-    (a): EmailAction =>
+    (a): Action =>
       a.type === "drop"
         ? { type: "drop" }
         : a.type === "forward"

@@ -114,7 +114,7 @@ test.provider(
 
       const cert = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("InspectionCa", {
+        Cloudflare.Gateway.GatewayCertificate("InspectionCa", {
           validityPeriodDays: 30,
         }),
       );
@@ -138,7 +138,7 @@ test.provider(
 
       // Deactivate in place — same certificate, new binding status.
       const deactivated = yield* stack.deploy(
-        Cloudflare.GatewayCertificate("InspectionCa", {
+        Cloudflare.Gateway.GatewayCertificate("InspectionCa", {
           validityPeriodDays: 30,
           activate: false,
         }),
@@ -164,7 +164,7 @@ test.provider.skipIf(!runGatewayCertTests)(
       // activation round-trips.
       const first = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("ShortCa", {
+        Cloudflare.Gateway.GatewayCertificate("ShortCa", {
           validityPeriodDays: 30,
           activate: false,
         }),
@@ -178,7 +178,7 @@ test.provider.skipIf(!runGatewayCertTests)(
 
       const second = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("ShortCa", {
+        Cloudflare.Gateway.GatewayCertificate("ShortCa", {
           validityPeriodDays: 60,
           activate: false,
         }),
@@ -209,14 +209,14 @@ test.provider(
 
       const cert = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("ListCa", {
+        Cloudflare.Gateway.GatewayCertificate("ListCa", {
           validityPeriodDays: 30,
           activate: false,
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.GatewayCertificate,
+        Cloudflare.Gateway.GatewayCertificate,
       );
       const all = yield* provider.list();
 

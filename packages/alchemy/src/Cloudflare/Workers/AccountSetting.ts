@@ -78,14 +78,14 @@ export type WorkersAccountSetting = Resource<
  * @section Managing account settings
  * @example Enable Green Compute for scheduled Workers
  * ```typescript
- * yield* Cloudflare.WorkersAccountSetting("GreenCompute", {
+ * yield* Cloudflare.Workers.WorkersAccountSetting("GreenCompute", {
  *   greenCompute: true,
  * });
  * ```
  *
  * @example Pin the default usage model
  * ```typescript
- * yield* Cloudflare.WorkersAccountSetting("UsageModel", {
+ * yield* Cloudflare.Workers.WorkersAccountSetting("UsageModel", {
  *   defaultUsageModel: "standard",
  *   greenCompute: false,
  * });

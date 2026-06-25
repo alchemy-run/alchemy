@@ -58,7 +58,7 @@ export type ContentScanningExpression = Resource<
  * An expression's identity is its `payload` text within the zone: the API
  * offers create/list/delete only (no update), so changing `payload`
  * triggers a replacement. The zone must have Content Scanning enabled (see
- * `Cloudflare.ContentScanning`) — payload calls on a zone where scanning is
+ * `Cloudflare.ContentScanning.ContentScanning`) — payload calls on a zone where scanning is
  * disabled fail with the typed `ContentScanningNotEnabled` error.
  *
  * Safety: expressions carry no ownership markers. When there is no prior
@@ -71,11 +71,11 @@ export type ContentScanningExpression = Resource<
  * @section Creating expressions
  * @example Scan a JSON-embedded file field
  * ```typescript
- * const scanning = yield* Cloudflare.ContentScanning("UploadScanning", {
+ * const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.ContentScanningExpression("ScanJsonFile", {
+ * yield* Cloudflare.ContentScanning.ContentScanningExpression("ScanJsonFile", {
  *   zoneId: scanning.zoneId,
  *   payload: 'lookup_json_string(http.request.body.raw, "file")',
  * });
@@ -83,7 +83,7 @@ export type ContentScanningExpression = Resource<
  *
  * @example Scan a base64-encoded form field
  * ```typescript
- * yield* Cloudflare.ContentScanningExpression("ScanBase64Document", {
+ * yield* Cloudflare.ContentScanning.ContentScanningExpression("ScanBase64Document", {
  *   zoneId: scanning.zoneId,
  *   payload: 'base64_decode(http.request.body.form["document"][0])',
  * });

@@ -104,7 +104,7 @@ export type DlpProfile = Resource<
  * @section Creating a DLP profile
  * @example Profile with a custom regex entry
  * ```typescript
- * const profile = yield* Cloudflare.DlpProfile("EmployeeIds", {
+ * const profile = yield* Cloudflare.Dlp.DlpProfile("EmployeeIds", {
  *   description: "Detects internal employee identifiers",
  *   allowedMatchCount: 0,
  *   entries: [
@@ -119,7 +119,7 @@ export type DlpProfile = Resource<
  *
  * @example Credit-card-like entry with Luhn validation
  * ```typescript
- * const cards = yield* Cloudflare.DlpProfile("Cards", {
+ * const cards = yield* Cloudflare.Dlp.DlpProfile("Cards", {
  *   entries: [
  *     {
  *       name: "card-number",

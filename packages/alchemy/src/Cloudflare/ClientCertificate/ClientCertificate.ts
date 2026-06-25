@@ -11,7 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ClientCertificateTypeId = "Cloudflare.ClientCertificate" as const;
+const ClientCertificateTypeId =
+  "Cloudflare.ClientCertificate.ClientCertificate" as const;
 type ClientCertificateTypeId = typeof ClientCertificateTypeId;
 
 /**
@@ -128,7 +129,7 @@ export type ClientCertificate = Resource<
  * @section Issuing a client certificate
  * @example Sign a CSR with the Cloudflare Managed CA
  * ```typescript
- * const cert = yield* Cloudflare.ClientCertificate("ApiClient", {
+ * const cert = yield* Cloudflare.ClientCertificate.ClientCertificate("ApiClient", {
  *   zoneId: zone.zoneId,
  *   csr: clientCsrPem,
  *   validityDays: 365,
@@ -141,7 +142,7 @@ export type ClientCertificate = Resource<
  * const fs = yield* FileSystem.FileSystem;
  * const csr = yield* fs.readFileString("certs/client.csr");
  *
- * const cert = yield* Cloudflare.ClientCertificate("ApiClient", {
+ * const cert = yield* Cloudflare.ClientCertificate.ClientCertificate("ApiClient", {
  *   zoneId: zone.zoneId,
  *   csr,
  *   validityDays: 90,
@@ -153,7 +154,7 @@ export type ClientCertificate = Resource<
  * ```typescript
  * // csr and validityDays are immutable — changing either replaces the
  * // certificate: a new one is signed and the old one is revoked.
- * const cert = yield* Cloudflare.ClientCertificate("ApiClient", {
+ * const cert = yield* Cloudflare.ClientCertificate.ClientCertificate("ApiClient", {
  *   zoneId: zone.zoneId,
  *   csr: rotatedCsrPem,
  *   validityDays: 365,

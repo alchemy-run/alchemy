@@ -1,10 +1,10 @@
 import * as Layer from "effect/Layer";
 import { makeHttpDnsBinding } from "./DnsBinding.ts";
-import { DnsWrite, dnsWriteClient } from "./DnsWrite.ts";
+import { WriteDns, dnsWriteClient } from "./WriteDns.ts";
 
-/** Runtime layer for {@link DnsWrite}. */
-export const DnsWriteBinding = Layer.effect(
-  DnsWrite,
+/** Runtime layer for {@link WriteDns}. */
+export const WriteDnsBinding = Layer.effect(
+  WriteDns,
   makeHttpDnsBinding({
     permissionGroups: ["DNS Write"],
     makeClient: dnsWriteClient,

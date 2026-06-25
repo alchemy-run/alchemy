@@ -130,7 +130,7 @@ export type TunnelConfiguration = Resource<
  * @section Routing a private hostname through a tunnel
  * @example Map an internal admin UI through a Cloudflare Tunnel to a K8s Service
  * ```typescript
- * yield* Cloudflare.TunnelConfiguration("AdminIngress", {
+ * yield* Cloudflare.Tunnel.TunnelConfiguration("AdminIngress", {
  *   tunnelId: tunnel.tunnelId,
  *   ingress: [
  *     {
@@ -144,7 +144,7 @@ export type TunnelConfiguration = Resource<
  * @section Multiple hostnames + custom catch-all
  * @example Two services on one tunnel, returning 503 for unknown hosts
  * ```typescript
- * yield* Cloudflare.TunnelConfiguration("Ingress", {
+ * yield* Cloudflare.Tunnel.TunnelConfiguration("Ingress", {
  *   tunnelId: tunnel.tunnelId,
  *   ingress: [
  *     { hostname: "ui.internal", service: "http://ui.app.svc.cluster.local:80" },

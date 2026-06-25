@@ -70,10 +70,13 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidationSettings("Settings", {
-            zoneId,
-            validationDefaultMitigationAction: "block",
-          });
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSettings(
+            "Settings",
+            {
+              zoneId,
+              validationDefaultMitigationAction: "block",
+            },
+          );
         }),
       );
 
@@ -91,11 +94,14 @@ test.provider(
       // initial state survives the update.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidationSettings("Settings", {
-            zoneId,
-            validationDefaultMitigationAction: "block",
-            validationOverrideMitigationAction: "none",
-          });
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSettings(
+            "Settings",
+            {
+              zoneId,
+              validationDefaultMitigationAction: "block",
+              validationOverrideMitigationAction: "none",
+            },
+          );
         }),
       );
 
@@ -130,7 +136,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SchemaValidationSettings,
+        Cloudflare.SchemaValidation.SchemaValidationSettings,
       );
       const all = yield* provider.list();
 

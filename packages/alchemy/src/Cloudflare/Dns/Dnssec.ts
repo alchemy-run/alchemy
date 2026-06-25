@@ -167,7 +167,7 @@ export type Dnssec = Resource<
  * @section Enabling DNSSEC
  * @example Sign the zone
  * ```typescript
- * const dnssec = yield* Cloudflare.Dnssec("ZoneDnssec", {
+ * const dnssec = yield* Cloudflare.Dns.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  * });
  * // Paste `dnssec.ds` at your registrar to complete activation.
@@ -175,7 +175,7 @@ export type Dnssec = Resource<
  *
  * @example Multi-signer DNSSEC
  * ```typescript
- * yield* Cloudflare.Dnssec("ZoneDnssec", {
+ * yield* Cloudflare.Dns.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  *   dnssecMultiSigner: true,
  * });
@@ -184,7 +184,7 @@ export type Dnssec = Resource<
  * @section Disabling DNSSEC
  * @example Keep DNSSEC explicitly off
  * ```typescript
- * yield* Cloudflare.Dnssec("ZoneDnssec", {
+ * yield* Cloudflare.Dns.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  *   status: "disabled",
  * });

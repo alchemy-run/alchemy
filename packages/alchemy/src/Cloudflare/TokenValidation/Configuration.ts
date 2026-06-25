@@ -150,7 +150,7 @@ export type TokenConfiguration = Resource<
  * @section Creating a Configuration
  * @example JWT configuration with an RSA key
  * ```typescript
- * const config = yield* Cloudflare.TokenConfiguration("ApiJwt", {
+ * const config = yield* Cloudflare.TokenValidation.TokenConfiguration("ApiJwt", {
  *   zoneId: zone.zoneId,
  *   tokenSources: ['http.request.headers["authorization"][0]'],
  *   keys: [
@@ -170,7 +170,7 @@ export type TokenConfiguration = Resource<
  * ```typescript
  * // Changing `keys` PUTs the full key set to the credentials endpoint —
  * // the configuration (and its UUID) stays in place.
- * const config = yield* Cloudflare.TokenConfiguration("ApiJwt", {
+ * const config = yield* Cloudflare.TokenValidation.TokenConfiguration("ApiJwt", {
  *   zoneId: zone.zoneId,
  *   tokenSources: ['http.request.headers["authorization"][0]'],
  *   keys: [oldKey, newKey],
@@ -180,7 +180,7 @@ export type TokenConfiguration = Resource<
  * @section Enforcing Validation
  * @example Reference the configuration from a rule
  * ```typescript
- * yield* Cloudflare.TokenValidationRule("RequireJwt", {
+ * yield* Cloudflare.TokenValidation.TokenValidationRule("RequireJwt", {
  *   zoneId: zone.zoneId,
  *   action: "block",
  *   expression: Output.interpolate`is_jwt_valid("${config.configId}")`,

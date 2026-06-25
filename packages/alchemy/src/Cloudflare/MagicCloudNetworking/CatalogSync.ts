@@ -115,7 +115,7 @@ export type CatalogSync = Resource<
  * @section Creating a sync
  * @example Sync discovered VPC CIDRs into a Zero Trust list
  * ```typescript
- * const sync = yield* Cloudflare.CatalogSync("VpcCidrs", {
+ * const sync = yield* Cloudflare.MagicCloudNetworking.CatalogSync("VpcCidrs", {
  *   destinationType: "ZERO_TRUST_LIST",
  *   updateMode: "AUTO",
  *   policy: "kind in ('aws_vpc','azurerm_virtual_network','google_compute_network')",
@@ -125,7 +125,7 @@ export type CatalogSync = Resource<
  *
  * @example Manual sync without a destination
  * ```typescript
- * yield* Cloudflare.CatalogSync("DryRun", {
+ * yield* Cloudflare.MagicCloudNetworking.CatalogSync("DryRun", {
  *   destinationType: "NONE",
  *   updateMode: "MANUAL",
  * });
@@ -134,7 +134,7 @@ export type CatalogSync = Resource<
  * @section Destroy behavior
  * @example Keep the destination list on destroy
  * ```typescript
- * yield* Cloudflare.CatalogSync("VpcCidrs", {
+ * yield* Cloudflare.MagicCloudNetworking.CatalogSync("VpcCidrs", {
  *   destinationType: "ZERO_TRUST_LIST",
  *   updateMode: "AUTO",
  *   deleteDestination: false,

@@ -121,9 +121,9 @@ export type AccountResourceTags = Resource<
  * @section Tagging a resource
  * @example Tag a KV namespace
  * ```typescript
- * const kv = yield* Cloudflare.KVNamespace("cache", {});
+ * const kv = yield* Cloudflare.KV.KVNamespace("cache", {});
  *
- * yield* Cloudflare.AccountResourceTags("cache-tags", {
+ * yield* Cloudflare.Tags.AccountResourceTags("cache-tags", {
  *   resourceType: "kv_namespace",
  *   resourceId: kv.namespaceId,
  *   tags: { team: "platform", env: "production" },
@@ -132,7 +132,7 @@ export type AccountResourceTags = Resource<
  *
  * @example Tag the account itself
  * ```typescript
- * yield* Cloudflare.AccountResourceTags("account-tags", {
+ * yield* Cloudflare.Tags.AccountResourceTags("account-tags", {
  *   resourceType: "account",
  *   resourceId: accountId,
  *   tags: { "cost-center": "eng-42" },

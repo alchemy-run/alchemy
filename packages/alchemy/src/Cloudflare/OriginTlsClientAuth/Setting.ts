@@ -71,13 +71,13 @@ export type OriginTlsClientAuthSetting = Resource<
  * @section Enabling Authenticated Origin Pulls
  * @example Enable zone-level AOP
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
  * });
  *
- * yield* Cloudflare.OriginTlsClientAuthSetting("Aop", {
+ * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting("Aop", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -85,7 +85,7 @@ export type OriginTlsClientAuthSetting = Resource<
  *
  * @example Pin AOP off
  * ```typescript
- * yield* Cloudflare.OriginTlsClientAuthSetting("Aop", {
+ * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting("Aop", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

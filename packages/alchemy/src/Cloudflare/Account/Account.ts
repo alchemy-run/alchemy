@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccountTypeId = "Cloudflare.Account" as const;
+const AccountTypeId = "Cloudflare.Account.Account" as const;
 type AccountTypeId = typeof AccountTypeId;
 
 /**
@@ -122,12 +122,12 @@ export type Account = Resource<
  * @section Creating an account
  * @example Standard subaccount with a generated name
  * ```typescript
- * const account = yield* Cloudflare.Account("CustomerAccount", {});
+ * const account = yield* Cloudflare.Account.Account("CustomerAccount", {});
  * ```
  *
  * @example Subaccount on a specific tenant unit
  * ```typescript
- * const account = yield* Cloudflare.Account("CustomerAccount", {
+ * const account = yield* Cloudflare.Account.Account("CustomerAccount", {
  *   name: "Customer: ACME Inc",
  *   unit: { id: tenantUnitId },
  * });
@@ -136,7 +136,7 @@ export type Account = Resource<
  * @section Account settings
  * @example Enforce two-factor authentication for all members
  * ```typescript
- * const account = yield* Cloudflare.Account("CustomerAccount", {
+ * const account = yield* Cloudflare.Account.Account("CustomerAccount", {
  *   name: "Customer: ACME Inc",
  *   enforceTwofactor: true,
  *   abuseContactEmail: "abuse@acme.example",

@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
 const Web3HostnameContentListTypeId =
-  "Cloudflare.Web3HostnameContentList" as const;
+  "Cloudflare.Web3.Web3HostnameContentList" as const;
 type Web3HostnameContentListTypeId = typeof Web3HostnameContentListTypeId;
 
 /**
@@ -102,13 +102,13 @@ export type Web3HostnameContentList = Resource<
  * @section Blocking content
  * @example Block a CID and a content path
  * ```typescript
- * const gateway = yield* Cloudflare.Web3Hostname("UniversalGateway", {
+ * const gateway = yield* Cloudflare.Web3.Web3Hostname("UniversalGateway", {
  *   zoneId: zone.zoneId,
  *   name: "gateway.example.com",
  *   target: "ipfs_universal_path",
  * });
  *
- * yield* Cloudflare.Web3HostnameContentList("Blocklist", {
+ * yield* Cloudflare.Web3.Web3HostnameContentList("Blocklist", {
  *   zoneId: zone.zoneId,
  *   hostnameId: gateway.hostnameId,
  *   entries: [
@@ -128,7 +128,7 @@ export type Web3HostnameContentList = Resource<
  * @example Clear the blocklist
  * ```typescript
  * // An empty entries array removes every block (also what destroy does).
- * yield* Cloudflare.Web3HostnameContentList("Blocklist", {
+ * yield* Cloudflare.Web3.Web3HostnameContentList("Blocklist", {
  *   zoneId: zone.zoneId,
  *   hostnameId: gateway.hostnameId,
  *   entries: [],

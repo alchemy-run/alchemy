@@ -109,7 +109,7 @@ export type PagesDomain = Resource<
  * resolve to the project (typically via a CNAME record pointing at the
  * project's `*.pages.dev` subdomain) before its status becomes `active`.
  * The resource does not wait for activation — compose it with
- * `Cloudflare.DnsRecord` to create the CNAME, and certificate issuance
+ * `Cloudflare.Dns.DnsRecord` to create the CNAME, and certificate issuance
  * completes asynchronously.
  *
  * Both properties are the attachment's identity, so every change triggers a
@@ -120,14 +120,14 @@ export type PagesDomain = Resource<
  * @section Attaching a Domain
  * @example Custom domain with its CNAME record
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {});
+ * const project = yield* Cloudflare.Pages.PagesProject("site", {});
  *
- * const domain = yield* Cloudflare.PagesDomain("site-domain", {
+ * const domain = yield* Cloudflare.Pages.PagesDomain("site-domain", {
  *   projectName: project.name,
  *   name: "www.example.com",
  * });
  *
- * yield* Cloudflare.DnsRecord("site-cname", {
+ * yield* Cloudflare.Dns.DnsRecord("site-cname", {
  *   zoneId: zone.zoneId,
  *   name: "www.example.com",
  *   type: "CNAME",

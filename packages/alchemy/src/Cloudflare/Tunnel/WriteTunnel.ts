@@ -32,14 +32,14 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  * @product Tunnels
  * @category Cloudflare One (Zero Trust)
  *
- * `TunnelWrite` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable — `yield* Cloudflare.TunnelWrite()`.
+ * `WriteTunnel` is a single identifier that is simultaneously the binding's
+ * Context tag, its type, and the callable — `yield* Cloudflare.Tunnel.WriteTunnel()`.
  *
  * @section Mutating tunnels at runtime
  * @example Bind the write client
  * Bind once in the Init phase; every method is available on the returned client.
  * ```typescript
- * const tunnels = yield* Cloudflare.TunnelWrite();
+ * const tunnels = yield* Cloudflare.Tunnel.WriteTunnel();
  * ```
  *
  * @example Create a tunnel
@@ -64,19 +64,19 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  * ```
  *
  * @section Runtime Layer
- * Provide {@link TunnelWriteBinding} in the Worker's runtime layer.
+ * Provide {@link WriteTunnelBinding} in the Worker's runtime layer.
  * ```typescript
- * Effect.provide(Cloudflare.TunnelWriteBinding)
+ * Effect.provide(Cloudflare.Tunnel.WriteTunnelBinding)
  * ```
  */
-export interface TunnelWrite extends Binding.Service<
-  TunnelWrite,
-  "Cloudflare.TunnelWrite",
-  () => Effect.Effect<TunnelWriteClient, never, Worker | CloudflareEnvironment>
+export interface WriteTunnel extends Binding.Service<
+  WriteTunnel,
+  "Cloudflare.Tunnel.WriteTunnel",
+  () => Effect.Effect<WriteTunnelClient, never, Worker | CloudflareEnvironment>
 > {}
 
-export const TunnelWrite = Binding.Service<TunnelWrite>(
-  "Cloudflare.TunnelWrite",
+export const WriteTunnel = Binding.Service<WriteTunnel>(
+  "Cloudflare.Tunnel.WriteTunnel",
 );
 
 /** Create-tunnel request, minus the account id (supplied by the binding). */
@@ -100,7 +100,7 @@ export type TunnelConfigurationBody = NonNullable<
  * Mutating tunnel operations. Backed by the `Cloudflare Tunnel Write`
  * permission group.
  */
-export interface TunnelWriteClient {
+export interface WriteTunnelClient {
   /** Create a new tunnel. */
   create(
     request: CreateTunnelRequest,
@@ -138,7 +138,7 @@ export interface TunnelWriteClient {
 }
 
 /** Build the write client over a bound token. */
-export const writeClient = (token: TunnelToken): TunnelWriteClient => {
+export const writeClient = (token: TunnelToken): WriteTunnelClient => {
   const authorize = authorizeWith(token);
   return {
     create: Effect.fn("Cloudflare.Tunnel.create")(function* (request) {

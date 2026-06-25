@@ -78,7 +78,7 @@ export type SynProtectionFilter = Resource<
  * @section Creating a filter
  * @example Scope SYN mitigation to HTTPS traffic
  * ```typescript
- * const filter = yield* Cloudflare.SynProtectionFilter("HttpsOnly", {
+ * const filter = yield* Cloudflare.DdosProtection.SynProtectionFilter("HttpsOnly", {
  *   expression: "tcp.dstport in {443}",
  *   mode: "enabled",
  * });
@@ -86,7 +86,7 @@ export type SynProtectionFilter = Resource<
  *
  * @example Monitor a port range without mitigating
  * ```typescript
- * yield* Cloudflare.SynProtectionFilter("WatchHighPorts", {
+ * yield* Cloudflare.DdosProtection.SynProtectionFilter("WatchHighPorts", {
  *   expression: "tcp.dstport in {8000..8999}",
  *   mode: "monitoring",
  * });

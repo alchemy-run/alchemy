@@ -119,7 +119,7 @@ export type NotificationPolicy = Resource<
  * @section Creating a policy
  * @example Email notifications for Universal SSL events
  * ```typescript
- * yield* Cloudflare.NotificationPolicy("SslAlerts", {
+ * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   mechanisms: { email: [{ id: "ops@example.com" }] },
  * });
@@ -127,7 +127,7 @@ export type NotificationPolicy = Resource<
  *
  * @example Disabled policy with a description
  * ```typescript
- * yield* Cloudflare.NotificationPolicy("SslAlerts", {
+ * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   enabled: false,
  *   description: "Paused during migration",
@@ -138,11 +138,11 @@ export type NotificationPolicy = Resource<
  * @section Webhook destinations
  * @example Dispatch to a webhook destination
  * ```typescript
- * const webhook = yield* Cloudflare.NotificationWebhook("AlertsHook", {
+ * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   url: "https://alerts.example.com/cf",
  * });
  *
- * yield* Cloudflare.NotificationPolicy("SslAlerts", {
+ * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   mechanisms: { webhooks: [{ id: webhook.webhookId }] },
  * });
@@ -151,7 +151,7 @@ export type NotificationPolicy = Resource<
  * @section Filters
  * @example Health check alerts for specific zones
  * ```typescript
- * yield* Cloudflare.NotificationPolicy("HealthAlerts", {
+ * yield* Cloudflare.Alerting.NotificationPolicy("HealthAlerts", {
  *   alertType: "health_check_status_notification",
  *   mechanisms: { email: [{ id: "ops@example.com" }] },
  *   filters: {

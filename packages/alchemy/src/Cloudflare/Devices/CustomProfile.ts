@@ -213,7 +213,7 @@ export type DeviceCustomProfile = Resource<
  * @section Creating a profile
  * @example Profile for a user group
  * ```typescript
- * const profile = yield* Cloudflare.DeviceCustomProfile("Contractors", {
+ * const profile = yield* Cloudflare.Devices.DeviceCustomProfile("Contractors", {
  *   match: 'identity.groups.name == "contractors"',
  *   precedence: 100,
  *   description: "Locked-down profile for contractors",
@@ -224,7 +224,7 @@ export type DeviceCustomProfile = Resource<
  * @section Split tunneling
  * @example Exclude internal ranges from the tunnel
  * ```typescript
- * yield* Cloudflare.DeviceCustomProfile("Engineering", {
+ * yield* Cloudflare.Devices.DeviceCustomProfile("Engineering", {
  *   match: 'identity.groups.name == "engineering"',
  *   precedence: 50,
  *   exclude: [
@@ -236,7 +236,7 @@ export type DeviceCustomProfile = Resource<
  * @section Fallback domains
  * @example Resolve a private suffix via an on-prem DNS server
  * ```typescript
- * yield* Cloudflare.DeviceCustomProfile("CorpDns", {
+ * yield* Cloudflare.Devices.DeviceCustomProfile("CorpDns", {
  *   match: 'identity.email matches ".*@corp.example.com"',
  *   precedence: 10,
  *   fallbackDomains: [

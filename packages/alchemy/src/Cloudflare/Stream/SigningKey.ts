@@ -65,7 +65,7 @@ export type StreamSigningKey = Resource<
  * @section Creating a signing key
  * @example Signing key for signed playback URLs
  * ```typescript
- * const key = yield* Cloudflare.StreamSigningKey("PlaybackKey", {});
+ * const key = yield* Cloudflare.Stream.StreamSigningKey("PlaybackKey", {});
  *
  * // key.pem / key.jwk are Redacted<string> — use them server-side to
  * // sign playback tokens for videos with requireSignedURLs enabled.

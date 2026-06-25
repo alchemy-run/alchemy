@@ -33,7 +33,7 @@ test(
     const html = yield* res.text;
     expect(html).toContain("TanStack Start Solid");
     expect(html).toContain(
-      "Hello from TanStack Start Solid on Cloudflare.Vite",
+      "Hello from TanStack Start Solid on Cloudflare.Website.Vite",
     );
   }),
   { timeout: 180_000 },

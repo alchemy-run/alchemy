@@ -104,7 +104,7 @@ export type Token = Resource<
  * `cfApiKey`). That API token must carry the "AI Search Index Engine"
  * permission group — Cloudflare validates the credential on create and
  * update and rejects tokens without it. Pair it with
- * `Cloudflare.AccountApiToken` to mint the underlying API token in the
+ * `Cloudflare.ApiToken.AccountApiToken` to mint the underlying API token in the
  * same stack, then reference the service token's `id` from an AI Search
  * instance's `tokenId` prop.
  * @resource
@@ -113,7 +113,7 @@ export type Token = Resource<
  * @section Creating a Token
  * @example Minting the underlying API token in the same stack
  * ```typescript
- * const apiToken = yield* Cloudflare.AccountApiToken("SearchTokenSource", {
+ * const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("SearchTokenSource", {
  *   policies: [
  *     {
  *       effect: "allow",
@@ -122,7 +122,7 @@ export type Token = Resource<
  *     },
  *   ],
  * });
- * const token = yield* Cloudflare.Token("SearchToken", {
+ * const token = yield* Cloudflare.AiSearch.Token("SearchToken", {
  *   cfApiId: apiToken.tokenId,
  *   cfApiKey: apiToken.value,
  * });
@@ -131,7 +131,7 @@ export type Token = Resource<
  * @section Using the Token from an Instance
  * @example Wiring the token into an AI Search instance
  * ```typescript
- * const search = yield* Cloudflare.Instance("Search", {
+ * const search = yield* Cloudflare.AiSearch.Instance("Search", {
  *   source: bucket.bucketName,
  *   tokenId: token.id,
  * });

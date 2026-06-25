@@ -74,14 +74,14 @@ export type AccessCertificate = Resource<
  * @section Creating a Certificate
  * @example Upload a CA certificate
  * ```typescript
- * const ca = yield* Cloudflare.AccessCertificate("ClientCa", {
+ * const ca = yield* Cloudflare.Access.AccessCertificate("ClientCa", {
  *   certificate: CA_PEM, // -----BEGIN CERTIFICATE----- ...
  * });
  * ```
  *
  * @example Certificate with associated hostnames
  * ```typescript
- * const ca = yield* Cloudflare.AccessCertificate("ClientCa", {
+ * const ca = yield* Cloudflare.Access.AccessCertificate("ClientCa", {
  *   name: "corp-client-ca",
  *   certificate: CA_PEM,
  *   associatedHostnames: ["app.example.com"],
@@ -91,7 +91,7 @@ export type AccessCertificate = Resource<
  * @section Updating Hostnames
  * @example Associate more hostnames in place
  * ```typescript
- * const ca = yield* Cloudflare.AccessCertificate("ClientCa", {
+ * const ca = yield* Cloudflare.Access.AccessCertificate("ClientCa", {
  *   certificate: CA_PEM,
  *   associatedHostnames: ["app.example.com", "admin.example.com"],
  * });

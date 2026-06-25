@@ -100,13 +100,19 @@ test.provider(
 
       const makeStack = (branch?: string) =>
         Effect.gen(function* () {
-          const project = yield* Cloudflare.PagesProject("DeployProject", {
-            name: PROJECT_NAME,
-          }).pipe(adopt(true));
-          const deployment = yield* Cloudflare.PagesDeployment("Deployment", {
-            projectName: project.name,
-            ...(branch === undefined ? {} : { branch }),
-          });
+          const project = yield* Cloudflare.Pages.PagesProject(
+            "DeployProject",
+            {
+              name: PROJECT_NAME,
+            },
+          ).pipe(adopt(true));
+          const deployment = yield* Cloudflare.Pages.PagesDeployment(
+            "Deployment",
+            {
+              projectName: project.name,
+              ...(branch === undefined ? {} : { branch }),
+            },
+          );
           return { deployment };
         });
 
@@ -196,11 +202,11 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
       yield* Effect.gen(function* () {
         const deployed = (yield* stack.deploy(
           Effect.gen(function* () {
-            const project = yield* Cloudflare.PagesProject(
+            const project = yield* Cloudflare.Pages.PagesProject(
               "ListDeployProject",
               { name: LIST_PROJECT_NAME },
             ).pipe(adopt(true));
-            const deployment = yield* Cloudflare.PagesDeployment(
+            const deployment = yield* Cloudflare.Pages.PagesDeployment(
               "ListDeployment",
               { projectName: project.name },
             );
@@ -209,7 +215,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
         )).deployment;
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.PagesDeployment,
+          Cloudflare.Pages.PagesDeployment,
         );
         // The deployment fans out across all account projects; ride out edge
         // propagation of the freshly-created project before asserting presence.

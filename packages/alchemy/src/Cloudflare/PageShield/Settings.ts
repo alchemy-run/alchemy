@@ -111,16 +111,16 @@ export type PageShieldSettings = Resource<
  * @section Managing Page Shield
  * @example Enable Page Shield on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Analyze connection URL paths too
  * ```typescript
- * yield* Cloudflare.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
  *   zoneId: zone.zoneId,
  *   useConnectionUrlPath: true,
  * });
@@ -128,7 +128,7 @@ export type PageShieldSettings = Resource<
  *
  * @example Report CSP violations to the zone instead of Cloudflare
  * ```typescript
- * yield* Cloudflare.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
  *   zoneId: zone.zoneId,
  *   useCloudflareReportingEndpoint: false,
  * });

@@ -68,11 +68,11 @@ test(
 /**
  * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
  *
- * `NotifyWorkflow` accesses `Cloudflare.WorkerEnvironment` inside its body and
+ * `NotifyWorkflow` accesses `Cloudflare.Workers.WorkerEnvironment` inside its body and
  * performs a KV roundtrip via `env.KV.put` / `env.KV.get`. If the fix from #71
  * is ever reverted, the body Effect loses the `WorkerEnvironment` service and
  * dies with `Service not found: Cloudflare.Workers.WorkerEnvironment` on the
- * first `yield* Cloudflare.WorkerEnvironment` — the workflow instance never
+ * first `yield* Cloudflare.Workers.WorkerEnvironment` — the workflow instance never
  * reaches `complete`, and this test times out or surfaces the `errored` status.
  */
 test(
@@ -142,7 +142,7 @@ test(
 
 /**
  * Queue producer→consumer round-trip via the Effect-style
- * `Cloudflare.messages(Queue).subscribe(...)` API.
+ * `Cloudflare.Queue.messages(Queue).subscribe(...)` API.
  *
  * Producer: `POST /queue/send` returns `{ sent: { id, text, sentAt } }`
  * after enqueuing a message.

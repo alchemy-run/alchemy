@@ -113,7 +113,7 @@ export type EmailSecurityAllowPolicy = Resource<
  * @section Creating an Allow Policy
  * @example Acceptable sender by email address
  * ```typescript
- * yield* Cloudflare.EmailSecurityAllowPolicy("NewsletterSender", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy("NewsletterSender", {
  *   pattern: "news@partner.example.com",
  *   patternType: "EMAIL",
  *   isAcceptableSender: true,
@@ -122,7 +122,7 @@ export type EmailSecurityAllowPolicy = Resource<
  *
  * @example Trusted sender domain (bypasses all detections)
  * ```typescript
- * yield* Cloudflare.EmailSecurityAllowPolicy("TrustedPartner", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy("TrustedPartner", {
  *   pattern: "partner.example.com",
  *   patternType: "DOMAIN",
  *   isTrustedSender: true,
@@ -133,7 +133,7 @@ export type EmailSecurityAllowPolicy = Resource<
  * @example Exempt recipient
  * ```typescript
  * // Messages delivered to the abuse mailbox must never be filtered.
- * yield* Cloudflare.EmailSecurityAllowPolicy("AbuseMailbox", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy("AbuseMailbox", {
  *   pattern: "abuse@example.com",
  *   patternType: "EMAIL",
  *   isExemptRecipient: true,

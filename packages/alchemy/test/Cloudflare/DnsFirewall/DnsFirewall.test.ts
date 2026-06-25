@@ -90,7 +90,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const cluster = yield* stack.deploy(
-        Cloudflare.DnsFirewall("TestCluster", {
+        Cloudflare.DnsFirewall.DnsFirewall("TestCluster", {
           name: "alchemy-dnsfw-lifecycle",
           upstreamIps: ["192.0.2.1"],
         }),
@@ -127,7 +127,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.DnsFirewall("UpdateCluster", {
+        Cloudflare.DnsFirewall.DnsFirewall("UpdateCluster", {
           name: "alchemy-dnsfw-update",
           upstreamIps: ["192.0.2.1"],
         }),
@@ -135,7 +135,7 @@ test.provider.skipIf(!entitled)(
 
       // In-place update: settings + an extra upstream IP, same id.
       const updated = yield* stack.deploy(
-        Cloudflare.DnsFirewall("UpdateCluster", {
+        Cloudflare.DnsFirewall.DnsFirewall("UpdateCluster", {
           name: "alchemy-dnsfw-update",
           upstreamIps: ["192.0.2.1", "192.0.2.2"],
           ratelimit: 600,
@@ -158,7 +158,7 @@ test.provider.skipIf(!entitled)(
 
       // No-op redeploy keeps the same cluster.
       const noop = yield* stack.deploy(
-        Cloudflare.DnsFirewall("UpdateCluster", {
+        Cloudflare.DnsFirewall.DnsFirewall("UpdateCluster", {
           name: "alchemy-dnsfw-update",
           upstreamIps: ["192.0.2.1", "192.0.2.2"],
           ratelimit: 600,
@@ -171,7 +171,7 @@ test.provider.skipIf(!entitled)(
       // Rename — the name is the cold-state recovery identity, so a new
       // cluster replaces the old one.
       const renamed = yield* stack.deploy(
-        Cloudflare.DnsFirewall("UpdateCluster", {
+        Cloudflare.DnsFirewall.DnsFirewall("UpdateCluster", {
           name: "alchemy-dnsfw-update-v2",
           upstreamIps: ["192.0.2.1", "192.0.2.2"],
           ratelimit: 600,
@@ -203,7 +203,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.DnsFirewall);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.DnsFirewall.DnsFirewall,
+      );
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
 
@@ -220,13 +222,15 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.DnsFirewall("ListCluster", {
+        Cloudflare.DnsFirewall.DnsFirewall("ListCluster", {
           name: "alchemy-dnsfw-list",
           upstreamIps: ["192.0.2.1"],
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.DnsFirewall);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.DnsFirewall.DnsFirewall,
+      );
       const all = yield* provider.list();
 
       const found = all.find((c) => c.dnsFirewallId === deployed.dnsFirewallId);

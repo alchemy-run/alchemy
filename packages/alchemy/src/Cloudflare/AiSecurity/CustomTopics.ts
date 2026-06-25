@@ -83,7 +83,7 @@ export type AiSecurityCustomTopics = Resource<
  * @section Managing custom topics
  * @example Classify traffic into two custom topics
  * ```typescript
- * const topics = yield* Cloudflare.AiSecurityCustomTopics("Topics", {
+ * const topics = yield* Cloudflare.AiSecurity.AiSecurityCustomTopics("Topics", {
  *   zoneId: zone.zoneId,
  *   topics: [
  *     { label: "billing", topic: "Questions about invoices and payments" },
@@ -94,7 +94,7 @@ export type AiSecurityCustomTopics = Resource<
  *
  * @example Clear all custom topics
  * ```typescript
- * yield* Cloudflare.AiSecurityCustomTopics("Topics", {
+ * yield* Cloudflare.AiSecurity.AiSecurityCustomTopics("Topics", {
  *   zoneId: zone.zoneId,
  *   topics: [],
  * });

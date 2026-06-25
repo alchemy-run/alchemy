@@ -10,7 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CustomNameserverTypeId = "Cloudflare.CustomNameserver" as const;
+const CustomNameserverTypeId =
+  "Cloudflare.CustomNameserver.CustomNameserver" as const;
 type CustomNameserverTypeId = typeof CustomNameserverTypeId;
 
 /**
@@ -114,7 +115,7 @@ export type CustomNameserver = Resource<
  * @section Creating a custom nameserver
  * @example Vanity nameserver on the default set
  * ```typescript
- * const ns1 = yield* Cloudflare.CustomNameserver("Ns1", {
+ * const ns1 = yield* Cloudflare.CustomNameserver.CustomNameserver("Ns1", {
  *   nsName: "ns1.yourbrand.com",
  * });
  *
@@ -124,7 +125,7 @@ export type CustomNameserver = Resource<
  *
  * @example Nameserver on a specific set
  * ```typescript
- * yield* Cloudflare.CustomNameserver("Ns2", {
+ * yield* Cloudflare.CustomNameserver.CustomNameserver("Ns2", {
  *   nsName: "ns2.yourbrand.com",
  *   nsSet: 2,
  * });

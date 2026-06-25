@@ -70,7 +70,7 @@ export type TunnelWarpConnector = Resource<
  * @section Creating a WARP Connector
  * @example Basic WARP Connector tunnel
  * ```typescript
- * const connector = yield* Cloudflare.TunnelWarpConnector("SiteA", {
+ * const connector = yield* Cloudflare.Tunnel.TunnelWarpConnector("SiteA", {
  *   name: "site-a-connector",
  * });
  * // Provision the host with: warp-cli connector new <Redacted.value(connector.token)>
@@ -78,7 +78,7 @@ export type TunnelWarpConnector = Resource<
  *
  * @example Route a private network through the connector
  * ```typescript
- * yield* Cloudflare.TunnelRoute("SiteANet", {
+ * yield* Cloudflare.Tunnel.TunnelRoute("SiteANet", {
  *   tunnelId: connector.tunnelId,
  *   network: "10.8.0.0/16",
  * });
@@ -88,7 +88,7 @@ export type TunnelWarpConnector = Resource<
  * @example Rename in place
  * ```typescript
  * // Renaming patches the existing tunnel — same tunnelId, no replacement.
- * const connector = yield* Cloudflare.TunnelWarpConnector("SiteA", {
+ * const connector = yield* Cloudflare.Tunnel.TunnelWarpConnector("SiteA", {
  *   name: "site-a-connector-v2",
  * });
  * ```

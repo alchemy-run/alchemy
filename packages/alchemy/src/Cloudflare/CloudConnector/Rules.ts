@@ -125,7 +125,7 @@ export type CloudConnectorRules = Resource<
  * @section Routing to object storage
  * @example Serve a path prefix from an S3 bucket
  * ```typescript
- * yield* Cloudflare.CloudConnectorRules("Rules", {
+ * yield* Cloudflare.CloudConnector.CloudConnectorRules("Rules", {
  *   zoneId: zone.zoneId,
  *   rules: [
  *     {
@@ -140,9 +140,9 @@ export type CloudConnectorRules = Resource<
  *
  * @example Serve static assets from an R2 bucket
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("Assets", {});
+ * const bucket = yield* Cloudflare.R2.R2Bucket("Assets", {});
  *
- * yield* Cloudflare.CloudConnectorRules("Rules", {
+ * yield* Cloudflare.CloudConnector.CloudConnectorRules("Rules", {
  *   zoneId: zone.zoneId,
  *   rules: [
  *     {

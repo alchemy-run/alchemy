@@ -85,7 +85,7 @@ export type DdosAllowlistEntry = Resource<
  * @section Creating an allowlist entry
  * @example Allowlist a trusted prefix
  * ```typescript
- * const entry = yield* Cloudflare.DdosAllowlistEntry("OfficeEgress", {
+ * const entry = yield* Cloudflare.DdosProtection.DdosAllowlistEntry("OfficeEgress", {
  *   prefix: "192.0.2.0/24",
  *   enabled: true,
  * });
@@ -94,7 +94,7 @@ export type DdosAllowlistEntry = Resource<
  * @example Staged entry with an explicit comment
  * ```typescript
  * // `enabled: false` keeps the entry inert until you flip it on.
- * yield* Cloudflare.DdosAllowlistEntry("PartnerRange", {
+ * yield* Cloudflare.DdosProtection.DdosAllowlistEntry("PartnerRange", {
  *   prefix: "198.51.100.0/24",
  *   comment: "partner NAT range — enable during migration",
  *   enabled: false,

@@ -12,7 +12,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LoadBalancerTypeId = "Cloudflare.LoadBalancer" as const;
+const LoadBalancerTypeId = "Cloudflare.LoadBalancer.LoadBalancer" as const;
 type LoadBalancerTypeId = typeof LoadBalancerTypeId;
 
 /**
@@ -202,7 +202,7 @@ export type LoadBalancer = Resource<
  * @section Creating a Load Balancer
  * @example DNS-only (unproxied) load balancer
  * ```typescript
- * const lb = yield* Cloudflare.LoadBalancer("ApiLb", {
+ * const lb = yield* Cloudflare.LoadBalancer.LoadBalancer("ApiLb", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   defaultPools: [pool.poolId],
@@ -214,7 +214,7 @@ export type LoadBalancer = Resource<
  *
  * @example Proxied load balancer with steering and affinity
  * ```typescript
- * const lb = yield* Cloudflare.LoadBalancer("AppLb", {
+ * const lb = yield* Cloudflare.LoadBalancer.LoadBalancer("AppLb", {
  *   zoneId: zone.zoneId,
  *   name: "app.example.com",
  *   defaultPools: [primary.poolId, secondary.poolId],
@@ -228,7 +228,7 @@ export type LoadBalancer = Resource<
  * @section Geo steering
  * @example Region pools
  * ```typescript
- * yield* Cloudflare.LoadBalancer("GeoLb", {
+ * yield* Cloudflare.LoadBalancer.LoadBalancer("GeoLb", {
  *   zoneId: zone.zoneId,
  *   name: "geo.example.com",
  *   defaultPools: [us.poolId],

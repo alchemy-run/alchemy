@@ -108,12 +108,12 @@ export type IamUserGroup = Resource<
  * @section Creating a User Group
  * @example Empty group
  * ```typescript
- * const group = yield* Cloudflare.IamUserGroup("Operators", {});
+ * const group = yield* Cloudflare.Iam.IamUserGroup("Operators", {});
  * ```
  *
  * @example Group with a policy
  * ```typescript
- * const readers = yield* Cloudflare.IamUserGroup("Readers", {
+ * const readers = yield* Cloudflare.Iam.IamUserGroup("Readers", {
  *   name: "zone-readers",
  *   policies: [
  *     {
@@ -128,7 +128,7 @@ export type IamUserGroup = Resource<
  * @section Managing Members
  * @example Add an account member to the group
  * ```typescript
- * yield* Cloudflare.IamUserGroupMembership("SamInReaders", {
+ * yield* Cloudflare.Iam.IamUserGroupMembership("SamInReaders", {
  *   userGroup: readers.userGroupId,
  *   memberId: accountMember.memberId,
  * });

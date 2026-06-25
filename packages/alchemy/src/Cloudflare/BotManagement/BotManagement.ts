@@ -8,7 +8,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const BotManagementTypeId = "Cloudflare.BotManagement" as const;
+const BotManagementTypeId = "Cloudflare.BotManagement.BotManagement" as const;
 type BotManagementTypeId = typeof BotManagementTypeId;
 
 /**
@@ -184,7 +184,7 @@ export type BotManagement = Resource<
  * @section Super Bot Fight Mode
  * @example Challenge definitely automated traffic (Pro and above)
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   sbfmDefinitelyAutomated: "managed_challenge",
  *   sbfmVerifiedBots: "allow",
@@ -193,7 +193,7 @@ export type BotManagement = Resource<
  *
  * @example Static resource protection and WordPress optimization
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   sbfmDefinitelyAutomated: "block",
  *   sbfmStaticResourceProtection: true,
@@ -204,7 +204,7 @@ export type BotManagement = Resource<
  * @section AI bot protection
  * @example Block AI scrapers and crawlers
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   aiBotsProtection: "block",
  *   crawlerProtection: "enabled",
@@ -214,7 +214,7 @@ export type BotManagement = Resource<
  * @section Bot Fight Mode (Free plans)
  * @example Enable Bot Fight Mode
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   fightMode: true,
  * });

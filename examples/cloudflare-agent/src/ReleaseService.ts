@@ -37,5 +37,5 @@ export default Cloudflare.Worker(
         return HttpServerResponse.text("Hello, world!");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.GitHubRepositoryEventSourceLive)),
+  }).pipe(Effect.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive)),
 );

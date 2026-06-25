@@ -67,7 +67,7 @@ export type AddressingPrefixDelegation = Resource<
  * @section Delegating a Prefix
  * @example Delegate a /26 to another account
  * ```typescript
- * const delegation = yield* Cloudflare.AddressingPrefixDelegation("share", {
+ * const delegation = yield* Cloudflare.Addressing.AddressingPrefixDelegation("share", {
  *   prefixId: prefix.prefixId,
  *   cidr: "192.0.2.0/26",
  *   delegatedAccountId: "023e105f4ecef8ad9ca31a8372d0c353",

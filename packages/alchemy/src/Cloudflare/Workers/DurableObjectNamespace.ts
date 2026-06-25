@@ -15,7 +15,7 @@ import type { MainRpc, PlatformServices } from "../../Platform.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
-import type { Container } from "../Container/Container.ts";
+import type { Container } from "../Containers/Container.ts";
 import {
   DurableObjectState,
   fromDurableObjectState,
@@ -524,7 +524,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * @section WebSocket Hibernation
  * Durable Objects support WebSocket hibernation — the runtime can
  * evict the object from memory while keeping connections open. Use
- * `Cloudflare.upgrade()` to accept a connection, and return
+ * `Cloudflare.Workers.upgrade()` to accept a connection, and return
  * `webSocketMessage` / `webSocketClose` handlers to process events
  * when the object wakes back up.
  *
@@ -532,7 +532,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * ```typescript
  * return {
  *   fetch: Effect.gen(function* () {
- *     const [response, socket] = yield* Cloudflare.upgrade();
+ *     const [response, socket] = yield* Cloudflare.Workers.upgrade();
  *     socket.serializeAttachment({ id: crypto.randomUUID() });
  *     return response;
  *   }),
@@ -543,7 +543,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * ```typescript
  * return {
  *   webSocketMessage: Effect.fn(function* (
- *     socket: Cloudflare.DurableWebSocket,
+ *     socket: Cloudflare.Workers.DurableWebSocket,
  *     message: string | Uint8Array,
  *   ) {
  *     const text = typeof message === "string"
@@ -552,7 +552,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *     // process the message
  *   }),
  *   webSocketClose: Effect.fn(function* (
- *     ws: Cloudflare.DurableWebSocket,
+ *     ws: Cloudflare.Workers.DurableWebSocket,
  *     code: number,
  *     reason: string,
  *   ) {
@@ -573,7 +573,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *   const state = yield* Cloudflare.DurableObjectState;
  *
  *   return Effect.gen(function* () {
- *     const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+ *     const sessions = new Map<string, Cloudflare.Workers.DurableWebSocket>();
  *
  *     // Rehydrate the in-memory session map after hibernation.
  *     for (const socket of yield* state.getWebSockets()) {
@@ -583,7 +583,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const [response, socket] = yield* Cloudflare.upgrade();
+ *         const [response, socket] = yield* Cloudflare.Workers.upgrade();
  *         const id = crypto.randomUUID();
  *         socket.serializeAttachment({ id });
  *         sessions.set(id, socket);
@@ -604,14 +604,14 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * @section Scheduled Alarms
  * Each Durable Object can have a single alarm timestamp. Alchemy
  * layers a small SQLite-backed scheduler on top via
- * `Cloudflare.scheduleEvent` and `Cloudflare.processScheduledEvents`,
+ * `Cloudflare.Workers.scheduleEvent` and `Cloudflare.Workers.processScheduledEvents`,
  * so you can register many named events with arbitrary payloads and
  * fire them from a single `alarm` handler.
  *
  * @example Scheduling and processing events
  * ```typescript
  * // schedule from a request or message handler
- * yield* Cloudflare.scheduleEvent(
+ * yield* Cloudflare.Workers.scheduleEvent(
  *   "reminder-1",
  *   new Date(Date.now() + 60_000),
  *   { message: "your meeting starts in a minute" },
@@ -620,7 +620,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * return {
  *   alarm: () =>
  *     Effect.gen(function* () {
- *       const fired = yield* Cloudflare.processScheduledEvents;
+ *       const fired = yield* Cloudflare.Workers.processScheduledEvents;
  *       for (const event of fired) {
  *         const payload = event.payload as { message: string };
  *         // dispatch / broadcast / persist...

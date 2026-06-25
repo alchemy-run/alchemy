@@ -66,8 +66,8 @@ export type TunnelHostnameRoute = Resource<
  * @section Creating a hostname route
  * @example Route an internal hostname through a tunnel
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("MyTunnel");
- * const route = yield* Cloudflare.TunnelHostnameRoute("AppRoute", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
+ * const route = yield* Cloudflare.Tunnel.TunnelHostnameRoute("AppRoute", {
  *   hostname: "app.internal.example.com",
  *   tunnelId: tunnel.tunnelId,
  * });
@@ -75,7 +75,7 @@ export type TunnelHostnameRoute = Resource<
  *
  * @example Add a comment
  * ```typescript
- * const route = yield* Cloudflare.TunnelHostnameRoute("AppRoute", {
+ * const route = yield* Cloudflare.Tunnel.TunnelHostnameRoute("AppRoute", {
  *   hostname: "app.internal.example.com",
  *   tunnelId: tunnel.tunnelId,
  *   comment: "Internal wiki behind the datacenter tunnel",

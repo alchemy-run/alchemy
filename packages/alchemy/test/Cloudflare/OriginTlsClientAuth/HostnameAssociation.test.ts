@@ -131,30 +131,35 @@ const program = (opts: {
   enabled: boolean;
 }) =>
   Effect.gen(function* () {
-    const cert5 = yield* Cloudflare.OriginTlsClientAuthHostnameCertificate(
-      "AssocCert5",
-      {
-        zoneId: opts.zoneId,
-        certificate: CERT_5,
-        privateKey: Redacted.make(KEY_5),
-      },
-    );
-    const cert6 = yield* Cloudflare.OriginTlsClientAuthHostnameCertificate(
-      "AssocCert6",
-      {
-        zoneId: opts.zoneId,
-        certificate: CERT_6,
-        privateKey: Redacted.make(KEY_6),
-      },
-    );
+    const cert5 =
+      yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameCertificate(
+        "AssocCert5",
+        {
+          zoneId: opts.zoneId,
+          certificate: CERT_5,
+          privateKey: Redacted.make(KEY_5),
+        },
+      );
+    const cert6 =
+      yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameCertificate(
+        "AssocCert6",
+        {
+          zoneId: opts.zoneId,
+          certificate: CERT_6,
+          privateKey: Redacted.make(KEY_6),
+        },
+      );
     const pinned = opts.cert === "6" ? cert6 : cert5;
     const association =
-      yield* Cloudflare.OriginTlsClientAuthHostnameAssociation("AopHost", {
-        zoneId: opts.zoneId,
-        hostname: opts.hostname,
-        certId: pinned.certificateId,
-        enabled: opts.enabled,
-      });
+      yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameAssociation(
+        "AopHost",
+        {
+          zoneId: opts.zoneId,
+          hostname: opts.hostname,
+          certId: pinned.certificateId,
+          enabled: opts.enabled,
+        },
+      );
     return { cert5, cert6, association };
   });
 
@@ -168,7 +173,7 @@ describe.skipIf(!!process.env.FAST)("HostnameAssociation", () => {
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.OriginTlsClientAuthHostnameAssociation,
+        Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameAssociation,
       );
       const all = yield* provider.list();
       expect(all).toEqual([]);

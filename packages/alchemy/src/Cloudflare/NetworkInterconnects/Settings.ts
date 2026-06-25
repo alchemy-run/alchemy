@@ -63,14 +63,14 @@ export type NetworkInterconnectSettings = Resource<
  * @section Managing the default ASN
  * @example Pin the account's default ASN
  * ```typescript
- * yield* Cloudflare.NetworkInterconnectSettings("CniSettings", {
+ * yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings("CniSettings", {
  *   defaultAsn: 65000,
  * });
  * ```
  *
  * @example Use a private 32-bit ASN
  * ```typescript
- * yield* Cloudflare.NetworkInterconnectSettings("CniSettings", {
+ * yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings("CniSettings", {
  *   defaultAsn: 4200000001,
  * });
  * ```

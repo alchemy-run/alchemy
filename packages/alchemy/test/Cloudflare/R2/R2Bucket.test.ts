@@ -20,13 +20,13 @@ test.provider(
 
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("ListResource", {
+          return yield* Cloudflare.R2.R2Bucket("ListResource", {
             name: "alchemy-r2bucket-list-test",
           });
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.R2Bucket);
+      const provider = yield* Provider.findProvider(Cloudflare.R2.R2Bucket);
       const all = yield* provider.list();
 
       const found = all.find((b) => b.bucketName === bucket.bucketName);

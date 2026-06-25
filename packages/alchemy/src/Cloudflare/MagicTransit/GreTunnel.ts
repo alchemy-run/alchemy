@@ -172,7 +172,7 @@ export type GreTunnel = Resource<
  * @section Creating a GRE tunnel
  * @example Basic tunnel
  * ```typescript
- * const tunnel = yield* Cloudflare.GreTunnel("office", {
+ * const tunnel = yield* Cloudflare.MagicTransit.GreTunnel("office", {
  *   name: "office-gre-1",
  *   cloudflareGreEndpoint: "203.0.113.1",
  *   customerGreEndpoint: "198.51.100.1",
@@ -182,7 +182,7 @@ export type GreTunnel = Resource<
  *
  * @example Tunnel with health checks and MTU
  * ```typescript
- * const tunnel = yield* Cloudflare.GreTunnel("office", {
+ * const tunnel = yield* Cloudflare.MagicTransit.GreTunnel("office", {
  *   name: "office-gre-1",
  *   cloudflareGreEndpoint: "203.0.113.1",
  *   customerGreEndpoint: "198.51.100.1",
@@ -196,7 +196,7 @@ export type GreTunnel = Resource<
  * @section Routing traffic over the tunnel
  * @example Static route via the tunnel interface
  * ```typescript
- * yield* Cloudflare.MagicStaticRoute("office-route", {
+ * yield* Cloudflare.MagicTransit.MagicStaticRoute("office-route", {
  *   prefix: "10.100.0.0/24",
  *   nexthop: "10.213.0.9",
  *   priority: 100,

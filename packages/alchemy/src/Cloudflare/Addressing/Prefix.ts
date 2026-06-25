@@ -94,7 +94,7 @@ export type AddressingPrefix = Resource<
  * @section Creating a Prefix
  * @example Onboard a prefix with a pre-uploaded LOA
  * ```typescript
- * const prefix = yield* Cloudflare.AddressingPrefix("byoip", {
+ * const prefix = yield* Cloudflare.Addressing.AddressingPrefix("byoip", {
  *   cidr: "192.0.2.0/24",
  *   asn: 64496,
  *   description: "production ingress",
@@ -104,7 +104,7 @@ export type AddressingPrefix = Resource<
  *
  * @example Delegate LOA creation to Cloudflare
  * ```typescript
- * const prefix = yield* Cloudflare.AddressingPrefix("byoip", {
+ * const prefix = yield* Cloudflare.Addressing.AddressingPrefix("byoip", {
  *   cidr: "192.0.2.0/24",
  *   asn: 64496,
  *   delegateLoaCreation: true,
@@ -114,7 +114,7 @@ export type AddressingPrefix = Resource<
  * @section Advertising the Prefix
  * @example Advertise via a BGP prefix
  * ```typescript
- * const bgp = yield* Cloudflare.AddressingBgpPrefix("advertise", {
+ * const bgp = yield* Cloudflare.Addressing.AddressingBgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
  *   cidr: prefix.cidr,
  *   advertised: true,

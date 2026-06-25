@@ -11,7 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DnsFirewallTypeId = "Cloudflare.DnsFirewall" as const;
+const DnsFirewallTypeId = "Cloudflare.DnsFirewall.DnsFirewall" as const;
 type DnsFirewallTypeId = typeof DnsFirewallTypeId;
 
 /**
@@ -202,7 +202,7 @@ export type DnsFirewall = Resource<
  * @section Creating a Cluster
  * @example Basic cluster
  * ```typescript
- * const cluster = yield* Cloudflare.DnsFirewall("dns-shield", {
+ * const cluster = yield* Cloudflare.DnsFirewall.DnsFirewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1", "192.0.2.2"],
  * });
  * // Point NS glue records at the assigned anycast IPs:
@@ -211,7 +211,7 @@ export type DnsFirewall = Resource<
  *
  * @example Tuned caching and attack mitigation
  * ```typescript
- * const cluster = yield* Cloudflare.DnsFirewall("dns-shield", {
+ * const cluster = yield* Cloudflare.DnsFirewall.DnsFirewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1"],
  *   minimumCacheTtl: 120,
  *   maximumCacheTtl: 3600,
@@ -228,7 +228,7 @@ export type DnsFirewall = Resource<
  * @section Reverse DNS
  * @example Managing PTR records for cluster IPs
  * ```typescript
- * const cluster = yield* Cloudflare.DnsFirewall("dns-shield", {
+ * const cluster = yield* Cloudflare.DnsFirewall.DnsFirewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1"],
  *   reverseDns: {
  *     "203.0.113.1": "ns1.example.com",

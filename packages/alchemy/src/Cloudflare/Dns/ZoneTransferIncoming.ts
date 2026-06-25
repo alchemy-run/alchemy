@@ -87,11 +87,11 @@ export type ZoneTransferIncoming = Resource<
  * @section Configuring incoming transfers
  * @example Transfer a secondary zone in from a primary
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.Dns.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  * });
- * yield* Cloudflare.ZoneTransferIncoming("Incoming", {
+ * yield* Cloudflare.Dns.ZoneTransferIncoming("Incoming", {
  *   zoneId: zone.zoneId,
  *   name: "example.com.",
  *   peers: [peer.peerId],

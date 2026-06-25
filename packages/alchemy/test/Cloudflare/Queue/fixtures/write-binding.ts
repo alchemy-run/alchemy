@@ -11,7 +11,7 @@ export default class QueueWriteBindingWorker extends Cloudflare.Worker<QueueWrit
   { main: import.meta.filename },
   Effect.gen(function* () {
     const queue = yield* TestQueue;
-    const producer = yield* Cloudflare.Queues.WriteQueue(queue);
+    const producer = yield* Cloudflare.Queue.WriteQueue(queue);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -20,5 +20,5 @@ export default class QueueWriteBindingWorker extends Cloudflare.Worker<QueueWrit
         return handled ?? HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Queues.WriteQueueBinding)),
+  }).pipe(Effect.provide(Cloudflare.Queue.WriteQueueBinding)),
 ) {}

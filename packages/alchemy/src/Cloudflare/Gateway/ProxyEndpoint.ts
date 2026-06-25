@@ -96,7 +96,7 @@ export type GatewayProxyEndpoint = Resource<
  * @section Creating a Proxy Endpoint
  * @example Identity-based endpoint (all plans)
  * ```typescript
- * const proxy = yield* Cloudflare.GatewayProxyEndpoint("UserProxy", {
+ * const proxy = yield* Cloudflare.Gateway.GatewayProxyEndpoint("UserProxy", {
  *   kind: "identity",
  * });
  * // PAC file target:
@@ -105,7 +105,7 @@ export type GatewayProxyEndpoint = Resource<
  *
  * @example IP allowlist endpoint (Enterprise)
  * ```typescript
- * const proxy = yield* Cloudflare.GatewayProxyEndpoint("OfficeProxy", {
+ * const proxy = yield* Cloudflare.Gateway.GatewayProxyEndpoint("OfficeProxy", {
  *   kind: "ip",
  *   ips: ["203.0.113.1/32"],
  * });

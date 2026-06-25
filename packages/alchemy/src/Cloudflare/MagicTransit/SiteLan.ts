@@ -159,7 +159,7 @@ export type MagicSiteLan = Resource<
  * @section Creating a LAN
  * @example Untagged LAN with DHCP
  * ```typescript
- * const lan = yield* Cloudflare.MagicSiteLan("hq-lan", {
+ * const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("hq-lan", {
  *   siteId: site.siteId,
  *   physport: 2,
  *   vlanTag: 0,
@@ -168,7 +168,7 @@ export type MagicSiteLan = Resource<
  *
  * @example LAN with static addressing and a routed subnet
  * ```typescript
- * const lan = yield* Cloudflare.MagicSiteLan("hq-lan", {
+ * const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("hq-lan", {
  *   siteId: site.siteId,
  *   physport: 2,
  *   vlanTag: 10,

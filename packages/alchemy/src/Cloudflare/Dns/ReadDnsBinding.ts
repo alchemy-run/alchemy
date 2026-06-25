@@ -1,10 +1,10 @@
 import * as Layer from "effect/Layer";
 import { makeHttpDnsBinding } from "./DnsBinding.ts";
-import { DnsRead, dnsReadClient } from "./DnsRead.ts";
+import { ReadDns, dnsReadClient } from "./ReadDns.ts";
 
-/** Runtime layer for {@link DnsRead}. */
-export const DnsReadBinding = Layer.effect(
-  DnsRead,
+/** Runtime layer for {@link ReadDns}. */
+export const ReadDnsBinding = Layer.effect(
+  ReadDns,
   makeHttpDnsBinding({
     permissionGroups: ["DNS Read"],
     makeClient: dnsReadClient,

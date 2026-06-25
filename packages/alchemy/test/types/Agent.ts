@@ -31,7 +31,7 @@ const _gen = Effect.gen(function* () {
     };
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(Sandbox, {
+      Cloudflare.Containers.layerContainer(Sandbox, {
         enableInternet: true,
       }),
     ),
@@ -55,7 +55,7 @@ export const Agent2 = Cloudflare.DurableObjectNamespace(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(Sandbox, {
+      Cloudflare.Containers.layerContainer(Sandbox, {
         enableInternet: true,
       }),
     ),
@@ -80,7 +80,7 @@ export class Agent3 extends Cloudflare.DurableObjectNamespace<Agent3>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(Sandbox, {
+      Cloudflare.Containers.layerContainer(Sandbox, {
         enableInternet: true,
       }),
     ),
@@ -97,7 +97,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     return Effect.gen(function* () {
       const connection = yield* sandbox.getTcpPort(1080);
 
-      const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+      const sessions = new Map<string, Cloudflare.Workers.DurableWebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
         const session = socket.deserializeAttachment<{ id: string }>();
@@ -123,14 +123,14 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
               Effect.orDie,
             ),
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.upgrade();
+          const [response, socket] = yield* Cloudflare.Workers.upgrade();
           const id = "TODO";
           socket.serializeAttachment({ id });
           sessions.set(id, socket);
           return response;
         }),
         webSocketMessage: Effect.fn(function* (
-          socket: Cloudflare.DurableWebSocket,
+          socket: Cloudflare.Workers.DurableWebSocket,
           message: string | Uint8Array,
         ) {
           const session = socket.deserializeAttachment<{ id: string }>();
@@ -144,7 +144,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           }
         }),
         webSocketClose: Effect.fn(function* (
-          ws: Cloudflare.DurableWebSocket,
+          ws: Cloudflare.Workers.DurableWebSocket,
           code: number,
           reason: string,
           _wasClean: boolean,
@@ -159,7 +159,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(Sandbox, {
+      Cloudflare.Containers.layerContainer(Sandbox, {
         enableInternet: true,
       }),
     ),

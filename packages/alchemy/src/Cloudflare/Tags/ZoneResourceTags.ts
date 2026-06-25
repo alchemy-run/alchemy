@@ -124,14 +124,14 @@ export type ZoneResourceTags = Resource<
  * @section Tagging a resource
  * @example Tag a DNS record
  * ```typescript
- * const record = yield* Cloudflare.DnsRecord("api", {
+ * const record = yield* Cloudflare.Dns.DnsRecord("api", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   type: "A",
  *   content: "203.0.113.42",
  * });
  *
- * yield* Cloudflare.ZoneResourceTags("api-tags", {
+ * yield* Cloudflare.Tags.ZoneResourceTags("api-tags", {
  *   zoneId: zone.zoneId,
  *   resourceType: "dns_record",
  *   resourceId: record.recordId,
@@ -141,7 +141,7 @@ export type ZoneResourceTags = Resource<
  *
  * @example Tag the zone itself
  * ```typescript
- * yield* Cloudflare.ZoneResourceTags("zone-tags", {
+ * yield* Cloudflare.Tags.ZoneResourceTags("zone-tags", {
  *   zoneId: zone.zoneId,
  *   resourceType: "zone",
  *   resourceId: zone.zoneId,

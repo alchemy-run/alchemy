@@ -69,11 +69,11 @@ const DO_CODE = `export default class Room extends Cloudflare.DurableObjectNames
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+      const sessions = new Map<string, Cloudflare.Workers.DurableWebSocket>();
 
       return {
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.upgrade();
+          const [response, socket] = yield* Cloudflare.Workers.upgrade();
           sessions.set(crypto.randomUUID(), socket);
           return response;
         }),
@@ -104,12 +104,12 @@ const WORKFLOW_CODE = `export default class Notifier extends Cloudflare.Workflow
   Effect.gen(function* () {
     const rooms = yield* Room;
     return Effect.gen(function* () {
-      const { roomId, message } = (yield* Cloudflare.WorkflowEvent).payload;
-      yield* Cloudflare.task("store",     rooms.getByName(roomId).store(message));
-      yield* Cloudflare.task("process",   processMessage(message));
-      yield* Cloudflare.task("broadcast", rooms.getByName(roomId).broadcast(message));
-      yield* Cloudflare.sleep("cooldown", "2 seconds");
-      yield* Cloudflare.task("finalize",  rooms.getByName(roomId).cleanup());
+      const { roomId, message } = (yield* Cloudflare.Workers.WorkflowEvent).payload;
+      yield* Cloudflare.Workers.task("store",     rooms.getByName(roomId).store(message));
+      yield* Cloudflare.Workers.task("process",   processMessage(message));
+      yield* Cloudflare.Workers.task("broadcast", rooms.getByName(roomId).broadcast(message));
+      yield* Cloudflare.Workers.sleep("cooldown", "2 seconds");
+      yield* Cloudflare.Workers.task("finalize",  rooms.getByName(roomId).cleanup());
     });
   }),
 ) {}`;

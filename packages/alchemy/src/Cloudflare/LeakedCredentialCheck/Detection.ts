@@ -78,11 +78,11 @@ export type LeakedCredentialDetection = Resource<
  * @section Custom detection locations
  * @example Detect credentials in a JSON login body
  * ```typescript
- * const check = yield* Cloudflare.LeakedCredentialCheck("Lcc", {
+ * const check = yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.LeakedCredentialDetection("LoginBody", {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("LoginBody", {
  *   // Reference the check's zoneId so the toggle deploys first.
  *   zoneId: check.zoneId,
  *   username: 'lookup_json_string(http.request.body.raw, "user")',
@@ -92,7 +92,7 @@ export type LeakedCredentialDetection = Resource<
  *
  * @example Username-only detection
  * ```typescript
- * yield* Cloudflare.LeakedCredentialDetection("UsernameHeader",  {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("UsernameHeader",  {
  *   zoneId: check.zoneId,
  *   username: 'http.request.headers["x-username"][0]',
  * });

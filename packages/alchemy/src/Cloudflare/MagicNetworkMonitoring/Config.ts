@@ -97,7 +97,7 @@ export type MagicNetworkMonitoringConfig = Resource<
  * @section Creating the configuration
  * @example Minimal configuration
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 1,
  * });
@@ -105,7 +105,7 @@ export type MagicNetworkMonitoringConfig = Resource<
  *
  * @example Configuration with router IPs
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 100,
  *   routerIps: ["203.0.113.1/32"],
@@ -115,12 +115,12 @@ export type MagicNetworkMonitoringConfig = Resource<
  * @section Rules depend on the configuration
  * @example Create the config before any rules
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 1,
  * });
  * // Reference an output attribute so the rule deploys after the config.
- * yield* Cloudflare.MagicNetworkMonitoringRule("VolumetricAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringRule("VolumetricAlert", {
  *   accountId: config.accountId,
  *   type: "threshold",
  *   prefixes: ["10.0.0.0/24"],

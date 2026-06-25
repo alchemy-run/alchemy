@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
 const FraudDetectionSettingsTypeId =
-  "Cloudflare.FraudDetectionSettings" as const;
+  "Cloudflare.Fraud.FraudDetectionSettings" as const;
 type FraudDetectionSettingsTypeId = typeof FraudDetectionSettingsTypeId;
 
 /**
@@ -125,7 +125,7 @@ export type FraudDetectionSettings = Resource<
  * @section Fraud User Profiles
  * @example Enable user profiles with a username expression
  * ```typescript
- * yield* Cloudflare.FraudDetectionSettings("Fraud", {
+ * yield* Cloudflare.Fraud.FraudDetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
  *   userProfiles: "enabled",
  *   usernameExpressions: [
@@ -137,7 +137,7 @@ export type FraudDetectionSettings = Resource<
  * @section Authentication outcome classification
  * @example Classify login success and failure by origin status code
  * ```typescript
- * yield* Cloudflare.FraudDetectionSettings("Fraud", {
+ * yield* Cloudflare.Fraud.FraudDetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
  *   userProfiles: "enabled",
  *   authenticationSettings: {
@@ -150,7 +150,7 @@ export type FraudDetectionSettings = Resource<
  * @section Username expressions only
  * @example Clear all username expressions
  * ```typescript
- * yield* Cloudflare.FraudDetectionSettings("Fraud", {
+ * yield* Cloudflare.Fraud.FraudDetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
  *   usernameExpressions: [],
  * });

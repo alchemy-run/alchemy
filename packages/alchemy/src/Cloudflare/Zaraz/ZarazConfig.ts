@@ -80,7 +80,7 @@ export type ZarazConfigProps = {
 };
 
 export type ZarazConfig = Resource<
-  "Cloudflare.ZarazConfig",
+  "Cloudflare.Zaraz.ZarazConfig",
   ZarazConfigProps,
   ZarazConfigAttributes,
   never,
@@ -159,7 +159,7 @@ export type ZarazConfigAttributes = {
  * @section Managing Zaraz
  * @example Enable data layer compatibility
  * ```typescript
- * const zaraz = yield* Cloudflare.ZarazConfig("Analytics", {
+ * const zaraz = yield* Cloudflare.Zaraz.ZarazConfig("Analytics", {
  *   zone: "example.com",
  *   dataLayer: true,
  * });
@@ -167,7 +167,7 @@ export type ZarazConfigAttributes = {
  *
  * @example Update Zaraz settings
  * ```typescript
- * const zaraz = yield* Cloudflare.ZarazConfig("Analytics", {
+ * const zaraz = yield* Cloudflare.Zaraz.ZarazConfig("Analytics", {
  *   zone: "example.com",
  *   settings: {
  *     autoInjectScript: true,
@@ -178,14 +178,14 @@ export type ZarazConfigAttributes = {
  *
  * @example Enable preview workflow
  * ```typescript
- * const zaraz = yield* Cloudflare.ZarazConfig("Analytics", {
+ * const zaraz = yield* Cloudflare.Zaraz.ZarazConfig("Analytics", {
  *   zone: "example.com",
  *   workflow: "preview",
  * });
  * ```
  */
 export const ZarazConfig = Object.assign(
-  Resource<ZarazConfig>("Cloudflare.ZarazConfig"),
+  Resource<ZarazConfig>("Cloudflare.Zaraz.ZarazConfig"),
   {
     /**
      * Define a type-only contract for the events sent through this Zaraz config.

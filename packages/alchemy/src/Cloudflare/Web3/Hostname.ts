@@ -10,7 +10,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const Web3HostnameTypeId = "Cloudflare.Web3Hostname" as const;
+const Web3HostnameTypeId = "Cloudflare.Web3.Web3Hostname" as const;
 type Web3HostnameTypeId = typeof Web3HostnameTypeId;
 
 /**
@@ -112,7 +112,7 @@ export type Web3Hostname = Resource<
  * @section IPFS gateway
  * @example IPFS hostname pinned to a DNSLink
  * ```typescript
- * const gateway = yield* Cloudflare.Web3Hostname("IpfsGateway", {
+ * const gateway = yield* Cloudflare.Web3.Web3Hostname("IpfsGateway", {
  *   zoneId: zone.zoneId,
  *   name: "ipfs.example.com",
  *   target: "ipfs",
@@ -124,7 +124,7 @@ export type Web3Hostname = Resource<
  * @example IPFS universal-path gateway
  * ```typescript
  * // Serves any CID under /ipfs/... and /ipns/... paths.
- * const universal = yield* Cloudflare.Web3Hostname("UniversalGateway", {
+ * const universal = yield* Cloudflare.Web3.Web3Hostname("UniversalGateway", {
  *   zoneId: zone.zoneId,
  *   name: "gateway.example.com",
  *   target: "ipfs_universal_path",
@@ -134,7 +134,7 @@ export type Web3Hostname = Resource<
  * @section Ethereum gateway
  * @example Ethereum RPC hostname
  * ```typescript
- * yield* Cloudflare.Web3Hostname("EthGateway", {
+ * yield* Cloudflare.Web3.Web3Hostname("EthGateway", {
  *   zoneId: zone.zoneId,
  *   name: "eth.example.com",
  *   target: "ethereum",

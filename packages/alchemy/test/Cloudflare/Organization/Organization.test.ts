@@ -85,7 +85,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.Organization);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Organization.Organization,
+      );
 
       const canList = yield* probeEntitlement;
       if (canList) {
@@ -118,13 +120,15 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Organization("ListOrg", {
+          return yield* Cloudflare.Organization.Organization("ListOrg", {
             name: ORG_NAME_CRUD,
           });
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Organization);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Organization.Organization,
+      );
       const all = yield* provider.list();
 
       expect(
@@ -159,7 +163,7 @@ test.provider.skipIf(!entitled)(
       // Create with a business profile.
       const v1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Organization("Org", {
+          return yield* Cloudflare.Organization.Organization("Org", {
             name: ORG_NAME_CRUD,
             profile: PROFILE,
           });
@@ -182,7 +186,7 @@ test.provider.skipIf(!entitled)(
       // organization (no replacement).
       const v2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Organization("Org", {
+          return yield* Cloudflare.Organization.Organization("Org", {
             name: ORG_NAME_CRUD_RENAMED,
             profile: { ...PROFILE, businessEmail: "ops@alchemy.run" },
           });
@@ -203,7 +207,7 @@ test.provider.skipIf(!entitled)(
       // No-op deploy — same desired state, same identity.
       const v3 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Organization("Org", {
+          return yield* Cloudflare.Organization.Organization("Org", {
             name: ORG_NAME_CRUD_RENAMED,
             profile: { ...PROFILE, businessEmail: "ops@alchemy.run" },
           });

@@ -199,13 +199,13 @@ export type PagesProject = Resource<
  * @section Creating a Project
  * @example Minimal project (generated name)
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {});
+ * const project = yield* Cloudflare.Pages.PagesProject("site", {});
  * // project.subdomain === "<generated-name>.pages.dev"
  * ```
  *
  * @example Named project with a build config
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {
+ * const project = yield* Cloudflare.Pages.PagesProject("site", {
  *   name: "my-site",
  *   productionBranch: "main",
  *   buildConfig: {
@@ -218,7 +218,7 @@ export type PagesProject = Resource<
  * @section Deployment Configuration
  * @example Environment variables and bindings
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {
+ * const project = yield* Cloudflare.Pages.PagesProject("site", {
  *   deploymentConfigs: {
  *     production: {
  *       compatibilityDate: "2025-01-01",
@@ -237,7 +237,7 @@ export type PagesProject = Resource<
  * @section Custom Domains
  * @example Attach a custom domain
  * ```typescript
- * const domain = yield* Cloudflare.PagesDomain("site-domain", {
+ * const domain = yield* Cloudflare.Pages.PagesDomain("site-domain", {
  *   projectName: project.name,
  *   name: "www.example.com",
  * });

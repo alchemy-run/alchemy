@@ -70,7 +70,7 @@ export type MagicApp = Resource<
  * @section Creating an app
  * @example App matching hostnames
  * ```typescript
- * const app = yield* Cloudflare.MagicApp("crm", {
+ * const app = yield* Cloudflare.MagicTransit.MagicApp("crm", {
  *   name: "Internal CRM",
  *   type: "Business",
  *   hostnames: ["crm.example.com"],
@@ -79,7 +79,7 @@ export type MagicApp = Resource<
  *
  * @example App matching IP subnets
  * ```typescript
- * const app = yield* Cloudflare.MagicApp("voip", {
+ * const app = yield* Cloudflare.MagicTransit.MagicApp("voip", {
  *   name: "VoIP",
  *   type: "Communication",
  *   ipSubnets: ["192.0.2.0/24", "198.51.100.0/24"],

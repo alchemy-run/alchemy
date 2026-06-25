@@ -29,14 +29,14 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  * @product Tunnels
  * @category Cloudflare One (Zero Trust)
  *
- * `TunnelRead` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable — `yield* Cloudflare.TunnelRead()`.
+ * `ReadTunnel` is a single identifier that is simultaneously the binding's
+ * Context tag, its type, and the callable — `yield* Cloudflare.Tunnel.ReadTunnel()`.
  *
  * @section Reading tunnels at runtime
  * @example Bind the read client
  * Bind once in the Init phase; every method is available on the returned client.
  * ```typescript
- * const tunnels = yield* Cloudflare.TunnelRead();
+ * const tunnels = yield* Cloudflare.Tunnel.ReadTunnel();
  * ```
  *
  * @example List tunnels
@@ -57,18 +57,20 @@ import { authorizeWith } from "../HttpClientUtils.ts";
  * ```
  *
  * @section Runtime Layer
- * Provide {@link TunnelReadBinding} in the Worker's runtime layer.
+ * Provide {@link ReadTunnelBinding} in the Worker's runtime layer.
  * ```typescript
- * Effect.provide(Cloudflare.TunnelReadBinding)
+ * Effect.provide(Cloudflare.Tunnel.ReadTunnelBinding)
  * ```
  */
-export interface TunnelRead extends Binding.Service<
-  TunnelRead,
-  "Cloudflare.TunnelRead",
-  () => Effect.Effect<TunnelReadClient, never, Worker | CloudflareEnvironment>
+export interface ReadTunnel extends Binding.Service<
+  ReadTunnel,
+  "Cloudflare.Tunnel.ReadTunnel",
+  () => Effect.Effect<ReadTunnelClient, never, Worker | CloudflareEnvironment>
 > {}
 
-export const TunnelRead = Binding.Service<TunnelRead>("Cloudflare.TunnelRead");
+export const ReadTunnel = Binding.Service<ReadTunnel>(
+  "Cloudflare.Tunnel.ReadTunnel",
+);
 
 /** List-tunnels request, minus the account id (supplied by the binding). */
 export type ListTunnelsRequest = Omit<
@@ -80,7 +82,7 @@ export type ListTunnelsRequest = Omit<
  * Read-only tunnel operations. Backed by the `Cloudflare Tunnel Read`
  * permission group.
  */
-export interface TunnelReadClient {
+export interface ReadTunnelClient {
   /** Fetch a single tunnel by id. */
   get(
     tunnelId: string,
@@ -116,7 +118,7 @@ export interface TunnelReadClient {
 }
 
 /** Build the read-only client over a bound token. */
-export const readClient = (token: TunnelToken): TunnelReadClient => {
+export const readClient = (token: TunnelToken): ReadTunnelClient => {
   const authorize = authorizeWith(token);
   return {
     get: Effect.fn("Cloudflare.Tunnel.get")(function* (tunnelId) {

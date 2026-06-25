@@ -183,7 +183,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
     }
     const worker = (yield* workerEff) as Worker;
     // Register the service binding on the surrounding worker at INIT.
-    // Mirrors `Cloudflare.bindWorker` — yielding the class is *not*
+    // Mirrors `Cloudflare.Workers.bindWorker` — yielding the class is *not*
     // enough; we need an explicit `self.bind\`${worker}\`(...)` so
     // workerd surfaces the stub on `env` at request time.
     const self = yield* WorkerCtor;

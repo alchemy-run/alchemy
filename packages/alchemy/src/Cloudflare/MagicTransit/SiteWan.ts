@@ -101,7 +101,7 @@ export type MagicSiteWan = Resource<
  * @section Creating a WAN
  * @example DHCP uplink
  * ```typescript
- * const wan = yield* Cloudflare.MagicSiteWan("hq-wan", {
+ * const wan = yield* Cloudflare.MagicTransit.MagicSiteWan("hq-wan", {
  *   siteId: site.siteId,
  *   physport: 1,
  * });
@@ -109,7 +109,7 @@ export type MagicSiteWan = Resource<
  *
  * @example Static uplink with priority
  * ```typescript
- * const wan = yield* Cloudflare.MagicSiteWan("hq-wan", {
+ * const wan = yield* Cloudflare.MagicTransit.MagicSiteWan("hq-wan", {
  *   siteId: site.siteId,
  *   physport: 1,
  *   priority: 10,

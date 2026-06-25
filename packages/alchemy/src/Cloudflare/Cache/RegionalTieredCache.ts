@@ -82,16 +82,16 @@ export type RegionalTieredCache = Resource<
  * @section Managing Regional Tiered Cache
  * @example Enable Regional Tiered Cache on an Enterprise zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.RegionalTieredCache("RegionalCache", {
+ * yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Regional Tiered Cache
  * ```typescript
- * yield* Cloudflare.RegionalTieredCache("RegionalCache", {
+ * yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });

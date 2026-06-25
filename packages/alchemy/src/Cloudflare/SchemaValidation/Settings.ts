@@ -86,7 +86,7 @@ export type SchemaValidationSettings = Resource<
  * @section Managing the zone default
  * @example Block non-conforming requests
  * ```typescript
- * yield* Cloudflare.SchemaValidationSettings("Validation", {
+ * yield* Cloudflare.SchemaValidation.SchemaValidationSettings("Validation", {
  *   zoneId: zone.zoneId,
  *   validationDefaultMitigationAction: "block",
  * });
@@ -95,7 +95,7 @@ export type SchemaValidationSettings = Resource<
  * @section Kill switch
  * @example Temporarily disable validation zone-wide
  * ```typescript
- * yield* Cloudflare.SchemaValidationSettings("Validation", {
+ * yield* Cloudflare.SchemaValidation.SchemaValidationSettings("Validation", {
  *   zoneId: zone.zoneId,
  *   validationDefaultMitigationAction: "block",
  *   // overrides every schema and per-operation setting:

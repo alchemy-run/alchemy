@@ -147,7 +147,7 @@ export type AccessIdentityProvider = Resource<
  * @section Creating an Identity Provider
  * @example One-time PIN (no external dependencies)
  * ```typescript
- * const otp = yield* Cloudflare.AccessIdentityProvider("Pin", {
+ * const otp = yield* Cloudflare.Access.AccessIdentityProvider("Pin", {
  *   type: "onetimepin",
  *   config: {},
  * });
@@ -155,7 +155,7 @@ export type AccessIdentityProvider = Resource<
  *
  * @example Generic OIDC provider
  * ```typescript
- * const oidc = yield* Cloudflare.AccessIdentityProvider("Sso", {
+ * const oidc = yield* Cloudflare.Access.AccessIdentityProvider("Sso", {
  *   type: "oidc",
  *   config: {
  *     clientId: "my-client-id",
@@ -171,7 +171,7 @@ export type AccessIdentityProvider = Resource<
  * @section Restricting an Application to an IdP
  * @example Allow only this IdP on an Access application
  * ```typescript
- * yield* Cloudflare.AccessApplication("Admin", {
+ * yield* Cloudflare.Access.AccessApplication("Admin", {
  *   domain: "admin.example.com",
  *   allowedIdps: [oidc.identityProviderId],
  * });

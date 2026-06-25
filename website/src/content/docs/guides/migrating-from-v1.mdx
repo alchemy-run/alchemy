@@ -45,7 +45,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export const Bucket = Cloudflare.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.R2Bucket("Bucket");
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
@@ -65,7 +65,7 @@ export default Alchemy.Stack(
 Key differences:
 
 - `await alchemy("name")` + `await app.finalize()` → `Alchemy.Stack("name", { providers }, effect)`
-- `await R2Bucket("name", {})` → `Cloudflare.R2Bucket("name")`
+- `await R2Bucket("name", {})` → `Cloudflare.R2.R2Bucket("name")`
 - `await Worker("name", { entrypoint })` → `Cloudflare.Worker("name", { main })`
 - `entrypoint` is now called `main`
 - Resources are declared at the top level, then `yield*`-ed inside the Stack
@@ -207,7 +207,7 @@ export default Alchemy.Stack(
 |              | v1 (async)                    | v2 (async style)              | v2 (Effect style)                  |
 | ------------ | ----------------------------- | ----------------------------- | ---------------------------------- |
 | Stack        | `await alchemy("name")`       | `Alchemy.Stack("name", ...)`  | `Alchemy.Stack("name", ...)`       |
-| Resources    | `await R2Bucket(...)`         | `Cloudflare.R2Bucket(...)`    | `Cloudflare.R2Bucket(...)`         |
+| Resources    | `await R2Bucket(...)`         | `Cloudflare.R2.R2Bucket(...)`    | `Cloudflare.R2.R2Bucket(...)`         |
 | Worker entry | `entrypoint`                  | `main`                        | `main: import.meta.filename`           |
 | Bindings     | `bindings: { KEY: resource }` | `env: { Key: resource }`      | `yield* Resource.bind(ref)`        |
 | Runtime code | `async fetch(req, env)`       | `async fetch(req, env)`       | `Effect.gen(function* () { ... })` |

@@ -1,5 +1,8 @@
 export * from "./AccountSetting.ts";
 export * from "./Assets.ts";
+export * from "./Browser.ts";
+export * from "./BrowserBinding.ts";
+export * from "./BrowserBindingLive.ts";
 export * from "./ConfigProvider.ts";
 export * from "./CronEventSource.ts";
 export * from "./DurableObjectBridge.ts";
@@ -17,6 +20,8 @@ export * from "./Route.ts";
 export * from "./Rpc.ts";
 export * from "./RpcDurableObjectNamespace.ts";
 export * from "./RpcWorker.ts";
+export * from "./RateLimit.ts";
+export * from "./RateLimitBinding.ts";
 export * from "./ScheduledEvents.ts";
 export * from "./Subdomain.ts";
 export * from "./VersionMetadata.ts";

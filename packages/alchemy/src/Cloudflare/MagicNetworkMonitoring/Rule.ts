@@ -153,11 +153,11 @@ export type MagicNetworkMonitoringRule = Resource<
  * @section Threshold rules
  * @example Alert when bandwidth exceeds 1 Mbps for 5 minutes
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 1,
  * });
- * yield* Cloudflare.MagicNetworkMonitoringRule("BandwidthAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringRule("BandwidthAlert", {
  *   accountId: config.accountId,
  *   type: "threshold",
  *   prefixes: ["10.0.0.0/24"],
@@ -168,7 +168,7 @@ export type MagicNetworkMonitoringRule = Resource<
  *
  * @example Packet-rate alert
  * ```typescript
- * yield* Cloudflare.MagicNetworkMonitoringRule("PacketAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringRule("PacketAlert", {
  *   accountId: config.accountId,
  *   type: "threshold",
  *   prefixes: ["10.0.1.0/24"],
@@ -179,7 +179,7 @@ export type MagicNetworkMonitoringRule = Resource<
  * @section Anomaly detection
  * @example Zscore rule on bits
  * ```typescript
- * yield* Cloudflare.MagicNetworkMonitoringRule("AnomalyAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringRule("AnomalyAlert", {
  *   accountId: config.accountId,
  *   type: "zscore",
  *   prefixes: ["10.0.2.0/24"],

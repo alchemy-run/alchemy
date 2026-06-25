@@ -131,7 +131,7 @@ export type RegistrarDomain = Resource<
  * @section Managing a registered domain
  * @example Pin auto-renew and the transfer lock
  * ```typescript
- * yield* Cloudflare.RegistrarDomain("ApexDomain", {
+ * yield* Cloudflare.Registrar.RegistrarDomain("ApexDomain", {
  *   domainName: "example.com",
  *   autoRenew: true,
  *   locked: true,
@@ -141,7 +141,7 @@ export type RegistrarDomain = Resource<
  * @example Enable WHOIS privacy only
  * ```typescript
  * // autoRenew and locked are omitted, so they are left untouched.
- * yield* Cloudflare.RegistrarDomain("ApexDomain", {
+ * yield* Cloudflare.Registrar.RegistrarDomain("ApexDomain", {
  *   domainName: "example.com",
  *   privacy: true,
  * });
@@ -150,7 +150,7 @@ export type RegistrarDomain = Resource<
  * @section Reading registration state
  * @example Use the registration expiry downstream
  * ```typescript
- * const domain = yield* Cloudflare.RegistrarDomain("ApexDomain", {
+ * const domain = yield* Cloudflare.Registrar.RegistrarDomain("ApexDomain", {
  *   domainName: "example.com",
  *   autoRenew: true,
  * });
@@ -215,7 +215,7 @@ export const RegistrarDomainProvider = () =>
         return yield* Effect.fail(
           new Error(
             `Domain "${domainName}" is not registered with Cloudflare Registrar ` +
-              `on account ${accountId}. Cloudflare.RegistrarDomain only manages ` +
+              `on account ${accountId}. Cloudflare.Registrar.RegistrarDomain only manages ` +
               `settings on an existing registration — register or transfer the ` +
               `domain in the Cloudflare dashboard first.`,
           ),

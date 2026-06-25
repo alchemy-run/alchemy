@@ -91,7 +91,7 @@ export type ApiShieldConfiguration = Resource<
  * @section Configuring session identifiers
  * @example Identify sessions by an Authorization header
  * ```typescript
- * yield* Cloudflare.ApiShieldConfiguration("SessionIds", {
+ * yield* Cloudflare.ApiShield.ApiShieldConfiguration("SessionIds", {
  *   zoneId: zone.zoneId,
  *   authIdCharacteristics: [{ name: "authorization", type: "header" }],
  * });
@@ -99,7 +99,7 @@ export type ApiShieldConfiguration = Resource<
  *
  * @example Identify sessions by a cookie and a JWT claim
  * ```typescript
- * yield* Cloudflare.ApiShieldConfiguration("SessionIds", {
+ * yield* Cloudflare.ApiShield.ApiShieldConfiguration("SessionIds", {
  *   zoneId: zone.zoneId,
  *   authIdCharacteristics: [
  *     { name: "session_id", type: "cookie" },

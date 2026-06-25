@@ -226,7 +226,7 @@ export type SpectrumApplication = Resource<
  * @section Proxying SSH
  * @example SSH on a fixed origin address
  * ```typescript
- * const ssh = yield* Cloudflare.SpectrumApplication("Ssh", {
+ * const ssh = yield* Cloudflare.Spectrum.SpectrumApplication("Ssh", {
  *   zoneId: zone.zoneId,
  *   dns: { type: "CNAME", name: "ssh.example.com" },
  *   protocol: "tcp/22",
@@ -237,7 +237,7 @@ export type SpectrumApplication = Resource<
  * @section Origin via DNS
  * @example Resolve the origin by hostname
  * ```typescript
- * yield* Cloudflare.SpectrumApplication("Minecraft", {
+ * yield* Cloudflare.Spectrum.SpectrumApplication("Minecraft", {
  *   zoneId: zone.zoneId,
  *   dns: { type: "CNAME", name: "mc.example.com" },
  *   protocol: "tcp/25565",
@@ -251,7 +251,7 @@ export type SpectrumApplication = Resource<
  * ```typescript
  * // Arbitrary ports/protocols, UDP, and proxyProtocol require an
  * // Enterprise plan with Spectrum.
- * yield* Cloudflare.SpectrumApplication("Dns", {
+ * yield* Cloudflare.Spectrum.SpectrumApplication("Dns", {
  *   zoneId: zone.zoneId,
  *   dns: { type: "CNAME", name: "dns.example.com" },
  *   protocol: "udp/53",

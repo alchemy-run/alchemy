@@ -20,7 +20,8 @@ import {
 import type { Providers } from "../Providers.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
-  typeof value === "object" && (value as any)?.Type === "Cloudflare.Queue";
+  typeof value === "object" &&
+  (value as any)?.Type === "Cloudflare.Queue.Queue";
 
 export type QueueProps = {
   /**
@@ -31,7 +32,7 @@ export type QueueProps = {
 };
 
 export type Queue = Resource<
-  "Cloudflare.Queue",
+  "Cloudflare.Queue.Queue",
   QueueProps,
   {
     queueId: string;
@@ -54,19 +55,19 @@ export type Queue = Resource<
  * @section Creating a Queue
  * @example Basic queue
  * ```typescript
- * const queue = yield* Cloudflare.Queue("MyQueue");
+ * const queue = yield* Cloudflare.Queue.Queue("MyQueue");
  * ```
  *
  * @example Queue with explicit name
  * ```typescript
- * const queue = yield* Cloudflare.Queue("MyQueue", {
+ * const queue = yield* Cloudflare.Queue.Queue("MyQueue", {
  *   name: "my-app-queue",
  * });
  * ```
  *
  * @section Binding to a Worker
- * In an Effect-style Worker, use `Cloudflare.Queues.WriteQueue` in
- * the init phase and provide `Cloudflare.Queues.WriteQueueBinding` in
+ * In an Effect-style Worker, use `Cloudflare.Queue.WriteQueue` in
+ * the init phase and provide `Cloudflare.Queue.WriteQueueBinding` in
  * the runtime layer. The returned `WriteQueueClient` exposes `send`
  * and `sendBatch`.
  *
@@ -77,13 +78,13 @@ export type Queue = Resource<
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * export const Queue = Cloudflare.Queue("Queue");
+ * export const Queue = Cloudflare.Queue.Queue("Queue");
  *
  * export default Cloudflare.Worker(
  *   "Worker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const queue = yield* Cloudflare.Queues.WriteQueue(Queue);
+ *     const queue = yield* Cloudflare.Queue.WriteQueue(Queue);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -99,11 +100,11 @@ export type Queue = Resource<
  *         return HttpServerResponse.text("Not Found", { status: 404 });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.Queues.WriteQueueBinding)),
+ *   }).pipe(Effect.provide(Cloudflare.Queue.WriteQueueBinding)),
  * );
  * ```
  */
-export const Queue = Resource<Queue>("Cloudflare.Queue");
+export const Queue = Resource<Queue>("Cloudflare.Queue.Queue");
 
 export const QueueProviderLive = () =>
   Provider.succeed(Queue, {

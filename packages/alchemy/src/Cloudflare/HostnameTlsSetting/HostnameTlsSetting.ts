@@ -11,7 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const HostnameTlsSettingTypeId = "Cloudflare.HostnameTlsSetting" as const;
+const HostnameTlsSettingTypeId =
+  "Cloudflare.HostnameTlsSetting.HostnameTlsSetting" as const;
 type HostnameTlsSettingTypeId = typeof HostnameTlsSettingTypeId;
 
 /**
@@ -124,7 +125,7 @@ export type HostnameTlsSetting = Resource<
  * @section Minimum TLS version
  * @example Require TLS 1.2 for a single hostname
  * ```typescript
- * yield* Cloudflare.HostnameTlsSetting("ApiMinTls", {
+ * yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("ApiMinTls", {
  *   zoneId: zone.zoneId,
  *   settingId: "min_tls_version",
  *   hostname: "api.example.com",
@@ -135,7 +136,7 @@ export type HostnameTlsSetting = Resource<
  * @section HTTP/2
  * @example Disable HTTP/2 for a legacy hostname
  * ```typescript
- * yield* Cloudflare.HostnameTlsSetting("LegacyHttp2", {
+ * yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("LegacyHttp2", {
  *   zoneId: zone.zoneId,
  *   settingId: "http2",
  *   hostname: "legacy.example.com",
@@ -146,7 +147,7 @@ export type HostnameTlsSetting = Resource<
  * @section Cipher suites
  * @example Restrict a hostname to modern ciphers
  * ```typescript
- * yield* Cloudflare.HostnameTlsSetting("StrictCiphers", {
+ * yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("StrictCiphers", {
  *   zoneId: zone.zoneId,
  *   settingId: "ciphers",
  *   hostname: "secure.example.com",

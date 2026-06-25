@@ -50,5 +50,5 @@ export default class RateLimitEffectWorker extends Cloudflare.Worker<RateLimitEf
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.RateLimitBinding)),
+  }).pipe(Effect.provide(Cloudflare.Workers.RateLimitBinding)),
 ) {}

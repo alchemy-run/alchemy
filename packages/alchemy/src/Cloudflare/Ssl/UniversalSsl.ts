@@ -74,7 +74,7 @@ export type UniversalSsl = Resource<
  * @section Managing Universal SSL
  * @example Disable Universal SSL for a zone
  * ```typescript
- * yield* Cloudflare.UniversalSsl("UniversalSsl", {
+ * yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -82,7 +82,7 @@ export type UniversalSsl = Resource<
  *
  * @example Pin Universal SSL enabled
  * ```typescript
- * yield* Cloudflare.UniversalSsl("UniversalSsl", {
+ * yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });

@@ -117,7 +117,7 @@ export type RumSite = Resource<
  * @section Measuring a hostname
  * @example Gray-clouded site (manual snippet embed)
  * ```typescript
- * const site = yield* Cloudflare.RumSite("Analytics", {
+ * const site = yield* Cloudflare.Rum.RumSite("Analytics", {
  *   host: "example.com",
  * });
  *
@@ -128,9 +128,9 @@ export type RumSite = Resource<
  * @section Measuring a zone
  * @example Orange-clouded site with automatic snippet injection
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Zone", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
  *
- * yield* Cloudflare.RumSite("ZoneAnalytics", {
+ * yield* Cloudflare.Rum.RumSite("ZoneAnalytics", {
  *   zoneTag: zone.zoneId,
  *   autoInstall: true,
  * });
@@ -138,7 +138,7 @@ export type RumSite = Resource<
  *
  * @example Skip injection for EU visitors
  * ```typescript
- * yield* Cloudflare.RumSite("ZoneAnalytics", {
+ * yield* Cloudflare.Rum.RumSite("ZoneAnalytics", {
  *   zoneTag: zone.zoneId,
  *   autoInstall: true,
  *   lite: true,

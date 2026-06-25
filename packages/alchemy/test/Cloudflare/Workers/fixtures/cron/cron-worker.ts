@@ -45,7 +45,7 @@ export default class CronTestWorker extends Cloudflare.Worker<CronTestWorker>()(
   Effect.gen(function* () {
     const counters = yield* CronCounter;
 
-    yield* Cloudflare.cron("* * * * *").subscribe((controller) =>
+    yield* Cloudflare.Workers.cron("* * * * *").subscribe((controller) =>
       counters.getByName("default").record(controller.scheduledTime),
     );
 
@@ -67,5 +67,5 @@ export default class CronTestWorker extends Cloudflare.Worker<CronTestWorker>()(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.CronEventSourceLive)),
+  }).pipe(Effect.provide(Cloudflare.Workers.CronEventSourceLive)),
 ) {}

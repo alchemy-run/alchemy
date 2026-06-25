@@ -117,7 +117,7 @@ export type DeviceSettings = Resource<
  * @section Managing device settings
  * @example Enable the Gateway proxy
  * ```typescript
- * yield* Cloudflare.DeviceSettings("Devices", {
+ * yield* Cloudflare.Devices.DeviceSettings("Devices", {
  *   gatewayProxyEnabled: true,
  *   gatewayUdpProxyEnabled: true,
  * });
@@ -125,7 +125,7 @@ export type DeviceSettings = Resource<
  *
  * @example Allow one-hour WARP override codes
  * ```typescript
- * yield* Cloudflare.DeviceSettings("Devices", {
+ * yield* Cloudflare.Devices.DeviceSettings("Devices", {
  *   disableForTime: 3600,
  * });
  * ```

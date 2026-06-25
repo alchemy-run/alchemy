@@ -76,12 +76,12 @@ export type CallsTurnKey = Resource<
  * @section Creating a TURN key
  * @example TURN key with a generated name
  * ```typescript
- * const turnKey = yield* Cloudflare.CallsTurnKey("turn", {});
+ * const turnKey = yield* Cloudflare.Calls.CallsTurnKey("turn", {});
  * ```
  *
  * @example TURN key with an explicit name
  * ```typescript
- * const turnKey = yield* Cloudflare.CallsTurnKey("turn", {
+ * const turnKey = yield* Cloudflare.Calls.CallsTurnKey("turn", {
  *   name: "my-turn-key",
  * });
  * ```

@@ -63,7 +63,7 @@ export interface QueueConsumerSettings {
 }
 
 export type QueueConsumer = Resource<
-  "Cloudflare.QueueConsumer",
+  "Cloudflare.Queue.QueueConsumer",
   QueueConsumerProps,
   {
     consumerId: string;
@@ -93,10 +93,10 @@ export type QueueConsumer = Resource<
  * @section Registering a Consumer
  * @example Basic consumer
  * ```typescript
- * const queue = yield* Cloudflare.Queue("MyQueue");
+ * const queue = yield* Cloudflare.Queue.Queue("MyQueue");
  * const worker = yield* Cloudflare.Worker("Worker", { ... });
  *
- * yield* Cloudflare.QueueConsumer("MyConsumer", {
+ * yield* Cloudflare.Queue.QueueConsumer("MyConsumer", {
  *   queueId: queue.queueId,
  *   scriptName: "my-worker",
  * });
@@ -104,7 +104,7 @@ export type QueueConsumer = Resource<
  *
  * @example Consumer with settings
  * ```typescript
- * yield* Cloudflare.QueueConsumer("MyConsumer", {
+ * yield* Cloudflare.Queue.QueueConsumer("MyConsumer", {
  *   queueId: queue.queueId,
  *   scriptName: "my-worker",
  *   settings: {
@@ -116,7 +116,7 @@ export type QueueConsumer = Resource<
  * ```
  */
 export const QueueConsumer = Resource<QueueConsumer>(
-  "Cloudflare.QueueConsumer",
+  "Cloudflare.Queue.QueueConsumer",
 );
 
 // Cloudflare allows a single Worker consumer per queue, so the

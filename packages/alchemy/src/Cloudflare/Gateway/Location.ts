@@ -135,7 +135,7 @@ export type GatewayLocation = Resource<
  * @section Creating a Location
  * @example DoH-only location
  * ```typescript
- * const office = yield* Cloudflare.GatewayLocation("Office", {
+ * const office = yield* Cloudflare.Gateway.GatewayLocation("Office", {
  *   ecsSupport: false,
  * });
  * // Point your resolver at the assigned DoH endpoint:
@@ -144,7 +144,7 @@ export type GatewayLocation = Resource<
  *
  * @example Location with IPv4 source networks
  * ```typescript
- * const office = yield* Cloudflare.GatewayLocation("Office", {
+ * const office = yield* Cloudflare.Gateway.GatewayLocation("Office", {
  *   networks: [{ network: "203.0.113.0/24" }],
  *   endpoints: {
  *     doh: { enabled: true },

@@ -130,7 +130,7 @@ in state — the raw token never touches your terminal.
   Effect.gen(function* () {
     const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
 +
-+   const apiToken = yield* Cloudflare.AccountApiToken("CIToken", {
++   const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("CIToken", {
 +     accountId,
 +     policies: [
 +       {
@@ -403,12 +403,12 @@ export default Alchemy.Stack(
     const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
     const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
 
-    const testToken = yield* Cloudflare.AccountApiToken("TestApiToken", {
+    const testToken = yield* Cloudflare.ApiToken.AccountApiToken("TestApiToken", {
       accountId: testAccountId,
       policies: [/* same policies as above */],
     });
 
-    const prodToken = yield* Cloudflare.AccountApiToken("ProdApiToken", {
+    const prodToken = yield* Cloudflare.ApiToken.AccountApiToken("ProdApiToken", {
       accountId: prodAccountId,
       policies: [/* same policies as above */],
     });
@@ -456,7 +456,7 @@ You've completed the tutorial. You now know how to:
 - **Part 3** — Write integration tests against deployed stacks
 - **Part 4** — Run locally with `alchemy dev`
 - **Part 5** — Mint scoped CI credentials with
-  `Cloudflare.AccountApiToken`, push them to GitHub with
+  `Cloudflare.ApiToken.AccountApiToken`, push them to GitHub with
   `GitHub.Secret`, and deploy from Actions
 
 ## What's next

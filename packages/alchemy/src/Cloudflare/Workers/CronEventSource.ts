@@ -21,7 +21,7 @@ import type { Providers } from "../Providers.ts";
  * @category Workers & Compute
  * @example
  * ```typescript
- * yield* Cloudflare.cron("0 12 * * *").subscribe((controller) =>
+ * yield* Cloudflare.Workers.cron("0 12 * * *").subscribe((controller) =>
  *   Effect.log(`scheduled at ${controller.scheduledTime}`),
  * );
  * ```
@@ -60,7 +60,7 @@ export const CronEventSourcePolicyLive = CronEventSourcePolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `Cloudflare.cron(...).subscribe(...) is only supported on ` +
+        `Cloudflare.Workers.cron(...).subscribe(...) is only supported on ` +
           `Cloudflare.Worker hosts (got '${host.Type}').`,
       );
     }

@@ -113,14 +113,14 @@ export type IndicatorFeed = Resource<
  * @section Creating a Feed
  * @example Basic feed
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("threat-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
  * });
  * ```
  *
  * @example Public, downloadable feed
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("public-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("public-feed", {
  *   name: "acme-public-indicators",
  *   description: "Acme Corp public threat indicators",
  *   isPublic: true,
@@ -132,7 +132,7 @@ export type IndicatorFeed = Resource<
  * @section Publishing Indicators
  * @example Upload a STIX 2.x snapshot inline
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("threat-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
  *   snapshot: JSON.stringify({
  *     type: "bundle",
@@ -145,7 +145,7 @@ export type IndicatorFeed = Resource<
  * @section Sharing a Feed
  * @example Grant another account access
  * ```typescript
- * yield* Cloudflare.IndicatorFeedPermission("partner-access", {
+ * yield* Cloudflare.Intel.IndicatorFeedPermission("partner-access", {
  *   feedId: feed.feedId,
  *   accountTag: "023e105f4ecef8ad9ca31a8372d0c353",
  * });

@@ -91,14 +91,14 @@ export type AccessMcpPortal = Resource<
  * @section Creating an MCP portal
  * @example Minimal portal
  * ```typescript
- * const portal = yield* Cloudflare.AccessMcpPortal("AiPortal", {
+ * const portal = yield* Cloudflare.Access.AccessMcpPortal("AiPortal", {
  *   hostname: "mcp.example.com",
  * });
  * ```
  *
  * @example Portal with gateway egress
  * ```typescript
- * const portal = yield* Cloudflare.AccessMcpPortal("AiPortal", {
+ * const portal = yield* Cloudflare.Access.AccessMcpPortal("AiPortal", {
  *   hostname: "mcp.example.com",
  *   description: "Company-approved AI tools",
  *   secureWebGateway: true,

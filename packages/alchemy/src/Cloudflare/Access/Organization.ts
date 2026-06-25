@@ -119,7 +119,7 @@ export declare namespace AccessOrganization {
 }
 
 export type AccessOrganization = Resource<
-  "Cloudflare.AccessOrganization",
+  "Cloudflare.Access.AccessOrganization",
   AccessOrganizationProps,
   {
     /** Cloudflare account that owns the Zero Trust organization. */
@@ -173,7 +173,7 @@ export type AccessOrganization = Resource<
  * @section Configuring the organization
  * @example Adopt and brand the organization
  * ```typescript
- * const org = yield* Cloudflare.AccessOrganization("Org", {
+ * const org = yield* Cloudflare.Access.AccessOrganization("Org", {
  *   authDomain: "acme.cloudflareaccess.com",
  *   name: "Acme",
  *   sessionDuration: "24h",
@@ -187,7 +187,7 @@ export type AccessOrganization = Resource<
  * ```
  */
 export const AccessOrganization = Resource<AccessOrganization>(
-  "Cloudflare.AccessOrganization",
+  "Cloudflare.Access.AccessOrganization",
 );
 
 export const AccessOrganizationProvider = () =>

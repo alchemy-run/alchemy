@@ -108,14 +108,14 @@ export type RumRule = Resource<
  * @section Excluding traffic
  * @example Exclude a path from measurement
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Zone", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
  *
- * const site = yield* Cloudflare.RumSite("Analytics", {
+ * const site = yield* Cloudflare.Rum.RumSite("Analytics", {
  *   zoneTag: zone.zoneId,
  *   autoInstall: true,
  * });
  *
- * yield* Cloudflare.RumRule("ExcludeAdmin", {
+ * yield* Cloudflare.Rum.RumRule("ExcludeAdmin", {
  *   rulesetId: site.rulesetId.as<string>(),
  *   host: "example.com",
  *   paths: ["/admin/*"],
@@ -126,7 +126,7 @@ export type RumRule = Resource<
  * @section Pausing a rule
  * @example Keep the rule but stop applying it
  * ```typescript
- * yield* Cloudflare.RumRule("ExcludeAdmin", {
+ * yield* Cloudflare.Rum.RumRule("ExcludeAdmin", {
  *   rulesetId: site.rulesetId.as<string>(),
  *   host: "example.com",
  *   paths: ["/admin/*"],

@@ -97,7 +97,7 @@ export type OriginTlsClientAuthCertificate = Resource<
  * @section Uploading a certificate
  * @example Zone client certificate
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
@@ -107,13 +107,13 @@ export type OriginTlsClientAuthCertificate = Resource<
  * @section Enabling Authenticated Origin Pulls
  * @example Upload the certificate and turn AOP on
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
  * });
  *
- * yield* Cloudflare.OriginTlsClientAuthSetting("Aop", {
+ * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting("Aop", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });

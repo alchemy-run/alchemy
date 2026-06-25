@@ -115,7 +115,7 @@ export type AddressMap = Resource<
  * @section Creating an Address Map
  * @example Disabled map with a description
  * ```typescript
- * const map = yield* Cloudflare.AddressMap("static-ips", {
+ * const map = yield* Cloudflare.Addressing.AddressMap("static-ips", {
  *   description: "static ingress IPs",
  *   enabled: false,
  * });
@@ -123,7 +123,7 @@ export type AddressMap = Resource<
  *
  * @example Map with IPs and zone memberships
  * ```typescript
- * const map = yield* Cloudflare.AddressMap("ingress", {
+ * const map = yield* Cloudflare.Addressing.AddressMap("ingress", {
  *   description: "ingress",
  *   enabled: true,
  *   ips: ["192.0.2.1"],
@@ -134,7 +134,7 @@ export type AddressMap = Resource<
  * @section Legacy TLS clients
  * @example Default SNI for clients without SNI
  * ```typescript
- * const map = yield* Cloudflare.AddressMap("legacy", {
+ * const map = yield* Cloudflare.Addressing.AddressMap("legacy", {
  *   enabled: true,
  *   defaultSni: "example.com",
  * });

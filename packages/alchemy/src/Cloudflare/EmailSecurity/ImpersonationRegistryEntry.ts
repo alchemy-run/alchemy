@@ -87,7 +87,7 @@ export type EmailSecurityImpersonationRegistryEntry = Resource<
  * @section Registering Protected Identities
  * @example Protect an executive's display name
  * ```typescript
- * yield* Cloudflare.EmailSecurityImpersonationRegistryEntry("Ceo", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry("Ceo", {
  *   name: "Jane Smith",
  *   email: "jane.smith@example.com",
  *   comments: "CEO — high-value BEC target",
@@ -96,7 +96,7 @@ export type EmailSecurityImpersonationRegistryEntry = Resource<
  *
  * @example Match several legitimate addresses with a regex
  * ```typescript
- * yield* Cloudflare.EmailSecurityImpersonationRegistryEntry("Finance", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry("Finance", {
  *   name: "Accounts Payable",
  *   email: "^ap(-[a-z]+)?@example\\.com$",
  *   isEmailRegex: true,

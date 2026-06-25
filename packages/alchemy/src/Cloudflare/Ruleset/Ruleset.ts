@@ -21,7 +21,7 @@ export type RulesetOutputRule = Omit<
 
 export type RulesetProps = {
   /**
-   * Zone to apply the ruleset to. Pass a `Cloudflare.Zone`.
+   * Zone to apply the ruleset to. Pass a `Cloudflare.Zone.Zone`.
    */
   zone: Zone;
   /**
@@ -51,7 +51,7 @@ export type RulesetKind =
   | (string & {});
 
 export type Ruleset = Resource<
-  "Cloudflare.Ruleset",
+  "Cloudflare.Ruleset.Ruleset",
   RulesetProps,
   {
     /** The unique ID of the ruleset (Cloudflare `id`). */
@@ -91,8 +91,8 @@ export type Ruleset = Resource<
  * @section WAF Rules
  * @example Block probes in the custom firewall phase
  * ```typescript
- * const zone = yield* Cloudflare.Zone("MyZone", { name: "example.com" });
- * const waf = yield* Cloudflare.Ruleset("WafRules", {
+ * const zone = yield* Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
+ * const waf = yield* Cloudflare.Ruleset.Ruleset("WafRules", {
  *   zone,
  *   phase: "http_request_firewall_custom",
  *   rules: [
@@ -105,7 +105,7 @@ export type Ruleset = Resource<
  * });
  * ```
  */
-export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset")({});
+export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset")({});
 
 export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {

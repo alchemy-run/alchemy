@@ -39,7 +39,7 @@ import * as Argo from "./Argo/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as BotManagement from "./BotManagement/index.ts";
-import * as Browser from "./Browser/index.ts";
+import * as Browser from "./Workers/index.ts";
 import * as Cache from "./Cache/index.ts";
 import * as Calls from "./Calls/index.ts";
 import * as CertificateAuthorities from "./CertificateAuthorities/index.ts";
@@ -48,7 +48,7 @@ import * as CloudConnector from "./CloudConnector/index.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as CloudforceOne from "./CloudforceOne/index.ts";
 import * as Connectivity from "./Connectivity/index.ts";
-import * as Containers from "./Container/index.ts";
+import * as Containers from "./Containers/index.ts";
 import * as ContentScanning from "./ContentScanning/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as CustomCertificates from "./CustomCertificate/index.ts";
@@ -104,7 +104,7 @@ import * as Pipelines from "./Pipelines/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as R2DataCatalog from "./R2DataCatalog/index.ts";
-import * as RateLimit from "./RateLimit/index.ts";
+import * as RateLimit from "./Workers/index.ts";
 import * as RealtimeKit from "./RealtimeKit/index.ts";
 import * as RegionalHostname from "./RegionalHostname/index.ts";
 import * as Registrar from "./Registrar/index.ts";
@@ -242,11 +242,11 @@ export const providers = () =>
       Dns.ZoneTransferPeer,
       Dns.ZoneTransferTsig,
       DnsFirewall.DnsFirewall,
-      Email.EmailAddress,
-      Email.EmailCatchAll,
-      Email.EmailRouting,
-      Email.EmailRule,
-      Email.EmailSendingSubdomain,
+      Email.Address,
+      Email.CatchAll,
+      Email.Routing,
+      Email.Rule,
+      Email.SendingSubdomain,
       EmailSecurity.EmailSecurityAllowPolicy,
       EmailSecurity.EmailSecurityBlockSender,
       EmailSecurity.EmailSecurityDomain,
@@ -413,9 +413,9 @@ export const providers = () =>
         D1.DatabaseProvider(),
         Devices.DeviceDefaultProfileProvider(),
         Dns.DnsRecordProvider(),
-        Email.EmailAddressProvider(),
-        Email.EmailRoutingProvider(),
-        Email.EmailRuleProvider(),
+        Email.AddressProvider(),
+        Email.RoutingProvider(),
+        Email.RuleProvider(),
         GatewayRule.GatewayRuleProvider(),
         Hyperdrive.ConnectionProvider(),
         KV.KVNamespaceProvider(),
@@ -526,11 +526,11 @@ export const providers = () =>
           Dns.DnssecProvider(),
           Dns.ZoneDnsSettingsProvider(),
           DnsFirewall.DnsFirewallProvider(),
-          Email.EmailAddressProvider(),
-          Email.EmailCatchAllProvider(),
-          Email.EmailRoutingProvider(),
-          Email.EmailRuleProvider(),
-          Email.EmailSendingSubdomainProvider(),
+          Email.AddressProvider(),
+          Email.CatchAllProvider(),
+          Email.RoutingProvider(),
+          Email.RuleProvider(),
+          Email.SendingSubdomainProvider(),
           EmailSecurity.EmailSecurityAllowPolicyProvider(),
           EmailSecurity.EmailSecurityBlockSenderProvider(),
           EmailSecurity.EmailSecurityDomainProvider(),

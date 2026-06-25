@@ -95,7 +95,7 @@ export type ShareRecipient = Resource<
  * @section Adding a Recipient
  * @example Share with another account
  * ```typescript
- * const recipient = yield* Cloudflare.ShareRecipient("Partner", {
+ * const recipient = yield* Cloudflare.ResourceSharing.ShareRecipient("Partner", {
  *   shareId: share.shareId,
  *   accountId: "<recipient-account-id>",
  * });
@@ -103,7 +103,7 @@ export type ShareRecipient = Resource<
  *
  * @example Share with an organization
  * ```typescript
- * const recipient = yield* Cloudflare.ShareRecipient("Org", {
+ * const recipient = yield* Cloudflare.ResourceSharing.ShareRecipient("Org", {
  *   shareId: share.shareId,
  *   organizationId: "<recipient-organization-id>",
  * });

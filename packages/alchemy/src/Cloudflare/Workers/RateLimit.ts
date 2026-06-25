@@ -159,7 +159,7 @@ const bindTag = RateLimitTag as unknown as (
  *         return HttpServerResponse.text(success ? "ok" : "rate limited");
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.RateLimitBinding)),
+ *   }).pipe(Effect.provide(Cloudflare.Workers.RateLimitBinding)),
  * );
  * ```
  *

@@ -9,7 +9,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const PageRuleTypeId = "Cloudflare.PageRule" as const;
+const PageRuleTypeId = "Cloudflare.PageRule.PageRule" as const;
 type PageRuleTypeId = typeof PageRuleTypeId;
 
 /**
@@ -106,8 +106,8 @@ export type PageRule = Resource<
  * :::caution[Legacy]
  * Page Rules are a legacy product superseded by Cloudflare's modern Rules
  * platform (Rulesets — Cache Rules, Redirect Rules, Configuration Rules,
- * Origin Rules, Transform Rules). Prefer `Cloudflare.Ruleset` for new
- * projects; use `Cloudflare.PageRule` only for existing setups or
+ * Origin Rules, Transform Rules). Prefer `Cloudflare.Ruleset.Ruleset` for new
+ * projects; use `Cloudflare.PageRule.PageRule` only for existing setups or
  * migrations. Page Rules are also plan-limited (Free 3, Pro 20,
  * Business 50, Enterprise 125).
  * :::
@@ -123,7 +123,7 @@ export type PageRule = Resource<
  * @section Caching
  * @example Cache everything under a path
  * ```typescript
- * yield* Cloudflare.PageRule("CacheImages", {
+ * yield* Cloudflare.PageRule.PageRule("CacheImages", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/images/*`,
  *   actions: [
@@ -137,7 +137,7 @@ export type PageRule = Resource<
  * @example Permanent redirect with forwarding_url
  * ```typescript
  * // forwarding_url cannot be combined with most other actions.
- * yield* Cloudflare.PageRule("RedirectOldBlog", {
+ * yield* Cloudflare.PageRule.PageRule("RedirectOldBlog", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/blog/*`,
  *   actions: [
@@ -152,7 +152,7 @@ export type PageRule = Resource<
  * @section Security
  * @example Force HTTPS and raise the security level
  * ```typescript
- * yield* Cloudflare.PageRule("SecureAdmin", {
+ * yield* Cloudflare.PageRule.PageRule("SecureAdmin", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/admin/*`,
  *   actions: [
@@ -166,7 +166,7 @@ export type PageRule = Resource<
  * @section Staged rollout
  * @example Create the rule disabled, flip to active later
  * ```typescript
- * yield* Cloudflare.PageRule("BypassCacheBeta", {
+ * yield* Cloudflare.PageRule.PageRule("BypassCacheBeta", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/beta/*`,
  *   actions: [{ id: "cache_level", value: "bypass" }],

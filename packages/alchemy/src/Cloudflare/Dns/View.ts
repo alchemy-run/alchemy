@@ -68,14 +68,14 @@ export type DnsView = Resource<
  * @section Creating a View
  * @example View over internal zones
  * ```typescript
- * const view = yield* Cloudflare.DnsView("Internal", {
+ * const view = yield* Cloudflare.Dns.DnsView("Internal", {
  *   zones: [internalZone.zoneId],
  * });
  * ```
  *
  * @example View with an explicit name
  * ```typescript
- * const view = yield* Cloudflare.DnsView("Internal", {
+ * const view = yield* Cloudflare.Dns.DnsView("Internal", {
  *   name: "datacenter-east",
  *   zones: [zoneA.zoneId, zoneB.zoneId],
  * });

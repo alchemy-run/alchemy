@@ -39,7 +39,7 @@ test.provider("list enumerates prefix delegations (read-only)", (stack) =>
     yield* stack.destroy();
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AddressingPrefixDelegation,
+      Cloudflare.Addressing.AddressingPrefixDelegation,
     );
     const all = yield* retryForbidden(provider.list());
 

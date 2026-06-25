@@ -78,20 +78,20 @@ export type Pipeline = Resource<
  * @section Creating a Pipeline
  * @example Stream → Sink passthrough
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("events", {});
- * const sink = yield* Cloudflare.PipelineSink("events-sink", {
+ * const stream = yield* Cloudflare.Pipelines.PipelineStream("events", {});
+ * const sink = yield* Cloudflare.Pipelines.PipelineSink("events-sink", {
  *   type: "r2",
  *   config: { bucket: bucket.bucketName, credentials },
  * });
  *
- * const pipeline = yield* Cloudflare.Pipeline("etl", {
+ * const pipeline = yield* Cloudflare.Pipelines.Pipeline("etl", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
  * });
  * ```
  *
  * @example Filtering transform
  * ```typescript
- * const pipeline = yield* Cloudflare.Pipeline("errors-only", {
+ * const pipeline = yield* Cloudflare.Pipelines.Pipeline("errors-only", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name} WHERE level = 'error'`,
  * });
  * ```

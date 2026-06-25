@@ -193,7 +193,7 @@ export type CertificatePack = Resource<
  * @section Ordering a certificate pack
  * @example Order an advanced certificate for the apex and a wildcard
  * ```typescript
- * const pack = yield* Cloudflare.CertificatePack("ApexCert", {
+ * const pack = yield* Cloudflare.Ssl.CertificatePack("ApexCert", {
  *   zoneId: zone.zoneId,
  *   certificateAuthority: "google",
  *   hosts: ["example.com", "*.example.com"],
@@ -204,7 +204,7 @@ export type CertificatePack = Resource<
  *
  * @example Order from Let's Encrypt with a short validity
  * ```typescript
- * yield* Cloudflare.CertificatePack("ShortLivedCert", {
+ * yield* Cloudflare.Ssl.CertificatePack("ShortLivedCert", {
  *   zoneId: zone.zoneId,
  *   certificateAuthority: "lets_encrypt",
  *   hosts: ["example.com", "api.example.com"],
@@ -216,7 +216,7 @@ export type CertificatePack = Resource<
  * @section Completing validation
  * @example Create the DCV TXT records the order asks for
  * ```typescript
- * const pack = yield* Cloudflare.CertificatePack("ApexCert", {
+ * const pack = yield* Cloudflare.Ssl.CertificatePack("ApexCert", {
  *   zoneId: zone.zoneId,
  *   certificateAuthority: "google",
  *   hosts: ["example.com"],

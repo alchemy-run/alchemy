@@ -49,7 +49,9 @@ test.provider("create and delete an app with default name", (stack) =>
 
     yield* stack.destroy();
 
-    const app = yield* stack.deploy(Cloudflare.CallsApp("DefaultApp", {}));
+    const app = yield* stack.deploy(
+      Cloudflare.Calls.CallsApp("DefaultApp", {}),
+    );
 
     expect(app.appId).toBeTruthy();
     expect(Redacted.value(app.secret)).toBeTruthy();
@@ -73,7 +75,7 @@ test.provider("update name in place (same appId, secret preserved)", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.CallsApp("UpdateApp", {
+      Cloudflare.Calls.CallsApp("UpdateApp", {
         name: "alchemy-calls-app-update",
       }),
     );
@@ -83,7 +85,7 @@ test.provider("update name in place (same appId, secret preserved)", (stack) =>
     expect(initialSecret).toBeTruthy();
 
     const updated = yield* stack.deploy(
-      Cloudflare.CallsApp("UpdateApp", {
+      Cloudflare.Calls.CallsApp("UpdateApp", {
         name: "alchemy-calls-app-update-v2",
       }),
     );
@@ -99,7 +101,7 @@ test.provider("update name in place (same appId, secret preserved)", (stack) =>
 
     // Redeploying identical props is a no-op (still the same app).
     const noop = yield* stack.deploy(
-      Cloudflare.CallsApp("UpdateApp", {
+      Cloudflare.Calls.CallsApp("UpdateApp", {
         name: "alchemy-calls-app-update-v2",
       }),
     );
@@ -119,12 +121,12 @@ test.provider("list enumerates the deployed app", (stack) =>
     yield* stack.destroy();
 
     const app = yield* stack.deploy(
-      Cloudflare.CallsApp("ListApp", {
+      Cloudflare.Calls.CallsApp("ListApp", {
         name: "alchemy-calls-app-list",
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.CallsApp);
+    const provider = yield* Provider.findProvider(Cloudflare.Calls.CallsApp);
     const all = yield* provider.list();
 
     // The account-scoped enumeration must contain the just-deployed app.
@@ -146,7 +148,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     const app = yield* stack.deploy(
-      Cloudflare.CallsApp("HealApp", {
+      Cloudflare.Calls.CallsApp("HealApp", {
         name: "alchemy-calls-app-heal",
       }),
     );
@@ -163,7 +165,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     );
 
     const healed = yield* stack.deploy(
-      Cloudflare.CallsApp("HealApp", {
+      Cloudflare.Calls.CallsApp("HealApp", {
         name: "alchemy-calls-app-heal-v2",
       }),
     );

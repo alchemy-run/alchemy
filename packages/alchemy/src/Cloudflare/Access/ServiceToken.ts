@@ -86,13 +86,13 @@ export type AccessServiceToken = Resource<
  * @section Creating a Service Token
  * @example Basic token with a generated name
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Ci", {});
+ * const token = yield* Cloudflare.Access.AccessServiceToken("Ci", {});
  * // token.clientId / token.clientSecret authenticate requests
  * ```
  *
  * @example Token with an explicit name and validity
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Deploys", {
+ * const token = yield* Cloudflare.Access.AccessServiceToken("Deploys", {
  *   name: "deploy-bot",
  *   duration: "17520h", // 2 years
  * });
@@ -101,7 +101,7 @@ export type AccessServiceToken = Resource<
  * @section Rotating the Secret
  * @example Increment clientSecretVersion to rotate
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Ci", {
+ * const token = yield* Cloudflare.Access.AccessServiceToken("Ci", {
  *   clientSecretVersion: 2, // was 1 — bumping rotates the secret
  * });
  * ```
@@ -109,9 +109,9 @@ export type AccessServiceToken = Resource<
  * @section Authorizing a Token
  * @example Reference from an Access policy
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Ci", {});
+ * const token = yield* Cloudflare.Access.AccessServiceToken("Ci", {});
  *
- * const policy = yield* Cloudflare.AccessPolicy("AllowCi", {
+ * const policy = yield* Cloudflare.Access.AccessPolicy("AllowCi", {
  *   decision: "non_identity",
  *   include: [{ serviceToken: { tokenId: token.serviceTokenId } }],
  * });

@@ -11,7 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MtlsCertificateTypeId = "Cloudflare.MtlsCertificate" as const;
+const MtlsCertificateTypeId =
+  "Cloudflare.MtlsCertificate.MtlsCertificate" as const;
 type MtlsCertificateTypeId = typeof MtlsCertificateTypeId;
 
 /**
@@ -124,7 +125,7 @@ export type MtlsCertificate = Resource<
  * @section Uploading Certificates
  * @example CA certificate
  * ```typescript
- * const ca = yield* Cloudflare.MtlsCertificate("client-ca", {
+ * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("client-ca", {
  *   ca: true,
  *   certificates: caPem,
  * });
@@ -132,7 +133,7 @@ export type MtlsCertificate = Resource<
  *
  * @example Leaf certificate with private key
  * ```typescript
- * const cert = yield* Cloudflare.MtlsCertificate("origin-client-cert", {
+ * const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate("origin-client-cert", {
  *   ca: false,
  *   certificates: leafPem,
  *   privateKey: alchemy.secret.env.ORIGIN_CLIENT_KEY,
@@ -141,7 +142,7 @@ export type MtlsCertificate = Resource<
  *
  * @example Named certificate
  * ```typescript
- * const ca = yield* Cloudflare.MtlsCertificate("client-ca", {
+ * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("client-ca", {
  *   name: "my-client-ca",
  *   ca: true,
  *   certificates: caPem,
@@ -151,7 +152,7 @@ export type MtlsCertificate = Resource<
  * @section Referencing from Hyperdrive
  * @example Verify the origin with an uploaded CA
  * ```typescript
- * const ca = yield* Cloudflare.MtlsCertificate("db-ca", {
+ * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("db-ca", {
  *   ca: true,
  *   certificates: caPem,
  * });

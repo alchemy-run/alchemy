@@ -28,7 +28,7 @@ export class ReleaseVersion extends Cloudflare.DurableObjectNamespace<ReleaseVer
         Layer.provideMerge(EvalLive),
         Layer.provideMerge(Cloudflare.AiGateway.layerChatDurableObject),
         Layer.provideMerge(
-          Cloudflare.layerContainer(DevBox, {
+          Cloudflare.Containers.layerContainer(DevBox, {
             enableInternet: true,
           }),
         ),

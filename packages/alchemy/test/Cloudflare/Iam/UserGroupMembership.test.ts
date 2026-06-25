@@ -78,12 +78,16 @@ const expectGone = (accountId: string, userGroupId: string, memberId: string) =>
 // keeps every test's groups isolated and self-healing.
 const program = (opts: { memberId: string; target: "A" | "B" }) =>
   Effect.gen(function* () {
-    const groupA = yield* Cloudflare.IamUserGroup("GroupA", {});
-    const groupB = yield* Cloudflare.IamUserGroup("GroupB", {});
-    const membership = yield* Cloudflare.IamUserGroupMembership("Membership", {
-      userGroup: opts.target === "A" ? groupA.userGroupId : groupB.userGroupId,
-      memberId: opts.memberId,
-    });
+    const groupA = yield* Cloudflare.Iam.IamUserGroup("GroupA", {});
+    const groupB = yield* Cloudflare.Iam.IamUserGroup("GroupB", {});
+    const membership = yield* Cloudflare.Iam.IamUserGroupMembership(
+      "Membership",
+      {
+        userGroup:
+          opts.target === "A" ? groupA.userGroupId : groupB.userGroupId,
+        memberId: opts.memberId,
+      },
+    );
     return { groupA, groupB, membership };
   });
 
@@ -153,7 +157,7 @@ test.provider(
       // Resolve the provider with the typed helper — element type is the
       // resource's exact Attributes shape (no `any`).
       const provider = yield* Provider.findProvider(
-        Cloudflare.IamUserGroupMembership,
+        Cloudflare.Iam.IamUserGroupMembership,
       );
 
       // Parent fan-out + per-group pagination must surface our deployed

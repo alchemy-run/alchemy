@@ -134,12 +134,12 @@ export type AccountMember = Resource<
  * @section Inviting a member
  * @example Invite with a role looked up by name
  * ```typescript
- * const role = yield* Cloudflare.findAccountRoleByName(
+ * const role = yield* Cloudflare.Account.findAccountRoleByName(
  *   accountId,
  *   "Administrator Read Only",
  * );
  *
- * yield* Cloudflare.AccountMember("Auditor", {
+ * yield* Cloudflare.Account.AccountMember("Auditor", {
  *   email: "auditor@example.com",
  *   roles: [role!.id],
  * });
@@ -149,7 +149,7 @@ export type AccountMember = Resource<
  * @example Swap the member's role in place
  * ```typescript
  * // Same email — the membership is updated, not replaced.
- * yield* Cloudflare.AccountMember("Auditor", {
+ * yield* Cloudflare.Account.AccountMember("Auditor", {
  *   email: "auditor@example.com",
  *   roles: [adminRole.id],
  * });
@@ -158,7 +158,7 @@ export type AccountMember = Resource<
  * @section Scoped policies (Enterprise)
  * @example Invite with a scoped policy instead of roles
  * ```typescript
- * yield* Cloudflare.AccountMember("ScopedOperator", {
+ * yield* Cloudflare.Account.AccountMember("ScopedOperator", {
  *   email: "operator@example.com",
  *   policies: [{
  *     access: "allow",

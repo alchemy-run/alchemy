@@ -120,7 +120,7 @@ export interface AccessApplicationProps {
   /**
    * Reusable Access policies that gate access to this application, in
    * ascending order of precedence. Author each policy with the
-   * `Cloudflare.AccessPolicy` resource and pass `policy.policyId` (or a bare
+   * `Cloudflare.Access.AccessPolicy` resource and pass `policy.policyId` (or a bare
    * policy UUID) here — Access applications no longer accept inline policy
    * bodies in this provider.
    *
@@ -206,13 +206,13 @@ export type AccessApplication = Resource<
  * @section Creating an Application
  * @example Self-hosted application gated by a reusable Access policy
  * ```typescript
- * const allowMyOrg = yield* Cloudflare.AccessPolicy("AllowMyOrg", {
+ * const allowMyOrg = yield* Cloudflare.Access.AccessPolicy("AllowMyOrg", {
  *   name: "Allow example.com via Google",
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  *
- * const app = yield* Cloudflare.AccessApplication("InternalDashboard", {
+ * const app = yield* Cloudflare.Access.AccessApplication("InternalDashboard", {
  *   type: "self_hosted",
  *   domain: "dashboard.example.com",
  *   sessionDuration: "24h",
@@ -225,13 +225,13 @@ export type AccessApplication = Resource<
  * ```typescript
  * // There can only be ONE warp app per account; Cloudflare auto-derives the
  * // domain (`${authDomain}/warp`) so do not pass `domain` for this type.
- * const allowCorp = yield* Cloudflare.AccessPolicy("AllowCorpUsers", {
+ * const allowCorp = yield* Cloudflare.Access.AccessPolicy("AllowCorpUsers", {
  *   name: "Allow corp users",
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  *
- * const enroll = yield* Cloudflare.AccessApplication("warp-login", {
+ * const enroll = yield* Cloudflare.Access.AccessApplication("warp-login", {
  *   type: "warp",
  *   allowedIdps: [googleIdpId],
  *   autoRedirectToIdentity: true,
@@ -243,7 +243,7 @@ export type AccessApplication = Resource<
  * @section Self-hosted with Google IdP
  * @example Self-hosted application restricted to a Google Workspace group
  * ```typescript
- * const admins = yield* Cloudflare.AccessPolicy("AdminsOnly", {
+ * const admins = yield* Cloudflare.Access.AccessPolicy("AdminsOnly", {
  *   name: "Admins only",
  *   decision: "allow",
  *   include: [
@@ -256,7 +256,7 @@ export type AccessApplication = Resource<
  *   ],
  * });
  *
- * const app = yield* Cloudflare.AccessApplication("AdminConsole", {
+ * const app = yield* Cloudflare.Access.AccessApplication("AdminConsole", {
  *   type: "self_hosted",
  *   domain: "admin.example.com",
  *   allowedIdps: [googleIdpUuid],

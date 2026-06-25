@@ -98,7 +98,7 @@ export type ZoneTransferPeer = Resource<
  * @section Creating a Peer
  * @example Primary nameserver to transfer from
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.Dns.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  * });
@@ -106,11 +106,11 @@ export type ZoneTransferPeer = Resource<
  *
  * @example Peer with TSIG authentication
  * ```typescript
- * const tsig = yield* Cloudflare.ZoneTransferTsig("TransferKey", {
+ * const tsig = yield* Cloudflare.Dns.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
  *   secret: Redacted.make(process.env.TSIG_SECRET!),
  * });
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.Dns.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   tsigId: tsig.tsigId,
  *   ixfrEnable: true,

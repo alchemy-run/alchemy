@@ -80,7 +80,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSecurityAllowPolicy,
+        Cloudflare.EmailSecurity.EmailSecurityAllowPolicy,
       );
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
@@ -100,16 +100,19 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityAllowPolicy("ListPolicy", {
-            pattern,
-            patternType: "EMAIL",
-            isAcceptableSender: true,
-          });
+          return yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy(
+            "ListPolicy",
+            {
+              pattern,
+              patternType: "EMAIL",
+              isAcceptableSender: true,
+            },
+          );
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSecurityAllowPolicy,
+        Cloudflare.EmailSecurity.EmailSecurityAllowPolicy,
       );
       const all = yield* provider.list();
       expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
@@ -132,12 +135,15 @@ test.provider.skipIf(!entitled)(
       // Create an acceptable-sender allow policy.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityAllowPolicy("Policy", {
-            pattern,
-            patternType: "EMAIL",
-            isAcceptableSender: true,
-            comments: "v1",
-          });
+          return yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy(
+            "Policy",
+            {
+              pattern,
+              patternType: "EMAIL",
+              isAcceptableSender: true,
+              comments: "v1",
+            },
+          );
         }),
       );
       expect(created.policyId).toBeDefined();
@@ -156,14 +162,17 @@ test.provider.skipIf(!entitled)(
       // Update mutable fields in place — same physical policy.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityAllowPolicy("Policy", {
-            pattern,
-            patternType: "EMAIL",
-            isAcceptableSender: true,
-            isExemptRecipient: true,
-            verifySender: false,
-            comments: "v2",
-          });
+          return yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy(
+            "Policy",
+            {
+              pattern,
+              patternType: "EMAIL",
+              isAcceptableSender: true,
+              isExemptRecipient: true,
+              verifySender: false,
+              comments: "v2",
+            },
+          );
         }),
       );
       expect(updated.policyId).toEqual(created.policyId);

@@ -10,7 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const RegionalHostnameTypeId = "Cloudflare.RegionalHostname" as const;
+const RegionalHostnameTypeId =
+  "Cloudflare.RegionalHostname.RegionalHostname" as const;
 type RegionalHostnameTypeId = typeof RegionalHostnameTypeId;
 
 export interface RegionalHostnameProps {
@@ -65,7 +66,7 @@ export type RegionalHostname = Resource<
  * Services).
  *
  * A DNS record for the hostname must exist in the zone for regionalization
- * to take effect (soft dependency on `Cloudflare.DnsRecord`). Only
+ * to take effect (soft dependency on `Cloudflare.Dns.DnsRecord`). Only
  * `regionKey` is mutable; `hostname` is the path identifier and `routing`
  * is create-only, so both force a replacement.
  *
@@ -77,7 +78,7 @@ export type RegionalHostname = Resource<
  * @section Regionalizing a Hostname
  * @example Pin a hostname to the EU
  * ```typescript
- * const regional = yield* Cloudflare.RegionalHostname("eu-only", {
+ * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.example.com",
  *   regionKey: "eu",
@@ -86,7 +87,7 @@ export type RegionalHostname = Resource<
  *
  * @example Move it to the US in place
  * ```typescript
- * const regional = yield* Cloudflare.RegionalHostname("eu-only", {
+ * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.example.com",
  *   regionKey: "us",

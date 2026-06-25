@@ -151,7 +151,7 @@ export type TokenValidationRule = Resource<
  * @section Creating a Rule
  * @example Log requests with invalid JWTs
  * ```typescript
- * const rule = yield* Cloudflare.TokenValidationRule("LogInvalidJwt", {
+ * const rule = yield* Cloudflare.TokenValidation.TokenValidationRule("LogInvalidJwt", {
  *   zoneId: zone.zoneId,
  *   action: "log",
  *   expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
@@ -161,7 +161,7 @@ export type TokenValidationRule = Resource<
  *
  * @example Block invalid JWTs, excluding a public operation
  * ```typescript
- * yield* Cloudflare.TokenValidationRule("BlockInvalidJwt", {
+ * yield* Cloudflare.TokenValidation.TokenValidationRule("BlockInvalidJwt", {
  *   zoneId: zone.zoneId,
  *   action: "block",
  *   expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
@@ -175,7 +175,7 @@ export type TokenValidationRule = Resource<
  * @section Updating a Rule
  * @example Disable a rule in place
  * ```typescript
- * yield* Cloudflare.TokenValidationRule("BlockInvalidJwt", {
+ * yield* Cloudflare.TokenValidation.TokenValidationRule("BlockInvalidJwt", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  *   action: "block",

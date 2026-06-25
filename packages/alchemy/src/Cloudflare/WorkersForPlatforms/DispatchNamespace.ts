@@ -82,12 +82,12 @@ export type DispatchNamespace = Resource<
  * @section Creating a Dispatch Namespace
  * @example Namespace with a generated name
  * ```typescript
- * const namespace = yield* Cloudflare.DispatchNamespace("Customers", {});
+ * const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Customers", {});
  * ```
  *
  * @example Namespace with an explicit name
  * ```typescript
- * const namespace = yield* Cloudflare.DispatchNamespace("Customers", {
+ * const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Customers", {
  *   name: "my-platform-customers",
  * });
  * ```

@@ -94,16 +94,16 @@ export type CacheReserve = Resource<
  * @section Managing Cache Reserve
  * @example Enable Cache Reserve on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.CacheReserve("Reserve", {
+ * yield* Cloudflare.Cache.CacheReserve("Reserve", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Clear stored data when the resource is destroyed
  * ```typescript
- * yield* Cloudflare.CacheReserve("Reserve", {
+ * yield* Cloudflare.Cache.CacheReserve("Reserve", {
  *   zoneId: zone.zoneId,
  *   clearOnDelete: true,
  * });

@@ -143,7 +143,7 @@ export type CloudIntegration = Resource<
  * @section Creating an integration
  * @example Register an AWS account
  * ```typescript
- * const aws = yield* Cloudflare.CloudIntegration("Discovery", {
+ * const aws = yield* Cloudflare.MagicCloudNetworking.CloudIntegration("Discovery", {
  *   cloudType: "AWS",
  *   description: "production AWS account",
  * });
@@ -152,7 +152,7 @@ export type CloudIntegration = Resource<
  *
  * @example Wire credentials after creating the IAM role
  * ```typescript
- * yield* Cloudflare.CloudIntegration("Discovery", {
+ * yield* Cloudflare.MagicCloudNetworking.CloudIntegration("Discovery", {
  *   cloudType: "AWS",
  *   awsArn: "arn:aws:iam::123456789012:role/cloudflare-mcn-discovery",
  * });
@@ -161,7 +161,7 @@ export type CloudIntegration = Resource<
  * @section GCP
  * @example Register a GCP project
  * ```typescript
- * yield* Cloudflare.CloudIntegration("GcpDiscovery", {
+ * yield* Cloudflare.MagicCloudNetworking.CloudIntegration("GcpDiscovery", {
  *   cloudType: "GOOGLE",
  *   gcpProjectId: "my-project",
  *   gcpServiceAccountEmail: "mcn@my-project.iam.gserviceaccount.com",

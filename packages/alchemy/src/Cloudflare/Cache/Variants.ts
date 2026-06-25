@@ -98,9 +98,9 @@ export type Variants = Resource<
  * @section Managing Variants
  * @example Serve WebP for JPEG URLs
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.Variants("ImageVariants", {
+ * yield* Cloudflare.Cache.Variants("ImageVariants", {
  *   zoneId: zone.zoneId,
  *   jpeg: ["image/webp"],
  *   jpg: ["image/webp"],
@@ -109,7 +109,7 @@ export type Variants = Resource<
  *
  * @example Allow WebP and AVIF for all common image extensions
  * ```typescript
- * yield* Cloudflare.Variants("ImageVariants", {
+ * yield* Cloudflare.Cache.Variants("ImageVariants", {
  *   zoneId: zone.zoneId,
  *   jpeg: ["image/webp", "image/avif"],
  *   jpg: ["image/webp", "image/avif"],

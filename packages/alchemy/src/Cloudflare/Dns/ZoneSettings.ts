@@ -220,7 +220,7 @@ export type ZoneDnsSettings = Resource<
  * @section Basic settings
  * @example Lower the NS record TTL
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   nsTtl: 3600,
  * });
@@ -228,7 +228,7 @@ export type ZoneDnsSettings = Resource<
  *
  * @example Flatten every CNAME in the zone
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   flattenAllCnames: true,
  * });
@@ -237,7 +237,7 @@ export type ZoneDnsSettings = Resource<
  * @section SOA tuning
  * @example Shorten the negative-caching TTL
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   soa: { minTtl: 300 },
  * });
@@ -246,7 +246,7 @@ export type ZoneDnsSettings = Resource<
  * @section Multi-provider DNS
  * @example Serve the zone alongside another DNS provider
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   multiProvider: true,
  * });

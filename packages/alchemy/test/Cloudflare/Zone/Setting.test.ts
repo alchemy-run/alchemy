@@ -73,7 +73,7 @@ test.provider(
 
       const setting = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneSetting("AlwaysOnline", {
+          return yield* Cloudflare.Zone.ZoneSetting("AlwaysOnline", {
             zoneId,
             settingId: "always_online",
             value: "off",
@@ -110,7 +110,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneSetting("BrowserCacheTtl", {
+          return yield* Cloudflare.Zone.ZoneSetting("BrowserCacheTtl", {
             zoneId,
             settingId: "browser_cache_ttl",
             value: 1800,
@@ -123,7 +123,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneSetting("BrowserCacheTtl", {
+          return yield* Cloudflare.Zone.ZoneSetting("BrowserCacheTtl", {
             zoneId,
             settingId: "browser_cache_ttl",
             value: 3600,
@@ -159,7 +159,7 @@ test.provider(
 
       const first = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneSetting("ReplaceSetting", {
+          return yield* Cloudflare.Zone.ZoneSetting("ReplaceSetting", {
             zoneId,
             settingId: "browser_check",
             value: "off",
@@ -176,7 +176,7 @@ test.provider(
       // restored to its pre-management value as the old instance deletes.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneSetting("ReplaceSetting", {
+          return yield* Cloudflare.Zone.ZoneSetting("ReplaceSetting", {
             zoneId,
             settingId: "email_obfuscation",
             value: "off",
@@ -215,7 +215,7 @@ test.provider("list enumerates the deployed (zone, setting) pair", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ZoneSetting("AlwaysUseHttps", {
+        return yield* Cloudflare.Zone.ZoneSetting("AlwaysUseHttps", {
           zoneId,
           settingId: "always_use_https",
           value: "on",
@@ -225,7 +225,7 @@ test.provider("list enumerates the deployed (zone, setting) pair", (stack) =>
     expect(deployed.settingId).toEqual("always_use_https");
     expect(deployed.value).toEqual("on");
 
-    const provider = yield* Provider.findProvider(Cloudflare.ZoneSetting);
+    const provider = yield* Provider.findProvider(Cloudflare.Zone.ZoneSetting);
     const all = yield* provider.list();
 
     // The deployed (zone, setting) pair is present, hydrated into the exact

@@ -98,7 +98,7 @@ export type AddressingBgpPrefix = Resource<
  * @section Advertising a Prefix
  * @example Advertise the whole BYOIP prefix
  * ```typescript
- * const bgp = yield* Cloudflare.AddressingBgpPrefix("advertise", {
+ * const bgp = yield* Cloudflare.Addressing.AddressingBgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
  *   cidr: prefix.cidr,
  *   advertised: true,
@@ -107,7 +107,7 @@ export type AddressingBgpPrefix = Resource<
  *
  * @example Withdraw with AS-Path prepending configured
  * ```typescript
- * const bgp = yield* Cloudflare.AddressingBgpPrefix("advertise", {
+ * const bgp = yield* Cloudflare.Addressing.AddressingBgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
  *   cidr: prefix.cidr,
  *   advertised: false,

@@ -3,7 +3,7 @@ import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 
 type ArtifactsTypeId = typeof ArtifactsTypeId;
-const ArtifactsTypeId = "Cloudflare.Artifacts" as const;
+const ArtifactsTypeId = "Cloudflare.Artifacts.Artifacts" as const;
 
 /**
  * Cloudflare validation: 3–63 chars, lowercase alphanumeric and hyphens, must

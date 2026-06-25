@@ -71,16 +71,16 @@ export type RealtimeKitApp = Resource<
  * @section Creating an App
  * @example Basic app
  * ```typescript
- * const app = yield* Cloudflare.RealtimeKitApp("Meetings", {
+ * const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("Meetings", {
  *   name: "my-meetings-app",
  * });
  * ```
  *
  * @example Child resources
  * ```typescript
- * const app = yield* Cloudflare.RealtimeKitApp("Meetings", {});
+ * const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("Meetings", {});
  *
- * const webhook = yield* Cloudflare.RealtimeKitWebhook("Events", {
+ * const webhook = yield* Cloudflare.RealtimeKit.RealtimeKitWebhook("Events", {
  *   appId: app.appId,
  *   url: "https://example.com/webhook",
  *   events: ["meeting.started", "meeting.ended"],

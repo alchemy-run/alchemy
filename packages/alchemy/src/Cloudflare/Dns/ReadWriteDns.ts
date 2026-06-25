@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Zone } from "../Zone/Zone.ts";
 import { type DnsToken } from "./DnsBinding.ts";
-import { dnsReadClient, type DnsReadClient } from "./DnsRead.ts";
-import { dnsWriteClient, type DnsWriteClient } from "./DnsWrite.ts";
+import { dnsReadClient, type ReadDnsClient } from "./ReadDns.ts";
+import { dnsWriteClient, type WriteDnsClient } from "./WriteDns.ts";
 
 /**
  * Binding that lets a Worker perform the full Cloudflare DNS record CRUD
@@ -20,7 +20,7 @@ import { dnsWriteClient, type DnsWriteClient } from "./DnsWrite.ts";
  * @section Managing DNS records at runtime
  * @example Full CRUD from inside a Worker
  * Bind the client in the Worker's Init phase and provide
- * {@link DnsReadWriteBinding}. The zone is fixed by `.bind(zone)` — the
+ * {@link ReadWriteDnsBinding}. The zone is fixed by `.bind(zone)` — the
  * provisioned token only grants access to that zone, so calls take no
  * `zoneId`. Pass the {@link Zone} resource directly (it's an `Effect`), or
  * `yield* Zone` for a resolved value.
@@ -29,14 +29,14 @@ import { dnsWriteClient, type DnsWriteClient } from "./DnsWrite.ts";
  * import * as Effect from "effect/Effect";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * const Zone = Cloudflare.Zone("MyZone", { name: "example.com" });
+ * const Zone = Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
  *
  * export class DnsWorker extends Cloudflare.Worker<DnsWorker>()(
  *   "DnsWorker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // Init phase — bind the full CRUD client scoped to the zone.
- *     const dns = yield* Cloudflare.DnsReadWrite(Zone);
+ *     const dns = yield* Cloudflare.Dns.ReadWriteDns(Zone);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -51,28 +51,28 @@ import { dnsWriteClient, type DnsWriteClient } from "./DnsWrite.ts";
  *         return yield* HttpServerResponse.json({ id: record.id });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.DnsReadWriteBinding)),
+ *   }).pipe(Effect.provide(Cloudflare.Dns.ReadWriteDnsBinding)),
  * ) {}
  * ```
  */
-export interface DnsReadWrite extends Binding.Service<
-  DnsReadWrite,
-  "Cloudflare.Dns.DnsReadWrite",
-  (zone: Zone) => Effect.Effect<DnsReadWriteClient>
+export interface ReadWriteDns extends Binding.Service<
+  ReadWriteDns,
+  "Cloudflare.Dns.ReadWriteDns",
+  (zone: Zone) => Effect.Effect<ReadWriteDnsClient>
 > {}
 
-export const DnsReadWrite = Binding.Service<DnsReadWrite>(
-  "Cloudflare.Dns.DnsReadWrite",
+export const ReadWriteDns = Binding.Service<ReadWriteDns>(
+  "Cloudflare.Dns.ReadWriteDns",
 );
 
 /** Combined read + write DNS record operations. */
-export interface DnsReadWriteClient extends DnsReadClient, DnsWriteClient {}
+export interface ReadWriteDnsClient extends ReadDnsClient, WriteDnsClient {}
 
 /** Build the combined read + write client over a bound token and zone id. */
 export const dnsReadWriteClient = (
   token: DnsToken,
   zoneId: Effect.Effect<string>,
-): DnsReadWriteClient => ({
+): ReadWriteDnsClient => ({
   ...dnsReadClient(token, zoneId),
   ...dnsWriteClient(token, zoneId),
 });

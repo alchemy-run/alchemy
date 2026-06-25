@@ -76,8 +76,8 @@ export interface ImagesClient {
 /**
  * The Cloudflare Images runtime binding. A single identifier that is
  * simultaneously the binding's Context tag, its type, and the callable —
- * `yield* Cloudflare.Images(...)` resolves through this. Prefer yielding the
- * {@link ImagesLike} marker (`Cloudflare.Images({ name })`) directly.
+ * `yield* Cloudflare.Images.Images(...)` resolves through this. Prefer yielding the
+ * {@link ImagesLike} marker (`Cloudflare.Images.Images({ name })`) directly.
  *
  * @binding
  * @product Images

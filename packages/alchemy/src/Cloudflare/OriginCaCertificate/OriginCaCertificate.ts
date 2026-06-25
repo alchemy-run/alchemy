@@ -11,7 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { findZoneByName, listAllZones } from "../Zone/lookup.ts";
 
-const OriginCaCertificateTypeId = "Cloudflare.OriginCaCertificate" as const;
+const OriginCaCertificateTypeId =
+  "Cloudflare.OriginCaCertificate.OriginCaCertificate" as const;
 type OriginCaCertificateTypeId = typeof OriginCaCertificateTypeId;
 
 /**
@@ -121,7 +122,7 @@ export type OriginCaCertificate = Resource<
  * @section Issuing a certificate
  * @example RSA certificate for a single hostname
  * ```typescript
- * const cert = yield* Cloudflare.OriginCaCertificate("origin-cert", {
+ * const cert = yield* Cloudflare.OriginCaCertificate.OriginCaCertificate("origin-cert", {
  *   csr: originCsrPem,
  *   hostnames: ["origin.example.com"],
  *   requestType: "origin-rsa",
@@ -131,7 +132,7 @@ export type OriginCaCertificate = Resource<
  *
  * @example Wildcard ECDSA certificate with the default 15-year validity
  * ```typescript
- * const cert = yield* Cloudflare.OriginCaCertificate("wildcard-cert", {
+ * const cert = yield* Cloudflare.OriginCaCertificate.OriginCaCertificate("wildcard-cert", {
  *   csr: wildcardCsrPem,
  *   hostnames: ["example.com", "*.example.com"],
  *   requestType: "origin-ecc",

@@ -113,7 +113,7 @@ export type DeviceDexTest = Resource<
  * @section Creating a DEX test
  * @example HTTP probe every 30 minutes
  * ```typescript
- * const test = yield* Cloudflare.DeviceDexTest("AppHealth", {
+ * const test = yield* Cloudflare.Devices.DeviceDexTest("AppHealth", {
  *   data: { host: "https://app.example.com/health", kind: "http", method: "GET" },
  *   interval: "0h30m0s",
  *   description: "Internal app reachability",
@@ -122,7 +122,7 @@ export type DeviceDexTest = Resource<
  *
  * @example Traceroute probe targeting specific device profiles
  * ```typescript
- * const trace = yield* Cloudflare.DeviceDexTest("OriginTrace", {
+ * const trace = yield* Cloudflare.Devices.DeviceDexTest("OriginTrace", {
  *   data: { host: "203.0.113.10", kind: "traceroute" },
  *   interval: "0h30m0s",
  *   targeted: true,

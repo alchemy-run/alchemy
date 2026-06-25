@@ -142,14 +142,14 @@ export type StreamWatermark = Resource<
  * @section Creating a watermark
  * @example Default watermark from an image URL
  * ```typescript
- * const watermark = yield* Cloudflare.StreamWatermark("Logo", {
+ * const watermark = yield* Cloudflare.Stream.StreamWatermark("Logo", {
  *   url: "https://example.com/logo.png",
  * });
  * ```
  *
  * @example Centered semi-transparent watermark
  * ```typescript
- * const watermark = yield* Cloudflare.StreamWatermark("Logo", {
+ * const watermark = yield* Cloudflare.Stream.StreamWatermark("Logo", {
  *   url: "https://example.com/logo.png",
  *   position: "center",
  *   opacity: 0.5,

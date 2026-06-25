@@ -89,20 +89,20 @@ export type GatewayCertificate = Resource<
  *
  * To make Gateway actually intercept with this certificate, reference its
  * `certificateId` from the Gateway configuration's `certificate` setting
- * (see `Cloudflare.GatewayConfiguration`).
+ * (see `Cloudflare.Gateway.GatewayConfiguration`).
  * @resource
  * @product Gateway
  * @category Cloudflare One (Zero Trust)
  * @section Creating a Certificate
  * @example Activated certificate (default)
  * ```typescript
- * const cert = yield* Cloudflare.GatewayCertificate("InspectionCa", {});
+ * const cert = yield* Cloudflare.Gateway.GatewayCertificate("InspectionCa", {});
  * // cert.bindingStatus === "available" once deployed to the edge
  * ```
  *
  * @example Short-lived, kept inactive
  * ```typescript
- * const cert = yield* Cloudflare.GatewayCertificate("StagedCa", {
+ * const cert = yield* Cloudflare.Gateway.GatewayCertificate("StagedCa", {
  *   validityPeriodDays: 365,
  *   activate: false,
  * });
@@ -111,8 +111,8 @@ export type GatewayCertificate = Resource<
  * @section Using the certificate for TLS interception
  * @example Wire into the Gateway configuration
  * ```typescript
- * const cert = yield* Cloudflare.GatewayCertificate("InspectionCa", {});
- * yield* Cloudflare.GatewayConfiguration("Gateway", {
+ * const cert = yield* Cloudflare.Gateway.GatewayCertificate("InspectionCa", {});
+ * yield* Cloudflare.Gateway.GatewayConfiguration("Gateway", {
  *   settings: {
  *     tlsDecrypt: { enabled: true },
  *     certificate: { id: cert.certificateId },

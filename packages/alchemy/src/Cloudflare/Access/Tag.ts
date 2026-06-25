@@ -47,12 +47,12 @@ export type AccessTag = Resource<
  * @section Creating a Tag
  * @example Tag with a generated name
  * ```typescript
- * const tag = yield* Cloudflare.AccessTag("Team", {});
+ * const tag = yield* Cloudflare.Access.AccessTag("Team", {});
  * ```
  *
  * @example Tag with an explicit name
  * ```typescript
- * const tag = yield* Cloudflare.AccessTag("Team", {
+ * const tag = yield* Cloudflare.Access.AccessTag("Team", {
  *   name: "platform-team",
  * });
  * ```
@@ -60,9 +60,9 @@ export type AccessTag = Resource<
  * @section Tagging an Application
  * @example Reference from an Access application
  * ```typescript
- * const tag = yield* Cloudflare.AccessTag("Team", { name: "platform-team" });
+ * const tag = yield* Cloudflare.Access.AccessTag("Team", { name: "platform-team" });
  *
- * const app = yield* Cloudflare.AccessApplication("Dashboard", {
+ * const app = yield* Cloudflare.Access.AccessApplication("Dashboard", {
  *   type: "self_hosted",
  *   domain: "dash.example.com",
  *   tags: [tag.name],

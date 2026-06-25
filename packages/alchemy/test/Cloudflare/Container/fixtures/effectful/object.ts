@@ -53,7 +53,7 @@ export class Object extends Cloudflare.DurableObjectNamespace<Object>()(
     Effect.provide(
       Layer.mergeAll(
         Cloudflare.R2.ReadWriteBucketBinding,
-        Cloudflare.layerContainer(MyContainer, {
+        Cloudflare.Containers.layerContainer(MyContainer, {
           enableInternet: true,
         }),
       ),

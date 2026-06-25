@@ -156,7 +156,7 @@ export type EmailSecurityDomain = Resource<
  * @section Configuring a Domain
  * @example Drop malicious mail before delivery
  * ```typescript
- * yield* Cloudflare.EmailSecurityDomain("MailDomain", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityDomain("MailDomain", {
  *   domain: "example.com",
  *   dropDispositions: ["MALICIOUS", "SPOOF"],
  * });
@@ -164,7 +164,7 @@ export type EmailSecurityDomain = Resource<
  *
  * @example Restrict inbound delivery and require TLS
  * ```typescript
- * yield* Cloudflare.EmailSecurityDomain("MailDomain", {
+ * yield* Cloudflare.EmailSecurity.EmailSecurityDomain("MailDomain", {
  *   domain: "example.com",
  *   ipRestrictions: ["203.0.113.0/24"],
  *   requireTlsInbound: true,
@@ -239,7 +239,7 @@ export const EmailSecurityDomainProvider = () =>
         return yield* Effect.fail(
           new Error(
             `Domain "${news.domain}" is not onboarded to Email Security on ` +
-              `account ${accountId}. Cloudflare.EmailSecurityDomain only ` +
+              `account ${accountId}. Cloudflare.EmailSecurity.EmailSecurityDomain only ` +
               `manages settings on an existing domain — onboard the domain ` +
               `in the Email Security dashboard first.`,
           ),

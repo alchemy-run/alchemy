@@ -99,11 +99,14 @@ test.provider(
 
       const schema = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("DefaultSchema", {
-            zoneId,
-            name: NAME_DEFAULT,
-            schema: source,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ApiShield.ApiShieldUserSchema(
+            "DefaultSchema",
+            {
+              zoneId,
+              name: NAME_DEFAULT,
+              schema: source,
+            },
+          ).pipe(adopt(true));
         }),
       );
 
@@ -121,12 +124,15 @@ test.provider(
       // Enable validation — same identity, patched in place.
       const enabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("DefaultSchema", {
-            zoneId,
-            name: NAME_DEFAULT,
-            schema: source,
-            validationEnabled: true,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ApiShield.ApiShieldUserSchema(
+            "DefaultSchema",
+            {
+              zoneId,
+              name: NAME_DEFAULT,
+              schema: source,
+              validationEnabled: true,
+            },
+          ).pipe(adopt(true));
         }),
       );
       expect(enabled.schemaId).toEqual(schema.schemaId);
@@ -156,22 +162,28 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("ReplaceSchema", {
-            zoneId,
-            name: NAME_REPLACE,
-            schema: sourceV1,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ApiShield.ApiShieldUserSchema(
+            "ReplaceSchema",
+            {
+              zoneId,
+              name: NAME_REPLACE,
+              schema: sourceV1,
+            },
+          ).pipe(adopt(true));
         }),
       );
       expect(initial.source).toEqual(sourceV1);
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("ReplaceSchema", {
-            zoneId,
-            name: NAME_REPLACE,
-            schema: sourceV2,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ApiShield.ApiShieldUserSchema(
+            "ReplaceSchema",
+            {
+              zoneId,
+              name: NAME_REPLACE,
+              schema: sourceV2,
+            },
+          ).pipe(adopt(true));
         }),
       );
 
@@ -209,7 +221,7 @@ test.provider(
 
       const schema = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("ListSchema", {
+          return yield* Cloudflare.ApiShield.ApiShieldUserSchema("ListSchema", {
             zoneId,
             name: NAME_LIST,
             schema: source,
@@ -218,7 +230,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ApiShieldUserSchema,
+        Cloudflare.ApiShield.ApiShieldUserSchema,
       );
       const all = yield* provider.list();
 

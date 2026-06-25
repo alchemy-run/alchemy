@@ -148,11 +148,14 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         yield* purgeCertificates(zoneId);
 
         const cert = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
-            zoneId,
-            certificate: CERT_1,
-            privateKey: Redacted.make(KEY_1),
-          }),
+          Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate(
+            "AopCert",
+            {
+              zoneId,
+              certificate: CERT_1,
+              privateKey: Redacted.make(KEY_1),
+            },
+          ),
         );
 
         expect(cert.certificateId).toBeDefined();
@@ -183,19 +186,25 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         yield* purgeCertificates(zoneId);
 
         const original = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("ReplaceCert", {
-            zoneId,
-            certificate: CERT_1,
-            privateKey: Redacted.make(KEY_1),
-          }),
+          Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate(
+            "ReplaceCert",
+            {
+              zoneId,
+              certificate: CERT_1,
+              privateKey: Redacted.make(KEY_1),
+            },
+          ),
         );
 
         const replaced = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("ReplaceCert", {
-            zoneId,
-            certificate: CERT_2,
-            privateKey: Redacted.make(KEY_2),
-          }),
+          Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate(
+            "ReplaceCert",
+            {
+              zoneId,
+              certificate: CERT_2,
+              privateKey: Redacted.make(KEY_2),
+            },
+          ),
         );
 
         expect(replaced.certificateId).toBeDefined();
@@ -229,18 +238,21 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         yield* purgeCertificates(zoneId);
 
         const cert = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("ListCert", {
-            zoneId,
-            // Dedicated PEM (see fixtures/certs.ts): keeps this certificate out
-            // of the upload/delete churn the sibling tests put CERT_1 through,
-            // so it appears in the eventually-consistent list promptly.
-            certificate: CERT_7,
-            privateKey: Redacted.make(KEY_7),
-          }),
+          Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate(
+            "ListCert",
+            {
+              zoneId,
+              // Dedicated PEM (see fixtures/certs.ts): keeps this certificate out
+              // of the upload/delete churn the sibling tests put CERT_1 through,
+              // so it appears in the eventually-consistent list promptly.
+              certificate: CERT_7,
+              privateKey: Redacted.make(KEY_7),
+            },
+          ),
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.OriginTlsClientAuthCertificate,
+          Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate,
         );
         // A freshly uploaded certificate can lag the zone list endpoint by tens
         // of seconds — especially when the same PEM was recently deleted and

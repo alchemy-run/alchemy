@@ -65,12 +65,12 @@ export type ImagesSigningKey = Resource<
  * @section Creating a Signing Key
  * @example Key with a generated name
  * ```typescript
- * const key = yield* Cloudflare.ImagesSigningKey("UrlSigner", {});
+ * const key = yield* Cloudflare.Images.ImagesSigningKey("UrlSigner", {});
  * ```
  *
  * @example Key with an explicit name
  * ```typescript
- * const key = yield* Cloudflare.ImagesSigningKey("UrlSigner", {
+ * const key = yield* Cloudflare.Images.ImagesSigningKey("UrlSigner", {
  *   name: "my-app-signer",
  * });
  * ```

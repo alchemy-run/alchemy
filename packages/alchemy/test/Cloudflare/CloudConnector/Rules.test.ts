@@ -81,17 +81,20 @@ describe.sequential("Rules", () => {
         // Create the singleton with a single S3 rule.
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
-              zoneId,
-              rules: [
-                {
-                  provider: "aws_s3",
-                  expression: EXPRESSION_V1,
-                  host: HOST_A,
-                  description: "alchemy cloud connector test",
-                },
-              ],
-            }).pipe(adopt(true));
+            return yield* Cloudflare.CloudConnector.CloudConnectorRules(
+              "Rules",
+              {
+                zoneId,
+                rules: [
+                  {
+                    provider: "aws_s3",
+                    expression: EXPRESSION_V1,
+                    host: HOST_A,
+                    description: "alchemy cloud connector test",
+                  },
+                ],
+              },
+            ).pipe(adopt(true));
           }),
         );
 
@@ -114,23 +117,26 @@ describe.sequential("Rules", () => {
         // atomically, not the resource.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
-              zoneId,
-              rules: [
-                {
-                  provider: "aws_s3",
-                  expression: EXPRESSION_V2,
-                  host: HOST_A,
-                  description: "alchemy cloud connector test v2",
-                },
-                {
-                  provider: "aws_s3",
-                  expression: EXPRESSION_B,
-                  host: HOST_B,
-                  enabled: false,
-                },
-              ],
-            }).pipe(adopt(true));
+            return yield* Cloudflare.CloudConnector.CloudConnectorRules(
+              "Rules",
+              {
+                zoneId,
+                rules: [
+                  {
+                    provider: "aws_s3",
+                    expression: EXPRESSION_V2,
+                    host: HOST_A,
+                    description: "alchemy cloud connector test v2",
+                  },
+                  {
+                    provider: "aws_s3",
+                    expression: EXPRESSION_B,
+                    host: HOST_B,
+                    enabled: false,
+                  },
+                ],
+              },
+            ).pipe(adopt(true));
           }),
         );
 
@@ -167,17 +173,20 @@ describe.sequential("Rules", () => {
 
         const deployOnce = stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
-              zoneId,
-              rules: [
-                {
-                  provider: "aws_s3",
-                  expression: EXPRESSION_V1,
-                  host: HOST_A,
-                  description: "alchemy cloud connector noop test",
-                },
-              ],
-            }).pipe(adopt(true));
+            return yield* Cloudflare.CloudConnector.CloudConnectorRules(
+              "Rules",
+              {
+                zoneId,
+                rules: [
+                  {
+                    provider: "aws_s3",
+                    expression: EXPRESSION_V1,
+                    host: HOST_A,
+                    description: "alchemy cloud connector noop test",
+                  },
+                ],
+              },
+            ).pipe(adopt(true));
           }),
         );
 
@@ -216,22 +225,25 @@ describe.sequential("Rules", () => {
 
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
-              zoneId,
-              rules: [
-                {
-                  provider: "aws_s3",
-                  expression: EXPRESSION_V1,
-                  host: HOST_A,
-                  description: "alchemy cloud connector list test",
-                },
-              ],
-            }).pipe(adopt(true));
+            return yield* Cloudflare.CloudConnector.CloudConnectorRules(
+              "Rules",
+              {
+                zoneId,
+                rules: [
+                  {
+                    provider: "aws_s3",
+                    expression: EXPRESSION_V1,
+                    host: HOST_A,
+                    description: "alchemy cloud connector list test",
+                  },
+                ],
+              },
+            ).pipe(adopt(true));
           }),
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.CloudConnectorRules,
+          Cloudflare.CloudConnector.CloudConnectorRules,
         );
         const all = yield* provider.list();
 

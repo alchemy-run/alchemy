@@ -37,7 +37,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
     },
   },
   Effect.gen(function* () {
-    const artifacts = yield* Cloudflare.Artifacts(Repos);
+    const artifacts = yield* Cloudflare.Artifacts.Artifacts(Repos);
     const repos = yield* Repo;
 
     const findRepo = (name: string) =>

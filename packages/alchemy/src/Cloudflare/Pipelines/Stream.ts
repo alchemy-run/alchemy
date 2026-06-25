@@ -192,12 +192,12 @@ export type PipelineStream = Resource<
  * @section Creating a Stream
  * @example Unstructured stream with default settings
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("events", {});
+ * const stream = yield* Cloudflare.Pipelines.PipelineStream("events", {});
  * ```
  *
  * @example Structured stream with a typed schema
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("clicks", {
+ * const stream = yield* Cloudflare.Pipelines.PipelineStream("clicks", {
  *   schema: {
  *     fields: [
  *       { type: "string", name: "url", required: true },
@@ -210,7 +210,7 @@ export type PipelineStream = Resource<
  * @section HTTP ingestion
  * @example Authenticated endpoint with CORS
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("events", {
+ * const stream = yield* Cloudflare.Pipelines.PipelineStream("events", {
  *   http: {
  *     enabled: true,
  *     authentication: true,
@@ -223,7 +223,7 @@ export type PipelineStream = Resource<
  * @section Wiring into a Pipeline
  * @example Stream → SQL Pipeline → R2 Sink
  * ```typescript
- * const pipeline = yield* Cloudflare.Pipeline("etl", {
+ * const pipeline = yield* Cloudflare.Pipelines.Pipeline("etl", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
  * });
  * ```

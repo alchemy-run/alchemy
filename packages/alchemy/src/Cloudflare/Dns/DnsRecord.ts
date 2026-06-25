@@ -141,7 +141,7 @@ export type DnsRecord = Resource<
  * @section Proxied CNAME pointing at a tunnel
  * @example Route a subdomain through a Cloudflare Tunnel
  * ```typescript
- * yield* Cloudflare.DnsRecord("AdminCname", {
+ * yield* Cloudflare.Dns.DnsRecord("AdminCname", {
  *   zoneId: zone.zoneId,
  *   name: "cluster-admin.example.com",
  *   type: "CNAME",
@@ -154,7 +154,7 @@ export type DnsRecord = Resource<
  * @section Plain A record
  * @example Direct A record (not proxied)
  * ```typescript
- * yield* Cloudflare.DnsRecord("ApiA", {
+ * yield* Cloudflare.Dns.DnsRecord("ApiA", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   type: "A",

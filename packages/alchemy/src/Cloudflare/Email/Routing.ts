@@ -8,27 +8,27 @@ import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-type EmailRoutingAttributes = EmailRouting["Attributes"];
+type RoutingAttributes = Routing["Attributes"];
 
 const toAttributes = (
   zoneId: string,
   result: emailRouting.GetEmailRoutingResponse,
-): EmailRoutingAttributes => ({
+): RoutingAttributes => ({
   routingId: result.id,
   zoneId,
   name: result.name,
   enabled: result.enabled,
-  status: (result.status ?? undefined) as EmailRoutingStatus | undefined,
+  status: (result.status ?? undefined) as RoutingStatus | undefined,
 });
 
-export type EmailRoutingStatus =
+export type RoutingStatus =
   | "ready"
   | "unconfigured"
   | "misconfigured"
   | "misconfigured/locked"
   | "unlocked";
 
-export type EmailRoutingProps = {
+export type RoutingProps = {
   /**
    * Zone to enable email routing on. Accepts a zone id, a zone name
    * (`example.com`), or a `{ zoneId, name? }` object.
@@ -42,15 +42,15 @@ export type EmailRoutingProps = {
   enabled?: boolean;
 };
 
-export type EmailRouting = Resource<
-  "Cloudflare.EmailRouting",
-  EmailRoutingProps,
+export type Routing = Resource<
+  "Cloudflare.Email.Routing",
+  RoutingProps,
   {
     routingId: string;
     zoneId: string;
     name: string;
     enabled: boolean;
-    status: EmailRoutingStatus | undefined;
+    status: RoutingStatus | undefined;
   },
   never,
   Providers
@@ -66,12 +66,12 @@ export type EmailRouting = Resource<
  * @section Enabling Email Routing
  * @example Enable on a zone you own
  * ```typescript
- * const routing = yield* Cloudflare.EmailRouting("Routing", {
+ * const routing = yield* Cloudflare.Email.Routing("Routing", {
  *   zone: "example.com",
  * });
  * ```
  */
-export const EmailRouting = Resource<EmailRouting>("Cloudflare.EmailRouting");
+export const Routing = Resource<Routing>("Cloudflare.Email.Routing");
 
 const resolve = Effect.fn(function* (zone: ZoneReference) {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -82,8 +82,8 @@ const resolve = Effect.fn(function* (zone: ZoneReference) {
   });
 });
 
-export const EmailRoutingProvider = () =>
-  Provider.succeed(EmailRouting, {
+export const RoutingProvider = () =>
+  Provider.succeed(Routing, {
     nuke: { singleton: true },
     stables: ["zoneId", "routingId"],
     list: Effect.fn(function* () {
@@ -102,9 +102,7 @@ export const EmailRoutingProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is EmailRoutingAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is RoutingAttributes => row !== undefined);
     }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!output) return undefined;
@@ -128,7 +126,7 @@ export const EmailRoutingProvider = () =>
         zoneId: output.zoneId,
         name: result.name,
         enabled: result.enabled,
-        status: (result.status ?? undefined) as EmailRoutingStatus | undefined,
+        status: (result.status ?? undefined) as RoutingStatus | undefined,
       };
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -145,9 +143,7 @@ export const EmailRoutingProvider = () =>
           zoneId,
           name: result.name,
           enabled: result.enabled,
-          status: (result.status ?? undefined) as
-            | EmailRoutingStatus
-            | undefined,
+          status: (result.status ?? undefined) as RoutingStatus | undefined,
         };
       } else {
         const result = yield* emailRouting.disableEmailRouting({
@@ -159,9 +155,7 @@ export const EmailRoutingProvider = () =>
           zoneId,
           name: result.name,
           enabled: result.enabled,
-          status: (result.status ?? undefined) as
-            | EmailRoutingStatus
-            | undefined,
+          status: (result.status ?? undefined) as RoutingStatus | undefined,
         };
       }
     }),

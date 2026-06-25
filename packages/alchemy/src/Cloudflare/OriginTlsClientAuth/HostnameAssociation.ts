@@ -98,13 +98,13 @@ export type OriginTlsClientAuthHostnameAssociation = Resource<
  * @section Enabling AOP for a hostname
  * @example Associate a hostname with a client certificate
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
  * });
  *
- * yield* Cloudflare.OriginTlsClientAuthHostnameAssociation("AopHost", {
+ * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameAssociation("AopHost", {
  *   zoneId: zone.zoneId,
  *   hostname: "api.example.com",
  *   certId: cert.certificateId,
@@ -114,7 +114,7 @@ export type OriginTlsClientAuthHostnameAssociation = Resource<
  *
  * @example Keep the certificate pinned but disable enforcement
  * ```typescript
- * yield* Cloudflare.OriginTlsClientAuthHostnameAssociation("AopHost", {
+ * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameAssociation("AopHost", {
  *   zoneId: zone.zoneId,
  *   hostname: "api.example.com",
  *   certId: cert.certificateId,

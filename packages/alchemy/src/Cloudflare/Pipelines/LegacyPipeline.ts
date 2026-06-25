@@ -175,9 +175,9 @@ export type LegacyPipeline = Resource<
  * the access key id is the token id and the secret is the SHA-256 hex
  * digest of the token value.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("events", {});
+ * const bucket = yield* Cloudflare.R2.R2Bucket("events", {});
  *
- * const pipeline = yield* Cloudflare.LegacyPipeline("ingest", {
+ * const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("ingest", {
  *   destination: {
  *     bucket: bucket.bucketName,
  *     credentials: {
@@ -191,7 +191,7 @@ export type LegacyPipeline = Resource<
  *
  * @example Tuned batching and CORS
  * ```typescript
- * const pipeline = yield* Cloudflare.LegacyPipeline("ingest", {
+ * const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("ingest", {
  *   source: [
  *     { type: "http", cors: { origins: ["https://example.com"] } },
  *   ],

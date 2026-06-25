@@ -113,7 +113,7 @@ export type TcpFlowProtectionRule = Resource<
  * @section Creating a rule
  * @example Global TCP flow protection in monitoring mode
  * ```typescript
- * const rule = yield* Cloudflare.TcpFlowProtectionRule("GlobalFlow", {
+ * const rule = yield* Cloudflare.DdosProtection.TcpFlowProtectionRule("GlobalFlow", {
  *   scope: "global",
  *   mode: "monitoring",
  *   burstSensitivity: "medium",
@@ -123,7 +123,7 @@ export type TcpFlowProtectionRule = Resource<
  *
  * @example Region-scoped rule
  * ```typescript
- * yield* Cloudflare.TcpFlowProtectionRule("WeurFlow", {
+ * yield* Cloudflare.DdosProtection.TcpFlowProtectionRule("WeurFlow", {
  *   scope: "region",
  *   name: "WEUR",
  *   mode: "enabled",

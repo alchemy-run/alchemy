@@ -78,7 +78,7 @@ export type ApiShieldLabel = Resource<
  * @section Creating a Label
  * @example Label with a generated name
  * ```typescript
- * const label = yield* Cloudflare.ApiShieldLabel("TeamPayments", {
+ * const label = yield* Cloudflare.ApiShield.ApiShieldLabel("TeamPayments", {
  *   zoneId: zone.zoneId,
  *   description: "endpoints owned by the payments team",
  * });
@@ -86,7 +86,7 @@ export type ApiShieldLabel = Resource<
  *
  * @example Label with an explicit name
  * ```typescript
- * yield* Cloudflare.ApiShieldLabel("Pii", {
+ * yield* Cloudflare.ApiShield.ApiShieldLabel("Pii", {
  *   zoneId: zone.zoneId,
  *   name: "pii",
  *   description: "endpoints that return personal data",

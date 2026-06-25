@@ -66,13 +66,19 @@ test.provider(
         enabled?: boolean;
       }) =>
         Effect.gen(function* () {
-          const input = yield* Cloudflare.StreamLiveInput("RestreamInput", {
-            meta: { name: "alchemy-stream-output-input" },
-          });
-          const output = yield* Cloudflare.StreamLiveInputOutput("Restream", {
-            liveInputId: input.liveInputId,
-            ...props,
-          });
+          const input = yield* Cloudflare.Stream.StreamLiveInput(
+            "RestreamInput",
+            {
+              meta: { name: "alchemy-stream-output-input" },
+            },
+          );
+          const output = yield* Cloudflare.Stream.StreamLiveInputOutput(
+            "Restream",
+            {
+              liveInputId: input.liveInputId,
+              ...props,
+            },
+          );
           return { input, output };
         });
 
@@ -174,15 +180,21 @@ test.provider(
 
       const deployOutput = (enabled?: boolean) =>
         Effect.gen(function* () {
-          const input = yield* Cloudflare.StreamLiveInput("HealOutputInput", {
-            meta: { name: "alchemy-stream-output-heal-input" },
-          });
-          const output = yield* Cloudflare.StreamLiveInputOutput("HealOutput", {
-            liveInputId: input.liveInputId,
-            url: "rtmps://a.rtmps.youtube.com/live2",
-            streamKey: "alchemy-heal-stream-key",
-            enabled,
-          });
+          const input = yield* Cloudflare.Stream.StreamLiveInput(
+            "HealOutputInput",
+            {
+              meta: { name: "alchemy-stream-output-heal-input" },
+            },
+          );
+          const output = yield* Cloudflare.Stream.StreamLiveInputOutput(
+            "HealOutput",
+            {
+              liveInputId: input.liveInputId,
+              url: "rtmps://a.rtmps.youtube.com/live2",
+              streamKey: "alchemy-heal-stream-key",
+              enabled,
+            },
+          );
           return { input, output };
         });
 
@@ -242,20 +254,26 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const input = yield* Cloudflare.StreamLiveInput("ListOutputInput", {
-            meta: { name: "alchemy-stream-output-list-input" },
-          });
-          const output = yield* Cloudflare.StreamLiveInputOutput("ListOutput", {
-            liveInputId: input.liveInputId,
-            url: "rtmps://a.rtmps.youtube.com/live2",
-            streamKey: "alchemy-list-stream-key",
-          });
+          const input = yield* Cloudflare.Stream.StreamLiveInput(
+            "ListOutputInput",
+            {
+              meta: { name: "alchemy-stream-output-list-input" },
+            },
+          );
+          const output = yield* Cloudflare.Stream.StreamLiveInputOutput(
+            "ListOutput",
+            {
+              liveInputId: input.liveInputId,
+              url: "rtmps://a.rtmps.youtube.com/live2",
+              streamKey: "alchemy-list-stream-key",
+            },
+          );
           return { input, output };
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.StreamLiveInputOutput,
+        Cloudflare.Stream.StreamLiveInputOutput,
       );
 
       // Edge propagation: the freshly-created output (and its parent live

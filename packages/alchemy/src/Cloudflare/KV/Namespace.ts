@@ -11,7 +11,7 @@ import type { Providers } from "../Providers.ts";
 
 export const isKVNamespace = (value: unknown): value is KVNamespace =>
   typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.KVNamespace";
+  (value as any)?.Type === "Cloudflare.KV.KVNamespace";
 
 export type KVNamespaceProps = {
   /**
@@ -23,7 +23,7 @@ export type KVNamespaceProps = {
 };
 
 export type KVNamespace = Resource<
-  "Cloudflare.KVNamespace",
+  "Cloudflare.KV.KVNamespace",
   KVNamespaceProps,
   {
     title: string;
@@ -47,7 +47,7 @@ export type KVNamespace = Resource<
  * @section Creating a Namespace
  * @example Basic KV namespace
  * ```typescript
- * const kv = yield* Cloudflare.KVNamespace("MyKV");
+ * const kv = yield* Cloudflare.KV.KVNamespace("MyKV");
  * ```
  *
  * @section Binding to a Worker
@@ -68,7 +68,7 @@ export type KVNamespace = Resource<
  * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
  * write-only access.
  */
-export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace");
+export const KVNamespace = Resource<KVNamespace>("Cloudflare.KV.KVNamespace");
 
 export const KVNamespaceProvider = () =>
   Provider.succeed(KVNamespace, {

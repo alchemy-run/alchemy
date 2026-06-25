@@ -24,8 +24,8 @@ import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { Container } from "../Container/Container.ts";
-import type { DevContainerImage } from "../Container/ContainerApplication.ts";
+import type { Container } from "../Containers/Container.ts";
+import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import type { Providers } from "../Providers.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
@@ -191,7 +191,7 @@ export interface WorkerProps<
     enabled?: boolean;
     previewsEnabled?: boolean;
   };
-  /** @internal used by Cloudflare.Vite resource */
+  /** @internal used by Cloudflare.Website.Vite resource */
   vite?: {
     rootDir?: string;
     memo?: MemoOptions;
@@ -431,7 +431,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * // alchemy.run.ts
  * const db = yield* Cloudflare.D1.Database("DB");
- * const bucket = yield* Cloudflare.R2Bucket("Bucket");
+ * const bucket = yield* Cloudflare.R2.R2Bucket("Bucket");
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
  *

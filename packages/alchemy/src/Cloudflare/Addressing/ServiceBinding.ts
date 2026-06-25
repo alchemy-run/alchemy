@@ -75,7 +75,7 @@ export type AddressingServiceBinding = Resource<
  * @section Binding a Prefix to a Service
  * @example Bind a /24 to the CDN
  * ```typescript
- * const binding = yield* Cloudflare.AddressingServiceBinding("cdn", {
+ * const binding = yield* Cloudflare.Addressing.AddressingServiceBinding("cdn", {
  *   prefixId: prefix.prefixId,
  *   cidr: "192.0.2.0/24",
  *   serviceId: cdnServiceId,

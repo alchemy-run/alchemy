@@ -117,7 +117,7 @@ export type MagicSiteAcl = Resource<
  * @section Creating an ACL
  * @example Allow TCP between two LANs
  * ```typescript
- * yield* Cloudflare.MagicSiteAcl("lan-to-lan", {
+ * yield* Cloudflare.MagicTransit.MagicSiteAcl("lan-to-lan", {
  *   siteId: site.siteId,
  *   name: "office-to-lab",
  *   lan1: { lanId: officeLan.lanId, ports: [443] },
@@ -128,7 +128,7 @@ export type MagicSiteAcl = Resource<
  *
  * @example Unidirectional ACL forwarded locally
  * ```typescript
- * yield* Cloudflare.MagicSiteAcl("one-way", {
+ * yield* Cloudflare.MagicTransit.MagicSiteAcl("one-way", {
  *   siteId: site.siteId,
  *   name: "sensors-to-collector",
  *   lan1: { lanId: sensorsLan.lanId },

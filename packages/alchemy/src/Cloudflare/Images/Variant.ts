@@ -116,7 +116,7 @@ export type ImagesVariant = Resource<
  * @example Thumbnail variant
  * ```typescript
  * // Variant names are alphanumeric only (no hyphens/underscores).
- * const thumbnail = yield* Cloudflare.ImagesVariant("thumbnail", {
+ * const thumbnail = yield* Cloudflare.Images.ImagesVariant("thumbnail", {
  *   fit: "cover",
  *   width: 100,
  *   height: 100,
@@ -125,7 +125,7 @@ export type ImagesVariant = Resource<
  *
  * @example Hero variant with explicit name and metadata
  * ```typescript
- * const hero = yield* Cloudflare.ImagesVariant("HeroImage", {
+ * const hero = yield* Cloudflare.Images.ImagesVariant("HeroImage", {
  *   name: "hero",
  *   fit: "scale-down",
  *   width: 1920,
@@ -139,7 +139,7 @@ export type ImagesVariant = Resource<
  * ```typescript
  * // Serve this variant without a signature even when the image itself
  * // requires signed URLs (e.g. for public thumbnails of private images).
- * const preview = yield* Cloudflare.ImagesVariant("preview", {
+ * const preview = yield* Cloudflare.Images.ImagesVariant("preview", {
  *   fit: "contain",
  *   width: 320,
  *   height: 240,

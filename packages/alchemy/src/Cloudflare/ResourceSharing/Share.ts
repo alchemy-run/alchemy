@@ -156,13 +156,13 @@ export type Share = Resource<
  * @section Creating a Share
  * @example Share a gateway policy with another account
  * ```typescript
- * const policy = yield* Cloudflare.GatewayRule("BlockPhishing", {
+ * const policy = yield* Cloudflare.Gateway.GatewayRule("BlockPhishing", {
  *   action: "block",
  *   traffic: 'dns.fqdn == "phishing.example"',
  *   filters: ["dns"],
  * });
  *
- * const share = yield* Cloudflare.Share("PolicyShare", {
+ * const share = yield* Cloudflare.ResourceSharing.Share("PolicyShare", {
  *   recipients: [{ accountId: "<recipient-account-id>" }],
  *   resources: [
  *     { resourceType: "gateway-policy", resourceId: policy.ruleId },
@@ -173,7 +173,7 @@ export type Share = Resource<
  * @section Updating a Share
  * @example Rename in place
  * ```typescript
- * const share = yield* Cloudflare.Share("PolicyShare", {
+ * const share = yield* Cloudflare.ResourceSharing.Share("PolicyShare", {
  *   name: "security-baseline-v2",
  *   recipients: [{ accountId: "<recipient-account-id>" }],
  *   resources: [

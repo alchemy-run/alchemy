@@ -208,7 +208,7 @@ export type AccountDnsSettings = Resource<
  * @section Account-wide overrides
  * @example Force every proxied record to DNS-only
  * ```typescript
- * yield* Cloudflare.AccountDnsSettings("DnsSettings", {
+ * yield* Cloudflare.Dns.AccountDnsSettings("DnsSettings", {
  *   enforceDnsOnly: true,
  * });
  * ```
@@ -216,14 +216,14 @@ export type AccountDnsSettings = Resource<
  * @section Zone defaults
  * @example Flatten CNAMEs in every new zone
  * ```typescript
- * yield* Cloudflare.AccountDnsSettings("DnsSettings", {
+ * yield* Cloudflare.Dns.AccountDnsSettings("DnsSettings", {
  *   zoneDefaults: { flattenAllCnames: true },
  * });
  * ```
  *
  * @example Default new zones to multi-provider DNS
  * ```typescript
- * yield* Cloudflare.AccountDnsSettings("DnsSettings", {
+ * yield* Cloudflare.Dns.AccountDnsSettings("DnsSettings", {
  *   zoneDefaults: { multiProvider: true },
  * });
  * ```

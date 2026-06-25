@@ -78,14 +78,14 @@ export type EndpointHealthcheck = Resource<
  * @section Creating an endpoint healthcheck
  * @example Probe an on-net host
  * ```typescript
- * const check = yield* Cloudflare.EndpointHealthcheck("core-router", {
+ * const check = yield* Cloudflare.Diagnostics.EndpointHealthcheck("core-router", {
  *   endpoint: "10.0.0.1",
  * });
  * ```
  *
  * @example With an explicit name
  * ```typescript
- * const check = yield* Cloudflare.EndpointHealthcheck("core-router", {
+ * const check = yield* Cloudflare.Diagnostics.EndpointHealthcheck("core-router", {
  *   endpoint: "10.0.0.1",
  *   name: "core-router-probe",
  * });
@@ -95,7 +95,7 @@ export type EndpointHealthcheck = Resource<
  * @example Re-point the probe at a different host
  * ```typescript
  * // Changing `endpoint` updates the same healthcheck in place.
- * const check = yield* Cloudflare.EndpointHealthcheck("core-router", {
+ * const check = yield* Cloudflare.Diagnostics.EndpointHealthcheck("core-router", {
  *   endpoint: "10.0.0.2",
  * });
  * ```

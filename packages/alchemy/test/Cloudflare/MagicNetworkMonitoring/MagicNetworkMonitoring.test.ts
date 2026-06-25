@@ -84,10 +84,13 @@ describe.sequential("MagicNetworkMonitoring", () => {
         );
 
         const config = yield* stack.deploy(
-          Cloudflare.MagicNetworkMonitoringConfig("Config", {
-            name: "alchemy-mnm-test",
-            defaultSampling: 1,
-          }),
+          Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig(
+            "Config",
+            {
+              name: "alchemy-mnm-test",
+              defaultSampling: 1,
+            },
+          ),
         );
 
         expect(config.accountId).toEqual(accountId);
@@ -105,10 +108,13 @@ describe.sequential("MagicNetworkMonitoring", () => {
         // `InvalidMnmConfig`, on this account), so only the always-available
         // fields are exercised here.
         const updated = yield* stack.deploy(
-          Cloudflare.MagicNetworkMonitoringConfig("Config", {
-            name: "alchemy-mnm-test-v2",
-            defaultSampling: 100,
-          }),
+          Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig(
+            "Config",
+            {
+              name: "alchemy-mnm-test-v2",
+              defaultSampling: 100,
+            },
+          ),
         );
 
         expect(updated.accountId).toEqual(accountId);
@@ -121,10 +127,13 @@ describe.sequential("MagicNetworkMonitoring", () => {
 
         // Redeploying identical props is a no-op.
         const noop = yield* stack.deploy(
-          Cloudflare.MagicNetworkMonitoringConfig("Config", {
-            name: "alchemy-mnm-test-v2",
-            defaultSampling: 100,
-          }),
+          Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig(
+            "Config",
+            {
+              name: "alchemy-mnm-test-v2",
+              defaultSampling: 100,
+            },
+          ),
         );
         expect(noop.name).toEqual("alchemy-mnm-test-v2");
 
@@ -163,22 +172,24 @@ describe.sequential("MagicNetworkMonitoring", () => {
         }) =>
           stack.deploy(
             Effect.gen(function* () {
-              const config = yield* Cloudflare.MagicNetworkMonitoringConfig(
-                "Config",
-                {
-                  name: "alchemy-mnm-rule-test",
-                  defaultSampling: 1,
-                },
-              );
+              const config =
+                yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig(
+                  "Config",
+                  {
+                    name: "alchemy-mnm-rule-test",
+                    defaultSampling: 1,
+                  },
+                );
               // Rules cannot exist without the account config — sequence the
               // rule after the config via its accountId output.
-              const rule = yield* Cloudflare.MagicNetworkMonitoringRule(
-                "Rule",
-                {
-                  accountId: config.accountId,
-                  ...props,
-                },
-              );
+              const rule =
+                yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringRule(
+                  "Rule",
+                  {
+                    accountId: config.accountId,
+                    ...props,
+                  },
+                );
               return { config, rule };
             }),
           );

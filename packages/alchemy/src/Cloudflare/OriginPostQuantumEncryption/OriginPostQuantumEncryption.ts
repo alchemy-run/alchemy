@@ -9,7 +9,7 @@ import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
 const OriginPostQuantumEncryptionTypeId =
-  "Cloudflare.OriginPostQuantumEncryption" as const;
+  "Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption" as const;
 type OriginPostQuantumEncryptionTypeId =
   typeof OriginPostQuantumEncryptionTypeId;
 
@@ -90,9 +90,9 @@ export type OriginPostQuantumEncryption = Resource<
  * @section Managing the setting
  * @example Prefer post-quantum key agreement to the origin
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+ * yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption("OriginPqe", {
  *   zoneId: zone.zoneId,
  *   value: "preferred",
  * });
@@ -100,7 +100,7 @@ export type OriginPostQuantumEncryption = Resource<
  *
  * @example Disable post-quantum key agreement to the origin
  * ```typescript
- * yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+ * yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption("OriginPqe", {
  *   zoneId: zone.zoneId,
  *   value: "off",
  * });
@@ -108,7 +108,7 @@ export type OriginPostQuantumEncryption = Resource<
  *
  * @example Pin the Cloudflare default explicitly
  * ```typescript
- * yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+ * yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption("OriginPqe", {
  *   zoneId: zone.zoneId,
  *   value: "supported",
  * });

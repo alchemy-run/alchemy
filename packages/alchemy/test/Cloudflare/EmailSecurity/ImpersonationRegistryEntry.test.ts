@@ -52,7 +52,7 @@ test.provider.skipIf(!entitled)(
       // Register the protected display name → legitimate address mapping.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityImpersonationRegistryEntry(
+          return yield* Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry(
             "Vip",
             { name, email, comments: "v1" },
           );
@@ -74,7 +74,7 @@ test.provider.skipIf(!entitled)(
       // Update mutable fields in place — same physical entry.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityImpersonationRegistryEntry(
+          return yield* Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry(
             "Vip",
             { name, email, comments: "v2" },
           );
@@ -110,7 +110,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSecurityImpersonationRegistryEntry,
+        Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry,
       );
       const all = yield* provider.list();
 
@@ -137,7 +137,7 @@ test.provider.skipIf(!entitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurityImpersonationRegistryEntry(
+          return yield* Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry(
             "ListVip",
             { name, email, comments: "list" },
           );
@@ -145,7 +145,7 @@ test.provider.skipIf(!entitled)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSecurityImpersonationRegistryEntry,
+        Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry,
       );
       const all = yield* provider.list();
       expect(all.some((e) => e.entryId === created.entryId)).toBe(true);

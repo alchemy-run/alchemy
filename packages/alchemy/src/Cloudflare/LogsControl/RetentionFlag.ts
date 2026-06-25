@@ -67,7 +67,7 @@ export type LogsRetentionFlag = Resource<
  * @section Managing log retention
  * @example Enable Logpull retention on a zone
  * ```typescript
- * const retention = yield* Cloudflare.LogsRetentionFlag("Retention", {
+ * const retention = yield* Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
  *   zoneId: zone.zoneId,
  *   flag: true,
  * });
@@ -75,7 +75,7 @@ export type LogsRetentionFlag = Resource<
  *
  * @example Explicitly disable retention
  * ```typescript
- * yield* Cloudflare.LogsRetentionFlag("Retention", {
+ * yield* Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
  *   zoneId: zone.zoneId,
  *   flag: false,
  * });

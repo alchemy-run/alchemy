@@ -1,14 +1,14 @@
 import * as Effect from "effect/Effect";
 
 type SendEmailTypeId = typeof SendEmailTypeId;
-const SendEmailTypeId = "Cloudflare.SendEmail" as const;
+const SendEmailTypeId = "Cloudflare.Email.SendEmail" as const;
 
 export type SendEmailProps = {
   /**
    * Restrict the Worker to send to a single verified destination address.
    *
    * Mutually exclusive with `allowedDestinationAddresses`. The destination
-   * must be a verified address on the account (see {@link EmailAddress}).
+   * must be a verified address on the account (see {@link Address}).
    */
   destinationAddress?: string;
   /**
@@ -21,7 +21,7 @@ export type SendEmailProps = {
    * Restrict the Worker to send from one of these sender addresses.
    *
    * The sender domain must have Email Routing configured (see
-   * {@link EmailRouting}) and the addresses must be verified.
+   * {@link Routing}) and the addresses must be verified.
    */
   allowedSenderAddresses?: string[];
 };
@@ -39,10 +39,10 @@ export type SendEmailProps = {
  * @section Binding to a Worker
  * @example Send to any verified destination
  * ```typescript
- * const Email = Cloudflare.SendEmail("Email");
+ * const Email = Cloudflare.Email.SendEmail("Email");
  *
  * // in the Worker effect:
- * const email = yield* Cloudflare.Send(Email);
+ * const email = yield* Cloudflare.Email.Send(Email);
  * yield* email.send({
  *   from: "noreply@example.com",
  *   to: "user@example.com",
@@ -53,7 +53,7 @@ export type SendEmailProps = {
  *
  * @example Restrict the sender address
  * ```typescript
- * const Ops = Cloudflare.SendEmail("OpsEmail", {
+ * const Ops = Cloudflare.Email.SendEmail("OpsEmail", {
  *   allowedSenderAddresses: ["noreply@example.com"],
  *   destinationAddress: "ops@example.com",
  * });

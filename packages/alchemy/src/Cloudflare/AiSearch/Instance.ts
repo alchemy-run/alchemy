@@ -342,8 +342,8 @@ export type Instance = Resource<
  * `tokenId` (see {@link Token}) or let the {@link AiSearch}
  * construct provision one for you.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("docs", {});
- * const search = yield* Cloudflare.Instance("docs-search", {
+ * const bucket = yield* Cloudflare.R2.R2Bucket("docs", {});
+ * const search = yield* Cloudflare.AiSearch.Instance("docs-search", {
  *   source: bucket.bucketName,
  *   tokenId: serviceToken.id,
  * });
@@ -351,7 +351,7 @@ export type Instance = Resource<
  *
  * @example Tuned retrieval settings
  * ```typescript
- * const search = yield* Cloudflare.Instance("docs-search", {
+ * const search = yield* Cloudflare.AiSearch.Instance("docs-search", {
  *   source: bucket.bucketName,
  *   aiSearchModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
  *   chunkSize: 512,
@@ -372,7 +372,7 @@ export type Instance = Resource<
  * - `r2Jurisdiction` — R2 data-residency jurisdiction of the source bucket.
  * @example Index only part of a bucket
  * ```typescript
- * const search = yield* Cloudflare.Instance("docs-search", {
+ * const search = yield* Cloudflare.AiSearch.Instance("docs-search", {
  *   source: bucket.bucketName,
  *   tokenId: serviceToken.id,
  *   sourceParams: {
@@ -415,7 +415,7 @@ export type Instance = Resource<
  * - `r2Jurisdiction` — R2 data-residency jurisdiction for the store bucket.
  * @example Basic web-crawler instance
  * ```typescript
- * const search = yield* Cloudflare.Instance("site-search", {
+ * const search = yield* Cloudflare.AiSearch.Instance("site-search", {
  *   type: "web-crawler",
  *   source: "https://example.com",
  *   sourceParams: { webCrawler: { parseType: "crawl" } },
@@ -423,7 +423,7 @@ export type Instance = Resource<
  * ```
  * @example Fully-configured crawl
  * ```typescript
- * const search = yield* Cloudflare.Instance("site-search", {
+ * const search = yield* Cloudflare.AiSearch.Instance("site-search", {
  *   type: "web-crawler",
  *   source: "https://example.com",
  *   sourceParams: {
@@ -448,7 +448,7 @@ export type Instance = Resource<
  * @example Sitemap and RSS sources
  * ```typescript
  * // Index the URLs listed in one or more sitemaps (the default parse mode).
- * const fromSitemap = yield* Cloudflare.Instance("sitemap-search", {
+ * const fromSitemap = yield* Cloudflare.AiSearch.Instance("sitemap-search", {
  *   type: "web-crawler",
  *   source: "https://example.com",
  *   sourceParams: {
@@ -460,7 +460,7 @@ export type Instance = Resource<
  * });
  *
  * // Treat the seed as an RSS / Atom feed.
- * const fromFeed = yield* Cloudflare.Instance("feed-search", {
+ * const fromFeed = yield* Cloudflare.AiSearch.Instance("feed-search", {
  *   type: "web-crawler",
  *   source: "https://example.com/feed.xml",
  *   sourceParams: { webCrawler: { parseType: "feed-rss" } },
@@ -468,7 +468,7 @@ export type Instance = Resource<
  * ```
  * @example Store crawl output in a specific R2 bucket
  * ```typescript
- * const search = yield* Cloudflare.Instance("site-search", {
+ * const search = yield* Cloudflare.AiSearch.Instance("site-search", {
  *   type: "web-crawler",
  *   source: "https://example.com",
  *   sourceParams: {
@@ -487,8 +487,8 @@ export type Instance = Resource<
  * deploy. The namespace is immutable; changing it replaces the instance.
  * @example Place the instance in a custom namespace
  * ```typescript
- * const ns = yield* Cloudflare.Namespace("docs-ns", {});
- * const search = yield* Cloudflare.Instance("docs-search", {
+ * const ns = yield* Cloudflare.AiSearch.Namespace("docs-ns", {});
+ * const search = yield* Cloudflare.AiSearch.Instance("docs-search", {
  *   source: bucket.bucketName,
  *   namespace: ns.name,
  * });

@@ -137,7 +137,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.WorkflowResource,
+        Cloudflare.Workers.WorkflowResource,
       );
       const all = yield* provider.list();
 

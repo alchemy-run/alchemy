@@ -78,7 +78,7 @@ export type TcpFlowProtectionFilter = Resource<
  * @section Creating a filter
  * @example Scope flow mitigation to HTTPS traffic
  * ```typescript
- * const filter = yield* Cloudflare.TcpFlowProtectionFilter("HttpsOnly", {
+ * const filter = yield* Cloudflare.DdosProtection.TcpFlowProtectionFilter("HttpsOnly", {
  *   expression: "tcp.dstport in {443}",
  *   mode: "enabled",
  * });
@@ -86,7 +86,7 @@ export type TcpFlowProtectionFilter = Resource<
  *
  * @example Exclude a trusted source port
  * ```typescript
- * yield* Cloudflare.TcpFlowProtectionFilter("SkipBgp", {
+ * yield* Cloudflare.DdosProtection.TcpFlowProtectionFilter("SkipBgp", {
  *   expression: "tcp.srcport in {179}",
  *   mode: "disabled",
  * });

@@ -10,7 +10,8 @@ import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const GoogleTagGatewayTypeId = "Cloudflare.GoogleTagGateway" as const;
+const GoogleTagGatewayTypeId =
+  "Cloudflare.GoogleTagGateway.GoogleTagGateway" as const;
 type GoogleTagGatewayTypeId = typeof GoogleTagGatewayTypeId;
 
 /**
@@ -106,7 +107,7 @@ export type GoogleTagGateway = Resource<
  * @section Managing the gateway
  * @example Enable Google Tag Gateway on a zone
  * ```typescript
- * const gateway = yield* Cloudflare.GoogleTagGateway("Analytics", {
+ * const gateway = yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("Analytics", {
  *   zone: "example.com",
  *   enabled: true,
  *   endpoint: "/metrics",
@@ -117,7 +118,7 @@ export type GoogleTagGateway = Resource<
  *
  * @example Proxy a Google Tag Manager container without auto-installing the tag
  * ```typescript
- * const gateway = yield* Cloudflare.GoogleTagGateway("Gtm", {
+ * const gateway = yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("Gtm", {
  *   zone: zone.zoneId,
  *   enabled: true,
  *   endpoint: "/collect",

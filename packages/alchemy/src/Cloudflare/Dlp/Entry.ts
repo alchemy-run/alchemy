@@ -82,7 +82,7 @@ export type DlpEntry = Resource<
  * @section Creating a DLP entry
  * @example Attach a regex entry to a profile
  * ```typescript
- * const entry = yield* Cloudflare.DlpEntry("EmployeeId", {
+ * const entry = yield* Cloudflare.Dlp.DlpEntry("EmployeeId", {
  *   pattern: { regex: "EMP-[0-9]{6}" },
  *   profileId: profile.profileId,
  * });
@@ -90,7 +90,7 @@ export type DlpEntry = Resource<
  *
  * @example Luhn-validated card entry
  * ```typescript
- * const card = yield* Cloudflare.DlpEntry("CardNumber", {
+ * const card = yield* Cloudflare.Dlp.DlpEntry("CardNumber", {
  *   pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
  *   profileId: profile.profileId,
  * });

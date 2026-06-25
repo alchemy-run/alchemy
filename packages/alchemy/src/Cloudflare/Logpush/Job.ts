@@ -229,9 +229,9 @@ export type LogpushJob = Resource<
  * The R2 destination authenticates with S3-compatible credentials embedded
  * in the destination URI, so no ownership challenge is required.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("logs", {});
+ * const bucket = yield* Cloudflare.R2.R2Bucket("logs", {});
  *
- * const job = yield* Cloudflare.LogpushJob("worker-logs", {
+ * const job = yield* Cloudflare.Logpush.LogpushJob("worker-logs", {
  *   dataset: "workers_trace_events",
  *   destinationConf: Output.interpolate`r2://${bucket.bucketName}/{DATE}?account-id=${accountId}&access-key-id=${r2AccessKeyId}&secret-access-key=${r2SecretAccessKey}`,
  *   enabled: true,
@@ -241,7 +241,7 @@ export type LogpushJob = Resource<
  * @section Zone-scoped jobs
  * @example HTTP requests dataset on a zone (Enterprise)
  * ```typescript
- * const job = yield* Cloudflare.LogpushJob("http-logs", {
+ * const job = yield* Cloudflare.Logpush.LogpushJob("http-logs", {
  *   zoneId: zone.zoneId,
  *   dataset: "http_requests",
  *   destinationConf: "s3://my-bucket/logs?region=us-east-1",
@@ -252,7 +252,7 @@ export type LogpushJob = Resource<
  * @section Output configuration
  * @example Selecting fields and batching limits
  * ```typescript
- * const job = yield* Cloudflare.LogpushJob("worker-logs", {
+ * const job = yield* Cloudflare.Logpush.LogpushJob("worker-logs", {
  *   dataset: "workers_trace_events",
  *   destinationConf,
  *   outputOptions: {

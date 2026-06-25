@@ -84,14 +84,14 @@ export type AccessGroup = Resource<
  * @section Creating a Group
  * @example Allow a single email domain
  * ```typescript
- * const group = yield* Cloudflare.AccessGroup("ExampleDomain", {
+ * const group = yield* Cloudflare.Access.AccessGroup("ExampleDomain", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  * ```
  *
  * @example Combine include, exclude and require rules
  * ```typescript
- * const group = yield* Cloudflare.AccessGroup("UsEngineers", {
+ * const group = yield* Cloudflare.Access.AccessGroup("UsEngineers", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  *   exclude: [{ email: { email: "intern@example.com" } }],
  *   require: [{ geo: { countryCode: "US" } }],
@@ -101,11 +101,11 @@ export type AccessGroup = Resource<
  * @section Referencing a Group from a Policy
  * @example Allow members of the group
  * ```typescript
- * const group = yield* Cloudflare.AccessGroup("Team", {
+ * const group = yield* Cloudflare.Access.AccessGroup("Team", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  *
- * const policy = yield* Cloudflare.AccessPolicy("AllowTeam", {
+ * const policy = yield* Cloudflare.Access.AccessPolicy("AllowTeam", {
  *   decision: "allow",
  *   include: [{ group: { id: group.groupId } }],
  * });

@@ -13,7 +13,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const HealthcheckTypeId = "Cloudflare.Healthcheck" as const;
+const HealthcheckTypeId = "Cloudflare.Healthcheck.Healthcheck" as const;
 type HealthcheckTypeId = typeof HealthcheckTypeId;
 
 /**
@@ -257,7 +257,7 @@ export type Healthcheck = Resource<
  * @section Creating a Health Check
  * @example Basic HTTP health check
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("origin-check", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("origin-check", {
  *   zoneId: zone.zoneId,
  *   address: "origin.example.com",
  * });
@@ -265,7 +265,7 @@ export type Healthcheck = Resource<
  *
  * @example HTTPS health check with custom path and expected codes
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("api-health", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("api-health", {
  *   zoneId: zone.zoneId,
  *   address: "api.example.com",
  *   type: "HTTPS",
@@ -283,7 +283,7 @@ export type Healthcheck = Resource<
  * @section TCP health checks
  * @example Probe a TCP port
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("db-port", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("db-port", {
  *   zoneId: zone.zoneId,
  *   address: "db.example.com",
  *   type: "TCP",
@@ -294,7 +294,7 @@ export type Healthcheck = Resource<
  * @section Suspending a check
  * @example Temporarily stop probing the origin
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("origin-check", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("origin-check", {
  *   zoneId: zone.zoneId,
  *   address: "origin.example.com",
  *   suspended: true,

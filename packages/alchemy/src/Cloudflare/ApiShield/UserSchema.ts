@@ -92,7 +92,7 @@ export type ApiShieldUserSchema = Resource<
  * const fs = yield* FileSystem.FileSystem;
  * const source = yield* fs.readFileString("./openapi.json");
  *
- * const schema = yield* Cloudflare.ApiShieldUserSchema("PetstoreSchema", {
+ * const schema = yield* Cloudflare.ApiShield.ApiShieldUserSchema("PetstoreSchema", {
  *   zoneId: zone.zoneId,
  *   name: "petstore",
  *   schema: source,
@@ -102,7 +102,7 @@ export type ApiShieldUserSchema = Resource<
  *
  * @example Upload and enable validation
  * ```typescript
- * yield* Cloudflare.ApiShieldUserSchema("PetstoreSchema", {
+ * yield* Cloudflare.ApiShield.ApiShieldUserSchema("PetstoreSchema", {
  *   zoneId: zone.zoneId,
  *   schema: source,
  *   validationEnabled: true,

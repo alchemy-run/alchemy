@@ -264,7 +264,7 @@ captured stdout/stderr/exitCode flow back through the typed shape.
 ## Configure the container with a Layer
 
 `yield* Sandbox` only resolves once you tell the DO **how** to run
-the container. Provide `Cloudflare.layerContainer(Sandbox, …)` on
+the container. Provide `Cloudflare.Containers.layerContainer(Sandbox, …)` on
 the DO's init — that layer binds, starts, and monitors the
 container, then satisfies the `Sandbox` tag with the running
 instance:
@@ -283,7 +283,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
 - }),
 + }).pipe(
 +   Effect.provide(
-+     Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
++     Cloudflare.Containers.layerContainer(Sandbox, { enableInternet: true }),
 +   ),
 + ),
 ) {}
@@ -448,7 +448,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
+      Cloudflare.Containers.layerContainer(Sandbox, { enableInternet: true }),
     ),
   ),
 ) {}
