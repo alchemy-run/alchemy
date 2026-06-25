@@ -47,13 +47,13 @@ const bucketProvider = () =>
   });
 
 // Queue
-export type QueueProps = {
+export type Props = {
   name?: string;
 };
 
 export interface Queue extends Resource<
   "Test.Queue",
-  QueueProps,
+  Props,
   {
     name: string;
     queueUrl: string;

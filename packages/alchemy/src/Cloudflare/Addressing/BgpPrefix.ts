@@ -13,7 +13,7 @@ import type { Providers } from "../Providers.ts";
 const AddressingBgpPrefixTypeId = "Cloudflare.Addressing.BgpPrefix" as const;
 type AddressingBgpPrefixTypeId = typeof AddressingBgpPrefixTypeId;
 
-export interface AddressingBgpPrefixProps {
+export interface BgpPrefixProps {
   /**
    * Identifier of the parent BYOIP prefix the BGP prefix belongs to.
    * Changing it forces a replacement.
@@ -44,7 +44,7 @@ export interface AddressingBgpPrefixProps {
   autoAdvertiseWithdraw?: boolean;
 }
 
-export interface AddressingBgpPrefixAttributes {
+export interface BgpPrefixAttributes {
   /** Cloudflare-assigned identifier of the BGP prefix. */
   bgpPrefixId: string;
   /** Identifier of the parent BYOIP prefix. */
@@ -76,10 +76,10 @@ export interface AddressingBgpPrefixAttributes {
   modifiedAt: string | undefined;
 }
 
-export type AddressingBgpPrefix = Resource<
+export type BgpPrefix = Resource<
   AddressingBgpPrefixTypeId,
-  AddressingBgpPrefixProps,
-  AddressingBgpPrefixAttributes,
+  BgpPrefixProps,
+  BgpPrefixAttributes,
   never,
   Providers
 >;
@@ -98,7 +98,7 @@ export type AddressingBgpPrefix = Resource<
  * @section Advertising a Prefix
  * @example Advertise the whole BYOIP prefix
  * ```typescript
- * const bgp = yield* Cloudflare.Addressing.AddressingBgpPrefix("advertise", {
+ * const bgp = yield* Cloudflare.Addressing.BgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
  *   cidr: prefix.cidr,
  *   advertised: true,
@@ -107,7 +107,7 @@ export type AddressingBgpPrefix = Resource<
  *
  * @example Withdraw with AS-Path prepending configured
  * ```typescript
- * const bgp = yield* Cloudflare.Addressing.AddressingBgpPrefix("advertise", {
+ * const bgp = yield* Cloudflare.Addressing.BgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
  *   cidr: prefix.cidr,
  *   advertised: false,
@@ -117,21 +117,17 @@ export type AddressingBgpPrefix = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/concepts/bgp-prefixes/
  */
-export const AddressingBgpPrefix = Resource<AddressingBgpPrefix>(
-  AddressingBgpPrefixTypeId,
-);
+export const BgpPrefix = Resource<BgpPrefix>(AddressingBgpPrefixTypeId);
 
 /**
- * Returns true if the given value is an AddressingBgpPrefix resource.
+ * Returns true if the given value is an BgpPrefix resource.
  */
-export const isAddressingBgpPrefix = (
-  value: unknown,
-): value is AddressingBgpPrefix =>
+export const isBgpPrefix = (value: unknown): value is BgpPrefix =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === AddressingBgpPrefixTypeId;
 
-export const AddressingBgpPrefixProvider = () =>
-  Provider.succeed(AddressingBgpPrefix, {
+export const BgpPrefixProvider = () =>
+  Provider.succeed(BgpPrefix, {
     stables: ["bgpPrefixId", "prefixId", "accountId", "cidr", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -206,7 +202,7 @@ export const AddressingBgpPrefixProvider = () =>
             ),
             // Parent prefix removed mid-enumeration — skip it.
             Effect.catchTag("PrefixNotFound", () =>
-              Effect.succeed([] as AddressingBgpPrefixAttributes[]),
+              Effect.succeed([] as BgpPrefixAttributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -333,7 +329,7 @@ const toAttributes = (
   bgp: ObservedBgpPrefix,
   prefixId: string,
   accountId: string,
-): AddressingBgpPrefixAttributes => ({
+): BgpPrefixAttributes => ({
   bgpPrefixId: bgp.id ?? "",
   prefixId,
   accountId,

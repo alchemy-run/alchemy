@@ -12,7 +12,7 @@ import type { Providers } from "../Providers.ts";
 const StreamWebhookTypeId = "Cloudflare.Stream.Webhook" as const;
 type StreamWebhookTypeId = typeof StreamWebhookTypeId;
 
-export type StreamWebhookProps = {
+export type WebhookProps = {
   /**
    * The URL where Stream webhook notifications (e.g. video ready,
    * live input connected/disconnected) are sent. Mutable — updated in
@@ -21,7 +21,7 @@ export type StreamWebhookProps = {
   notificationUrl: string;
 };
 
-export type StreamWebhookAttributes = {
+export type WebhookAttributes = {
   /**
    * The Cloudflare account the webhook belongs to.
    */
@@ -41,10 +41,10 @@ export type StreamWebhookAttributes = {
   secret: Redacted.Redacted<string>;
 };
 
-export type StreamWebhook = Resource<
+export type Webhook = Resource<
   StreamWebhookTypeId,
-  StreamWebhookProps,
-  StreamWebhookAttributes,
+  WebhookProps,
+  WebhookAttributes,
   never,
   Providers
 >;
@@ -66,7 +66,7 @@ export type StreamWebhook = Resource<
  * @section Configuring the webhook
  * @example Receive Stream notifications
  * ```typescript
- * const webhook = yield* Cloudflare.Stream.StreamWebhook("Notifications", {
+ * const webhook = yield* Cloudflare.Stream.Webhook("Notifications", {
  *   notificationUrl: "https://example.com/hooks/stream",
  * });
  *
@@ -76,16 +76,16 @@ export type StreamWebhook = Resource<
  *
  * @see https://developers.cloudflare.com/stream/manage-video-library/using-webhooks/
  */
-export const StreamWebhook = Resource<StreamWebhook>(StreamWebhookTypeId);
+export const Webhook = Resource<Webhook>(StreamWebhookTypeId);
 
 /**
- * Returns true if the given value is a StreamWebhook resource.
+ * Returns true if the given value is a Webhook resource.
  */
-export const isStreamWebhook = (value: unknown): value is StreamWebhook =>
+export const isWebhook = (value: unknown): value is Webhook =>
   Predicate.hasProperty(value, "Type") && value.Type === StreamWebhookTypeId;
 
-export const StreamWebhookProvider = () =>
-  Provider.succeed(StreamWebhook, {
+export const WebhookProvider = () =>
+  Provider.succeed(Webhook, {
     stables: ["accountId"],
 
     diff: Effect.fn(function* ({ output }) {
@@ -169,7 +169,7 @@ const getWebhook = (accountId: string) =>
 const toAttributes = (
   webhook: stream.GetWebhookResponse | stream.PutWebhookResponse,
   accountId: string,
-): StreamWebhookAttributes => ({
+): WebhookAttributes => ({
   accountId,
   notificationUrl: webhook.notificationUrl ?? "",
   modified: webhook.modified ?? undefined,

@@ -3,7 +3,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
+import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import type { Zone } from "../Zone/Zone.ts";
 
 /**
@@ -13,7 +13,7 @@ import type { Zone } from "../Zone/Zone.ts";
  * are zone-scoped (the `zoneId` is passed per call), so the account id is not
  * needed at runtime.
  */
-export interface DnsToken {
+export interface Token {
   /** The token's plaintext value (injected as a `secret_text` binding). */
   value: Effect.Effect<Redacted.Redacted<string>>;
 }
@@ -32,8 +32,8 @@ export interface DnsToken {
  * provisioned token only grants access to that one zone anyway.
  */
 export const makeHttpDnsBinding = <Client>(options: {
-  permissionGroups: ApiTokenPermissionGroupRef[];
-  makeClient: (token: DnsToken, zoneId: Effect.Effect<string>) => Client;
+  permissionGroups: PermissionGroupRef[];
+  makeClient: (token: Token, zoneId: Effect.Effect<string>) => Client;
 }) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
@@ -62,7 +62,7 @@ export const makeHttpDnsBinding = <Client>(options: {
       }
       const bound = {
         value: yield* token.value,
-      } satisfies DnsToken;
+      } satisfies Token;
       const zoneId = yield* zone.zoneId;
       return options.makeClient(bound, zoneId);
     });

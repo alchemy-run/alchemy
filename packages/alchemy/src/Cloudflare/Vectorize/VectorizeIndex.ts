@@ -15,7 +15,7 @@ type VectorizeIndexTypeId = typeof VectorizeIndexTypeId;
 
 export type DistanceMetric = "cosine" | "euclidean" | "dot-product";
 
-export type VectorizePreset =
+export type Preset =
   | "@cf/baai/bge-small-en-v1.5"
   | "@cf/baai/bge-base-en-v1.5"
   | "@cf/baai/bge-large-en-v1.5"
@@ -51,7 +51,7 @@ export type IndexProps = {
    * to match the named model. Mutually exclusive with `dimensions`/`metric`.
    * Cannot be changed after creation — updating this triggers a replacement.
    */
-  preset?: VectorizePreset;
+  preset?: Preset;
   /**
    * Human-readable description of the index. Vectorize has no update API,
    * so changing the description triggers a replacement.
@@ -136,7 +136,7 @@ export const Index = Resource<Index>(VectorizeIndexTypeId);
 /**
  * Returns true if the given value is a Vectorize Index resource.
  */
-export const isVectorizeIndex = (value: unknown): value is Index =>
+export const isIndex = (value: unknown): value is Index =>
   Predicate.hasProperty(value, "Type") && value.Type === VectorizeIndexTypeId;
 
 export const IndexProvider = () =>
@@ -268,7 +268,7 @@ const buildConfig = (
   news: IndexProps,
 ): vectorize.CreateIndexRequest["config"] =>
   news.preset !== undefined
-    ? // `VectorizePreset` is intentionally open (`| (string & {})`) so
+    ? // `Preset` is intentionally open (`| (string & {})`) so
       // new Cloudflare presets aren't blocked by stale types. The
       // distilled type is the strict-at-release-time union; cast
       // through for the API call.

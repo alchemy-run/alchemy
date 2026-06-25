@@ -8,13 +8,13 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { EmailSecurityPatternType } from "./AllowPolicy.ts";
+import type { PatternType } from "./AllowPolicy.ts";
 
 const EmailSecurityBlockSenderTypeId =
   "Cloudflare.EmailSecurity.BlockSender" as const;
 type EmailSecurityBlockSenderTypeId = typeof EmailSecurityBlockSenderTypeId;
 
-export interface EmailSecurityBlockSenderProps {
+export interface BlockSenderProps {
   /**
    * The email address, domain, IP, or regular expression to block.
    * The pattern is the entry's identity for cold-state recovery — a
@@ -25,7 +25,7 @@ export interface EmailSecurityBlockSenderProps {
   /**
    * Type of pattern matching.
    */
-  patternType: EmailSecurityPatternType;
+  patternType: PatternType;
   /**
    * Whether `pattern` is a regular expression.
    * @default false
@@ -37,7 +37,7 @@ export interface EmailSecurityBlockSenderProps {
   comments?: string;
 }
 
-export interface EmailSecurityBlockSenderAttributes {
+export interface BlockSenderAttributes {
   /** Cloudflare-assigned blocked sender pattern identifier. */
   blockSenderId: string;
   /** The account the entry belongs to. */
@@ -45,7 +45,7 @@ export interface EmailSecurityBlockSenderAttributes {
   /** The blocked pattern. */
   pattern: string;
   /** Type of pattern matching. */
-  patternType: EmailSecurityPatternType;
+  patternType: PatternType;
   /** Whether the pattern is a regular expression. */
   isRegex: boolean;
   /** Free-form notes about the entry, if set. */
@@ -56,10 +56,10 @@ export interface EmailSecurityBlockSenderAttributes {
   modifiedAt: string | undefined;
 }
 
-export type EmailSecurityBlockSender = Resource<
+export type BlockSender = Resource<
   EmailSecurityBlockSenderTypeId,
-  EmailSecurityBlockSenderProps,
-  EmailSecurityBlockSenderAttributes,
+  BlockSenderProps,
+  BlockSenderAttributes,
   never,
   Providers
 >;
@@ -77,7 +77,7 @@ export type EmailSecurityBlockSender = Resource<
  * @section Blocking Senders
  * @example Block a single email address
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender("KnownPhisher", {
+ * yield* Cloudflare.EmailSecurity.BlockSender("KnownPhisher", {
  *   pattern: "phisher@malicious.example.com",
  *   patternType: "EMAIL",
  *   comments: "reported in incident 1234",
@@ -86,7 +86,7 @@ export type EmailSecurityBlockSender = Resource<
  *
  * @example Block a whole sending domain
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender("SpamDomain", {
+ * yield* Cloudflare.EmailSecurity.BlockSender("SpamDomain", {
  *   pattern: "spam-source.example.net",
  *   patternType: "DOMAIN",
  * });
@@ -94,7 +94,7 @@ export type EmailSecurityBlockSender = Resource<
  *
  * @example Block by regular expression
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender("LookalikeSenders", {
+ * yield* Cloudflare.EmailSecurity.BlockSender("LookalikeSenders", {
  *   pattern: ".*@examp1e\\.com$",
  *   patternType: "EMAIL",
  *   isRegex: true,
@@ -103,21 +103,19 @@ export type EmailSecurityBlockSender = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
  */
-export const EmailSecurityBlockSender = Resource<EmailSecurityBlockSender>(
+export const BlockSender = Resource<BlockSender>(
   EmailSecurityBlockSenderTypeId,
 );
 
 /**
- * Returns true if the given value is an EmailSecurityBlockSender resource.
+ * Returns true if the given value is an BlockSender resource.
  */
-export const isEmailSecurityBlockSender = (
-  value: unknown,
-): value is EmailSecurityBlockSender =>
+export const isBlockSender = (value: unknown): value is BlockSender =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === EmailSecurityBlockSenderTypeId;
 
-export const EmailSecurityBlockSenderProvider = () =>
-  Provider.succeed(EmailSecurityBlockSender, {
+export const BlockSenderProvider = () =>
+  Provider.succeed(BlockSender, {
     stables: ["blockSenderId", "accountId", "createdAt"],
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -254,11 +252,11 @@ const toAttributes = (
     | emailSecurity.PatchSettingBlockSenderResponse
     | emailSecurity.ListSettingBlockSendersResponse["result"][number],
   accountId: string,
-): EmailSecurityBlockSenderAttributes => ({
+): BlockSenderAttributes => ({
   blockSenderId: entry.id ?? "",
   accountId,
   pattern: entry.pattern ?? "",
-  patternType: (entry.patternType ?? "EMAIL") as EmailSecurityPatternType,
+  patternType: (entry.patternType ?? "EMAIL") as PatternType,
   isRegex: entry.isRegex ?? false,
   comments: entry.comments ?? undefined,
   createdAt: entry.createdAt ?? "",

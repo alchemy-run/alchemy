@@ -16,7 +16,7 @@ type MagicNetworkMonitoringConfigTypeId =
 /**
  * A WARP device registered as a flow-data source on the MNM config.
  */
-export interface MagicNetworkMonitoringWarpDevice {
+export interface WarpDevice {
   /**
    * Unique identifier of the WARP device.
    */
@@ -31,7 +31,7 @@ export interface MagicNetworkMonitoringWarpDevice {
   routerIp: string;
 }
 
-export interface MagicNetworkMonitoringConfigProps {
+export interface ConfigProps {
   /**
    * The account name label stored on the MNM configuration. Freeform —
    * mutable in place.
@@ -56,10 +56,10 @@ export interface MagicNetworkMonitoringConfigProps {
    * WARP devices registered as flow-data sources.
    * @default []
    */
-  warpDevices?: MagicNetworkMonitoringWarpDevice[];
+  warpDevices?: WarpDevice[];
 }
 
-export interface MagicNetworkMonitoringConfigAttributes {
+export interface ConfigAttributes {
   /** The Cloudflare account the configuration belongs to. */
   accountId: string;
   /** The account name label stored on the configuration. */
@@ -69,13 +69,13 @@ export interface MagicNetworkMonitoringConfigAttributes {
   /** Router IPs registered as flow-data sources. */
   routerIps: string[];
   /** WARP devices registered as flow-data sources. */
-  warpDevices: MagicNetworkMonitoringWarpDevice[];
+  warpDevices: WarpDevice[];
 }
 
-export type MagicNetworkMonitoringConfig = Resource<
+export type Config = Resource<
   MagicNetworkMonitoringConfigTypeId,
-  MagicNetworkMonitoringConfigProps,
-  MagicNetworkMonitoringConfigAttributes,
+  ConfigProps,
+  ConfigAttributes,
   never,
   Providers
 >;
@@ -97,7 +97,7 @@ export type MagicNetworkMonitoringConfig = Resource<
  * @section Creating the configuration
  * @example Minimal configuration
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.Config("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 1,
  * });
@@ -105,7 +105,7 @@ export type MagicNetworkMonitoringConfig = Resource<
  *
  * @example Configuration with router IPs
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.Config("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 100,
  *   routerIps: ["203.0.113.1/32"],
@@ -115,12 +115,12 @@ export type MagicNetworkMonitoringConfig = Resource<
  * @section Rules depend on the configuration
  * @example Create the config before any rules
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.Config("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 1,
  * });
  * // Reference an output attribute so the rule deploys after the config.
- * yield* Cloudflare.MagicNetworkMonitoring.MagicNetworkMonitoringRule("VolumetricAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.Rule("VolumetricAlert", {
  *   accountId: config.accountId,
  *   type: "threshold",
  *   prefixes: ["10.0.0.0/24"],
@@ -130,20 +130,17 @@ export type MagicNetworkMonitoringConfig = Resource<
  *
  * @see https://developers.cloudflare.com/magic-network-monitoring/
  */
-export const MagicNetworkMonitoringConfig =
-  Resource<MagicNetworkMonitoringConfig>(MagicNetworkMonitoringConfigTypeId);
+export const Config = Resource<Config>(MagicNetworkMonitoringConfigTypeId);
 
 /**
- * Returns true if the given value is a MagicNetworkMonitoringConfig resource.
+ * Returns true if the given value is a Config resource.
  */
-export const isMagicNetworkMonitoringConfig = (
-  value: unknown,
-): value is MagicNetworkMonitoringConfig =>
+export const isConfig = (value: unknown): value is Config =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === MagicNetworkMonitoringConfigTypeId;
 
-export const MagicNetworkMonitoringConfigProvider = () =>
-  Provider.succeed(MagicNetworkMonitoringConfig, {
+export const ConfigProvider = () =>
+  Provider.succeed(Config, {
     stables: ["accountId"],
 
     diff: Effect.fn(function* ({ output }) {
@@ -245,7 +242,7 @@ interface ObservedConfig {
   name: string;
   defaultSampling: number;
   routerIps: readonly string[];
-  warpDevices: readonly MagicNetworkMonitoringWarpDevice[];
+  warpDevices: readonly WarpDevice[];
 }
 
 /**
@@ -274,15 +271,13 @@ const sameStrings = (observed: readonly string[], desired: readonly string[]) =>
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
 const sameWarpDevices = (
-  observed: readonly MagicNetworkMonitoringWarpDevice[],
-  desired: readonly MagicNetworkMonitoringWarpDevice[],
+  observed: readonly WarpDevice[],
+  desired: readonly WarpDevice[],
 ) =>
   observed.length === desired.length &&
   serializeWarpDevices(observed) === serializeWarpDevices(desired);
 
-const serializeWarpDevices = (
-  devices: readonly MagicNetworkMonitoringWarpDevice[],
-) =>
+const serializeWarpDevices = (devices: readonly WarpDevice[]) =>
   devices
     .map((d) => `${d.id}|${d.name}|${d.routerIp}`)
     .sort()
@@ -291,7 +286,7 @@ const serializeWarpDevices = (
 const toAttributes = (
   config: ObservedConfig,
   accountId: string,
-): MagicNetworkMonitoringConfigAttributes => ({
+): ConfigAttributes => ({
   accountId,
   name: config.name,
   defaultSampling: config.defaultSampling,

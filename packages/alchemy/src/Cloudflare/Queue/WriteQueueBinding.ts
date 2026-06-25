@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeQueueBinding, makeQueueHelpers } from "./QueueBinding.ts";
-import type { QueueSendMessage, QueueSendOptions } from "./QueueTypes.ts";
+import type { SendMessage, SendOptions } from "./QueueTypes.ts";
 import { WriteQueue, type WriteQueueClient } from "./WriteQueue.ts";
 
 /**
@@ -19,9 +19,9 @@ export const makeWriteQueueClient = ({
   use,
 }: ReturnType<typeof makeQueueHelpers>): WriteQueueClient => ({
   raw,
-  send: (body: unknown, options?: QueueSendOptions) =>
+  send: (body: unknown, options?: SendOptions) =>
     use((q) => q.send(body, options)),
-  sendBatch: (messages: ReadonlyArray<QueueSendMessage>) =>
+  sendBatch: (messages: ReadonlyArray<SendMessage>) =>
     use((q) =>
       q.sendBatch(
         messages.map((m) => ({

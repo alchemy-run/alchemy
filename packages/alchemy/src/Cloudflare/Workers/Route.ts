@@ -88,7 +88,7 @@ export type WorkerRoute = Resource<
  * });
  *
  * // Workers only run on proxied hostnames — give the host an origin.
- * yield* Cloudflare.Dns.DnsRecord("ApiPlaceholder", {
+ * yield* Cloudflare.Dns.Record("ApiPlaceholder", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   type: "AAAA",

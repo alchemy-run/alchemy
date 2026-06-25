@@ -10,7 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { RulesetOutputRule, RulesetPhase } from "./Ruleset.ts";
+import type { OutputRule, Phase } from "./Ruleset.ts";
 
 const CustomRulesetTypeId = "Cloudflare.Rulesets.CustomRuleset" as const;
 type CustomRulesetTypeId = typeof CustomRulesetTypeId;
@@ -46,7 +46,7 @@ export type CustomRulesetProps = {
    * The phase the ruleset belongs to (e.g. `http_request_firewall_custom`).
    * Changing the phase triggers a replacement.
    */
-  phase: RulesetPhase;
+  phase: Phase;
   /**
    * The full list of rules in the ruleset. This resource owns every rule —
    * rules added out-of-band are overwritten on the next deploy.
@@ -71,11 +71,11 @@ export type CustomRulesetAttributes = {
   /** The human-readable name of the ruleset. */
   name: string;
   /** The phase of the ruleset. */
-  phase: RulesetPhase;
+  phase: Phase;
   /** An informative description of the ruleset. */
   description: string | undefined;
   /** The list of rules in the ruleset. */
-  rules: RulesetOutputRule[];
+  rules: OutputRule[];
   /** The timestamp of when the ruleset was last modified. */
   lastUpdated: string;
   /** The version of the ruleset. */
@@ -96,7 +96,7 @@ export type CustomRuleset = Resource<
  * Custom rulesets are the Enterprise WAF deployment workflow: define a
  * reusable ruleset once at the account level, then deploy it across zones
  * with an `execute` rule in a phase entrypoint (see
- * `Cloudflare.Ruleset.RulesetAccountEntrypoint`). Account-level WAF phases require
+ * `Cloudflare.Ruleset.AccountEntrypoint`). Account-level WAF phases require
  * an Enterprise plan — on lower plans, creation fails with the typed
  * `PhaseNotEntitled` error.
  *
@@ -123,7 +123,7 @@ export type CustomRuleset = Resource<
  *
  * @example Deploy the custom ruleset via the account entrypoint
  * ```typescript
- * yield* Cloudflare.Ruleset.RulesetAccountEntrypoint("WafDeployment", {
+ * yield* Cloudflare.Ruleset.AccountEntrypoint("WafDeployment", {
  *   phase: "http_request_firewall_custom",
  *   rules: [
  *     {
@@ -346,7 +346,7 @@ const toCustomRulesetAttributes = (
  * Strip server-assigned per-rule fields so observed rules can be compared
  * structurally against the desired props.
  */
-const normalizeObservedRules = (rules: RulesetOutputRule[]) =>
+const normalizeObservedRules = (rules: OutputRule[]) =>
   rules.map(({ id: _id, ...rule }) => rule);
 
 const normalizeDesiredRules = (rules: CustomRulesetRule[]) =>

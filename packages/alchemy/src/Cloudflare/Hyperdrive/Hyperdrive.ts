@@ -13,13 +13,13 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
-export type HyperdriveScheme = "postgres" | "postgresql" | "mysql";
+export type Scheme = "postgres" | "postgresql" | "mysql";
 
 /**
  * Origin configuration for a public PostgreSQL or MySQL database.
  */
-export type HyperdrivePublicOrigin = {
-  scheme: HyperdriveScheme;
+export type PublicOrigin = {
+  scheme: Scheme;
   host: string;
   port?: number;
   database: string;
@@ -33,8 +33,8 @@ export type HyperdrivePublicOrigin = {
 /**
  * Origin configuration for a database fronted by Cloudflare Access.
  */
-export type HyperdriveAccessOrigin = {
-  scheme: HyperdriveScheme;
+export type AccessOrigin = {
+  scheme: Scheme;
   host: string;
   database: string;
   user: string;
@@ -43,9 +43,9 @@ export type HyperdriveAccessOrigin = {
   accessClientSecret: Redacted.Redacted<string>;
 };
 
-export type HyperdriveOrigin = HyperdrivePublicOrigin | HyperdriveAccessOrigin;
+export type Origin = PublicOrigin | AccessOrigin;
 
-export type HyperdriveCaching = {
+export type Caching = {
   /**
    * Whether caching is disabled.
    * @default false
@@ -63,7 +63,7 @@ export type HyperdriveCaching = {
   staleWhileRevalidate?: number;
 };
 
-export type HyperdriveMtls = {
+export type Mtls = {
   caCertificateId?: string;
   mtlsCertificateId?: string;
   /**
@@ -72,14 +72,14 @@ export type HyperdriveMtls = {
   sslmode?: "require" | "verify-ca" | "verify-full";
 };
 
-export type HyperdriveDevOrigin = HyperdrivePublicOrigin & {
+export type DevOrigin = PublicOrigin & {
   /**
    * @default "prefer"
    */
   sslmode?: "disable" | "prefer" | "require" | "verify-ca" | "verify-full";
 };
 
-export type HyperdriveProps = {
+export type Props = {
   /**
    * Name of the Hyperdrive configuration. If omitted, a unique name will be
    * generated.
@@ -90,15 +90,15 @@ export type HyperdriveProps = {
    * Database connection origin. Hyperdrive supports public Postgres/MySQL
    * databases and databases fronted by Cloudflare Access.
    */
-  origin: HyperdriveOrigin;
+  origin: Origin;
   /**
    * Caching configuration.
    */
-  caching?: HyperdriveCaching;
+  caching?: Caching;
   /**
    * mTLS configuration.
    */
-  mtls?: HyperdriveMtls;
+  mtls?: Mtls;
   /**
    * The (soft) maximum number of connections Hyperdrive is allowed to make to
    * the origin database.
@@ -108,19 +108,19 @@ export type HyperdriveProps = {
    * Local development overrides. When the stack runs in dev mode
    * connect to a locally running database
    */
-  dev?: HyperdriveDevOrigin;
+  dev?: DevOrigin;
 };
 
 export type Connection = Resource<
   "Cloudflare.Hyperdrive",
-  HyperdriveProps,
+  Props,
   {
     hyperdriveId: string;
     name: string;
     accountId: string;
-    origin: HyperdriveOrigin;
-    mtls: HyperdriveMtls;
-    dev: HyperdriveDevOrigin | undefined;
+    origin: Origin;
+    mtls: Mtls;
+    dev: DevOrigin | undefined;
   },
   never,
   Providers
@@ -180,12 +180,12 @@ export const ConnectionProvider = () =>
               // The connection-string password is write-only and never
               // returned by the API, so it is absent here (matching `read`,
               // which sources it from `olds`).
-              origin: { ...c.origin } as HyperdriveOrigin,
+              origin: { ...c.origin } as Origin,
               mtls: {
                 caCertificateId: c.mtls?.caCertificateId ?? undefined,
                 mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
                 sslmode: c.mtls?.sslmode ?? undefined,
-              } as HyperdriveMtls,
+              } as Mtls,
               dev: undefined,
             })),
           ),
@@ -233,12 +233,12 @@ export const ConnectionProvider = () =>
               origin: {
                 ...c.origin,
                 password: olds?.origin?.password,
-              } as HyperdriveOrigin,
+              } as Origin,
               mtls: {
                 caCertificateId: c.mtls?.caCertificateId ?? undefined,
                 mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
                 sslmode: c.mtls?.sslmode ?? undefined,
-              } as HyperdriveMtls,
+              } as Mtls,
               dev: output?.dev,
             })),
             Effect.catchTag("HyperdriveConfigNotFound", () =>
@@ -256,12 +256,12 @@ export const ConnectionProvider = () =>
           origin: {
             ...match.origin,
             password: olds?.origin?.password,
-          } as HyperdriveOrigin,
+          } as Origin,
           mtls: {
             caCertificateId: match.mtls?.caCertificateId ?? undefined,
             mtlsCertificateId: match.mtls?.mtlsCertificateId ?? undefined,
             sslmode: match.mtls?.sslmode ?? undefined,
-          } as HyperdriveMtls,
+          } as Mtls,
           dev: output?.dev,
         };
       }
@@ -354,7 +354,7 @@ const findByName = (name: string) =>
     return list.result.find((c) => c.name === name);
   });
 
-export const defaultPort = (scheme: HyperdriveScheme): number =>
+export const defaultPort = (scheme: Scheme): number =>
   scheme === "mysql" ? 3306 : 5432;
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
@@ -366,7 +366,7 @@ const unwrap = (v: string | Redacted.Redacted<string>): string =>
  * declare `password`/`access_client_secret` as plain strings even though the
  * runtime schema also accepts `Redacted<string>`.
  */
-const toRequestOrigin = (origin: HyperdriveOrigin) => {
+const toRequestOrigin = (origin: Origin) => {
   if ("accessClientId" in origin) {
     return {
       accessClientId: unwrap(origin.accessClientId),

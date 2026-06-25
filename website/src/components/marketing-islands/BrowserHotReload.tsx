@@ -339,10 +339,10 @@ export default function BrowserHotReload() {
 
           switch (next) {
             case "boot-photos":
-              push(bootLine("Photos", "Cloudflare.R2.R2Bucket"));
+              push(bootLine("Photos", "Cloudflare.R2.Bucket"));
               break;
             case "boot-sessions":
-              push(bootLine("Sessions", "Cloudflare.KV.KVNamespace"));
+              push(bootLine("Sessions", "Cloudflare.KV.Namespace"));
               break;
             case "boot-api":
               push(bootLine("Api", "Cloudflare.Worker · local → workerd"));

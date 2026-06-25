@@ -18,7 +18,7 @@ type OriginTlsClientAuthHostnameAssociationTypeId =
  * propagate asynchronously (`pending_deployment` → `active`), typically
  * settling within seconds.
  */
-export type OriginTlsClientAuthHostnameAssociationStatus =
+export type HostnameAssociationStatus =
   | "initializing"
   | "pending_deployment"
   | "pending_deletion"
@@ -29,7 +29,7 @@ export type OriginTlsClientAuthHostnameAssociationStatus =
   // Keep the union open so new Cloudflare statuses aren't blocked by stale types.
   | (string & {});
 
-export type OriginTlsClientAuthHostnameAssociationProps = {
+export type HostnameAssociationProps = {
   /**
    * Zone the hostname belongs to. Cannot be changed — updating this property
    * triggers a replacement.
@@ -44,7 +44,7 @@ export type OriginTlsClientAuthHostnameAssociationProps = {
   hostname: string;
   /**
    * Identifier of the hostname client certificate
-   * ({@link OriginTlsClientAuthHostnameCertificate}) presented to the origin
+   * ({@link HostnameCertificate}) presented to the origin
    * for this hostname. Required by Cloudflare for every hostname AOP
    * configuration. Mutable — updated in place.
    */
@@ -58,7 +58,7 @@ export type OriginTlsClientAuthHostnameAssociationProps = {
   enabled: boolean;
 };
 
-export type OriginTlsClientAuthHostnameAssociationAttributes = {
+export type HostnameAssociationAttributes = {
   /** Zone the hostname belongs to. */
   zoneId: string;
   /** The hostname the association applies to. */
@@ -68,15 +68,15 @@ export type OriginTlsClientAuthHostnameAssociationAttributes = {
   /** Whether hostname-level Authenticated Origin Pulls is enabled. */
   enabled: boolean;
   /** Deployment status of the association. */
-  status: OriginTlsClientAuthHostnameAssociationStatus | undefined;
+  status: HostnameAssociationStatus | undefined;
   /** Deployment status of the pinned certificate. */
-  certStatus: OriginTlsClientAuthHostnameAssociationStatus | undefined;
+  certStatus: HostnameAssociationStatus | undefined;
 };
 
-export type OriginTlsClientAuthHostnameAssociation = Resource<
+export type HostnameAssociation = Resource<
   OriginTlsClientAuthHostnameAssociationTypeId,
-  OriginTlsClientAuthHostnameAssociationProps,
-  OriginTlsClientAuthHostnameAssociationAttributes,
+  HostnameAssociationProps,
+  HostnameAssociationAttributes,
   never,
   Providers
 >;
@@ -86,7 +86,7 @@ export type OriginTlsClientAuthHostnameAssociation = Resource<
  * (`/zones/{zone_id}/origin_tls_client_auth/hostnames`).
  *
  * Pins a hostname client certificate
- * ({@link OriginTlsClientAuthHostnameCertificate}) to a hostname and toggles
+ * ({@link HostnameCertificate}) to a hostname and toggles
  * hostname-level AOP for it. Cloudflare's API is a bulk upsert keyed by
  * hostname; this resource manages exactly one hostname per instance, so
  * separate instances for different hostnames are safe to deploy
@@ -98,13 +98,13 @@ export type OriginTlsClientAuthHostnameAssociation = Resource<
  * @section Enabling AOP for a hostname
  * @example Associate a hostname with a client certificate
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate("AopHostCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
  * });
  *
- * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameAssociation("AopHost", {
+ * yield* Cloudflare.OriginTlsClientAuth.HostnameAssociation("AopHost", {
  *   zoneId: zone.zoneId,
  *   hostname: "api.example.com",
  *   certId: cert.certificateId,
@@ -114,7 +114,7 @@ export type OriginTlsClientAuthHostnameAssociation = Resource<
  *
  * @example Keep the certificate pinned but disable enforcement
  * ```typescript
- * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthHostnameAssociation("AopHost", {
+ * yield* Cloudflare.OriginTlsClientAuth.HostnameAssociation("AopHost", {
  *   zoneId: zone.zoneId,
  *   hostname: "api.example.com",
  *   certId: cert.certificateId,
@@ -124,23 +124,22 @@ export type OriginTlsClientAuthHostnameAssociation = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/set-up/per-hostname/
  */
-export const OriginTlsClientAuthHostnameAssociation =
-  Resource<OriginTlsClientAuthHostnameAssociation>(
-    OriginTlsClientAuthHostnameAssociationTypeId,
-  );
+export const HostnameAssociation = Resource<HostnameAssociation>(
+  OriginTlsClientAuthHostnameAssociationTypeId,
+);
 
 /**
- * Returns true if the given value is an OriginTlsClientAuthHostnameAssociation
+ * Returns true if the given value is an HostnameAssociation
  * resource.
  */
-export const isOriginTlsClientAuthHostnameAssociation = (
+export const isHostnameAssociation = (
   value: unknown,
-): value is OriginTlsClientAuthHostnameAssociation =>
+): value is HostnameAssociation =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === OriginTlsClientAuthHostnameAssociationTypeId;
 
-export const OriginTlsClientAuthHostnameAssociationProvider = () =>
-  Provider.succeed(OriginTlsClientAuthHostnameAssociation, {
+export const HostnameAssociationProvider = () =>
+  Provider.succeed(HostnameAssociation, {
     stables: ["zoneId", "hostname"],
 
     // Non-listable: an association is keyed entirely by {zoneId, hostname}
@@ -149,8 +148,7 @@ export const OriginTlsClientAuthHostnameAssociationProvider = () =>
     // AOP association (`listHostnameCertificates` lists certificates, which
     // carry no hostname), so there is provably no way to discover the
     // hostnames to read. Return [] rather than throwing.
-    list: () =>
-      Effect.succeed<OriginTlsClientAuthHostnameAssociationAttributes[]>([]),
+    list: () => Effect.succeed<HostnameAssociationAttributes[]>([]),
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
@@ -271,7 +269,7 @@ const toAttributes = (
   assoc: AssociationShape,
   zoneId: string,
   hostname: string,
-): OriginTlsClientAuthHostnameAssociationAttributes => ({
+): HostnameAssociationAttributes => ({
   zoneId,
   hostname,
   certId: assoc.certId!,

@@ -28,9 +28,9 @@ export type GetBindingType<T> =
           ? RpcWireShape<Shape> & Service
           : T extends Cloudflare.D1.Database
             ? D1Database
-            : T extends Cloudflare.R2.R2Bucket
+            : T extends Cloudflare.R2.Bucket
               ? R2Bucket
-              : T extends Cloudflare.KV.KVNamespace
+              : T extends Cloudflare.KV.Namespace
                 ? KVNamespace
                 : T extends Cloudflare.Queue.Queue
                   ? Queue<unknown>
@@ -42,7 +42,7 @@ export type GetBindingType<T> =
                         ? AiSearchNamespace
                         : T extends Cloudflare.Email.SendEmail
                           ? SendEmail
-                          : T extends Cloudflare.AnalyticsEngine.AnalyticsEngineDataset
+                          : T extends Cloudflare.AnalyticsEngine.Dataset
                             ? AnalyticsEngineDataset
                             : T extends Cloudflare.Artifacts.Artifacts
                               ? Artifacts

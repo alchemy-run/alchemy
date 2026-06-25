@@ -6,7 +6,7 @@ import {
   makeHttpKVNamespaceBinding,
   makeKVHttpScope,
   toKVNamespaceError,
-  type KVHttpToken,
+  type HttpToken,
 } from "./NamespaceHttp.ts";
 import { ReadNamespace, type ReadNamespaceClient } from "./ReadNamespace.ts";
 
@@ -27,7 +27,7 @@ export const ReadNamespaceHttp = Layer.effect(
 );
 
 export const makeReadKVHttpClient = (
-  token: KVHttpToken,
+  token: HttpToken,
   namespaceId: Effect.Effect<string>,
 ): ReadNamespaceClient => {
   const authorize = authorizeWith(token);
@@ -99,7 +99,7 @@ export const makeReadKVHttpClient = (
   return {
     raw: Effect.die(
       new (class extends Error {})(
-        "KV HTTP client does not expose a native KVNamespace binding; use get/list/getWithMetadata.",
+        "KV HTTP client does not expose a native Namespace binding; use get/list/getWithMetadata.",
       ),
     ) as any,
     get: ((key: string | string[], typeOrOptions?: unknown) =>

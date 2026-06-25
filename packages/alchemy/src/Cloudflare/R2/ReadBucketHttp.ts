@@ -9,14 +9,14 @@ import {
   makeR2HttpScope,
   toR2Error,
   type HttpMetadata,
-  type R2HttpToken,
+  type HttpToken,
 } from "./BucketHttp.ts";
 import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 import {
   R2Error,
-  type R2GetOptions,
-  type R2ListOptions,
-  type R2Objects,
+  type GetOptions,
+  type ListOptions,
+  type Objects,
 } from "./BucketTypes.ts";
 
 /**
@@ -35,7 +35,7 @@ export const ReadBucketHttp = Layer.effect(
 );
 
 export const makeReadR2HttpClient = (
-  token: R2HttpToken,
+  token: HttpToken,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): ReadBucketClient => {
@@ -46,7 +46,7 @@ export const makeReadR2HttpClient = (
     raw: Effect.die(
       new R2Error({
         message:
-          "R2BucketBindingHttp does not expose a native `raw` R2Bucket; use the binary HTTP methods instead.",
+          "R2BucketBindingHttp does not expose a native `raw` Bucket; use the binary HTTP methods instead.",
         cause: new Error("unsupported"),
       }),
     ),
@@ -76,7 +76,7 @@ export const makeReadR2HttpClient = (
         Effect.catchTag("NoSuchKey", () => Effect.succeed(null)),
         Effect.mapError(toR2Error),
       ),
-    get: ((key: string, _options?: R2GetOptions) =>
+    get: ((key: string, _options?: GetOptions) =>
       scope.pipe(
         Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
           authorize(
@@ -93,7 +93,7 @@ export const makeReadR2HttpClient = (
         Effect.catchTag("NoSuchKey", () => Effect.succeed(null)),
         Effect.mapError(toR2Error),
       )) as any,
-    list: (options?: R2ListOptions) =>
+    list: (options?: ListOptions) =>
       scope.pipe(
         Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
           authorize(
@@ -131,7 +131,7 @@ export const makeReadR2HttpClient = (
             cursor
               ? { objects, delimitedPrefixes: [], truncated: true, cursor }
               : { objects, delimitedPrefixes: [], truncated: false }
-          ) as R2Objects;
+          ) as Objects;
         }),
       ),
   };

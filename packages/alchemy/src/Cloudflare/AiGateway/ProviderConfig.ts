@@ -180,9 +180,7 @@ export const ProviderConfig = Resource<ProviderConfig>(ProviderConfigTypeId);
 /**
  * Returns true if the given value is an ProviderConfig resource.
  */
-export const isAiGatewayProviderConfig = (
-  value: unknown,
-): value is ProviderConfig =>
+export const isProviderConfig = (value: unknown): value is ProviderConfig =>
   Predicate.hasProperty(value, "Type") && value.Type === ProviderConfigTypeId;
 
 export const ProviderConfigProvider = () =>

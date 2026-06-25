@@ -14,7 +14,7 @@ import { listAllZones } from "../Zone/lookup.ts";
 const ApiShieldLabelTypeId = "Cloudflare.ApiShield.Label" as const;
 type ApiShieldLabelTypeId = typeof ApiShieldLabelTypeId;
 
-export interface ApiShieldLabelProps {
+export interface LabelProps {
   /**
    * Zone the label is defined on.
    *
@@ -37,7 +37,7 @@ export interface ApiShieldLabelProps {
   description?: string;
 }
 
-export interface ApiShieldLabelAttributes {
+export interface LabelAttributes {
   /** Zone the label is defined on. */
   zoneId: string;
   /** Name of the label (its identity within the zone). */
@@ -55,10 +55,10 @@ export interface ApiShieldLabelAttributes {
   lastUpdated: string;
 }
 
-export type ApiShieldLabel = Resource<
+export type Label = Resource<
   ApiShieldLabelTypeId,
-  ApiShieldLabelProps,
-  ApiShieldLabelAttributes,
+  LabelProps,
+  LabelAttributes,
   never,
   Providers
 >;
@@ -78,7 +78,7 @@ export type ApiShieldLabel = Resource<
  * @section Creating a Label
  * @example Label with a generated name
  * ```typescript
- * const label = yield* Cloudflare.ApiShield.ApiShieldLabel("TeamPayments", {
+ * const label = yield* Cloudflare.ApiShield.Label("TeamPayments", {
  *   zoneId: zone.zoneId,
  *   description: "endpoints owned by the payments team",
  * });
@@ -86,7 +86,7 @@ export type ApiShieldLabel = Resource<
  *
  * @example Label with an explicit name
  * ```typescript
- * yield* Cloudflare.ApiShield.ApiShieldLabel("Pii", {
+ * yield* Cloudflare.ApiShield.Label("Pii", {
  *   zoneId: zone.zoneId,
  *   name: "pii",
  *   description: "endpoints that return personal data",
@@ -95,16 +95,16 @@ export type ApiShieldLabel = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/management-and-monitoring/endpoint-labels/
  */
-export const ApiShieldLabel = Resource<ApiShieldLabel>(ApiShieldLabelTypeId);
+export const Label = Resource<Label>(ApiShieldLabelTypeId);
 
 /**
- * Returns true if the given value is an ApiShieldLabel resource.
+ * Returns true if the given value is an Label resource.
  */
-export const isApiShieldLabel = (value: unknown): value is ApiShieldLabel =>
+export const isLabel = (value: unknown): value is Label =>
   Predicate.hasProperty(value, "Type") && value.Type === ApiShieldLabelTypeId;
 
-export const ApiShieldLabelProvider = () =>
-  Provider.succeed(ApiShieldLabel, {
+export const LabelProvider = () =>
+  Provider.succeed(Label, {
     stables: ["zoneId", "name", "source", "createdAt"],
 
     list: Effect.fn(function* () {
@@ -142,8 +142,8 @@ export const ApiShieldLabelProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
-      const o = olds as ApiShieldLabelProps | undefined;
-      const n = news as ApiShieldLabelProps;
+      const o = olds as LabelProps | undefined;
+      const n = news as LabelProps;
       if (o === undefined) return undefined;
       // The name is the label's identity — compare the resolved physical
       // names (an omitted name resolves deterministically from the id).
@@ -268,7 +268,7 @@ const createLabelName = (id: string, name: string | undefined) =>
 const toAttributes = (
   label: ObservedLabel,
   zoneId: string,
-): ApiShieldLabelAttributes => ({
+): LabelAttributes => ({
   zoneId,
   name: label.name,
   description: label.description,

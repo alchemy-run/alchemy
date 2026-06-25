@@ -144,7 +144,7 @@ export const Token = Resource<Token>(TokenTypeId);
 /**
  * Returns true if the given value is an Token resource.
  */
-export const isAiSearchToken = (value: unknown): value is Token =>
+export const isToken = (value: unknown): value is Token =>
   Predicate.hasProperty(value, "Type") && value.Type === TokenTypeId;
 
 export const TokenProvider = () =>

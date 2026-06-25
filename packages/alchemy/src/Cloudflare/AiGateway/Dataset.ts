@@ -170,7 +170,7 @@ export const Dataset = Resource<Dataset>(DatasetTypeId);
 /**
  * Returns true if the given value is an Dataset resource.
  */
-export const isAiGatewayDataset = (value: unknown): value is Dataset =>
+export const isDataset = (value: unknown): value is Dataset =>
   Predicate.hasProperty(value, "Type") && value.Type === DatasetTypeId;
 
 export const DatasetProvider = () =>

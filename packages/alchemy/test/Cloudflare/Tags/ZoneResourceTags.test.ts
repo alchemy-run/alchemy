@@ -80,7 +80,7 @@ test.provider("create, update, and clear tags on a DNS record", (stack) =>
 
     const v1 = yield* stack.deploy(
       Effect.gen(function* () {
-        const record = yield* Cloudflare.Dns.DnsRecord("CrudTaggedRecord", {
+        const record = yield* Cloudflare.Dns.Record("CrudTaggedRecord", {
           zoneId,
           name: CRUD_RECORD_NAME,
           type: "A",
@@ -109,7 +109,7 @@ test.provider("create, update, and clear tags on a DNS record", (stack) =>
     // `team`, add `owner`.
     const v2 = yield* stack.deploy(
       Effect.gen(function* () {
-        const record = yield* Cloudflare.Dns.DnsRecord("CrudTaggedRecord", {
+        const record = yield* Cloudflare.Dns.Record("CrudTaggedRecord", {
           zoneId,
           name: CRUD_RECORD_NAME,
           type: "A",
@@ -179,7 +179,7 @@ test.provider("list enumerates tagged zone-scoped resources", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const record = yield* Cloudflare.Dns.DnsRecord("ListTaggedRecord", {
+        const record = yield* Cloudflare.Dns.Record("ListTaggedRecord", {
           zoneId,
           name: LIST_RECORD_NAME,
           type: "A",

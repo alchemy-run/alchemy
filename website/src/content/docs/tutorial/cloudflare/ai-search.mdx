@@ -24,7 +24,7 @@ Create `src/Docs.ts` with a bucket definition.
 // src/Docs.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Docs = Cloudflare.R2.R2Bucket("Docs", {});
+export const Docs = Cloudflare.R2.Bucket("Docs", {});
 ```
 
 This is the bucket you'll drop Markdown, PDFs, or text files into —

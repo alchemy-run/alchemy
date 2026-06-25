@@ -24,7 +24,7 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.R2Bucket("AiSearchEffectBindingBucket");
+    const bucket = yield* Cloudflare.R2.Bucket("AiSearchEffectBindingBucket");
     const namespace = yield* Cloudflare.AiSearch.Namespace(
       "AiSearchEffectBindingNs",
     );

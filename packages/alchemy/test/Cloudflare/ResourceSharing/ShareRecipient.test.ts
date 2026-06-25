@@ -59,7 +59,7 @@ test.provider.skipIf(!recipientAccountId)(
       yield* stack.destroy();
 
       const policy = yield* stack.deploy(
-        Cloudflare.Gateway.GatewayRule("RecipientListPolicy", {
+        Cloudflare.Gateway.Rule("RecipientListPolicy", {
           action: "block",
           traffic: 'dns.fqdn == "recipient-list.alchemy-test.example"',
           filters: ["dns"],

@@ -13,7 +13,7 @@ const EmailSecurityTrustedDomainTypeId =
   "Cloudflare.EmailSecurity.TrustedDomain" as const;
 type EmailSecurityTrustedDomainTypeId = typeof EmailSecurityTrustedDomainTypeId;
 
-export interface EmailSecurityTrustedDomainProps {
+export interface TrustedDomainProps {
   /**
    * The domain (or regular expression) to trust. The pattern is the
    * entry's identity for cold-state recovery — a pre-existing entry with
@@ -45,7 +45,7 @@ export interface EmailSecurityTrustedDomainProps {
   comments?: string;
 }
 
-export interface EmailSecurityTrustedDomainAttributes {
+export interface TrustedDomainAttributes {
   /** Cloudflare-assigned trusted domain identifier. */
   trustedDomainId: string;
   /** The account the entry belongs to. */
@@ -66,10 +66,10 @@ export interface EmailSecurityTrustedDomainAttributes {
   modifiedAt: string | undefined;
 }
 
-export type EmailSecurityTrustedDomain = Resource<
+export type TrustedDomain = Resource<
   EmailSecurityTrustedDomainTypeId,
-  EmailSecurityTrustedDomainProps,
-  EmailSecurityTrustedDomainAttributes,
+  TrustedDomainProps,
+  TrustedDomainAttributes,
   never,
   Providers
 >;
@@ -87,7 +87,7 @@ export type EmailSecurityTrustedDomain = Resource<
  * @section Trusting Domains
  * @example Trust a partner domain with similar spelling
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityTrustedDomain("PartnerLookalike", {
+ * yield* Cloudflare.EmailSecurity.TrustedDomain("PartnerLookalike", {
  *   pattern: "examp1e-partner.com",
  *   isSimilarity: true,
  *   comments: "legitimate partner domain",
@@ -96,7 +96,7 @@ export type EmailSecurityTrustedDomain = Resource<
  *
  * @example Trust a recently registered domain
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityTrustedDomain("NewSubsidiary", {
+ * yield* Cloudflare.EmailSecurity.TrustedDomain("NewSubsidiary", {
  *   pattern: "brand-new-subsidiary.example",
  *   isRecent: true,
  * });
@@ -104,21 +104,19 @@ export type EmailSecurityTrustedDomain = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
  */
-export const EmailSecurityTrustedDomain = Resource<EmailSecurityTrustedDomain>(
+export const TrustedDomain = Resource<TrustedDomain>(
   EmailSecurityTrustedDomainTypeId,
 );
 
 /**
- * Returns true if the given value is an EmailSecurityTrustedDomain resource.
+ * Returns true if the given value is an TrustedDomain resource.
  */
-export const isEmailSecurityTrustedDomain = (
-  value: unknown,
-): value is EmailSecurityTrustedDomain =>
+export const isTrustedDomain = (value: unknown): value is TrustedDomain =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === EmailSecurityTrustedDomainTypeId;
 
-export const EmailSecurityTrustedDomainProvider = () =>
-  Provider.succeed(EmailSecurityTrustedDomain, {
+export const TrustedDomainProvider = () =>
+  Provider.succeed(TrustedDomain, {
     stables: ["trustedDomainId", "accountId", "createdAt"],
 
     // Account-scoped collection. Exhaustively paginate the account's trusted
@@ -139,7 +137,7 @@ export const EmailSecurityTrustedDomainProvider = () =>
             ),
           ),
           Effect.catchTag("EmailSecurityNotEntitled", () =>
-            Effect.succeed([] as EmailSecurityTrustedDomainAttributes[]),
+            Effect.succeed([] as TrustedDomainAttributes[]),
           ),
         );
     }),
@@ -257,7 +255,7 @@ const toAttributes = (
     | emailSecurity.PatchSettingTrustedDomainResponse
     | emailSecurity.ListSettingTrustedDomainsResponse["result"][number],
   accountId: string,
-): EmailSecurityTrustedDomainAttributes => ({
+): TrustedDomainAttributes => ({
   trustedDomainId: entry.id ?? "",
   accountId,
   pattern: entry.pattern ?? "",

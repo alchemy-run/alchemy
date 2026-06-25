@@ -25,7 +25,7 @@ test.provider("create and delete basic allow policy", (stack) =>
 
     const policy = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Access.AccessPolicy("BasicAllowPolicy", {
+        return yield* Cloudflare.Access.Policy("BasicAllowPolicy", {
           decision: "allow",
           include: [{ emailDomain: { domain: "example.com" } }],
         });
@@ -61,7 +61,7 @@ test.provider("update mutates includes without replacing", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Access.AccessPolicy("UpdatePolicy", {
+        return yield* Cloudflare.Access.Policy("UpdatePolicy", {
           decision: "allow",
           include: [{ emailDomain: { domain: "example.com" } }],
           adopt: true,
@@ -73,7 +73,7 @@ test.provider("update mutates includes without replacing", (stack) =>
 
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Access.AccessPolicy("UpdatePolicy", {
+        return yield* Cloudflare.Access.Policy("UpdatePolicy", {
           decision: "allow",
           include: [
             { emailDomain: { domain: "example.com" } },
@@ -114,7 +114,7 @@ test.provider("adopts an out-of-band reusable policy", (stack) =>
 
     const adopted = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Access.AccessPolicy("AdoptPolicy", {
+        return yield* Cloudflare.Access.Policy("AdoptPolicy", {
           name,
           decision: "allow",
           include: [{ emailDomain: { domain: "example.com" } }],
@@ -143,16 +143,14 @@ test.provider("list enumerates the deployed reusable policy", (stack) =>
 
     const policy = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Access.AccessPolicy("ListPolicy", {
+        return yield* Cloudflare.Access.Policy("ListPolicy", {
           decision: "allow",
           include: [{ emailDomain: { domain: "example.com" } }],
         });
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Access.AccessPolicy,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Access.Policy);
     const all = yield* provider.list();
 
     const match = all.find((p) => p.policyId === policy.policyId);

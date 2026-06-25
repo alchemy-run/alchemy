@@ -12,7 +12,7 @@ import { listAllZones } from "../Zone/lookup.ts";
 const SecurityTxtTypeId = "Cloudflare.SecurityTxt.SecurityTxt" as const;
 type SecurityTxtTypeId = typeof SecurityTxtTypeId;
 
-export type SecurityTxtProps = {
+export type Props = {
   /**
    * Zone the security.txt file belongs to. Stable — changing the zone
    * triggers a replacement (the old zone's security.txt is deleted and a
@@ -71,7 +71,7 @@ export type SecurityTxtProps = {
   preferredLanguages?: string;
 };
 
-export type SecurityTxtAttributes = {
+export type Attributes = {
   /** Zone the security.txt file belongs to. */
   zoneId: string;
   /** Whether the file is served at `/.well-known/security.txt`. */
@@ -96,8 +96,8 @@ export type SecurityTxtAttributes = {
 
 export type SecurityTxt = Resource<
   SecurityTxtTypeId,
-  SecurityTxtProps,
-  SecurityTxtAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -190,14 +190,12 @@ export const SecurityTxtProvider = () =>
             ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is SecurityTxtAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as SecurityTxtProps;
-      const n = news as SecurityTxtProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -270,10 +268,7 @@ export const SecurityTxtProvider = () =>
   });
 
 /** Normalize the desired state from input props into the Attributes shape. */
-const desiredAttributes = (
-  zoneId: string,
-  news: SecurityTxtProps,
-): SecurityTxtAttributes => ({
+const desiredAttributes = (zoneId: string, news: Props): Attributes => ({
   zoneId,
   enabled: news.enabled ?? true,
   contact: [...news.contact],
@@ -291,7 +286,7 @@ const desiredAttributes = (
 const toAttributes = (
   zoneId: string,
   observed: Exclude<securityTxt.GetSecurityTxtResponse, string>,
-): SecurityTxtAttributes => ({
+): Attributes => ({
   zoneId,
   enabled: observed.enabled ?? false,
   contact: [...(observed.contact ?? [])],
@@ -324,10 +319,7 @@ const listEquals = (
   return a.length === b.length && a.every((v, i) => v === b[i]);
 };
 
-const attributesEqual = (
-  a: SecurityTxtAttributes,
-  b: SecurityTxtAttributes,
-): boolean =>
+const attributesEqual = (a: Attributes, b: Attributes): boolean =>
   a.zoneId === b.zoneId &&
   a.enabled === b.enabled &&
   a.expires === b.expires &&

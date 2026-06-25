@@ -2,14 +2,14 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { R2Bucket } from "./Bucket.ts";
+import type { Bucket } from "./Bucket.ts";
 import type {
-  R2Conditional,
+  Conditional,
   R2Error,
-  R2MultipartOptions,
-  R2MultipartUpload,
+  MultipartOptions,
+  MultipartUpload,
   R2Object,
-  R2PutOptions,
+  PutOptions,
 } from "./BucketTypes.ts";
 
 /**
@@ -20,7 +20,7 @@ import type {
 export interface WriteBucket extends Binding.Service<
   WriteBucket,
   "Cloudflare.R2.WriteBucket",
-  (bucket: R2Bucket) => Effect.Effect<WriteBucketClient>
+  (bucket: Bucket) => Effect.Effect<WriteBucketClient>
 > {}
 
 export const WriteBucket = Binding.Service<WriteBucket>(
@@ -38,8 +38,8 @@ export interface WriteBucketClient {
       | null
       | Blob
       | Stream.Stream<Uint8Array, Err>,
-    options?: R2PutOptions & {
-      onlyIf: R2Conditional | Headers;
+    options?: PutOptions & {
+      onlyIf: Conditional | Headers;
       contentLength?: number;
     },
   ): Effect.Effect<R2Object | null, R2Error | Err, RuntimeContext>;
@@ -52,7 +52,7 @@ export interface WriteBucketClient {
       | string
       | null
       | Blob,
-    options?: R2PutOptions,
+    options?: PutOptions,
   ): Effect.Effect<R2Object, R2Error | Err, RuntimeContext>;
   put<Err = never>(
     key: string,
@@ -64,17 +64,17 @@ export interface WriteBucketClient {
       | null
       | Blob
       | Stream.Stream<Uint8Array, Err>,
-    options: R2PutOptions & {
+    options: PutOptions & {
       contentLength: number;
     },
   ): Effect.Effect<R2Object, R2Error | Err, RuntimeContext>;
   delete(keys: string | string[]): Effect.Effect<void, R2Error, RuntimeContext>;
   createMultipartUpload(
     key: string,
-    options?: R2MultipartOptions,
-  ): Effect.Effect<R2MultipartUpload, R2Error, RuntimeContext>;
+    options?: MultipartOptions,
+  ): Effect.Effect<MultipartUpload, R2Error, RuntimeContext>;
   resumeMultipartUpload(
     key: string,
     uploadId: string,
-  ): Effect.Effect<R2MultipartUpload, R2Error, RuntimeContext>;
+  ): Effect.Effect<MultipartUpload, R2Error, RuntimeContext>;
 }

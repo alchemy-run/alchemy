@@ -64,7 +64,7 @@ test.provider.skipIf(!entitled)(
 
       const bookmark = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessBookmark("Wiki", {
+          return yield* Cloudflare.Access.Bookmark("Wiki", {
             domain: "wiki.alchemy-test-2.us",
           });
         }),
@@ -84,7 +84,7 @@ test.provider.skipIf(!entitled)(
       // Update — domain and visibility converge in place (same id).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessBookmark("Wiki", {
+          return yield* Cloudflare.Access.Bookmark("Wiki", {
             domain: "docs.alchemy-test-2.us",
             appLauncherVisible: false,
           });
@@ -121,9 +121,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.AccessBookmark,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.Bookmark);
 
       if (!entitled) {
         const all = yield* provider.list();
@@ -137,7 +135,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessBookmark("ListWiki", {
+          return yield* Cloudflare.Access.Bookmark("ListWiki", {
             domain: "wiki.alchemy-test-2.us",
           });
         }),

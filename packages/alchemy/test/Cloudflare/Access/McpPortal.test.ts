@@ -69,7 +69,7 @@ test.provider(
 
       const portal = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessMcpPortal("AiPortal", {
+          return yield* Cloudflare.Access.McpPortal("AiPortal", {
             portalId: PORTAL_ID,
             hostname: HOSTNAME,
             description: "alchemy mcp portal v1",
@@ -93,7 +93,7 @@ test.provider(
       // Name + description update converges in place — same portal id.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessMcpPortal("AiPortal", {
+          return yield* Cloudflare.Access.McpPortal("AiPortal", {
             portalId: PORTAL_ID,
             name: "Alchemy AI Portal",
             hostname: HOSTNAME,
@@ -114,7 +114,7 @@ test.provider(
       // No-op redeploy keeps the same portal without drift.
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessMcpPortal("AiPortal", {
+          return yield* Cloudflare.Access.McpPortal("AiPortal", {
             portalId: PORTAL_ID,
             name: "Alchemy AI Portal",
             hostname: HOSTNAME,
@@ -147,7 +147,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessMcpPortal("ListPortal", {
+          return yield* Cloudflare.Access.McpPortal("ListPortal", {
             portalId: LIST_PORTAL_ID,
             hostname: LIST_HOSTNAME,
           });
@@ -155,7 +155,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Access.AccessMcpPortal,
+        Cloudflare.Access.McpPortal,
       );
       const all = yield* provider.list();
 

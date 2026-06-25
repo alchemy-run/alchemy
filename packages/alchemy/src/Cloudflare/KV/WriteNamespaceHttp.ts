@@ -6,9 +6,9 @@ import {
   makeHttpKVNamespaceBinding,
   makeKVHttpScope,
   toKVNamespaceError,
-  type KVHttpToken,
+  type HttpToken,
 } from "./NamespaceHttp.ts";
-import { KVNamespaceError } from "./NamespaceTypes.ts";
+import { NamespaceError } from "./NamespaceTypes.ts";
 import { WriteNamespace, type WriteNamespaceClient } from "./WriteNamespace.ts";
 
 /**
@@ -28,7 +28,7 @@ export const WriteNamespaceHttp = Layer.effect(
 );
 
 export const makeWriteKVHttpClient = (
-  token: KVHttpToken,
+  token: HttpToken,
   namespaceId: Effect.Effect<string>,
 ): WriteNamespaceClient => {
   const authorize = authorizeWith(token);
@@ -77,7 +77,7 @@ export const makeWriteKVHttpClient = (
 /** Collect a put value into a body accepted by the KV HTTP API. */
 const toKVBody = (
   value: string | ArrayBuffer | ArrayBufferView | ReadableStream,
-): Effect.Effect<string | Blob, KVNamespaceError> =>
+): Effect.Effect<string | Blob, NamespaceError> =>
   Effect.gen(function* () {
     if (typeof value === "string") return value;
     if (value instanceof Blob) return value;

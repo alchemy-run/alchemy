@@ -23,7 +23,7 @@ export const isQueue = (value: unknown): value is Queue =>
   typeof value === "object" &&
   (value as any)?.Type === "Cloudflare.Queue.Queue";
 
-export type QueueProps = {
+export type Props = {
   /**
    * Name of the queue. If omitted, a unique name will be generated.
    * @default ${app}-${stage}-${id}
@@ -33,7 +33,7 @@ export type QueueProps = {
 
 export type Queue = Resource<
   "Cloudflare.Queue.Queue",
-  QueueProps,
+  Props,
   {
     queueId: string;
     queueName: string;
@@ -106,7 +106,7 @@ export type Queue = Resource<
  */
 export const Queue = Resource<Queue>("Cloudflare.Queue.Queue");
 
-export const QueueProviderLive = () =>
+export const ProviderLive = () =>
   Provider.succeed(Queue, {
     // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
     stables: ["accountId"],
@@ -287,7 +287,7 @@ const findQueueByName = Effect.fn(function* (queueName: string) {
   );
 });
 
-export const QueueProviderLocal = () =>
+export const ProviderLocal = () =>
   RpcProvider.effect(
     Queue,
     LOCAL_ENTRY_URL,
@@ -337,6 +337,6 @@ export const QueueProviderLocal = () =>
 
 export const QueueProvider = () =>
   ProviderLayer.select({
-    local: () => QueueProviderLocal(),
-    live: () => QueueProviderLive(),
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
   });

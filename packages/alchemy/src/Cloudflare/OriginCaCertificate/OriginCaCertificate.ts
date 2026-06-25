@@ -19,18 +19,15 @@ type OriginCaCertificateTypeId = typeof OriginCaCertificateTypeId;
  * Signature type requested on the certificate: `origin-rsa` (RSA),
  * `origin-ecc` (ECDSA), or `keyless-certificate` (for Keyless SSL servers).
  */
-export type OriginCaCertificateRequestType =
-  | "origin-rsa"
-  | "origin-ecc"
-  | "keyless-certificate";
+export type RequestType = "origin-rsa" | "origin-ecc" | "keyless-certificate";
 
 /**
  * Number of days the certificate should be valid for. Cloudflare only
  * accepts this fixed set of validity periods.
  */
-export type OriginCaCertificateValidity = 7 | 30 | 90 | 365 | 730 | 1095 | 5475;
+export type Validity = 7 | 30 | 90 | 365 | 730 | 1095 | 5475;
 
-export interface OriginCaCertificateProps {
+export interface Props {
   /**
    * The Certificate Signing Request (CSR) in PEM format (newline-encoded).
    * The CSR's key is yours; Cloudflare only signs it. Immutable — changing
@@ -50,16 +47,16 @@ export interface OriginCaCertificateProps {
    * `origin-ecc` (ECDSA), or `keyless-certificate` (for Keyless SSL
    * servers). Immutable — changing the request type triggers a replacement.
    */
-  requestType: OriginCaCertificateRequestType;
+  requestType: RequestType;
   /**
    * The number of days for which the certificate should be valid.
    * Immutable — changing the validity triggers a replacement.
    * @default 5475
    */
-  requestedValidity?: OriginCaCertificateValidity;
+  requestedValidity?: Validity;
 }
 
-export interface OriginCaCertificateAttributes {
+export interface Attributes {
   /**
    * Cloudflare-assigned identifier of the certificate (a long decimal
    * serial string). Stable for the lifetime of the certificate.
@@ -82,7 +79,7 @@ export interface OriginCaCertificateAttributes {
   /**
    * Signature type on the certificate.
    */
-  requestType: OriginCaCertificateRequestType;
+  requestType: RequestType;
   /**
    * The number of days the certificate was requested to be valid for.
    */
@@ -95,8 +92,8 @@ export interface OriginCaCertificateAttributes {
 
 export type OriginCaCertificate = Resource<
   OriginCaCertificateTypeId,
-  OriginCaCertificateProps,
-  OriginCaCertificateAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -196,13 +193,11 @@ export const OriginCaCertificateProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? [])
                   .filter((cert) => cert.id != null)
-                  .map(
-                    (cert): OriginCaCertificateAttributes => toAttributes(cert),
-                  ),
+                  .map((cert): Attributes => toAttributes(cert)),
               ),
             ),
             Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as OriginCaCertificateAttributes[]),
+              Effect.succeed([] as Attributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -211,8 +206,8 @@ export const OriginCaCertificateProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds, news }) {
-      const o = olds as OriginCaCertificateProps | undefined;
-      const n = news as OriginCaCertificateProps;
+      const o = olds as Props | undefined;
+      const n = news as Props;
       // No prior props to compare against — let the engine decide.
       if (o?.csr === undefined) return undefined;
       // There is no update API for Origin CA certificates — every change
@@ -392,17 +387,17 @@ const toAttributes = (
   cert: CertificateShape,
   fallback?: {
     csr?: string;
-    requestType?: OriginCaCertificateRequestType;
+    requestType?: RequestType;
     requestedValidity?: number;
   },
-): OriginCaCertificateAttributes => ({
+): Attributes => ({
   certificateId: cert.id!,
   certificate: cert.certificate ?? "",
   csr: cert.csr ?? fallback?.csr ?? "",
   hostnames: [...cert.hostnames],
   requestType: (cert.requestType ??
     fallback?.requestType ??
-    "origin-rsa") as OriginCaCertificateRequestType,
+    "origin-rsa") as RequestType,
   requestedValidity:
     cert.requestedValidity ?? fallback?.requestedValidity ?? DEFAULT_VALIDITY,
   expiresOn: cert.expiresOn ?? undefined,

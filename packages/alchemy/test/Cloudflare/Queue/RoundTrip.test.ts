@@ -37,9 +37,9 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
  *       and stores the body, via
  *       `Cloudflare.Queue.messages(RoundTripQueue).subscribe(...)`.
  *     - `GET /count?name=K`  →  reads the DO snapshot.
- * - `Cloudflare.Queue.QueueConsumer` is auto-created by the policy
+ * - `Cloudflare.Queue.Consumer` is auto-created by the policy
  *   side of `messages().subscribe(...)` — there is no explicit
- *   `QueueConsumer(...)` yield in the stack.
+ *   `Consumer(...)` yield in the stack.
  *
  * The test sends N messages, then polls `/count?name=K` with
  * exponential backoff until the DO reports `count >= N`. The
@@ -59,7 +59,7 @@ test.provider(
           // The Worker's init body yields Counter and
           // RoundTripQueue internally — yielding QueueWorker is
           // enough to bring the whole stack (Queue +
-          // QueueConsumer + Counter DO + Worker) into the plan.
+          // Consumer + Counter DO + Worker) into the plan.
           const worker = yield* QueueWorker;
           return { url: worker.url };
         }),

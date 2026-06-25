@@ -79,10 +79,10 @@ a KV namespace by declaring it in its own file:
 // src/KV.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const KV = Cloudflare.KV.KVNamespace("KV");
+export const KV = Cloudflare.KV.Namespace("KV");
 ```
 
-`Cloudflare.KV.KVNamespace("KV")` is just a description — Alchemy
+`Cloudflare.KV.Namespace("KV")` is just a description — Alchemy
 provisions the real namespace on the next deploy as soon as
 something binds to it.
 

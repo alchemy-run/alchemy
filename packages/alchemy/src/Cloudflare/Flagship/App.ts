@@ -11,7 +11,7 @@ import type { Providers } from "../Providers.ts";
 const FlagshipAppTypeId = "Cloudflare.Flagship.App" as const;
 type FlagshipAppTypeId = typeof FlagshipAppTypeId;
 
-export type FlagshipAppProps = {
+export type AppProps = {
   /**
    * Human readable app name. Apps group flags by project or service. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
@@ -20,7 +20,7 @@ export type FlagshipAppProps = {
   name?: string;
 };
 
-export type FlagshipAppAttributes = {
+export type AppAttributes = {
   /**
    * Server-generated app identifier. Stable across updates; used as the
    * `appId` for flags, the Worker binding, and all evaluation calls.
@@ -51,8 +51,8 @@ export type FlagshipAppAttributes = {
 
 export type App = Resource<
   FlagshipAppTypeId,
-  FlagshipAppProps,
-  FlagshipAppAttributes,
+  AppProps,
+  AppAttributes,
   never,
   Providers
 >;
@@ -155,7 +155,7 @@ export const App = Resource<App>(FlagshipAppTypeId);
 /**
  * Returns true if the given value is a Flagship App resource.
  */
-export const isFlagshipApp = (value: unknown): value is App =>
+export const isApp = (value: unknown): value is App =>
   Predicate.hasProperty(value, "Type") && value.Type === FlagshipAppTypeId;
 
 export const AppProvider = () =>
@@ -268,7 +268,7 @@ const toAttributes = (
     | flagship.CreateAppResponse
     | flagship.UpdateAppResponse,
   accountId: string,
-): FlagshipAppAttributes => ({
+): AppAttributes => ({
   appId: app.id,
   accountId,
   name: app.name,

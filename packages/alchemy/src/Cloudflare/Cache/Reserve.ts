@@ -9,10 +9,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CacheReserveTypeId = "Cloudflare.Cache.CacheReserve" as const;
+const CacheReserveTypeId = "Cloudflare.Cache.Reserve" as const;
 type CacheReserveTypeId = typeof CacheReserveTypeId;
 
-export interface CacheReserveProps {
+export interface ReserveProps {
   /**
    * Zone whose Cache Reserve setting is managed. Stable — changing the
    * zone triggers a replacement (the old zone's setting is restored to
@@ -36,7 +36,7 @@ export interface CacheReserveProps {
   clearOnDelete?: boolean;
 }
 
-export interface CacheReserveAttributes {
+export interface ReserveAttributes {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** Resolved current value of the setting (`"on"` or `"off"`). */
@@ -56,10 +56,10 @@ export interface CacheReserveAttributes {
   initialValue: string;
 }
 
-export type CacheReserve = Resource<
+export type Reserve = Resource<
   CacheReserveTypeId,
-  CacheReserveProps,
-  CacheReserveAttributes,
+  ReserveProps,
+  ReserveAttributes,
   never,
   Providers
 >;
@@ -86,7 +86,7 @@ export type CacheReserve = Resource<
  * `clearOnDelete: true` to run the asynchronous Cache Reserve Clear
  * operation on destroy (the provider polls until the clear completes).
  *
- * Only one `CacheReserve` resource per zone makes sense — two instances
+ * Only one `Reserve` resource per zone makes sense — two instances
  * managing the same zone would fight over the singleton.
  * @resource
  * @product Cache
@@ -96,14 +96,14 @@ export type CacheReserve = Resource<
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.Cache.CacheReserve("Reserve", {
+ * yield* Cloudflare.Cache.Reserve("Reserve", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Clear stored data when the resource is destroyed
  * ```typescript
- * yield* Cloudflare.Cache.CacheReserve("Reserve", {
+ * yield* Cloudflare.Cache.Reserve("Reserve", {
  *   zoneId: zone.zoneId,
  *   clearOnDelete: true,
  * });
@@ -111,19 +111,19 @@ export type CacheReserve = Resource<
  *
  * @see https://developers.cloudflare.com/cache/advanced-configuration/cache-reserve/
  */
-export const CacheReserve = Resource<CacheReserve>(CacheReserveTypeId);
+export const Reserve = Resource<Reserve>(CacheReserveTypeId);
 
 /**
- * Returns true if the given value is a CacheReserve resource.
+ * Returns true if the given value is a Reserve resource.
  */
-export const isCacheReserve = (value: unknown): value is CacheReserve =>
+export const isReserve = (value: unknown): value is Reserve =>
   Predicate.hasProperty(value, "Type") && value.Type === CacheReserveTypeId;
 
-const desiredValue = (props: CacheReserveProps): "on" | "off" =>
+const desiredValue = (props: ReserveProps): "on" | "off" =>
   (props.enabled ?? true) ? "on" : "off";
 
-export const CacheReserveProvider = () =>
-  Provider.succeed(CacheReserve, {
+export const ReserveProvider = () =>
+  Provider.succeed(Reserve, {
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {
@@ -149,14 +149,12 @@ export const CacheReserveProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is CacheReserveAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is ReserveAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as CacheReserveProps;
-      const n = news as CacheReserveProps;
+      const o = olds as ReserveProps;
+      const n = news as ReserveProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -252,7 +250,7 @@ const toAttributes = (
   zoneId: string,
   setting: cache.GetCacheReserveResponse | cache.PatchCacheReserveResponse,
   initialValue: string,
-): CacheReserveAttributes => ({
+): ReserveAttributes => ({
   zoneId,
   value: setting.value,
   editable: setting.editable,

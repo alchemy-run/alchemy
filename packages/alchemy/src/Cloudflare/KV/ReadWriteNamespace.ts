@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import type { KVNamespace } from "./Namespace.ts";
+import type { Namespace } from "./Namespace.ts";
 import type { ReadNamespaceClient } from "./ReadNamespace.ts";
 import type { WriteNamespaceClient } from "./WriteNamespace.ts";
 
 /**
- * Bind a {@link KVNamespace} to a Worker with read + write access and obtain
+ * Bind a {@link Namespace} to a Worker with read + write access and obtain
  * the Effect-native KV client (`get`, `getWithMetadata`, `list`, `put`,
  * `delete`).
  *
@@ -20,7 +20,7 @@ import type { WriteNamespaceClient } from "./WriteNamespace.ts";
 export interface ReadWriteNamespace extends Binding.Service<
   ReadWriteNamespace,
   "Cloudflare.KVNamespace.ReadWrite",
-  (namespace: KVNamespace) => Effect.Effect<ReadWriteNamespaceClient>
+  (namespace: Namespace) => Effect.Effect<ReadWriteNamespaceClient>
 > {}
 
 export const ReadWriteNamespace = Binding.Service<ReadWriteNamespace>(

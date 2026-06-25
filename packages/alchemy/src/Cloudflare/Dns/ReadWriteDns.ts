@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Zone } from "../Zone/Zone.ts";
-import { type DnsToken } from "./DnsBinding.ts";
+import { type Token } from "./DnsBinding.ts";
 import { dnsReadClient, type ReadDnsClient } from "./ReadDns.ts";
 import { dnsWriteClient, type WriteDnsClient } from "./WriteDns.ts";
 
@@ -31,8 +31,8 @@ import { dnsWriteClient, type WriteDnsClient } from "./WriteDns.ts";
  *
  * const Zone = Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
  *
- * export class DnsWorker extends Cloudflare.Worker<DnsWorker>()(
- *   "DnsWorker",
+ * export class Worker extends Cloudflare.Worker<Worker>()(
+ *   "Worker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // Init phase — bind the full CRUD client scoped to the zone.
@@ -70,7 +70,7 @@ export interface ReadWriteDnsClient extends ReadDnsClient, WriteDnsClient {}
 
 /** Build the combined read + write client over a bound token and zone id. */
 export const dnsReadWriteClient = (
-  token: DnsToken,
+  token: Token,
   zoneId: Effect.Effect<string>,
 ): ReadWriteDnsClient => ({
   ...dnsReadClient(token, zoneId),

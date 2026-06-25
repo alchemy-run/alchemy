@@ -5,7 +5,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
 type RoutingAttributes = Routing["Attributes"];
@@ -33,7 +33,7 @@ export type RoutingProps = {
    * Zone to enable email routing on. Accepts a zone id, a zone name
    * (`example.com`), or a `{ zoneId, name? }` object.
    */
-  zone: ZoneReference;
+  zone: Reference;
   /**
    * Whether to enable Email Routing on the zone.
    *
@@ -73,7 +73,7 @@ export type Routing = Resource<
  */
 export const Routing = Resource<Routing>("Cloudflare.Email.Routing");
 
-const resolve = Effect.fn(function* (zone: ZoneReference) {
+const resolve = Effect.fn(function* (zone: Reference) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* resolveZoneId({
     accountId,

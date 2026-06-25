@@ -114,7 +114,7 @@ test.provider.skipIf(!lbEnabled)(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("Pool", {
+          const pool = yield* Cloudflare.LoadBalancer.Pool("Pool", {
             name: NAME_POOL,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
           });
@@ -146,7 +146,7 @@ test.provider.skipIf(!lbEnabled)(
       // engine never has to replace and drop a dependency in one deploy.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("Pool", {
+          const pool = yield* Cloudflare.LoadBalancer.Pool("Pool", {
             name: NAME_POOL,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
           });
@@ -225,7 +225,7 @@ test.provider.skipIf(!lbEnabled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("Pool", {
+          const pool = yield* Cloudflare.LoadBalancer.Pool("Pool", {
             name: NAME_POOL,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
           });

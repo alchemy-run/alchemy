@@ -88,7 +88,7 @@ test.provider(
       // deploy would fail with the typed `Forbidden` (HTTP 403, code 10000).
       if (recipientAccountId) {
         const policyA = yield* stack.deploy(
-          Cloudflare.Gateway.GatewayRule("ListEntryPolicyA", {
+          Cloudflare.Gateway.Rule("ListEntryPolicyA", {
             action: "block",
             traffic: 'dns.fqdn == "list-entry-a.alchemy-test.example"',
             filters: ["dns"],
@@ -96,7 +96,7 @@ test.provider(
           }),
         );
         const policyB = yield* stack.deploy(
-          Cloudflare.Gateway.GatewayRule("ListEntryPolicyB", {
+          Cloudflare.Gateway.Rule("ListEntryPolicyB", {
             action: "block",
             traffic: 'dns.fqdn == "list-entry-b.alchemy-test.example"',
             filters: ["dns"],

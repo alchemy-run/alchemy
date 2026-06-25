@@ -307,9 +307,7 @@ export const DynamicRouting = Resource<DynamicRouting>(DynamicRoutingTypeId);
 /**
  * Returns true if the given value is an DynamicRouting resource.
  */
-export const isAiGatewayDynamicRouting = (
-  value: unknown,
-): value is DynamicRouting =>
+export const isDynamicRouting = (value: unknown): value is DynamicRouting =>
   Predicate.hasProperty(value, "Type") && value.Type === DynamicRoutingTypeId;
 
 export const DynamicRoutingProvider = () =>

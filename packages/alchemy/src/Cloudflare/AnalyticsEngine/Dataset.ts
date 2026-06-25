@@ -2,9 +2,9 @@ import * as Effect from "effect/Effect";
 
 type AnalyticsEngineDatasetTypeId = typeof AnalyticsEngineDatasetTypeId;
 const AnalyticsEngineDatasetTypeId =
-  "Cloudflare.AnalyticsEngine.AnalyticsEngineDataset" as const;
+  "Cloudflare.AnalyticsEngine.Dataset" as const;
 
-export type AnalyticsEngineDatasetProps = {
+export type DatasetProps = {
   /**
    * Dataset name. If omitted, the logical ID is used.
    */
@@ -23,7 +23,7 @@ export type AnalyticsEngineDatasetProps = {
  * @section Binding to a Worker
  * @example Basic Analytics Engine binding
  * ```typescript
- * const Analytics = yield* Cloudflare.AnalyticsEngine.AnalyticsEngineDataset("Analytics", {
+ * const Analytics = yield* Cloudflare.AnalyticsEngine.Dataset("Analytics", {
  *   dataset: "app-events",
  * });
  *
@@ -39,29 +39,24 @@ export type AnalyticsEngineDatasetProps = {
  * yield* analytics.writeDataPoint({ blobs: ["signup"] });
  * ```
  */
-export type AnalyticsEngineDataset = {
+export type Dataset = {
   kind: AnalyticsEngineDatasetTypeId;
   name: string;
   dataset: string;
 };
 
-export const isAnalyticsEngineDataset = (
-  value: unknown,
-): value is AnalyticsEngineDataset =>
+export const isDataset = (value: unknown): value is Dataset =>
   typeof value === "object" &&
   value !== null &&
   "kind" in value &&
-  (value as AnalyticsEngineDataset).kind === AnalyticsEngineDatasetTypeId;
+  (value as Dataset).kind === AnalyticsEngineDatasetTypeId;
 
-export const AnalyticsEngineDataset: {
-  (
-    name: string,
-    props?: AnalyticsEngineDatasetProps,
-  ): Effect.Effect<AnalyticsEngineDataset>;
-} = Effect.fn(function* (name: string, props?: AnalyticsEngineDatasetProps) {
+export const Dataset: {
+  (name: string, props?: DatasetProps): Effect.Effect<Dataset>;
+} = Effect.fn(function* (name: string, props?: DatasetProps) {
   return {
     kind: AnalyticsEngineDatasetTypeId,
     name,
     dataset: props?.dataset ?? name,
-  } satisfies AnalyticsEngineDataset;
+  } satisfies Dataset;
 });

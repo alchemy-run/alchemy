@@ -56,12 +56,9 @@ test.provider.skipIf(!entitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.RiskScoring.RiskScoringIntegration(
-            "OktaSsf",
-            {
-              tenantUrl,
-            },
-          );
+          return yield* Cloudflare.RiskScoring.Integration("OktaSsf", {
+            tenantUrl,
+          });
         }),
       );
 
@@ -80,13 +77,10 @@ test.provider.skipIf(!entitled)(
       // Pausing exports converges in place — same integration id.
       const paused = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.RiskScoring.RiskScoringIntegration(
-            "OktaSsf",
-            {
-              tenantUrl,
-              active: false,
-            },
-          );
+          return yield* Cloudflare.RiskScoring.Integration("OktaSsf", {
+            tenantUrl,
+            active: false,
+          });
         }),
       );
       expect(paused.integrationId).toEqual(created.integrationId);
@@ -117,7 +111,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.RiskScoring.RiskScoringIntegration,
+        Cloudflare.RiskScoring.Integration,
       );
       const all = yield* provider.list();
 
@@ -145,17 +139,14 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.RiskScoring.RiskScoringIntegration(
-            "OktaSsf",
-            {
-              tenantUrl,
-            },
-          );
+          return yield* Cloudflare.RiskScoring.Integration("OktaSsf", {
+            tenantUrl,
+          });
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.RiskScoring.RiskScoringIntegration,
+        Cloudflare.RiskScoring.Integration,
       );
       const all = yield* provider.list();
 

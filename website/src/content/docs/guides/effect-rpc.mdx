@@ -108,7 +108,7 @@ an incoming request.
 
 ### 3a. Bind an R2 bucket for storage
 
-Tasks need durable storage. Declare an `R2Bucket` resource and bind
+Tasks need durable storage. Declare an `Bucket` resource and bind
 it inside Init — `bind()` returns a typed handle whose `get` /
 `put` / `delete` / `list` methods we'll call from the handlers
 below.
@@ -117,7 +117,7 @@ below.
 // src/bucket.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Tasks = Cloudflare.R2.R2Bucket("Tasks");
+export const Tasks = Cloudflare.R2.Bucket("Tasks");
 ```
 
 ```typescript twoslash

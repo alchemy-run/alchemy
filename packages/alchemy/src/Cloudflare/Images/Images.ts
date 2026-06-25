@@ -1,11 +1,11 @@
 import type * as Effect from "effect/Effect";
 import { SingleShotGen } from "effect/Utils";
-import { ImagesBinding, type ImagesClient } from "./ImagesBinding.ts";
+import { ImagesBinding, type Client } from "./ImagesBinding.ts";
 
 type ImagesTypeId = typeof ImagesTypeId;
 const ImagesTypeId = "Cloudflare.Images.Images" as const;
 
-export type ImagesProps = {
+export type Props = {
   /**
    * Binding name used when `Images` is bound from inside a Worker init phase
    * (`yield* Cloudflare.Images.Images(...)`). When passed through
@@ -19,9 +19,9 @@ export type ImagesProps = {
 /**
  * The Effect yielded when an `Images` marker is used inside a Worker init
  * phase: it attaches the `images` binding to the surrounding Worker and
- * resolves to the runtime {@link ImagesClient}.
+ * resolves to the runtime {@link Client}.
  */
-type BindEffect = Effect.Effect<ImagesClient, never, ImagesBinding>;
+type BindEffect = Effect.Effect<Client, never, ImagesBinding>;
 
 const bindImages = (self: Images): BindEffect => ImagesBinding(self);
 
@@ -31,19 +31,19 @@ const bindImages = (self: Images): BindEffect => ImagesBinding(self);
  * It is a plain data structure (so it can be declared directly on a Worker's
  * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
  * (`yield* Cloudflare.Images.Images(...)`) attaches the binding to the surrounding
- * Worker and returns the runtime {@link ImagesClient} — no separate `.bind(...)`
+ * Worker and returns the runtime {@link Client} — no separate `.bind(...)`
  * step required.
  *
  * The divergence is achieved via `[Symbol.iterator]`: the object is
  * deliberately not an `Effect` (so `InferEnv` and the Worker `env` resolver
- * keep it as the native `ImagesBinding` rather than `yield*`-ing it), but it
+ * keep it as the native `Binding` rather than `yield*`-ing it), but it
  * is iterable as one when `yield*`-ed.
  */
 export interface Images {
   kind: ImagesTypeId;
   name: string;
   asEffect(): BindEffect;
-  [Symbol.iterator](): SingleShotGen<BindEffect, ImagesClient>;
+  [Symbol.iterator](): SingleShotGen<BindEffect, Client>;
 }
 
 export const isImages = (value: unknown): value is Images =>
@@ -57,7 +57,7 @@ export const isImages = (value: unknown): value is Images =>
  * Workers.
  *
  * The Effect-native interface (`Cloudflare.Images.bind(...)`) returns an
- * `ImagesClient` whose methods take Effect `Stream.Stream<Uint8Array>`
+ * `Client` whose methods take Effect `Stream.Stream<Uint8Array>`
  * inputs and return `Effect`s — `info`, `input(...).transform(...)
  * .draw(...).output(...)`. The runtime conversion to Cloudflare's
  * `ReadableStream` is handled internally.
@@ -81,7 +81,7 @@ export const isImages = (value: unknown): value is Images =>
  *         return yield* HttpServerResponse.json(info);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.Images.ImagesBindingLayer)),
+ *   }).pipe(Effect.provide(Cloudflare.Images.BindingLayer)),
  * );
  * ```
  *
@@ -94,7 +94,7 @@ export const isImages = (value: unknown): value is Images =>
  * const response = yield* result.response;
  * ```
  *
- * @section Binding to a Worker (declarative)
+ * @section ImagesBinding to a Worker (declarative)
  * @example
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
@@ -115,7 +115,7 @@ export const isImages = (value: unknown): value is Images =>
  * @see https://developers.cloudflare.com/images/transform-images/bindings/
  */
 export const Images: {
-  (props?: ImagesProps): Images;
+  (props?: Props): Images;
   /**
    * Bind an existing `Images` marker to the surrounding Worker, returning the
    * Effect-native client. Equivalent to `yield* images` — prefer yielding the
@@ -123,7 +123,7 @@ export const Images: {
    */
   bind: (images: Images) => BindEffect;
 } = Object.assign(
-  (props?: ImagesProps): Images => {
+  (props?: Props): Images => {
     const self: Images = {
       kind: ImagesTypeId,
       name: props?.name ?? "IMAGES",

@@ -45,8 +45,8 @@ type FlagshipEffect<A> = Effect.Effect<A, FlagshipError, RuntimeContext>;
 
 // Re-exported so callers don't reach into the `@cloudflare/workers-types`
 // namespace directly.
-export type FlagshipEvaluationContext = cf.FlagshipEvaluationContext;
-export type FlagshipEvaluationDetails<T> = cf.FlagshipEvaluationDetails<T>;
+export type EvaluationContext = cf.FlagshipEvaluationContext;
+export type EvaluationDetails<T> = cf.FlagshipEvaluationDetails<T>;
 
 /**
  * Effect-native client for a Cloudflare Flagship (feature flags) binding.
@@ -70,7 +70,7 @@ export interface ReadFlagsClient {
   get(
     flagKey: string,
     defaultValue?: unknown,
-    context?: FlagshipEvaluationContext,
+    context?: EvaluationContext,
   ): FlagshipEffect<unknown>;
   /**
    * Get a boolean flag value, falling back to `defaultValue` when evaluation
@@ -79,7 +79,7 @@ export interface ReadFlagsClient {
   getBooleanValue(
     flagKey: string,
     defaultValue: boolean,
-    context?: FlagshipEvaluationContext,
+    context?: EvaluationContext,
   ): FlagshipEffect<boolean>;
   /**
    * Get a string flag value, falling back to `defaultValue` when evaluation
@@ -88,7 +88,7 @@ export interface ReadFlagsClient {
   getStringValue(
     flagKey: string,
     defaultValue: string,
-    context?: FlagshipEvaluationContext,
+    context?: EvaluationContext,
   ): FlagshipEffect<string>;
   /**
    * Get a number flag value, falling back to `defaultValue` when evaluation
@@ -97,7 +97,7 @@ export interface ReadFlagsClient {
   getNumberValue(
     flagKey: string,
     defaultValue: number,
-    context?: FlagshipEvaluationContext,
+    context?: EvaluationContext,
   ): FlagshipEffect<number>;
   /**
    * Get a typed object flag value, falling back to `defaultValue` when
@@ -106,7 +106,7 @@ export interface ReadFlagsClient {
   getObjectValue<T extends object>(
     flagKey: string,
     defaultValue: T,
-    context?: FlagshipEvaluationContext,
+    context?: EvaluationContext,
   ): FlagshipEffect<T>;
   /**
    * Get a boolean flag value with full evaluation details (variant, reason,
@@ -115,8 +115,8 @@ export interface ReadFlagsClient {
   getBooleanDetails(
     flagKey: string,
     defaultValue: boolean,
-    context?: FlagshipEvaluationContext,
-  ): FlagshipEffect<FlagshipEvaluationDetails<boolean>>;
+    context?: EvaluationContext,
+  ): FlagshipEffect<EvaluationDetails<boolean>>;
   /**
    * Get a string flag value with full evaluation details (variant, reason,
    * error code).
@@ -124,8 +124,8 @@ export interface ReadFlagsClient {
   getStringDetails(
     flagKey: string,
     defaultValue: string,
-    context?: FlagshipEvaluationContext,
-  ): FlagshipEffect<FlagshipEvaluationDetails<string>>;
+    context?: EvaluationContext,
+  ): FlagshipEffect<EvaluationDetails<string>>;
   /**
    * Get a number flag value with full evaluation details (variant, reason,
    * error code).
@@ -133,8 +133,8 @@ export interface ReadFlagsClient {
   getNumberDetails(
     flagKey: string,
     defaultValue: number,
-    context?: FlagshipEvaluationContext,
-  ): FlagshipEffect<FlagshipEvaluationDetails<number>>;
+    context?: EvaluationContext,
+  ): FlagshipEffect<EvaluationDetails<number>>;
   /**
    * Get a typed object flag value with full evaluation details (variant,
    * reason, error code).
@@ -142,6 +142,6 @@ export interface ReadFlagsClient {
   getObjectDetails<T extends object>(
     flagKey: string,
     defaultValue: T,
-    context?: FlagshipEvaluationContext,
-  ): FlagshipEffect<FlagshipEvaluationDetails<T>>;
+    context?: EvaluationContext,
+  ): FlagshipEffect<EvaluationDetails<T>>;
 }

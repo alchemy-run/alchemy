@@ -78,7 +78,7 @@ test.provider(
 // the provider's `list()` deliberately tolerates (returning `[]`) so that
 // account-wide enumeration / `nuke` never blows up on a non-tenant account;
 // the raw-op probe test above already pins the typed tag. On an entitled
-// account it returns a well-typed `OrganizationAttributes[]`.
+// account it returns a well-typed `Attributes[]`.
 test.provider(
   "list either enumerates organizations or tolerates the unentitled account",
   (stack) =>

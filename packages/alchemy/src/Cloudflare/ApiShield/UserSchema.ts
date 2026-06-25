@@ -14,7 +14,7 @@ import { listAllZones } from "../Zone/lookup.ts";
 const ApiShieldUserSchemaTypeId = "Cloudflare.ApiShield.UserSchema" as const;
 type ApiShieldUserSchemaTypeId = typeof ApiShieldUserSchemaTypeId;
 
-export interface ApiShieldUserSchemaProps {
+export interface UserSchemaProps {
   /**
    * Zone the schema is uploaded to.
    *
@@ -47,7 +47,7 @@ export interface ApiShieldUserSchemaProps {
   validationEnabled?: boolean;
 }
 
-export interface ApiShieldUserSchemaAttributes {
+export interface UserSchemaAttributes {
   /** Cloudflare-assigned UUID of the schema. */
   schemaId: string;
   /** Zone the schema is uploaded to. */
@@ -64,10 +64,10 @@ export interface ApiShieldUserSchemaAttributes {
   createdAt: string;
 }
 
-export type ApiShieldUserSchema = Resource<
+export type UserSchema = Resource<
   ApiShieldUserSchemaTypeId,
-  ApiShieldUserSchemaProps,
-  ApiShieldUserSchemaAttributes,
+  UserSchemaProps,
+  UserSchemaAttributes,
   never,
   Providers
 >;
@@ -92,7 +92,7 @@ export type ApiShieldUserSchema = Resource<
  * const fs = yield* FileSystem.FileSystem;
  * const source = yield* fs.readFileString("./openapi.json");
  *
- * const schema = yield* Cloudflare.ApiShield.ApiShieldUserSchema("PetstoreSchema", {
+ * const schema = yield* Cloudflare.ApiShield.UserSchema("PetstoreSchema", {
  *   zoneId: zone.zoneId,
  *   name: "petstore",
  *   schema: source,
@@ -102,7 +102,7 @@ export type ApiShieldUserSchema = Resource<
  *
  * @example Upload and enable validation
  * ```typescript
- * yield* Cloudflare.ApiShield.ApiShieldUserSchema("PetstoreSchema", {
+ * yield* Cloudflare.ApiShield.UserSchema("PetstoreSchema", {
  *   zoneId: zone.zoneId,
  *   schema: source,
  *   validationEnabled: true,
@@ -111,26 +111,22 @@ export type ApiShieldUserSchema = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const ApiShieldUserSchema = Resource<ApiShieldUserSchema>(
-  ApiShieldUserSchemaTypeId,
-);
+export const UserSchema = Resource<UserSchema>(ApiShieldUserSchemaTypeId);
 
 /**
- * Returns true if the given value is an ApiShieldUserSchema resource.
+ * Returns true if the given value is an UserSchema resource.
  */
-export const isApiShieldUserSchema = (
-  value: unknown,
-): value is ApiShieldUserSchema =>
+export const isUserSchema = (value: unknown): value is UserSchema =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === ApiShieldUserSchemaTypeId;
 
-export const ApiShieldUserSchemaProvider = () =>
-  Provider.succeed(ApiShieldUserSchema, {
+export const UserSchemaProvider = () =>
+  Provider.succeed(UserSchema, {
     stables: ["zoneId", "name", "kind"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
-      const o = olds as ApiShieldUserSchemaProps | undefined;
-      const n = news as ApiShieldUserSchemaProps;
+      const o = olds as UserSchemaProps | undefined;
+      const n = news as UserSchemaProps;
       if (o === undefined) return undefined;
       // The name is part of the schema's identity — compare the resolved
       // physical names (an omitted name resolves deterministically).
@@ -260,12 +256,12 @@ export const ApiShieldUserSchemaProvider = () =>
             // Zones without the API Shield entitlement reject the listing
             // route; skip them rather than failing the whole enumeration.
             Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as ApiShieldUserSchemaAttributes[]),
+              Effect.succeed([] as UserSchemaAttributes[]),
             ),
             // A zone purged (deleted) out-of-band mid-enumeration — it was in
             // the zone list but no longer exists; drop it.
             Effect.catchTag("ZonePurged", () =>
-              Effect.succeed([] as ApiShieldUserSchemaAttributes[]),
+              Effect.succeed([] as UserSchemaAttributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -317,7 +313,7 @@ const createSchemaName = (id: string, name: string | undefined) =>
 const toAttributes = (
   schema: ObservedSchema,
   zoneId: string,
-): ApiShieldUserSchemaAttributes => ({
+): UserSchemaAttributes => ({
   schemaId: schema.schemaId,
   zoneId,
   name: schema.name,

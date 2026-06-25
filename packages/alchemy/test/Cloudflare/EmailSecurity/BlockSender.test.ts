@@ -47,14 +47,11 @@ test.provider.skipIf(!entitled)(
       // Block a sender address.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender(
-            "Blocked",
-            {
-              pattern,
-              patternType: "EMAIL",
-              comments: "v1",
-            },
-          );
+          return yield* Cloudflare.EmailSecurity.BlockSender("Blocked", {
+            pattern,
+            patternType: "EMAIL",
+            comments: "v1",
+          });
         }),
       );
       expect(created.blockSenderId).toBeDefined();
@@ -71,14 +68,11 @@ test.provider.skipIf(!entitled)(
       // Update mutable fields in place — same physical entry.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender(
-            "Blocked",
-            {
-              pattern,
-              patternType: "EMAIL",
-              comments: "v2",
-            },
-          );
+          return yield* Cloudflare.EmailSecurity.BlockSender("Blocked", {
+            pattern,
+            patternType: "EMAIL",
+            comments: "v2",
+          });
         }),
       );
       expect(updated.blockSenderId).toEqual(created.blockSenderId);
@@ -110,19 +104,16 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSecurity.EmailSecurityBlockSender,
+        Cloudflare.EmailSecurity.BlockSender,
       );
 
       if (entitled) {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.EmailSecurity.EmailSecurityBlockSender(
-              "ListBlocked",
-              {
-                pattern,
-                patternType: "EMAIL",
-              },
-            );
+            return yield* Cloudflare.EmailSecurity.BlockSender("ListBlocked", {
+              pattern,
+              patternType: "EMAIL",
+            });
           }),
         );
 

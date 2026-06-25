@@ -92,7 +92,7 @@ test.provider(
               ],
             },
           );
-          const entrypoint = yield* Cloudflare.Ruleset.RulesetAccountEntrypoint(
+          const entrypoint = yield* Cloudflare.Ruleset.AccountEntrypoint(
             "WafDeployment",
             {
               phase,
@@ -135,21 +135,18 @@ test.provider(
               ],
             },
           );
-          return yield* Cloudflare.Ruleset.RulesetAccountEntrypoint(
-            "WafDeployment",
-            {
-              phase,
-              description: "alchemy account entrypoint v2",
-              rules: [
-                {
-                  description: "Deploy shared WAF rules",
-                  expression: "true",
-                  action: "execute",
-                  actionParameters: { id: ruleset.rulesetId },
-                },
-              ],
-            },
-          );
+          return yield* Cloudflare.Ruleset.AccountEntrypoint("WafDeployment", {
+            phase,
+            description: "alchemy account entrypoint v2",
+            rules: [
+              {
+                description: "Deploy shared WAF rules",
+                expression: "true",
+                action: "execute",
+                actionParameters: { id: ruleset.rulesetId },
+              },
+            ],
+          });
         }),
       );
       expect(updated.rulesetId).toEqual(deployed.entrypoint.rulesetId);
@@ -186,7 +183,7 @@ test.provider(
         );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Ruleset.RulesetAccountEntrypoint,
+        Cloudflare.Ruleset.AccountEntrypoint,
       );
 
       if (Result.isFailure(probe)) {
@@ -216,21 +213,18 @@ test.provider(
               ],
             },
           );
-          return yield* Cloudflare.Ruleset.RulesetAccountEntrypoint(
-            "WafDeployment",
-            {
-              phase,
-              description: "alchemy account entrypoint list",
-              rules: [
-                {
-                  description: "Deploy shared WAF rules",
-                  expression: "true",
-                  action: "execute",
-                  actionParameters: { id: ruleset.rulesetId },
-                },
-              ],
-            },
-          );
+          return yield* Cloudflare.Ruleset.AccountEntrypoint("WafDeployment", {
+            phase,
+            description: "alchemy account entrypoint list",
+            rules: [
+              {
+                description: "Deploy shared WAF rules",
+                expression: "true",
+                action: "execute",
+                actionParameters: { id: ruleset.rulesetId },
+              },
+            ],
+          });
         }),
       );
 

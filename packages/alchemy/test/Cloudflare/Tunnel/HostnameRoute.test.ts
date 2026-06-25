@@ -68,14 +68,11 @@ test.provider(
           const tunnel = yield* Cloudflare.Tunnel.Tunnel("HrTunnel", {
             adopt: true,
           });
-          const route = yield* Cloudflare.Tunnel.TunnelHostnameRoute(
-            "AppRoute",
-            {
-              hostname: HOSTNAME,
-              tunnelId: tunnel.tunnelId,
-              comment: "v1",
-            },
-          );
+          const route = yield* Cloudflare.Tunnel.HostnameRoute("AppRoute", {
+            hostname: HOSTNAME,
+            tunnelId: tunnel.tunnelId,
+            comment: "v1",
+          });
           return { tunnel, route };
         }),
       );
@@ -99,14 +96,11 @@ test.provider(
           const tunnel = yield* Cloudflare.Tunnel.Tunnel("HrTunnel", {
             adopt: true,
           });
-          const route = yield* Cloudflare.Tunnel.TunnelHostnameRoute(
-            "AppRoute",
-            {
-              hostname: HOSTNAME,
-              tunnelId: tunnel.tunnelId,
-              comment: "v2",
-            },
-          );
+          const route = yield* Cloudflare.Tunnel.HostnameRoute("AppRoute", {
+            hostname: HOSTNAME,
+            tunnelId: tunnel.tunnelId,
+            comment: "v2",
+          });
           return { route };
         }),
       );
@@ -147,20 +141,17 @@ test.provider(
           const tunnel = yield* Cloudflare.Tunnel.Tunnel("HrListTunnel", {
             adopt: true,
           });
-          const route = yield* Cloudflare.Tunnel.TunnelHostnameRoute(
-            "ListRoute",
-            {
-              hostname: LIST_HOSTNAME,
-              tunnelId: tunnel.tunnelId,
-              comment: "list",
-            },
-          );
+          const route = yield* Cloudflare.Tunnel.HostnameRoute("ListRoute", {
+            hostname: LIST_HOSTNAME,
+            tunnelId: tunnel.tunnelId,
+            comment: "list",
+          });
           return { route };
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Tunnel.TunnelHostnameRoute,
+        Cloudflare.Tunnel.HostnameRoute,
       );
 
       // The account-wide list is eventually consistent right after a create —

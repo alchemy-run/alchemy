@@ -16,17 +16,12 @@ type EmailSecurityDomainTypeId = typeof EmailSecurityDomainTypeId;
 /**
  * Delivery modes a domain accepts messages through.
  */
-export type EmailSecurityDeliveryMode =
-  | "DIRECT"
-  | "BCC"
-  | "JOURNAL"
-  | "API"
-  | "RETRO_SCAN";
+export type DeliveryMode = "DIRECT" | "BCC" | "JOURNAL" | "API" | "RETRO_SCAN";
 
 /**
  * Message dispositions that can be dropped before delivery.
  */
-export type EmailSecurityDropDisposition =
+export type DropDisposition =
   | "MALICIOUS"
   | "MALICIOUS-BEC"
   | "SUSPICIOUS"
@@ -38,7 +33,7 @@ export type EmailSecurityDropDisposition =
   | "UNKNOWN"
   | "NONE";
 
-export interface EmailSecurityDomainProps {
+export interface DomainProps {
   /**
    * The fully-qualified domain name of a domain that is **already
    * onboarded** to Email Security (via MX/BCC/journal or an API
@@ -51,11 +46,11 @@ export interface EmailSecurityDomainProps {
   /**
    * Delivery modes the domain accepts messages through.
    */
-  allowedDeliveryModes?: EmailSecurityDeliveryMode[];
+  allowedDeliveryModes?: DeliveryMode[];
   /**
    * Message dispositions that are dropped before delivery.
    */
-  dropDispositions?: EmailSecurityDropDisposition[];
+  dropDispositions?: DropDisposition[];
   /**
    * IP/CIDR restrictions for inbound delivery.
    */
@@ -87,7 +82,7 @@ export interface EmailSecurityDomainProps {
   transport?: string;
 }
 
-export interface EmailSecurityDomainAttributes {
+export interface DomainAttributes {
   /** Cloudflare-assigned domain identifier. */
   domainId: string;
   /** The account the domain belongs to. */
@@ -97,9 +92,9 @@ export interface EmailSecurityDomainAttributes {
   /** Domain authorization status, if reported. */
   authorization: { authorized: boolean; timestamp: string } | undefined;
   /** Delivery modes the domain accepts messages through. */
-  allowedDeliveryModes: EmailSecurityDeliveryMode[];
+  allowedDeliveryModes: DeliveryMode[];
   /** Message dispositions dropped before delivery. */
-  dropDispositions: EmailSecurityDropDisposition[];
+  dropDispositions: DropDisposition[];
   /** IP/CIDR restrictions for inbound delivery. */
   ipRestrictions: string[];
   /** Folder messages are scanned in for API-deployed domains. */
@@ -124,10 +119,10 @@ export interface EmailSecurityDomainAttributes {
   modifiedAt: string | undefined;
 }
 
-export type EmailSecurityDomain = Resource<
+export type Domain = Resource<
   EmailSecurityDomainTypeId,
-  EmailSecurityDomainProps,
-  EmailSecurityDomainAttributes,
+  DomainProps,
+  DomainAttributes,
   never,
   Providers
 >;
@@ -156,7 +151,7 @@ export type EmailSecurityDomain = Resource<
  * @section Configuring a Domain
  * @example Drop malicious mail before delivery
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityDomain("MailDomain", {
+ * yield* Cloudflare.EmailSecurity.Domain("MailDomain", {
  *   domain: "example.com",
  *   dropDispositions: ["MALICIOUS", "SPOOF"],
  * });
@@ -164,7 +159,7 @@ export type EmailSecurityDomain = Resource<
  *
  * @example Restrict inbound delivery and require TLS
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityDomain("MailDomain", {
+ * yield* Cloudflare.EmailSecurity.Domain("MailDomain", {
  *   domain: "example.com",
  *   ipRestrictions: ["203.0.113.0/24"],
  *   requireTlsInbound: true,
@@ -175,21 +170,17 @@ export type EmailSecurityDomain = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
  */
-export const EmailSecurityDomain = Resource<EmailSecurityDomain>(
-  EmailSecurityDomainTypeId,
-);
+export const Domain = Resource<Domain>(EmailSecurityDomainTypeId);
 
 /**
- * Returns true if the given value is an EmailSecurityDomain resource.
+ * Returns true if the given value is an Domain resource.
  */
-export const isEmailSecurityDomain = (
-  value: unknown,
-): value is EmailSecurityDomain =>
+export const isDomain = (value: unknown): value is Domain =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === EmailSecurityDomainTypeId;
 
-export const EmailSecurityDomainProvider = () =>
-  Provider.succeed(EmailSecurityDomain, {
+export const DomainProvider = () =>
+  Provider.succeed(Domain, {
     stables: ["domainId", "accountId", "domain", "o365TenantId", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -239,7 +230,7 @@ export const EmailSecurityDomainProvider = () =>
         return yield* Effect.fail(
           new Error(
             `Domain "${news.domain}" is not onboarded to Email Security on ` +
-              `account ${accountId}. Cloudflare.EmailSecurity.EmailSecurityDomain only ` +
+              `account ${accountId}. Cloudflare.EmailSecurity.Domain only ` +
               `manages settings on an existing domain — onboard the domain ` +
               `in the Email Security dashboard first.`,
           ),
@@ -290,7 +281,7 @@ export const EmailSecurityDomainProvider = () =>
           ),
         ),
         Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
-          Effect.succeed([] as EmailSecurityDomainAttributes[]),
+          Effect.succeed([] as DomainAttributes[]),
         ),
       );
     }),
@@ -338,7 +329,7 @@ const sameArray = (
  */
 const settingsDelta = (
   observed: ObservedDomain,
-  news: EmailSecurityDomainProps,
+  news: DomainProps,
 ):
   | Omit<emailSecurity.PatchSettingDomainRequest, "accountId" | "domainId">
   | undefined => {
@@ -414,7 +405,7 @@ const settingsDelta = (
 const toAttributes = (
   domain: ObservedDomain | emailSecurity.PatchSettingDomainResponse,
   accountId: string,
-): EmailSecurityDomainAttributes => ({
+): DomainAttributes => ({
   domainId: domain.id ?? "",
   accountId,
   domain: domain.domain ?? "",
@@ -426,10 +417,8 @@ const toAttributes = (
     : undefined,
   allowedDeliveryModes: [
     ...(domain.allowedDeliveryModes ?? []),
-  ] as EmailSecurityDeliveryMode[],
-  dropDispositions: [
-    ...(domain.dropDispositions ?? []),
-  ] as EmailSecurityDropDisposition[],
+  ] as DeliveryMode[],
+  dropDispositions: [...(domain.dropDispositions ?? [])] as DropDisposition[],
   ipRestrictions: [...(domain.ipRestrictions ?? [])],
   folder: (domain.folder ?? undefined) as "AllItems" | "Inbox" | undefined,
   integrationId: domain.integrationId ?? undefined,

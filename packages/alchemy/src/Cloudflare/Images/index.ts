@@ -1,5 +1,5 @@
 export * from "./Images.ts";
 export * from "./ImagesBinding.ts";
-export * from "./ImagesBindingLayer.ts";
+export * from "./BindingLayer.ts";
 export * from "./SigningKey.ts";
 export * from "./Variant.ts";

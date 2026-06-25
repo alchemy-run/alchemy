@@ -2,7 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
-import { QueueSendError } from "./QueueTypes.ts";
+import { SendError } from "./QueueTypes.ts";
 
 /**
  * Shared scaffolding for the Worker-binding implementations of the Queue
@@ -42,13 +42,11 @@ export const makeQueueHelpers = (env: Record<string, any>, queue: Queue) => {
     () => (env as Record<string, runtime.Queue<unknown>>)[queue.LogicalId]!,
   );
 
-  const tryPromise = <T>(
-    fn: () => Promise<T>,
-  ): Effect.Effect<T, QueueSendError> =>
+  const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, SendError> =>
     Effect.tryPromise({
       try: fn,
       catch: (error: any) =>
-        new QueueSendError({
+        new SendError({
           message: error?.message ?? "Unknown queue error",
           cause: error,
         }),
@@ -56,7 +54,7 @@ export const makeQueueHelpers = (env: Record<string, any>, queue: Queue) => {
 
   const use = <T>(
     fn: (raw: runtime.Queue<unknown>) => Promise<T>,
-  ): Effect.Effect<T, QueueSendError> =>
+  ): Effect.Effect<T, SendError> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
   return { raw, use, tryPromise };

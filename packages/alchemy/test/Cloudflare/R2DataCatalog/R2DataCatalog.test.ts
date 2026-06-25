@@ -17,8 +17,8 @@ const logLevel = Effect.provideService(
 );
 
 interface CatalogOpts {
-  compaction?: Cloudflare.R2DataCatalog.R2DataCatalogCompaction;
-  snapshotExpiration?: Cloudflare.R2DataCatalog.R2DataCatalogSnapshotExpiration;
+  compaction?: Cloudflare.R2DataCatalog.Compaction;
+  snapshotExpiration?: Cloudflare.R2DataCatalog.SnapshotExpiration;
   token?: Redacted.Redacted<string>;
 }
 
@@ -27,7 +27,7 @@ interface CatalogOpts {
 // orders catalog-after-bucket on deploy (and the reverse on destroy).
 const program = (opts: CatalogOpts = {}) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.R2Bucket("CatalogBucket", {});
+    const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", {});
     const catalog = yield* Cloudflare.R2DataCatalog.R2DataCatalog("Catalog", {
       bucketName: bucket.bucketName,
       ...opts,

@@ -74,7 +74,7 @@ test.provider("create, update description in place, destroy a label", (stack) =>
 
     const label = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShield.ApiShieldLabel("DefaultLabel", {
+        return yield* Cloudflare.ApiShield.Label("DefaultLabel", {
           zoneId,
           name: NAME_DEFAULT,
           description: "v1",
@@ -94,7 +94,7 @@ test.provider("create, update description in place, destroy a label", (stack) =>
     // Update the mutable description — same identity, patched in place.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShield.ApiShieldLabel("DefaultLabel", {
+        return yield* Cloudflare.ApiShield.Label("DefaultLabel", {
           zoneId,
           name: NAME_DEFAULT,
           description: "v2",
@@ -125,7 +125,7 @@ test.provider("renaming a label triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShield.ApiShieldLabel("RenameLabel", {
+        return yield* Cloudflare.ApiShield.Label("RenameLabel", {
           zoneId,
           name: NAME_RENAME_A,
           description: "before rename",
@@ -136,7 +136,7 @@ test.provider("renaming a label triggers replacement", (stack) =>
 
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShield.ApiShieldLabel("RenameLabel", {
+        return yield* Cloudflare.ApiShield.Label("RenameLabel", {
           zoneId,
           name: NAME_RENAME_B,
           description: "after rename",
@@ -172,12 +172,9 @@ test.provider(
 
       const label = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShield.ApiShieldLabel(
-            "GeneratedNameLabel",
-            {
-              zoneId,
-            },
-          ).pipe(adopt(true));
+          return yield* Cloudflare.ApiShield.Label("GeneratedNameLabel", {
+            zoneId,
+          }).pipe(adopt(true));
         }),
       );
 
@@ -204,7 +201,7 @@ test.provider("list enumerates the deployed label", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShield.ApiShieldLabel("ListLabel", {
+        return yield* Cloudflare.ApiShield.Label("ListLabel", {
           zoneId,
           name: NAME_LIST,
           description: "listed",
@@ -212,9 +209,7 @@ test.provider("list enumerates the deployed label", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.ApiShield.ApiShieldLabel,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.ApiShield.Label);
 
     // `list()` fans out over every zone and paginates each. Under a full
     // concurrent run two things can blip: the freshly-minted scoped token

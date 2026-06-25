@@ -11,7 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type TunnelProps = {
+export type Props = {
   /**
    * Name for the tunnel. If omitted, a unique name will be generated.
    *
@@ -85,7 +85,7 @@ export declare namespace Tunnel {
 
 export type Tunnel = Resource<
   "Cloudflare.Tunnel.Tunnel",
-  TunnelProps,
+  Props,
   {
     tunnelId: string;
     tunnelName: string;

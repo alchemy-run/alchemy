@@ -195,7 +195,7 @@ export const Dnssec = Resource<Dnssec>(DnssecTypeId);
 /**
  * Returns true if the given value is a Dnssec resource.
  */
-export const isDnssec = (value: unknown): value is Dnssec =>
+export const issec = (value: unknown): value is Dnssec =>
   Predicate.hasProperty(value, "Type") && value.Type === DnssecTypeId;
 
 export const DnssecProvider = () =>

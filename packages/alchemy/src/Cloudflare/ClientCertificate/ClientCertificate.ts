@@ -19,7 +19,7 @@ type ClientCertificateTypeId = typeof ClientCertificateTypeId;
  * Lifecycle status of a client certificate. `pending_reactivation` and
  * `pending_revocation` are in-progress asynchronous transitions.
  */
-export type ClientCertificateStatus =
+export type Status =
   | "active"
   | "pending_reactivation"
   | "pending_revocation"
@@ -28,7 +28,7 @@ export type ClientCertificateStatus =
   // types.
   | (string & {});
 
-export interface ClientCertificateProps {
+export interface Props {
   /**
    * Zone the client certificate is issued under. Client certificates are a
    * zone-level API Shield feature.
@@ -55,7 +55,7 @@ export interface ClientCertificateProps {
   validityDays: number;
 }
 
-export interface ClientCertificateAttributes {
+export interface Attributes {
   /** Cloudflare-assigned identifier of the client certificate. */
   clientCertificateId: string;
   /** Zone the certificate was issued under. */
@@ -89,7 +89,7 @@ export interface ClientCertificateAttributes {
   /** Subject Key Identifier. */
   ski: string | undefined;
   /** Current lifecycle status of the certificate. */
-  status: ClientCertificateStatus;
+  status: Status;
   /** The number of days the certificate is valid after `issuedOn`. */
   validityDays: number;
   /** Identifier of the Certificate Authority that issued the certificate. */
@@ -100,8 +100,8 @@ export interface ClientCertificateAttributes {
 
 export type ClientCertificate = Resource<
   ClientCertificateTypeId,
-  ClientCertificateProps,
-  ClientCertificateAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -222,10 +222,7 @@ export const ClientCertificateProvider = () =>
                 Array.from(chunk).flatMap((page) =>
                   (page.result ?? [])
                     .filter((cert) => !isGone(cert.status))
-                    .map(
-                      (cert): ClientCertificateAttributes =>
-                        toAttributes(cert, zone.id),
-                    ),
+                    .map((cert): Attributes => toAttributes(cert, zone.id)),
                 ),
               ),
               Effect.catchTag("Forbidden", () => Effect.succeed([])),
@@ -236,8 +233,8 @@ export const ClientCertificateProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as ClientCertificateProps;
-      const n = news as ClientCertificateProps;
+      const o = olds as Props;
+      const n = news as Props;
       // No prior props to compare against — let the engine decide.
       if (o.csr === undefined) return undefined;
       // The API has no update for csr/validityDays — every change replaces.
@@ -415,7 +412,7 @@ const normalizePem = (pem: string | undefined): string | undefined =>
 const toAttributes = (
   cert: ObservedCertificate,
   zoneId: string,
-): ClientCertificateAttributes => ({
+): Attributes => ({
   clientCertificateId: cert.id!,
   zoneId,
   certificate: cert.certificate ?? "",
@@ -432,7 +429,7 @@ const toAttributes = (
   serialNumber: cert.serialNumber ?? undefined,
   signature: cert.signature ?? undefined,
   ski: cert.ski ?? undefined,
-  status: (cert.status ?? "active") as ClientCertificateStatus,
+  status: (cert.status ?? "active") as Status,
   validityDays: cert.validityDays ?? 0,
   certificateAuthorityId: cert.certificateAuthority?.id ?? undefined,
   certificateAuthorityName: cert.certificateAuthority?.name ?? undefined,

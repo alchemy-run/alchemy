@@ -20,12 +20,12 @@ type KeylessCertificateTypeId = typeof KeylessCertificateTypeId;
  * Create-only — Cloudflare has no API to change the bundle method after
  * upload, so changing it triggers a replacement.
  */
-export type KeylessCertificateBundleMethod = "ubiquitous" | "optimal" | "force";
+export type BundleMethod = "ubiquitous" | "optimal" | "force";
 
 /**
  * Lifecycle status of a Keyless SSL configuration.
  */
-export type KeylessCertificateStatus =
+export type Status =
   | "active"
   | "deleted"
   // Keep the union open so new Cloudflare statuses aren't blocked by stale
@@ -36,19 +36,19 @@ export type KeylessCertificateStatus =
  * Configuration for reaching the key server through a Cloudflare Tunnel
  * instead of over the public internet.
  */
-export interface KeylessCertificateTunnel {
+export interface Tunnel {
   /**
    * Private IP of the key server inside the tunnel's virtual network.
    */
   privateIp: string;
   /**
    * Identifier of the Cloudflare Tunnel virtual network the key server is
-   * reachable through (e.g. `TunnelVirtualNetwork.vnetId`).
+   * reachable through (e.g. `VirtualNetwork.vnetId`).
    */
   vnetId: string;
 }
 
-export interface KeylessCertificateProps {
+export interface Props {
   /**
    * Zone the Keyless SSL certificate is uploaded to. Keyless SSL is a
    * zone-level Enterprise feature.
@@ -92,7 +92,7 @@ export interface KeylessCertificateProps {
    * Create-only — changing the bundle method triggers a replacement.
    * @default "ubiquitous"
    */
-  bundleMethod?: KeylessCertificateBundleMethod;
+  bundleMethod?: BundleMethod;
   /**
    * Whether the Keyless SSL configuration is on or off. Mutable — patched in
    * place.
@@ -106,10 +106,10 @@ export interface KeylessCertificateProps {
    * Adding or changing the tunnel is patched in place; removing a previously
    * configured tunnel triggers a replacement (the PATCH API cannot clear it).
    */
-  tunnel?: KeylessCertificateTunnel;
+  tunnel?: Tunnel;
 }
 
-export interface KeylessCertificateAttributes {
+export interface Attributes {
   /** Cloudflare-assigned identifier of the Keyless SSL configuration. */
   keylessCertificateId: string;
   /** Zone the Keyless SSL configuration belongs to. */
@@ -123,7 +123,7 @@ export interface KeylessCertificateAttributes {
   /** Whether the Keyless SSL configuration is on or off. */
   enabled: boolean;
   /** Current lifecycle status of the Keyless SSL configuration. */
-  status: KeylessCertificateStatus;
+  status: Status;
   /** Permissions the requesting token has on this Keyless SSL. */
   permissions: string[];
   /** ISO8601 timestamp the Keyless SSL configuration was created. */
@@ -136,8 +136,8 @@ export interface KeylessCertificateAttributes {
 
 export type KeylessCertificate = Resource<
   KeylessCertificateTypeId,
-  KeylessCertificateProps,
-  KeylessCertificateAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -187,7 +187,7 @@ export type KeylessCertificate = Resource<
  * @section Reaching the key server through a Cloudflare Tunnel
  * @example Private key server on a tunnel virtual network
  * ```typescript
- * const vnet = yield* Cloudflare.Tunnel.TunnelVirtualNetwork("KeylessVnet", {});
+ * const vnet = yield* Cloudflare.Tunnel.VirtualNetwork("KeylessVnet", {});
  *
  * const keyless = yield* Cloudflare.KeylessCertificate.KeylessCertificate("SiteKeyless", {
  *   zoneId: zone.zoneId,
@@ -459,7 +459,7 @@ const normalizePem = (pem: string): string => pem.replace(/\r\n/g, "\n").trim();
  * been resolved to concrete strings by Plan before reconcile runs.
  */
 const resolveTunnel = (
-  tunnel: KeylessCertificateTunnel | undefined,
+  tunnel: Tunnel | undefined,
 ): { privateIp: string; vnetId: string } | undefined =>
   tunnel === undefined
     ? undefined
@@ -479,14 +479,14 @@ const sameTunnel = (
 const toAttributes = (
   keyless: ObservedKeyless,
   zoneId: string,
-): KeylessCertificateAttributes => ({
+): Attributes => ({
   keylessCertificateId: keyless.id,
   zoneId,
   name: keyless.name,
   host: keyless.host,
   port: keyless.port,
   enabled: keyless.enabled,
-  status: keyless.status as KeylessCertificateStatus,
+  status: keyless.status as Status,
   permissions: [...keyless.permissions],
   createdOn: keyless.createdOn,
   modifiedOn: keyless.modifiedOn,

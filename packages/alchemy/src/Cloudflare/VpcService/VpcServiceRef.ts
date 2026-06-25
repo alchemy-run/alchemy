@@ -4,9 +4,9 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { formatVpcService, type VpcServiceAttributes } from "./VpcService.ts";
+import { formatVpcService, type Attributes } from "./VpcService.ts";
 
-export type VpcServiceRefProps =
+export type RefProps =
   | {
       /**
        * The Cloudflare-assigned ID for the VPC service.
@@ -23,7 +23,7 @@ export type VpcServiceRefProps =
 /**
  * Reference to an existing VPC service. Same shape as the resource's outputs.
  */
-export type VpcServiceRef = VpcServiceAttributes;
+export type VpcServiceRef = Attributes;
 
 /**
  * Reference an existing Cloudflare VPC service without managing its lifecycle.
@@ -44,7 +44,7 @@ export type VpcServiceRef = VpcServiceAttributes;
  * });
  * ```
  */
-export const VpcServiceRef = (props: VpcServiceRefProps) =>
+export const VpcServiceRef = (props: RefProps) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     if ("name" in props) {

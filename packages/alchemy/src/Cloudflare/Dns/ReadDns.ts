@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Zone } from "../Zone/Zone.ts";
-import { type DnsToken } from "./DnsBinding.ts";
+import { type Token } from "./DnsBinding.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 
 /**
@@ -83,7 +83,7 @@ export interface ReadDnsClient {
 
 /** Build the read-only client over a bound token and zone id. */
 export const dnsReadClient = (
-  token: DnsToken,
+  token: Token,
   zoneId: Effect.Effect<string>,
 ): ReadDnsClient => {
   const authorize = authorizeWith(token);

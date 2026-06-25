@@ -67,12 +67,9 @@ describe.sequential("AccountSetting", () => {
         // Create — pin green compute to the opposite of the baseline.
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Workers.WorkersAccountSetting(
-              "AccountSetting",
-              {
-                greenCompute: flipped,
-              },
-            );
+            return yield* Cloudflare.Workers.AccountSetting("AccountSetting", {
+              greenCompute: flipped,
+            });
           }),
         );
 
@@ -88,12 +85,9 @@ describe.sequential("AccountSetting", () => {
         // singleton, no replacement; the captured initial value survives.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Workers.WorkersAccountSetting(
-              "AccountSetting",
-              {
-                greenCompute: baselineGreen,
-              },
-            );
+            return yield* Cloudflare.Workers.AccountSetting("AccountSetting", {
+              greenCompute: baselineGreen,
+            });
           }),
         );
 
@@ -126,13 +120,10 @@ describe.sequential("AccountSetting", () => {
         // drift and skips the PUT entirely.
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Workers.WorkersAccountSetting(
-              "NoopSetting",
-              {
-                defaultUsageModel: baseline.defaultUsageModel ?? undefined,
-                greenCompute: baseline.greenCompute ?? undefined,
-              },
-            );
+            return yield* Cloudflare.Workers.AccountSetting("NoopSetting", {
+              defaultUsageModel: baseline.defaultUsageModel ?? undefined,
+              greenCompute: baseline.greenCompute ?? undefined,
+            });
           }),
         );
 
@@ -171,7 +162,7 @@ describe.sequential("AccountSetting", () => {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.Workers.WorkersAccountSetting,
+          Cloudflare.Workers.AccountSetting,
         );
         const all = yield* provider.list();
 

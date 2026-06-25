@@ -20,12 +20,9 @@ type SchemaValidationOperationSettingTypeId =
  * Per-operation mitigation action for schema validation: `log` records
  * non-conforming requests, `block` denies them, `none` does nothing.
  */
-export type SchemaValidationOperationMitigationAction =
-  | "log"
-  | "block"
-  | "none";
+export type OperationMitigationAction = "log" | "block" | "none";
 
-export interface SchemaValidationOperationSettingProps {
+export interface OperationSettingProps {
   /**
    * Zone the operation belongs to.
    *
@@ -47,22 +44,22 @@ export interface SchemaValidationOperationSettingProps {
    * Mutable in place (the PUT is a true upsert). `log` may be plan-gated
    * (API Shield entitlement).
    */
-  mitigationAction: SchemaValidationOperationMitigationAction;
+  mitigationAction: OperationMitigationAction;
 }
 
-export interface SchemaValidationOperationSettingAttributes {
+export interface OperationSettingAttributes {
   /** Zone the operation belongs to. */
   zoneId: string;
   /** UUID of the API Shield operation the override applies to. */
   operationId: string;
   /** The mitigation action applied to this operation. */
-  mitigationAction: SchemaValidationOperationMitigationAction;
+  mitigationAction: OperationMitigationAction;
 }
 
-export type SchemaValidationOperationSetting = Resource<
+export type OperationSetting = Resource<
   SchemaValidationOperationSettingTypeId,
-  SchemaValidationOperationSettingProps,
-  SchemaValidationOperationSettingAttributes,
+  OperationSettingProps,
+  OperationSettingAttributes,
   never,
   Providers
 >;
@@ -82,14 +79,14 @@ export type SchemaValidationOperationSetting = Resource<
  * @section Overriding an operation
  * @example Block non-conforming requests on one operation
  * ```typescript
- * const op = yield* Cloudflare.ApiShield.ApiShieldOperation("GetUser", {
+ * const op = yield* Cloudflare.ApiShield.Operation("GetUser", {
  *   zoneId: zone.zoneId,
  *   method: "GET",
  *   host: "api.example.com",
  *   endpoint: "/users/{id}",
  * });
  *
- * yield* Cloudflare.SchemaValidation.SchemaValidationOperationSetting("BlockGetUser", {
+ * yield* Cloudflare.SchemaValidation.OperationSetting("BlockGetUser", {
  *   zoneId: zone.zoneId,
  *   operationId: op.operationId,
  *   mitigationAction: "block",
@@ -98,7 +95,7 @@ export type SchemaValidationOperationSetting = Resource<
  *
  * @example Exempt an operation from validation
  * ```typescript
- * yield* Cloudflare.SchemaValidation.SchemaValidationOperationSetting("SkipWebhook", {
+ * yield* Cloudflare.SchemaValidation.OperationSetting("SkipWebhook", {
  *   zoneId: zone.zoneId,
  *   operationId: webhookOp.operationId,
  *   mitigationAction: "none",
@@ -107,23 +104,20 @@ export type SchemaValidationOperationSetting = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const SchemaValidationOperationSetting =
-  Resource<SchemaValidationOperationSetting>(
-    SchemaValidationOperationSettingTypeId,
-  );
+export const OperationSetting = Resource<OperationSetting>(
+  SchemaValidationOperationSettingTypeId,
+);
 
 /**
- * Returns true if the given value is a SchemaValidationOperationSetting
+ * Returns true if the given value is a OperationSetting
  * resource.
  */
-export const isSchemaValidationOperationSetting = (
-  value: unknown,
-): value is SchemaValidationOperationSetting =>
+export const isOperationSetting = (value: unknown): value is OperationSetting =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === SchemaValidationOperationSettingTypeId;
 
-export const SchemaValidationOperationSettingProvider = () =>
-  Provider.succeed(SchemaValidationOperationSetting, {
+export const OperationSettingProvider = () =>
+  Provider.succeed(OperationSetting, {
     stables: ["zoneId", "operationId"],
 
     list: Effect.fn(function* () {
@@ -150,7 +144,7 @@ export const SchemaValidationOperationSettingProvider = () =>
                         operationId: op.operationId,
                         // Distilled widens the generated enum to an open union.
                         mitigationAction:
-                          op.mitigationAction as SchemaValidationOperationMitigationAction,
+                          op.mitigationAction as OperationMitigationAction,
                       }),
                     ),
                 ),
@@ -228,8 +222,7 @@ export const SchemaValidationOperationSettingProvider = () =>
       return toAttributes(zoneId, {
         operationId: updated.operationId,
         // Distilled widens the generated enum to an open union.
-        mitigationAction:
-          updated.mitigationAction as SchemaValidationOperationMitigationAction,
+        mitigationAction: updated.mitigationAction as OperationMitigationAction,
       });
     }),
 
@@ -260,7 +253,7 @@ const getOperationSetting = (zoneId: string, operationId: string) =>
             operationId: setting.operationId,
             // Distilled widens the generated enum to an open union.
             mitigationAction:
-              setting.mitigationAction as SchemaValidationOperationMitigationAction,
+              setting.mitigationAction as OperationMitigationAction,
           },
     ),
     Effect.catchTag("OperationNotFound", () => Effect.succeed(undefined)),
@@ -270,9 +263,9 @@ const toAttributes = (
   zoneId: string,
   setting: {
     operationId: string;
-    mitigationAction: SchemaValidationOperationMitigationAction;
+    mitigationAction: OperationMitigationAction;
   },
-): SchemaValidationOperationSettingAttributes => ({
+): OperationSettingAttributes => ({
   zoneId,
   operationId: setting.operationId,
   mitigationAction: setting.mitigationAction,

@@ -14,12 +14,12 @@ import {
   policyFingerprint,
   resolvePolicies,
   type ApiTokenBinding,
-  type ApiTokenProps,
+  type Props,
 } from "./Common.ts";
 
 export type UserApiToken = Resource<
   "Cloudflare.ApiToken.UserApiToken",
-  ApiTokenProps,
+  Props,
   {
     tokenId: string;
     name: string;

@@ -12,7 +12,7 @@ const LeakedCredentialCheckTypeId =
   "Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck" as const;
 type LeakedCredentialCheckTypeId = typeof LeakedCredentialCheckTypeId;
 
-export interface LeakedCredentialCheckProps {
+export interface Props {
   /**
    * Zone whose Leaked Credential Checks setting is managed. Stable —
    * changing the zone triggers a replacement (the old zone's setting is
@@ -27,7 +27,7 @@ export interface LeakedCredentialCheckProps {
   enabled?: boolean;
 }
 
-export interface LeakedCredentialCheckAttributes {
+export interface Attributes {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** Whether Leaked Credential Checks are currently enabled. */
@@ -42,8 +42,8 @@ export interface LeakedCredentialCheckAttributes {
 
 export type LeakedCredentialCheck = Resource<
   LeakedCredentialCheckTypeId,
-  LeakedCredentialCheckProps,
-  LeakedCredentialCheckAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -104,8 +104,7 @@ export const isLeakedCredentialCheck = (
   Predicate.hasProperty(value, "Type") &&
   value.Type === LeakedCredentialCheckTypeId;
 
-const desiredEnabled = (props: LeakedCredentialCheckProps): boolean =>
-  props.enabled ?? true;
+const desiredEnabled = (props: Props): boolean => props.enabled ?? true;
 
 export const LeakedCredentialCheckProvider = () =>
   Provider.succeed(LeakedCredentialCheck, {
@@ -129,21 +128,19 @@ export const LeakedCredentialCheckProvider = () =>
                 zoneId,
                 enabled,
                 initialEnabled: enabled,
-              } satisfies LeakedCredentialCheckAttributes;
+              } satisfies Attributes;
             }),
             // Zone deleted out-of-band or plan-gated route; skip it.
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is LeakedCredentialCheckAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as LeakedCredentialCheckProps;
-      const n = news as LeakedCredentialCheckProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);

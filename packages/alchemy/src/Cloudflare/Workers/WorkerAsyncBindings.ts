@@ -6,23 +6,23 @@ import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import { isAiGateway } from "../AiGateway/AiGateway.ts";
-import { isAiSearchInstance } from "../AiSearch/Instance.ts";
-import { isAiSearchNamespace } from "../AiSearch/Namespace.ts";
-import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
+import { isInstance } from "../AiSearch/Instance.ts";
+import { isNamespace as isAiSearchNamespace } from "../AiSearch/Namespace.ts";
+import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
 import { isBrowser } from "./Browser.ts";
-import { isD1Database } from "../D1/D1Database.ts";
+import { isDatabase } from "../D1/D1Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
-import { isFlagshipApp } from "../Flagship/App.ts";
+import { isApp } from "../Flagship/App.ts";
 import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
 import { isImages } from "../Images/Images.ts";
-import { isKVNamespace } from "../KV/Namespace.ts";
+import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
 import { isQueue } from "../Queue/Queue.ts";
-import { isR2Bucket } from "../R2/Bucket.ts";
+import { isBucket } from "../R2/Bucket.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
-import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
+import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
@@ -121,13 +121,13 @@ const toBinding = (
       type: "browser",
       name: bindingName,
     };
-  } else if (isFlagshipApp(binding)) {
+  } else if (isApp(binding)) {
     return {
       type: "flagship",
       name: bindingName,
       appId: binding.appId,
     };
-  } else if (isAnalyticsEngineDataset(binding)) {
+  } else if (isDataset(binding)) {
     return {
       type: "analytics_engine",
       name: bindingName,
@@ -155,13 +155,13 @@ const toBinding = (
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
     };
-  } else if (isD1Database(binding)) {
+  } else if (isDatabase(binding)) {
     return {
       type: "d1",
       databaseId: binding.databaseId,
       name: bindingName,
     };
-  } else if (isR2Bucket(binding)) {
+  } else if (isBucket(binding)) {
     return {
       type: "r2_bucket",
       name: bindingName,
@@ -189,7 +189,7 @@ const toBinding = (
       type: "ai",
       name: bindingName,
     };
-  } else if (isAiSearchInstance(binding)) {
+  } else if (isInstance(binding)) {
     // Single-instance binding: `env.NAME` is the instance itself. The
     // `namespace` qualifies which namespace the instance lives in (the
     // account-provided `default` when unspecified).
@@ -219,7 +219,7 @@ const toBinding = (
       name: bindingName,
       service: binding.workerName,
     };
-  } else if (isVectorizeIndex(binding)) {
+  } else if (isIndex(binding)) {
     return {
       type: "vectorize",
       name: bindingName,

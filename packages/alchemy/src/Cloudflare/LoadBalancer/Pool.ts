@@ -17,7 +17,7 @@ type LoadBalancerPoolTypeId = typeof LoadBalancerPoolTypeId;
 /**
  * A single origin server within a Load Balancing pool.
  */
-export interface LoadBalancerPoolOrigin {
+export interface PoolOrigin {
   /**
    * The IP address (IPv4 or IPv6) or publicly-resolvable hostname of the
    * origin server.
@@ -58,7 +58,7 @@ export interface LoadBalancerPoolOrigin {
 /**
  * Load shedding configuration for a pool.
  */
-export interface LoadBalancerPoolLoadShedding {
+export interface PoolLoadShedding {
   /** Percent (0–100) of new (non-affine) traffic to shed. @default 0 */
   defaultPercent?: number;
   /** Policy for shedding new traffic. @default "random" */
@@ -73,12 +73,12 @@ export interface LoadBalancerPoolLoadShedding {
  * Filters pool/origin health notifications by resource type or health
  * status.
  */
-export interface LoadBalancerPoolNotificationFilter {
+export interface PoolNotificationFilter {
   origin?: { disable?: boolean; healthy?: boolean };
   pool?: { disable?: boolean; healthy?: boolean };
 }
 
-export interface LoadBalancerPoolProps {
+export interface PoolProps {
   /**
    * A short name (tag) for the pool. Only alphanumeric characters, hyphens,
    * and underscores are allowed. If omitted, a unique name is generated
@@ -90,7 +90,7 @@ export interface LoadBalancerPoolProps {
    * The list of origins within this pool. Traffic directed at this pool is
    * balanced across all currently healthy origins.
    */
-  origins: ReadonlyArray<LoadBalancerPoolOrigin>;
+  origins: ReadonlyArray<PoolOrigin>;
   /**
    * A human-readable description of the pool.
    */
@@ -130,7 +130,7 @@ export interface LoadBalancerPoolProps {
   /**
    * Load shedding policies and percentages for the pool.
    */
-  loadShedding?: LoadBalancerPoolLoadShedding;
+  loadShedding?: PoolLoadShedding;
   /**
    * How origins are selected for new sessions / traffic without session
    * affinity.
@@ -147,7 +147,7 @@ export interface LoadBalancerPoolProps {
    * Filter pool and origin health notifications by resource type or health
    * status.
    */
-  notificationFilter?: LoadBalancerPoolNotificationFilter;
+  notificationFilter?: PoolNotificationFilter;
   /**
    * Deprecated upstream — the email address to send health status
    * notifications to. Prefer Cloudflare's centralized notification service.
@@ -155,7 +155,7 @@ export interface LoadBalancerPoolProps {
   notificationEmail?: string;
 }
 
-export interface LoadBalancerPoolAttributes {
+export interface PoolAttributes {
   /** Cloudflare-assigned pool identifier. */
   poolId: string;
   /** The Cloudflare account the pool belongs to. */
@@ -172,10 +172,10 @@ export interface LoadBalancerPoolAttributes {
   modifiedOn: string | undefined;
 }
 
-export type LoadBalancerPool = Resource<
+export type Pool = Resource<
   LoadBalancerPoolTypeId,
-  LoadBalancerPoolProps,
-  LoadBalancerPoolAttributes,
+  PoolProps,
+  PoolAttributes,
   never,
   Providers
 >;
@@ -183,7 +183,7 @@ export type LoadBalancerPool = Resource<
 /**
  * A Cloudflare Load Balancing pool — an account-scoped group of origin
  * servers that Load Balancers route traffic to. Pools optionally reference
- * a {@link LoadBalancerMonitor} for active health checking.
+ * a {@link Monitor} for active health checking.
  *
  * Requires the Load Balancing subscription on the account; without it, pool
  * creation fails with the typed `PoolAccessFailed` error.
@@ -193,20 +193,20 @@ export type LoadBalancerPool = Resource<
  * @section Creating a Pool
  * @example Pool with one origin
  * ```typescript
- * const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("ApiPool", {
+ * const pool = yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  * });
  * ```
  *
  * @example Health-checked pool
  * ```typescript
- * const monitor = yield* Cloudflare.LoadBalancer.LoadBalancerMonitor("ApiMonitor", {
+ * const monitor = yield* Cloudflare.LoadBalancer.Monitor("ApiMonitor", {
  *   type: "https",
  *   path: "/health",
  *   expectedCodes: "2xx",
  * });
  *
- * const pool = yield* Cloudflare.LoadBalancer.LoadBalancerPool("ApiPool", {
+ * const pool = yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
  *   origins: [
  *     { name: "origin-1", address: "203.0.113.10", weight: 0.7 },
  *     { name: "origin-2", address: "203.0.113.11", weight: 0.3 },
@@ -229,18 +229,16 @@ export type LoadBalancerPool = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/pools/
  */
-export const LoadBalancerPool = Resource<LoadBalancerPool>(
-  LoadBalancerPoolTypeId,
-);
+export const Pool = Resource<Pool>(LoadBalancerPoolTypeId);
 
 /**
- * Returns true if the given value is a LoadBalancerPool resource.
+ * Returns true if the given value is a Pool resource.
  */
-export const isLoadBalancerPool = (value: unknown): value is LoadBalancerPool =>
+export const isPool = (value: unknown): value is Pool =>
   Predicate.hasProperty(value, "Type") && value.Type === LoadBalancerPoolTypeId;
 
-export const LoadBalancerPoolProvider = () =>
-  Provider.succeed(LoadBalancerPool, {
+export const PoolProvider = () =>
+  Provider.succeed(Pool, {
     stables: ["poolId", "accountId", "createdOn"],
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -278,7 +276,7 @@ export const LoadBalancerPoolProvider = () =>
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? []).map(
-              (pool): LoadBalancerPoolAttributes => ({
+              (pool): PoolAttributes => ({
                 poolId: pool.id ?? "",
                 accountId,
                 name: pool.name ?? "",
@@ -381,7 +379,7 @@ const createPoolName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const buildBody = (news: LoadBalancerPoolProps, name: string) => ({
+const buildBody = (news: PoolProps, name: string) => ({
   name,
   origins: news.origins.map((o) => ({
     address: o.address,
@@ -495,7 +493,7 @@ const normalizeOrigin = (o: {
 const toAttributes = (
   pool: ObservedPool,
   accountId: string,
-): LoadBalancerPoolAttributes => ({
+): PoolAttributes => ({
   poolId: pool.id ?? "",
   accountId,
   name: pool.name ?? "",

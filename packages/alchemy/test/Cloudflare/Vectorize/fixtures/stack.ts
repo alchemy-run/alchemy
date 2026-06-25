@@ -7,7 +7,7 @@ import { ensureMetaIndex, TestIndex } from "./index-resource.ts";
 
 /**
  * Async-style Worker: the shared Vectorize index is declared on `env`.
- * `WorkerAsyncBindings` resolves it (via `isVectorizeIndex`) into the native
+ * `WorkerAsyncBindings` resolves it (via `isIndex`) into the native
  * `vectorize` binding, so the plain `async fetch` handler in async-worker.ts
  * gets `env.INDEX` as the runtime `Vectorize` binding.
  */

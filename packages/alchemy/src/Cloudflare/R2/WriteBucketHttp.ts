@@ -10,9 +10,9 @@ import {
   readHttpMetadata,
   toBody,
   toR2Error,
-  type R2HttpToken,
+  type HttpToken,
 } from "./BucketHttp.ts";
-import { R2Error, type R2PutOptions } from "./BucketTypes.ts";
+import { R2Error, type PutOptions } from "./BucketTypes.ts";
 import { WriteBucket, type WriteBucketClient } from "./WriteBucket.ts";
 
 /**
@@ -32,7 +32,7 @@ export const WriteBucketHttp = Layer.effect(
 
 /** Build the write half of the HTTP-backed {@link ReadWrite} client. */
 export const makeWriteR2HttpClient = (
-  token: R2HttpToken,
+  token: HttpToken,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): WriteBucketClient => {
@@ -50,7 +50,7 @@ export const makeWriteR2HttpClient = (
         | null
         | Blob
         | Stream.Stream<Uint8Array, unknown>,
-      options?: R2PutOptions,
+      options?: PutOptions,
     ) =>
       scope.pipe(
         Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>

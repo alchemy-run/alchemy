@@ -38,7 +38,7 @@ export type ManagedResponseTransformId =
   | "remove_x-powered-by_header"
   | (string & {});
 
-export interface ManagedTransformsProps {
+export interface Props {
   /**
    * Zone whose managed transforms are managed. Stable — changing the zone
    * triggers a replacement (the old zone's managed transforms are restored
@@ -81,7 +81,7 @@ export interface ManagedTransformState {
   conflictsWith: string[] | undefined;
 }
 
-export interface ManagedTransformsAttributes {
+export interface Attributes {
   /** Zone that owns these managed transforms. */
   zoneId: string;
   /** Observed state of every managed request transform on the zone. */
@@ -104,8 +104,8 @@ export interface ManagedTransformsAttributes {
 
 export type ManagedTransforms = Resource<
   ManagedTransformsTypeId,
-  ManagedTransformsProps,
-  ManagedTransformsAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -216,14 +216,12 @@ export const ManagedTransformsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ManagedTransformsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as ManagedTransformsProps;
-      const n = news as ManagedTransformsProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only when both sides are concrete.
       const oldZone = output?.zoneId ?? o.zoneId;
       if (
@@ -310,7 +308,7 @@ export const ManagedTransformsProvider = () =>
       // the snapshot (added by Cloudflare after adoption) are left as-is.
       const observed = yield* observe(output.zoneId);
       if (!observed) return; // zone is gone — nothing to restore
-      const o = (olds ?? {}) as ManagedTransformsProps;
+      const o = (olds ?? {}) as Props;
       const requestRestore = restoreDelta(
         o.requestHeaders ?? {},
         output.initialRequestHeaders ?? {},
@@ -434,7 +432,7 @@ const toAttributes = (
   observed: ObservedTransforms,
   initialRequestHeaders: Record<string, boolean>,
   initialResponseHeaders: Record<string, boolean>,
-): ManagedTransformsAttributes => ({
+): Attributes => ({
   zoneId,
   requestHeaders: observed.managedRequestHeaders.map(toState),
   responseHeaders: observed.managedResponseHeaders.map(toState),

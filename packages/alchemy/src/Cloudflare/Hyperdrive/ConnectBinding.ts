@@ -6,7 +6,7 @@ import * as Output from "../../Output.ts";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { Connect, type ConnectClient } from "./Connect.ts";
 import type { Connection } from "./Hyperdrive.ts";
-import { defaultPort, type HyperdriveDevOrigin } from "./Hyperdrive.ts";
+import { defaultPort, type DevOrigin } from "./Hyperdrive.ts";
 
 export const ConnectBinding = Layer.effect(
   Connect,
@@ -51,7 +51,7 @@ export const ConnectBinding = Layer.effect(
 export const getHyperdriveDevOrigin = (connection: Connection) => {
   const origin = Output.map(
     Output.all(connection.dev, connection.origin, connection.mtls),
-    ([dev, origin, mtls]): Required<HyperdriveDevOrigin> => {
+    ([dev, origin, mtls]): Required<DevOrigin> => {
       if (dev) {
         return {
           scheme: dev.scheme,
@@ -85,5 +85,5 @@ export const getHyperdriveDevOrigin = (connection: Connection) => {
     ([id, origin]) => ({
       [id]: origin,
     }),
-  ) as unknown as Record<string, Required<HyperdriveDevOrigin>>;
+  ) as unknown as Record<string, Required<DevOrigin>>;
 };

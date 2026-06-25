@@ -355,7 +355,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         //
         // Producer side: `Cloudflare.Queue.WriteQueue`. Consumer side:
         // `Cloudflare.Queue.messages(Queue).subscribe(...)` registered in
-        // the init phase (above), with `QueueEventSourceLive` on the
+        // the init phase (above), with `EventSourceLive` on the
         // worker layer.
         // AI Gateway smoke test — POST /ai with { prompt }.
         //
@@ -419,7 +419,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             );
           }
           // DELETE — used by the integ test to clear consumed
-          // entries before stack.destroy(), so R2Bucket delete
+          // entries before stack.destroy(), so Bucket delete
           // doesn't fail with "bucket not empty".
           if (request.method === "DELETE") {
             return yield* bucket.delete(`/queue/${id}`).pipe(
@@ -449,7 +449,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Cloudflare.R2.ReadWriteBucketBinding,
         Cloudflare.KV.ReadWriteNamespaceBinding,
         Cloudflare.Queue.WriteQueueBinding,
-        Cloudflare.Queue.QueueEventSourceLive,
+        Cloudflare.Queue.EventSourceLive,
         Cloudflare.Artifacts.ReadWriteStoreBinding,
         Cloudflare.AiGateway.InferenceBinding,
       ),

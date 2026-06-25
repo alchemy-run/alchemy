@@ -22,7 +22,7 @@ export type InstanceSourceType = "r2" | "web-crawler";
 /**
  * Generation model used to answer AI Search queries.
  */
-export type AiSearchModel = Exclude<
+export type Model = Exclude<
   NonNullable<aisearch.CreateInstanceRequest["aiSearchModel"]>,
   ""
 >;
@@ -31,7 +31,7 @@ export type AiSearchModel = Exclude<
  * Embedding model used to vectorize indexed content. Cannot be changed
  * after creation (it defines the vector space).
  */
-export type AiSearchEmbeddingModel = Exclude<
+export type EmbeddingModel = Exclude<
   NonNullable<aisearch.CreateInstanceRequest["embeddingModel"]>,
   ""
 >;
@@ -39,55 +39,55 @@ export type AiSearchEmbeddingModel = Exclude<
 /**
  * Reranking model applied to retrieved results.
  */
-export type AiSearchRerankingModel = "@cf/baai/bge-reranker-base";
+export type RerankingModel = "@cf/baai/bge-reranker-base";
 
 /**
  * Data-source specific indexing parameters (R2 prefix / include / exclude
  * filters, or web-crawler options).
  */
-export type AiSearchSourceParams = NonNullable<
+export type SourceParams = NonNullable<
   aisearch.CreateInstanceRequest["sourceParams"]
 >;
 
 /**
  * Controls which storage backends are used during indexing.
  */
-export type AiSearchIndexMethod = NonNullable<
+export type IndexMethod = NonNullable<
   aisearch.CreateInstanceRequest["indexMethod"]
 >;
 
 /**
  * Keyword indexing options.
  */
-export type AiSearchIndexingOptions = NonNullable<
+export type IndexingOptions = NonNullable<
   aisearch.CreateInstanceRequest["indexingOptions"]
 >;
 
 /**
  * Custom metadata fields extracted at indexing time.
  */
-export type AiSearchCustomMetadata = NonNullable<
+export type CustomMetadata = NonNullable<
   aisearch.CreateInstanceRequest["customMetadata"]
 >;
 
 /**
  * Retrieval-time options (boosting and keyword match mode).
  */
-export type AiSearchRetrievalOptions = NonNullable<
+export type RetrievalOptions = NonNullable<
   aisearch.CreateInstanceRequest["retrievalOptions"]
 >;
 
 /**
  * Public REST endpoint configuration for the instance.
  */
-export type AiSearchPublicEndpointParams = NonNullable<
+export type PublicEndpointParams = NonNullable<
   aisearch.CreateInstanceRequest["publicEndpointParams"]
 >;
 
 /**
  * Similarity-cache threshold preset.
  */
-export type AiSearchCacheThreshold =
+export type CacheThreshold =
   | "super_strict_match"
   | "close_enough"
   | "flexible_friend"
@@ -129,7 +129,7 @@ export type InstanceProps = {
    * Source-specific indexing parameters (R2 prefix / include / exclude
    * filters, web-crawler crawl and parse options).
    */
-  sourceParams?: AiSearchSourceParams;
+  sourceParams?: SourceParams;
   /**
    * Id of the AI Search service token used to access the data source on
    * sync. When omitted, Cloudflare provisions one automatically.
@@ -144,12 +144,12 @@ export type InstanceProps = {
    * creation — updating this property triggers a replacement.
    * @default service default
    */
-  embeddingModel?: AiSearchEmbeddingModel;
+  embeddingModel?: EmbeddingModel;
   /**
    * Generation model used to answer AI Search queries.
    * @default service default
    */
-  aiSearchModel?: AiSearchModel;
+  aiSearchModel?: Model;
   /**
    * Whether to rewrite the user query before retrieval.
    * @default false
@@ -158,7 +158,7 @@ export type InstanceProps = {
   /**
    * Model used to rewrite queries when `rewriteQuery` is enabled.
    */
-  rewriteModel?: AiSearchModel;
+  rewriteModel?: Model;
   /**
    * Whether custom chunking settings are applied during indexing.
    */
@@ -177,15 +177,15 @@ export type InstanceProps = {
    * Controls which storage backends are used during indexing. Defaults to
    * vector-only.
    */
-  indexMethod?: AiSearchIndexMethod;
+  indexMethod?: IndexMethod;
   /**
    * Keyword indexing options (tokenizer selection).
    */
-  indexingOptions?: AiSearchIndexingOptions;
+  indexingOptions?: IndexingOptions;
   /**
    * Custom metadata fields extracted at indexing time.
    */
-  customMetadata?: AiSearchCustomMetadata;
+  customMetadata?: CustomMetadata;
   /**
    * Whether the similarity cache is enabled.
    * @default false
@@ -194,7 +194,7 @@ export type InstanceProps = {
   /**
    * Similarity-cache match strictness preset.
    */
-  cacheThreshold?: AiSearchCacheThreshold;
+  cacheThreshold?: CacheThreshold;
   /**
    * Cache entry TTL in seconds. Allowed values: 600, 1800, 3600, 7200,
    * 21600, 43200, 86400, 172800, 259200, 518400.
@@ -208,11 +208,11 @@ export type InstanceProps = {
   /**
    * Model used for reranking when `reranking` is enabled.
    */
-  rerankingModel?: AiSearchRerankingModel;
+  rerankingModel?: RerankingModel;
   /**
    * Retrieval-time options (boosting and keyword match mode).
    */
-  retrievalOptions?: AiSearchRetrievalOptions;
+  retrievalOptions?: RetrievalOptions;
   /**
    * How vector and keyword results are fused: `max` or `rrf`
    * (reciprocal rank fusion).
@@ -229,7 +229,7 @@ export type InstanceProps = {
   /**
    * Public REST endpoint configuration (search / chat-completions / MCP).
    */
-  publicEndpointParams?: AiSearchPublicEndpointParams;
+  publicEndpointParams?: PublicEndpointParams;
   /**
    * Interval between automatic syncs, in seconds. Allowed values: 900,
    * 1800, 3600, 7200, 14400, 21600, 43200, 86400.
@@ -342,7 +342,7 @@ export type Instance = Resource<
  * `tokenId` (see {@link Token}) or let the {@link AiSearch}
  * construct provision one for you.
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("docs", {});
+ * const bucket = yield* Cloudflare.R2.Bucket("docs", {});
  * const search = yield* Cloudflare.AiSearch.Instance("docs-search", {
  *   source: bucket.bucketName,
  *   tokenId: serviceToken.id,
@@ -559,7 +559,7 @@ export const Instance = Resource<Instance>(InstanceTypeId);
 /**
  * Returns true if the given value is an Instance resource.
  */
-export const isAiSearchInstance = (value: unknown): value is Instance =>
+export const isInstance = (value: unknown): value is Instance =>
   Predicate.hasProperty(value, "Type") && value.Type === InstanceTypeId;
 
 export const InstanceProvider = () =>

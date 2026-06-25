@@ -17,7 +17,7 @@ import * as Binding from "../../Binding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { type TunnelToken } from "./TunnelBinding.ts";
+import { type Token } from "./TunnelBinding.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 
 /**
@@ -92,7 +92,7 @@ export type UpdateTunnelRequest = Omit<
 >;
 
 /** Tunnel configuration body, minus the account id and tunnel id (positional). */
-export type TunnelConfigurationBody = NonNullable<
+export type ConfigurationBody = NonNullable<
   PutTunnelCloudflaredConfigurationRequest["config"]
 >;
 
@@ -129,7 +129,7 @@ export interface WriteTunnelClient {
   /** Replace the remotely-managed configuration (ingress rules) for a tunnel. */
   putConfiguration(
     tunnelId: string,
-    config: TunnelConfigurationBody,
+    config: ConfigurationBody,
   ): Effect.Effect<
     PutTunnelCloudflaredConfigurationResponse,
     PutTunnelCloudflaredConfigurationError,
@@ -138,7 +138,7 @@ export interface WriteTunnelClient {
 }
 
 /** Build the write client over a bound token. */
-export const writeClient = (token: TunnelToken): WriteTunnelClient => {
+export const writeClient = (token: Token): WriteTunnelClient => {
   const authorize = authorizeWith(token);
   return {
     create: Effect.fn("Cloudflare.Tunnel.create")(function* (request) {

@@ -13,7 +13,7 @@ const AddressingPrefixDelegationTypeId =
   "Cloudflare.Addressing.PrefixDelegation" as const;
 type AddressingPrefixDelegationTypeId = typeof AddressingPrefixDelegationTypeId;
 
-export interface AddressingPrefixDelegationProps {
+export interface PrefixDelegationProps {
   /**
    * Identifier of the parent BYOIP prefix being delegated from. Changing it
    * forces a replacement.
@@ -31,7 +31,7 @@ export interface AddressingPrefixDelegationProps {
   delegatedAccountId: string;
 }
 
-export interface AddressingPrefixDelegationAttributes {
+export interface PrefixDelegationAttributes {
   /** Cloudflare-assigned identifier of the delegation. */
   delegationId: string;
   /** Identifier of the parent BYOIP prefix. */
@@ -46,10 +46,10 @@ export interface AddressingPrefixDelegationAttributes {
   createdAt: string | undefined;
 }
 
-export type AddressingPrefixDelegation = Resource<
+export type PrefixDelegation = Resource<
   AddressingPrefixDelegationTypeId,
-  AddressingPrefixDelegationProps,
-  AddressingPrefixDelegationAttributes,
+  PrefixDelegationProps,
+  PrefixDelegationAttributes,
   never,
   Providers
 >;
@@ -67,7 +67,7 @@ export type AddressingPrefixDelegation = Resource<
  * @section Delegating a Prefix
  * @example Delegate a /26 to another account
  * ```typescript
- * const delegation = yield* Cloudflare.Addressing.AddressingPrefixDelegation("share", {
+ * const delegation = yield* Cloudflare.Addressing.PrefixDelegation("share", {
  *   prefixId: prefix.prefixId,
  *   cidr: "192.0.2.0/26",
  *   delegatedAccountId: "023e105f4ecef8ad9ca31a8372d0c353",
@@ -76,21 +76,19 @@ export type AddressingPrefixDelegation = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/
  */
-export const AddressingPrefixDelegation = Resource<AddressingPrefixDelegation>(
+export const PrefixDelegation = Resource<PrefixDelegation>(
   AddressingPrefixDelegationTypeId,
 );
 
 /**
- * Returns true if the given value is an AddressingPrefixDelegation resource.
+ * Returns true if the given value is an PrefixDelegation resource.
  */
-export const isAddressingPrefixDelegation = (
-  value: unknown,
-): value is AddressingPrefixDelegation =>
+export const isPrefixDelegation = (value: unknown): value is PrefixDelegation =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === AddressingPrefixDelegationTypeId;
 
-export const AddressingPrefixDelegationProvider = () =>
-  Provider.succeed(AddressingPrefixDelegation, {
+export const PrefixDelegationProvider = () =>
+  Provider.succeed(PrefixDelegation, {
     stables: [
       "delegationId",
       "prefixId",
@@ -254,7 +252,7 @@ const toAttributes = (
   delegation: ObservedDelegation,
   prefixId: string,
   accountId: string,
-): AddressingPrefixDelegationAttributes => ({
+): PrefixDelegationAttributes => ({
   delegationId: delegation.id ?? "",
   prefixId,
   accountId,

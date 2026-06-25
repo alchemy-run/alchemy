@@ -20,11 +20,11 @@ interface DevStep {
 }
 
 const DEV_STEPS: DevStep[] = [
-  { kind: "boot", label: "Photos", detail: "Cloudflare.R2.R2Bucket", ms: 600 },
+  { kind: "boot", label: "Photos", detail: "Cloudflare.R2.Bucket", ms: 600 },
   {
     kind: "boot",
     label: "Sessions",
-    detail: "Cloudflare.KV.KVNamespace",
+    detail: "Cloudflare.KV.Namespace",
     ms: 500,
   },
   {

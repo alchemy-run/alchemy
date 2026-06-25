@@ -41,13 +41,13 @@ export class ArtifactsError extends Data.TaggedError("ArtifactsError")<{
 
 export type Scope = "read" | "write";
 
-export type ArtifactsCreateOptions = {
+export type CreateOptions = {
   readOnly?: boolean;
   description?: string;
   setDefaultBranch?: string;
 };
 
-export type ArtifactsImportOptions = {
+export type ImportOptions = {
   source: { url: string; branch?: string; depth?: number };
   target: {
     name: string;
@@ -55,12 +55,12 @@ export type ArtifactsImportOptions = {
   };
 };
 
-export type ArtifactsListOptions = {
+export type ListOptions = {
   limit?: number;
   cursor?: string;
 };
 
-export type ArtifactsForkOptions = {
+export type ForkOptions = {
   description?: string;
   readOnly?: boolean;
   defaultBranchOnly?: boolean;
@@ -70,7 +70,7 @@ export type ArtifactsForkOptions = {
  * Effect-native handle to a single Artifacts repo. Wraps the runtime
  * {@link ArtifactsRepo} so each method returns an Effect.
  */
-export interface ArtifactsRepoClient {
+export interface RepoClient {
   /** Underlying Cloudflare runtime handle. */
   raw: ArtifactsRepo;
   createToken(
@@ -81,7 +81,7 @@ export interface ArtifactsRepoClient {
   revokeToken(tokenOrId: string): Effect.Effect<boolean, ArtifactsError>;
   fork(
     name: string,
-    opts?: ArtifactsForkOptions,
+    opts?: ForkOptions,
   ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError>;
 }
 
@@ -96,17 +96,15 @@ export interface ReadWriteStoreClient {
   raw: Effect.Effect<Artifacts, never, RuntimeContext>;
   create(
     name: string,
-    opts?: ArtifactsCreateOptions,
+    opts?: CreateOptions,
   ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
   /** Look up an existing repo by name. Fails with `ArtifactsError` if missing. */
-  get(
-    name: string,
-  ): Effect.Effect<ArtifactsRepoClient, ArtifactsError, RuntimeContext>;
+  get(name: string): Effect.Effect<RepoClient, ArtifactsError, RuntimeContext>;
   list(
-    opts?: ArtifactsListOptions,
+    opts?: ListOptions,
   ): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, RuntimeContext>;
   delete(name: string): Effect.Effect<boolean, ArtifactsError, RuntimeContext>;
   import(
-    opts: ArtifactsImportOptions,
+    opts: ImportOptions,
   ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
 }

@@ -10,14 +10,14 @@ import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
 const FraudDetectionSettingsTypeId =
-  "Cloudflare.Fraud.FraudDetectionSettings" as const;
+  "Cloudflare.Fraud.DetectionSettings" as const;
 type FraudDetectionSettingsTypeId = typeof FraudDetectionSettingsTypeId;
 
 /**
  * Criterion for classifying a login authentication outcome from the origin
  * response. Currently only status-code matching is supported.
  */
-export interface FraudAuthenticationCriteria {
+export interface AuthenticationCriteria {
   /**
    * How the origin response is matched. Only `"status_code"` is supported.
    */
@@ -33,15 +33,15 @@ export interface FraudAuthenticationCriteria {
  * Configuration for classifying login authentication outcomes based on the
  * origin response. Requires `userProfiles` to be `"enabled"`.
  */
-export interface FraudAuthenticationSettings {
+export interface AuthenticationSettings {
   /**
    * Origin responses that count as a successful authentication.
    */
-  successCriteria?: FraudAuthenticationCriteria;
+  successCriteria?: AuthenticationCriteria;
   /**
    * Origin responses that count as a failed authentication.
    */
-  failureCriteria?: FraudAuthenticationCriteria;
+  failureCriteria?: AuthenticationCriteria;
 }
 
 /**
@@ -49,7 +49,7 @@ export interface FraudAuthenticationSettings {
  * explicitly set are ever sent to Cloudflare — unset fields are left
  * untouched on the zone.
  */
-export interface FraudDetectionSettingsValues {
+export interface DetectionSettingsValues {
   /**
    * Whether Fraud User Profiles is enabled for the zone.
    *
@@ -68,10 +68,10 @@ export interface FraudDetectionSettingsValues {
    * Configuration for classifying login authentication outcomes based on
    * the origin response. Requires `userProfiles` to be `"enabled"`.
    */
-  authenticationSettings?: FraudAuthenticationSettings;
+  authenticationSettings?: AuthenticationSettings;
 }
 
-export interface FraudDetectionSettingsProps extends FraudDetectionSettingsValues {
+export interface DetectionSettingsProps extends DetectionSettingsValues {
   /**
    * Zone whose fraud-detection settings are managed. Stable — changing
    * the zone triggers a replacement (which re-adopts the new zone's
@@ -80,7 +80,7 @@ export interface FraudDetectionSettingsProps extends FraudDetectionSettingsValue
   zoneId: string;
 }
 
-export interface FraudDetectionSettingsAttributes extends FraudDetectionSettingsValues {
+export interface DetectionSettingsAttributes extends DetectionSettingsValues {
   /**
    * Zone that owns this fraud-detection configuration.
    */
@@ -90,13 +90,13 @@ export interface FraudDetectionSettingsAttributes extends FraudDetectionSettings
    * first wrote to the zone. `delete` restores these values for the
    * fields this resource managed.
    */
-  initialSettings: FraudDetectionSettingsValues;
+  initialSettings: DetectionSettingsValues;
 }
 
-export type FraudDetectionSettings = Resource<
+export type DetectionSettings = Resource<
   FraudDetectionSettingsTypeId,
-  FraudDetectionSettingsProps,
-  FraudDetectionSettingsAttributes,
+  DetectionSettingsProps,
+  DetectionSettingsAttributes,
   never,
   Providers
 >;
@@ -125,7 +125,7 @@ export type FraudDetectionSettings = Resource<
  * @section Fraud User Profiles
  * @example Enable user profiles with a username expression
  * ```typescript
- * yield* Cloudflare.Fraud.FraudDetectionSettings("Fraud", {
+ * yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
  *   userProfiles: "enabled",
  *   usernameExpressions: [
@@ -137,7 +137,7 @@ export type FraudDetectionSettings = Resource<
  * @section Authentication outcome classification
  * @example Classify login success and failure by origin status code
  * ```typescript
- * yield* Cloudflare.Fraud.FraudDetectionSettings("Fraud", {
+ * yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
  *   userProfiles: "enabled",
  *   authenticationSettings: {
@@ -150,7 +150,7 @@ export type FraudDetectionSettings = Resource<
  * @section Username expressions only
  * @example Clear all username expressions
  * ```typescript
- * yield* Cloudflare.Fraud.FraudDetectionSettings("Fraud", {
+ * yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
  *   zoneId: zone.zoneId,
  *   usernameExpressions: [],
  * });
@@ -158,16 +158,16 @@ export type FraudDetectionSettings = Resource<
  *
  * @see https://developers.cloudflare.com/bots/additional-configurations/fraud-detection/
  */
-export const FraudDetectionSettings = Resource<FraudDetectionSettings>(
+export const DetectionSettings = Resource<DetectionSettings>(
   FraudDetectionSettingsTypeId,
 );
 
 /**
- * Returns true if the given value is a FraudDetectionSettings resource.
+ * Returns true if the given value is a DetectionSettings resource.
  */
-export const isFraudDetectionSettings = (
+export const isDetectionSettings = (
   value: unknown,
-): value is FraudDetectionSettings =>
+): value is DetectionSettings =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === FraudDetectionSettingsTypeId;
 
@@ -183,8 +183,8 @@ const SETTINGS_KEYS = [
 
 type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
-export const FraudDetectionSettingsProvider = () =>
-  Provider.succeed(FraudDetectionSettings, {
+export const DetectionSettingsProvider = () =>
+  Provider.succeed(DetectionSettings, {
     nuke: { singleton: true },
     stables: ["zoneId", "initialSettings"],
 
@@ -208,7 +208,7 @@ export const FraudDetectionSettingsProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is FraudDetectionSettingsAttributes => row !== undefined,
+        (row): row is DetectionSettingsAttributes => row !== undefined,
       );
     }),
 
@@ -277,7 +277,7 @@ export const FraudDetectionSettingsProvider = () =>
       if (!observed) return; // zone is gone — nothing to restore
       const managed = pickSettings(olds ?? {});
       const current = pickSettings(observed);
-      const restore: FraudDetectionSettingsValues = {};
+      const restore: DetectionSettingsValues = {};
       for (const key of SETTINGS_KEYS) {
         const snapshot = output.initialSettings?.[key];
         if (
@@ -321,7 +321,7 @@ const normalizeCriteria = (
     | { kind: "status_code"; statusCodes?: readonly number[] | null }
     | null
     | undefined,
-): FraudAuthenticationCriteria | undefined => {
+): AuthenticationCriteria | undefined => {
   if (criteria == null) return undefined;
   const statusCodes = undef(criteria.statusCodes);
   return {
@@ -332,7 +332,7 @@ const normalizeCriteria = (
 
 const normalizeAuthenticationSettings = (
   settings: ObservedFraudSettings["authenticationSettings"],
-): FraudAuthenticationSettings | undefined => {
+): AuthenticationSettings | undefined => {
   if (settings == null) return undefined;
   const successCriteria = normalizeCriteria(settings.successCriteria);
   const failureCriteria = normalizeCriteria(settings.failureCriteria);
@@ -351,9 +351,9 @@ const normalizeAuthenticationSettings = (
  * nested nullable fields.
  */
 const pickSettings = (
-  source: ObservedFraudSettings | FraudDetectionSettingsValues,
-): FraudDetectionSettingsValues => {
-  const out: FraudDetectionSettingsValues = {};
+  source: ObservedFraudSettings | DetectionSettingsValues,
+): DetectionSettingsValues => {
+  const out: DetectionSettingsValues = {};
   const userProfiles = undef(source.userProfiles);
   if (userProfiles === "enabled") {
     out.userProfiles = "enabled";
@@ -378,8 +378,8 @@ const pickSettings = (
  * desired fields are ignored — they are dashboard-managed.
  */
 const settingsEqual = (
-  desired: FraudDetectionSettingsValues,
-  observed: FraudDetectionSettingsValues,
+  desired: DetectionSettingsValues,
+  observed: DetectionSettingsValues,
 ): boolean =>
   SETTINGS_KEYS.every(
     (key) =>
@@ -389,8 +389,8 @@ const settingsEqual = (
 const toAttributes = (
   zoneId: string,
   observed: ObservedFraudSettings,
-  initialSettings: FraudDetectionSettingsValues,
-): FraudDetectionSettingsAttributes => ({
+  initialSettings: DetectionSettingsValues,
+): DetectionSettingsAttributes => ({
   zoneId,
   ...pickSettings(observed),
   initialSettings,

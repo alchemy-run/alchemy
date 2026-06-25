@@ -43,7 +43,7 @@ export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
  * and polls `GET /count?name=K` until the count matches.
  *
  * `Cloudflare.Queue.messages(...).subscribe(...)` (in QueueWorker below)
- * auto-creates the matching `Cloudflare.Queue.QueueConsumer` resource at
+ * auto-creates the matching `Cloudflare.Queue.Consumer` resource at
  * deploy time, so this fixture has no separate consumer wiring.
  */
 export const RoundTripQueue = Cloudflare.Queue.Queue("RoundTripQueue");
@@ -71,7 +71,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     // exercises that a `Duration` value (`maxWaitTime`) and a
     // string (`retryDelay: "1 second"`) both type-check at the
     // `Cloudflare.Queue.messages(...)` call site and survive the convert-
-    // and-forward path into Cloudflare's QueueConsumer settings.
+    // and-forward path into Cloudflare's Consumer settings.
     // Values are kept small so the round-trip latency stays well
     // under the test's 240s timeout.
     yield* Cloudflare.Queue.messages<QueueMessageBody>(queueResource, {
@@ -111,6 +111,6 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     };
   }).pipe(
     Effect.provide(Cloudflare.Queue.WriteQueueBinding),
-    Effect.provide(Cloudflare.Queue.QueueEventSourceLive),
+    Effect.provide(Cloudflare.Queue.EventSourceLive),
   ),
 ) {}

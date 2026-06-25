@@ -2,14 +2,14 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { R2Bucket } from "./Bucket.ts";
+import type { Bucket } from "./Bucket.ts";
 import type {
   R2Error,
-  R2GetOptions,
-  R2ListOptions,
+  GetOptions,
+  ListOptions,
   R2Object,
-  R2ObjectBody,
-  R2Objects,
+  ObjectBody,
+  Objects,
 } from "./BucketTypes.ts";
 
 /**
@@ -20,7 +20,7 @@ import type {
 export interface ReadBucket extends Binding.Service<
   ReadBucket,
   "Cloudflare.R2.ReadBucket",
-  (bucket: R2Bucket) => Effect.Effect<ReadBucketClient>
+  (bucket: Bucket) => Effect.Effect<ReadBucketClient>
 > {}
 
 export const ReadBucket = Binding.Service<ReadBucket>(
@@ -32,15 +32,13 @@ export interface ReadBucketClient {
   head(key: string): Effect.Effect<R2Object | null, R2Error, RuntimeContext>;
   get(
     key: string,
-    options: R2GetOptions & {
+    options: GetOptions & {
       onlyIf: runtime.R2Conditional | Headers;
     },
-  ): Effect.Effect<R2ObjectBody | R2Object | null, R2Error, RuntimeContext>;
+  ): Effect.Effect<ObjectBody | R2Object | null, R2Error, RuntimeContext>;
   get(
     key: string,
-    options?: R2GetOptions,
-  ): Effect.Effect<R2ObjectBody | null, R2Error, RuntimeContext>;
-  list(
-    options?: R2ListOptions,
-  ): Effect.Effect<R2Objects, R2Error, RuntimeContext>;
+    options?: GetOptions,
+  ): Effect.Effect<ObjectBody | null, R2Error, RuntimeContext>;
+  list(options?: ListOptions): Effect.Effect<Objects, R2Error, RuntimeContext>;
 }

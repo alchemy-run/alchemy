@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { R2Bucket } from "./Bucket.ts";
+import type { Bucket } from "./Bucket.ts";
 
 const R2BucketEventNotificationTypeId =
   "Cloudflare.R2.BucketEventNotification" as const;
@@ -24,7 +24,7 @@ type R2BucketEventNotificationTypeId = typeof R2BucketEventNotificationTypeId;
  * - `CompleteMultipartUpload` — a multipart upload completes
  * - `LifecycleDeletion` — an object is deleted by a lifecycle rule
  */
-export type R2BucketEventNotificationAction =
+export type BucketEventNotificationAction =
   | "PutObject"
   | "CopyObject"
   | "DeleteObject"
@@ -36,11 +36,11 @@ export type R2BucketEventNotificationAction =
  * when an object matching the rule's `prefix`/`suffix` undergoes one of
  * the rule's `actions`.
  */
-export interface R2BucketEventNotificationRule {
+export interface BucketEventNotificationRule {
   /**
    * Object actions that trigger a notification for this rule.
    */
-  actions: R2BucketEventNotificationAction[];
+  actions: BucketEventNotificationAction[];
   /**
    * Only notify for objects whose key starts with this prefix.
    * @default "" (match all objects)
@@ -58,10 +58,10 @@ export interface R2BucketEventNotificationRule {
   description?: string;
 }
 
-export interface R2BucketEventNotificationProps {
+export interface BucketEventNotificationProps {
   /**
    * Name of the R2 bucket that produces the events. Pass
-   * `bucket.bucketName` from a `Cloudflare.R2.R2Bucket`.
+   * `bucket.bucketName` from a `Cloudflare.R2.Bucket`.
    *
    * Immutable — changing the bucket triggers a replacement.
    */
@@ -79,7 +79,7 @@ export interface R2BucketEventNotificationProps {
    * Immutable — changing the jurisdiction triggers a replacement.
    * @default "default"
    */
-  jurisdiction?: R2Bucket.Jurisdiction;
+  jurisdiction?: Bucket.Jurisdiction;
   /**
    * Rules that decide which object events are delivered to the queue.
    * The full set is replaced on every update (the provider clears the
@@ -90,10 +90,10 @@ export interface R2BucketEventNotificationProps {
    * overlap ("invalid overlap"), even when their actions are disjoint —
    * scope each rule to a distinct key range.
    */
-  rules: R2BucketEventNotificationRule[];
+  rules: BucketEventNotificationRule[];
 }
 
-export interface R2BucketEventNotificationAttributes {
+export interface BucketEventNotificationAttributes {
   /** Name of the bucket that produces the events. */
   bucketName: string;
   /** ID of the queue that receives the event messages. */
@@ -103,15 +103,15 @@ export interface R2BucketEventNotificationAttributes {
   /** Account the configuration lives in. */
   accountId: string;
   /** Jurisdiction of the bucket. */
-  jurisdiction: R2Bucket.Jurisdiction;
+  jurisdiction: Bucket.Jurisdiction;
   /** The active notification rules, including server-assigned rule IDs. */
-  rules: R2BucketEventNotification.Rule[];
+  rules: BucketEventNotification.Rule[];
 }
 
-export type R2BucketEventNotification = Resource<
+export type BucketEventNotification = Resource<
   R2BucketEventNotificationTypeId,
-  R2BucketEventNotificationProps,
-  R2BucketEventNotificationAttributes,
+  BucketEventNotificationProps,
+  BucketEventNotificationAttributes,
   never,
   Providers
 >;
@@ -134,10 +134,10 @@ export type R2BucketEventNotification = Resource<
  * @section Notifying a Queue
  * @example Notify on every upload and delete
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("Uploads");
+ * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  * const queue = yield* Cloudflare.Queue.Queue("UploadEvents");
  *
- * yield* Cloudflare.R2.R2BucketEventNotification("UploadNotifications", {
+ * yield* Cloudflare.R2.BucketEventNotification("UploadNotifications", {
  *   bucketName: bucket.bucketName,
  *   queueId: queue.queueId,
  *   rules: [
@@ -150,7 +150,7 @@ export type R2BucketEventNotification = Resource<
  *
  * @example Scope notifications to a key prefix and suffix
  * ```typescript
- * yield* Cloudflare.R2.R2BucketEventNotification("ImageNotifications", {
+ * yield* Cloudflare.R2.BucketEventNotification("ImageNotifications", {
  *   bucketName: bucket.bucketName,
  *   queueId: queue.queueId,
  *   rules: [
@@ -169,7 +169,7 @@ export type R2BucketEventNotification = Resource<
  * ```typescript
  * // Rules must cover non-overlapping key ranges — Cloudflare rejects
  * // overlapping prefixes/suffixes even when the actions are disjoint.
- * yield* Cloudflare.R2.R2BucketEventNotification("Notifications", {
+ * yield* Cloudflare.R2.BucketEventNotification("Notifications", {
  *   bucketName: bucket.bucketName,
  *   queueId: queue.queueId,
  *   rules: [
@@ -181,13 +181,13 @@ export type R2BucketEventNotification = Resource<
  *
  * @see https://developers.cloudflare.com/r2/buckets/event-notifications/
  */
-export const R2BucketEventNotification = Resource<R2BucketEventNotification>(
+export const BucketEventNotification = Resource<BucketEventNotification>(
   R2BucketEventNotificationTypeId,
 );
 
-export declare namespace R2BucketEventNotification {
+export declare namespace BucketEventNotification {
   export type Rule = {
-    actions: R2BucketEventNotificationAction[];
+    actions: BucketEventNotificationAction[];
     prefix: string;
     suffix: string;
     description: string | undefined;
@@ -197,21 +197,21 @@ export declare namespace R2BucketEventNotification {
 }
 
 /**
- * Returns true if the given value is an R2BucketEventNotification resource.
+ * Returns true if the given value is an BucketEventNotification resource.
  */
-export const isR2BucketEventNotification = (
+export const isBucketEventNotification = (
   value: unknown,
-): value is R2BucketEventNotification =>
+): value is BucketEventNotification =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === R2BucketEventNotificationTypeId;
 
-export const R2BucketEventNotificationProvider = () =>
-  Provider.succeed(R2BucketEventNotification, {
+export const BucketEventNotificationProvider = () =>
+  Provider.succeed(BucketEventNotification, {
     stables: ["bucketName", "queueId", "accountId", "jurisdiction"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Partial<R2BucketEventNotificationProps>;
-      const n = news as R2BucketEventNotificationProps;
+      const o = olds as Partial<BucketEventNotificationProps>;
+      const n = news as BucketEventNotificationProps;
       // No prior props to compare against — let the engine decide.
       if (o.bucketName === undefined) return undefined;
       // bucketName/queueId are Input<string>; compare only once both
@@ -396,7 +396,7 @@ export const R2BucketEventNotificationProvider = () =>
     // Parent fan-out: a notification configuration is keyed by (bucket,
     // queue) and there is no account-wide enumeration. Enumerate every R2
     // bucket (account-scoped), then list each bucket's event-notification
-    // queues — one (bucket, queue) pair is one R2BucketEventNotification.
+    // queues — one (bucket, queue) pair is one BucketEventNotification.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const buckets = yield* listAllBuckets(accountId);
@@ -405,10 +405,10 @@ export const R2BucketEventNotificationProvider = () =>
         (bucket) => {
           const bucketName = bucket.name;
           if (bucketName == null) {
-            return Effect.succeed([] as R2BucketEventNotificationAttributes[]);
+            return Effect.succeed([] as BucketEventNotificationAttributes[]);
           }
           const jurisdiction = (bucket.jurisdiction ??
-            "default") as R2Bucket.Jurisdiction;
+            "default") as Bucket.Jurisdiction;
           return r2
             .listBucketEventNotifications({
               accountId,
@@ -423,7 +423,7 @@ export const R2BucketEventNotificationProvider = () =>
                       q.queueId != null,
                   )
                   .map(
-                    (q): R2BucketEventNotificationAttributes => ({
+                    (q): BucketEventNotificationAttributes => ({
                       bucketName,
                       // The endpoint echoes the queue ID in dashed-UUID
                       // form; normalise to the undashed form
@@ -446,8 +446,7 @@ export const R2BucketEventNotificationProvider = () =>
                   // Plan-gated / partial buckets reject the route.
                   "InvalidRoute",
                 ],
-                () =>
-                  Effect.succeed([] as R2BucketEventNotificationAttributes[]),
+                () => Effect.succeed([] as BucketEventNotificationAttributes[]),
               ),
             );
         },
@@ -493,7 +492,7 @@ const getConfiguration = (
   accountId: string,
   bucketName: string,
   queueId: string,
-  jurisdiction: R2Bucket.Jurisdiction,
+  jurisdiction: Bucket.Jurisdiction,
 ) =>
   r2
     .getBucketEventNotification({
@@ -527,10 +526,10 @@ type ObservedRule = NonNullable<
 
 const toRuleAttributes = (
   rule: ObservedRule,
-): R2BucketEventNotification.Rule => ({
+): BucketEventNotification.Rule => ({
   // Distilled widens generated string enums to open unions; the API only
   // returns the known action variants.
-  actions: [...rule.actions] as R2BucketEventNotificationAction[],
+  actions: [...rule.actions] as BucketEventNotificationAction[],
   prefix: rule.prefix ?? "",
   suffix: rule.suffix ?? "",
   description: rule.description ?? undefined,
@@ -543,8 +542,8 @@ const toAttributes = (
   accountId: string,
   bucketName: string,
   queueId: string,
-  jurisdiction: R2Bucket.Jurisdiction,
-): R2BucketEventNotificationAttributes => ({
+  jurisdiction: Bucket.Jurisdiction,
+): BucketEventNotificationAttributes => ({
   bucketName,
   // The endpoint echoes the queue ID in dashed-UUID form while the Queues
   // API uses the undashed form — keep the canonical input ID so attributes
@@ -579,7 +578,7 @@ const ruleIdentity = (rule: {
  */
 const sameRules = (
   observed: readonly ObservedRule[],
-  desired: readonly R2BucketEventNotificationRule[],
+  desired: readonly BucketEventNotificationRule[],
 ): boolean => {
   if (observed.length !== desired.length) return false;
   const observedKeys = observed.map(ruleIdentity).sort();

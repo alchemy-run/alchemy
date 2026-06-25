@@ -13,7 +13,7 @@ import type { Providers } from "../Providers.ts";
 const DnsViewTypeId = "Cloudflare.Dns.View" as const;
 type DnsViewTypeId = typeof DnsViewTypeId;
 
-export interface DnsViewProps {
+export interface ViewProps {
   /**
    * Name of the view. If omitted, a unique name is generated from the
    * app, stage, and logical ID.
@@ -31,7 +31,7 @@ export interface DnsViewProps {
   zones: string[];
 }
 
-export interface DnsViewAttributes {
+export interface ViewAttributes {
   /** Identifier of the view. */
   viewId: string;
   /** The Cloudflare account the view belongs to. */
@@ -46,10 +46,10 @@ export interface DnsViewAttributes {
   modifiedTime: string;
 }
 
-export type DnsView = Resource<
+export type View = Resource<
   DnsViewTypeId,
-  DnsViewProps,
-  DnsViewAttributes,
+  ViewProps,
+  ViewAttributes,
   never,
   Providers
 >;
@@ -68,14 +68,14 @@ export type DnsView = Resource<
  * @section Creating a View
  * @example View over internal zones
  * ```typescript
- * const view = yield* Cloudflare.Dns.DnsView("Internal", {
+ * const view = yield* Cloudflare.Dns.View("Internal", {
  *   zones: [internalZone.zoneId],
  * });
  * ```
  *
  * @example View with an explicit name
  * ```typescript
- * const view = yield* Cloudflare.Dns.DnsView("Internal", {
+ * const view = yield* Cloudflare.Dns.View("Internal", {
  *   name: "datacenter-east",
  *   zones: [zoneA.zoneId, zoneB.zoneId],
  * });
@@ -83,16 +83,16 @@ export type DnsView = Resource<
  *
  * @see https://developers.cloudflare.com/dns/internal-dns/
  */
-export const DnsView = Resource<DnsView>(DnsViewTypeId);
+export const View = Resource<View>(DnsViewTypeId);
 
 /**
- * Returns true if the given value is a DnsView resource.
+ * Returns true if the given value is a View resource.
  */
-export const isDnsView = (value: unknown): value is DnsView =>
+export const isView = (value: unknown): value is View =>
   Predicate.hasProperty(value, "Type") && value.Type === DnsViewTypeId;
 
-export const DnsViewProvider = () =>
-  Provider.succeed(DnsView, {
+export const ViewProvider = () =>
+  Provider.succeed(View, {
     stables: ["viewId", "accountId", "createdTime"],
 
     // Account collection — internal DNS views are enumerated per account
@@ -217,7 +217,7 @@ const sameZones = (observed: readonly string[], desired: readonly string[]) =>
 const toAttributes = (
   view: ObservedView,
   accountId: string,
-): DnsViewAttributes => ({
+): ViewAttributes => ({
   viewId: view.id,
   accountId,
   name: view.name,

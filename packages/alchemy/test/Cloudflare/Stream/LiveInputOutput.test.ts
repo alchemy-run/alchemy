@@ -66,19 +66,13 @@ test.provider(
         enabled?: boolean;
       }) =>
         Effect.gen(function* () {
-          const input = yield* Cloudflare.Stream.StreamLiveInput(
-            "RestreamInput",
-            {
-              meta: { name: "alchemy-stream-output-input" },
-            },
-          );
-          const output = yield* Cloudflare.Stream.StreamLiveInputOutput(
-            "Restream",
-            {
-              liveInputId: input.liveInputId,
-              ...props,
-            },
-          );
+          const input = yield* Cloudflare.Stream.LiveInput("RestreamInput", {
+            meta: { name: "alchemy-stream-output-input" },
+          });
+          const output = yield* Cloudflare.Stream.LiveInputOutput("Restream", {
+            liveInputId: input.liveInputId,
+            ...props,
+          });
           return { input, output };
         });
 
@@ -180,13 +174,10 @@ test.provider(
 
       const deployOutput = (enabled?: boolean) =>
         Effect.gen(function* () {
-          const input = yield* Cloudflare.Stream.StreamLiveInput(
-            "HealOutputInput",
-            {
-              meta: { name: "alchemy-stream-output-heal-input" },
-            },
-          );
-          const output = yield* Cloudflare.Stream.StreamLiveInputOutput(
+          const input = yield* Cloudflare.Stream.LiveInput("HealOutputInput", {
+            meta: { name: "alchemy-stream-output-heal-input" },
+          });
+          const output = yield* Cloudflare.Stream.LiveInputOutput(
             "HealOutput",
             {
               liveInputId: input.liveInputId,
@@ -254,13 +245,10 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const input = yield* Cloudflare.Stream.StreamLiveInput(
-            "ListOutputInput",
-            {
-              meta: { name: "alchemy-stream-output-list-input" },
-            },
-          );
-          const output = yield* Cloudflare.Stream.StreamLiveInputOutput(
+          const input = yield* Cloudflare.Stream.LiveInput("ListOutputInput", {
+            meta: { name: "alchemy-stream-output-list-input" },
+          });
+          const output = yield* Cloudflare.Stream.LiveInputOutput(
             "ListOutput",
             {
               liveInputId: input.liveInputId,
@@ -273,7 +261,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Stream.StreamLiveInputOutput,
+        Cloudflare.Stream.LiveInputOutput,
       );
 
       // Edge propagation: the freshly-created output (and its parent live

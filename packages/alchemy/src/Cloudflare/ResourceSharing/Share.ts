@@ -156,7 +156,7 @@ export type Share = Resource<
  * @section Creating a Share
  * @example Share a gateway policy with another account
  * ```typescript
- * const policy = yield* Cloudflare.Gateway.GatewayRule("BlockPhishing", {
+ * const policy = yield* Cloudflare.Gateway.Rule("BlockPhishing", {
  *   action: "block",
  *   traffic: 'dns.fqdn == "phishing.example"',
  *   filters: ["dns"],

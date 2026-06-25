@@ -12,13 +12,13 @@ import type { FunctionContext } from "../../Serverless/Function.ts";
 import * as DurationUtil from "../../Util/Duration.ts";
 import { isWorker, isWorkerEvent } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
-import { QueueConsumer } from "./QueueConsumer.ts";
+import { Consumer } from "./Consumer.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
- * Subscriber settings — the same shape Cloudflare's `QueueConsumer`
+ * Subscriber settings — the same shape Cloudflare's `Consumer`
  * accepts. `messages(queue, props).subscribe(...)` passes these
- * through to the auto-created `Cloudflare.Queue.QueueConsumer` so a single
+ * through to the auto-created `Cloudflare.Queue.Consumer` so a single
  * call captures both runtime and deploy-time intent.
  */
 export interface MessagesProps {
@@ -44,12 +44,12 @@ export interface MessagesProps {
 
 /**
  * Convert a {@link MessagesProps} (with `Duration.Input` time fields)
- * into the numeric settings shape Cloudflare's `QueueConsumer` API
+ * into the numeric settings shape Cloudflare's `Consumer` API
  * expects. `maxWaitTime` is rounded up to whole milliseconds and
  * `retryDelay` to whole seconds.
  *
  * Exposed for testing and for callers that want to mirror the
- * conversion when wiring `QueueConsumer` directly.
+ * conversion when wiring `Consumer` directly.
  */
 export const toConsumerSettings = (props: MessagesProps) => ({
   batchSize: props.batchSize,
@@ -64,7 +64,7 @@ export const toConsumerSettings = (props: MessagesProps) => ({
  * Cloudflare's runtime `Message<Body>` shape so per-message
  * `ack()` / `retry()` semantics match the platform docs.
  */
-export type QueueMessage<Body = unknown> = cf.Message<Body>;
+export type Message<Body = unknown> = cf.Message<Body>;
 
 /**
  * Subscribe to a Cloudflare Queue with an Effect stream handler.
@@ -74,9 +74,9 @@ export type QueueMessage<Body = unknown> = cf.Message<Body>;
  *
  * - **Runtime**: registers a `queue` event listener on the Worker.
  *   Each batch is piped through `process` as a `Stream.Stream`.
- * - **Deploy-time**: yields a `Cloudflare.Queue.QueueConsumer` resource
+ * - **Deploy-time**: yields a `Cloudflare.Queue.Consumer` resource
  *   so Cloudflare actually dispatches messages from `queue` to
- *   this Worker. No manual `QueueConsumer` wiring needed in
+ *   this Worker. No manual `Consumer` wiring needed in
  *   `alchemy.run.ts`.
  *
  * Acking semantics: if `process` succeeds, every message in the
@@ -113,10 +113,9 @@ export const messages = <Body = unknown>(
 ) => ({
   subscribe: <Req = never>(
     process: (
-      stream: Stream.Stream<QueueMessage<Body>>,
+      stream: Stream.Stream<Message<Body>>,
     ) => Effect.Effect<void, unknown, Req>,
-  ) =>
-    QueueEventSource.use((source) => source<Body, Req>(queue, props, process)),
+  ) => EventSource.use((source) => source<Body, Req>(queue, props, process)),
 });
 
 // `Req` is the handler's requirements. The service registers the
@@ -124,39 +123,39 @@ export const messages = <Body = unknown>(
 // machinery provides bindings and `WorkerEnvironment` when the
 // dispatch fires — so the requirement is satisfied at handler
 // invocation, NOT at subscribe time. We drop `Req` from the return
-// to keep init effects clean (mirrors `AWS.SQS.QueueEventSourceService`).
-export type QueueEventSourceService = <Body = unknown, Req = never>(
+// to keep init effects clean (mirrors `AWS.SQS.EventSourceService`).
+export type EventSourceService = <Body = unknown, Req = never>(
   queue: Queue,
   props: MessagesProps,
   process: (
-    stream: Stream.Stream<QueueMessage<Body>>,
+    stream: Stream.Stream<Message<Body>>,
   ) => Effect.Effect<void, unknown, Req>,
 ) => Effect.Effect<void, never, never>;
 
 /**
  * Service tag for the Cloudflare Queue event source. Provided by
- * {@link QueueEventSourceLive} on the Worker's runtime layer.
+ * {@link EventSourceLive} on the Worker's runtime layer.
  */
-export class QueueEventSource extends Context.Service<
-  QueueEventSource,
-  QueueEventSourceService
->()("Cloudflare.Queue.QueueEventSource") {}
+export class EventSource extends Context.Service<
+  EventSource,
+  EventSourceService
+>()("Cloudflare.Queue.EventSource") {}
 
 /**
- * Deploy-time policy that yields a `Cloudflare.Queue.QueueConsumer`
+ * Deploy-time policy that yields a `Cloudflare.Queue.Consumer`
  * resource pointing the host Worker at the queue. Provided in
- * `Cloudflare.providers()` and used by {@link QueueEventSourceLive}
- * via `yield* QueueEventSourcePolicy(...)`. At runtime the policy
+ * `Cloudflare.providers()` and used by {@link EventSourceLive}
+ * via `yield* EventSourcePolicy(...)`. At runtime the policy
  * is absent, so the call is a no-op.
  */
-export class QueueEventSourcePolicy extends Binding.Policy<
-  QueueEventSourcePolicy,
+export class EventSourcePolicy extends Binding.Policy<
+  EventSourcePolicy,
   (queue: Queue, props: MessagesProps) => Effect.Effect<void>,
   Providers
->()("Cloudflare.Queue.QueueEventSource") {}
+>()("Cloudflare.Queue.EventSource") {}
 
-export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(
-  // Cast: yielding `QueueConsumer(...)` requires the Cloudflare
+export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
+  // Cast: yielding `Consumer(...)` requires the Cloudflare
   // `Providers` services, which the deploy-time stack provides
   // when this policy runs (the worker's init scope inherits the
   // stack's services). `Binding.Policy.layer.succeed` types the
@@ -171,13 +170,13 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(
             `Cloudflare.Worker hosts (got '${host.Type}').`,
         );
       }
-      // Yield the QueueConsumer resource as a sibling of the
+      // Yield the Consumer resource as a sibling of the
       // Worker. The engine creates / updates / destroys it
       // alongside the Worker's lifecycle; the consumer's
       // reconciler waits for the Worker upload to expose the
       // `queue` handler before completing (see PR #257 for the
       // 11001 retry).
-      yield* QueueConsumer(`${queue.LogicalId}Consumer`, {
+      yield* Consumer(`${queue.LogicalId}Consumer`, {
         queueId: queue.queueId,
         scriptName: host.workerName,
         settings: toConsumerSettings(props),
@@ -194,25 +193,25 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(
  * Runtime layer for {@link messages}. Wires each
  * `messages(queue).subscribe(...)` call in the Worker init phase to
  * a `queue` event listener on the runtime context, and asks the
- * deploy-time policy ({@link QueueEventSourcePolicy}, provided in
+ * deploy-time policy ({@link EventSourcePolicy}, provided in
  * `Cloudflare.providers()`) to yield the matching
- * `Cloudflare.Queue.QueueConsumer` resource.
+ * `Cloudflare.Queue.Consumer` resource.
  *
  * Provide alongside other Cloudflare runtime layers (e.g.
  * `WriteQueueBinding`) on the Worker effect.
  */
-export const QueueEventSourceLive = Layer.effect(
-  QueueEventSource,
+export const EventSourceLive = Layer.effect(
+  EventSource,
   Effect.gen(function* () {
-    const policy = yield* QueueEventSourcePolicy;
+    const policy = yield* EventSourcePolicy;
     return Effect.fn(function* <Body, Req>(
       queue: Queue,
       props: MessagesProps,
       process: (
-        stream: Stream.Stream<QueueMessage<Body>>,
+        stream: Stream.Stream<Message<Body>>,
       ) => Effect.Effect<void, unknown, Req>,
     ) {
-      // Deploy-time: ensure the QueueConsumer resource exists. At
+      // Deploy-time: ensure the Consumer resource exists. At
       // runtime this Layer's `policy` resolves to the no-op variant
       // (Binding.Policy provides that automatically via
       // `Effect.serviceOption`), so this becomes a no-op.
@@ -251,7 +250,7 @@ export const QueueEventSourceLive = Layer.effect(
                 // signal is the message reappearing on the next
                 // attempt.
                 console.error(
-                  `[QueueEventSource] handler failed on queue ` +
+                  `[EventSource] handler failed on queue ` +
                     `"${queueName}": ${Cause.pretty(cause)}`,
                 );
                 for (const msg of batch.messages) msg.retry();
@@ -261,6 +260,6 @@ export const QueueEventSourceLive = Layer.effect(
           );
         });
       });
-    }) as QueueEventSourceService;
+    }) as EventSourceService;
   }),
 );

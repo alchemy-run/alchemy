@@ -26,7 +26,7 @@ import type { Self } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
-import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
+import type { DevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import type { Providers } from "../Providers.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObjectNamespace.ts";
@@ -372,7 +372,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     bindings?: WorkerBinding[];
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
-    hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
+    hyperdrives?: Record<string, Required<DevOrigin>>;
   },
   Providers
 >;
@@ -431,7 +431,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * // alchemy.run.ts
  * const db = yield* Cloudflare.D1.Database("DB");
- * const bucket = yield* Cloudflare.R2.R2Bucket("Bucket");
+ * const bucket = yield* Cloudflare.R2.Bucket("Bucket");
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
  *

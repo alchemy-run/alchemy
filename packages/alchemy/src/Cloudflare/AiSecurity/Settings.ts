@@ -11,7 +11,7 @@ import { listAllZones } from "../Zone/lookup.ts";
 const AiSecuritySettingsTypeId = "Cloudflare.AiSecurity.Settings" as const;
 type AiSecuritySettingsTypeId = typeof AiSecuritySettingsTypeId;
 
-export type AiSecuritySettingsProps = {
+export type SettingsProps = {
   /**
    * Zone the AI Security settings belong to. Stable — changing the zone
    * triggers a replacement (the old zone's setting is restored to the
@@ -27,7 +27,7 @@ export type AiSecuritySettingsProps = {
   enabled?: boolean;
 };
 
-export type AiSecuritySettingsAttributes = {
+export type SettingsAttributes = {
   /** Zone the AI Security settings belong to. */
   zoneId: string;
   /** Whether AI Security for Apps is currently enabled on the zone. */
@@ -40,10 +40,10 @@ export type AiSecuritySettingsAttributes = {
   initialEnabled: boolean;
 };
 
-export type AiSecuritySettings = Resource<
+export type Settings = Resource<
   AiSecuritySettingsTypeId,
-  AiSecuritySettingsProps,
-  AiSecuritySettingsAttributes,
+  SettingsProps,
+  SettingsAttributes,
   never,
   Providers
 >;
@@ -57,7 +57,7 @@ export type AiSecuritySettings = Resource<
  * value when the observed value differs; destroy restores the value the
  * zone had before Alchemy first managed it.
  *
- * Declare at most one `AiSecuritySettings` per zone — two instances
+ * Declare at most one `Settings` per zone — two instances
  * managing the same zone would fight over the single underlying setting.
  *
  * AI Security for Apps is entitlement-gated: on accounts without the
@@ -69,7 +69,7 @@ export type AiSecuritySettings = Resource<
  * @section Enabling AI Security
  * @example Enable AI Security for Apps on a zone
  * ```typescript
- * const settings = yield* Cloudflare.AiSecurity.AiSecuritySettings("AiSecurity", {
+ * const settings = yield* Cloudflare.AiSecurity.Settings("AiSecurity", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -77,7 +77,7 @@ export type AiSecuritySettings = Resource<
  *
  * @example Pin AI Security off
  * ```typescript
- * yield* Cloudflare.AiSecurity.AiSecuritySettings("AiSecurity", {
+ * yield* Cloudflare.AiSecurity.Settings("AiSecurity", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -85,21 +85,17 @@ export type AiSecuritySettings = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/firewall-for-ai/
  */
-export const AiSecuritySettings = Resource<AiSecuritySettings>(
-  AiSecuritySettingsTypeId,
-);
+export const Settings = Resource<Settings>(AiSecuritySettingsTypeId);
 
 /**
- * Returns true if the given value is an AiSecuritySettings resource.
+ * Returns true if the given value is an Settings resource.
  */
-export const isAiSecuritySettings = (
-  value: unknown,
-): value is AiSecuritySettings =>
+export const isSettings = (value: unknown): value is Settings =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === AiSecuritySettingsTypeId;
 
-export const AiSecuritySettingsProvider = () =>
-  Provider.succeed(AiSecuritySettings, {
+export const SettingsProvider = () =>
+  Provider.succeed(Settings, {
     stables: ["zoneId", "initialEnabled"],
 
     list: Effect.fn(function* () {
@@ -112,7 +108,7 @@ export const AiSecuritySettingsProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           aiSecurity.getAiSecurity({ zoneId }).pipe(
-            Effect.map((observed): AiSecuritySettingsAttributes => {
+            Effect.map((observed): SettingsAttributes => {
               const enabled = observed.enabled ?? false;
               return { zoneId, enabled, initialEnabled: enabled };
             }),
@@ -127,14 +123,12 @@ export const AiSecuritySettingsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is AiSecuritySettingsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SettingsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as AiSecuritySettingsProps;
-      const n = news as AiSecuritySettingsProps;
+      const o = olds as SettingsProps;
+      const n = news as SettingsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);

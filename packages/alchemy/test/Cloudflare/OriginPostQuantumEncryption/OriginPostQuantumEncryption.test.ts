@@ -52,7 +52,7 @@ const getSetting = (zoneId: string) =>
 // run left behind. Cloudflare's documented default is "supported".
 const setBaseline = (
   zoneId: string,
-  value: Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryptionValue,
+  value: Cloudflare.OriginPostQuantumEncryption.Value,
 ) =>
   pqe.putOriginPostQuantumEncryption({ zoneId, value }).pipe(
     Effect.retry({

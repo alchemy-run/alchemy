@@ -57,7 +57,7 @@ const etl = (creds: {
   secretAccessKey: Redacted.Redacted<string>;
 }) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.R2Bucket("SinkBucket", {});
+    const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
     const stream = yield* Cloudflare.Pipelines.PipelineStream("Stream", {});
     const sink = yield* Cloudflare.Pipelines.PipelineSink("Sink", {
       type: "r2",

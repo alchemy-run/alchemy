@@ -93,7 +93,7 @@ const legacy = (
   opts: LegacyOpts = {},
 ) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.R2Bucket("LegacyBucket", {});
+    const bucket = yield* Cloudflare.R2.Bucket("LegacyBucket", {});
     const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("Legacy", {
       name: opts.name,
       source: [

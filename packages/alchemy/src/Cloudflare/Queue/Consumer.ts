@@ -17,7 +17,7 @@ import {
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
-export type QueueConsumerProps = {
+export type ConsumerProps = {
   /**
    * The queue ID to attach the consumer to.
    */
@@ -33,10 +33,10 @@ export type QueueConsumerProps = {
   /**
    * Consumer settings.
    */
-  settings?: QueueConsumerSettings;
+  settings?: ConsumerSettings;
 };
 
-export interface QueueConsumerSettings {
+export interface ConsumerSettings {
   /**
    * The maximum number of messages per batch.
    * @default 10
@@ -62,16 +62,16 @@ export interface QueueConsumerSettings {
   retryDelay?: number;
 }
 
-export type QueueConsumer = Resource<
-  "Cloudflare.Queue.QueueConsumer",
-  QueueConsumerProps,
+export type Consumer = Resource<
+  "Cloudflare.Queue.Consumer",
+  ConsumerProps,
   {
     consumerId: string;
     queueId: string;
     scriptName: string;
     accountId: string;
     deadLetterQueue?: string;
-    settings?: QueueConsumerSettings;
+    settings?: ConsumerSettings;
   },
   never,
   Providers
@@ -96,7 +96,7 @@ export type QueueConsumer = Resource<
  * const queue = yield* Cloudflare.Queue.Queue("MyQueue");
  * const worker = yield* Cloudflare.Worker("Worker", { ... });
  *
- * yield* Cloudflare.Queue.QueueConsumer("MyConsumer", {
+ * yield* Cloudflare.Queue.Consumer("MyConsumer", {
  *   queueId: queue.queueId,
  *   scriptName: "my-worker",
  * });
@@ -104,7 +104,7 @@ export type QueueConsumer = Resource<
  *
  * @example Consumer with settings
  * ```typescript
- * yield* Cloudflare.Queue.QueueConsumer("MyConsumer", {
+ * yield* Cloudflare.Queue.Consumer("MyConsumer", {
  *   queueId: queue.queueId,
  *   scriptName: "my-worker",
  *   settings: {
@@ -115,9 +115,7 @@ export type QueueConsumer = Resource<
  * });
  * ```
  */
-export const QueueConsumer = Resource<QueueConsumer>(
-  "Cloudflare.Queue.QueueConsumer",
-);
+export const Consumer = Resource<Consumer>("Cloudflare.Queue.Consumer");
 
 // Cloudflare allows a single Worker consumer per queue, so the
 // first match in the paginated stream is the only one. Using
@@ -131,8 +129,8 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
     Effect.map(Option.getOrUndefined),
   );
 
-export const QueueConsumerProviderLive = () =>
-  Provider.succeed(QueueConsumer, {
+export const ConsumerProviderLive = () =>
+  Provider.succeed(Consumer, {
     // The `consumerId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
     stables: ["accountId"],
     // Queue consumers are sub-resources of a queue with no account-wide
@@ -160,35 +158,33 @@ export const QueueConsumerProviderLive = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).flatMap(
-                  (c): QueueConsumer["Attributes"][] => {
-                    if (c.type !== "worker" || !c.consumerId) return [];
-                    const s = c.settings ?? undefined;
-                    return [
-                      {
-                        consumerId: c.consumerId,
-                        queueId,
-                        scriptName: c.scriptName ?? "",
-                        accountId,
-                        deadLetterQueue: c.deadLetterQueue ?? undefined,
-                        settings: s
-                          ? {
-                              batchSize: s.batchSize ?? undefined,
-                              maxConcurrency: s.maxConcurrency ?? undefined,
-                              maxRetries: s.maxRetries ?? undefined,
-                              maxWaitTimeMs: s.maxWaitTimeMs ?? undefined,
-                              retryDelay: s.retryDelay ?? undefined,
-                            }
-                          : undefined,
-                      },
-                    ];
-                  },
-                ),
+                (page.result ?? []).flatMap((c): Consumer["Attributes"][] => {
+                  if (c.type !== "worker" || !c.consumerId) return [];
+                  const s = c.settings ?? undefined;
+                  return [
+                    {
+                      consumerId: c.consumerId,
+                      queueId,
+                      scriptName: c.scriptName ?? "",
+                      accountId,
+                      deadLetterQueue: c.deadLetterQueue ?? undefined,
+                      settings: s
+                        ? {
+                            batchSize: s.batchSize ?? undefined,
+                            maxConcurrency: s.maxConcurrency ?? undefined,
+                            maxRetries: s.maxRetries ?? undefined,
+                            maxWaitTimeMs: s.maxWaitTimeMs ?? undefined,
+                            retryDelay: s.retryDelay ?? undefined,
+                          }
+                        : undefined,
+                    },
+                  ];
+                }),
               ),
             ),
             // Queue deleted mid-list or partial entitlement — skip it.
             Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
-              Effect.succeed<QueueConsumer["Attributes"][]>([]),
+              Effect.succeed<Consumer["Attributes"][]>([]),
             ),
           ),
         { concurrency: 10 },
@@ -361,7 +357,7 @@ export const QueueConsumerProviderLive = () =>
             Effect.tapError((e) =>
               e._tag === "QueueHandlerMissing"
                 ? Effect.logDebug(
-                    `QueueConsumer create: worker ` +
+                    `Consumer create: worker ` +
                       `"${news.scriptName}" has no queue handler ` +
                       `yet (code 11001), retrying`,
                   )
@@ -558,9 +554,9 @@ const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
   Schedule.both(Schedule.recurs(30)),
 );
 
-export const QueueConsumerProviderLocal = () =>
+export const ConsumerProviderLocal = () =>
   RpcProvider.effect(
-    QueueConsumer,
+    Consumer,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       const localRuntimeState = yield* LocalRuntimeState;
@@ -605,7 +601,7 @@ export const QueueConsumerProviderLocal = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const consumer: QueueConsumer["Attributes"] = {
+          const consumer: Consumer["Attributes"] = {
             consumerId: output?.consumerId ?? `dev:${crypto.randomUUID()}`,
             queueId: news.queueId,
             scriptName: news.scriptName,
@@ -630,8 +626,8 @@ export const QueueConsumerProviderLocal = () =>
     }),
   );
 
-export const QueueConsumerProvider = () =>
+export const ConsumerProvider = () =>
   ProviderLayer.select({
-    local: () => QueueConsumerProviderLocal(),
-    live: () => QueueConsumerProviderLive(),
+    local: () => ConsumerProviderLocal(),
+    live: () => ConsumerProviderLive(),
   });

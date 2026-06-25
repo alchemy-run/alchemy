@@ -48,7 +48,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TokenValidation.TokenValidationRule,
+        Cloudflare.TokenValidation.Rule,
       );
       const all = yield* provider.list();
 
@@ -86,20 +86,17 @@ test.provider.skipIf(!entitledZoneId)(
               keys: [JWKS_KEY_1],
             },
           );
-          return yield* Cloudflare.TokenValidation.TokenValidationRule(
-            "JwtRule",
-            {
-              zoneId,
-              action: "log",
-              expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
-              selector: { include: [{ host: [zoneName] }] },
-            },
-          );
+          return yield* Cloudflare.TokenValidation.Rule("JwtRule", {
+            zoneId,
+            action: "log",
+            expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
+            selector: { include: [{ host: [zoneName] }] },
+          });
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TokenValidation.TokenValidationRule,
+        Cloudflare.TokenValidation.Rule,
       );
       const all = yield* provider.list();
 

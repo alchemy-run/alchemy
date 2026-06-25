@@ -13,7 +13,7 @@ const ZoneCustomNameserversTypeId =
   "Cloudflare.Zone.CustomNameservers" as const;
 type ZoneCustomNameserversTypeId = typeof ZoneCustomNameserversTypeId;
 
-export type ZoneCustomNameserversProps = {
+export type CustomNameserversProps = {
   /**
    * Zone whose account-level custom nameserver usage is managed. Stable —
    * changing the zone triggers a replacement (the old zone's configuration
@@ -42,7 +42,7 @@ export type ZoneCustomNameserversProps = {
   nsSet?: number;
 };
 
-export type ZoneCustomNameserversAttributes = {
+export type CustomNameserversAttributes = {
   /** Zone whose custom nameserver usage is managed. */
   zoneId: string;
   /** Whether the zone currently uses account-level custom nameservers. */
@@ -59,10 +59,10 @@ export type ZoneCustomNameserversAttributes = {
   initialNsSet: number | undefined;
 };
 
-export type ZoneCustomNameservers = Resource<
+export type CustomNameservers = Resource<
   ZoneCustomNameserversTypeId,
-  ZoneCustomNameserversProps,
-  ZoneCustomNameserversAttributes,
+  CustomNameserversProps,
+  CustomNameserversAttributes,
   never,
   Providers
 >;
@@ -86,7 +86,7 @@ export type ZoneCustomNameservers = Resource<
  * @section Enabling account custom nameservers
  * @example Use the account's default nameserver set
  * ```typescript
- * yield* Cloudflare.Zone.ZoneCustomNameservers("CustomNs", {
+ * yield* Cloudflare.Zone.CustomNameservers("CustomNs", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -94,7 +94,7 @@ export type ZoneCustomNameservers = Resource<
  *
  * @example Pin a specific nameserver set
  * ```typescript
- * yield* Cloudflare.Zone.ZoneCustomNameservers("CustomNs", {
+ * yield* Cloudflare.Zone.CustomNameservers("CustomNs", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  *   nsSet: 2,
@@ -104,7 +104,7 @@ export type ZoneCustomNameservers = Resource<
  * @section Disabling
  * @example Explicitly pin the zone to Cloudflare-assigned nameservers
  * ```typescript
- * yield* Cloudflare.Zone.ZoneCustomNameservers("CustomNs", {
+ * yield* Cloudflare.Zone.CustomNameservers("CustomNs", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -112,21 +112,21 @@ export type ZoneCustomNameservers = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/zones/subresources/custom_nameservers/
  */
-export const ZoneCustomNameservers = Resource<ZoneCustomNameservers>(
+export const CustomNameservers = Resource<CustomNameservers>(
   ZoneCustomNameserversTypeId,
 );
 
 /**
- * Returns true if the given value is a ZoneCustomNameservers resource.
+ * Returns true if the given value is a CustomNameservers resource.
  */
-export const isZoneCustomNameservers = (
+export const isCustomNameservers = (
   value: unknown,
-): value is ZoneCustomNameservers =>
+): value is CustomNameservers =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === ZoneCustomNameserversTypeId;
 
-export const ZoneCustomNameserversProvider = () =>
-  Provider.succeed(ZoneCustomNameservers, {
+export const CustomNameserversProvider = () =>
+  Provider.succeed(CustomNameservers, {
     stables: ["zoneId", "initialEnabled", "initialNsSet"],
 
     list: Effect.fn(function* () {
@@ -160,7 +160,7 @@ export const ZoneCustomNameserversProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is ZoneCustomNameserversAttributes => row !== undefined,
+        (row): row is CustomNameserversAttributes => row !== undefined,
       );
     }),
 
@@ -286,7 +286,7 @@ const toAttributes = (
   observed: zones.GetCustomNameserverResponse,
   initialEnabled: boolean,
   initialNsSet: number | undefined,
-): ZoneCustomNameserversAttributes => ({
+): CustomNameserversAttributes => ({
   zoneId,
   enabled: observed.enabled ?? false,
   nsSet: observed.nsSet ?? undefined,

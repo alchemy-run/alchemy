@@ -14,7 +14,7 @@ const EmailSecurityImpersonationRegistryEntryTypeId =
 type EmailSecurityImpersonationRegistryEntryTypeId =
   typeof EmailSecurityImpersonationRegistryEntryTypeId;
 
-export interface EmailSecurityImpersonationRegistryEntryProps {
+export interface ImpersonationRegistryEntryProps {
   /**
    * The display name to protect (e.g. a VIP's name as it appears in the
    * `From` header). Together with `email` it forms the entry's identity
@@ -38,7 +38,7 @@ export interface EmailSecurityImpersonationRegistryEntryProps {
   comments?: string;
 }
 
-export interface EmailSecurityImpersonationRegistryEntryAttributes {
+export interface ImpersonationRegistryEntryAttributes {
   /** Cloudflare-assigned impersonation registry entry identifier. */
   entryId: string;
   /** The account the entry belongs to. */
@@ -63,10 +63,10 @@ export interface EmailSecurityImpersonationRegistryEntryAttributes {
   modifiedAt: string | undefined;
 }
 
-export type EmailSecurityImpersonationRegistryEntry = Resource<
+export type ImpersonationRegistryEntry = Resource<
   EmailSecurityImpersonationRegistryEntryTypeId,
-  EmailSecurityImpersonationRegistryEntryProps,
-  EmailSecurityImpersonationRegistryEntryAttributes,
+  ImpersonationRegistryEntryProps,
+  ImpersonationRegistryEntryAttributes,
   never,
   Providers
 >;
@@ -87,7 +87,7 @@ export type EmailSecurityImpersonationRegistryEntry = Resource<
  * @section Registering Protected Identities
  * @example Protect an executive's display name
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry("Ceo", {
+ * yield* Cloudflare.EmailSecurity.ImpersonationRegistryEntry("Ceo", {
  *   name: "Jane Smith",
  *   email: "jane.smith@example.com",
  *   comments: "CEO — high-value BEC target",
@@ -96,7 +96,7 @@ export type EmailSecurityImpersonationRegistryEntry = Resource<
  *
  * @example Match several legitimate addresses with a regex
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityImpersonationRegistryEntry("Finance", {
+ * yield* Cloudflare.EmailSecurity.ImpersonationRegistryEntry("Finance", {
  *   name: "Accounts Payable",
  *   email: "^ap(-[a-z]+)?@example\\.com$",
  *   isEmailRegex: true,
@@ -105,23 +105,22 @@ export type EmailSecurityImpersonationRegistryEntry = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
  */
-export const EmailSecurityImpersonationRegistryEntry =
-  Resource<EmailSecurityImpersonationRegistryEntry>(
-    EmailSecurityImpersonationRegistryEntryTypeId,
-  );
+export const ImpersonationRegistryEntry = Resource<ImpersonationRegistryEntry>(
+  EmailSecurityImpersonationRegistryEntryTypeId,
+);
 
 /**
  * Returns true if the given value is an
- * EmailSecurityImpersonationRegistryEntry resource.
+ * ImpersonationRegistryEntry resource.
  */
-export const isEmailSecurityImpersonationRegistryEntry = (
+export const isImpersonationRegistryEntry = (
   value: unknown,
-): value is EmailSecurityImpersonationRegistryEntry =>
+): value is ImpersonationRegistryEntry =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === EmailSecurityImpersonationRegistryEntryTypeId;
 
-export const EmailSecurityImpersonationRegistryEntryProvider = () =>
-  Provider.succeed(EmailSecurityImpersonationRegistryEntry, {
+export const ImpersonationRegistryEntryProvider = () =>
+  Provider.succeed(ImpersonationRegistryEntry, {
     stables: ["entryId", "accountId", "createdAt"],
 
     // Account collection: exhaustively paginate the account-scoped registry
@@ -142,9 +141,7 @@ export const EmailSecurityImpersonationRegistryEntryProvider = () =>
             ),
           ),
           Effect.catchTag("EmailSecurityNotEntitled", () =>
-            Effect.succeed(
-              [] as EmailSecurityImpersonationRegistryEntryAttributes[],
-            ),
+            Effect.succeed([] as ImpersonationRegistryEntryAttributes[]),
           ),
         );
     }),
@@ -276,7 +273,7 @@ const toAttributes = (
     | emailSecurity.PatchSettingImpersonationRegistryResponse
     | ListedEntry,
   accountId: string,
-): EmailSecurityImpersonationRegistryEntryAttributes => ({
+): ImpersonationRegistryEntryAttributes => ({
   entryId: entry.id ?? "",
   accountId,
   name: entry.name ?? "",

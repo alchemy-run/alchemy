@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
+import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { Worker } from "../Workers/Worker.ts";
 
@@ -10,7 +10,7 @@ import { Worker } from "../Workers/Worker.ts";
  * {@link AccountApiToken}'s outputs in the Worker's Init phase. Each accessor
  * reads the value back from the Worker's environment at runtime.
  */
-export interface TunnelToken {
+export interface Token {
   /** The token's plaintext value (injected as a `secret_text` binding). */
   value: Effect.Effect<Redacted.Redacted<string>>;
   /** The account id the token is scoped to. */
@@ -20,13 +20,13 @@ export interface TunnelToken {
 /**
  * Bind an {@link AccountApiToken}'s outputs into the Worker so they can be read
  * at runtime: `token.value` is injected as a `secret_text` binding and
- * `token.accountId` as `plain_text`. Returns the {@link TunnelToken} accessors.
+ * `token.accountId` as `plain_text`. Returns the {@link Token} accessors.
  */
 export const bindTunnelToken = (token: AccountApiToken) =>
   Effect.gen(function* () {
     const value = yield* token.value;
     const accountId = yield* token.accountId;
-    return { value, accountId } satisfies TunnelToken;
+    return { value, accountId } satisfies Token;
   });
 
 /**
@@ -39,8 +39,8 @@ export const bindTunnelToken = (token: AccountApiToken) =>
  */
 export const makeTunnelClient = <C>(
   sid: string,
-  permissionGroups: ApiTokenPermissionGroupRef[],
-  makeClient: (token: TunnelToken) => C,
+  permissionGroups: PermissionGroupRef[],
+  makeClient: (token: Token) => C,
 ) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;

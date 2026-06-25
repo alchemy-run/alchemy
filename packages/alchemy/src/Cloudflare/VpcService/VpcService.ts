@@ -10,7 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type VpcServiceProps = {
+export type Props = {
   /**
    * Display name for the VPC service. If omitted, a unique name is generated.
    *
@@ -74,7 +74,7 @@ export declare namespace VpcService {
   }
 }
 
-export type VpcServiceAttributes = {
+export type Attributes = {
   serviceId: string;
   serviceName: string;
   serviceType: "http" | "tcp";
@@ -88,8 +88,8 @@ export type VpcServiceAttributes = {
 
 export type VpcService = Resource<
   "Cloudflare.VpcService.VpcService",
-  VpcServiceProps,
-  VpcServiceAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -298,7 +298,7 @@ export const formatVpcService = (
     host: connectivity.GetDirectoryServiceResponse["host"];
   },
   accountId: string,
-): VpcServiceAttributes => {
+): Attributes => {
   let host: VpcService.Host;
   if ("hostname" in service.host) {
     host = {

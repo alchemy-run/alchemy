@@ -124,7 +124,7 @@ export type ZoneResourceTags = Resource<
  * @section Tagging a resource
  * @example Tag a DNS record
  * ```typescript
- * const record = yield* Cloudflare.Dns.DnsRecord("api", {
+ * const record = yield* Cloudflare.Dns.Record("api", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   type: "A",

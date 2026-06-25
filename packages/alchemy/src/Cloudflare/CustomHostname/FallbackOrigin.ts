@@ -18,7 +18,7 @@ export interface FallbackOriginProps {
   /**
    * Your origin hostname that requests to custom hostnames are sent to.
    * Must be a DNS record (A, AAAA or CNAME) within the zone — create the
-   * `Cloudflare.Dns.DnsRecord` first and pass its name.
+   * `Cloudflare.Dns.Record` first and pass its name.
    *
    * Mutable — the API is a PUT-style upsert.
    */
@@ -63,7 +63,7 @@ export type FallbackOrigin = Resource<
  * @section Setting the Fallback Origin
  * @example Point custom hostname traffic at your origin
  * ```typescript
- * const record = yield* Cloudflare.Dns.DnsRecord("Origin", {
+ * const record = yield* Cloudflare.Dns.Record("Origin", {
  *   zoneId: zone.zoneId,
  *   name: "origin.my-saas.com",
  *   type: "A",

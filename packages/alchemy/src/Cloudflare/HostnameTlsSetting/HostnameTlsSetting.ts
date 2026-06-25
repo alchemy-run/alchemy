@@ -22,26 +22,19 @@ type HostnameTlsSettingTypeId = typeof HostnameTlsSettingTypeId;
  * - `min_tls_version` — minimum TLS protocol version for the hostname
  * - `http2` — whether HTTP/2 is offered to clients connecting to the hostname
  */
-export type HostnameTlsSettingId = "ciphers" | "min_tls_version" | "http2";
+export type Id = "ciphers" | "min_tls_version" | "http2";
 
 /**
  * The value of a per-hostname TLS setting. The shape depends on
- * {@link HostnameTlsSettingId}:
+ * {@link Id}:
  *
  * - `ciphers` → `string[]` of BoringSSL cipher suite names
  * - `min_tls_version` → `"1.0" | "1.1" | "1.2" | "1.3"`
  * - `http2` → `"on" | "off"`
  */
-export type HostnameTlsSettingValue =
-  | "1.0"
-  | "1.1"
-  | "1.2"
-  | "1.3"
-  | "on"
-  | "off"
-  | string[];
+export type Value = "1.0" | "1.1" | "1.2" | "1.3" | "on" | "off" | string[];
 
-export interface HostnameTlsSettingProps {
+export interface Props {
   /**
    * Zone the hostname belongs to. Stable — moving the override to another
    * zone triggers a replacement.
@@ -52,7 +45,7 @@ export interface HostnameTlsSettingProps {
    * `http2`). Part of the override's identity — changing it triggers a
    * replacement.
    */
-  settingId: HostnameTlsSettingId;
+  settingId: Id;
   /**
    * The hostname the override applies to. Part of the override's identity —
    * changing it triggers a replacement.
@@ -71,10 +64,10 @@ export interface HostnameTlsSettingProps {
    *
    * Mutable — upserted in place via PUT.
    */
-  value: HostnameTlsSettingValue;
+  value: Value;
 }
 
-export interface HostnameTlsSettingAttributes {
+export interface Attributes {
   /** Zone the hostname belongs to. */
   zoneId: string;
   /** The overridden TLS setting's identifier. */
@@ -82,7 +75,7 @@ export interface HostnameTlsSettingAttributes {
   /** The hostname the override applies to. */
   hostname: string;
   /** Current value of the override. */
-  value: HostnameTlsSettingValue;
+  value: Value;
   /**
    * Deployment status of the override (e.g. `pending_deployment`,
    * `active`). Propagation to the edge is asynchronous.
@@ -96,8 +89,8 @@ export interface HostnameTlsSettingAttributes {
 
 export type HostnameTlsSetting = Resource<
   HostnameTlsSettingTypeId,
-  HostnameTlsSettingProps,
-  HostnameTlsSettingAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -183,11 +176,7 @@ export const HostnameTlsSettingProvider = () =>
       // row per (settingId, hostname) override.
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
-      const settingIds: HostnameTlsSettingId[] = [
-        "ciphers",
-        "min_tls_version",
-        "http2",
-      ];
+      const settingIds: Id[] = ["ciphers", "min_tls_version", "http2"];
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
@@ -220,7 +209,7 @@ export const HostnameTlsSettingProvider = () =>
                   // enumeration.
                   Effect.catchTag(
                     ["AdvancedCertificateManagerRequired", "Forbidden"],
-                    () => Effect.succeed([] as HostnameTlsSettingAttributes[]),
+                    () => Effect.succeed([] as Attributes[]),
                   ),
                 ),
             { concurrency: "unbounded" },
@@ -337,10 +326,7 @@ const findSetting = (zoneId: string, settingId: string, hostname: string) =>
  * by identity, cipher lists element-wise (order matters: the list is the
  * client-facing preference order).
  */
-const valueEquals = (
-  a: ObservedSetting["value"],
-  b: HostnameTlsSettingValue,
-): boolean => {
+const valueEquals = (a: ObservedSetting["value"], b: Value): boolean => {
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b)) return false;
     return a.length === b.length && a.every((v, i) => v === b[i]);
@@ -353,7 +339,7 @@ const toAttributes = (
   settingId: string,
   hostname: string,
   setting: ObservedSetting | hostnames.PutSettingTlsResponse,
-): HostnameTlsSettingAttributes => ({
+): Attributes => ({
   zoneId,
   settingId,
   hostname,
@@ -369,9 +355,7 @@ const toAttributes = (
  * override always carries a value; fall back to `"off"` purely to satisfy
  * the type.
  */
-const normalizeValue = (
-  value: ObservedSetting["value"],
-): HostnameTlsSettingValue =>
+const normalizeValue = (value: ObservedSetting["value"]): Value =>
   value === null || value === undefined
     ? "off"
     : Array.isArray(value)

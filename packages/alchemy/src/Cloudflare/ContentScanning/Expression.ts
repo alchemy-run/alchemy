@@ -16,7 +16,7 @@ const ContentScanningExpressionTypeId =
   "Cloudflare.ContentScanning.Expression" as const;
 type ContentScanningExpressionTypeId = typeof ContentScanningExpressionTypeId;
 
-export interface ContentScanningExpressionProps {
+export interface ExpressionProps {
   /**
    * Zone the custom scan expression belongs to. Stable — moving an
    * expression between zones triggers a replacement.
@@ -33,7 +33,7 @@ export interface ContentScanningExpressionProps {
   payload: string;
 }
 
-export interface ContentScanningExpressionAttributes {
+export interface ExpressionAttributes {
   /** Cloudflare-assigned identifier of the custom scan expression. */
   expressionId: string;
   /** Zone the expression belongs to. */
@@ -42,10 +42,10 @@ export interface ContentScanningExpressionAttributes {
   payload: string;
 }
 
-export type ContentScanningExpression = Resource<
+export type Expression = Resource<
   ContentScanningExpressionTypeId,
-  ContentScanningExpressionProps,
-  ContentScanningExpressionAttributes,
+  ExpressionProps,
+  ExpressionAttributes,
   never,
   Providers
 >;
@@ -75,7 +75,7 @@ export type ContentScanningExpression = Resource<
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.ContentScanning.ContentScanningExpression("ScanJsonFile", {
+ * yield* Cloudflare.ContentScanning.Expression("ScanJsonFile", {
  *   zoneId: scanning.zoneId,
  *   payload: 'lookup_json_string(http.request.body.raw, "file")',
  * });
@@ -83,7 +83,7 @@ export type ContentScanningExpression = Resource<
  *
  * @example Scan a base64-encoded form field
  * ```typescript
- * yield* Cloudflare.ContentScanning.ContentScanningExpression("ScanBase64Document", {
+ * yield* Cloudflare.ContentScanning.Expression("ScanBase64Document", {
  *   zoneId: scanning.zoneId,
  *   payload: 'base64_decode(http.request.body.form["document"][0])',
  * });
@@ -91,16 +91,12 @@ export type ContentScanningExpression = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/#add-custom-scan-expressions
  */
-export const ContentScanningExpression = Resource<ContentScanningExpression>(
-  ContentScanningExpressionTypeId,
-);
+export const Expression = Resource<Expression>(ContentScanningExpressionTypeId);
 
 /**
- * Returns true if the given value is a ContentScanningExpression resource.
+ * Returns true if the given value is a Expression resource.
  */
-export const isContentScanningExpression = (
-  value: unknown,
-): value is ContentScanningExpression =>
+export const isExpression = (value: unknown): value is Expression =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === ContentScanningExpressionTypeId;
 
@@ -108,15 +104,15 @@ export const isContentScanningExpression = (
  * Cloudflare accepted the create call but the expression did not appear in
  * the returned list — an API anomaly that should never happen in practice.
  */
-export class ContentScanningExpressionCreateAnomaly extends Data.TaggedError(
-  "ContentScanningExpressionCreateAnomaly",
+export class ExpressionCreateAnomaly extends Data.TaggedError(
+  "ExpressionCreateAnomaly",
 )<{
   readonly zoneId: string;
   readonly payload: string;
 }> {}
 
-export const ContentScanningExpressionProvider = () =>
-  Provider.succeed(ContentScanningExpression, {
+export const ExpressionProvider = () =>
+  Provider.succeed(Expression, {
     stables: ["expressionId", "zoneId", "payload"],
 
     // Custom scan expressions are a zone-scoped Content Scanning feature. Fan
@@ -226,7 +222,7 @@ export const ContentScanningExpressionProvider = () =>
         observed = created.result.find((e) => e.payload === news.payload);
         if (!observed) {
           return yield* Effect.fail(
-            new ContentScanningExpressionCreateAnomaly({
+            new ExpressionCreateAnomaly({
               zoneId,
               payload: news.payload,
             }),
@@ -273,7 +269,7 @@ const listExpressions = (zoneId: string) =>
 const toAttributes = (
   zoneId: string,
   expression: ObservedExpression,
-): ContentScanningExpressionAttributes => ({
+): ExpressionAttributes => ({
   // Cloudflare always echoes both fields for a persisted expression.
   expressionId: expression.id ?? "",
   zoneId,

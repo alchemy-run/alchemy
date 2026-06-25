@@ -50,7 +50,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       const worker = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* R2.R2Bucket("Bucket", {
+          yield* R2.Bucket("Bucket", {
             storageClass: "Standard",
           });
 

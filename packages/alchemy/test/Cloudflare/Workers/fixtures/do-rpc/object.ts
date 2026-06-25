@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
-const KV = Cloudflare.KV.KVNamespace("DurableObjectWorkerEnvironmentKV", {
+const KV = Cloudflare.KV.Namespace("DurableObjectWorkerEnvironmentKV", {
   title: "durable-object-worker-environment-kv",
 });
 

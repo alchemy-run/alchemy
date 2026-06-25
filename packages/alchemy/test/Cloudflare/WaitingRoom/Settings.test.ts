@@ -64,13 +64,10 @@ describe("Settings", () => {
         // converges even on unentitled zones.
         const settings = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.WaitingRoom.WaitingRoomSettings(
-              "Settings",
-              {
-                zoneId,
-                searchEngineCrawlerBypass: false,
-              },
-            );
+            return yield* Cloudflare.WaitingRoom.Settings("Settings", {
+              zoneId,
+              searchEngineCrawlerBypass: false,
+            });
           }),
         );
 
@@ -131,13 +128,10 @@ describe("Settings", () => {
 
         const settings = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.WaitingRoom.WaitingRoomSettings(
-              "Settings",
-              {
-                zoneId,
-                searchEngineCrawlerBypass: true,
-              },
-            );
+            return yield* Cloudflare.WaitingRoom.Settings("Settings", {
+              zoneId,
+              searchEngineCrawlerBypass: true,
+            });
           }),
         );
 
@@ -165,7 +159,7 @@ describe("Settings", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.WaitingRoom.WaitingRoomSettings,
+        Cloudflare.WaitingRoom.Settings,
       );
       const all = yield* provider.list();
 

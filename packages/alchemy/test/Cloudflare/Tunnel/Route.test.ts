@@ -35,7 +35,7 @@ test.provider("create and delete route with default props", (stack) =>
         const tunnel = yield* Cloudflare.Tunnel.Tunnel("RouteHostTunnel", {
           adopt: true,
         });
-        const route = yield* Cloudflare.Tunnel.TunnelRoute("DefaultRoute", {
+        const route = yield* Cloudflare.Tunnel.Route("DefaultRoute", {
           tunnelId: tunnel.tunnelId,
           network: NETWORK_DEFAULT,
           adopt: true,
@@ -72,7 +72,7 @@ test.provider("updating the comment patches in place", (stack) =>
         const tunnel = yield* Cloudflare.Tunnel.Tunnel("RouteUpdateTunnel", {
           adopt: true,
         });
-        const route = yield* Cloudflare.Tunnel.TunnelRoute("UpdateRoute", {
+        const route = yield* Cloudflare.Tunnel.Route("UpdateRoute", {
           tunnelId: tunnel.tunnelId,
           network: NETWORK_UPDATE,
           comment: "v1",
@@ -89,7 +89,7 @@ test.provider("updating the comment patches in place", (stack) =>
         const tunnel = yield* Cloudflare.Tunnel.Tunnel("RouteUpdateTunnel", {
           adopt: true,
         });
-        const route = yield* Cloudflare.Tunnel.TunnelRoute("UpdateRoute", {
+        const route = yield* Cloudflare.Tunnel.Route("UpdateRoute", {
           tunnelId: tunnel.tunnelId,
           network: NETWORK_UPDATE,
           comment: "v2",
@@ -164,7 +164,7 @@ test.provider("adopt: takes over a pre-existing route", (stack) =>
         const tunnel = yield* Cloudflare.Tunnel.Tunnel("RouteAdoptTunnel", {
           adopt: true,
         });
-        const route = yield* Cloudflare.Tunnel.TunnelRoute("AdoptRoute", {
+        const route = yield* Cloudflare.Tunnel.Route("AdoptRoute", {
           tunnelId: tunnel.tunnelId,
           network: NETWORK_ADOPT,
           adopt: true,
@@ -191,7 +191,7 @@ test.provider("list enumerates the deployed route", (stack) =>
         const tunnel = yield* Cloudflare.Tunnel.Tunnel("RouteListTunnel", {
           adopt: true,
         });
-        const route = yield* Cloudflare.Tunnel.TunnelRoute("ListRoute", {
+        const route = yield* Cloudflare.Tunnel.Route("ListRoute", {
           tunnelId: tunnel.tunnelId,
           network: NETWORK_LIST,
           adopt: true,
@@ -200,9 +200,7 @@ test.provider("list enumerates the deployed route", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Tunnel.TunnelRoute,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Tunnel.Route);
     const all = yield* provider.list();
 
     const found = all.find((r) => r.routeId === route.routeId);

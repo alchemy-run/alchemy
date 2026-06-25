@@ -10,21 +10,21 @@ import {
 } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 import { defineZarazEvents } from "./ZarazEventTypes.ts";
 
-export type ZarazWorkflow = zaraz.GetWorkflowResponse;
-export type ZarazSettings = zaraz.PutConfigRequest["settings"];
-export type ZarazAnalytics = NonNullable<zaraz.PutConfigRequest["analytics"]>;
-export type ZarazConsent = NonNullable<zaraz.PutConfigRequest["consent"]>;
+export type Workflow = zaraz.GetWorkflowResponse;
+export type Settings = zaraz.PutConfigRequest["settings"];
+export type Analytics = NonNullable<zaraz.PutConfigRequest["analytics"]>;
+export type Consent = NonNullable<zaraz.PutConfigRequest["consent"]>;
 
-export type ZarazConfigProps = {
+export type ConfigProps = {
   /**
    * Zone whose Zaraz config should be managed. Accepts a zone id, a zone name
    * (`example.com`), or a `{ zoneId, name? }` object.
    */
-  zone: ZoneReference;
+  zone: Reference;
   /**
    * Data layer compatibility mode.
    */
@@ -36,7 +36,7 @@ export type ZarazConfigProps = {
   /**
    * Zaraz settings to merge into the current zone config.
    */
-  settings?: Partial<ZarazSettings>;
+  settings?: Partial<Settings>;
   /**
    * Zaraz tools keyed by tool id. When omitted, existing tools are retained.
    */
@@ -54,11 +54,11 @@ export type ZarazConfigProps = {
   /**
    * Cloudflare Monitoring settings.
    */
-  analytics?: ZarazAnalytics;
+  analytics?: Analytics;
   /**
    * Zaraz consent management configuration.
    */
-  consent?: ZarazConsent;
+  consent?: Consent;
   /**
    * Single Page Application support.
    */
@@ -66,7 +66,7 @@ export type ZarazConfigProps = {
   /**
    * Zaraz workflow mode. When omitted, the current workflow is retained.
    */
-  workflow?: ZarazWorkflow;
+  workflow?: Workflow;
   /**
    * Whether destroy should restore Cloudflare's default Zaraz config.
    *
@@ -79,15 +79,15 @@ export type ZarazConfigProps = {
   delete?: boolean;
 };
 
-export type ZarazConfig = Resource<
-  "Cloudflare.Zaraz.ZarazConfig",
-  ZarazConfigProps,
-  ZarazConfigAttributes,
+export type Config = Resource<
+  "Cloudflare.Zaraz.Config",
+  ConfigProps,
+  ConfigAttributes,
   never,
   Providers
 >;
 
-export type ZarazConfigAttributes = {
+export type ConfigAttributes = {
   /**
    * Cloudflare zone id.
    */
@@ -135,7 +135,7 @@ export type ZarazConfigAttributes = {
   /**
    * Current Zaraz workflow mode.
    */
-  workflow: ZarazWorkflow;
+  workflow: Workflow;
 };
 
 /**
@@ -159,7 +159,7 @@ export type ZarazConfigAttributes = {
  * @section Managing Zaraz
  * @example Enable data layer compatibility
  * ```typescript
- * const zaraz = yield* Cloudflare.Zaraz.ZarazConfig("Analytics", {
+ * const zaraz = yield* Cloudflare.Zaraz.Config("Analytics", {
  *   zone: "example.com",
  *   dataLayer: true,
  * });
@@ -167,7 +167,7 @@ export type ZarazConfigAttributes = {
  *
  * @example Update Zaraz settings
  * ```typescript
- * const zaraz = yield* Cloudflare.Zaraz.ZarazConfig("Analytics", {
+ * const zaraz = yield* Cloudflare.Zaraz.Config("Analytics", {
  *   zone: "example.com",
  *   settings: {
  *     autoInjectScript: true,
@@ -178,14 +178,14 @@ export type ZarazConfigAttributes = {
  *
  * @example Enable preview workflow
  * ```typescript
- * const zaraz = yield* Cloudflare.Zaraz.ZarazConfig("Analytics", {
+ * const zaraz = yield* Cloudflare.Zaraz.Config("Analytics", {
  *   zone: "example.com",
  *   workflow: "preview",
  * });
  * ```
  */
-export const ZarazConfig = Object.assign(
-  Resource<ZarazConfig>("Cloudflare.Zaraz.ZarazConfig"),
+export const Config = Object.assign(
+  Resource<Config>("Cloudflare.Zaraz.Config"),
   {
     /**
      * Define a type-only contract for the events sent through this Zaraz config.
@@ -197,8 +197,8 @@ export const ZarazConfig = Object.assign(
   },
 );
 
-export const ZarazConfigProvider = () =>
-  Provider.succeed(ZarazConfig, {
+export const ConfigProvider = () =>
+  Provider.succeed(Config, {
     nuke: { singleton: true },
     stables: ["zoneId"],
     list: Effect.fn(function* () {
@@ -223,7 +223,7 @@ export const ZarazConfigProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is ZarazConfig["Attributes"] => row !== undefined,
+        (row): row is Config["Attributes"] => row !== undefined,
       );
     }),
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -291,7 +291,7 @@ export const ZarazConfigProvider = () =>
     }),
   });
 
-const resolve = Effect.fn(function* (zone: ZoneReference) {
+const resolve = Effect.fn(function* (zone: Reference) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* resolveZoneId({
     accountId,
@@ -318,8 +318,8 @@ type ConfigResponse =
 const toAttributes = (
   zoneId: string,
   config: ConfigResponse,
-  workflow: ZarazWorkflow,
-): ZarazConfig["Attributes"] => ({
+  workflow: Workflow,
+): Config["Attributes"] => ({
   zoneId,
   dataLayer: config.dataLayer,
   debugKey: config.debugKey,
@@ -334,7 +334,7 @@ const toAttributes = (
   workflow,
 });
 
-const fromAttributes = (attrs: ZarazConfigAttributes): ConfigResponse => ({
+const fromAttributes = (attrs: ConfigAttributes): ConfigResponse => ({
   dataLayer: attrs.dataLayer,
   debugKey: attrs.debugKey,
   settings: attrs.settings,
@@ -349,7 +349,7 @@ const fromAttributes = (attrs: ZarazConfigAttributes): ConfigResponse => ({
 
 const desiredConfig = (
   observed: ConfigResponse,
-  props: ZarazConfigProps,
+  props: ConfigProps,
 ): ConfigResponse => ({
   dataLayer: props.dataLayer ?? observed.dataLayer,
   debugKey: props.debugKey ?? observed.debugKey,
@@ -378,16 +378,16 @@ const toPutConfig = (
     zoneId,
     dataLayer: config.dataLayer,
     debugKey: config.debugKey,
-    settings: stripNullFields(config.settings) as ZarazSettings,
+    settings: stripNullFields(config.settings) as Settings,
     tools: unwrapRedacted(config.tools) as Record<string, unknown>,
     triggers: unwrapRedacted(config.triggers) as Record<string, unknown>,
     variables: unwrapRedacted(config.variables) as Record<string, unknown>,
     zarazVersion: config.zarazVersion,
     analytics: config.analytics
-      ? (stripNullFields(config.analytics) as ZarazAnalytics)
+      ? (stripNullFields(config.analytics) as Analytics)
       : undefined,
     consent: config.consent
-      ? (stripNullFields(config.consent) as ZarazConsent)
+      ? (stripNullFields(config.consent) as Consent)
       : undefined,
     historyChange: config.historyChange ?? undefined,
   }) as zaraz.PutConfigRequest;
@@ -399,8 +399,8 @@ const comparableConfig = (config: ConfigResponse) => {
 
 const configForCompare = (
   observed: ConfigResponse,
-  oldProps: ZarazConfigProps | undefined,
-  props: ZarazConfigProps,
+  oldProps: ConfigProps | undefined,
+  props: ConfigProps,
 ): ConfigResponse => {
   if (
     props.variables === undefined ||

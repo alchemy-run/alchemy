@@ -62,7 +62,7 @@ test.provider("create, update, and clear tags on a KV namespace", (stack) =>
 
     const v1 = yield* stack.deploy(
       Effect.gen(function* () {
-        const kv = yield* Cloudflare.KV.KVNamespace("TagsKv", {
+        const kv = yield* Cloudflare.KV.Namespace("TagsKv", {
           title: KV_TITLE_CRUD,
         });
         const tags = yield* Cloudflare.Tags.AccountResourceTags("KvTags", {
@@ -87,7 +87,7 @@ test.provider("create, update, and clear tags on a KV namespace", (stack) =>
     // `team`, add `owner`.
     const v2 = yield* stack.deploy(
       Effect.gen(function* () {
-        const kv = yield* Cloudflare.KV.KVNamespace("TagsKv", {
+        const kv = yield* Cloudflare.KV.Namespace("TagsKv", {
           title: KV_TITLE_CRUD,
         });
         const tags = yield* Cloudflare.Tags.AccountResourceTags("KvTags", {
@@ -124,10 +124,10 @@ test.provider("changing resourceId triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const a = yield* Cloudflare.KV.KVNamespace("KvA", {
+        const a = yield* Cloudflare.KV.Namespace("KvA", {
           title: KV_TITLE_REPLACE_A,
         });
-        const b = yield* Cloudflare.KV.KVNamespace("KvB", {
+        const b = yield* Cloudflare.KV.Namespace("KvB", {
           title: KV_TITLE_REPLACE_B,
         });
         const tags = yield* Cloudflare.Tags.AccountResourceTags("ReplaceTags", {
@@ -152,10 +152,10 @@ test.provider("changing resourceId triggers replacement", (stack) =>
     // tagged, and the old set on A is cleared by the replacement delete.
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        const a = yield* Cloudflare.KV.KVNamespace("KvA", {
+        const a = yield* Cloudflare.KV.Namespace("KvA", {
           title: KV_TITLE_REPLACE_A,
         });
-        const b = yield* Cloudflare.KV.KVNamespace("KvB", {
+        const b = yield* Cloudflare.KV.Namespace("KvB", {
           title: KV_TITLE_REPLACE_B,
         });
         const tags = yield* Cloudflare.Tags.AccountResourceTags("ReplaceTags", {
@@ -266,7 +266,7 @@ test.provider("list enumerates account-wide tagged resources", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const kv = yield* Cloudflare.KV.KVNamespace("ListKv", {
+        const kv = yield* Cloudflare.KV.Namespace("ListKv", {
           title: KV_TITLE_LIST,
         });
         const tags = yield* Cloudflare.Tags.AccountResourceTags("ListTags", {

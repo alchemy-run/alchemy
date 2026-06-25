@@ -2,7 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { AnalyticsEngineDataset as AnalyticsEngineDatasetLike } from "./AnalyticsEngineDataset.ts";
+import type { Dataset as AnalyticsEngineDatasetLike } from "./Dataset.ts";
 
 /**
  * Bind an {@link AnalyticsEngineDatasetLike} dataset to a Worker and obtain the
@@ -25,35 +25,31 @@ import type { AnalyticsEngineDataset as AnalyticsEngineDatasetLike } from "./Ana
 export interface WriteDataset extends Binding.Service<
   WriteDataset,
   "Cloudflare.AnalyticsEngineDataset.WriteDataset",
-  (
-    dataset: AnalyticsEngineDatasetLike,
-  ) => Effect.Effect<AnalyticsEngineDatasetClient>
+  (dataset: AnalyticsEngineDatasetLike) => Effect.Effect<DatasetClient>
 > {}
 
 export const WriteDataset = Binding.Service<WriteDataset>(
   "Cloudflare.AnalyticsEngineDataset.WriteDataset",
 );
 
-export interface AnalyticsEngineDataPoint {
+export interface DataPoint {
   indexes?: string[];
   blobs?: string[];
   doubles?: number[];
 }
 
 export interface RuntimeAnalyticsEngineDataset {
-  writeDataPoint(dataPoint: AnalyticsEngineDataPoint): void;
+  writeDataPoint(dataPoint: DataPoint): void;
 }
 
-export class AnalyticsEngineDatasetError extends Data.TaggedError(
-  "AnalyticsEngineDatasetError",
-)<{
+export class DatasetError extends Data.TaggedError("DatasetError")<{
   message: string;
   cause: Error;
 }> {}
 
-export interface AnalyticsEngineDatasetClient {
+export interface DatasetClient {
   raw: Effect.Effect<RuntimeAnalyticsEngineDataset, never, RuntimeContext>;
   writeDataPoint(
-    dataPoint: AnalyticsEngineDataPoint,
-  ): Effect.Effect<void, AnalyticsEngineDatasetError, RuntimeContext>;
+    dataPoint: DataPoint,
+  ): Effect.Effect<void, DatasetError, RuntimeContext>;
 }

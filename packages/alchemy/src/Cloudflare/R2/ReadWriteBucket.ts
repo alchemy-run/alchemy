@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import type { R2Bucket } from "./Bucket.ts";
+import type { Bucket } from "./Bucket.ts";
 import type { ReadBucketClient } from "./ReadBucket.ts";
 import type { WriteBucketClient } from "./WriteBucket.ts";
 
@@ -12,7 +12,7 @@ import type { WriteBucketClient } from "./WriteBucket.ts";
 export interface ReadWriteBucket extends Binding.Service<
   ReadWriteBucket,
   "Cloudflare.R2.ReadWriteBucket",
-  (bucket: R2Bucket) => Effect.Effect<ReadWriteBucketClient>
+  (bucket: Bucket) => Effect.Effect<ReadWriteBucketClient>
 > {}
 
 export const ReadWriteBucket = Binding.Service<ReadWriteBucket>(

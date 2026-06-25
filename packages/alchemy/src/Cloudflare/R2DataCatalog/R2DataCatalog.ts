@@ -17,37 +17,37 @@ type R2DataCatalogTypeId = typeof R2DataCatalogTypeId;
 /**
  * Whether a maintenance job (compaction or snapshot expiration) runs.
  */
-export type R2DataCatalogMaintenanceState = "enabled" | "disabled";
+export type MaintenanceState = "enabled" | "disabled";
 
 /**
  * Target output file size, in MB, that catalog compaction rewrites small
  * files into.
  */
-export type R2DataCatalogTargetSizeMb = "64" | "128" | "256" | "512";
+export type TargetSizeMb = "64" | "128" | "256" | "512";
 
 /**
  * Catalog-level compaction maintenance settings.
  */
-export type R2DataCatalogCompaction = {
+export type Compaction = {
   /**
    * Whether compaction runs for tables in this catalog.
    */
-  state?: R2DataCatalogMaintenanceState;
+  state?: MaintenanceState;
   /**
    * Target output file size, in MB.
    * @default "128"
    */
-  targetSizeMb?: R2DataCatalogTargetSizeMb;
+  targetSizeMb?: TargetSizeMb;
 };
 
 /**
  * Catalog-level snapshot expiration maintenance settings.
  */
-export type R2DataCatalogSnapshotExpiration = {
+export type SnapshotExpiration = {
   /**
    * Whether snapshot expiration runs for tables in this catalog.
    */
-  state?: R2DataCatalogMaintenanceState;
+  state?: MaintenanceState;
   /**
    * Maximum age a snapshot may reach before it is expired, expressed as a
    * duration string (e.g. `"7d"`).
@@ -59,10 +59,10 @@ export type R2DataCatalogSnapshotExpiration = {
   minSnapshotsToKeep?: number;
 };
 
-export type R2DataCatalogProps = {
+export type Props = {
   /**
    * Name of the R2 bucket to enable the Iceberg data catalog on. The bucket
-   * must already exist — pass `bucket.bucketName` from a `Cloudflare.R2.R2Bucket`
+   * must already exist — pass `bucket.bucketName` from a `Cloudflare.R2.Bucket`
    * resource to order catalog-after-bucket. Changing the bucket replaces the
    * catalog (the old bucket's catalog is disabled; table data is untouched).
    */
@@ -71,12 +71,12 @@ export type R2DataCatalogProps = {
    * Compaction maintenance configuration. Only the fields you specify are
    * enforced; omitted fields keep Cloudflare's defaults.
    */
-  compaction?: R2DataCatalogCompaction;
+  compaction?: Compaction;
   /**
    * Snapshot expiration maintenance configuration. Only the fields you
    * specify are enforced; omitted fields keep Cloudflare's defaults.
    */
-  snapshotExpiration?: R2DataCatalogSnapshotExpiration;
+  snapshotExpiration?: SnapshotExpiration;
   /**
    * Cloudflare API token (with R2 read/write access) the catalog uses to
    * run maintenance jobs against the bucket. Write-only: Cloudflare exposes
@@ -86,7 +86,7 @@ export type R2DataCatalogProps = {
   token?: Redacted.Redacted<string>;
 };
 
-export type R2DataCatalogAttributes = {
+export type Attributes = {
   /**
    * Unique identifier of the catalog (stable across disable/enable cycles).
    */
@@ -117,8 +117,8 @@ export type R2DataCatalogAttributes = {
    */
   compaction:
     | {
-        state: R2DataCatalogMaintenanceState;
-        targetSizeMb: R2DataCatalogTargetSizeMb;
+        state: MaintenanceState;
+        targetSizeMb: TargetSizeMb;
       }
     | undefined;
   /**
@@ -126,7 +126,7 @@ export type R2DataCatalogAttributes = {
    */
   snapshotExpiration:
     | {
-        state: R2DataCatalogMaintenanceState;
+        state: MaintenanceState;
         maxSnapshotAge: string;
         minSnapshotsToKeep: number;
       }
@@ -140,8 +140,8 @@ export type R2DataCatalogAttributes = {
 
 export type R2DataCatalog = Resource<
   R2DataCatalogTypeId,
-  R2DataCatalogProps,
-  R2DataCatalogAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -160,7 +160,7 @@ export type R2DataCatalog = Resource<
  * @section Enabling a catalog
  * @example Enable the catalog on an R2 bucket
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("LakehouseBucket");
+ * const bucket = yield* Cloudflare.R2.Bucket("LakehouseBucket");
  *
  * const catalog = yield* Cloudflare.R2DataCatalog.R2DataCatalog("Lakehouse", {
  *   bucketName: bucket.bucketName,
@@ -394,7 +394,7 @@ const toAttributes = (
   catalog: rdc.GetR2DataCatalogResponse,
   accountId: string,
   credentialStatus?: "present" | "absent",
-): R2DataCatalogAttributes => ({
+): Attributes => ({
   catalogId: catalog.id,
   name: catalog.name,
   bucketName: catalog.bucket,
@@ -404,16 +404,15 @@ const toAttributes = (
   credentialStatus: credentialStatus ?? catalog.credentialStatus ?? "absent",
   compaction: catalog.maintenanceConfig?.compaction
     ? {
-        state: catalog.maintenanceConfig.compaction
-          .state as R2DataCatalogMaintenanceState,
+        state: catalog.maintenanceConfig.compaction.state as MaintenanceState,
         targetSizeMb: catalog.maintenanceConfig.compaction
-          .targetSizeMb as R2DataCatalogTargetSizeMb,
+          .targetSizeMb as TargetSizeMb,
       }
     : undefined,
   snapshotExpiration: catalog.maintenanceConfig?.snapshotExpiration
     ? {
         state: catalog.maintenanceConfig.snapshotExpiration
-          .state as R2DataCatalogMaintenanceState,
+          .state as MaintenanceState,
         maxSnapshotAge:
           catalog.maintenanceConfig.snapshotExpiration.maxSnapshotAge,
         minSnapshotsToKeep:

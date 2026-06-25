@@ -103,13 +103,10 @@ describe.sequential("Expression", () => {
                 zoneId,
               },
             );
-            return yield* Cloudflare.ContentScanning.ContentScanningExpression(
-              "ScanField",
-              {
-                zoneId: scanning.zoneId,
-                payload: firstPayload,
-              },
-            );
+            return yield* Cloudflare.ContentScanning.Expression("ScanField", {
+              zoneId: scanning.zoneId,
+              payload: firstPayload,
+            });
           }),
         );
 
@@ -131,13 +128,10 @@ describe.sequential("Expression", () => {
                 zoneId,
               },
             );
-            return yield* Cloudflare.ContentScanning.ContentScanningExpression(
-              "ScanField",
-              {
-                zoneId: scanning.zoneId,
-                payload: secondPayload,
-              },
-            );
+            return yield* Cloudflare.ContentScanning.Expression("ScanField", {
+              zoneId: scanning.zoneId,
+              payload: secondPayload,
+            });
           }),
         );
 
@@ -181,7 +175,7 @@ describe.sequential("Expression", () => {
         yield* stack.destroy();
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.ContentScanning.ContentScanningExpression,
+          Cloudflare.ContentScanning.Expression,
         );
         const all = yield* provider.list();
 
@@ -216,18 +210,15 @@ describe.sequential("Expression", () => {
               "UploadScanning",
               { zoneId },
             );
-            return yield* Cloudflare.ContentScanning.ContentScanningExpression(
-              "ListField",
-              {
-                zoneId: scanning.zoneId,
-                payload,
-              },
-            );
+            return yield* Cloudflare.ContentScanning.Expression("ListField", {
+              zoneId: scanning.zoneId,
+              payload,
+            });
           }),
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.ContentScanning.ContentScanningExpression,
+          Cloudflare.ContentScanning.Expression,
         );
         const all = yield* provider.list();
 

@@ -79,10 +79,10 @@ test.provider(
       // Create — preset with all-default config / ui / permissions.
       const v1 = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKit.RealtimeKitPreset("Preset", {
+          return yield* Cloudflare.RealtimeKit.Preset("Preset", {
             appId: app.appId,
             name: LIFECYCLE_PRESET_NAME,
           });
@@ -104,10 +104,10 @@ test.provider(
       // replacement).
       const v2 = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKit.RealtimeKitPreset("Preset", {
+          return yield* Cloudflare.RealtimeKit.Preset("Preset", {
             appId: app.appId,
             name: LIFECYCLE_PRESET_NAME,
             permissions: {
@@ -130,10 +130,10 @@ test.provider(
       // Idempotent re-deploy — reconcile must detect the no-op.
       const v3 = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKit.RealtimeKitPreset("Preset", {
+          return yield* Cloudflare.RealtimeKit.Preset("Preset", {
             appId: app.appId,
             name: LIFECYCLE_PRESET_NAME,
             permissions: {
@@ -174,10 +174,10 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKit.RealtimeKitPreset("Preset", {
+          return yield* Cloudflare.RealtimeKit.Preset("Preset", {
             appId: app.appId,
             name: LIST_PRESET_NAME,
           });
@@ -185,7 +185,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.RealtimeKit.RealtimeKitPreset,
+        Cloudflare.RealtimeKit.Preset,
       );
       const all = yield* provider.list();
 

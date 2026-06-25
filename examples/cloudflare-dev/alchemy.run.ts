@@ -31,7 +31,7 @@ const AsyncWorker = Effect.gen(function* () {
       ),
     },
   });
-  yield* Cloudflare.Queue.QueueConsumer("QueueConsumer", {
+  yield* Cloudflare.Queue.Consumer("Consumer", {
     queueId: queue.queueId,
     scriptName: worker.workerName,
   });

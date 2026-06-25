@@ -175,7 +175,7 @@ export type LegacyPipeline = Resource<
  * the access key id is the token id and the secret is the SHA-256 hex
  * digest of the token value.
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("events", {});
+ * const bucket = yield* Cloudflare.R2.Bucket("events", {});
  *
  * const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("ingest", {
  *   destination: {

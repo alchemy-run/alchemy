@@ -181,7 +181,7 @@ export const Namespace = Resource<Namespace>(NamespaceTypeId);
 /**
  * Returns true if the given value is an Namespace resource.
  */
-export const isAiSearchNamespace = (value: unknown): value is Namespace =>
+export const isNamespace = (value: unknown): value is Namespace =>
   Predicate.hasProperty(value, "Type") && value.Type === NamespaceTypeId;
 
 export const NamespaceProvider = () =>

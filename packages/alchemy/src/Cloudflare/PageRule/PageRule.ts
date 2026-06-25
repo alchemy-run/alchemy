@@ -21,15 +21,15 @@ type PageRuleTypeId = typeof PageRuleTypeId;
  * Note: `forwarding_url` cannot be combined with most other actions —
  * a rule either redirects or overrides settings, not both.
  */
-export type PageRuleAction = pageRules.CreatePageRuleRequest["actions"][number];
+export type Action = pageRules.CreatePageRuleRequest["actions"][number];
 
 /**
  * Whether the rule is evaluated (`active`) or kept but ignored
  * (`disabled`).
  */
-export type PageRuleStatus = "active" | "disabled";
+export type Status = "active" | "disabled";
 
-export interface PageRuleProps {
+export interface Props {
   /**
    * Zone the Page Rule applies to. Stable — moving a rule between zones
    * triggers a replacement.
@@ -48,7 +48,7 @@ export interface PageRuleProps {
    * redirect to another URL (`forwarding_url`) or override settings,
    * but not both. Mutable — synced in place via PUT.
    */
-  actions: ReadonlyArray<PageRuleAction>;
+  actions: ReadonlyArray<Action>;
   /**
    * The priority of the rule relative to other Page Rules on the zone.
    * A higher number indicates a higher priority. Mutable.
@@ -68,10 +68,10 @@ export interface PageRuleProps {
    *
    * @default "active"
    */
-  status?: PageRuleStatus;
+  status?: Status;
 }
 
-export interface PageRuleAttributes {
+export interface Attributes {
   /** Cloudflare-assigned identifier of the Page Rule. */
   pageRuleId: string;
   /** Zone the rule belongs to. */
@@ -79,11 +79,11 @@ export interface PageRuleAttributes {
   /** The URL pattern the rule matches. */
   target: string;
   /** The actions the rule performs, as echoed by Cloudflare. */
-  actions: ReadonlyArray<PageRuleAction>;
+  actions: ReadonlyArray<Action>;
   /** The rule's priority relative to other Page Rules on the zone. */
   priority: number;
   /** Whether the rule is evaluated (`active`) or ignored (`disabled`). */
-  status: PageRuleStatus;
+  status: Status;
   /** ISO8601 creation timestamp. */
   createdOn: string;
   /** ISO8601 last-modified timestamp. */
@@ -92,8 +92,8 @@ export interface PageRuleAttributes {
 
 export type PageRule = Resource<
   PageRuleTypeId,
-  PageRuleProps,
-  PageRuleAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -217,8 +217,8 @@ export const PageRuleProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as PageRuleProps;
-      const n = news as PageRuleProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both are concrete.
       if (
         typeof o.zoneId === "string" &&
@@ -353,7 +353,7 @@ const findByTarget = (zoneId: string, target: string) =>
     );
 
 /** The desired request body (everything except path params). */
-const desiredBody = (news: PageRuleProps) => ({
+const desiredBody = (news: Props) => ({
   targets: [
     {
       target: "url" as const,
@@ -391,7 +391,7 @@ const canonical = (v: unknown): unknown => {
   return v;
 };
 
-const canonicalActions = (actions: ReadonlyArray<PageRuleAction>): string =>
+const canonicalActions = (actions: ReadonlyArray<Action>): string =>
   JSON.stringify(
     actions
       .map((a) => canonical(a) as { id?: string })
@@ -401,26 +401,20 @@ const canonicalActions = (actions: ReadonlyArray<PageRuleAction>): string =>
   );
 
 /** True when the observed rule already matches every desired aspect. */
-const ruleMatchesDesired = (
-  observed: ObservedRule,
-  news: PageRuleProps,
-): boolean =>
+const ruleMatchesDesired = (observed: ObservedRule, news: Props): boolean =>
   targetOf(observed) === news.target &&
   observed.priority === (news.priority ?? 1) &&
   observed.status === (news.status ?? "active") &&
-  canonicalActions(observed.actions as ReadonlyArray<PageRuleAction>) ===
+  canonicalActions(observed.actions as ReadonlyArray<Action>) ===
     canonicalActions(news.actions);
 
-const toAttributes = (
-  rule: ObservedRule,
-  zoneId: string,
-): PageRuleAttributes => ({
+const toAttributes = (rule: ObservedRule, zoneId: string): Attributes => ({
   pageRuleId: rule.id,
   zoneId,
   target: targetOf(rule) ?? "",
-  actions: rule.actions as ReadonlyArray<PageRuleAction>,
+  actions: rule.actions as ReadonlyArray<Action>,
   priority: rule.priority,
-  status: rule.status as PageRuleStatus,
+  status: rule.status as Status,
   createdOn: rule.createdOn,
   modifiedOn: rule.modifiedOn,
 });

@@ -5,8 +5,8 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import { LocalContainerProvider } from "./Containers/LocalContainerProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { localRuntimeServices } from "./LocalRuntime.ts";
-import { QueueProviderLocal } from "./Queue/Queue.ts";
-import { QueueConsumerProviderLocal } from "./Queue/QueueConsumer.ts";
+import { ProviderLocal } from "./Queue/Queue.ts";
+import { ConsumerProviderLocal } from "./Queue/Consumer.ts";
 import { LocalWorkerProvider } from "./Workers/LocalWorkerProvider.ts";
 
 const cloudflareServices = Layer.provide(
@@ -20,8 +20,8 @@ const cloudflareServices = Layer.provide(
 Layer.mergeAll(
   LocalWorkerProvider(),
   LocalContainerProvider(),
-  QueueProviderLocal(),
-  QueueConsumerProviderLocal(),
+  ProviderLocal(),
+  ConsumerProviderLocal(),
 ).pipe(
   Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),

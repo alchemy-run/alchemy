@@ -169,16 +169,13 @@ test.provider.skipIf(!entitledZoneId)(
               keys: [JWKS_KEY_1],
             },
           );
-          const rule = yield* Cloudflare.TokenValidation.TokenValidationRule(
-            "JwtRule",
-            {
-              zoneId,
-              description: "v1",
-              action: "log",
-              expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
-              selector: { include: [{ host: [zoneName] }] },
-            },
-          );
+          const rule = yield* Cloudflare.TokenValidation.Rule("JwtRule", {
+            zoneId,
+            description: "v1",
+            action: "log",
+            expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
+            selector: { include: [{ host: [zoneName] }] },
+          });
           return { config, rule };
         }),
       );
@@ -218,17 +215,14 @@ test.provider.skipIf(!entitledZoneId)(
               keys: [JWKS_KEY_1, JWKS_KEY_2],
             },
           );
-          const rule = yield* Cloudflare.TokenValidation.TokenValidationRule(
-            "JwtRule",
-            {
-              zoneId,
-              description: "v2",
-              enabled: false,
-              action: "block",
-              expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
-              selector: { include: [{ host: [zoneName] }] },
-            },
-          );
+          const rule = yield* Cloudflare.TokenValidation.Rule("JwtRule", {
+            zoneId,
+            description: "v2",
+            enabled: false,
+            action: "block",
+            expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
+            selector: { include: [{ host: [zoneName] }] },
+          });
           return { config, rule };
         }),
       );

@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { KVNamespace } from "./Namespace.ts";
-import type { KVNamespaceError } from "./NamespaceTypes.ts";
+import type { Namespace } from "./Namespace.ts";
+import type { NamespaceError } from "./NamespaceTypes.ts";
 
 /**
- * Bind a {@link KVNamespace} to a Worker with write access and obtain the
+ * Bind a {@link Namespace} to a Worker with write access and obtain the
  * Effect-native KV client (`put`, `delete`).
  *
  * `WriteNamespace` is a single identifier that is simultaneously the binding's
@@ -19,7 +19,7 @@ import type { KVNamespaceError } from "./NamespaceTypes.ts";
 export interface WriteNamespace extends Binding.Service<
   WriteNamespace,
   "Cloudflare.KVNamespace.Write",
-  (namespace: KVNamespace) => Effect.Effect<WriteNamespaceClient>
+  (namespace: Namespace) => Effect.Effect<WriteNamespaceClient>
 > {}
 
 export const WriteNamespace = Binding.Service<WriteNamespace>(
@@ -31,6 +31,6 @@ export interface WriteNamespaceClient<Key extends string = string> {
     key: Key,
     value: string | ArrayBuffer | ArrayBufferView | ReadableStream,
     options?: KVNamespacePutOptions,
-  ): Effect.Effect<void, KVNamespaceError, RuntimeContext>;
-  delete(key: Key): Effect.Effect<void, KVNamespaceError, RuntimeContext>;
+  ): Effect.Effect<void, NamespaceError, RuntimeContext>;
+  delete(key: Key): Effect.Effect<void, NamespaceError, RuntimeContext>;
 }

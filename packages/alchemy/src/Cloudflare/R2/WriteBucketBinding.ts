@@ -5,12 +5,12 @@ import * as Stream from "effect/Stream";
 import { getRawStream } from "../../Util/Stream.ts";
 import { makeBucketBinding, makeHelpers } from "./BucketBinding.ts";
 import type {
-  R2Conditional,
-  R2MultipartOptions,
-  R2MultipartUpload,
-  R2PutOptions,
-  R2UploadPartOptions,
-  R2UploadedPart,
+  Conditional,
+  MultipartOptions,
+  MultipartUpload,
+  PutOptions,
+  UploadPartOptions,
+  UploadedPart,
 } from "./BucketTypes.ts";
 import { WriteBucket, type WriteBucketClient } from "./WriteBucket.ts";
 
@@ -32,12 +32,12 @@ export const makeWrite = ({
 }: ReturnType<typeof makeHelpers>): WriteBucketClient => {
   const wrapR2MultipartUpload = (
     upload: runtime.R2MultipartUpload,
-  ): R2MultipartUpload => ({
+  ): MultipartUpload => ({
     ...upload,
     raw: upload,
     uploadId: upload.uploadId,
     abort: () => tryPromise(() => upload.abort()),
-    complete: (uploadedParts: R2UploadedPart[]) =>
+    complete: (uploadedParts: UploadedPart[]) =>
       tryPromise(() => upload.complete(uploadedParts)).pipe(
         Effect.map(wrapR2Object),
       ),
@@ -50,7 +50,7 @@ export const makeWrite = ({
         | string
         | Blob
         | Stream.Stream<Uint8Array>,
-      options?: R2UploadPartOptions,
+      options?: UploadPartOptions,
     ) =>
       tryPromise(() =>
         upload.uploadPart(
@@ -75,8 +75,8 @@ export const makeWrite = ({
         | null
         | Blob
         | Stream.Stream<Uint8Array>,
-      options?: R2PutOptions & {
-        onlyIf: R2Conditional | Headers;
+      options?: PutOptions & {
+        onlyIf: Conditional | Headers;
         contentLength?: number;
       },
     ) =>
@@ -98,7 +98,7 @@ export const makeWrite = ({
         return raw.put(key, value as any, options);
       }).pipe(Effect.map(wrapR2ObjectOrBody)) as any,
     delete: (keys: string | string[]) => use((raw) => raw.delete(keys)),
-    createMultipartUpload: (key: string, options?: R2MultipartOptions) =>
+    createMultipartUpload: (key: string, options?: MultipartOptions) =>
       use((raw) => raw.createMultipartUpload(key, options)).pipe(
         Effect.map(wrapR2MultipartUpload),
       ),

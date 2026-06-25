@@ -15,7 +15,7 @@ import * as Binding from "../../Binding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { type TunnelToken } from "./TunnelBinding.ts";
+import { type Token } from "./TunnelBinding.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 
 /**
@@ -118,7 +118,7 @@ export interface ReadTunnelClient {
 }
 
 /** Build the read-only client over a bound token. */
-export const readClient = (token: TunnelToken): ReadTunnelClient => {
+export const readClient = (token: Token): ReadTunnelClient => {
   const authorize = authorizeWith(token);
   return {
     get: Effect.fn("Cloudflare.Tunnel.get")(function* (tunnelId) {

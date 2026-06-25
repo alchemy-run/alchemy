@@ -15,7 +15,7 @@ batches with the Effect-style
 
 `subscribe(...)` does both halves in one call: it registers a
 runtime queue listener on the Worker, and it auto-creates the
-`Cloudflare.Queue.QueueConsumer` resource that tells Cloudflare to
+`Cloudflare.Queue.Consumer` resource that tells Cloudflare to
 dispatch messages from the queue to this Worker. No separate
 deploy-time wiring is needed.
 
@@ -37,7 +37,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export const Queue = Cloudflare.Queue.Queue("Queue");
-export const Bucket = Cloudflare.R2.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 ```
 
 The Queue's name is generated from the stack/stage/id. The Bucket
@@ -145,20 +145,20 @@ to whole seconds when forwarded to Cloudflare.
 ## Provide the runtime layer
 
 `messages(...).subscribe(...)` is a `Context.Service` call —
-`QueueEventSourceLive` is the layer that registers the listener
+`EventSourceLive` is the layer that registers the listener
 with the Worker's runtime context. Add it to the layer stack
 alongside the other binding lives.
 
 ```diff lang="typescript"
   }).pipe(
-+   Effect.provide(Cloudflare.Queue.QueueEventSourceLive),
++   Effect.provide(Cloudflare.Queue.EventSourceLive),
     Effect.provide(Cloudflare.Queue.WriteQueueBinding),
     Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   ),
 ```
 
 Without the live layer, the subscribe call fails at deploy with
-`Service not found: Cloudflare.Queue.QueueEventSource`.
+`Service not found: Cloudflare.Queue.EventSource`.
 
 ## Add the producer route
 

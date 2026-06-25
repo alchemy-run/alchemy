@@ -6,7 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 import type { Action } from "./Rule.ts";
 
@@ -21,7 +21,7 @@ export type CatchAllProps = {
    * a replacement (the old zone's catch-all is restored to the state it
    * had before Alchemy managed it).
    */
-  zone: ZoneReference;
+  zone: Reference;
   /**
    * Display name for the catch-all rule. When omitted, the current name
    * on the rule is left untouched.
@@ -327,7 +327,7 @@ const toAttributes = (
   initialActions: initial.initialActions,
 });
 
-const resolve = Effect.fn(function* (zone: ZoneReference) {
+const resolve = Effect.fn(function* (zone: Reference) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* resolveZoneId({
     accountId,

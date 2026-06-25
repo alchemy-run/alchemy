@@ -3,11 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Queue } from "./Queue.ts";
-import type {
-  QueueSendError,
-  QueueSendMessage,
-  QueueSendOptions,
-} from "./QueueTypes.ts";
+import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
 
 /**
  * Binding service that turns a {@link Queue} resource into a typed
@@ -63,9 +59,9 @@ export interface WriteQueueClient {
   raw: Effect.Effect<runtime.Queue<unknown>, never, RuntimeContext>;
   send(
     body: unknown,
-    options?: QueueSendOptions,
-  ): Effect.Effect<void, QueueSendError, RuntimeContext>;
+    options?: SendOptions,
+  ): Effect.Effect<void, SendError, RuntimeContext>;
   sendBatch(
-    messages: ReadonlyArray<QueueSendMessage>,
-  ): Effect.Effect<void, QueueSendError, RuntimeContext>;
+    messages: ReadonlyArray<SendMessage>,
+  ): Effect.Effect<void, SendError, RuntimeContext>;
 }

@@ -6,9 +6,9 @@ import {
   makeHttpQueueBinding,
   makeQueueHttpScope,
   toQueueSendError,
-  type QueueHttpToken,
+  type HttpToken,
 } from "./QueueHttp.ts";
-import { QueueSendError, type QueueSendMessage } from "./QueueTypes.ts";
+import { SendError, type SendMessage } from "./QueueTypes.ts";
 import { WriteQueue, type WriteQueueClient } from "./WriteQueue.ts";
 
 /**
@@ -33,7 +33,7 @@ export const WriteQueueHttp = Layer.effect(
 );
 
 /** Convert a message into the Cloudflare bulk-push `messages[]` shape. */
-const toMessage = (message: QueueSendMessage) =>
+const toMessage = (message: SendMessage) =>
   message.contentType === "text"
     ? {
         body:
@@ -46,13 +46,13 @@ const toMessage = (message: QueueSendMessage) =>
 
 /** Build the producer client over the Queues bulk-push HTTP API. */
 export const makeWriteQueueHttpClient = (
-  token: QueueHttpToken,
+  token: HttpToken,
   queueId: Effect.Effect<string>,
 ): WriteQueueClient => {
   const authorize = authorizeWith(token);
   const scope = makeQueueHttpScope(token, queueId);
 
-  const push = (messages: ReadonlyArray<QueueSendMessage>) =>
+  const push = (messages: ReadonlyArray<SendMessage>) =>
     scope.pipe(
       Effect.flatMap(({ accountId, queueId }) =>
         authorize(
@@ -69,7 +69,7 @@ export const makeWriteQueueHttpClient = (
 
   return {
     raw: Effect.die(
-      new QueueSendError({
+      new SendError({
         message:
           "Queue HTTP client does not expose a native Queue binding; use send/sendBatch.",
         cause: new Error("unsupported"),
@@ -77,6 +77,6 @@ export const makeWriteQueueHttpClient = (
     ),
     send: (body: unknown, options?: { contentType?: "json" | "text" }) =>
       push([{ body, contentType: options?.contentType }]),
-    sendBatch: (messages: ReadonlyArray<QueueSendMessage>) => push(messages),
+    sendBatch: (messages: ReadonlyArray<SendMessage>) => push(messages),
   };
 };

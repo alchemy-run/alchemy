@@ -13,7 +13,7 @@ interface AddInstance {
     add(a: number, b: number): number;
   };
 }
-interface QueueMessage {
+interface Message {
   id: string;
   body: {
     text: string;
@@ -37,7 +37,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     const queueMessages = yield* QueueMessages;
     const workflow = yield* NotifyWorkflow;
 
-    yield* Cloudflare.Queue.messages<QueueMessage["body"]>(queue).subscribe(
+    yield* Cloudflare.Queue.messages<Message["body"]>(queue).subscribe(
       (stream) =>
         Stream.runForEach(stream, (msg) =>
           queueMessages
@@ -103,7 +103,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     Effect.provide([
       Cloudflare.KV.ReadWriteNamespaceBinding,
       Cloudflare.Queue.WriteQueueBinding,
-      Cloudflare.Queue.QueueEventSourceLive,
+      Cloudflare.Queue.EventSourceLive,
     ]),
   ),
 ) {}
@@ -114,12 +114,12 @@ export class QueueMessages extends Cloudflare.DurableObjectNamespace<QueueMessag
     Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       return {
-        put: Effect.fn(function* (message: QueueMessage) {
+        put: Effect.fn(function* (message: Message) {
           yield* state.storage.put(message.id, message);
         }),
         list: Effect.fn(function* () {
-          const messages = new Map<string, QueueMessage>(
-            state.storage.kv.list<QueueMessage>(),
+          const messages = new Map<string, Message>(
+            state.storage.kv.list<Message>(),
           );
           return Array.from(messages.values());
         }),

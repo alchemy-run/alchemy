@@ -16,7 +16,7 @@ import { cloneD1Database } from "./D1Clone.ts";
 import { importD1Database } from "./D1Import.ts";
 import { applyMigrations } from "./D1Migrations.ts";
 
-export const isD1Database = (value: unknown): value is Database =>
+export const isDatabase = (value: unknown): value is Database =>
   typeof value === "object" && (value as any)?.Type === "Cloudflare.D1Database";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";

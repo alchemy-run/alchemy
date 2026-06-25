@@ -9,10 +9,10 @@ import {
   ImagesError,
   type ImageTransformationResultClient,
   type ImageTransformerClient,
-  type ImagesClient,
+  type Client,
 } from "./ImagesBinding.ts";
 
-export const ImagesBindingLayer = Layer.effect(
+export const BindingLayer = Layer.effect(
   ImagesBinding,
   Effect.gen(function* () {
     const env = yield* WorkerEnvironment;
@@ -49,7 +49,7 @@ export const ImagesBindingLayer = Layer.effect(
             const readable = yield* toCfReadable(stream);
             return wrapTransformer(binding.input(readable, options));
           }),
-      } satisfies ImagesClient;
+      } satisfies Client;
     });
   }),
 );

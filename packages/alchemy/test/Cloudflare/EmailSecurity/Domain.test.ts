@@ -53,13 +53,10 @@ test.provider.skipIf(!sacrificialDomain)(
       // it under management requires `adopt(true)`.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurity.EmailSecurityDomain(
-            "MailDomain",
-            {
-              domain: domainName,
-              lookbackHops: 5,
-            },
-          ).pipe(adopt(true));
+          return yield* Cloudflare.EmailSecurity.Domain("MailDomain", {
+            domain: domainName,
+            lookbackHops: 5,
+          }).pipe(adopt(true));
         }),
       );
       expect(created.domainId).toEqual(baseline?.id);
@@ -69,14 +66,11 @@ test.provider.skipIf(!sacrificialDomain)(
       // Update settings in place — same physical domain.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSecurity.EmailSecurityDomain(
-            "MailDomain",
-            {
-              domain: domainName,
-              lookbackHops: 10,
-              dropDispositions: ["MALICIOUS"],
-            },
-          ).pipe(adopt(true));
+          return yield* Cloudflare.EmailSecurity.Domain("MailDomain", {
+            domain: domainName,
+            lookbackHops: 10,
+            dropDispositions: ["MALICIOUS"],
+          }).pipe(adopt(true));
         }),
       );
       expect(updated.domainId).toEqual(created.domainId);
@@ -114,7 +108,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSecurity.EmailSecurityDomain,
+        Cloudflare.EmailSecurity.Domain,
       );
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);

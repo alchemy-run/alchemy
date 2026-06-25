@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { type TunnelToken } from "./TunnelBinding.ts";
+import { type Token } from "./TunnelBinding.ts";
 import { readClient, type ReadTunnelClient } from "./ReadTunnel.ts";
 import { writeClient, type WriteTunnelClient } from "./WriteTunnel.ts";
 
@@ -69,7 +69,7 @@ export interface ReadWriteTunnelClient
   extends ReadTunnelClient, WriteTunnelClient {}
 
 /** Build the combined read + write client over a bound token. */
-export const readWriteClient = (token: TunnelToken): ReadWriteTunnelClient => ({
+export const readWriteClient = (token: Token): ReadWriteTunnelClient => ({
   ...readClient(token),
   ...writeClient(token),
 });

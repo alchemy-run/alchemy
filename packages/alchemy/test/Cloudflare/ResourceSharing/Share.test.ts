@@ -162,7 +162,7 @@ test.provider(
       // deploy would fail with the typed `Forbidden` (HTTP 403, code 10000).
       if (recipientAccountId) {
         const policy = yield* stack.deploy(
-          Cloudflare.Gateway.GatewayRule("ListSharePolicy", {
+          Cloudflare.Gateway.Rule("ListSharePolicy", {
             action: "block",
             traffic: 'dns.fqdn == "list-share.alchemy-test.example"',
             filters: ["dns"],
@@ -203,7 +203,7 @@ test.provider.skipIf(!recipientAccountId)(
       // A shareable resource: gateway policies are sharable on the test
       // account's Zero Trust setup.
       const policyA = yield* stack.deploy(
-        Cloudflare.Gateway.GatewayRule("SharePolicyA", {
+        Cloudflare.Gateway.Rule("SharePolicyA", {
           action: "block",
           traffic: 'dns.fqdn == "share-a.alchemy-test.example"',
           filters: ["dns"],
@@ -211,7 +211,7 @@ test.provider.skipIf(!recipientAccountId)(
         }),
       );
       const policyB = yield* stack.deploy(
-        Cloudflare.Gateway.GatewayRule("SharePolicyB", {
+        Cloudflare.Gateway.Rule("SharePolicyB", {
           action: "block",
           traffic: 'dns.fqdn == "share-b.alchemy-test.example"',
           filters: ["dns"],
@@ -292,7 +292,7 @@ test.provider.skipIf(!recipientAccountId)(
       yield* stack.destroy();
 
       const policyA = yield* stack.deploy(
-        Cloudflare.Gateway.GatewayRule("ChildPolicyA", {
+        Cloudflare.Gateway.Rule("ChildPolicyA", {
           action: "block",
           traffic: 'dns.fqdn == "child-a.alchemy-test.example"',
           filters: ["dns"],
@@ -300,7 +300,7 @@ test.provider.skipIf(!recipientAccountId)(
         }),
       );
       const policyB = yield* stack.deploy(
-        Cloudflare.Gateway.GatewayRule("ChildPolicyB", {
+        Cloudflare.Gateway.Rule("ChildPolicyB", {
           action: "block",
           traffic: 'dns.fqdn == "child-b.alchemy-test.example"',
           filters: ["dns"],

@@ -14,7 +14,7 @@ const RegionalHostnameTypeId =
   "Cloudflare.RegionalHostname.RegionalHostname" as const;
 type RegionalHostnameTypeId = typeof RegionalHostnameTypeId;
 
-export interface RegionalHostnameProps {
+export interface Props {
   /**
    * The zone the regional hostname belongs to. Changing it forces a
    * replacement.
@@ -39,7 +39,7 @@ export interface RegionalHostnameProps {
   routing?: string;
 }
 
-export interface RegionalHostnameAttributes {
+export interface Attributes {
   /** The zone the regional hostname belongs to. */
   zoneId: string;
   /** The regionalized DNS hostname. */
@@ -54,8 +54,8 @@ export interface RegionalHostnameAttributes {
 
 export type RegionalHostname = Resource<
   RegionalHostnameTypeId,
-  RegionalHostnameProps,
-  RegionalHostnameAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -66,7 +66,7 @@ export type RegionalHostname = Resource<
  * Services).
  *
  * A DNS record for the hostname must exist in the zone for regionalization
- * to take effect (soft dependency on `Cloudflare.Dns.DnsRecord`). Only
+ * to take effect (soft dependency on `Cloudflare.Dns.Record`). Only
  * `regionKey` is mutable; `hostname` is the path identifier and `routing`
  * is create-only, so both force a replacement.
  *
@@ -124,7 +124,7 @@ export const RegionalHostnameProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? []).map(
-                  (item): RegionalHostnameAttributes => ({
+                  (item): Attributes => ({
                     zoneId: zone.id,
                     hostname: item.hostname,
                     regionKey: item.regionKey,
@@ -250,7 +250,7 @@ const getHostname = (zoneId: string, hostname: string) =>
 const toAttributes = (
   hostname: addressing.GetRegionalHostnameResponse,
   zoneId: string,
-): RegionalHostnameAttributes => ({
+): Attributes => ({
   zoneId,
   hostname: hostname.hostname,
   regionKey: hostname.regionKey,

@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { AnalyticsEngineDataset as AnalyticsEngineDatasetLike } from "./AnalyticsEngineDataset.ts";
+import type { Dataset as AnalyticsEngineDatasetLike } from "./Dataset.ts";
 import {
-  AnalyticsEngineDatasetError,
-  type AnalyticsEngineDatasetClient,
+  DatasetError,
+  type DatasetClient,
   type RuntimeAnalyticsEngineDataset,
   WriteDataset,
 } from "./WriteDataset.ts";
@@ -41,14 +41,14 @@ export const WriteDatasetBinding = Layer.effect(
               Effect.try({
                 try: () => raw.writeDataPoint(dataPoint),
                 catch: (error: any) =>
-                  new AnalyticsEngineDatasetError({
+                  new DatasetError({
                     message: error?.message ?? "Unknown error",
                     cause: error,
                   }),
               }),
             ),
           ),
-      } satisfies AnalyticsEngineDatasetClient;
+      } satisfies DatasetClient;
     });
   }),
 );

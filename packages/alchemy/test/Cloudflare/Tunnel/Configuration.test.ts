@@ -31,7 +31,7 @@ describe("Tunnel Configuration", () => {
               name: "alchemy-tunnel-config-list-test",
               configSrc: "cloudflare",
             });
-            const config = yield* Cloudflare.Tunnel.TunnelConfiguration(
+            const config = yield* Cloudflare.Tunnel.Configuration(
               "ListConfig",
               {
                 tunnelId: tunnel.tunnelId,
@@ -48,7 +48,7 @@ describe("Tunnel Configuration", () => {
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.Tunnel.TunnelConfiguration,
+          Cloudflare.Tunnel.Configuration,
         );
         const all = yield* provider.list();
 

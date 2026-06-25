@@ -12,7 +12,7 @@ import type { Providers } from "../Providers.ts";
 const RealtimeKitAppTypeId = "Cloudflare.RealtimeKit.App" as const;
 type RealtimeKitAppTypeId = typeof RealtimeKitAppTypeId;
 
-export type RealtimeKitAppProps = {
+export type AppProps = {
   /**
    * Human readable app name. App names are not unique on Cloudflare's side.
    * If omitted, a unique name is generated from the app, stage, and logical
@@ -27,7 +27,7 @@ export type RealtimeKitAppProps = {
   name?: string;
 };
 
-export type RealtimeKitAppAttributes = {
+export type AppAttributes = {
   /**
    * Server-generated app identifier (also called the organization id).
    * Stable for the lifetime of the app.
@@ -47,10 +47,10 @@ export type RealtimeKitAppAttributes = {
   createdAt: string;
 };
 
-export type RealtimeKitApp = Resource<
+export type App = Resource<
   RealtimeKitAppTypeId,
-  RealtimeKitAppProps,
-  RealtimeKitAppAttributes,
+  AppProps,
+  AppAttributes,
   never,
   Providers
 >;
@@ -71,16 +71,16 @@ export type RealtimeKitApp = Resource<
  * @section Creating an App
  * @example Basic app
  * ```typescript
- * const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("Meetings", {
+ * const app = yield* Cloudflare.RealtimeKit.App("Meetings", {
  *   name: "my-meetings-app",
  * });
  * ```
  *
  * @example Child resources
  * ```typescript
- * const app = yield* Cloudflare.RealtimeKit.RealtimeKitApp("Meetings", {});
+ * const app = yield* Cloudflare.RealtimeKit.App("Meetings", {});
  *
- * const webhook = yield* Cloudflare.RealtimeKit.RealtimeKitWebhook("Events", {
+ * const webhook = yield* Cloudflare.RealtimeKit.Webhook("Events", {
  *   appId: app.appId,
  *   url: "https://example.com/webhook",
  *   events: ["meeting.started", "meeting.ended"],
@@ -89,16 +89,16 @@ export type RealtimeKitApp = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/realtimekit/
  */
-export const RealtimeKitApp = Resource<RealtimeKitApp>(RealtimeKitAppTypeId);
+export const App = Resource<App>(RealtimeKitAppTypeId);
 
 /**
- * Returns true if the given value is a RealtimeKitApp resource.
+ * Returns true if the given value is a App resource.
  */
-export const isRealtimeKitApp = (value: unknown): value is RealtimeKitApp =>
+export const isApp = (value: unknown): value is App =>
   Predicate.hasProperty(value, "Type") && value.Type === RealtimeKitAppTypeId;
 
-export const RealtimeKitAppProvider = () =>
-  Provider.succeed(RealtimeKitApp, {
+export const AppProvider = () =>
+  Provider.succeed(App, {
     stables: ["appId", "accountId", "name", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -157,7 +157,7 @@ export const RealtimeKitAppProvider = () =>
       // is the name; fail loudly instead of silently ignoring drift.
       if ((observed.name ?? "") !== name) {
         return yield* Effect.fail(
-          new RealtimeKitAppRenameNotSupported({
+          new AppRenameNotSupported({
             appId: observed.id ?? "",
             currentName: observed.name ?? "",
             desiredName: name,
@@ -233,8 +233,8 @@ const listAllApps = (accountId: string) =>
  * has neither an update endpoint (to rename in place) nor a delete endpoint
  * (to model the change as a replacement).
  */
-export class RealtimeKitAppRenameNotSupported extends Data.TaggedError(
-  "RealtimeKitAppRenameNotSupported",
+export class AppRenameNotSupported extends Data.TaggedError(
+  "AppRenameNotSupported",
 )<{
   readonly appId: string;
   readonly currentName: string;
@@ -283,10 +283,7 @@ const createAppName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  app: ObservedApp,
-  accountId: string,
-): RealtimeKitAppAttributes => ({
+const toAttributes = (app: ObservedApp, accountId: string): AppAttributes => ({
   appId: app.id ?? "",
   accountId,
   name: app.name ?? "",

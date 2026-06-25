@@ -7,7 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
 const GoogleTagGatewayTypeId =
@@ -18,7 +18,7 @@ type GoogleTagGatewayTypeId = typeof GoogleTagGatewayTypeId;
  * The plain Google Tag Gateway configuration shape — the value PUT to and
  * read back from `/zones/{zone_id}/settings/google-tag-gateway/config`.
  */
-export type GoogleTagGatewayConfig = {
+export type Config = {
   /** Whether Google Tag Gateway is enabled for the zone. */
   enabled: boolean;
   /** Endpoint path used to proxy Google Tag Manager requests. */
@@ -31,7 +31,7 @@ export type GoogleTagGatewayConfig = {
   setUpTag: boolean | undefined;
 };
 
-export type GoogleTagGatewayProps = {
+export type Props = {
   /**
    * Zone whose Google Tag Gateway config should be managed. Accepts a zone
    * id, a zone name (`example.com`), or a `{ zoneId, name? }` object.
@@ -40,7 +40,7 @@ export type GoogleTagGatewayProps = {
    * a replacement (the old zone's config is restored to the value it had
    * before Alchemy managed it).
    */
-  zone: ZoneReference;
+  zone: Reference;
   /**
    * Enables or disables Google Tag Gateway for the zone.
    */
@@ -70,7 +70,7 @@ export type GoogleTagGatewayProps = {
   setUpTag?: boolean;
 };
 
-export type GoogleTagGatewayAttributes = GoogleTagGatewayConfig & {
+export type Attributes = Config & {
   /** Cloudflare zone id the config belongs to. */
   zoneId: string;
   /**
@@ -79,13 +79,13 @@ export type GoogleTagGatewayAttributes = GoogleTagGatewayConfig & {
    * Restored on destroy, so deleting the resource puts the zone back the
    * way it was found.
    */
-  initialConfig: GoogleTagGatewayConfig | undefined;
+  initialConfig: Config | undefined;
 };
 
 export type GoogleTagGateway = Resource<
   GoogleTagGatewayTypeId,
-  GoogleTagGatewayProps,
-  GoogleTagGatewayAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -164,7 +164,7 @@ export const GoogleTagGatewayProvider = () =>
                 zoneId,
                 ...config,
                 initialConfig: config,
-              } satisfies GoogleTagGatewayAttributes;
+              } satisfies Attributes;
             }),
             // Zone deleted out-of-band, or the scoped token can't see this
             // zone — skip it rather than failing the whole enumeration.
@@ -221,7 +221,7 @@ export const GoogleTagGatewayProvider = () =>
         output !== undefined ? output.initialConfig : observed;
 
       // 3. Sync — PUT is a full replace; skip the call on no-op.
-      const desired: GoogleTagGatewayConfig = {
+      const desired: Config = {
         enabled: news.enabled,
         endpoint: news.endpoint,
         hideOriginalIp: news.hideOriginalIp,
@@ -254,7 +254,7 @@ export const GoogleTagGatewayProvider = () =>
       // PUT schema requires endpoint/measurementId, so a zone that had never
       // configured the feature is reset to a disabled baseline keeping the
       // last-known endpoint and measurement id.
-      const target: GoogleTagGatewayConfig = initialConfig ?? {
+      const target: Config = initialConfig ?? {
         enabled: false,
         endpoint: output.endpoint,
         hideOriginalIp: false,
@@ -277,7 +277,7 @@ export const GoogleTagGatewayProvider = () =>
     }),
   });
 
-const resolve = Effect.fn(function* (zone: ZoneReference) {
+const resolve = Effect.fn(function* (zone: Reference) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* resolveZoneId({
     accountId,
@@ -290,7 +290,7 @@ type ConfigResponse = NonNullable<
   googleTagGateway.GetConfigResponse | googleTagGateway.PutConfigResponse
 >;
 
-const toConfig = (response: ConfigResponse): GoogleTagGatewayConfig => ({
+const toConfig = (response: ConfigResponse): Config => ({
   enabled: response.enabled,
   endpoint: response.endpoint,
   hideOriginalIp: response.hideOriginalIp,
@@ -298,10 +298,7 @@ const toConfig = (response: ConfigResponse): GoogleTagGatewayConfig => ({
   setUpTag: response.setUpTag ?? undefined,
 });
 
-const configEquals = (
-  a: GoogleTagGatewayConfig,
-  b: GoogleTagGatewayConfig,
-): boolean =>
+const configEquals = (a: Config, b: Config): boolean =>
   a.enabled === b.enabled &&
   a.endpoint === b.endpoint &&
   a.hideOriginalIp === b.hideOriginalIp &&

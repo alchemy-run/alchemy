@@ -38,7 +38,7 @@ export default Alchemy.Stack(
     const secondaryApi = yield* SecondaryApi;
     // The Queue consumer is wired automatically by
     // `Cloudflare.Queue.messages(Queue).subscribe(...)` inside src/Api.ts —
-    // no explicit `Cloudflare.Queue.QueueConsumer(...)` is needed here.
+    // no explicit `Cloudflare.Queue.Consumer(...)` is needed here.
 
     const announcement = yield* AnnounceDeploy({
       url: api.url.as<string>(),

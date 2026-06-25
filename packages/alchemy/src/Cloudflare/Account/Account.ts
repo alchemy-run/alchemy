@@ -15,9 +15,9 @@ type AccountTypeId = typeof AccountTypeId;
 /**
  * The kind of Cloudflare account. Cannot be changed after creation.
  */
-export type AccountType = "standard" | "enterprise";
+export type Type = "standard" | "enterprise";
 
-export interface AccountProps {
+export interface Props {
   /**
    * Account name (display name). Mutable in place. If omitted, a unique
    * name is generated from the app, stage, and logical ID.
@@ -30,7 +30,7 @@ export interface AccountProps {
    * updating this property triggers a replacement.
    * @default "standard"
    */
-  type?: AccountType;
+  type?: Type;
   /**
    * Tenant unit to create the account under. Only meaningful for tenant /
    * partner credentials; defaults to the tenant's root unit. Create-only —
@@ -59,7 +59,7 @@ export interface AccountProps {
   enforceTwofactor?: boolean;
 }
 
-export interface AccountAttributes {
+export interface Attributes {
   /**
    * Account identifier tag assigned by Cloudflare.
    */
@@ -71,7 +71,7 @@ export interface AccountAttributes {
   /**
    * The kind of account.
    */
-  type: AccountType;
+  type: Type;
   /**
    * Timestamp for the creation of the account.
    */
@@ -96,8 +96,8 @@ export interface AccountAttributes {
 
 export type Account = Resource<
   AccountTypeId,
-  AccountProps,
-  AccountAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -279,11 +279,11 @@ const getAccount = (accountId: string) =>
     Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
   );
 
-const toAttributes = (account: ObservedAccount): AccountAttributes => ({
+const toAttributes = (account: ObservedAccount): Attributes => ({
   accountId: account.id,
   name: account.name,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  type: account.type as AccountType,
+  type: account.type as Type,
   createdOn: account.createdOn ?? undefined,
   parentOrgId: account.managedBy?.parentOrgId ?? undefined,
   parentOrgName: account.managedBy?.parentOrgName ?? undefined,

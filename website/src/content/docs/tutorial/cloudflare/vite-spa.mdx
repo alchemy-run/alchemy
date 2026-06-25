@@ -390,10 +390,10 @@ Start with the simplest backend: an R2 bucket.
 // src/backend.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Bucket = Cloudflare.R2.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 ```
 
-`Cloudflare.R2.R2Bucket("Bucket")` is a description, not a deploy.
+`Cloudflare.R2.Bucket("Bucket")` is a description, not a deploy.
 Alchemy provisions the real bucket on the next run as soon as
 something binds to it.
 
@@ -413,12 +413,12 @@ Add the bucket to the Vite worker's `bindings` map:
 ```
 
 The key (`BUCKET`) is the field name on `env`; the value identifies
-the resource. `env.BUCKET` is now typed as `R2Bucket` end to end.
+the resource. `env.BUCKET` is now typed as `Bucket` end to end.
 
 ## Pull in Cloudflare's binding types
 
 `InferEnv` maps each binding to a Cloudflare runtime type
-(`R2Bucket`, `Service`, `KVNamespace`, …) — those types live in
+(`Bucket`, `Service`, `Namespace`, …) — those types live in
 `@cloudflare/workers-types`. Add it to your `tsconfig.json` so the
 TypeScript checker can find them:
 
@@ -440,7 +440,7 @@ bun add -d @cloudflare/workers-types
  }
 ```
 
-Without this you'll see `Cannot find name 'R2Bucket'` (or `Service`,
+Without this you'll see `Cannot find name 'Bucket'` (or `Service`,
 etc.) the moment you reference `env.BUCKET` inside a route handler.
 
 ## Option 1 — call the binding directly
@@ -486,7 +486,7 @@ concurrency), factor it into its own Worker:
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 +import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
- export const Bucket = Cloudflare.R2.R2Bucket("Bucket");
+ export const Bucket = Cloudflare.R2.Bucket("Bucket");
 +
 +export default class Backend extends Cloudflare.Worker<Backend>()(
 +  "Backend",

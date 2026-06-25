@@ -26,20 +26,20 @@ type CustomCertificateTypeId = typeof CustomCertificateTypeId;
  * `optimal` bundle uses the shortest chain and newest intermediates. `force`
  * serves exactly the certificate you uploaded.
  */
-export type CustomCertificateBundleMethod = "ubiquitous" | "optimal" | "force";
+export type BundleMethod = "ubiquitous" | "optimal" | "force";
 
 /**
  * SNI support of the uploaded certificate. `legacy_custom` enables support
  * for legacy clients which do not include SNI in the TLS handshake (requires
  * dedicated IPs); `sni_custom` is the recommended modern option.
  */
-export type CustomCertificateType = "legacy_custom" | "sni_custom";
+export type Type = "legacy_custom" | "sni_custom";
 
 /**
  * Lifecycle status of a custom certificate. Uploads are asynchronous —
  * a certificate transitions `initializing` → `active`.
  */
-export type CustomCertificateStatus =
+export type Status =
   | "active"
   | "expired"
   | "deleted"
@@ -53,14 +53,14 @@ export type CustomCertificateStatus =
  * Geo Key Manager region restriction: where the certificate's private key
  * may be held locally for optimal TLS performance.
  */
-export interface CustomCertificateGeoRestrictions {
+export interface GeoRestrictions {
   /**
    * Region label: `us`, `eu`, or `highest_security`.
    */
   label: "us" | "eu" | "highest_security";
 }
 
-export interface CustomCertificateProps {
+export interface Props {
   /**
    * Zone the certificate is uploaded to. Custom certificates are a
    * zone-level feature (Business and Enterprise plans only).
@@ -95,7 +95,7 @@ export interface CustomCertificateProps {
    * How Cloudflare builds the certificate chain served to clients.
    * @default "ubiquitous"
    */
-  bundleMethod?: CustomCertificateBundleMethod;
+  bundleMethod?: BundleMethod;
   /**
    * SNI support: `sni_custom` (recommended) or `legacy_custom` (supports
    * non-SNI clients; requires dedicated IPs).
@@ -104,12 +104,12 @@ export interface CustomCertificateProps {
    * triggers a replacement.
    * @default "legacy_custom"
    */
-  type?: CustomCertificateType;
+  type?: Type;
   /**
    * Geo Key Manager region restriction for the private key. Mutually
    * exclusive with `policy`.
    */
-  geoRestrictions?: CustomCertificateGeoRestrictions;
+  geoRestrictions?: GeoRestrictions;
   /**
    * Geo Key Manager policy expression (e.g.
    * `(country: US) or (region: EU)`) that determines where the private key
@@ -133,7 +133,7 @@ export interface CustomCertificateProps {
   priority?: number;
 }
 
-export interface CustomCertificateAttributes {
+export interface Attributes {
   /** Cloudflare-assigned identifier of the custom certificate. Stable across in-place certificate rotations. */
   certificateId: string;
   /** Zone the certificate belongs to. */
@@ -151,17 +151,17 @@ export interface CustomCertificateAttributes {
   /** ISO8601 date the certificate was last modified. */
   modifiedOn: string | undefined;
   /** How Cloudflare builds the certificate chain served to clients. */
-  bundleMethod: CustomCertificateBundleMethod | undefined;
+  bundleMethod: BundleMethod | undefined;
   /** SNI support the certificate was uploaded with. Not echoed by the API — persisted from the input props. */
-  type: CustomCertificateType;
+  type: Type;
   /** The order/priority in which the certificate is used in a request. */
   priority: number | undefined;
   /** Lifecycle status of the certificate (`initializing` → `active`). */
-  status: CustomCertificateStatus | undefined;
+  status: Status | undefined;
   /** Geo Key Manager policy expression, as echoed by the API for the `policy` prop. */
   policyRestrictions: string | undefined;
   /** Geo Key Manager region restriction, if set. */
-  geoRestrictions: CustomCertificateGeoRestrictions | undefined;
+  geoRestrictions: GeoRestrictions | undefined;
   /**
    * SHA-256 hash of the uploaded certificate/private key pair. Cloudflare
    * never echoes the PEM contents back, so this hash is the diff baseline
@@ -173,8 +173,8 @@ export interface CustomCertificateAttributes {
 
 export type CustomCertificate = Resource<
   CustomCertificateTypeId,
-  CustomCertificateProps,
-  CustomCertificateAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -285,7 +285,7 @@ export const CustomCertificateProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.result ?? []).map(
-                    (cert): CustomCertificateAttributes =>
+                    (cert): Attributes =>
                       toAttributes(cert, {
                         type: "legacy_custom",
                         contentHash: "",
@@ -295,7 +295,7 @@ export const CustomCertificateProvider = () =>
               ),
               Effect.catchTag(
                 ["PlanLevelNotAllowed", "ZoneNotFound", "Forbidden"],
-                () => Effect.succeed([] as CustomCertificateAttributes[]),
+                () => Effect.succeed([] as Attributes[]),
               ),
             ),
         { concurrency: 10 },
@@ -510,7 +510,7 @@ const parseCertificate = (pem: string) =>
  * Persisted in the attributes as the rotation diff baseline because the API
  * never returns the PEM contents.
  */
-const hashContent = (news: CustomCertificateProps) =>
+const hashContent = (news: Props) =>
   Effect.sync(() =>
     crypto
       .createHash("sha256")
@@ -546,8 +546,8 @@ const syncPriority = (
 
 const toAttributes = (
   cert: ObservedCertificate,
-  meta: { type: CustomCertificateType; contentHash: string },
-): CustomCertificateAttributes => ({
+  meta: { type: Type; contentHash: string },
+): Attributes => ({
   certificateId: cert.id,
   zoneId: cert.zoneId,
   hosts: [...(cert.hosts ?? [])],
@@ -557,8 +557,7 @@ const toAttributes = (
   uploadedOn: cert.uploadedOn ?? undefined,
   modifiedOn: cert.modifiedOn ?? undefined,
   bundleMethod:
-    (cert.bundleMethod as CustomCertificateBundleMethod | null | undefined) ??
-    undefined,
+    (cert.bundleMethod as BundleMethod | null | undefined) ?? undefined,
   type: meta.type,
   priority: cert.priority ?? undefined,
   status: cert.status ?? undefined,

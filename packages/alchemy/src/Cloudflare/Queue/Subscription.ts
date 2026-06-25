@@ -19,7 +19,7 @@ type QueueSubscriptionTypeId = typeof QueueSubscriptionTypeId;
  * and the source is fixed at creation — changing it triggers a
  * replacement.
  */
-export type QueueSubscriptionSource =
+export type SubscriptionSource =
   | {
       /** Cloudflare Images events. */
       type: "images";
@@ -59,7 +59,7 @@ export type QueueSubscriptionSource =
       workflowName: string;
     };
 
-export type QueueSubscriptionProps = {
+export type SubscriptionProps = {
   /**
    * Human readable name of the subscription. If omitted, a unique name is
    * generated from the app, stage, and logical ID.
@@ -71,7 +71,7 @@ export type QueueSubscriptionProps = {
    * events). Fixed at creation — changing it triggers a replacement.
    * Cloudflare allows at most one subscription per source per account.
    */
-  source: QueueSubscriptionSource;
+  source: SubscriptionSource;
   /**
    * Event types to deliver, scoped to the source (e.g. `bucket.created`
    * and `bucket.deleted` for the `r2` source, `namespace.created` for
@@ -90,7 +90,7 @@ export type QueueSubscriptionProps = {
   enabled?: boolean;
 };
 
-export type QueueSubscriptionAttributes = {
+export type SubscriptionAttributes = {
   /**
    * Unique identifier for the subscription.
    */
@@ -106,7 +106,7 @@ export type QueueSubscriptionAttributes = {
   /**
    * The event source the subscription listens to.
    */
-  source: QueueSubscriptionSource;
+  source: SubscriptionSource;
   /**
    * Event types delivered by this subscription.
    */
@@ -129,10 +129,10 @@ export type QueueSubscriptionAttributes = {
   modifiedAt: string;
 };
 
-export type QueueSubscription = Resource<
+export type Subscription = Resource<
   QueueSubscriptionTypeId,
-  QueueSubscriptionProps,
-  QueueSubscriptionAttributes,
+  SubscriptionProps,
+  SubscriptionAttributes,
   never,
   Providers
 >;
@@ -154,7 +154,7 @@ export type QueueSubscription = Resource<
  * ```typescript
  * const queue = yield* Cloudflare.Queue.Queue("EventsQueue");
  *
- * const subscription = yield* Cloudflare.Queue.QueueSubscription("R2Events", {
+ * const subscription = yield* Cloudflare.Queue.Subscription("R2Events", {
  *   source: { type: "r2" },
  *   events: ["bucket.created", "bucket.deleted"],
  *   queueId: queue.queueId,
@@ -163,7 +163,7 @@ export type QueueSubscription = Resource<
  *
  * @example KV namespace events with an explicit name
  * ```typescript
- * const subscription = yield* Cloudflare.Queue.QueueSubscription("KvEvents", {
+ * const subscription = yield* Cloudflare.Queue.Subscription("KvEvents", {
  *   name: "kv-events",
  *   source: { type: "kv" },
  *   events: ["namespace.created"],
@@ -173,7 +173,7 @@ export type QueueSubscription = Resource<
  *
  * @example Workers Builds events for one Worker
  * ```typescript
- * const subscription = yield* Cloudflare.Queue.QueueSubscription("BuildEvents", {
+ * const subscription = yield* Cloudflare.Queue.Subscription("BuildEvents", {
  *   source: { type: "workersBuilds.worker", workerName: "my-worker" },
  *   events: ["build.started", "build.completed"],
  *   queueId: queue.queueId,
@@ -183,7 +183,7 @@ export type QueueSubscription = Resource<
  * @section Pausing delivery
  * @example Disable a subscription without deleting it
  * ```typescript
- * const subscription = yield* Cloudflare.Queue.QueueSubscription("R2Events", {
+ * const subscription = yield* Cloudflare.Queue.Subscription("R2Events", {
  *   source: { type: "r2" },
  *   events: ["bucket.created"],
  *   queueId: queue.queueId,
@@ -193,21 +193,17 @@ export type QueueSubscription = Resource<
  *
  * @see https://developers.cloudflare.com/queues/event-subscriptions/
  */
-export const QueueSubscription = Resource<QueueSubscription>(
-  QueueSubscriptionTypeId,
-);
+export const Subscription = Resource<Subscription>(QueueSubscriptionTypeId);
 
 /**
- * Returns true if the given value is a QueueSubscription resource.
+ * Returns true if the given value is a Subscription resource.
  */
-export const isQueueSubscription = (
-  value: unknown,
-): value is QueueSubscription =>
+export const isSubscription = (value: unknown): value is Subscription =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === QueueSubscriptionTypeId;
 
-export const QueueSubscriptionProvider = () =>
-  Provider.succeed(QueueSubscription, {
+export const SubscriptionProvider = () =>
+  Provider.succeed(Subscription, {
     stables: ["subscriptionId", "accountId", "source", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -362,7 +358,7 @@ const findByName = (accountId: string, name: string) =>
  * at most one subscription per source per account, so the first match is
  * the only one.
  */
-const findBySource = (accountId: string, source: QueueSubscriptionSource) =>
+const findBySource = (accountId: string, source: SubscriptionSource) =>
   queues.listSubscriptions.items({ accountId }).pipe(
     Stream.filter((s) => sameSource(toSource(s.source), source)),
     Stream.runHead,
@@ -385,7 +381,7 @@ type WireSource = {
   workflowName?: string | null;
 };
 
-const toSource = (wire: unknown): QueueSubscriptionSource => {
+const toSource = (wire: unknown): SubscriptionSource => {
   const source = wire as WireSource;
   switch (source.type) {
     case "workersAi.model":
@@ -413,10 +409,7 @@ const toSource = (wire: unknown): QueueSubscriptionSource => {
   }
 };
 
-const sameSource = (
-  a: QueueSubscriptionSource,
-  b: QueueSubscriptionSource,
-): boolean => {
+const sameSource = (a: SubscriptionSource, b: SubscriptionSource): boolean => {
   if (a.type !== b.type) return false;
   switch (a.type) {
     case "workersAi.model":
@@ -437,7 +430,7 @@ const sameEvents = (observed: readonly string[], desired: readonly string[]) =>
 const toAttributes = (
   subscription: ObservedSubscription,
   accountId: string,
-): QueueSubscriptionAttributes => ({
+): SubscriptionAttributes => ({
   subscriptionId: subscription.id,
   accountId,
   name: subscription.name,

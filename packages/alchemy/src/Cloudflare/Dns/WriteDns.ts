@@ -19,7 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Zone } from "../Zone/Zone.ts";
-import { type DnsToken } from "./DnsBinding.ts";
+import { type Token } from "./DnsBinding.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 
 /**
@@ -142,7 +142,7 @@ export interface WriteDnsClient {
 
 /** Build the write client over a bound token and zone id. */
 export const dnsWriteClient = (
-  token: DnsToken,
+  token: Token,
   zoneId: Effect.Effect<string>,
 ): WriteDnsClient => {
   const authorize = authorizeWith(token);

@@ -103,7 +103,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.PageShield.PageShieldPolicy,
+        Cloudflare.PageShield.Policy,
       );
 
       // Page Shield CSP policies are an Enterprise add-on; the testing
@@ -115,10 +115,10 @@ test.provider(
         const description = "alchemy-pageshield-list";
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
+            yield* Cloudflare.PageShield.Settings("PageShield", {
               zoneId: entitledZoneId,
             });
-            return yield* Cloudflare.PageShield.PageShieldPolicy("ListPolicy", {
+            return yield* Cloudflare.PageShield.Policy("ListPolicy", {
               zoneId: entitledZoneId,
               description,
               action: "log",
@@ -156,10 +156,10 @@ test.provider.skipIf(!entitledZoneId)(
       // the Settings singleton in the same stack).
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
+          yield* Cloudflare.PageShield.Settings("PageShield", {
             zoneId,
           });
-          return yield* Cloudflare.PageShield.PageShieldPolicy("CspPolicy", {
+          return yield* Cloudflare.PageShield.Policy("CspPolicy", {
             zoneId,
             description,
             action: "log",
@@ -183,10 +183,10 @@ test.provider.skipIf(!entitledZoneId)(
       // Update in place — action and value are mutable, same policy id.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
+          yield* Cloudflare.PageShield.Settings("PageShield", {
             zoneId,
           });
-          return yield* Cloudflare.PageShield.PageShieldPolicy("CspPolicy", {
+          return yield* Cloudflare.PageShield.Policy("CspPolicy", {
             zoneId,
             description,
             action: "allow",

@@ -17,7 +17,7 @@ type DnsFirewallTypeId = typeof DnsFirewallTypeId;
 /**
  * Attack mitigation settings for a DNS Firewall cluster.
  */
-export type DnsFirewallAttackMitigation = {
+export type AttackMitigation = {
   /**
    * When enabled, automatically mitigate random-prefix attacks to protect
    * upstream DNS servers.
@@ -31,7 +31,7 @@ export type DnsFirewallAttackMitigation = {
   onlyWhenUpstreamUnhealthy?: boolean;
 };
 
-export type DnsFirewallProps = {
+export type Props = {
   /**
    * DNS Firewall cluster name. Changing the name triggers a replacement —
    * the name is the identity used for cold-state recovery. If omitted, a
@@ -48,7 +48,7 @@ export type DnsFirewallProps = {
    * Attack mitigation settings.
    * @default disabled
    */
-  attackMitigation?: DnsFirewallAttackMitigation;
+  attackMitigation?: AttackMitigation;
   /**
    * Whether to refuse to answer queries for the ANY type.
    * @default false
@@ -100,7 +100,7 @@ export type DnsFirewallProps = {
   reverseDns?: Record<string, string>;
 };
 
-export type DnsFirewallAttributes = {
+export type Attributes = {
   /**
    * DNS Firewall cluster identifier (UUID).
    */
@@ -174,8 +174,8 @@ export type DnsFirewallAttributes = {
 
 export type DnsFirewall = Resource<
   DnsFirewallTypeId,
-  DnsFirewallProps,
-  DnsFirewallAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -488,7 +488,7 @@ const toAttributes = (
   cluster: ObservedCluster,
   accountId: string,
   reverseDns: Record<string, string> | undefined,
-): DnsFirewallAttributes => ({
+): Attributes => ({
   dnsFirewallId: cluster.id,
   accountId,
   name: cluster.name,

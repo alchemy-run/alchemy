@@ -34,7 +34,7 @@ test.provider(
 
       const keys = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessKeyConfiguration("Keys", {
+          return yield* Cloudflare.Access.KeyConfiguration("Keys", {
             keyRotationIntervalDays: 45,
           });
         }),
@@ -52,7 +52,7 @@ test.provider(
       // initial interval survives the update.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.AccessKeyConfiguration("Keys", {
+          return yield* Cloudflare.Access.KeyConfiguration("Keys", {
             keyRotationIntervalDays: 60,
           });
         }),
@@ -83,7 +83,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Access.AccessKeyConfiguration,
+        Cloudflare.Access.KeyConfiguration,
       );
       const all = yield* provider.list();
 

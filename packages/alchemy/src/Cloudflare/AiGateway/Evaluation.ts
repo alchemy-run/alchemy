@@ -129,7 +129,7 @@ export const Evaluation = Resource<Evaluation>(EvaluationTypeId);
 /**
  * Returns true if the given value is an Evaluation resource.
  */
-export const isAiGatewayEvaluation = (value: unknown): value is Evaluation =>
+export const isEvaluation = (value: unknown): value is Evaluation =>
   Predicate.hasProperty(value, "Type") && value.Type === EvaluationTypeId;
 
 /**

@@ -19,14 +19,14 @@ type MtlsCertificateTypeId = typeof MtlsCertificateTypeId;
  * How the certificate was created and who manages it. Certificates uploaded
  * through this resource are always `"custom"`.
  */
-export type MtlsCertificateType =
+export type Type =
   | "custom"
   | "gateway_managed"
   | "access_managed"
   // Keep the union open so new Cloudflare types aren't blocked by stale types.
   | (string & {});
 
-export type MtlsCertificateProps = {
+export type Props = {
   /**
    * Optional human-readable name for the certificate. If omitted, a unique
    * name will be generated. There is no update API, so changing the name
@@ -56,7 +56,7 @@ export type MtlsCertificateProps = {
   privateKey?: Redacted.Redacted<string>;
 };
 
-export type MtlsCertificateAttributes = {
+export type Attributes = {
   /**
    * Unique identifier of the uploaded certificate.
    */
@@ -96,13 +96,13 @@ export type MtlsCertificateAttributes = {
   /**
    * How the certificate was created and who manages it.
    */
-  type: MtlsCertificateType | undefined;
+  type: Type | undefined;
 };
 
 export type MtlsCertificate = Resource<
   MtlsCertificateTypeId,
-  MtlsCertificateProps,
-  MtlsCertificateAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -348,14 +348,14 @@ type CertificateShape = {
   signature?: string | null;
   expiresOn?: string | null;
   uploadedOn?: string | null;
-  type?: MtlsCertificateType | null;
+  type?: Type | null;
 };
 
 const toAttributes = (
   cert: CertificateShape,
   accountId: string,
-  news?: MtlsCertificateProps,
-): MtlsCertificateAttributes => ({
+  news?: Props,
+): Attributes => ({
   mtlsCertificateId: cert.id!,
   accountId,
   name: cert.name ?? undefined,

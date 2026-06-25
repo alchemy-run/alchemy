@@ -4,7 +4,7 @@ export * from "./ReadDns.ts";
 export * from "./ReadDnsBinding.ts";
 export * from "./ReadWriteDns.ts";
 export * from "./ReadWriteDnsBinding.ts";
-export * from "./DnsRecord.ts";
+export * from "./Record.ts";
 export * from "./Dnssec.ts";
 export * from "./WriteDns.ts";
 export * from "./WriteDnsBinding.ts";

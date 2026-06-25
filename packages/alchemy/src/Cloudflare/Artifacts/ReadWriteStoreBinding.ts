@@ -5,7 +5,7 @@ import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
 import {
   ArtifactsError,
   type ReadWriteStoreClient,
-  type ArtifactsRepoClient,
+  type RepoClient,
   ReadWriteStore,
 } from "./ReadWriteStore.ts";
 
@@ -77,7 +77,7 @@ const tryPromise = <T>(
       }),
   });
 
-const wrapRepo = (raw: ArtifactsRepo): ArtifactsRepoClient => ({
+const wrapRepo = (raw: ArtifactsRepo): RepoClient => ({
   raw,
   createToken: (scope, ttl) => tryPromise(() => raw.createToken(scope, ttl)),
   listTokens: () => tryPromise(() => raw.listTokens()),

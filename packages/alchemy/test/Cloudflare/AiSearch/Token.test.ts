@@ -191,15 +191,12 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Full composition: AccountApiToken → AiSearchToken → R2Bucket →
+      // Full composition: AccountApiToken → AiSearchToken → Bucket →
       // AiSearchInstance wired to the service token via `tokenId`.
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const { apiToken, token } = yield* program(accountId);
-          const bucket = yield* Cloudflare.R2.R2Bucket(
-            "AiSearchTokenSource",
-            {},
-          );
+          const bucket = yield* Cloudflare.R2.Bucket("AiSearchTokenSource", {});
           const instance = yield* Cloudflare.AiSearch.Instance("Search", {
             source: bucket.bucketName,
             tokenId: token.id,

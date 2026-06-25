@@ -12,7 +12,7 @@ import { listAllZones } from "../Zone/lookup.ts";
 const PageShieldSettingsTypeId = "Cloudflare.PageShield.Settings" as const;
 type PageShieldSettingsTypeId = typeof PageShieldSettingsTypeId;
 
-export interface PageShieldSettingsProps {
+export interface SettingsProps {
   /**
    * Zone whose Page Shield configuration is managed. Stable — changing
    * the zone triggers a replacement (the old zone's configuration is
@@ -49,7 +49,7 @@ export interface PageShieldSettingsProps {
   useConnectionUrlPath?: boolean;
 }
 
-export interface PageShieldSettingsAttributes {
+export interface SettingsAttributes {
   /** Zone the configuration belongs to. */
   zoneId: string;
   /** Whether Page Shield is enabled. */
@@ -77,10 +77,10 @@ export interface PageShieldSettingsAttributes {
   initialUseConnectionUrlPath: boolean;
 }
 
-export type PageShieldSettings = Resource<
+export type Settings = Resource<
   PageShieldSettingsTypeId,
-  PageShieldSettingsProps,
-  PageShieldSettingsAttributes,
+  SettingsProps,
+  SettingsAttributes,
   never,
   Providers
 >;
@@ -103,7 +103,7 @@ export type PageShieldSettings = Resource<
  * or `useCloudflareReportingEndpoint: false` on a non-entitled zone fails
  * with the typed `NotEntitled` error.
  *
- * Only one `PageShieldSettings` resource per zone makes sense — two
+ * Only one `Settings` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
  * @resource
  * @product Page Shield
@@ -113,14 +113,14 @@ export type PageShieldSettings = Resource<
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.Settings("PageShield", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Analyze connection URL paths too
  * ```typescript
- * yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.Settings("PageShield", {
  *   zoneId: zone.zoneId,
  *   useConnectionUrlPath: true,
  * });
@@ -128,7 +128,7 @@ export type PageShieldSettings = Resource<
  *
  * @example Report CSP violations to the zone instead of Cloudflare
  * ```typescript
- * yield* Cloudflare.PageShield.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.Settings("PageShield", {
  *   zoneId: zone.zoneId,
  *   useCloudflareReportingEndpoint: false,
  * });
@@ -136,16 +136,12 @@ export type PageShieldSettings = Resource<
  *
  * @see https://developers.cloudflare.com/page-shield/
  */
-export const PageShieldSettings = Resource<PageShieldSettings>(
-  PageShieldSettingsTypeId,
-);
+export const Settings = Resource<Settings>(PageShieldSettingsTypeId);
 
 /**
- * Returns true if the given value is a PageShieldSettings resource.
+ * Returns true if the given value is a Settings resource.
  */
-export const isPageShieldSettings = (
-  value: unknown,
-): value is PageShieldSettings =>
+export const isSettings = (value: unknown): value is Settings =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === PageShieldSettingsTypeId;
 
@@ -155,14 +151,14 @@ interface DesiredSettings {
   useConnectionUrlPath: boolean;
 }
 
-const desiredSettings = (props: PageShieldSettingsProps): DesiredSettings => ({
+const desiredSettings = (props: SettingsProps): DesiredSettings => ({
   enabled: props.enabled ?? true,
   useCloudflareReportingEndpoint: props.useCloudflareReportingEndpoint ?? true,
   useConnectionUrlPath: props.useConnectionUrlPath ?? false,
 });
 
-export const PageShieldSettingsProvider = () =>
-  Provider.succeed(PageShieldSettings, {
+export const SettingsProvider = () =>
+  Provider.succeed(Settings, {
     nuke: { singleton: true },
     stables: [
       "zoneId",
@@ -190,9 +186,7 @@ export const PageShieldSettingsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is PageShieldSettingsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SettingsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -285,7 +279,7 @@ const toAttributes = (
   zoneId: string,
   observed: pageShield.GetPageShieldResponse | pageShield.PutPageShieldResponse,
   initial: DesiredSettings,
-): PageShieldSettingsAttributes => ({
+): SettingsAttributes => ({
   zoneId,
   enabled: observed.enabled,
   useCloudflareReportingEndpoint: observed.useCloudflareReportingEndpoint,

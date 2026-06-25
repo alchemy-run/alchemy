@@ -2,22 +2,22 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
+import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Queue } from "./Queue.ts";
-import { QueueSendError } from "./QueueTypes.ts";
+import { SendError } from "./QueueTypes.ts";
 
-export interface QueueHttpToken {
+export interface HttpToken {
   value: Effect.Effect<Redacted.Redacted<string>>;
   accountId: Effect.Effect<string>;
 }
 
-export interface QueueHttpScope {
+export interface HttpScope {
   accountId: string;
   queueId: string;
 }
 
-const QUEUE_HTTP_PERMISSION_GROUPS: ApiTokenPermissionGroupRef[] = [
+const QUEUE_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
   "Queues Read",
   "Queues Write",
 ];
@@ -33,7 +33,7 @@ type PermissionGroup = (typeof QUEUE_HTTP_PERMISSION_GROUPS)[number];
  */
 export const makeHttpQueueBinding = <Client>(options: {
   permissionGroups: PermissionGroup[];
-  makeClient: (token: QueueHttpToken, queueId: Effect.Effect<string>) => Client;
+  makeClient: (token: HttpToken, queueId: Effect.Effect<string>) => Client;
 }) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
@@ -59,7 +59,7 @@ export const makeHttpQueueBinding = <Client>(options: {
       const bound = {
         value: yield* token.value,
         accountId: yield* token.accountId,
-      } satisfies QueueHttpToken;
+      } satisfies HttpToken;
       const queueId = yield* queue.queueId;
       return options.makeClient(bound, queueId);
     });
@@ -67,17 +67,17 @@ export const makeHttpQueueBinding = <Client>(options: {
 
 /** Resolve the account and queue id once per operation. */
 export const makeQueueHttpScope = (
-  token: QueueHttpToken,
+  token: HttpToken,
   queueId: Effect.Effect<string>,
-): Effect.Effect<QueueHttpScope> =>
+): Effect.Effect<HttpScope> =>
   Effect.gen(function* () {
     const accountId = yield* token.accountId;
     const id = yield* queueId;
     return { accountId, queueId: id };
   });
 
-export const toQueueSendError = (error: unknown): QueueSendError =>
-  new QueueSendError({
+export const toQueueSendError = (error: unknown): SendError =>
+  new SendError({
     message:
       typeof error === "object" && error !== null && "message" in error
         ? String((error as { message: unknown }).message)

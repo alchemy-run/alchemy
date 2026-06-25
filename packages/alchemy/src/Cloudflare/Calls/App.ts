@@ -13,7 +13,7 @@ import type { Providers } from "../Providers.ts";
 const CallsAppTypeId = "Cloudflare.Calls.App" as const;
 type CallsAppTypeId = typeof CallsAppTypeId;
 
-export type CallsAppProps = {
+export type AppProps = {
   /**
    * A short description of the app, not shown to end users and not unique.
    * Mutable in place. If omitted, a unique name is generated from the app,
@@ -23,7 +23,7 @@ export type CallsAppProps = {
   name?: string;
 };
 
-export type CallsAppAttributes = {
+export type AppAttributes = {
   /**
    * Cloudflare-generated unique identifier for the app. Used in client SDK
    * session URLs (`https://rtc.live.cloudflare.com/v1/apps/{appId}/...`).
@@ -53,10 +53,10 @@ export type CallsAppAttributes = {
   modified: string;
 };
 
-export type CallsApp = Resource<
+export type App = Resource<
   CallsAppTypeId,
-  CallsAppProps,
-  CallsAppAttributes,
+  AppProps,
+  AppAttributes,
   never,
   Providers
 >;
@@ -75,12 +75,12 @@ export type CallsApp = Resource<
  * @section Creating an App
  * @example App with a generated name
  * ```typescript
- * const app = yield* Cloudflare.Calls.CallsApp("realtime", {});
+ * const app = yield* Cloudflare.Calls.App("realtime", {});
  * ```
  *
  * @example App with an explicit name
  * ```typescript
- * const app = yield* Cloudflare.Calls.CallsApp("realtime", {
+ * const app = yield* Cloudflare.Calls.App("realtime", {
  *   name: "my-realtime-app",
  * });
  * ```
@@ -98,16 +98,16 @@ export type CallsApp = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/
  */
-export const CallsApp = Resource<CallsApp>(CallsAppTypeId);
+export const App = Resource<App>(CallsAppTypeId);
 
 /**
- * Returns true if the given value is a CallsApp resource.
+ * Returns true if the given value is a App resource.
  */
-export const isCallsApp = (value: unknown): value is CallsApp =>
+export const isApp = (value: unknown): value is App =>
   Predicate.hasProperty(value, "Type") && value.Type === CallsAppTypeId;
 
-export const CallsAppProvider = () =>
-  Provider.succeed(CallsApp, {
+export const AppProvider = () =>
+  Provider.succeed(App, {
     stables: ["appId", "accountId", "secret", "created"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -201,7 +201,7 @@ const toAttributes = (
   app: calls.GetSfuResponse | calls.CreateSfuResponse | calls.UpdateSfuResponse,
   accountId: string,
   secret: Redacted.Redacted<string>,
-): CallsAppAttributes => ({
+): AppAttributes => ({
   appId: app.uid ?? "",
   accountId,
   secret,

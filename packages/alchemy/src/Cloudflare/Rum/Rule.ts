@@ -14,10 +14,10 @@ import type { Providers } from "../Providers.ts";
 const RumRuleTypeId = "Cloudflare.Rum.Rule" as const;
 type RumRuleTypeId = typeof RumRuleTypeId;
 
-export type RumRuleProps = {
+export type RuleProps = {
   /**
    * The identifier of the Web Analytics ruleset the rule belongs to.
-   * Each zone-based (orange-clouded) `RumSite` owns one implicit ruleset —
+   * Each zone-based (orange-clouded) `Site` owns one implicit ruleset —
    * pass its `rulesetId` attribute. Changing this property triggers a
    * replacement.
    */
@@ -43,7 +43,7 @@ export type RumRuleProps = {
   isPaused?: boolean;
 };
 
-export type RumRuleAttributes = {
+export type RuleAttributes = {
   /**
    * The Web Analytics rule identifier. Stable for the lifetime of the rule.
    */
@@ -84,10 +84,10 @@ export type RumRuleAttributes = {
   created: string | undefined;
 };
 
-export type RumRule = Resource<
+export type Rule = Resource<
   RumRuleTypeId,
-  RumRuleProps,
-  RumRuleAttributes,
+  RuleProps,
+  RuleAttributes,
   never,
   Providers
 >;
@@ -97,7 +97,7 @@ export type RumRule = Resource<
  *
  * Rules include or exclude traffic from Web Analytics measurement by
  * hostname and path patterns. They live under the implicit ruleset of a
- * zone-based (orange-clouded) `RumSite` — pass the site's `rulesetId`
+ * zone-based (orange-clouded) `Site` — pass the site's `rulesetId`
  * attribute. Host, paths, `inclusive`, and `isPaused` are all mutable in
  * place; changing `rulesetId` triggers a replacement.
  *
@@ -110,12 +110,12 @@ export type RumRule = Resource<
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
  *
- * const site = yield* Cloudflare.Rum.RumSite("Analytics", {
+ * const site = yield* Cloudflare.Rum.Site("Analytics", {
  *   zoneTag: zone.zoneId,
  *   autoInstall: true,
  * });
  *
- * yield* Cloudflare.Rum.RumRule("ExcludeAdmin", {
+ * yield* Cloudflare.Rum.Rule("ExcludeAdmin", {
  *   rulesetId: site.rulesetId.as<string>(),
  *   host: "example.com",
  *   paths: ["/admin/*"],
@@ -126,7 +126,7 @@ export type RumRule = Resource<
  * @section Pausing a rule
  * @example Keep the rule but stop applying it
  * ```typescript
- * yield* Cloudflare.Rum.RumRule("ExcludeAdmin", {
+ * yield* Cloudflare.Rum.Rule("ExcludeAdmin", {
  *   rulesetId: site.rulesetId.as<string>(),
  *   host: "example.com",
  *   paths: ["/admin/*"],
@@ -137,21 +137,21 @@ export type RumRule = Resource<
  *
  * @see https://developers.cloudflare.com/web-analytics/
  */
-export const RumRule = Resource<RumRule>(RumRuleTypeId);
+export const Rule = Resource<Rule>(RumRuleTypeId);
 
 /**
- * Returns true if the given value is a RumRule resource.
+ * Returns true if the given value is a Rule resource.
  */
-export const isRumRule = (value: unknown): value is RumRule =>
+export const isRule = (value: unknown): value is Rule =>
   Predicate.hasProperty(value, "Type") && value.Type === RumRuleTypeId;
 
-export const RumRuleProvider = () =>
-  Provider.succeed(RumRule, {
+export const RuleProvider = () =>
+  Provider.succeed(Rule, {
     stables: ["id", "rulesetId", "accountId", "created"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Rules live under a RumSite's implicit ruleset and there is no
+      // Rules live under a Site's implicit ruleset and there is no
       // account-wide rule list. Enumerate every site (paginated), collect
       // their ruleset ids, then fan out the per-ruleset rule list and
       // flatten — the same listRules read path each rule's `read` uses.
@@ -267,7 +267,7 @@ export const RumRuleProvider = () =>
             isPaused: news.isPaused ?? false,
           })
           .pipe(
-            // The implicit ruleset of a freshly-created RumSite is eventually
+            // The implicit ruleset of a freshly-created Site is eventually
             // consistent: a createRule issued immediately after the site
             // deploy can briefly 404 (`RulesetNotFound`, code
             // `web_analytics.configuration.api.notFound`) before the ruleset is
@@ -367,7 +367,7 @@ const toAttributes = (
   rule: ObservedRule,
   rulesetId: string,
   accountId: string,
-): RumRuleAttributes => ({
+): RuleAttributes => ({
   id: rule.id ?? "",
   rulesetId,
   accountId,

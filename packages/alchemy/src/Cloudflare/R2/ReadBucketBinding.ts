@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeBucketBinding, makeHelpers } from "./BucketBinding.ts";
 import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
-import type { R2GetOptions, R2ListOptions, R2Objects } from "./BucketTypes.ts";
+import type { GetOptions, ListOptions, Objects } from "./BucketTypes.ts";
 
 /**
  * Implementation of the {@link ReadBucket} binding that uses a Worker binding.
@@ -20,13 +20,13 @@ export const makeRead = ({
   wrapR2Object,
   wrapR2ObjectOrBody,
 }: ReturnType<typeof makeHelpers>): ReadBucketClient => {
-  const wrapR2Objects = (objects: runtime.R2Objects): R2Objects =>
+  const wrapR2Objects = (objects: runtime.R2Objects): Objects =>
     ({
       objects: objects.objects.map(wrapR2Object),
       delimitedPrefixes: objects.delimitedPrefixes,
       ...("cursor" in objects ? { cursor: objects.cursor } : {}),
       ...("truncated" in objects ? { truncated: objects.truncated } : {}),
-    }) as R2Objects;
+    }) as Objects;
 
   return {
     raw,
@@ -34,11 +34,11 @@ export const makeRead = ({
       use((raw) => raw.head(key)).pipe(
         Effect.map((object) => (object ? wrapR2Object(object) : object)),
       ),
-    get: ((key: string, options?: R2GetOptions) =>
+    get: ((key: string, options?: GetOptions) =>
       use((raw) => raw.get(key, options)).pipe(
         Effect.map(wrapR2ObjectOrBody),
       )) as any,
-    list: (options?: R2ListOptions) =>
+    list: (options?: ListOptions) =>
       use((raw) => raw.list(options)).pipe(Effect.map(wrapR2Objects)),
   };
 };

@@ -79,14 +79,12 @@ test.provider("lists the services catalog and prefixes (read-only)", (stack) =>
 // `list()` enumerates account-scoped BYOIP prefixes via the catalog endpoint,
 // which is available regardless of the BYOIP entitlement (it returns an empty
 // array on accounts with no onboarded prefixes). The result is a well-typed
-// `AddressingPrefixAttributes[]` — the exact shape `read` produces.
+// `PrefixAttributes[]` — the exact shape `read` produces.
 test.provider("list enumerates account prefixes (read-only)", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Addressing.AddressingPrefix,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Addressing.Prefix);
     const all = yield* retryForbidden(provider.list());
 
     expect(Array.isArray(all)).toBe(true);
@@ -113,7 +111,7 @@ test.provider.skipIf(!byoipCidr || !byoipAsn)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Addressing.AddressingPrefix("Byoip", {
+          return yield* Cloudflare.Addressing.Prefix("Byoip", {
             cidr,
             asn,
             description: "alchemy v1",
@@ -136,7 +134,7 @@ test.provider.skipIf(!byoipCidr || !byoipAsn)(
       // Update the description in place — same physical prefix.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Addressing.AddressingPrefix("Byoip", {
+          return yield* Cloudflare.Addressing.Prefix("Byoip", {
             cidr,
             asn,
             description: "alchemy v2",
@@ -177,7 +175,7 @@ test.provider.skipIf(!byoipPrefixId)(
       // resource adopts the one matching the CIDR rather than duplicating.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Addressing.AddressingBgpPrefix("Bgp", {
+          return yield* Cloudflare.Addressing.BgpPrefix("Bgp", {
             prefixId,
             cidr,
             advertised: false,
@@ -192,7 +190,7 @@ test.provider.skipIf(!byoipPrefixId)(
       // consistent so only the API acknowledgement is asserted.
       const advertised = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Addressing.AddressingBgpPrefix("Bgp", {
+          return yield* Cloudflare.Addressing.BgpPrefix("Bgp", {
             prefixId,
             cidr,
             advertised: true,
@@ -232,14 +230,11 @@ test.provider.skipIf(!byoipPrefixId || !delegateAccountId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Addressing.AddressingPrefixDelegation(
-            "Share",
-            {
-              prefixId,
-              cidr,
-              delegatedAccountId: delegateAccountId!,
-            },
-          );
+          return yield* Cloudflare.Addressing.PrefixDelegation("Share", {
+            prefixId,
+            cidr,
+            delegatedAccountId: delegateAccountId!,
+          });
         }),
       );
       expect(created.delegationId).toBeDefined();
@@ -292,7 +287,7 @@ test.provider.skipIf(!byoipPrefixId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Addressing.AddressingServiceBinding("Cdn", {
+          return yield* Cloudflare.Addressing.ServiceBinding("Cdn", {
             prefixId,
             cidr,
             serviceId: cdn!.id!,

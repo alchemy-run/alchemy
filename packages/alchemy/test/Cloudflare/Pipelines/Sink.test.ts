@@ -70,7 +70,7 @@ test.provider(
       const deployed = yield* retryAuthBlip(
         stack.deploy(
           Effect.gen(function* () {
-            const bucket = yield* Cloudflare.R2.R2Bucket("SinkBucket", {});
+            const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
             return yield* Cloudflare.Pipelines.PipelineSink("ListSink", {
               type: "r2",
               config: {

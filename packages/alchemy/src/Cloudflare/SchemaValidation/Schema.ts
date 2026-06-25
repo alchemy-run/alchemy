@@ -16,7 +16,7 @@ const SchemaValidationSchemaTypeId =
   "Cloudflare.SchemaValidation.Schema" as const;
 type SchemaValidationSchemaTypeId = typeof SchemaValidationSchemaTypeId;
 
-export interface SchemaValidationSchemaProps {
+export interface SchemaProps {
   /**
    * Zone the schema is uploaded to.
    *
@@ -61,7 +61,7 @@ export interface SchemaValidationSchemaProps {
   validationEnabled?: boolean;
 }
 
-export interface SchemaValidationSchemaAttributes {
+export interface SchemaAttributes {
   /** Cloudflare-assigned UUID of the schema. */
   schemaId: string;
   /** Zone the schema is uploaded to. */
@@ -80,8 +80,8 @@ export interface SchemaValidationSchemaAttributes {
 
 export type SchemaValidationSchema = Resource<
   SchemaValidationSchemaTypeId,
-  SchemaValidationSchemaProps,
-  SchemaValidationSchemaAttributes,
+  SchemaProps,
+  SchemaAttributes,
   never,
   Providers
 >;
@@ -150,13 +150,11 @@ export const SchemaValidationSchema = Resource<SchemaValidationSchema>(
 /**
  * Returns true if the given value is a SchemaValidationSchema resource.
  */
-export const isSchemaValidationSchema = (
-  value: unknown,
-): value is SchemaValidationSchema =>
+export const isSchema = (value: unknown): value is SchemaValidationSchema =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === SchemaValidationSchemaTypeId;
 
-export const SchemaValidationSchemaProvider = () =>
+export const SchemaProvider = () =>
   Provider.succeed(SchemaValidationSchema, {
     stables: ["schemaId", "zoneId", "name", "kind", "source", "createdAt"],
 
@@ -304,7 +302,7 @@ export const SchemaValidationSchemaProvider = () =>
               // has since been purged), and `Forbidden` (the scoped token /
               // zone plan doesn't grant schema-validation access).
               Effect.catchTag(["InvalidRoute", "ZonePurged", "Forbidden"], () =>
-                Effect.succeed<SchemaValidationSchemaAttributes[]>([]),
+                Effect.succeed<SchemaAttributes[]>([]),
               ),
             ),
         { concurrency: 10 },
@@ -348,7 +346,7 @@ const toAttributes = (
     | schemaValidation.CreateSchemaResponse
     | schemaValidation.PatchSchemaResponse
     | schemaValidation.ListSchemasResponse["result"][number],
-): SchemaValidationSchemaAttributes => ({
+): SchemaAttributes => ({
   schemaId: schema.schemaId,
   zoneId,
   name: schema.name,

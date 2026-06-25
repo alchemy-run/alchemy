@@ -18,9 +18,9 @@ type EmailSecurityAllowPolicyTypeId = typeof EmailSecurityAllowPolicyTypeId;
  * `UNKNOWN` is deprecated and rejected on create/update, so it is not
  * accepted as an input.
  */
-export type EmailSecurityPatternType = "EMAIL" | "DOMAIN" | "IP";
+export type PatternType = "EMAIL" | "DOMAIN" | "IP";
 
-export interface EmailSecurityAllowPolicyProps {
+export interface AllowPolicyProps {
   /**
    * The email address, domain, IP, or regular expression to match.
    * The pattern is the policy's identity for cold-state recovery — a
@@ -31,7 +31,7 @@ export interface EmailSecurityAllowPolicyProps {
   /**
    * Type of pattern matching.
    */
-  patternType: EmailSecurityPatternType;
+  patternType: PatternType;
   /**
    * Whether `pattern` is a regular expression.
    * @default false
@@ -65,7 +65,7 @@ export interface EmailSecurityAllowPolicyProps {
   comments?: string;
 }
 
-export interface EmailSecurityAllowPolicyAttributes {
+export interface AllowPolicyAttributes {
   /** Cloudflare-assigned allow policy identifier. */
   policyId: string;
   /** The account the policy belongs to. */
@@ -73,7 +73,7 @@ export interface EmailSecurityAllowPolicyAttributes {
   /** The matched pattern. */
   pattern: string;
   /** Type of pattern matching. */
-  patternType: EmailSecurityPatternType;
+  patternType: PatternType;
   /** Whether the pattern is a regular expression. */
   isRegex: boolean;
   /** Whether the sender is exempted from Spam/Spoof/Bulk dispositions. */
@@ -92,10 +92,10 @@ export interface EmailSecurityAllowPolicyAttributes {
   modifiedAt: string | undefined;
 }
 
-export type EmailSecurityAllowPolicy = Resource<
+export type AllowPolicy = Resource<
   EmailSecurityAllowPolicyTypeId,
-  EmailSecurityAllowPolicyProps,
-  EmailSecurityAllowPolicyAttributes,
+  AllowPolicyProps,
+  AllowPolicyAttributes,
   never,
   Providers
 >;
@@ -113,7 +113,7 @@ export type EmailSecurityAllowPolicy = Resource<
  * @section Creating an Allow Policy
  * @example Acceptable sender by email address
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy("NewsletterSender", {
+ * yield* Cloudflare.EmailSecurity.AllowPolicy("NewsletterSender", {
  *   pattern: "news@partner.example.com",
  *   patternType: "EMAIL",
  *   isAcceptableSender: true,
@@ -122,7 +122,7 @@ export type EmailSecurityAllowPolicy = Resource<
  *
  * @example Trusted sender domain (bypasses all detections)
  * ```typescript
- * yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy("TrustedPartner", {
+ * yield* Cloudflare.EmailSecurity.AllowPolicy("TrustedPartner", {
  *   pattern: "partner.example.com",
  *   patternType: "DOMAIN",
  *   isTrustedSender: true,
@@ -133,7 +133,7 @@ export type EmailSecurityAllowPolicy = Resource<
  * @example Exempt recipient
  * ```typescript
  * // Messages delivered to the abuse mailbox must never be filtered.
- * yield* Cloudflare.EmailSecurity.EmailSecurityAllowPolicy("AbuseMailbox", {
+ * yield* Cloudflare.EmailSecurity.AllowPolicy("AbuseMailbox", {
  *   pattern: "abuse@example.com",
  *   patternType: "EMAIL",
  *   isExemptRecipient: true,
@@ -143,21 +143,19 @@ export type EmailSecurityAllowPolicy = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/email-security/
  */
-export const EmailSecurityAllowPolicy = Resource<EmailSecurityAllowPolicy>(
+export const AllowPolicy = Resource<AllowPolicy>(
   EmailSecurityAllowPolicyTypeId,
 );
 
 /**
- * Returns true if the given value is an EmailSecurityAllowPolicy resource.
+ * Returns true if the given value is an AllowPolicy resource.
  */
-export const isEmailSecurityAllowPolicy = (
-  value: unknown,
-): value is EmailSecurityAllowPolicy =>
+export const isAllowPolicy = (value: unknown): value is AllowPolicy =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === EmailSecurityAllowPolicyTypeId;
 
-export const EmailSecurityAllowPolicyProvider = () =>
-  Provider.succeed(EmailSecurityAllowPolicy, {
+export const AllowPolicyProvider = () =>
+  Provider.succeed(AllowPolicy, {
     stables: ["policyId", "accountId", "createdAt"],
 
     list: Effect.fn(function* () {
@@ -176,7 +174,7 @@ export const EmailSecurityAllowPolicyProvider = () =>
           // Email Security is a paid add-on; accounts without the
           // entitlement can't enumerate policies — treat as empty.
           Effect.catchTag("EmailSecurityNotEntitled", () =>
-            Effect.succeed([] as EmailSecurityAllowPolicyAttributes[]),
+            Effect.succeed([] as AllowPolicyAttributes[]),
           ),
         );
     }),
@@ -286,7 +284,7 @@ const findByPattern = (accountId: string, pattern: string) =>
     ),
   );
 
-const withDefaults = (news: EmailSecurityAllowPolicyProps) => ({
+const withDefaults = (news: AllowPolicyProps) => ({
   pattern: news.pattern,
   patternType: news.patternType,
   isRegex: news.isRegex ?? false,
@@ -303,13 +301,13 @@ const toAttributes = (
     | emailSecurity.CreateSettingAllowPolicyResponse
     | emailSecurity.PatchSettingAllowPolicyResponse,
   accountId: string,
-): EmailSecurityAllowPolicyAttributes => ({
+): AllowPolicyAttributes => ({
   policyId: policy.id,
   accountId,
   pattern: policy.pattern ?? "",
   // UNKNOWN can only appear on legacy entries; new policies always echo
   // the type they were created with.
-  patternType: (policy.patternType ?? "EMAIL") as EmailSecurityPatternType,
+  patternType: (policy.patternType ?? "EMAIL") as PatternType,
   isRegex: policy.isRegex ?? false,
   isAcceptableSender: policy.isAcceptableSender ?? false,
   isExemptRecipient: policy.isExemptRecipient ?? false,

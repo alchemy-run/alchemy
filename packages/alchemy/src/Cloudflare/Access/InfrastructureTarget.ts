@@ -18,7 +18,7 @@ type AccessInfrastructureTargetTypeId = typeof AccessInfrastructureTargetTypeId;
  * IPv4/IPv6 address details for an infrastructure target. At least one
  * of `ipv4` / `ipv6` must be provided.
  */
-export interface AccessInfrastructureTargetIp {
+export interface InfrastructureTargetIp {
   /** IPv4 address of the target, optionally scoped to a virtual network. */
   ipv4?: {
     /** The IPv4 address (e.g. `10.0.0.5`). */
@@ -41,7 +41,7 @@ export interface AccessInfrastructureTargetIp {
   };
 }
 
-export interface AccessInfrastructureTargetProps {
+export interface InfrastructureTargetProps {
   /**
    * Hostname identifying the target. Non-unique, case-insensitive, max
    * 255 characters; supports dashes and periods, no spaces. Mutable —
@@ -53,10 +53,10 @@ export interface AccessInfrastructureTargetProps {
    * least one of `ipv4` / `ipv6` is required. Mutable — updated in
    * place via PUT.
    */
-  ip: AccessInfrastructureTargetIp;
+  ip: InfrastructureTargetIp;
 }
 
-export interface AccessInfrastructureTargetAttributes {
+export interface InfrastructureTargetAttributes {
   /** UUID of the infrastructure target, assigned by Cloudflare. */
   targetId: string;
   /** Cloudflare account that owns the target. */
@@ -74,10 +74,10 @@ export interface AccessInfrastructureTargetAttributes {
   modifiedAt: string;
 }
 
-export type AccessInfrastructureTarget = Resource<
+export type InfrastructureTarget = Resource<
   AccessInfrastructureTargetTypeId,
-  AccessInfrastructureTargetProps,
-  AccessInfrastructureTargetAttributes,
+  InfrastructureTargetProps,
+  InfrastructureTargetAttributes,
   never,
   Providers
 >;
@@ -95,7 +95,7 @@ export type AccessInfrastructureTarget = Resource<
  * @section Creating a Target
  * @example Basic IPv4 target
  * ```typescript
- * const target = yield* Cloudflare.Access.AccessInfrastructureTarget("Bastion", {
+ * const target = yield* Cloudflare.Access.InfrastructureTarget("Bastion", {
  *   hostname: "bastion.internal",
  *   ip: { ipv4: { ipAddr: "10.0.0.5" } },
  * });
@@ -103,8 +103,8 @@ export type AccessInfrastructureTarget = Resource<
  *
  * @example Target scoped to a virtual network
  * ```typescript
- * const vnet = yield* Cloudflare.Tunnel.TunnelVirtualNetwork("Staging", {});
- * const target = yield* Cloudflare.Access.AccessInfrastructureTarget("DbHost", {
+ * const vnet = yield* Cloudflare.Tunnel.VirtualNetwork("Staging", {});
+ * const target = yield* Cloudflare.Access.InfrastructureTarget("DbHost", {
  *   hostname: "db.staging.internal",
  *   ip: {
  *     ipv4: {
@@ -119,7 +119,7 @@ export type AccessInfrastructureTarget = Resource<
  * @example Re-point the target at a new address
  * ```typescript
  * // Hostname and IP update in place — same targetId, no replacement.
- * const target = yield* Cloudflare.Access.AccessInfrastructureTarget("Bastion", {
+ * const target = yield* Cloudflare.Access.InfrastructureTarget("Bastion", {
  *   hostname: "bastion.internal",
  *   ip: { ipv4: { ipAddr: "10.0.0.6" } },
  * });
@@ -127,21 +127,21 @@ export type AccessInfrastructureTarget = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/applications/non-http/infrastructure-apps/
  */
-export const AccessInfrastructureTarget = Resource<AccessInfrastructureTarget>(
+export const InfrastructureTarget = Resource<InfrastructureTarget>(
   AccessInfrastructureTargetTypeId,
 );
 
 /**
- * Returns true if the given value is an AccessInfrastructureTarget resource.
+ * Returns true if the given value is an InfrastructureTarget resource.
  */
-export const isAccessInfrastructureTarget = (
+export const isInfrastructureTarget = (
   value: unknown,
-): value is AccessInfrastructureTarget =>
+): value is InfrastructureTarget =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === AccessInfrastructureTargetTypeId;
 
-export const AccessInfrastructureTargetProvider = () =>
-  Provider.succeed(AccessInfrastructureTarget, {
+export const InfrastructureTargetProvider = () =>
+  Provider.succeed(InfrastructureTarget, {
     stables: ["targetId", "accountId", "createdAt"],
 
     list: Effect.fn(function* () {
@@ -279,7 +279,7 @@ const findByIdentity = (
  * Narrow the props' `ip` (whose virtualNetworkIds are `Input`s already
  * resolved to strings by Plan) to the concrete wire shape.
  */
-const resolvedIp = (ip: AccessInfrastructureTargetIp): ResolvedIp => ({
+const resolvedIp = (ip: InfrastructureTargetIp): ResolvedIp => ({
   ...(ip.ipv4
     ? {
         ipv4: {
@@ -358,7 +358,7 @@ const familyEquals = (
 const toAttributes = (
   target: ObservedTarget,
   accountId: string,
-): AccessInfrastructureTargetAttributes => ({
+): InfrastructureTargetAttributes => ({
   targetId: target.id,
   accountId,
   hostname: target.hostname,

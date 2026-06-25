@@ -15,7 +15,7 @@ import { listAllZones } from "../Zone/lookup.ts";
  * across reconciles; changing it triggers a replacement because record
  * type is part of a record's identity.
  */
-export type DnsRecordType =
+export type RecordType =
   | "A"
   | "AAAA"
   | "CNAME"
@@ -39,7 +39,7 @@ export type DnsRecordType =
   | "URI"
   | (string & {});
 
-export interface DnsRecordProps {
+export interface RecordProps {
   /**
    * Zone the record lives in. Stable — changing the zone triggers
    * replacement.
@@ -56,10 +56,10 @@ export interface DnsRecordProps {
   /**
    * Record type. Stable — changing triggers replacement.
    *
-   * Declared as plain `string` (narrowed to {@link DnsRecordType}) so
+   * Declared as plain `string` (narrowed to {@link RecordType}) so
    * `diff` can compare without resolving an `Input`.
    */
-  type: DnsRecordType;
+  type: RecordType;
   /**
    * Record value. Interpretation depends on `type` — an A record's
    * content is an IPv4, a CNAME's is a target hostname, etc.
@@ -96,7 +96,7 @@ export interface DnsRecordProps {
   priority?: number;
 }
 
-export interface DnsRecordAttributes {
+export interface RecordAttributes {
   /** Cloudflare-assigned DNS record UUID. */
   recordId: string;
   /** Zone that owns this record. */
@@ -104,7 +104,7 @@ export interface DnsRecordAttributes {
   /** Record name (FQDN, as Cloudflare returns it). */
   name: string;
   /** Record type. */
-  type: DnsRecordType;
+  type: RecordType;
   /** Resolved record value. */
   content: string;
   /** Resolved TTL (Cloudflare echoes `1` for "automatic"). */
@@ -117,10 +117,10 @@ export interface DnsRecordAttributes {
   modifiedOn: string | undefined;
 }
 
-export type DnsRecord = Resource<
+export type Record = Resource<
   "Cloudflare.Dns.Record",
-  DnsRecordProps,
-  DnsRecordAttributes,
+  RecordProps,
+  RecordAttributes,
   never,
   Providers
 >;
@@ -141,7 +141,7 @@ export type DnsRecord = Resource<
  * @section Proxied CNAME pointing at a tunnel
  * @example Route a subdomain through a Cloudflare Tunnel
  * ```typescript
- * yield* Cloudflare.Dns.DnsRecord("AdminCname", {
+ * yield* Cloudflare.Dns.Record("AdminCname", {
  *   zoneId: zone.zoneId,
  *   name: "cluster-admin.example.com",
  *   type: "CNAME",
@@ -154,7 +154,7 @@ export type DnsRecord = Resource<
  * @section Plain A record
  * @example Direct A record (not proxied)
  * ```typescript
- * yield* Cloudflare.Dns.DnsRecord("ApiA", {
+ * yield* Cloudflare.Dns.Record("ApiA", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   type: "A",
@@ -163,10 +163,10 @@ export type DnsRecord = Resource<
  * });
  * ```
  */
-export const DnsRecord = Resource<DnsRecord>("Cloudflare.Dns.Record");
+export const Record = Resource<Record>("Cloudflare.Dns.Record");
 
-export const DnsRecordProvider = () =>
-  Provider.succeed(DnsRecord, {
+export const RecordProvider = () =>
+  Provider.succeed(Record, {
     stables: ["recordId", "zoneId", "type", "name"],
 
     // Zone-scoped collection: DNS records live under `/zones/{id}/dns_records`
@@ -195,7 +195,7 @@ export const DnsRecordProvider = () =>
               ),
             ),
             Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as DnsRecordAttributes[]),
+              Effect.succeed([] as RecordAttributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -204,8 +204,8 @@ export const DnsRecordProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as DnsRecordProps;
-      const n = news as DnsRecordProps;
+      const o = olds as RecordProps;
+      const n = news as RecordProps;
       if (o.type !== undefined && o.type !== n.type) {
         return { action: "replace" } as const;
       }
@@ -354,7 +354,7 @@ export const DnsRecordProvider = () =>
         proxied: observed.proxied ?? false,
         createdOn: observed.createdOn,
         modifiedOn: observed.modifiedOn,
-      } satisfies DnsRecordAttributes;
+      } satisfies RecordAttributes;
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -405,7 +405,7 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
 // Locate an existing record by `(zoneId, name, type)`. Used both
 // for the adoption path and to surface a conflict when the caller
 // hasn't opted into adoption.
-const findByNameType = (zoneId: string, name: string, type: DnsRecordType) =>
+const findByNameType = (zoneId: string, name: string, type: RecordType) =>
   dns.listRecords
     .items({
       zoneId,
@@ -427,7 +427,7 @@ const findByNameType = (zoneId: string, name: string, type: DnsRecordType) =>
 interface ObservedRecord {
   readonly id?: string;
   readonly name?: string;
-  readonly type?: DnsRecordType;
+  readonly type?: RecordType;
   readonly content?: string;
   readonly ttl?: number;
   readonly proxied?: boolean;
@@ -456,7 +456,7 @@ const narrowRecord = (raw: {
 }): ObservedRecord => ({
   id: undef(raw.id),
   name: undef(raw.name),
-  type: raw.type == null ? undefined : (raw.type as DnsRecordType),
+  type: raw.type == null ? undefined : (raw.type as RecordType),
   content: undef(raw.content),
   ttl: undef(raw.ttl),
   proxied: undef(raw.proxied),
@@ -470,7 +470,7 @@ const narrowRecord = (raw: {
 const toAttributes = (
   observed: ObservedRecord | undefined,
   zoneId: string,
-): DnsRecordAttributes | undefined => {
+): RecordAttributes | undefined => {
   if (
     !observed?.id ||
     !observed.name ||
@@ -499,7 +499,7 @@ const toAttributes = (
 
 interface RecordMutableBody {
   name: string;
-  type: DnsRecordType;
+  type: RecordType;
   content: string;
   ttl: number;
   proxied?: boolean;
@@ -509,7 +509,7 @@ interface RecordMutableBody {
 }
 
 const buildMutableBody = (
-  news: DnsRecordProps,
+  news: RecordProps,
   resolvedContent: string,
 ): RecordMutableBody => ({
   name: news.name,

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeHttpBucketBinding, type R2HttpToken } from "./BucketHttp.ts";
+import { makeHttpBucketBinding, type HttpToken } from "./BucketHttp.ts";
 import { makeReadR2HttpClient } from "./ReadBucketHttp.ts";
 import {
   ReadWriteBucket,
@@ -25,7 +25,7 @@ export const ReadWriteBucketHttp = Layer.effect(
 
 /** Build the HTTP-backed {@link ReadWrite} over a bound token + bucket. */
 export const makeReadWriteR2HttpClient = (
-  token: R2HttpToken,
+  token: HttpToken,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
 ): ReadWriteBucketClient =>

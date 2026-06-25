@@ -39,23 +39,17 @@ test.provider(
           yield* Cloudflare.Zone.Zone("TestZone", {
             name: zoneName,
           }).pipe(AdoptPolicy.adopt(true));
-          const policy = yield* Cloudflare.Access.AccessPolicy(
-            "AllowExampleDomain",
-            {
-              name: "Allow example.com",
-              decision: "allow",
-              include: [{ emailDomain: { domain: "example.com" } }],
-            },
-          );
-          const app = yield* Cloudflare.Access.AccessApplication(
-            "SelfHostedApp",
-            {
-              type: "self_hosted",
-              domain,
-              sessionDuration: "24h",
-              policies: [policy.policyId],
-            },
-          );
+          const policy = yield* Cloudflare.Access.Policy("AllowExampleDomain", {
+            name: "Allow example.com",
+            decision: "allow",
+            include: [{ emailDomain: { domain: "example.com" } }],
+          });
+          const app = yield* Cloudflare.Access.Application("SelfHostedApp", {
+            type: "self_hosted",
+            domain,
+            sessionDuration: "24h",
+            policies: [policy.policyId],
+          });
           return { app, policy };
         }),
       );
@@ -100,15 +94,12 @@ test.provider(
       const app = yield* stack.deploy(
         Effect.gen(function* () {
           // Warp apps derive their domain from the auth domain — no zone needed.
-          const policy = yield* Cloudflare.Access.AccessPolicy(
-            "WarpAllowDomain",
-            {
-              name: "Allow example.com",
-              decision: "allow",
-              include: [{ emailDomain: { domain: "example.com" } }],
-            },
-          );
-          return yield* Cloudflare.Access.AccessApplication("WarpEnroll", {
+          const policy = yield* Cloudflare.Access.Policy("WarpAllowDomain", {
+            name: "Allow example.com",
+            decision: "allow",
+            include: [{ emailDomain: { domain: "example.com" } }],
+          });
+          return yield* Cloudflare.Access.Application("WarpEnroll", {
             type: "warp",
             name: "Alchemy Warp Test",
             sessionDuration: "720h",
@@ -137,15 +128,12 @@ test.provider("list enumerates the deployed access application", (stack) =>
         yield* Cloudflare.Zone.Zone("TestZone", {
           name: zoneName,
         }).pipe(AdoptPolicy.adopt(true));
-        const policy = yield* Cloudflare.Access.AccessPolicy(
-          "ListAllowDomain",
-          {
-            name: "Allow example.com",
-            decision: "allow",
-            include: [{ emailDomain: { domain: "example.com" } }],
-          },
-        );
-        return yield* Cloudflare.Access.AccessApplication("ListApp", {
+        const policy = yield* Cloudflare.Access.Policy("ListAllowDomain", {
+          name: "Allow example.com",
+          decision: "allow",
+          include: [{ emailDomain: { domain: "example.com" } }],
+        });
+        return yield* Cloudflare.Access.Application("ListApp", {
           type: "self_hosted",
           domain,
           sessionDuration: "24h",
@@ -155,7 +143,7 @@ test.provider("list enumerates the deployed access application", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.Access.AccessApplication,
+      Cloudflare.Access.Application,
     );
 
     // `list()` enumerates every Access application in the account. The
@@ -200,12 +188,12 @@ test.provider(
           yield* Cloudflare.Zone.Zone("TestZone", {
             name: zoneName,
           }).pipe(AdoptPolicy.adopt(true));
-          const allow = yield* Cloudflare.Access.AccessPolicy("UpdateAllow", {
+          const allow = yield* Cloudflare.Access.Policy("UpdateAllow", {
             name: "Allow example.com",
             decision: "allow",
             include: [{ emailDomain: { domain: "example.com" } }],
           });
-          return yield* Cloudflare.Access.AccessApplication("UpdatePolicies", {
+          return yield* Cloudflare.Access.Application("UpdatePolicies", {
             type: "self_hosted",
             domain,
             policies: [allow.policyId],
@@ -218,17 +206,17 @@ test.provider(
           yield* Cloudflare.Zone.Zone("TestZone", {
             name: zoneName,
           }).pipe(AdoptPolicy.adopt(true));
-          const allow = yield* Cloudflare.Access.AccessPolicy("UpdateAllow", {
+          const allow = yield* Cloudflare.Access.Policy("UpdateAllow", {
             name: "Allow example.com",
             decision: "allow",
             include: [{ emailDomain: { domain: "example.com" } }],
           });
-          const deny = yield* Cloudflare.Access.AccessPolicy("UpdateDeny", {
+          const deny = yield* Cloudflare.Access.Policy("UpdateDeny", {
             name: "Deny everyone else",
             decision: "deny",
             include: [{ everyone: {} }],
           });
-          return yield* Cloudflare.Access.AccessApplication("UpdatePolicies", {
+          return yield* Cloudflare.Access.Application("UpdatePolicies", {
             type: "self_hosted",
             domain,
             policies: [allow.policyId, deny.policyId],

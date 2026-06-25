@@ -8,7 +8,7 @@ const LABEL = "async";
 /**
  * Async (non-Effect) Worker style: the Vectorize index is declared on the
  * Worker `env` (`env: { INDEX: TestIndex }` in stack.ts). `WorkerAsyncBindings`
- * resolves it via the `isVectorizeIndex` predicate and registers the native
+ * resolves it via the `isIndex` predicate and registers the native
  * `vectorize` binding, so the handler calls the runtime `Vectorize` binding
  * (`env.INDEX.upsert(...)`, `.describe()`, `.query(...)`, `.getByIds(...)`)
  * directly with plain `await`.

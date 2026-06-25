@@ -22,7 +22,7 @@ type OriginTlsClientAuthCertificateTypeId =
  * asynchronous (`pending_deployment` → `active`, `pending_deletion` →
  * `deleted`), typically settling within minutes.
  */
-export type OriginTlsClientAuthCertificateStatus =
+export type CertificateStatus =
   | "initializing"
   | "pending_deployment"
   | "pending_deletion"
@@ -33,7 +33,7 @@ export type OriginTlsClientAuthCertificateStatus =
   // Keep the union open so new Cloudflare statuses aren't blocked by stale types.
   | (string & {});
 
-export type OriginTlsClientAuthCertificateProps = {
+export type CertificateProps = {
   /**
    * Zone the certificate is uploaded to. Cannot be changed after upload —
    * updating this property triggers a replacement.
@@ -53,13 +53,13 @@ export type OriginTlsClientAuthCertificateProps = {
   privateKey: Redacted.Redacted<string>;
 };
 
-export type OriginTlsClientAuthCertificateAttributes = {
+export type CertificateAttributes = {
   /** Unique identifier of the uploaded certificate. */
   certificateId: string;
   /** Zone the certificate is uploaded to. */
   zoneId: string;
   /** Deployment status of the certificate. */
-  status: OriginTlsClientAuthCertificateStatus | undefined;
+  status: CertificateStatus | undefined;
   /** When the certificate expires. */
   expiresOn: string | undefined;
   /** The certificate authority that issued the certificate. */
@@ -70,10 +70,10 @@ export type OriginTlsClientAuthCertificateAttributes = {
   uploadedOn: string | undefined;
 };
 
-export type OriginTlsClientAuthCertificate = Resource<
+export type Certificate = Resource<
   OriginTlsClientAuthCertificateTypeId,
-  OriginTlsClientAuthCertificateProps,
-  OriginTlsClientAuthCertificateAttributes,
+  CertificateProps,
+  CertificateAttributes,
   never,
   Providers
 >;
@@ -84,7 +84,7 @@ export type OriginTlsClientAuthCertificate = Resource<
  *
  * Uploads the client certificate Cloudflare presents to your origin when
  * zone-level Authenticated Origin Pulls is enabled
- * ({@link OriginTlsClientAuthSetting}), letting the origin verify that
+ * ({@link Setting}), letting the origin verify that
  * requests really come from Cloudflare via mTLS.
  *
  * Certificates are immutable: there is no update API, so changing any
@@ -97,7 +97,7 @@ export type OriginTlsClientAuthCertificate = Resource<
  * @section Uploading a certificate
  * @example Zone client certificate
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate("AopCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
@@ -107,13 +107,13 @@ export type OriginTlsClientAuthCertificate = Resource<
  * @section Enabling Authenticated Origin Pulls
  * @example Upload the certificate and turn AOP on
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthCertificate("AopCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
  * });
  *
- * yield* Cloudflare.OriginTlsClientAuth.OriginTlsClientAuthSetting("Aop", {
+ * yield* Cloudflare.OriginTlsClientAuth.Setting("Aop", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -121,29 +121,26 @@ export type OriginTlsClientAuthCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/
  */
-export const OriginTlsClientAuthCertificate =
-  Resource<OriginTlsClientAuthCertificate>(
-    OriginTlsClientAuthCertificateTypeId,
-  );
+export const Certificate = Resource<Certificate>(
+  OriginTlsClientAuthCertificateTypeId,
+);
 
 /**
- * Returns true if the given value is an OriginTlsClientAuthCertificate
+ * Returns true if the given value is an Certificate
  * resource.
  */
-export const isOriginTlsClientAuthCertificate = (
-  value: unknown,
-): value is OriginTlsClientAuthCertificate =>
+export const isCertificate = (value: unknown): value is Certificate =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === OriginTlsClientAuthCertificateTypeId;
 
-export const OriginTlsClientAuthCertificateProvider = () =>
-  Provider.succeed(OriginTlsClientAuthCertificate, {
+export const CertificateProvider = () =>
+  Provider.succeed(Certificate, {
     stables: ["certificateId", "zoneId"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       if (!isResolved(news)) return undefined;
-      const o = olds as OriginTlsClientAuthCertificateProps;
-      const n = news as OriginTlsClientAuthCertificateProps;
+      const o = olds as CertificateProps;
+      const n = news as CertificateProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       if (
         typeof o.zoneId === "string" &&
@@ -352,7 +349,7 @@ type CertificateShape = {
 const toAttributes = (
   cert: CertificateShape,
   zoneId: string,
-): OriginTlsClientAuthCertificateAttributes => ({
+): CertificateAttributes => ({
   certificateId: cert.id!,
   zoneId,
   status: cert.status ?? undefined,

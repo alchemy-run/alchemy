@@ -54,7 +54,7 @@ export type ScanConfigAttributes = {
   ports: string[];
 };
 
-export type CloudforceOneScanConfig = Resource<
+export type ScanConfig = Resource<
   ScanConfigTypeId,
   ScanConfigProps,
   ScanConfigAttributes,
@@ -80,7 +80,7 @@ export type CloudforceOneScanConfig = Resource<
  * @section Creating a Scan Config
  * @example One-off scan of a single address
  * ```typescript
- * const scan = yield* Cloudflare.CloudforceOne.CloudforceOneScanConfig("edge-scan", {
+ * const scan = yield* Cloudflare.CloudforceOne.ScanConfig("edge-scan", {
  *   ips: ["203.0.113.7/32"],
  *   frequency: 0,
  * });
@@ -88,7 +88,7 @@ export type CloudforceOneScanConfig = Resource<
  *
  * @example Weekly scan of a CIDR block on specific ports
  * ```typescript
- * const scan = yield* Cloudflare.CloudforceOne.CloudforceOneScanConfig("perimeter", {
+ * const scan = yield* Cloudflare.CloudforceOne.ScanConfig("perimeter", {
  *   ips: ["203.0.113.0/24"],
  *   frequency: 7,
  *   ports: ["1-80", "443"],
@@ -98,7 +98,7 @@ export type CloudforceOneScanConfig = Resource<
  * @section Updating
  * @example Change the schedule and port list in place
  * ```typescript
- * const scan = yield* Cloudflare.CloudforceOne.CloudforceOneScanConfig("perimeter", {
+ * const scan = yield* Cloudflare.CloudforceOne.ScanConfig("perimeter", {
  *   ips: ["203.0.113.0/24"],
  *   frequency: 30,
  *   ports: ["all"],
@@ -107,19 +107,16 @@ export type CloudforceOneScanConfig = Resource<
  *
  * @see https://developers.cloudflare.com/security-center/intel-apis/attack-surface-scans/
  */
-export const CloudforceOneScanConfig =
-  Resource<CloudforceOneScanConfig>(ScanConfigTypeId);
+export const ScanConfig = Resource<ScanConfig>(ScanConfigTypeId);
 
 /**
- * Returns true if the given value is a CloudforceOneScanConfig resource.
+ * Returns true if the given value is a ScanConfig resource.
  */
-export const isCloudforceOneScanConfig = (
-  value: unknown,
-): value is CloudforceOneScanConfig =>
+export const isScanConfig = (value: unknown): value is ScanConfig =>
   Predicate.hasProperty(value, "Type") && value.Type === ScanConfigTypeId;
 
-export const CloudforceOneScanConfigProvider = () =>
-  Provider.succeed(CloudforceOneScanConfig, {
+export const ScanConfigProvider = () =>
+  Provider.succeed(ScanConfig, {
     stables: ["configId", "accountId"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

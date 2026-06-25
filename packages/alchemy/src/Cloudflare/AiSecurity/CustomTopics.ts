@@ -15,7 +15,7 @@ type AiSecurityCustomTopicsTypeId = typeof AiSecurityCustomTopicsTypeId;
 /**
  * A custom topic category for AI Security for Apps content detection.
  */
-export type AiSecurityTopic = {
+export type Topic = {
   /**
    * Human-readable label for the topic category.
    */
@@ -26,7 +26,7 @@ export type AiSecurityTopic = {
   topic: string;
 };
 
-export type AiSecurityCustomTopicsProps = {
+export type CustomTopicsProps = {
   /**
    * Zone the custom topics belong to. Stable — changing the zone
    * triggers a replacement (the old zone's topic list is restored to
@@ -37,26 +37,26 @@ export type AiSecurityCustomTopicsProps = {
    * The full list of custom topic categories. Mutable — the PUT
    * replaces the entire list, so reconcile syncs the list as a whole.
    */
-  topics: AiSecurityTopic[];
+  topics: Topic[];
 };
 
-export type AiSecurityCustomTopicsAttributes = {
+export type CustomTopicsAttributes = {
   /** Zone the custom topics belong to. */
   zoneId: string;
   /** The custom topic categories currently configured on the zone. */
-  topics: AiSecurityTopic[];
+  topics: Topic[];
   /**
    * The topic list the zone had before Alchemy first managed it.
    * Restored on destroy, so deleting the resource puts the zone back
    * the way it was found.
    */
-  initialTopics: AiSecurityTopic[];
+  initialTopics: Topic[];
 };
 
-export type AiSecurityCustomTopics = Resource<
+export type CustomTopics = Resource<
   AiSecurityCustomTopicsTypeId,
-  AiSecurityCustomTopicsProps,
-  AiSecurityCustomTopicsAttributes,
+  CustomTopicsProps,
+  CustomTopicsAttributes,
   never,
   Providers
 >;
@@ -71,7 +71,7 @@ export type AiSecurityCustomTopics = Resource<
  * PUT. Reconcile PUTs the desired list when the observed list differs;
  * destroy restores the list the zone had before Alchemy first managed it.
  *
- * Declare at most one `AiSecurityCustomTopics` per zone — two instances
+ * Declare at most one `CustomTopics` per zone — two instances
  * managing the same zone would fight over the single underlying list.
  *
  * AI Security for Apps is entitlement-gated: on accounts without the
@@ -83,7 +83,7 @@ export type AiSecurityCustomTopics = Resource<
  * @section Managing custom topics
  * @example Classify traffic into two custom topics
  * ```typescript
- * const topics = yield* Cloudflare.AiSecurity.AiSecurityCustomTopics("Topics", {
+ * const topics = yield* Cloudflare.AiSecurity.CustomTopics("Topics", {
  *   zoneId: zone.zoneId,
  *   topics: [
  *     { label: "billing", topic: "Questions about invoices and payments" },
@@ -94,7 +94,7 @@ export type AiSecurityCustomTopics = Resource<
  *
  * @example Clear all custom topics
  * ```typescript
- * yield* Cloudflare.AiSecurity.AiSecurityCustomTopics("Topics", {
+ * yield* Cloudflare.AiSecurity.CustomTopics("Topics", {
  *   zoneId: zone.zoneId,
  *   topics: [],
  * });
@@ -102,21 +102,19 @@ export type AiSecurityCustomTopics = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/firewall-for-ai/
  */
-export const AiSecurityCustomTopics = Resource<AiSecurityCustomTopics>(
+export const CustomTopics = Resource<CustomTopics>(
   AiSecurityCustomTopicsTypeId,
 );
 
 /**
- * Returns true if the given value is an AiSecurityCustomTopics resource.
+ * Returns true if the given value is an CustomTopics resource.
  */
-export const isAiSecurityCustomTopics = (
-  value: unknown,
-): value is AiSecurityCustomTopics =>
+export const isCustomTopics = (value: unknown): value is CustomTopics =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === AiSecurityCustomTopicsTypeId;
 
-export const AiSecurityCustomTopicsProvider = () =>
-  Provider.succeed(AiSecurityCustomTopics, {
+export const CustomTopicsProvider = () =>
+  Provider.succeed(CustomTopics, {
     stables: ["zoneId", "initialTopics"],
 
     list: Effect.fn(function* () {
@@ -149,13 +147,13 @@ export const AiSecurityCustomTopicsProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is AiSecurityCustomTopicsAttributes => row !== undefined,
+        (row): row is CustomTopicsAttributes => row !== undefined,
       );
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as AiSecurityCustomTopicsProps;
-      const n = news as AiSecurityCustomTopicsProps;
+      const o = olds as CustomTopicsProps;
+      const n = news as CustomTopicsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -243,20 +241,17 @@ export const AiSecurityCustomTopicsProvider = () =>
  * Normalize the API's `topics ?? null` into a concrete (mutable) array.
  */
 const normalizeTopics = (
-  topics: readonly AiSecurityTopic[] | null | undefined,
-): AiSecurityTopic[] => (topics ?? []).map((t) => ({ ...t }));
+  topics: readonly Topic[] | null | undefined,
+): Topic[] => (topics ?? []).map((t) => ({ ...t }));
 
 /**
  * Order-insensitive structural equality on the `topic` key — the PUT
  * replaces the whole list, so two lists are equal when they contain the
  * same `{ label, topic }` pairs regardless of order.
  */
-const topicsEqual = (
-  a: readonly AiSecurityTopic[],
-  b: readonly AiSecurityTopic[],
-): boolean => {
+const topicsEqual = (a: readonly Topic[], b: readonly Topic[]): boolean => {
   if (a.length !== b.length) return false;
-  const key = (t: AiSecurityTopic) => `${t.topic} ${t.label}`;
+  const key = (t: Topic) => `${t.topic} ${t.label}`;
   const as = a.map(key).sort();
   const bs = b.map(key).sort();
   return as.every((k, i) => k === bs[i]);

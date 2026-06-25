@@ -11,7 +11,7 @@ const AccessKeyConfigurationTypeId =
   "Cloudflare.Access.KeyConfiguration" as const;
 type AccessKeyConfigurationTypeId = typeof AccessKeyConfigurationTypeId;
 
-export type AccessKeyConfigurationProps = {
+export type KeyConfigurationProps = {
   /**
    * The number of days between automatic Access service key rotations.
    * Cloudflare accepts values between 21 and 372 days.
@@ -21,7 +21,7 @@ export type AccessKeyConfigurationProps = {
   keyRotationIntervalDays: number;
 };
 
-export type AccessKeyConfigurationAttributes = {
+export type KeyConfigurationAttributes = {
   /** Cloudflare account the key configuration belongs to. */
   accountId: string;
   /** The number of days between key rotations. */
@@ -39,10 +39,10 @@ export type AccessKeyConfigurationAttributes = {
   initialKeyRotationIntervalDays: number | undefined;
 };
 
-export type AccessKeyConfiguration = Resource<
+export type KeyConfiguration = Resource<
   AccessKeyConfigurationTypeId,
-  AccessKeyConfigurationProps,
-  AccessKeyConfigurationAttributes,
+  KeyConfigurationProps,
+  KeyConfigurationAttributes,
   never,
   Providers
 >;
@@ -62,14 +62,14 @@ export type AccessKeyConfiguration = Resource<
  * @section Managing the rotation interval
  * @example Rotate Access service keys every 30 days
  * ```typescript
- * const keys = yield* Cloudflare.Access.AccessKeyConfiguration("Keys", {
+ * const keys = yield* Cloudflare.Access.KeyConfiguration("Keys", {
  *   keyRotationIntervalDays: 30,
  * });
  * ```
  *
  * @example Inspect rotation status
  * ```typescript
- * const keys = yield* Cloudflare.Access.AccessKeyConfiguration("Keys", {
+ * const keys = yield* Cloudflare.Access.KeyConfiguration("Keys", {
  *   keyRotationIntervalDays: 90,
  * });
  * // keys.daysUntilNextRotation, keys.lastKeyRotationAt
@@ -77,21 +77,19 @@ export type AccessKeyConfiguration = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/keys/
  */
-export const AccessKeyConfiguration = Resource<AccessKeyConfiguration>(
+export const KeyConfiguration = Resource<KeyConfiguration>(
   AccessKeyConfigurationTypeId,
 );
 
 /**
- * Returns true if the given value is an AccessKeyConfiguration resource.
+ * Returns true if the given value is an KeyConfiguration resource.
  */
-export const isAccessKeyConfiguration = (
-  value: unknown,
-): value is AccessKeyConfiguration =>
+export const isKeyConfiguration = (value: unknown): value is KeyConfiguration =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === AccessKeyConfigurationTypeId;
 
-export const AccessKeyConfigurationProvider = () =>
-  Provider.succeed(AccessKeyConfiguration, {
+export const KeyConfigurationProvider = () =>
+  Provider.succeed(KeyConfiguration, {
     nuke: { singleton: true },
     stables: ["accountId", "initialKeyRotationIntervalDays"],
 
@@ -186,7 +184,7 @@ const toAttributes = (
   accountId: string,
   observed: zeroTrust.GetAccessKeyResponse | zeroTrust.PutAccessKeyResponse,
   initialKeyRotationIntervalDays: number | undefined,
-): AccessKeyConfigurationAttributes => ({
+): KeyConfigurationAttributes => ({
   accountId,
   keyRotationIntervalDays: observed.keyRotationIntervalDays ?? undefined,
   daysUntilNextRotation: observed.daysUntilNextRotation ?? undefined,

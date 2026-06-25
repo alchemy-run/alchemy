@@ -49,24 +49,23 @@ test.provider(
       yield* stack.destroy();
 
       const program = (
-        mitigationAction: Cloudflare.SchemaValidation.SchemaValidationOperationMitigationAction,
+        mitigationAction: Cloudflare.SchemaValidation.OperationMitigationAction,
       ) =>
         Effect.gen(function* () {
-          const op = yield* Cloudflare.ApiShield.ApiShieldOperation("TestOp", {
+          const op = yield* Cloudflare.ApiShield.Operation("TestOp", {
             zoneId,
             method: "GET",
             host: zoneName,
             endpoint: "/alchemy-sv-operation-setting-test",
           });
-          const override =
-            yield* Cloudflare.SchemaValidation.SchemaValidationOperationSetting(
-              "TestOverride",
-              {
-                zoneId,
-                operationId: op.operationId,
-                mitigationAction,
-              },
-            );
+          const override = yield* Cloudflare.SchemaValidation.OperationSetting(
+            "TestOverride",
+            {
+              zoneId,
+              operationId: op.operationId,
+              mitigationAction,
+            },
+          );
           return { op, override };
         });
 
@@ -116,27 +115,26 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const op = yield* Cloudflare.ApiShield.ApiShieldOperation("ListOp", {
+          const op = yield* Cloudflare.ApiShield.Operation("ListOp", {
             zoneId,
             method: "GET",
             host: zoneName,
             endpoint: "/alchemy-sv-operation-setting-list-test",
           });
-          const override =
-            yield* Cloudflare.SchemaValidation.SchemaValidationOperationSetting(
-              "ListOverride",
-              {
-                zoneId,
-                operationId: op.operationId,
-                mitigationAction: "block",
-              },
-            );
+          const override = yield* Cloudflare.SchemaValidation.OperationSetting(
+            "ListOverride",
+            {
+              zoneId,
+              operationId: op.operationId,
+              mitigationAction: "block",
+            },
+          );
           return { op, override };
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SchemaValidation.SchemaValidationOperationSetting,
+        Cloudflare.SchemaValidation.OperationSetting,
       );
       const all = yield* provider.list();
 

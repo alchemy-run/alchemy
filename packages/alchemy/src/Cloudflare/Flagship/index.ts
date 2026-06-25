@@ -4,7 +4,7 @@ export {
   ReadFlags,
   FlagshipError,
   type ReadFlagsClient,
-  type FlagshipEvaluationContext,
-  type FlagshipEvaluationDetails,
+  type EvaluationContext,
+  type EvaluationDetails,
 } from "./ReadFlags.ts";
 export { ReadFlagsBinding } from "./ReadFlagsBinding.ts";

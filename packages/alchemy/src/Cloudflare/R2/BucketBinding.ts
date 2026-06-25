@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Output from "../../Output.ts";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { R2Bucket } from "./Bucket.ts";
-import type { R2Object, R2ObjectBody } from "./BucketTypes.ts";
+import type { Bucket } from "./Bucket.ts";
+import type { R2Object, ObjectBody } from "./BucketTypes.ts";
 import { R2Error } from "./BucketTypes.ts";
 
 /**
@@ -21,7 +21,7 @@ export const makeBucketBinding = <Client>(options: {
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (bucket: R2Bucket) {
+    return Effect.fn(function* (bucket: Bucket) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${bucket}`({
           bindings: [
@@ -50,7 +50,7 @@ export const makeBucketBinding = <Client>(options: {
  * live in {@link makeRead}/{@link makeWrite} respectively — only the primitives
  * used by both sides are exposed here.
  */
-export const makeHelpers = (env: Record<string, any>, bucket: R2Bucket) => {
+export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
   const raw = Effect.sync(
     () => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId]!,
   );
@@ -74,7 +74,7 @@ export const makeHelpers = (env: Record<string, any>, bucket: R2Bucket) => {
     writeHttpMetadata: (headers: Headers) =>
       Effect.sync(() => object.writeHttpMetadata(headers)),
   });
-  const wrapR2ObjectBody = (object: runtime.R2ObjectBody): R2ObjectBody => ({
+  const wrapR2ObjectBody = (object: runtime.R2ObjectBody): ObjectBody => ({
     ...wrapR2Object(object),
     body: Stream.fromReadableStream({
       evaluate: () =>
@@ -98,7 +98,7 @@ export const makeHelpers = (env: Record<string, any>, bucket: R2Bucket) => {
 
   const wrapR2ObjectOrBody = (
     object: runtime.R2Object | runtime.R2ObjectBody | null,
-  ): R2Object | R2ObjectBody | null =>
+  ): R2Object | ObjectBody | null =>
     object === null
       ? object
       : isR2ObjectBody(object)

@@ -271,7 +271,7 @@ export class WorkflowScope extends Context.Service<
  * ```
  *
  * @example Accessing env bindings inside a task
- * Bind a resource (e.g. `KVNamespace`, `R2Bucket`) in the workflow's
+ * Bind a resource (e.g. `Namespace`, `Bucket`) in the workflow's
  * outer init phase to get a typed Effect-native client, then use it
  * directly inside `task`. `task` threads the binding's service
  * requirement (`WorkerEnvironment`) through automatically so the inner

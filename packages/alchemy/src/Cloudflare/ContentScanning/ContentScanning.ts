@@ -16,7 +16,7 @@ type ContentScanningTypeId = typeof ContentScanningTypeId;
 /** The wire status values Cloudflare uses for Content Scanning. */
 type ContentScanningStatus = "enabled" | "disabled";
 
-export interface ContentScanningProps {
+export interface Props {
   /**
    * Zone to manage WAF Content Scanning on. Stable — changing the zone
    * triggers a replacement (the old zone's status is restored to the
@@ -36,7 +36,7 @@ export interface ContentScanningProps {
   enabled?: boolean;
 }
 
-export interface ContentScanningAttributes {
+export interface Attributes {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** Whether Content Scanning is currently enabled. */
@@ -53,8 +53,8 @@ export interface ContentScanningAttributes {
 
 export type ContentScanning = Resource<
   ContentScanningTypeId,
-  ContentScanningProps,
-  ContentScanningAttributes,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -100,7 +100,7 @@ export type ContentScanning = Resource<
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.ContentScanning.ContentScanningExpression("ScanJsonFile", {
+ * yield* Cloudflare.ContentScanning.Expression("ScanJsonFile", {
  *   zoneId: scanning.zoneId,
  *   payload: 'lookup_json_string(http.request.body.raw, "file")',
  * });
@@ -138,9 +138,7 @@ export const ContentScanningProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ContentScanningAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -235,7 +233,7 @@ const toAttributes = (
     | contentScanning.GetContentScanningResponse
     | contentScanning.PutContentScanningResponse,
   initialValue: string,
-): ContentScanningAttributes => ({
+): Attributes => ({
   zoneId,
   enabled: statusOf(setting) === "enabled",
   modified: setting.modified ?? undefined,

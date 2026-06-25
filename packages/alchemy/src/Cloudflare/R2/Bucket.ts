@@ -11,15 +11,14 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
-export const isR2Bucket = (value: any): value is R2Bucket =>
-  typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.R2.R2Bucket";
+export const isBucket = (value: any): value is Bucket =>
+  typeof value === "object" && (value as any)?.Type === "Cloudflare.R2.Bucket";
 
-export type R2BucketName = string;
+export type BucketName = string;
 
-export type R2BucketCustomDomainZone = Zone.ZoneReference;
+export type BucketCustomDomainZone = Zone.Reference;
 
-export type R2BucketCustomDomain = {
+export type BucketCustomDomain = {
   /**
    * Custom domain name to attach to the bucket.
    */
@@ -29,7 +28,7 @@ export type R2BucketCustomDomain = {
    * from `domain`. Pass a zone ID string, a hostname in the zone, or any object
    * with a `zoneId` attribute such as `Cloudflare.Zone.Zone`.
    */
-  zone?: R2BucketCustomDomainZone;
+  zone?: BucketCustomDomainZone;
   /**
    * Whether public bucket access is enabled at this custom domain.
    * @default true
@@ -46,7 +45,7 @@ export type R2BucketCustomDomain = {
   minTLS?: "1.0" | "1.1" | "1.2" | "1.3";
 };
 
-export type R2BucketLifecycleCondition =
+export type BucketLifecycleCondition =
   | {
       type: "Age";
       /**
@@ -62,7 +61,7 @@ export type R2BucketLifecycleCondition =
       date: string;
     };
 
-export type R2BucketLifecycleRule = {
+export type BucketLifecycleRule = {
   /**
    * Unique identifier for the rule within the bucket.
    */
@@ -88,19 +87,19 @@ export type R2BucketLifecycleRule = {
    * Delete matching objects after the configured age or on a specific date.
    */
   deleteObjectsTransition?: {
-    condition?: R2BucketLifecycleCondition;
+    condition?: BucketLifecycleCondition;
   };
   /**
    * Transition matching objects to a different storage class. Cloudflare R2
    * only supports transitioning to `InfrequentAccess` today.
    */
   storageClassTransitions?: {
-    condition: R2BucketLifecycleCondition;
+    condition: BucketLifecycleCondition;
     storageClass: "InfrequentAccess";
   }[];
 };
 
-export type R2BucketProps = {
+export type BucketProps = {
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
    * @default ${app}-${stage}-${id}
@@ -110,40 +109,40 @@ export type R2BucketProps = {
    * Storage class for newly uploaded objects.
    * @default "Standard"
    */
-  storageClass?: R2Bucket.StorageClass;
+  storageClass?: Bucket.StorageClass;
   /**
    * Jurisdiction where objects in this bucket are guaranteed to be stored.
    * @default "default"
    */
-  jurisdiction?: R2Bucket.Jurisdiction;
+  jurisdiction?: Bucket.Jurisdiction;
   /**
    * Location hint for the bucket.
    */
-  locationHint?: R2Bucket.Location;
+  locationHint?: Bucket.Location;
   /**
    * Custom domains to attach to the bucket. Pass an empty array (or omit)
    * to remove all custom domains.
    */
-  domains?: R2BucketCustomDomain[];
+  domains?: BucketCustomDomain[];
   /**
    * Object lifecycle rules applied to the bucket. Pass an empty array (or
    * omit) to clear all lifecycle rules. See the Cloudflare R2 docs for
    * supported transitions.
    */
-  lifecycleRules?: R2BucketLifecycleRule[];
+  lifecycleRules?: BucketLifecycleRule[];
 };
 
-export type R2Bucket = Resource<
-  "Cloudflare.R2.R2Bucket",
-  R2BucketProps,
+export type Bucket = Resource<
+  "Cloudflare.R2.Bucket",
+  BucketProps,
   {
-    bucketName: R2BucketName;
-    storageClass: R2Bucket.StorageClass;
-    jurisdiction: R2Bucket.Jurisdiction;
-    location: R2Bucket.Location | undefined;
+    bucketName: BucketName;
+    storageClass: Bucket.StorageClass;
+    jurisdiction: Bucket.Jurisdiction;
+    location: Bucket.Location | undefined;
     accountId: string;
-    domains: R2Bucket.CustomDomain[];
-    lifecycleRules: R2Bucket.LifecycleRule[];
+    domains: Bucket.CustomDomain[];
+    lifecycleRules: Bucket.LifecycleRule[];
   },
   never,
   Cloudflare.Providers
@@ -160,12 +159,12 @@ export type R2Bucket = Resource<
  * @section Creating a Bucket
  * @example Basic R2 bucket
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket");
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket");
  * ```
  *
  * @example Bucket with location hint
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   locationHint: "wnam",
  * });
  * ```
@@ -204,14 +203,14 @@ export type R2Bucket = Resource<
  *
  * @example Single custom domain
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com" }],
  * });
  * ```
  *
  * @example Multiple custom domains
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [
  *     { name: "assets.example.com" },
  *     { name: "static.example.com" },
@@ -221,7 +220,7 @@ export type R2Bucket = Resource<
  *
  * @example Disable a custom domain without removing it
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [{ name: "assets.example.com", enabled: false }],
  * });
  * ```
@@ -232,7 +231,7 @@ export type R2Bucket = Resource<
  *   name: "example.com",
  * });
  *
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   domains: [
  *     {
  *       name: "assets.example.com",
@@ -253,7 +252,7 @@ export type R2Bucket = Resource<
  *
  * @example Delete objects 30 days after upload
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
  *     {
  *       id: "expire-old-objects",
@@ -267,7 +266,7 @@ export type R2Bucket = Resource<
  *
  * @example Transition to InfrequentAccess after 60 days, delete after 365
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
  *     {
  *       id: "archive-then-delete",
@@ -288,7 +287,7 @@ export type R2Bucket = Resource<
  *
  * @example Abort incomplete multipart uploads after 7 days
  * ```typescript
- * const bucket = yield* Cloudflare.R2.R2Bucket("MyBucket", {
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   lifecycleRules: [
  *     {
  *       id: "abort-stale-uploads",
@@ -300,9 +299,9 @@ export type R2Bucket = Resource<
  * });
  * ```
  */
-export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2.R2Bucket");
+export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket");
 
-export declare namespace R2Bucket {
+export declare namespace Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
   export type Jurisdiction = "default" | "eu" | "fedramp";
   export type Location = "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
@@ -314,11 +313,11 @@ export declare namespace R2Bucket {
       | { condition: { type: "Age"; maxAge: number } | undefined }
       | undefined;
     deleteObjectsTransition:
-      | { condition: R2BucketLifecycleCondition | undefined }
+      | { condition: BucketLifecycleCondition | undefined }
       | undefined;
     storageClassTransitions:
       | {
-          condition: R2BucketLifecycleCondition;
+          condition: BucketLifecycleCondition;
           storageClass: "InfrequentAccess";
         }[]
       | undefined;
@@ -350,13 +349,13 @@ export declare namespace R2Bucket {
   };
 }
 
-export const R2BucketProvider = () =>
+export const BucketProvider = () =>
   Provider.effect(
-    R2Bucket,
+    Bucket,
     Effect.gen(function* () {
       const emptyBucket = Effect.fn(function* (
         bucketName: string,
-        jurisdiction: R2Bucket.Jurisdiction,
+        jurisdiction: Bucket.Jurisdiction,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         return yield* r2.listObjects
@@ -395,14 +394,14 @@ export const R2BucketProvider = () =>
 
       const normalizeLocation = (
         location: string | undefined | null,
-      ): R2Bucket.Location | undefined => {
+      ): Bucket.Location | undefined => {
         if (!location) return undefined;
-        return location.toLowerCase() as R2Bucket.Location;
+        return location.toLowerCase() as Bucket.Location;
       };
 
       const listCustomDomains = Effect.fn(function* (
         bucketName: string,
-        jurisdiction: R2Bucket.Jurisdiction,
+        jurisdiction: Bucket.Jurisdiction,
         // `NoSuchBucket` after a *create* is endpoint-consistency lag worth
         // retrying. During *enumeration* (`list`), a bucket that 404s is one a
         // parallel suite just deleted — it's genuinely gone, so retrying the
@@ -436,9 +435,9 @@ export const R2BucketProvider = () =>
 
       const reconcileCustomDomains = (
         bucketName: string,
-        jurisdiction: R2Bucket.Jurisdiction,
-        desired: R2BucketCustomDomain[],
-        previous: R2Bucket.CustomDomain[],
+        jurisdiction: Bucket.Jurisdiction,
+        desired: BucketCustomDomain[],
+        previous: Bucket.CustomDomain[],
       ) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -576,14 +575,14 @@ export const R2BucketProvider = () =>
       // until a short page signals the end.
       const listBucketsInJurisdiction = (
         accountId: string,
-        jurisdiction: R2Bucket.Jurisdiction,
+        jurisdiction: Bucket.Jurisdiction,
       ) =>
         Effect.gen(function* () {
           const all: {
             name: string;
-            jurisdiction: R2Bucket.Jurisdiction;
-            storageClass: R2Bucket.StorageClass;
-            location: R2Bucket.Location | undefined;
+            jurisdiction: Bucket.Jurisdiction;
+            storageClass: Bucket.StorageClass;
+            location: Bucket.Location | undefined;
           }[] = [];
           let startAfter: string | undefined = undefined;
           const perPage = 1000;
@@ -602,9 +601,9 @@ export const R2BucketProvider = () =>
               all.push({
                 name: b.name,
                 jurisdiction: (b.jurisdiction ??
-                  jurisdiction) as R2Bucket.Jurisdiction,
+                  jurisdiction) as Bucket.Jurisdiction,
                 storageClass: (b.storageClass ??
-                  "Standard") as R2Bucket.StorageClass,
+                  "Standard") as Bucket.StorageClass,
                 location: normalizeLocation(b.location),
               });
             }
@@ -616,8 +615,8 @@ export const R2BucketProvider = () =>
 
       const reconcileLifecycleRules = (
         bucketName: string,
-        jurisdiction: R2Bucket.Jurisdiction,
-        desired: R2BucketLifecycleRule[],
+        jurisdiction: Bucket.Jurisdiction,
+        desired: BucketLifecycleRule[],
       ) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -666,7 +665,7 @@ export const R2BucketProvider = () =>
             // R2 buckets are account-scoped but partitioned by jurisdiction, so
             // enumerate each jurisdiction. Accounts not entitled to a given
             // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
-            const jurisdictions: R2Bucket.Jurisdiction[] = [
+            const jurisdictions: Bucket.Jurisdiction[] = [
               "default",
               "eu",
               "fedramp",
@@ -713,7 +712,7 @@ export const R2BucketProvider = () =>
                         (observed.rules ?? []).map(toLifecycleRule),
                       ),
                       Effect.catchTag("NoSuchBucket", () =>
-                        Effect.succeed([] as R2Bucket.LifecycleRule[]),
+                        Effect.succeed([] as Bucket.LifecycleRule[]),
                       ),
                     );
                   return {
@@ -854,9 +853,9 @@ export const R2BucketProvider = () =>
             bucketName: observed.name!,
             // Distilled widened generated string enums to open unions.
             storageClass: (observed.storageClass ??
-              "Standard") as R2Bucket.StorageClass,
+              "Standard") as Bucket.StorageClass,
             jurisdiction: (observed.jurisdiction ??
-              "default") as R2Bucket.Jurisdiction,
+              "default") as Bucket.Jurisdiction,
             location: normalizeLocation(observed.location),
             accountId: acct,
           };
@@ -925,9 +924,9 @@ export const R2BucketProvider = () =>
                 bucketName: bucket.name!,
                 // Distilled widened generated string enums to open unions.
                 storageClass: (bucket.storageClass ??
-                  "Standard") as R2Bucket.StorageClass,
+                  "Standard") as Bucket.StorageClass,
                 jurisdiction: (bucket.jurisdiction ??
-                  "default") as R2Bucket.Jurisdiction,
+                  "default") as Bucket.Jurisdiction,
                 location: normalizeLocation(bucket.location),
                 accountId: acct,
                 domains: output?.domains ?? [],
@@ -968,18 +967,18 @@ type CustomDomainResponse = {
 
 const toCustomDomainAttributes = (
   domain: CustomDomainResponse,
-): R2Bucket.CustomDomain => ({
+): Bucket.CustomDomain => ({
   domain: domain.domain,
   zoneId: domain.zoneId ?? undefined,
   enabled: domain.enabled ?? true,
   ciphers: domain.ciphers ?? undefined,
-  minTLS: (domain.minTLS ?? undefined) as R2Bucket.CustomDomain["minTLS"],
-  status: (domain.status ?? undefined) as R2Bucket.CustomDomain["status"],
+  minTLS: (domain.minTLS ?? undefined) as Bucket.CustomDomain["minTLS"],
+  status: (domain.status ?? undefined) as Bucket.CustomDomain["status"],
 });
 
 const sameCustomDomainConfig = (
-  observed: R2Bucket.CustomDomain | undefined,
-  desired: R2BucketCustomDomain,
+  observed: Bucket.CustomDomain | undefined,
+  desired: BucketCustomDomain,
   zoneId: string,
 ): boolean =>
   observed !== undefined &&
@@ -994,7 +993,7 @@ type LifecycleRuleResponse = NonNullable<
 
 const toLifecycleRule = (
   rule: LifecycleRuleResponse,
-): R2Bucket.LifecycleRule => ({
+): Bucket.LifecycleRule => ({
   id: rule.id,
   enabled: rule.enabled,
   prefix: rule.conditions.prefix ?? "",
@@ -1008,8 +1007,8 @@ const toLifecycleRule = (
 });
 
 const normalizeLifecycleRule = (
-  rule: R2BucketLifecycleRule,
-): R2Bucket.LifecycleRule => ({
+  rule: BucketLifecycleRule,
+): Bucket.LifecycleRule => ({
   id: rule.id,
   enabled: rule.enabled ?? true,
   prefix: rule.prefix ?? "",
@@ -1023,7 +1022,7 @@ const normalizeLifecycleRule = (
 });
 
 const toLifecyclePutPayload = (
-  rule: R2BucketLifecycleRule,
+  rule: BucketLifecycleRule,
 ): NonNullable<r2.PutBucketLifecycleRequest["rules"]>[number] => ({
   id: rule.id,
   enabled: rule.enabled ?? true,
