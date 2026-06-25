@@ -190,7 +190,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * has a typed shape and a `.make(props, impl)` runtime. The other two
  * ship an arbitrary image as-is: they have no runtime to provide, so
  * you declare the class with its props inline and register it purely
- * via `Cloudflare.Containers.layerContainer` from the hosting Durable Object.
+ * via `Cloudflare.Containers.layer` from the hosting Durable Object.
  *
  * @example Effect-native image (`main`)
  * ```typescript
@@ -249,7 +249,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *           }),
  *       };
  *     });
- *   }).pipe(Effect.provide(Cloudflare.Containers.layerContainer(Web))),
+ *   }).pipe(Effect.provide(Cloudflare.Containers.layer(Web))),
  * ) {}
  * ```
  *
@@ -299,7 +299,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * @section Calling from a Durable Object
  * `yield* Sandbox` resolves a **running** container instance — every
  * method declared on the container's shape **plus** a `getTcpPort`
- * helper. Provide `Cloudflare.Containers.layerContainer(Sandbox, …)` on the
+ * helper. Provide `Cloudflare.Containers.layer(Sandbox, …)` on the
  * DO's init to configure how the container runs; that layer binds,
  * starts, and monitors it and satisfies the `Sandbox` tag. Because
  * only the class is imported, the runtime implementation in
@@ -319,7 +319,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *     });
  *   }).pipe(
  *     Effect.provide(
- *       Cloudflare.Containers.layerContainer(Sandbox, { enableInternet: true }),
+ *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
  *     ),
  *   ),
  * ) {}
@@ -352,7 +352,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *     });
  *   }).pipe(
  *     Effect.provide(
- *       Cloudflare.Containers.layerContainer(Sandbox, { enableInternet: true }),
+ *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
  *     ),
  *   ),
  * ) {}
@@ -385,7 +385,7 @@ export const Container: ResourceClassLike<ContainerApplication> & {
           const [id] = args as [string];
           const tag = ContainerPlatform()(id);
           // `yield* MyContainer` resolves the *started* instance tag, which is
-          // provided by `layerContainer(MyContainer)`. The bind effect (which
+          // provided by `layer(MyContainer)`. The bind effect (which
           // registers the DO + Worker bindings and produces the runtime
           // handle) is stashed so `startContainer` can run it from inside that
           // layer — see ContainerPlatform.bind / StartContainer.ts.

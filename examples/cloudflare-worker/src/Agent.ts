@@ -74,7 +74,7 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.Containers.layerContainer(Sandbox, {
+      Cloudflare.Containers.layer(Sandbox, {
         enableInternet: true,
       }),
     ),

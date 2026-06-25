@@ -16,7 +16,7 @@ import {
   type ContainerStartupOptions,
 } from "./Container.ts";
 
-export const layerContainer = <Image extends Container.Decl.Any>(
+export const layer = <Image extends Container.Decl.Any>(
   container: Image,
   options?: ContainerStartupOptions,
 ) => {

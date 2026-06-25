@@ -34,7 +34,7 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.Containers.layerContainer(RemoteContainer, {
+      Cloudflare.Containers.layer(RemoteContainer, {
         enableInternet: true,
       }),
     ),

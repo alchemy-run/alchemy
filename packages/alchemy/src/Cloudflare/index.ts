@@ -120,6 +120,7 @@ export {
   WorkerLoader,
   Browser,
   RateLimit,
+  Request,
 } from "./Workers/index.ts";
 export type { InferEnv } from "./Workers/index.ts";
 export { Container } from "./Containers/index.ts";

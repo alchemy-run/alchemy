@@ -41,7 +41,7 @@ export class ExternalContainerObject extends Cloudflare.DurableObject<ExternalCo
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.Containers.layerContainer(ExternalContainer, {
+        Cloudflare.Containers.layer(ExternalContainer, {
           enableInternet: true,
         }),
       ),

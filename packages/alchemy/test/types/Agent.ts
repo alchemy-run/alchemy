@@ -31,7 +31,7 @@ const _gen = Effect.gen(function* () {
     };
   }).pipe(
     Effect.provide(
-      Cloudflare.Containers.layerContainer(Sandbox, {
+      Cloudflare.Containers.layer(Sandbox, {
         enableInternet: true,
       }),
     ),
@@ -55,7 +55,7 @@ export const Agent2 = Cloudflare.DurableObject(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.Containers.layerContainer(Sandbox, {
+      Cloudflare.Containers.layer(Sandbox, {
         enableInternet: true,
       }),
     ),
@@ -80,7 +80,7 @@ export class Agent3 extends Cloudflare.DurableObject<Agent3>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.Containers.layerContainer(Sandbox, {
+      Cloudflare.Containers.layer(Sandbox, {
         enableInternet: true,
       }),
     ),
@@ -159,7 +159,7 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.Containers.layerContainer(Sandbox, {
+      Cloudflare.Containers.layer(Sandbox, {
         enableInternet: true,
       }),
     ),
