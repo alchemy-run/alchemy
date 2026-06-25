@@ -24,6 +24,7 @@ export * from "./KeyPair.ts";
 export * from "./Namespace.ts";
 export { stackRef } from "./Output.ts";
 export type { Output } from "./Output.ts";
+export { ALCHEMY_DEV, ALCHEMY_PHASE, type AlchemyPhase } from "./Phase.ts";
 export * from "./PhysicalName.ts";
 export * as Plan from "./Plan.ts";
 export { Provider, ProviderCollection } from "./Provider.ts";
