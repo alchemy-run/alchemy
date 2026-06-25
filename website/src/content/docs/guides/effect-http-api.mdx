@@ -142,7 +142,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-+   const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
++   const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
     return {};
   }),
@@ -167,7 +167,7 @@ safe to call inside Init.
 ```typescript twoslash
 // @noErrors
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
 +   const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
 +     handlers
@@ -283,7 +283,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
     const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
       handlers
@@ -513,7 +513,7 @@ under the hood:
 +import TasksObject, { TaskDOApi } from "./object.ts";
 
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 +   const tasksDO = yield* TasksObject;
 +
 +   const getTaskDOClient = (id: string = "default") =>
