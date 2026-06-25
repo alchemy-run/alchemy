@@ -17,9 +17,11 @@ import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawne
 export class Docker extends Context.Service<
   Docker,
   {
+    /** Runs a Docker command and returns the output. Use this to run a command that doesn't have a dedicated method. */
     readonly run: (
       args: Array<string>,
     ) => Effect.Effect<CommandOutput, PlatformError>;
+    /** Writes build files and an inline Dockerfile to the given context directory. */
     readonly materialize: (options: {
       context: string;
       dockerfile: string;
@@ -29,6 +31,7 @@ export class Docker extends Context.Service<
       }>;
     }) => Effect.Effect<void, PlatformError>;
     readonly container: {
+      /** Creates a new container. */
       readonly create: (options: {
         name: string;
         image: string;
@@ -45,21 +48,26 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         command: Array<string> | undefined;
       }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Inspects a container. */
       readonly inspect: (
         name: string,
       ) => Effect.Effect<Docker.Container, PlatformError>;
+      /** Removes a container. */
       readonly remove: (
         name: string,
         force?: boolean,
       ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Starts a container. */
       readonly start: (
         name: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Stops a container. */
       readonly stop: (
         name: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly image: {
+      /** Builds a new image. */
       readonly build: (options: {
         context: string;
         tag: string;
@@ -71,10 +79,12 @@ export class Docker extends Context.Service<
         "cache-to"?: Array<string>;
         args?: Array<string>;
       }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Pulls an image. */
       readonly pull: (
         ref: string,
         platform?: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Pushes an image to a registry. */
       readonly push: (
         ref: string,
         credentials: {
@@ -83,57 +93,68 @@ export class Docker extends Context.Service<
           password: string | Redacted.Redacted<string>;
         },
       ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Tags an image. */
       readonly tag: (
         source: string,
         target: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Inspects an image. */
       readonly inspect: (
         ref: string,
       ) => Effect.Effect<Docker.Image, PlatformError>;
+      /** Removes an image. */
       readonly remove: (
         ref: string | Array<string>,
         force?: boolean,
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly volume: {
+      /** Creates a new volume. */
       readonly create: (options: {
         name: string;
         driver?: string;
         opt?: Record<string, string>;
         label?: Record<string, string>;
       }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Removes a volume. */
       readonly remove: (
         name: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Inspects a volume. */
       readonly inspect: (
         name: string,
       ) => Effect.Effect<Docker.Volume, PlatformError>;
     };
     readonly network: {
+      /** Creates a new network. */
       readonly create: (options: {
         name: string;
         driver: string;
         ipv6?: boolean;
         label?: Record<string, string>;
       }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Connects a container to a network. */
       readonly connect: (options: {
         network: string;
         container: string;
         alias?: string[];
       }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Disconnects a container from a network. */
       readonly disconnect: (options: {
         network: string;
         container: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Inspects a network. */
       readonly inspect: (
         name: string,
       ) => Effect.Effect<Docker.Network, PlatformError>;
+      /** Removes a network. */
       readonly remove: (
         id: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
   }
->()("@alchemy/docker/client") {}
+>()("@alchemy/Docker") {}
 
 export declare namespace Docker {
   export type ContainerStatus =
@@ -196,6 +217,7 @@ export declare namespace Docker {
     RepoTags?: string[] | null;
     RepoDigests?: string[] | null;
   }
+
   export interface Volume {
     CreatedAt: string;
     Driver: string;
@@ -205,6 +227,7 @@ export declare namespace Docker {
     Options: Record<string, string> | null;
     Scope: string;
   }
+
   export interface Network {
     Name: string;
     Id: string;
@@ -301,23 +324,6 @@ export const DockerLive = Layer.effect(
         Effect.scoped,
       );
 
-    const systemError = (input: {
-      _tag: SystemErrorTag;
-      args: Array<string>;
-      description?: string;
-      cause?: unknown;
-    }) =>
-      new PlatformError(
-        new SystemError({
-          _tag: input._tag,
-          module: "Docker",
-          method: input.args.slice(0, 2).join("."),
-          pathOrDescriptor: input.args[2],
-          description: input.description,
-          cause: input.cause,
-        }),
-      );
-
     const runInspect = <T>(args: Array<string>) =>
       run(args).pipe(
         Effect.map((result) => {
@@ -325,40 +331,6 @@ export const DockerLive = Layer.effect(
           return item;
         }),
       );
-
-    const argsFrom = (
-      options: Record<
-        string,
-        | boolean
-        | string
-        | number
-        | undefined
-        | Record<string, string>
-        | Array<string>
-      >,
-    ) => {
-      const args: Array<string> = [];
-      for (const [key, value] of Object.entries(options)) {
-        if (!value) continue;
-        const prefix = key.length > 1 ? `--${key}` : `-${key}`;
-        if (value === true) {
-          args.push(prefix);
-        } else if (typeof value === "string") {
-          args.push(prefix, value);
-        } else if (typeof value === "number") {
-          args.push(prefix, String(value));
-        } else if (Array.isArray(value)) {
-          for (const item of value) {
-            args.push(prefix, item);
-          }
-        } else if (value !== null && typeof value === "object") {
-          for (const [k, v] of Object.entries(value)) {
-            args.push(prefix, `${k}=${v}`);
-          }
-        }
-      }
-      return args;
-    };
 
     return Docker.of({
       run,
@@ -389,7 +361,7 @@ export const DockerLive = Layer.effect(
             [
               "container",
               "create",
-              ...argsFrom({
+              ...formatArgs({
                 ...options,
                 env: env ? Object.keys(env) : undefined,
               }),
@@ -411,7 +383,7 @@ export const DockerLive = Layer.effect(
             "image",
             "build",
             context,
-            ...argsFrom(options),
+            ...formatArgs(options),
             ...(args ?? []),
           ]),
         pull: (ref, platform) =>
@@ -466,7 +438,7 @@ export const DockerLive = Layer.effect(
         }, Effect.scoped),
       },
       volume: {
-        create: (options) => run(["volume", "create", ...argsFrom(options)]),
+        create: (options) => run(["volume", "create", ...formatArgs(options)]),
         remove: (name) => run(["volume", "rm", name]),
         inspect: (name) =>
           runInspect<Docker.Volume>(["volume", "inspect", name]),
@@ -477,7 +449,7 @@ export const DockerLive = Layer.effect(
             "network",
             "create",
             name,
-            ...argsFrom({ driver, ipv6, label }),
+            ...formatArgs({ driver, ipv6, label }),
           ]),
         connect: ({ network, container, alias }) =>
           run([
@@ -496,3 +468,56 @@ export const DockerLive = Layer.effect(
     });
   }),
 );
+
+/** Constructs a PlatformError from a command execution result. */
+const systemError = (input: {
+  _tag: SystemErrorTag;
+  args: Array<string>;
+  description?: string;
+  cause?: unknown;
+}) =>
+  new PlatformError(
+    new SystemError({
+      _tag: input._tag,
+      module: "Docker",
+      method: input.args.slice(0, 2).join("."),
+      pathOrDescriptor: input.args.join(" "),
+      description: input.description,
+      cause: input.cause,
+    }),
+  );
+
+/** Formats a set of options into a list of command-line arguments. */
+const formatArgs = (
+  options: Record<
+    string,
+    | boolean
+    | string
+    | number
+    | undefined
+    | Record<string, string>
+    | Array<string>
+  >,
+) => {
+  const args: Array<string> = [];
+  for (const [key, value] of Object.entries(options)) {
+    if (!value) continue;
+    const prefix = key.length > 1 ? `--${key}` : `-${key}`;
+    if (value === true) {
+      args.push(prefix);
+    } else if (typeof value === "string") {
+      args.push(prefix, value);
+    } else if (typeof value === "number") {
+      args.push(prefix, String(value));
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        args.push(prefix, item);
+      }
+    } else if (value !== null && typeof value === "object") {
+      for (const [k, v] of Object.entries(value)) {
+        args.push(prefix, `${k}=${v}`);
+      }
+    }
+  }
+  return args;
+};
