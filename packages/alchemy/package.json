@@ -271,6 +271,12 @@
       "worker": "./src/Test/Bun.ts",
       "import": "./lib/Test/Bun.js"
     },
+    "./Test/Http": {
+      "types": "./lib/Test/Http.d.ts",
+      "bun": "./src/Test/Http.ts",
+      "worker": "./src/Test/Http.ts",
+      "import": "./lib/Test/Http.js"
+    },
     "./Util": {
       "types": "./lib/Util/index.d.ts",
       "bun": "./src/Util/index.ts",
