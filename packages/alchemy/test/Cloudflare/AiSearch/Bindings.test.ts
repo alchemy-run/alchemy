@@ -76,7 +76,7 @@ test(
 );
 
 // The Effect worker attaches the same two binding flavors via
-// `AiSearchInstanceBinding.bind(...)` / `AiSearchNamespaceBinding.bind(...)`
+// `Cloudflare.AiSearch.Search(...)` / `Cloudflare.AiSearch.SearchNamespace(...)`
 // and reads them through the Effect-native client. Resolving each client's
 // `raw` runtime handle proves the Effect-first path wires through to the
 // live runtime bindings.
@@ -114,12 +114,12 @@ test(
     };
 
     expect(body.mode).toBe("effect");
-    // `AiSearchInstanceBinding.bind(...).raw` resolves to the runtime
+    // `Cloudflare.AiSearch.Search(...).raw` resolves to the runtime
     // `AiSearchInstance` exposing `search()` / `chatCompletions()`.
     expect(body.searchRaw).toBe("object");
     expect(body.searchChatCompletions).toBe("function");
     expect(body.searchSearch).toBe("function");
-    // `AiSearchNamespaceBinding.bind(...).raw` resolves to the runtime
+    // `Cloudflare.AiSearch.SearchNamespace(...).raw` resolves to the runtime
     // `AiSearchNamespace`; `.get(name)` scopes to an instance exposing
     // `chatCompletions()`. The namespace handle may be a callable runtime
     // proxy (`typeof` `"function"`) or an object.

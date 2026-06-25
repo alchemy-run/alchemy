@@ -53,7 +53,7 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+    const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
 
     const languageModel = aiGateway.model({
       model: MODEL,
@@ -236,5 +236,5 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
         return HttpServerResponse.text("ok");
       }).pipe(Effect.provide(languageModel)),
     };
-  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.AiGateway.InferenceBinding)),
 ) {}

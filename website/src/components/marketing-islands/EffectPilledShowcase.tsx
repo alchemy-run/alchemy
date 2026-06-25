@@ -150,8 +150,8 @@ const LAYER_SEGMENTS: LayerSegment[] = [
     ],
     d1: [
       "export const JobStorageD1 = Layer.effect(JobStorage, Effect.gen(function* () {",
-      '  const db   = yield* Cloudflare.D1Database("JobsDB");',
-      "  const conn = yield* Cloudflare.D1Connection.bind(db);",
+      '  const db   = yield* Cloudflare.D1.Database("JobsDB");',
+      "  const conn = yield* Cloudflare.D1.QueryDatabase(db);",
       "",
     ],
   },
@@ -565,7 +565,7 @@ function LayerPanel({ impl }: { impl: LayerImpl }) {
           >
             <FeatureRow
               icon="logos:cloudflare-icon"
-              label="Cloudflare.D1Database"
+              label="Cloudflare.D1.Database"
               sub='"JobsDB" · serverless SQL'
               delay={240}
             />

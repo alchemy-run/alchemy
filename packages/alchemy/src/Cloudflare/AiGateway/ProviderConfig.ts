@@ -10,11 +10,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AiGatewayProviderConfigTypeId =
-  "Cloudflare.AiGateway.ProviderConfig" as const;
-type AiGatewayProviderConfigTypeId = typeof AiGatewayProviderConfigTypeId;
+const ProviderConfigTypeId = "Cloudflare.AiGateway.ProviderConfig" as const;
+type ProviderConfigTypeId = typeof ProviderConfigTypeId;
 
-export type AiGatewayProviderConfigProps = {
+export type ProviderConfigProps = {
   /**
    * The AI Gateway the provider config (BYOK key) belongs to. The gateway
    * must have its `storeId` set to a Secrets Store id — Cloudflare resolves
@@ -63,7 +62,7 @@ export type AiGatewayProviderConfigProps = {
   rateLimitPeriod?: number;
 };
 
-export type AiGatewayProviderConfigAttributes = {
+export type ProviderConfigAttributes = {
   /**
    * Server-generated provider config identifier.
    */
@@ -110,10 +109,10 @@ export type AiGatewayProviderConfigAttributes = {
   modifiedAt: string;
 };
 
-export type AiGatewayProviderConfig = Resource<
-  AiGatewayProviderConfigTypeId,
-  AiGatewayProviderConfigProps,
-  AiGatewayProviderConfigAttributes,
+export type ProviderConfig = Resource<
+  ProviderConfigTypeId,
+  ProviderConfigProps,
+  ProviderConfigAttributes,
   never,
   Providers
 >;
@@ -138,22 +137,22 @@ export type AiGatewayProviderConfig = Resource<
  * @section Creating a Provider Config
  * @example Bring your own OpenAI key
  * ```typescript
- * const store = yield* Cloudflare.SecretsStore("Store");
+ * const store = yield* Cloudflare.SecretsStore.Store("Store");
  *
- * const gateway = yield* Cloudflare.AiGateway("Gateway", {
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway", {
  *   id: "my-gateway",
  *   storeId: store.storeId,
  * });
  *
  * // The secret name must be `{gatewayId}_{providerSlug}_{alias}`.
- * const secret = yield* Cloudflare.Secret("OpenAiKey", {
+ * const secret = yield* Cloudflare.SecretsStore.Secret("OpenAiKey", {
  *   store,
  *   name: "my-gateway_openai_default",
  *   value: Redacted.make(process.env.OPENAI_API_KEY!),
  *   scopes: ["ai_gateway"],
  * });
  *
- * const byok = yield* Cloudflare.AiGatewayProviderConfig("OpenAi", {
+ * const byok = yield* Cloudflare.AiGateway.ProviderConfig("OpenAi", {
  *   gatewayId: gateway.gatewayId,
  *   providerSlug: "openai",
  *   alias: "default",
@@ -164,7 +163,7 @@ export type AiGatewayProviderConfig = Resource<
  *
  * @example Rate-limit a key
  * ```typescript
- * const byok = yield* Cloudflare.AiGatewayProviderConfig("OpenAi", {
+ * const byok = yield* Cloudflare.AiGateway.ProviderConfig("OpenAi", {
  *   gatewayId: gateway.gatewayId,
  *   providerSlug: "openai",
  *   alias: "default",
@@ -176,21 +175,18 @@ export type AiGatewayProviderConfig = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/
  */
-export const AiGatewayProviderConfig = Resource<AiGatewayProviderConfig>(
-  AiGatewayProviderConfigTypeId,
-);
+export const ProviderConfig = Resource<ProviderConfig>(ProviderConfigTypeId);
 
 /**
- * Returns true if the given value is an AiGatewayProviderConfig resource.
+ * Returns true if the given value is an ProviderConfig resource.
  */
 export const isAiGatewayProviderConfig = (
   value: unknown,
-): value is AiGatewayProviderConfig =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AiGatewayProviderConfigTypeId;
+): value is ProviderConfig =>
+  Predicate.hasProperty(value, "Type") && value.Type === ProviderConfigTypeId;
 
-export const AiGatewayProviderConfigProvider = () =>
-  Provider.succeed(AiGatewayProviderConfig, {
+export const ProviderConfigProvider = () =>
+  Provider.succeed(ProviderConfig, {
     stables: ["providerConfigId", "accountId", "gatewayId"],
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return undefined;
@@ -341,7 +337,7 @@ const reconcileProviderConfig = (desired: {
     currentId,
   } = desired;
 
-  const matchesDesired = (attrs: AiGatewayProviderConfigAttributes) =>
+  const matchesDesired = (attrs: ProviderConfigAttributes) =>
     attrs.secretId === secretId &&
     attrs.defaultConfig === defaultConfig &&
     attrs.rateLimit === rateLimit &&
@@ -415,7 +411,7 @@ const toAttributes = (
     | aiGateway.CreateProviderConfigResponse
     | aiGateway.ListProviderConfigsResponse["result"][number],
   accountId: string,
-): AiGatewayProviderConfigAttributes => ({
+): ProviderConfigAttributes => ({
   providerConfigId: config.id,
   accountId,
   gatewayId: config.gatewayId,

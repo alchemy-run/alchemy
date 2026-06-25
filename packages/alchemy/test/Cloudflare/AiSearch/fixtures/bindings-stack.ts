@@ -11,7 +11,7 @@ import AiSearchEffectBindingsWorker from "./effect-bindings-worker.ts";
  *   single-instance `ai_search` binding; `NS` is an `ai_search_namespace`
  *   binding) and reads them as raw runtime objects.
  * - The Effect worker attaches the same two binding flavors via
- *   `AiSearchInstanceBinding.bind(...)` / `AiSearchNamespaceBinding.bind(...)`
+ *   `Cloudflare.AiSearch.Search(...)` / `Cloudflare.AiSearch.SearchNamespace(...)`
  *   and reads them through the Effect-native client.
  *
  * The single-instance binding is sourced from the `AiSearch` construct (not
@@ -29,13 +29,16 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("AiSearchBindingBucket", {});
-    const namespace = yield* Cloudflare.AiSearchNamespace(
+    const namespace = yield* Cloudflare.AiSearch.Namespace(
       "AiSearchBindingNs",
       {},
     );
-    const search = yield* Cloudflare.AiSearch("AiSearchBindingInstance", {
-      source: bucket,
-    });
+    const search = yield* Cloudflare.AiSearch.AiSearch(
+      "AiSearchBindingInstance",
+      {
+        source: bucket,
+      },
+    );
     const asyncWorker = yield* Cloudflare.Worker("AiSearchBindingsWorker", {
       main: path.resolve(import.meta.dirname, "bindings-worker.ts"),
       url: true,

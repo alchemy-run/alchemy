@@ -39,7 +39,7 @@ export type SchemaProps = {
   /**
    * Output directory for generated migrations. Each migration is written as
    * `{out}/{timestamp}_migration/{migration.sql, snapshot.json}`. Pass this
-   * value through to `Neon.Branch`/`Cloudflare.D1Database` as `migrationsDir`
+   * value through to `Neon.Branch`/`Cloudflare.D1.Database` as `migrationsDir`
    * to apply pending migrations on deploy.
    *
    * @default "./migrations"

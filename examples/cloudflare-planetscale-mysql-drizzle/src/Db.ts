@@ -44,10 +44,10 @@ export const PlanetscaleDb = Effect.gen(function* () {
   return { database, branch, password };
 });
 
-export const Hyperdrive: Effect.Effect<Cloudflare.Hyperdrive, never, any> =
+export const Hyperdrive: Effect.Effect<Cloudflare.Hyperdrive.Connection, never, any> =
   Effect.gen(function* () {
     const { password } = yield* PlanetscaleDb;
-    return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
+    return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
       origin: password.origin,
       caching: { disabled: true },
     });

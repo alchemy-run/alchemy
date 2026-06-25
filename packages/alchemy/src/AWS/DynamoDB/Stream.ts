@@ -9,10 +9,14 @@ export type StreamRecord<Data> = TableRecord<Data>;
 export type StreamEvent<Data> = TableEvent<Data>;
 
 /** @binding */
-export class TableEventSource extends Binding.Service<
+export interface TableEventSource extends Binding.Service<
   TableEventSource,
+  "AWS.DynamoDB.TableEventSource",
   TableEventSourceService
->()("AWS.DynamoDB.TableEventSource") {}
+> {}
+export const TableEventSource = Binding.Service<TableEventSource>(
+  "AWS.DynamoDB.TableEventSource",
+);
 
 export type TableEventSourceService = <
   Data = unknown,

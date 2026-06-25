@@ -1,12 +1,10 @@
 export * from "./App.ts";
 export * from "./Flag.ts";
 export {
-  FlagshipBinding,
-  FlagshipBindingLive,
-  FlagshipBindingPolicy,
-  FlagshipBindingPolicyLive,
+  ReadFlags,
   FlagshipError,
-  type FlagshipClient,
+  type ReadFlagsClient,
   type FlagshipEvaluationContext,
   type FlagshipEvaluationDetails,
-} from "./FlagshipBinding.ts";
+} from "./ReadFlags.ts";
+export { ReadFlagsBinding } from "./ReadFlagsBinding.ts";

@@ -13,19 +13,71 @@ import type {
 } from "@distilled.cloud/cloudflare/zero-trust";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import {
-  makeTunnelClient,
-  makeTunnelPolicyLive,
-  type TunnelToken,
-} from "./TunnelBinding.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { type TunnelToken } from "./TunnelBinding.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
-import type { Providers } from "../Providers.ts";
+
+/**
+ * Binding that lets a Worker create, update, and delete Cloudflare Tunnels at
+ * runtime.
+ *
+ * Creates a scoped {@link AccountApiToken} with only the `Cloudflare Tunnel
+ * Write` permission and binds its outputs into the Worker (the token value as a
+ * `secret_text` binding) so runtime code can authenticate.
+ *
+ * @binding
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
+ *
+ * `TunnelWrite` is a single identifier that is simultaneously the binding's
+ * Context tag, its type, and the callable — `yield* Cloudflare.TunnelWrite()`.
+ *
+ * @section Mutating tunnels at runtime
+ * @example Bind the write client
+ * Bind once in the Init phase; every method is available on the returned client.
+ * ```typescript
+ * const tunnels = yield* Cloudflare.TunnelWrite();
+ * ```
+ *
+ * @example Create a tunnel
+ * ```typescript
+ * const tunnel = yield* tunnels.create({ name: "on-demand-tunnel" });
+ * ```
+ *
+ * @example Push ingress configuration
+ * ```typescript
+ * yield* tunnels.putConfiguration(tunnel.id!, {
+ *   ingress: [
+ *     { hostname: "app.example.com", service: "http://localhost:3000" },
+ *     { service: "http_status:404" },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Rename and delete a tunnel
+ * ```typescript
+ * yield* tunnels.update(tunnel.id!, { name: "renamed-tunnel" });
+ * yield* tunnels.delete(tunnel.id!);
+ * ```
+ *
+ * @section Runtime Layer
+ * Provide {@link TunnelWriteBinding} in the Worker's runtime layer.
+ * ```typescript
+ * Effect.provide(Cloudflare.TunnelWriteBinding)
+ * ```
+ */
+export interface TunnelWrite extends Binding.Service<
+  TunnelWrite,
+  "Cloudflare.TunnelWrite",
+  () => Effect.Effect<TunnelWriteClient, never, Worker | CloudflareEnvironment>
+> {}
+
+export const TunnelWrite = Binding.Service<TunnelWrite>(
+  "Cloudflare.TunnelWrite",
+);
 
 /** Create-tunnel request, minus the account id (supplied by the binding). */
 export type CreateTunnelRequest = Omit<
@@ -123,77 +175,3 @@ export const writeClient = (token: TunnelToken): TunnelWriteClient => {
     ),
   };
 };
-
-/**
- * Binding that lets a Worker create, update, and delete Cloudflare Tunnels at
- * runtime.
- *
- * Creates a scoped {@link AccountApiToken} with only the `Cloudflare Tunnel
- * Write` permission and binds its outputs into the Worker (the token value as a
- * `secret_text` binding) so runtime code can authenticate.
- *
- * @binding
- * @product Tunnels
- * @category Cloudflare One (Zero Trust)
- *
- * @section Mutating tunnels at runtime
- * @example Bind the write client
- * Bind once in the Init phase; every method is available on the returned client.
- * ```typescript
- * const tunnels = yield* Cloudflare.TunnelWrite.bind();
- * ```
- *
- * @example Create a tunnel
- * ```typescript
- * const tunnel = yield* tunnels.create({ name: "on-demand-tunnel" });
- * ```
- *
- * @example Push ingress configuration
- * ```typescript
- * yield* tunnels.putConfiguration(tunnel.id!, {
- *   ingress: [
- *     { hostname: "app.example.com", service: "http://localhost:3000" },
- *     { service: "http_status:404" },
- *   ],
- * });
- * ```
- *
- * @example Rename and delete a tunnel
- * ```typescript
- * yield* tunnels.update(tunnel.id!, { name: "renamed-tunnel" });
- * yield* tunnels.delete(tunnel.id!);
- * ```
- *
- * @section Runtime Layer
- * Provide {@link TunnelWriteLive} in the Worker's runtime layer.
- * ```typescript
- * Effect.provide(Cloudflare.TunnelWriteLive)
- * ```
- */
-export class TunnelWrite extends Binding.Service<
-  TunnelWrite,
-  () => Effect.Effect<TunnelWriteClient, never, Worker | CloudflareEnvironment>
->()("Cloudflare.TunnelWrite") {}
-
-/**
- * Deploy-time policy for {@link TunnelWrite}. Attaches the `Cloudflare Tunnel
- * Write` permission to the token via its binding contract.
- */
-export class TunnelWritePolicy extends Binding.Policy<
-  TunnelWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>,
-  Providers
->()("Cloudflare.TunnelWrite") {}
-
-/** Runtime layer for {@link TunnelWrite}. */
-export const TunnelWriteLive = Layer.effect(
-  TunnelWrite,
-  makeTunnelClient(TunnelWritePolicy, writeClient),
-);
-
-/** Live deploy-time policy layer for {@link TunnelWritePolicy}. */
-export const TunnelWritePolicyLive = makeTunnelPolicyLive(
-  TunnelWritePolicy,
-  "Cloudflare.TunnelWrite",
-  ["Cloudflare Tunnel Write"],
-);

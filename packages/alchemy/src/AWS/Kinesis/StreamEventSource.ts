@@ -73,10 +73,15 @@ export interface StreamEventSourceProps {
 }
 
 /** @binding */
-export class StreamEventSource extends Binding.Service<
+export interface StreamEventSource extends Binding.Service<
   StreamEventSource,
+  "AWS.Kinesis.StreamEventSource",
   StreamEventSourceService
->()("AWS.Kinesis.StreamEventSource") {}
+> {}
+
+export const StreamEventSource = Binding.Service<StreamEventSource>(
+  "AWS.Kinesis.StreamEventSource",
+);
 
 export type StreamEventSourceService = <StreamReq = never, Req = never>(
   stream: KinesisStream,

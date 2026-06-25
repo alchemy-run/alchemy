@@ -45,10 +45,14 @@ interface EventDescriptor {
 }
 
 /** @binding */
-export class EventSource extends Binding.Service<
+export interface EventSource extends Binding.Service<
   EventSource,
+  "AWS.EventBridge.EventSource",
   EventSourceService
->()("AWS.EventBridge.EventSource") {}
+> {}
+export const EventSource = Binding.Service<EventSource>(
+  "AWS.EventBridge.EventSource",
+);
 
 export type EventSourceService = <
   Detail = unknown,

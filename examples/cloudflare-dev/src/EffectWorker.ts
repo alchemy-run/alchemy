@@ -32,7 +32,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
     const queue = yield* Cloudflare.Queue("EffectWorkerQueue");
-    const queueBinding = yield* Cloudflare.Queue.bind(queue);
+    const queueBinding = yield* Cloudflare.Queue(queue);
     const sandbox = yield* SandboxDO;
     const queueMessages = yield* QueueMessages;
     const workflow = yield* NotifyWorkflow;

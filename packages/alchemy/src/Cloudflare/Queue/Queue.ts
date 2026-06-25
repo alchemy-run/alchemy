@@ -18,7 +18,6 @@ import {
   LocalRuntimeState,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import { QueueWrite } from "./QueueWrite.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
   typeof value === "object" && (value as any)?.Type === "Cloudflare.Queue";
@@ -104,9 +103,7 @@ export type Queue = Resource<
  * );
  * ```
  */
-export const Queue = Resource<Queue>("Cloudflare.Queue")({
-  bind: QueueWrite.bind,
-});
+export const Queue = Resource<Queue>("Cloudflare.Queue");
 
 export const QueueProviderLive = () =>
   Provider.succeed(Queue, {

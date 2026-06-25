@@ -1,0 +1,112 @@
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Binding from "../../Binding.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
+
+/**
+ * Bind a Cloudflare Artifacts namespace ({@link Store}) to a Worker and obtain
+ * the Effect-native {@link ReadWriteStoreClient} (read + write: create / list / get /
+ * delete / import).
+ *
+ * `ReadWriteStore` is a single identifier that is simultaneously the binding's
+ * Context tag, its type, and the callable —
+ * `yield* Cloudflare.Artifacts.ReadWriteStore(Repos)`.
+ *
+ * @binding
+ * @product Artifacts
+ * @category Developer Platform
+ * @example Using Artifacts inside a Worker
+ * ```typescript
+ * const artifacts = yield* Cloudflare.Artifacts.ReadWriteStore(Repos);
+ * const repo = yield* artifacts.create("starter-repo", {
+ *   setDefaultBranch: "main",
+ * });
+ * ```
+ */
+export interface ReadWriteStore extends Binding.Service<
+  ReadWriteStore,
+  "Cloudflare.Artifacts.ReadWriteStore",
+  (artifacts: ArtifactsLike) => Effect.Effect<ReadWriteStoreClient>
+> {}
+
+export const ReadWriteStore = Binding.Service<ReadWriteStore>(
+  "Cloudflare.Artifacts.ReadWriteStore",
+);
+
+export class ArtifactsError extends Data.TaggedError("ArtifactsError")<{
+  message: string;
+  cause: Error;
+}> {}
+
+export type Scope = "read" | "write";
+
+export type ArtifactsCreateOptions = {
+  readOnly?: boolean;
+  description?: string;
+  setDefaultBranch?: string;
+};
+
+export type ArtifactsImportOptions = {
+  source: { url: string; branch?: string; depth?: number };
+  target: {
+    name: string;
+    opts?: { description?: string; readOnly?: boolean };
+  };
+};
+
+export type ArtifactsListOptions = {
+  limit?: number;
+  cursor?: string;
+};
+
+export type ArtifactsForkOptions = {
+  description?: string;
+  readOnly?: boolean;
+  defaultBranchOnly?: boolean;
+};
+
+/**
+ * Effect-native handle to a single Artifacts repo. Wraps the runtime
+ * {@link ArtifactsRepo} so each method returns an Effect.
+ */
+export interface ArtifactsRepoClient {
+  /** Underlying Cloudflare runtime handle. */
+  raw: ArtifactsRepo;
+  createToken(
+    scope?: Scope,
+    ttl?: number,
+  ): Effect.Effect<ArtifactsCreateTokenResult, ArtifactsError>;
+  listTokens(): Effect.Effect<ArtifactsTokenListResult, ArtifactsError>;
+  revokeToken(tokenOrId: string): Effect.Effect<boolean, ArtifactsError>;
+  fork(
+    name: string,
+    opts?: ArtifactsForkOptions,
+  ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError>;
+}
+
+/**
+ * Effect-native client for a Cloudflare Artifacts namespace binding.
+ *
+ * Wraps the runtime {@link Artifacts} binding so each method returns an
+ * Effect tagged with {@link ArtifactsError}.
+ */
+export interface ReadWriteStoreClient {
+  /** Effect resolving to the raw Cloudflare runtime binding. */
+  raw: Effect.Effect<Artifacts, never, RuntimeContext>;
+  create(
+    name: string,
+    opts?: ArtifactsCreateOptions,
+  ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
+  /** Look up an existing repo by name. Fails with `ArtifactsError` if missing. */
+  get(
+    name: string,
+  ): Effect.Effect<ArtifactsRepoClient, ArtifactsError, RuntimeContext>;
+  list(
+    opts?: ArtifactsListOptions,
+  ): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, RuntimeContext>;
+  delete(name: string): Effect.Effect<boolean, ArtifactsError, RuntimeContext>;
+  import(
+    opts: ArtifactsImportOptions,
+  ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
+}

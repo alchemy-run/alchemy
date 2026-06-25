@@ -189,6 +189,14 @@ export const isBrowser = (value: unknown): value is Browser =>
  *
  * @see https://developers.cloudflare.com/browser-rendering/workers-binding-api/
  */
+/**
+ * `BrowserBinding` typed purely as its binding callable — `(browser) => BindEffect`
+ * — so the marker's `asEffect`/iterator resolve to the binding Effect.
+ */
+const bindBrowser = BrowserBinding as unknown as (
+  browser: Browser,
+) => BindEffect;
+
 export const Browser: {
   (props?: BrowserProps): Browser;
   /**
@@ -196,19 +204,18 @@ export const Browser: {
    * runtime client. Equivalent to `yield* browser` — prefer yielding the marker
    * directly.
    */
-  bind: typeof BrowserBinding.bind;
+  bind: (browser: Browser) => BindEffect;
 } = Object.assign(
   (props?: BrowserProps): Browser => {
     const self: Browser = {
       kind: BrowserTypeId,
       name: props?.name ?? "BROWSER",
-      asEffect: () => BrowserBinding.bind(self),
-      [Symbol.iterator]: () => new SingleShotGen(BrowserBinding.bind(self)),
+      asEffect: () => bindBrowser(self),
+      [Symbol.iterator]: () => new SingleShotGen(bindBrowser(self)),
     };
     return self;
   },
   {
-    bind: (...args: Parameters<typeof BrowserBinding.bind>) =>
-      BrowserBinding.bind(...args),
+    bind: (browser: Browser) => bindBrowser(browser),
   },
 );

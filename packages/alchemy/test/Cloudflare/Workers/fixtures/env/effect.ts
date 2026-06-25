@@ -90,5 +90,5 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.VersionMetadataBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.VersionMetadataBindingLayer)),
 ) {}

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import { ArtifactsBinding } from "./ArtifactsBinding.ts";
 
 type ArtifactsTypeId = typeof ArtifactsTypeId;
 const ArtifactsTypeId = "Cloudflare.Artifacts" as const;
@@ -21,7 +20,7 @@ export class InvalidArtifactsNamespaceError extends Error {
   }
 }
 
-export type ArtifactsProps = {
+export type StoreProps = {
   /**
    * Cloudflare namespace name. Namespaces are implicit on Cloudflare — the
    * first repo created against this name conjures the namespace.
@@ -72,12 +71,12 @@ export const isArtifacts = (value: unknown): value is Artifacts =>
  * @section Declaring a Namespace
  * @example Default namespace (a unique physical name is generated)
  * ```typescript
- * const Repos = Cloudflare.Artifacts("Repos");
+ * const Repos = Cloudflare.Artifacts.Store("Repos");
  * ```
  *
  * @example Override the namespace name (must be lowercase, 3–63 chars)
  * ```typescript
- * const Repos = Cloudflare.Artifacts("Repos", { namespace: "starter-repos" });
+ * const Repos = Cloudflare.Artifacts.Store("Repos", { namespace: "starter-repos" });
  * ```
  *
  * @section Binding to a Worker
@@ -104,38 +103,28 @@ export const isArtifacts = (value: unknown): value is Artifacts =>
  *
  * @example Effect-style worker
  * ```typescript
- * const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
+ * const artifacts = yield* Cloudflare.Artifacts.ReadWriteStore(Repos);
  * const repo = yield* artifacts.create("starter-repo", {
  *   setDefaultBranch: "main",
  * });
  * ```
  */
-export const Artifacts: {
-  (
-    name: string,
-    props?: ArtifactsProps,
-  ): Effect.Effect<Artifacts, never, Stack | Stage>;
-  /**
-   * Bind a Cloudflare Artifacts namespace to the surrounding Worker, returning
-   * an Effect-native client. See {@link ArtifactsBinding}.
-   */
-  bind: typeof ArtifactsBinding.bind;
-} = Object.assign(
-  Effect.fn(function* (name: string, props?: ArtifactsProps) {
-    const namespace = props?.namespace
-      ? props.namespace
-      : name.toLocaleLowerCase();
-    if (!ARTIFACTS_NAMESPACE_REGEX.test(namespace)) {
-      return yield* Effect.die(new InvalidArtifactsNamespaceError(namespace));
-    }
-    return {
-      kind: ArtifactsTypeId,
-      name,
-      namespace,
-    } satisfies Artifacts;
-  }),
-  {
-    bind: (...args: Parameters<typeof ArtifactsBinding.bind>) =>
-      ArtifactsBinding.bind(...args),
-  },
-);
+export const Store: (
+  name: string,
+  props?: StoreProps,
+) => Effect.Effect<Artifacts, never, Stack | Stage> = Effect.fn(function* (
+  name: string,
+  props?: StoreProps,
+) {
+  const namespace = props?.namespace
+    ? props.namespace
+    : name.toLocaleLowerCase();
+  if (!ARTIFACTS_NAMESPACE_REGEX.test(namespace)) {
+    return yield* Effect.die(new InvalidArtifactsNamespaceError(namespace));
+  }
+  return {
+    kind: ArtifactsTypeId,
+    name,
+    namespace,
+  } satisfies Artifacts;
+});

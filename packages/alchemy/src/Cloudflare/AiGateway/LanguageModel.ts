@@ -11,14 +11,14 @@ import {
 } from "effect/unstable/ai";
 import * as Sse from "effect/unstable/encoding/Sse";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { AiGatewayClient } from "./AiGatewayBinding.ts";
+import type { InferenceClient } from "./Inference.ts";
 
 /**
  * Options for constructing an AI Gateway-backed Workers AI LanguageModel.
  */
 export interface LanguageModelOptions {
-  /** Already-bound AI Gateway client from `AiGatewayBinding.bind(gateway)`. */
-  readonly client: AiGatewayClient;
+  /** Already-bound AI Gateway client from `Cloudflare.AiGateway.Inference(gateway)`. */
+  readonly client: InferenceClient;
   /** Workers AI model id, e.g. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. */
   readonly model: string;
   /** Optional per-call defaults; overridable per request via `providerOptions`. */

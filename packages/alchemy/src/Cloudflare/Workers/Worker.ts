@@ -430,7 +430,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Defining an async Worker in your stack
  * ```typescript
  * // alchemy.run.ts
- * const db = yield* Cloudflare.D1Database("DB");
+ * const db = yield* Cloudflare.D1.Database("DB");
  * const bucket = yield* Cloudflare.R2Bucket("Bucket");
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
@@ -660,14 +660,14 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section D1 Database
- * Bind a D1 database with `Cloudflare.D1Connection.bind`. D1 is a
+ * Bind a D1 database with `Cloudflare.D1.QueryDatabase`. D1 is a
  * serverless SQLite database — use `prepare` to build parameterized
  * queries and `all`, `first`, or `run` to execute them.
  *
  * @example Binding and querying D1
  * ```typescript
  * // init
- * const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ * const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *
  * return {
  *   fetch: Effect.gen(function* () {

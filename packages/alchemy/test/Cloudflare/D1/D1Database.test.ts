@@ -22,11 +22,11 @@ test.provider("list enumerates the deployed database", (stack) =>
 
     const database = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("ListDatabase");
+        return yield* Cloudflare.D1.Database("ListDatabase");
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.D1Database);
+    const provider = yield* Provider.findProvider(Cloudflare.D1.Database);
     const all = yield* provider.list();
 
     expect(all.some((db) => db.databaseId === database.databaseId)).toBe(true);

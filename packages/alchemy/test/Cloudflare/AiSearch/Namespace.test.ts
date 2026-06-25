@@ -70,9 +70,9 @@ const expectDescription = (
     Effect.map((ns) => expect(ns.description ?? undefined).toEqual(expected)),
   );
 
-const program = (props?: Cloudflare.AiSearchNamespaceProps) =>
+const program = (props?: Cloudflare.AiSearch.NamespaceProps) =>
   Effect.gen(function* () {
-    const namespace = yield* Cloudflare.AiSearchNamespace("Namespace", {
+    const namespace = yield* Cloudflare.AiSearch.Namespace("Namespace", {
       ...props,
     });
     return { namespace };
@@ -181,7 +181,7 @@ test.provider(
       const deployed = yield* stack.deploy(program());
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AiSearchNamespace,
+        Cloudflare.AiSearch.Namespace,
       );
       const all = yield* provider.list();
 

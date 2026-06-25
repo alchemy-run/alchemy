@@ -9,13 +9,13 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AiGatewayDatasetTypeId = "Cloudflare.AiGateway.Dataset" as const;
-type AiGatewayDatasetTypeId = typeof AiGatewayDatasetTypeId;
+const DatasetTypeId = "Cloudflare.AiGateway.Dataset" as const;
+type DatasetTypeId = typeof DatasetTypeId;
 
 /**
  * Log property a dataset filter can match on.
  */
-export type AiGatewayDatasetFilterKey =
+export type DatasetFilterKey =
   | "created_at"
   | "request_content_type"
   | "response_content_type"
@@ -33,27 +33,27 @@ export type AiGatewayDatasetFilterKey =
 /**
  * Comparison operator applied to a dataset filter.
  */
-export type AiGatewayDatasetFilterOperator = "eq" | "contains" | "lt" | "gt";
+export type DatasetFilterOperator = "eq" | "contains" | "lt" | "gt";
 
 /**
  * A single saved log filter on an AI Gateway dataset.
  */
-export type AiGatewayDatasetFilter = {
+export type DatasetFilter = {
   /**
    * Log property to match on (e.g. `success`, `model`, `provider`).
    */
-  key: AiGatewayDatasetFilterKey;
+  key: DatasetFilterKey;
   /**
    * Comparison operator.
    */
-  operator: AiGatewayDatasetFilterOperator;
+  operator: DatasetFilterOperator;
   /**
    * Values to compare against. Multiple values act as an OR.
    */
   value: (string | number | boolean)[];
 };
 
-export type AiGatewayDatasetProps = {
+export type DatasetProps = {
   /**
    * The AI Gateway the dataset belongs to. Changing the gateway triggers a
    * replacement.
@@ -74,10 +74,10 @@ export type AiGatewayDatasetProps = {
    * Saved log filters defining which gateway logs the dataset captures.
    * An empty array captures all logs.
    */
-  filters: AiGatewayDatasetFilter[];
+  filters: DatasetFilter[];
 };
 
-export type AiGatewayDatasetAttributes = {
+export type DatasetAttributes = {
   /**
    * Server-generated dataset identifier. Stable across updates.
    */
@@ -101,7 +101,7 @@ export type AiGatewayDatasetAttributes = {
   /**
    * Saved log filters.
    */
-  filters: AiGatewayDatasetFilter[];
+  filters: DatasetFilter[];
   /**
    * When the dataset was created.
    */
@@ -112,10 +112,10 @@ export type AiGatewayDatasetAttributes = {
   modifiedAt: string;
 };
 
-export type AiGatewayDataset = Resource<
-  AiGatewayDatasetTypeId,
-  AiGatewayDatasetProps,
-  AiGatewayDatasetAttributes,
+export type Dataset = Resource<
+  DatasetTypeId,
+  DatasetProps,
+  DatasetAttributes,
   never,
   Providers
 >;
@@ -133,9 +133,9 @@ export type AiGatewayDataset = Resource<
  * @section Creating a Dataset
  * @example Capture successful requests
  * ```typescript
- * const gateway = yield* Cloudflare.AiGateway("Gateway");
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway");
  *
- * const dataset = yield* Cloudflare.AiGatewayDataset("SuccessLogs", {
+ * const dataset = yield* Cloudflare.AiGateway.Dataset("SuccessLogs", {
  *   gatewayId: gateway.gatewayId,
  *   filters: [{ key: "success", operator: "eq", value: [true] }],
  * });
@@ -143,7 +143,7 @@ export type AiGatewayDataset = Resource<
  *
  * @example Capture logs for a specific model
  * ```typescript
- * const dataset = yield* Cloudflare.AiGatewayDataset("LlamaLogs", {
+ * const dataset = yield* Cloudflare.AiGateway.Dataset("LlamaLogs", {
  *   gatewayId: gateway.gatewayId,
  *   name: "llama-traffic",
  *   filters: [
@@ -156,7 +156,7 @@ export type AiGatewayDataset = Resource<
  * @section Updating a Dataset
  * @example Disable collection without deleting
  * ```typescript
- * const dataset = yield* Cloudflare.AiGatewayDataset("SuccessLogs", {
+ * const dataset = yield* Cloudflare.AiGateway.Dataset("SuccessLogs", {
  *   gatewayId: gateway.gatewayId,
  *   enable: false,
  *   filters: [{ key: "success", operator: "eq", value: [true] }],
@@ -165,18 +165,16 @@ export type AiGatewayDataset = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/evaluations/set-up-evaluations/
  */
-export const AiGatewayDataset = Resource<AiGatewayDataset>(
-  AiGatewayDatasetTypeId,
-);
+export const Dataset = Resource<Dataset>(DatasetTypeId);
 
 /**
- * Returns true if the given value is an AiGatewayDataset resource.
+ * Returns true if the given value is an Dataset resource.
  */
-export const isAiGatewayDataset = (value: unknown): value is AiGatewayDataset =>
-  Predicate.hasProperty(value, "Type") && value.Type === AiGatewayDatasetTypeId;
+export const isAiGatewayDataset = (value: unknown): value is Dataset =>
+  Predicate.hasProperty(value, "Type") && value.Type === DatasetTypeId;
 
-export const AiGatewayDatasetProvider = () =>
-  Provider.succeed(AiGatewayDataset, {
+export const DatasetProvider = () =>
+  Provider.succeed(Dataset, {
     stables: ["datasetId", "accountId", "gatewayId", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
@@ -316,7 +314,7 @@ export const AiGatewayDatasetProvider = () =>
               // A gateway removed between enumeration and its dataset list
               // is gone — skip it rather than failing the whole listing.
               Effect.catchTag("GatewayNotFound", () =>
-                Effect.succeed([] as AiGatewayDatasetAttributes[]),
+                Effect.succeed([] as DatasetAttributes[]),
               ),
             ),
         { concurrency: 10 },
@@ -366,10 +364,10 @@ const normalizeFilters = (
     operator: string;
     value: readonly (string | number | boolean)[];
   }[],
-): AiGatewayDatasetFilter[] =>
+): DatasetFilter[] =>
   filters.map((f) => ({
-    key: f.key as AiGatewayDatasetFilterKey,
-    operator: f.operator as AiGatewayDatasetFilterOperator,
+    key: f.key as DatasetFilterKey,
+    operator: f.operator as DatasetFilterOperator,
     value: [...f.value],
   }));
 
@@ -379,7 +377,7 @@ const toAttributes = (
     | aiGateway.CreateDatasetResponse
     | aiGateway.UpdateDatasetResponse,
   accountId: string,
-): AiGatewayDatasetAttributes => ({
+): DatasetAttributes => ({
   datasetId: dataset.id,
   accountId,
   gatewayId: dataset.gatewayId,

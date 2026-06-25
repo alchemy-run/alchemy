@@ -48,7 +48,7 @@ test.provider("create, noop, replace, delete an evaluation", (stack) =>
 
     // The mandatory evaluation types (speed, cost) are account-global
     // constants — discover their ids out-of-band.
-    const types = yield* Cloudflare.listEvaluationTypes(accountId);
+    const types = yield* Cloudflare.AiGateway.listEvaluationTypes(accountId);
     const typeIds = types
       .filter((t) => t.mandatory)
       .map((t) => t.id)
@@ -57,20 +57,23 @@ test.provider("create, noop, replace, delete an evaluation", (stack) =>
 
     const program = (name: string) =>
       Effect.gen(function* () {
-        const gateway = yield* Cloudflare.AiGateway("EvalGateway", {
+        const gateway = yield* Cloudflare.AiGateway.Gateway("EvalGateway", {
           id: GATEWAY_ID,
         });
-        const dataset = yield* Cloudflare.AiGatewayDataset("EvalDataset", {
+        const dataset = yield* Cloudflare.AiGateway.Dataset("EvalDataset", {
           gatewayId: gateway.gatewayId,
           name: "alchemy-test-eval-dataset",
           filters: [{ key: "success", operator: "eq", value: [true] }],
         });
-        const evaluation = yield* Cloudflare.AiGatewayEvaluation("Evaluation", {
-          gatewayId: gateway.gatewayId,
-          name,
-          datasetIds: [dataset.datasetId],
-          evaluationTypeIds: typeIds,
-        });
+        const evaluation = yield* Cloudflare.AiGateway.Evaluation(
+          "Evaluation",
+          {
+            gatewayId: gateway.gatewayId,
+            name,
+            datasetIds: [dataset.datasetId],
+            evaluationTypeIds: typeIds,
+          },
+        );
         return { dataset, evaluation };
       });
 
@@ -121,7 +124,7 @@ test.provider("list enumerates the deployed evaluation", (stack) =>
 
     yield* stack.destroy();
 
-    const types = yield* Cloudflare.listEvaluationTypes(accountId);
+    const types = yield* Cloudflare.AiGateway.listEvaluationTypes(accountId);
     const typeIds = types
       .filter((t) => t.mandatory)
       .map((t) => t.id)
@@ -130,26 +133,29 @@ test.provider("list enumerates the deployed evaluation", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const gateway = yield* Cloudflare.AiGateway("EvalGateway", {
+        const gateway = yield* Cloudflare.AiGateway.Gateway("EvalGateway", {
           id: GATEWAY_ID,
         });
-        const dataset = yield* Cloudflare.AiGatewayDataset("EvalDataset", {
+        const dataset = yield* Cloudflare.AiGateway.Dataset("EvalDataset", {
           gatewayId: gateway.gatewayId,
           name: "alchemy-test-eval-list-dataset",
           filters: [{ key: "success", operator: "eq", value: [true] }],
         });
-        const evaluation = yield* Cloudflare.AiGatewayEvaluation("Evaluation", {
-          gatewayId: gateway.gatewayId,
-          name: "alchemy-test-eval-list",
-          datasetIds: [dataset.datasetId],
-          evaluationTypeIds: typeIds,
-        });
+        const evaluation = yield* Cloudflare.AiGateway.Evaluation(
+          "Evaluation",
+          {
+            gatewayId: gateway.gatewayId,
+            name: "alchemy-test-eval-list",
+            datasetIds: [dataset.datasetId],
+            evaluationTypeIds: typeIds,
+          },
+        );
         return { evaluation };
       }),
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AiGatewayEvaluation,
+      Cloudflare.AiGateway.Evaluation,
     );
     const all = yield* provider.list();
 

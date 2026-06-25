@@ -139,7 +139,7 @@ export type Tunnel = Resource<
  * @example Create a tunnel on demand from a Worker
  * ```typescript
  * // init
- * const tunnels = yield* Cloudflare.TunnelReadWrite.bind();
+ * const tunnels = yield* Cloudflare.TunnelReadWrite();
  *
  * return {
  *   fetch: Effect.gen(function* () {

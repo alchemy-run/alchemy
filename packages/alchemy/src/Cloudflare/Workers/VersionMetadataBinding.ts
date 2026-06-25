@@ -1,10 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import type { ResourceLike } from "../../Resource.ts";
 import type { VersionMetadata as VersionMetadataLike } from "./VersionMetadata.ts";
 import { isWorker, WorkerEnvironment } from "./Worker.ts";
-import type { Providers } from "../Providers.ts";
 
 /**
  * Runtime value Cloudflare exposes for a `version_metadata` binding — the
@@ -35,20 +33,32 @@ export type VersionMetadataAccessor = Effect.Effect<
  * @product Workers
  * @category Workers & Compute
  */
-export class VersionMetadataBinding extends Binding.Service<
+export interface VersionMetadataBinding extends Binding.Service<
   VersionMetadataBinding,
+  "Cloudflare.VersionMetadata",
   (
     versionMetadata: VersionMetadataLike,
   ) => Effect.Effect<VersionMetadataAccessor>
->()("Cloudflare.VersionMetadata") {}
+> {}
 
-export const VersionMetadataBindingLive = Layer.effect(
+export const VersionMetadataBinding = Binding.Service<VersionMetadataBinding>(
+  "Cloudflare.VersionMetadata",
+);
+
+export const VersionMetadataBindingLayer = Layer.effect(
   VersionMetadataBinding,
   Effect.gen(function* () {
-    const Policy = yield* VersionMetadataBindingPolicy;
-
     return Effect.fn(function* (versionMetadata: VersionMetadataLike) {
-      yield* Policy(versionMetadata);
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.host;
+        if (isWorker(host)) {
+          yield* host.bind(versionMetadata.name, {
+            bindings: [
+              { type: "version_metadata", name: versionMetadata.name },
+            ],
+          });
+        }
+      }
       return WorkerEnvironment.useSync(
         (env) =>
           (env as Record<string, WorkerVersionMetadata>)[versionMetadata.name]!,
@@ -56,34 +66,3 @@ export const VersionMetadataBindingLive = Layer.effect(
     });
   }),
 );
-
-export class VersionMetadataBindingPolicy extends Binding.Policy<
-  VersionMetadataBindingPolicy,
-  (versionMetadata: VersionMetadataLike) => Effect.Effect<void>,
-  Providers
->()("Cloudflare.VersionMetadata") {}
-
-export const VersionMetadataBindingPolicyLive =
-  VersionMetadataBindingPolicy.layer.succeed(
-    Effect.fn(function* (
-      host: ResourceLike,
-      versionMetadata: VersionMetadataLike,
-    ) {
-      if (isWorker(host)) {
-        yield* host.bind(versionMetadata.name, {
-          bindings: [
-            {
-              type: "version_metadata",
-              name: versionMetadata.name,
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          new Error(
-            `VersionMetadataBinding does not support runtime '${host.Type}'`,
-          ),
-        );
-      }
-    }),
-  );

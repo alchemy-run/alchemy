@@ -16,18 +16,82 @@ import type {
 } from "@distilled.cloud/cloudflare/dns";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { Zone } from "../Zone/Zone.ts";
-import {
-  type DnsToken,
-  makeDnsClient,
-  makeDnsPolicyLive,
-} from "./DnsBinding.ts";
+import { type DnsToken } from "./DnsBinding.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
-import type { Providers } from "../Providers.ts";
+
+/**
+ * Binding that lets a Worker create, update, and delete Cloudflare DNS records
+ * at runtime.
+ *
+ * Creates a least-privilege {@link AccountApiToken} with only the `DNS Write`
+ * permission, scoped to the single zone passed to `bind`, and binds its value
+ * into the Worker so runtime code can authenticate.
+ *
+ * @binding
+ * @product DNS
+ * @category Domains & DNS
+ *
+ * @section Mutating DNS records at runtime
+ * @example Create, update, and delete records from inside a Worker
+ * Bind the client in the Worker's Init phase and provide {@link DnsWriteBinding}.
+ * The zone is fixed by `.bind(zone)` — the provisioned token only grants
+ * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
+ * resource directly (it's an `Effect`), or `yield* Zone` for a resolved value.
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * const Zone = Cloudflare.Zone("MyZone", { name: "example.com" });
+ *
+ * export class DnsWriterWorker extends Cloudflare.Worker<DnsWriterWorker>()(
+ *   "DnsWriterWorker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     // Init phase — bind the write client scoped to the zone.
+ *     const dns = yield* Cloudflare.DnsWrite(Zone);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { result } = yield* dns.createDnsRecord({
+ *           type: "A",
+ *           name: "app.example.com",
+ *           content: "192.0.2.1",
+ *           ttl: 1,
+ *           proxied: true,
+ *         });
+ *         yield* dns.updateDnsRecord(result.id, {
+ *           type: "A",
+ *           name: "app.example.com",
+ *           content: "192.0.2.2",
+ *           ttl: 1,
+ *         });
+ *         yield* dns.deleteDnsRecord(result.id);
+ *         return yield* HttpServerResponse.json({ id: result.id });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.DnsWriteBinding)),
+ * ) {}
+ * ```
+ *
+ * @example Apply a batch of changes atomically
+ * ```typescript
+ * yield* dns.batchDnsRecords({
+ *   posts: [{ type: "A", name: "a.example.com", content: "192.0.2.1", ttl: 1 }],
+ *   deletes: [{ id: oldRecordId }],
+ * });
+ * ```
+ */
+export interface DnsWrite extends Binding.Service<
+  DnsWrite,
+  "Cloudflare.Dns.DnsWrite",
+  (zone: Zone) => Effect.Effect<DnsWriteClient>
+> {}
+
+export const DnsWrite = Binding.Service<DnsWrite>("Cloudflare.Dns.DnsWrite");
 
 /** Create-record request, minus the zone id (bound at `.bind(zone)` time). */
 export type CreateRecordRequestInput = Omit<CreateRecordRequest, "zoneId">;
@@ -120,94 +184,3 @@ export const dnsWriteClient = (
     ),
   };
 };
-
-/**
- * Binding that lets a Worker create, update, and delete Cloudflare DNS records
- * at runtime.
- *
- * Creates a least-privilege {@link AccountApiToken} with only the `DNS Write`
- * permission, scoped to the single zone passed to `bind`, and binds its value
- * into the Worker so runtime code can authenticate.
- *
- * @binding
- * @product DNS
- * @category Domains & DNS
- *
- * @section Mutating DNS records at runtime
- * @example Create, update, and delete records from inside a Worker
- * Bind the client in the Worker's Init phase and provide {@link DnsWriteLive}.
- * The zone is fixed by `.bind(zone)` — the provisioned token only grants
- * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
- * resource directly (it's an `Effect`), or `yield* Zone` for a resolved value.
- * ```typescript
- * import * as Cloudflare from "alchemy/Cloudflare";
- * import * as Effect from "effect/Effect";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
- *
- * const Zone = Cloudflare.Zone("MyZone", { name: "example.com" });
- *
- * export class DnsWriterWorker extends Cloudflare.Worker<DnsWriterWorker>()(
- *   "DnsWriterWorker",
- *   { main: import.meta.filename },
- *   Effect.gen(function* () {
- *     // Init phase — bind the write client scoped to the zone.
- *     const dns = yield* Cloudflare.DnsWrite.bind(Zone);
- *
- *     return {
- *       fetch: Effect.gen(function* () {
- *         const { result } = yield* dns.createDnsRecord({
- *           type: "A",
- *           name: "app.example.com",
- *           content: "192.0.2.1",
- *           ttl: 1,
- *           proxied: true,
- *         });
- *         yield* dns.updateDnsRecord(result.id, {
- *           type: "A",
- *           name: "app.example.com",
- *           content: "192.0.2.2",
- *           ttl: 1,
- *         });
- *         yield* dns.deleteDnsRecord(result.id);
- *         return yield* HttpServerResponse.json({ id: result.id });
- *       }),
- *     };
- *   }).pipe(Effect.provide(Cloudflare.DnsWriteLive)),
- * ) {}
- * ```
- *
- * @example Apply a batch of changes atomically
- * ```typescript
- * yield* dns.batchDnsRecords({
- *   posts: [{ type: "A", name: "a.example.com", content: "192.0.2.1", ttl: 1 }],
- *   deletes: [{ id: oldRecordId }],
- * });
- * ```
- */
-export class DnsWrite extends Binding.Service<
-  DnsWrite,
-  (zone: Zone) => Effect.Effect<DnsWriteClient>
->()("Cloudflare.DnsWrite") {}
-
-/**
- * Deploy-time policy for {@link DnsWrite}. Attaches the `DNS Write` permission
- * to the token via its binding contract.
- */
-export class DnsWritePolicy extends Binding.Policy<
-  DnsWritePolicy,
-  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>,
-  Providers
->()("Cloudflare.DnsWrite") {}
-
-/** Runtime layer for {@link DnsWrite}. */
-export const DnsWriteLive = Layer.effect(
-  DnsWrite,
-  makeDnsClient(DnsWritePolicy, "DnsWriteToken", dnsWriteClient),
-);
-
-/** Live deploy-time policy layer for {@link DnsWritePolicy}. */
-export const DnsWritePolicyLive = makeDnsPolicyLive(
-  DnsWritePolicy,
-  "Cloudflare.DnsWrite",
-  ["DNS Write"],
-);

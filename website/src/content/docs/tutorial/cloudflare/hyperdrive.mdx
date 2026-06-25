@@ -258,7 +258,7 @@ export const Db = Effect.gen(function* () {
 
 +export const Hyperdrive = Effect.gen(function* () {
 +  const { branch } = yield* Db;
-+  return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
++  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 +    origin: branch.origin,
 +  });
 +});
@@ -284,7 +284,7 @@ export const Db = Effect.gen(function* () {
 
 +export const Hyperdrive = Effect.gen(function* () {
 +  const { role } = yield* Db;
-+  return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
++  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 +    origin: role.origin,
 +  });
 +});
@@ -310,7 +310,7 @@ export const Db = Effect.gen(function* () {
 
 +export const Hyperdrive = Effect.gen(function* () {
 +  const { password } = yield* Db;
-+  return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
++  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 +    origin: password.origin,
 +  });
 +});
@@ -394,7 +394,7 @@ the binding. Pick the one that matches your engine:
 
 ## Bind Hyperdrive to your Worker
 
-`Cloudflare.Hyperdrive.bind(...)` returns a typed accessor for the
+`Cloudflare.Hyperdrive.Connect(...)` returns a typed accessor for the
 runtime binding — connection string, host, port, user, password,
 database — plus a `raw` escape hatch for libraries that want the
 underlying `Hyperdrive` object:
@@ -420,7 +420,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 +    },
   },
   Effect.gen(function* () {
-+    const hd = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
++    const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
 +
     return {
       fetch: Effect.gen(function* () {
@@ -440,7 +440,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
++  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectionBindingLive)),
 ) {}
 ```
 
@@ -465,7 +465,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 +    },
   },
   Effect.gen(function* () {
-+    const hd = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
++    const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
 +
     return {
       fetch: Effect.gen(function* () {
@@ -485,7 +485,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
++  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectionBindingLive)),
 ) {}
 ```
 
@@ -510,7 +510,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 +    },
   },
   Effect.gen(function* () {
-+    const hd = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
++    const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
 +
     return {
       fetch: Effect.gen(function* () {
@@ -529,7 +529,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
++  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectionBindingLive)),
 ) {}
 ```
 

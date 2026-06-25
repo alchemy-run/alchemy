@@ -1,17 +1,17 @@
 import * as Effect from "effect/Effect";
 import type { Input, InputProps } from "../../Input.ts";
-import * as Namespace from "../../Namespace.ts";
+import * as CoreNamespace from "../../Namespace.ts";
 import { isResource } from "../../Resource.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { R2Bucket } from "../R2/Bucket.ts";
 import {
-  AiSearchInstance,
-  type AiSearchInstanceProps,
+  Instance,
+  type InstanceProps,
   type AiSearchSourceParams,
-} from "./AiSearchInstance.ts";
-import type { AiSearchNamespace } from "./AiSearchNamespace.ts";
-import { AiSearchToken } from "./AiSearchToken.ts";
+} from "./Instance.ts";
+import type { Namespace } from "./Namespace.ts";
+import { Token } from "./Token.ts";
 
 type WebCrawlerParams = NonNullable<AiSearchSourceParams["webCrawler"]>;
 
@@ -55,18 +55,18 @@ export type AiSearchStore = {
  * the source-specific variant, so they're omitted here.
  */
 export type AiSearchSharedProps = Omit<
-  InputProps<AiSearchInstanceProps, "type">,
+  InputProps<InstanceProps, "type">,
   "type" | "source" | "sourceParams" | "namespace"
 > & {
   /**
-   * Namespace to group this pipeline under. Pass an {@link AiSearchNamespace}
+   * Namespace to group this pipeline under. Pass an {@link Namespace}
    * resource — the engine orders this pipeline after the namespace on deploy
    * and tears it down before the namespace on destroy. Omit to place the
    * pipeline in the account-provided `default` namespace. The namespace is
    * immutable — changing it triggers a replacement.
    * @default the account-provided `default` namespace
    */
-  namespace?: AiSearchNamespace;
+  namespace?: Namespace;
 };
 
 /**
@@ -126,43 +126,43 @@ export type AiSearchProps = AiSearchR2Props | AiSearchWebCrawlerProps;
 
 /**
  * The result of the {@link AiSearch} construct. It *is* the underlying
- * {@link AiSearchInstance}, augmented with the managed `serviceToken`, so it
- * can be passed anywhere an `AiSearchInstance` is expected —
- * `AiSearchInstance.bind(search)`, a Worker's `env`, etc.
+ * {@link Instance}, augmented with the managed `serviceToken`, so it
+ * can be passed anywhere an `Instance` is expected —
+ * `Cloudflare.AiSearch.Search(search)`, a Worker's `env`, etc.
  */
-export type AiSearch = AiSearchInstance & {
+export type AiSearch = Instance & {
   /**
    * The managed AI Search service token minted for an R2 source, or
    * `undefined` when the source is a web crawler (no token needed) or you
    * supplied your own `tokenId`.
    */
-  serviceToken: AiSearchToken | undefined;
+  serviceToken: Token | undefined;
 };
 
 /**
- * A convenience construct over {@link AiSearchInstance} that auto-creates the
+ * A convenience construct over {@link Instance} that auto-creates the
  * sub-resources an AI Search instance typically needs, so a single call wires
  * up a working pipeline. The data source is chosen by what you pass as
  * `source` — an {@link R2Bucket} for R2, or a URL for a web crawl:
  *
  * - For an R2 source, it mints a least-privilege {@link AccountApiToken}
  *   (`AI Search Index Engine`, stable child `ApiToken`) and an
- *   {@link AiSearchToken} wrapping it (stable child `Token`), then passes
+ *   {@link Token} wrapping it (stable child `Token`), then passes
  *   that token to the instance.
  *   Cloudflare requires a service token to read an R2 bucket and only
  *   provisions one through the dashboard / Wrangler — never on a
  *   programmatic API create — so the construct provisions it for you. Pass
  *   your own `tokenId` to skip minting and reuse an existing token.
- * - It creates the {@link AiSearchInstance} (child `Instance`) with the
+ * - It creates the {@link Instance} (child `Instance`) with the
  *   remaining props.
  *
  * Drop down to the low-level resources directly when you need to share a
  * token across instances, adopt an existing one, or bind a namespace.
  *
- * The returned value *is* an {@link AiSearchInstance} (augmented with the
+ * The returned value *is* an {@link Instance} (augmented with the
  * managed `serviceToken`, `undefined` for a web crawler), so an `AiSearch`
- * is usable anywhere an `AiSearchInstance` is expected — pass it straight to
- * `AiSearchInstance.bind(search)` or a Worker's `env`.
+ * is usable anywhere an `Instance` is expected — pass it straight to
+ * `Cloudflare.AiSearch.Search(search)` or a Worker's `env`.
  *
  * @resource
  * @product AI Search
@@ -219,12 +219,12 @@ export type AiSearch = AiSearchInstance & {
  *
  * @section Binding to an Effect Worker
  *
- * The returned `search` is an {@link AiSearchInstance}. Bind it during the
- * Worker's init phase with `Cloudflare.AiSearchInstance.bind(search)`, which
+ * The returned `search` is an {@link Instance}. Bind it during the
+ * Worker's init phase with `Cloudflare.AiSearch.Search(search)`, which
  * attaches the single-instance `ai_search` binding and hands back an
  * Effect-native client whose `search` / `chatCompletions` methods return
- * `Effect`s. Provide `AiSearchInstanceBindingLive` in the Worker's runtime
- * layer.
+ * `Effect`s. Provide `Cloudflare.AiSearch.SearchBinding` in the Worker's
+ * runtime layer.
  *
  * @example Effect Worker that answers from AI Search
  * ```typescript
@@ -241,7 +241,7 @@ export type AiSearch = AiSearchInstance & {
  *     const aiSearch = yield* Cloudflare.AiSearch("docs-search", {
  *       source: bucket,
  *     });
- *     const search = yield* Cloudflare.AiSearchInstance.bind(aiSearch);
+ *     const search = yield* Cloudflare.AiSearch.Search(aiSearch);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -253,7 +253,7 @@ export type AiSearch = AiSearchInstance & {
  *         return yield* HttpServerResponse.json(answer);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.AiSearchInstanceBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.AiSearch.SearchBinding)),
  * ) {}
  * ```
  *
@@ -263,7 +263,7 @@ export type AiSearch = AiSearchInstance & {
  * The engine attaches the same single-instance `ai_search` binding (see
  * `toBinding` in `WorkerAsyncBindings.ts`), orders the deploy
  * bucket → instance → worker, and `InferEnv` types `env.SEARCH` as the
- * runtime `AiSearchInstance` handle — no hand-written types.
+ * runtime `Instance` handle — no hand-written types.
  *
  * @example Async Worker that answers from AI Search
  * ```typescript
@@ -310,7 +310,7 @@ export const AiSearch = (id: string, props: AiSearchProps) =>
     } = props;
 
     let tokenId = shared.tokenId;
-    let serviceToken: AiSearchToken | undefined;
+    let serviceToken: Token | undefined;
     let type: "r2" | "web-crawler";
     let instanceSource: Input<string>;
     let sourceParams: Input<AiSearchSourceParams> | undefined;
@@ -345,7 +345,7 @@ export const AiSearch = (id: string, props: AiSearchProps) =>
             },
           ],
         });
-        serviceToken = yield* AiSearchToken("Token", {
+        serviceToken = yield* Token("Token", {
           cfApiId: apiToken.tokenId,
           cfApiKey: apiToken.value,
         });
@@ -373,7 +373,7 @@ export const AiSearch = (id: string, props: AiSearchProps) =>
         : undefined;
     }
 
-    const instance = yield* AiSearchInstance("Instance", {
+    const instance = yield* Instance("Instance", {
       ...shared,
       // The instance is keyed by namespace name; pass the namespace's `name`
       // output so the engine orders instance-after-namespace.
@@ -385,10 +385,10 @@ export const AiSearch = (id: string, props: AiSearchProps) =>
     });
 
     // Return the instance itself (augmented with the managed `serviceToken`)
-    // so an `AiSearch` is usable anywhere an `AiSearchInstance` is expected —
-    // `AiSearchInstance.bind(search)`, `env: { SEARCH: search }`, etc.
+    // so an `AiSearch` is usable anywhere an `Instance` is expected —
+    // `Cloudflare.AiSearch.Search(search)`, `env: { SEARCH: search }`, etc.
     return Object.assign(instance, { serviceToken }) as AiSearch;
-  }).pipe(Namespace.push(id));
+  }).pipe(CoreNamespace.push(id));
 
 /** Drop `undefined` entries; return `undefined` when nothing is left. */
 const clean = <T extends Record<string, unknown>>(

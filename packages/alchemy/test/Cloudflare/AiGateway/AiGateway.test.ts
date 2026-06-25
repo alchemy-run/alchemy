@@ -31,7 +31,7 @@ test.provider("create and delete ai gateway with default props", (stack) =>
 
     const gateway = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("DefaultGateway", {
+        return yield* Cloudflare.AiGateway.Gateway("DefaultGateway", {
           id: "alchemy-test-ai-gateway-default",
         });
       }),
@@ -65,7 +65,7 @@ test.provider("create, update, delete ai gateway", (stack) =>
 
     const gateway = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("TestGateway", {
+        return yield* Cloudflare.AiGateway.Gateway("TestGateway", {
           id: "alchemy-test-ai-gateway",
           cacheTtl: 60,
           collectLogs: true,
@@ -86,7 +86,7 @@ test.provider("create, update, delete ai gateway", (stack) =>
 
     const updatedGateway = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("TestGateway", {
+        return yield* Cloudflare.AiGateway.Gateway("TestGateway", {
           id: "alchemy-test-ai-gateway",
           cacheTtl: 120,
           collectLogs: true,
@@ -124,7 +124,7 @@ test.provider("create, update spend limits, delete ai gateway", (stack) =>
 
     const gateway = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("SpendGateway", {
+        return yield* Cloudflare.AiGateway.Gateway("SpendGateway", {
           id: "alchemy-test-ai-gateway-spend",
           spendLimits: {
             enabled: true,
@@ -151,7 +151,7 @@ test.provider("create, update spend limits, delete ai gateway", (stack) =>
     // the server-assigned rule id / enabled default).
     const again = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("SpendGateway", {
+        return yield* Cloudflare.AiGateway.Gateway("SpendGateway", {
           id: "alchemy-test-ai-gateway-spend",
           spendLimits: {
             enabled: true,
@@ -165,7 +165,7 @@ test.provider("create, update spend limits, delete ai gateway", (stack) =>
     // Update the cap in place.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("SpendGateway", {
+        return yield* Cloudflare.AiGateway.Gateway("SpendGateway", {
           id: "alchemy-test-ai-gateway-spend",
           spendLimits: {
             enabled: true,
@@ -196,13 +196,13 @@ test.provider("list enumerates the deployed ai gateway", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("ListGateway", {
+        return yield* Cloudflare.AiGateway.Gateway("ListGateway", {
           id: gatewayId,
         });
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.AiGateway);
+    const provider = yield* Provider.findProvider(Cloudflare.AiGateway.Gateway);
     const all = yield* provider.list();
 
     expect(all.some((g) => g.gatewayId === deployed.gatewayId)).toBe(true);
@@ -230,7 +230,7 @@ test.provider(
       // Phase 1: deploy normally so a real AI Gateway exists.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AiGateway("AdoptableGateway", {
+          return yield* Cloudflare.AiGateway.Gateway("AdoptableGateway", {
             id: gatewayId,
           });
         }),
@@ -252,7 +252,7 @@ test.provider(
       // attrs — silent adoption.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AiGateway("AdoptableGateway", {
+          return yield* Cloudflare.AiGateway.Gateway("AdoptableGateway", {
             id: gatewayId,
           });
         }),

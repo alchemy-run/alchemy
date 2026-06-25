@@ -197,7 +197,7 @@ export type FlagshipFlagAttributes = {
   updatedBy: string | undefined;
 };
 
-export type FlagshipFlag = Resource<
+export type Flag = Resource<
   FlagshipFlagTypeId,
   FlagshipFlagProps,
   FlagshipFlagAttributes,
@@ -219,9 +219,9 @@ export type FlagshipFlag = Resource<
  * @section Creating a Flag
  * @example Boolean flag
  * ```typescript
- * const app = yield* Cloudflare.FlagshipApp("Flags", {});
+ * const app = yield* Cloudflare.Flagship.App("Flags", {});
  *
- * const flag = yield* Cloudflare.FlagshipFlag("NewCheckout", {
+ * const flag = yield* Cloudflare.Flagship.Flag("NewCheckout", {
  *   appId: app.appId,
  *   key: "new-checkout",
  *   defaultVariation: "off",
@@ -231,7 +231,7 @@ export type FlagshipFlag = Resource<
  *
  * @example String flag with multiple variations
  * ```typescript
- * const flag = yield* Cloudflare.FlagshipFlag("CheckoutFlow", {
+ * const flag = yield* Cloudflare.Flagship.Flag("CheckoutFlow", {
  *   appId: app.appId,
  *   key: "checkout-flow",
  *   defaultVariation: "v1",
@@ -242,7 +242,7 @@ export type FlagshipFlag = Resource<
  * @section Targeting Rules
  * @example Serve a variation to a specific country
  * ```typescript
- * const flag = yield* Cloudflare.FlagshipFlag("DarkMode", {
+ * const flag = yield* Cloudflare.Flagship.Flag("DarkMode", {
  *   appId: app.appId,
  *   key: "dark-mode",
  *   defaultVariation: "off",
@@ -261,7 +261,7 @@ export type FlagshipFlag = Resource<
  *
  * @example Percentage rollout
  * ```typescript
- * const flag = yield* Cloudflare.FlagshipFlag("NewSearch", {
+ * const flag = yield* Cloudflare.Flagship.Flag("NewSearch", {
  *   appId: app.appId,
  *   key: "new-search",
  *   defaultVariation: "off",
@@ -280,7 +280,7 @@ export type FlagshipFlag = Resource<
  * @section Toggling a Flag
  * @example Disable a flag without removing its rules
  * ```typescript
- * const flag = yield* Cloudflare.FlagshipFlag("NewCheckout", {
+ * const flag = yield* Cloudflare.Flagship.Flag("NewCheckout", {
  *   appId: app.appId,
  *   key: "new-checkout",
  *   enabled: false,
@@ -292,16 +292,16 @@ export type FlagshipFlag = Resource<
  * @see https://developers.cloudflare.com/flagship/
  * @see https://developers.cloudflare.com/api/resources/flagship/
  */
-export const FlagshipFlag = Resource<FlagshipFlag>(FlagshipFlagTypeId);
+export const Flag = Resource<Flag>(FlagshipFlagTypeId);
 
 /**
- * Returns true if the given value is a FlagshipFlag resource.
+ * Returns true if the given value is a Flagship Flag resource.
  */
-export const isFlagshipFlag = (value: unknown): value is FlagshipFlag =>
+export const isFlagshipFlag = (value: unknown): value is Flag =>
   Predicate.hasProperty(value, "Type") && value.Type === FlagshipFlagTypeId;
 
-export const FlagshipFlagProvider = () =>
-  Provider.succeed(FlagshipFlag, {
+export const FlagProvider = () =>
+  Provider.succeed(Flag, {
     stables: ["appId", "accountId", "key"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

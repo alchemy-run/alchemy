@@ -53,10 +53,10 @@ const expectGone = (accountId: string, id: string, namespace = "default") =>
 // instance indexing it. The instance's `source` references the bucket
 // name so the engine orders instance-after-bucket on deploy (and the
 // reverse on destroy).
-const program = (props?: Partial<Cloudflare.AiSearchInstanceProps>) =>
+const program = (props?: Partial<Cloudflare.AiSearch.InstanceProps>) =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("AiSearchSource", {});
-    const instance = yield* Cloudflare.AiSearchInstance("Search", {
+    const instance = yield* Cloudflare.AiSearch.Instance("Search", {
       source: bucket.bucketName,
       ...props,
     });
@@ -240,7 +240,7 @@ test.provider(
       const deployed = yield* stack.deploy(program());
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AiSearchInstance,
+        Cloudflare.AiSearch.Instance,
       );
       const all = yield* provider.list();
 
@@ -294,7 +294,7 @@ test.provider(
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
           const target = yield* AiSearchCrawlTargetWorker;
-          const instance = yield* Cloudflare.AiSearchInstance("Search", {
+          const instance = yield* Cloudflare.AiSearch.Instance("Search", {
             type: "web-crawler",
             source: target.url.as<string>(),
             sourceParams: {
@@ -330,11 +330,11 @@ test.provider(
 // `namespace` references the namespace's `name` output, so the engine orders
 // instance-after-namespace on deploy (and namespace-after-instance on
 // destroy, so the namespace's instances are torn down before it).
-const nsProgram = (props?: Partial<Cloudflare.AiSearchInstanceProps>) =>
+const nsProgram = (props?: Partial<Cloudflare.AiSearch.InstanceProps>) =>
   Effect.gen(function* () {
-    const namespace = yield* Cloudflare.AiSearchNamespace("AiSearchNs", {});
+    const namespace = yield* Cloudflare.AiSearch.Namespace("AiSearchNs", {});
     const bucket = yield* Cloudflare.R2Bucket("AiSearchSource", {});
-    const instance = yield* Cloudflare.AiSearchInstance("Search", {
+    const instance = yield* Cloudflare.AiSearch.Instance("Search", {
       source: bucket.bucketName,
       namespace: namespace.name,
       ...props,

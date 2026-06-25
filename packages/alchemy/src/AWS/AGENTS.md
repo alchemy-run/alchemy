@@ -50,8 +50,8 @@ Examples:
 Bindings are:
 
 - one file per operation
-- `Binding.Service` + `Binding.Policy`
-- usually named `alchemy/src/AWS/<Service>/<Operation>.ts`
+- the combined `Binding.Service` form (`interface X extends Binding.Service<X, "id", Shape>` + `const X = Binding.Service<X>("id")`); the deploy-time IAM registration is inlined into the impl layer under `if (!globalThis.__ALCHEMY_RUNTIME__)`, resolving the host via `yield* Binding.host`
+- usually named `alchemy/src/AWS/<Service>/<Operation>.ts` (callable + types) with the impl layer in `<Operation>Binding.ts`
 
 ### 2. Resource
 

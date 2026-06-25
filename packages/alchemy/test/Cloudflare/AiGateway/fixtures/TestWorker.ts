@@ -10,7 +10,7 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+    const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
 
     return {
       fetch: Effect.gen(function* () {
@@ -24,5 +24,5 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.AiGateway.InferenceBinding)),
 ) {}

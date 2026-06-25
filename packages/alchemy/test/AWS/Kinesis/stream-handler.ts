@@ -39,7 +39,7 @@ export default KinesisStreamFunction.make(
   },
   Effect.gen(function* () {
     const { stream, queue } = yield* StreamAndQueue;
-    const sink = yield* AWS.SQS.QueueSink.bind(queue);
+    const sink = yield* AWS.SQS.QueueSink(queue);
 
     yield* AWS.Kinesis.records(stream, {
       startingPosition: "LATEST",
@@ -74,8 +74,8 @@ export default KinesisStreamFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(AWS.Lambda.StreamEventSource, AWS.SQS.QueueSinkLive),
-        Layer.mergeAll(AWS.SQS.SendMessageBatchLive, StreamAndQueueLive),
+        Layer.mergeAll(AWS.Lambda.StreamEventSource, AWS.SQS.QueueSinkBinding),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchBinding, StreamAndQueueLive),
       ),
     ),
   ),

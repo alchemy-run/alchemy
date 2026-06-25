@@ -33,7 +33,7 @@ export default class Server extends AWS.EC2.Instance<Server>()(
       stream.pipe(Stream.mapEffect(Effect.logInfo), Stream.runDrain),
     );
 
-    const sendMessage = yield* AWS.SQS.SendMessage.bind(queue);
+    const sendMessage = yield* AWS.SQS.SendMessage(queue);
 
     return {
       fetch: Effect.gen(function* () {
@@ -79,9 +79,9 @@ export default class Server extends AWS.EC2.Instance<Server>()(
       Layer.provideMerge(
         Layer.mergeAll(NetworkLive, SQSQueueEventSource),
         Layer.mergeAll(
-          AWS.SQS.DeleteMessageBatchLive,
-          AWS.SQS.ReceiveMessageLive,
-          AWS.SQS.SendMessageLive,
+          AWS.SQS.DeleteMessageBatchBinding,
+          AWS.SQS.ReceiveMessageBinding,
+          AWS.SQS.SendMessageBinding,
         ),
       ),
     ),

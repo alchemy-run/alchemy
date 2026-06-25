@@ -1,10 +1,10 @@
-import type { ReadKVNamespaceClient } from "@/Cloudflare/KV/NamespaceRead.ts";
+import type { ReadNamespaceClient } from "@/Cloudflare/KV/ReadNamespace.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Shared read-side routes exercised by both the binding and HTTP fixtures so
- * every method of {@link ReadKVNamespaceClient} is driven over `fetch`:
+ * every method of {@link ReadNamespaceClient} is driven over `fetch`:
  *
  * - `GET /get?key=` — `get(key)` (text, the default).
  * - `GET /get-json?key=` — `get(key, "json")` (parsed JSON value).
@@ -15,7 +15,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * Returns `undefined` when the path is not a read route so the caller can fall
  * through (used by the read-write fixtures).
  */
-export const readRoutes = (kv: ReadKVNamespaceClient, url: URL) =>
+export const readRoutes = (kv: ReadNamespaceClient, url: URL) =>
   Effect.gen(function* () {
     if (url.pathname === "/get") {
       const key = url.searchParams.get("key") ?? "";

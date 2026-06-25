@@ -22,23 +22,24 @@ const logLevel = Effect.provideService(
 // substitutable for an instance. The two binding styles are also exercised at
 // runtime by the `bindings-stack` fixtures (Effect Worker `bind(...)` +
 // async Worker `env`).
-declare const _search: Cloudflare.AiSearch;
-// 1. Assignable to an `AiSearchInstance` (and thus to `AiSearchInstance.bind`,
-//    which is how an Effect Worker attaches the `ai_search` binding). These
+declare const _search: Cloudflare.AiSearch.Instance;
+// 1. Assignable to an `AiSearchInstance` (and thus to
+//    `Cloudflare.AiSearch.Search(...)`, which is how an Effect Worker attaches
+//    the `ai_search` binding). These
 //    assertions live inside a never-invoked closure so the type checks compile
 //    without executing the `declare`d binding (which has no runtime value).
 void (() => {
-  const _asInstance: Cloudflare.AiSearchInstance = _search;
+  const _asInstance: Cloudflare.AiSearch.Instance = _search;
   void _asInstance;
-  void Cloudflare.AiSearchInstance.bind(_search);
+  void Cloudflare.AiSearch.Search(_search);
 });
 // 2. As a Worker `env` binding, `InferEnv` resolves it to the same runtime
 //    handle (`AiSearchInstance`) it would for a plain `AiSearchInstance`.
 type _EnvSearch = Cloudflare.InferEnv<{
-  SEARCH: Cloudflare.AiSearch;
+  SEARCH: Cloudflare.AiSearch.Instance;
 }>["SEARCH"];
 type _EnvInstance = Cloudflare.InferEnv<{
-  SEARCH: Cloudflare.AiSearchInstance;
+  SEARCH: Cloudflare.AiSearch.Instance;
 }>["SEARCH"];
 const _envSame: _EnvSearch extends _EnvInstance ? true : never = true;
 void _envSame;
@@ -73,7 +74,7 @@ const expectGone = (accountId: string, id: string, namespace = "default") =>
 const program = () =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("AiSearchSource", {});
-    const search = yield* Cloudflare.AiSearch("Search", {
+    const search = yield* Cloudflare.AiSearch.AiSearch("Search", {
       source: bucket,
     });
     return { bucket, search, serviceToken: search.serviceToken };
@@ -119,7 +120,7 @@ const crawlerProgram = () =>
     // Exercise the flattened source groups end-to-end: `parse` (parseType +
     // parse options) and `crawl` (link-discovery options) must translate into
     // the distilled `sourceParams.webCrawler.{parseType,parseOptions,crawlOptions}`.
-    const search = yield* Cloudflare.AiSearch("Search", {
+    const search = yield* Cloudflare.AiSearch.AiSearch("Search", {
       source: target.url.as<string>(),
       parse: { type: "crawl", useBrowserRendering: false },
       // Discover URLs by following links only. Without `source: "links"`,

@@ -8,13 +8,12 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { AiGatewayBinding } from "./AiGatewayBinding.ts";
 
-export type AiGatewayRateLimitingTechnique = "fixed" | "sliding";
+export type GatewayRateLimitingTechnique = "fixed" | "sliding";
 
-export type AiGatewayLogManagementStrategy = "STOP_INSERTING" | "DELETE_OLDEST";
+export type GatewayLogManagementStrategy = "STOP_INSERTING" | "DELETE_OLDEST";
 
-export type AiGatewayDlp =
+export type GatewayDlp =
   | {
       /**
        * Action to take when a DLP profile matches.
@@ -61,7 +60,7 @@ export type AiGatewayDlp =
       }[];
     };
 
-export type AiGatewayOtel = {
+export type GatewayOtel = {
   /**
    * Authorization header value for the OpenTelemetry endpoint.
    */
@@ -81,7 +80,7 @@ export type AiGatewayOtel = {
   contentType?: "json" | "protobuf";
 };
 
-export type AiGatewayStripe = {
+export type GatewayStripe = {
   /**
    * Authorization header value for Stripe usage events.
    */
@@ -102,7 +101,7 @@ export type AiGatewayStripe = {
  * the gateway over a rolling `window` (in seconds), optionally scoped to a set
  * of models or providers.
  */
-export type AiGatewaySpendLimitRule = {
+export type GatewaySpendLimitRule = {
   /**
    * Spend cap for this rule. The amount is in cents (`limitType: "cost"`).
    */
@@ -144,17 +143,17 @@ export type AiGatewaySpendLimitRule = {
    * Enforcement algorithm — `fixed` resets on the window boundary, `sliding`
    * tracks a rolling window.
    */
-  technique?: AiGatewayRateLimitingTechnique;
+  technique?: GatewayRateLimitingTechnique;
 };
 
 /**
  * Per-gateway spend limits — Cloudflare's replacement for the deprecated
  * account-level AI Gateway spending limit. Attach cost caps directly to a
- * gateway via {@link AiGatewayProps.spendLimits}.
+ * gateway via {@link GatewayProps.spendLimits}.
  *
  * @see https://developers.cloudflare.com/ai-gateway/features/spend-limits/
  */
-export type AiGatewaySpendLimits = {
+export type GatewaySpendLimits = {
   /**
    * Whether spend limiting is enabled for the gateway.
    */
@@ -162,10 +161,10 @@ export type AiGatewaySpendLimits = {
   /**
    * The cost-cap rules applied to requests routed through the gateway.
    */
-  rules?: AiGatewaySpendLimitRule[];
+  rules?: GatewaySpendLimitRule[];
 };
 
-export type AiGatewayProps = {
+export type GatewayProps = {
   /**
    * Gateway identifier. If omitted, a unique ID will be generated.
    *
@@ -211,7 +210,7 @@ export type AiGatewayProps = {
    *
    * @default "fixed"
    */
-  rateLimitingTechnique?: AiGatewayRateLimitingTechnique;
+  rateLimitingTechnique?: GatewayRateLimitingTechnique;
   /**
    * Whether gateway authentication is enabled.
    */
@@ -220,7 +219,7 @@ export type AiGatewayProps = {
    * DLP configuration. The installed distilled Cloudflare client applies this
    * through the update API after gateway creation.
    */
-  dlp?: AiGatewayDlp;
+  dlp?: GatewayDlp;
   /**
    * Whether this gateway is the account default.
    */
@@ -232,7 +231,7 @@ export type AiGatewayProps = {
   /**
    * Strategy used when retained logs reach `logManagement`.
    */
-  logManagementStrategy?: AiGatewayLogManagementStrategy | null;
+  logManagementStrategy?: GatewayLogManagementStrategy | null;
   /**
    * Whether Logpush is enabled for this gateway.
    */
@@ -244,7 +243,7 @@ export type AiGatewayProps = {
   /**
    * OpenTelemetry export configuration.
    */
-  otel?: AiGatewayOtel[] | null;
+  otel?: GatewayOtel[] | null;
   /**
    * Store identifier used by the gateway.
    */
@@ -252,22 +251,22 @@ export type AiGatewayProps = {
   /**
    * Stripe usage export configuration.
    */
-  stripe?: AiGatewayStripe | null;
+  stripe?: GatewayStripe | null;
   /**
    * Per-gateway spend limits (Cloudflare's replacement for the deprecated
    * account-level spending limit). Applied through the update API after
    * gateway creation.
    */
-  spendLimits?: AiGatewaySpendLimits | null;
+  spendLimits?: GatewaySpendLimits | null;
   /**
    * Whether Zero Data Retention is enabled.
    */
   zdr?: boolean;
 };
 
-export type AiGateway = Resource<
+export type Gateway = Resource<
   "Cloudflare.AiGateway",
-  AiGatewayProps,
+  GatewayProps,
   {
     gatewayId: string;
     accountId: string;
@@ -278,18 +277,18 @@ export type AiGateway = Resource<
     modifiedAt: string;
     rateLimitingInterval: number | null;
     rateLimitingLimit: number | null;
-    rateLimitingTechnique: AiGatewayRateLimitingTechnique;
+    rateLimitingTechnique: GatewayRateLimitingTechnique;
     authentication: boolean;
-    dlp: AiGatewayDlp | undefined;
+    dlp: GatewayDlp | undefined;
     isDefault: boolean;
     logManagement: number;
-    logManagementStrategy: AiGatewayLogManagementStrategy;
+    logManagementStrategy: GatewayLogManagementStrategy;
     logpush: boolean;
     logpushPublicKey: string | undefined;
-    otel: AiGatewayOtel[] | undefined;
+    otel: GatewayOtel[] | undefined;
     storeId: string;
-    stripe: AiGatewayStripe | undefined;
-    spendLimits: AiGatewaySpendLimits | undefined;
+    stripe: GatewayStripe | undefined;
+    spendLimits: GatewaySpendLimits | undefined;
     zdr: boolean;
   },
   never,
@@ -302,11 +301,11 @@ export type AiGateway = Resource<
 const nullIfZero = (value: number | null | undefined): number | null =>
   value == null || value === 0 ? null : value;
 
-export const isAiGateway = (value: unknown): value is AiGateway =>
+export const isAiGateway = (value: unknown): value is Gateway =>
   typeof value === "object" &&
   value !== null &&
   "Type" in value &&
-  (value as AiGateway).Type === "Cloudflare.AiGateway";
+  (value as Gateway).Type === "Cloudflare.AiGateway";
 
 /**
  * A Cloudflare AI Gateway for observability, caching, rate limiting, and
@@ -324,12 +323,12 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * @section Creating a Gateway
  * @example Basic gateway
  * ```typescript
- * const gateway = yield* Cloudflare.AiGateway("Gateway");
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway");
  * ```
  *
  * @example Gateway with caching and rate limiting
  * ```typescript
- * const gateway = yield* Cloudflare.AiGateway("Gateway", {
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway", {
  *   id: "my-gateway",
  *   cacheTtl: 300,
  *   cacheInvalidateOnUpdate: true,
@@ -342,7 +341,7 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * @section Logging
  * @example Gateway with log retention
  * ```typescript
- * const gateway = yield* Cloudflare.AiGateway("Gateway", {
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway", {
  *   collectLogs: true,
  *   logManagement: 10000,
  *   logManagementStrategy: "STOP_INSERTING",
@@ -351,8 +350,8 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  *
  * @section Binding into a Worker
  * @example Bind the gateway and provide the runtime layer
- * `AiGateway.bind(gateway)` returns a typed, Effect-native client during the
- * Worker's Init phase. Provide `Cloudflare.AiGatewayBindingLive` once at the
+ * `Cloudflare.AiGateway.Inference(gateway)` returns a typed, Effect-native client during the
+ * Worker's Init phase. Provide `Cloudflare.AiGateway.InferenceBinding` once at the
  * bottom of the Init layer chain so every `bind(...)` resolves at runtime.
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
@@ -363,14 +362,14 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  *   "Api",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+ *     const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
  *         // …routes
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.AiGateway.InferenceBinding)),
  * ) {}
  * ```
  *
@@ -381,7 +380,7 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * `Layer.unwrap`, since the binding handles auth and the gateway URL. Build it
  * in the Init phase; construction is pure.
  * ```typescript
- * const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+ * const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
  *
  * const languageModel = aiGateway.model({
  *   client: aiGateway,
@@ -442,7 +441,7 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * @example Production-grade caching, rate limits, and DLP
  * Every prop maps to an in-place update — no replacement, no downtime.
  * ```typescript
- * export const Gateway = Cloudflare.AiGateway("Gateway", {
+ * export const Gateway = Cloudflare.AiGateway.Gateway("Gateway", {
  *   id: "prod-gateway",
  *   cacheTtl: 300,
  *   cacheInvalidateOnUpdate: true,
@@ -462,7 +461,7 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * limit. Each rule caps cumulative cost (in cents) over a rolling `window`
  * (in seconds), optionally scoped to specific models or providers.
  * ```typescript
- * const gateway = yield* Cloudflare.AiGateway("Gateway", {
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway", {
  *   spendLimits: {
  *     enabled: true,
  *     rules: [
@@ -472,16 +471,10 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * });
  * ```
  */
-export const AiGateway = Resource<AiGateway>("Cloudflare.AiGateway")({
-  /**
-   * Bind this gateway to the surrounding Worker, returning an Effect-native
-   * client for the runtime AI Gateway binding.
-   */
-  bind: AiGatewayBinding.bind,
-});
+export const Gateway = Resource<Gateway>("Cloudflare.AiGateway");
 
-export const AiGatewayProvider = () =>
-  Provider.succeed(AiGateway, {
+export const GatewayProvider = () =>
+  Provider.succeed(Gateway, {
     stables: ["gatewayId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       if (!isResolved(news)) return undefined;
@@ -498,9 +491,9 @@ export const AiGatewayProvider = () =>
       }
 
       const oldMutable = mutable(
-        output ?? ((yield* desired(id, olds)) as AiGateway["Attributes"]),
+        output ?? ((yield* desired(id, olds)) as Gateway["Attributes"]),
       );
-      const nextMutable = mutable(next as AiGateway["Attributes"]);
+      const nextMutable = mutable(next as Gateway["Attributes"]);
       if (!deepEqual(oldMutable, nextMutable)) {
         return { action: "update" } as const;
       }
@@ -597,7 +590,7 @@ const createGatewayId = (id: string, gatewayId: string | undefined) =>
       lowercase: true,
     });
   });
-const desired = (id: string, props: AiGatewayProps | undefined) =>
+const desired = (id: string, props: GatewayProps | undefined) =>
   Effect.gen(function* () {
     return {
       gatewayId: yield* createGatewayId(id, props?.id),
@@ -631,7 +624,7 @@ const desired = (id: string, props: AiGatewayProps | undefined) =>
 // diff baseline carry seconds (matching what the API echoes back), keeping the
 // reconciler's diff stable.
 const resolveSpendLimits = (
-  spendLimits: AiGatewaySpendLimits | null | undefined,
+  spendLimits: GatewaySpendLimits | null | undefined,
 ) => {
   if (spendLimits == null) return undefined;
   return {
@@ -649,7 +642,7 @@ const mapGateway = (
     | aiGateway.CreateAiGatewayResponse
     | aiGateway.UpdateAiGatewayResponse,
   accountId: string,
-): AiGateway["Attributes"] => ({
+): Gateway["Attributes"] => ({
   gatewayId: gateway.id,
   accountId,
   // accountTag: gateway.accountTag ?? undefined,
@@ -664,7 +657,7 @@ const mapGateway = (
   rateLimitingTechnique: gateway.rateLimitingTechnique ?? "fixed",
   authentication: gateway.authentication ?? false,
   // Distilled widened generated string enums to open unions (`string & {}`).
-  dlp: (gateway.dlp ?? undefined) as AiGatewayDlp | undefined,
+  dlp: (gateway.dlp ?? undefined) as GatewayDlp | undefined,
   isDefault: gateway.isDefault ?? false,
   logManagement: gateway.logManagement ?? 100_000,
   logManagementStrategy: gateway.logManagementStrategy ?? "STOP_INSERTING",
@@ -673,7 +666,7 @@ const mapGateway = (
   // The wire shape uses explicit nulls and an open content-type union —
   // normalize into our prop shape so attributes diff cleanly against props.
   otel: gateway.otel?.map(
-    (o): AiGatewayOtel => ({
+    (o): GatewayOtel => ({
       url: o.url,
       headers: o.headers,
       ...(o.authorization != null ? { authorization: o.authorization } : {}),
@@ -713,12 +706,12 @@ const normalizeSpendLimits = (
       }
     | null
     | undefined,
-): AiGatewaySpendLimits | undefined => {
+): GatewaySpendLimits | undefined => {
   if (spendLimits == null) return undefined;
   return {
     enabled: spendLimits.enabled ?? false,
     rules: (spendLimits.rules ?? []).map(
-      (rule): AiGatewaySpendLimitRule => ({
+      (rule): GatewaySpendLimitRule => ({
         limit: rule.limit,
         limitType: rule.limitType,
         window: rule.window,
@@ -730,14 +723,14 @@ const normalizeSpendLimits = (
         ...(rule.model != null ? { model: rule.model } : {}),
         ...(rule.provider != null ? { provider: rule.provider } : {}),
         ...(rule.technique != null
-          ? { technique: rule.technique as AiGatewayRateLimitingTechnique }
+          ? { technique: rule.technique as GatewayRateLimitingTechnique }
           : {}),
       }),
     ),
   };
 };
 
-const mutable = (gateway: AiGateway["Attributes"]) => ({
+const mutable = (gateway: Gateway["Attributes"]) => ({
   cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
   cacheTtl: gateway.cacheTtl,
   collectLogs: gateway.collectLogs,
@@ -762,7 +755,7 @@ const mutable = (gateway: AiGateway["Attributes"]) => ({
 // server-assigned rule `id` (absent on freshly-declared props) and apply the
 // per-rule `enabled` default so desired (from props) and observed (from the
 // API) converge to a no-op when semantically equal.
-const spendLimitsForDiff = (spendLimits: AiGatewaySpendLimits | undefined) => {
+const spendLimitsForDiff = (spendLimits: GatewaySpendLimits | undefined) => {
   if (spendLimits == null) return undefined;
   return {
     enabled: spendLimits.enabled ?? false,
@@ -782,7 +775,7 @@ const spendLimitsForDiff = (spendLimits: AiGatewaySpendLimits | undefined) => {
 };
 const createRequest = Effect.fn(function* (
   id: string,
-  props: AiGatewayProps | undefined,
+  props: GatewayProps | undefined,
 ) {
   const next = yield* desired(id, props);
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -807,7 +800,7 @@ const createRequest = Effect.fn(function* (
 
 const updateRequest = Effect.fn(function* (
   id: string,
-  props: AiGatewayProps | undefined,
+  props: GatewayProps | undefined,
   accountId: string,
 ) {
   const next = yield* desired(id, props);

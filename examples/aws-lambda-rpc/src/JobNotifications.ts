@@ -34,7 +34,7 @@ export const JobNotificationsSNS = Layer.provideMerge(
         },
       });
 
-      const publish = yield* AWS.SNS.Publish.bind(topic);
+      const publish = yield* AWS.SNS.Publish(topic);
 
       yield* AWS.SNS.notifications(topic).subscribe((stream) =>
         stream.pipe(
@@ -85,5 +85,5 @@ export const JobNotificationsSNS = Layer.provideMerge(
       });
     }),
   ),
-  Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishLive),
+  Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishBinding),
 );

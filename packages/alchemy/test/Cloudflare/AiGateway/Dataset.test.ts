@@ -50,10 +50,13 @@ describe.sequential("AiGatewayDataset", () => {
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("DatasetGateway", {
-            id: GATEWAY_ID,
-          });
-          const dataset = yield* Cloudflare.AiGatewayDataset("Dataset", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway(
+            "DatasetGateway",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          const dataset = yield* Cloudflare.AiGateway.Dataset("Dataset", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-dataset",
             filters: [{ key: "success", operator: "eq", value: [true] }],
@@ -86,10 +89,13 @@ describe.sequential("AiGatewayDataset", () => {
       // Update mutable props in place — same dataset id.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("DatasetGateway", {
-            id: GATEWAY_ID,
-          });
-          const dataset = yield* Cloudflare.AiGatewayDataset("Dataset", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway(
+            "DatasetGateway",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          const dataset = yield* Cloudflare.AiGateway.Dataset("Dataset", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-dataset-v2",
             enable: false,
@@ -119,10 +125,13 @@ describe.sequential("AiGatewayDataset", () => {
       // Redeploying identical props is a no-op (still the same dataset).
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("DatasetGateway", {
-            id: GATEWAY_ID,
-          });
-          const dataset = yield* Cloudflare.AiGatewayDataset("Dataset", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway(
+            "DatasetGateway",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          const dataset = yield* Cloudflare.AiGateway.Dataset("Dataset", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-dataset-v2",
             enable: false,
@@ -150,17 +159,23 @@ describe.sequential("AiGatewayDataset", () => {
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const gatewayA = yield* Cloudflare.AiGateway("ReplaceGatewayA", {
-            id: GATEWAY_ID,
-          });
-          yield* Cloudflare.AiGateway("ReplaceGatewayB", {
+          const gatewayA = yield* Cloudflare.AiGateway.Gateway(
+            "ReplaceGatewayA",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          yield* Cloudflare.AiGateway.Gateway("ReplaceGatewayB", {
             id: GATEWAY_ID_B,
           });
-          const dataset = yield* Cloudflare.AiGatewayDataset("ReplaceDataset", {
-            gatewayId: gatewayA.gatewayId,
-            name: "alchemy-test-dataset-replace",
-            filters: [],
-          });
+          const dataset = yield* Cloudflare.AiGateway.Dataset(
+            "ReplaceDataset",
+            {
+              gatewayId: gatewayA.gatewayId,
+              name: "alchemy-test-dataset-replace",
+              filters: [],
+            },
+          );
           return { dataset };
         }),
       );
@@ -170,17 +185,23 @@ describe.sequential("AiGatewayDataset", () => {
       // new parent, and the old dataset is removed from gateway A.
       const moved = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Cloudflare.AiGateway("ReplaceGatewayA", {
+          yield* Cloudflare.AiGateway.Gateway("ReplaceGatewayA", {
             id: GATEWAY_ID,
           });
-          const gatewayB = yield* Cloudflare.AiGateway("ReplaceGatewayB", {
-            id: GATEWAY_ID_B,
-          });
-          const dataset = yield* Cloudflare.AiGatewayDataset("ReplaceDataset", {
-            gatewayId: gatewayB.gatewayId,
-            name: "alchemy-test-dataset-replace",
-            filters: [],
-          });
+          const gatewayB = yield* Cloudflare.AiGateway.Gateway(
+            "ReplaceGatewayB",
+            {
+              id: GATEWAY_ID_B,
+            },
+          );
+          const dataset = yield* Cloudflare.AiGateway.Dataset(
+            "ReplaceDataset",
+            {
+              gatewayId: gatewayB.gatewayId,
+              name: "alchemy-test-dataset-replace",
+              filters: [],
+            },
+          );
           return { dataset };
         }),
       );
@@ -205,10 +226,10 @@ describe.sequential("AiGatewayDataset", () => {
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("HealGateway", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway("HealGateway", {
             id: GATEWAY_ID,
           });
-          const dataset = yield* Cloudflare.AiGatewayDataset("HealDataset", {
+          const dataset = yield* Cloudflare.AiGateway.Dataset("HealDataset", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-dataset-heal",
             filters: [{ key: "success", operator: "eq", value: [true] }],
@@ -228,10 +249,10 @@ describe.sequential("AiGatewayDataset", () => {
 
       const healed = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("HealGateway", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway("HealGateway", {
             id: GATEWAY_ID,
           });
-          const dataset = yield* Cloudflare.AiGatewayDataset("HealDataset", {
+          const dataset = yield* Cloudflare.AiGateway.Dataset("HealDataset", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-dataset-heal",
             enable: false,
@@ -265,10 +286,10 @@ describe.sequential("AiGatewayDataset", () => {
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("ListGateway", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway("ListGateway", {
             id: GATEWAY_ID,
           });
-          const dataset = yield* Cloudflare.AiGatewayDataset("ListDataset", {
+          const dataset = yield* Cloudflare.AiGateway.Dataset("ListDataset", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-dataset-list",
             filters: [{ key: "success", operator: "eq", value: [true] }],
@@ -278,7 +299,7 @@ describe.sequential("AiGatewayDataset", () => {
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AiGatewayDataset,
+        Cloudflare.AiGateway.Dataset,
       );
       const all = yield* provider.list();
 

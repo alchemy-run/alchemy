@@ -85,7 +85,7 @@ export const isVersionMetadata = (value: unknown): value is VersionMetadata =>
  *         return Response.json({ id, tag, timestamp });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.VersionMetadataBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.VersionMetadataBindingLayer)),
  * );
  * ```
  *
@@ -105,6 +105,15 @@ export const isVersionMetadata = (value: unknown): value is VersionMetadata =>
  *
  * @see https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/
  */
+/**
+ * `VersionMetadataBinding` typed purely as its binding callable —
+ * `(versionMetadata) => BindEffect` — so the marker's `asEffect`/iterator
+ * resolve to the binding Effect.
+ */
+const bindVersionMetadata = VersionMetadataBinding as unknown as (
+  versionMetadata: VersionMetadata,
+) => BindEffect;
+
 export const VersionMetadata: {
   (props?: VersionMetadataProps): VersionMetadata;
   /**
@@ -112,20 +121,19 @@ export const VersionMetadata: {
    * returning the deferred accessor. Equivalent to `yield* versionMetadata` —
    * prefer yielding the marker directly.
    */
-  bind: typeof VersionMetadataBinding.bind;
+  bind: (versionMetadata: VersionMetadata) => BindEffect;
 } = Object.assign(
   (props?: VersionMetadataProps): VersionMetadata => {
     const self: VersionMetadata = {
       kind: VersionMetadataTypeId,
       name: props?.name ?? "CF_VERSION_METADATA",
-      asEffect: () => VersionMetadataBinding.bind(self),
-      [Symbol.iterator]: () =>
-        new SingleShotGen(VersionMetadataBinding.bind(self)),
+      asEffect: () => bindVersionMetadata(self),
+      [Symbol.iterator]: () => new SingleShotGen(bindVersionMetadata(self)),
     };
     return self;
   },
   {
-    bind: (...args: Parameters<typeof VersionMetadataBinding.bind>) =>
-      VersionMetadataBinding.bind(...args),
+    bind: (versionMetadata: VersionMetadata) =>
+      bindVersionMetadata(versionMetadata),
   },
 );

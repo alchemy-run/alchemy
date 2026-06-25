@@ -156,7 +156,7 @@ export type MtlsCertificate = Resource<
  *   certificates: caPem,
  * });
  *
- * const hd = yield* Cloudflare.Hyperdrive("my-db", {
+ * const hd = yield* Cloudflare.Hyperdrive.Connection("my-db", {
  *   origin: { ... },
  *   mtls: {
  *     caCertificateId: ca.mtlsCertificateId,

@@ -18,7 +18,7 @@ export default class Store extends DurableObjectNamespace<Store>()(
     // Outer (class-level) phase — resolve the binding factory once.
     // The actual secret read happens inside each DO instance below,
     // since `SecretClient.get()` needs the per-instance worker env.
-    const encryptionSecret = yield* Secret.Secret.bind(EncryptionKey);
+    const encryptionSecret = yield* Secret.ReadSecret(EncryptionKey);
     const state = yield* DurableObjectState;
     const storage = state.storage;
 
@@ -253,7 +253,7 @@ export default class Store extends DurableObjectNamespace<Store>()(
           ),
       };
     });
-  }).pipe(Effect.provide(Secret.SecretBindingLive)),
+  }).pipe(Effect.provide(Secret.ReadSecretBinding)),
 ) {
   /**
    * Well-known DO name whose sole job is to track the set of stacks

@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import { AnalyticsEngineDatasetBinding } from "./AnalyticsEngineDatasetBinding.ts";
 
 type AnalyticsEngineDatasetTypeId = typeof AnalyticsEngineDatasetTypeId;
 const AnalyticsEngineDatasetTypeId =
@@ -36,7 +35,7 @@ export type AnalyticsEngineDatasetProps = {
  *
  * @example Effect-style worker
  * ```typescript
- * const analytics = yield* Cloudflare.AnalyticsEngineDataset.bind(Analytics);
+ * const analytics = yield* Cloudflare.AnalyticsEngineDataset.WriteDataset(Analytics);
  * yield* analytics.writeDataPoint({ blobs: ["signup"] });
  * ```
  */
@@ -59,21 +58,10 @@ export const AnalyticsEngineDataset: {
     name: string,
     props?: AnalyticsEngineDatasetProps,
   ): Effect.Effect<AnalyticsEngineDataset>;
-  /**
-   * Bind Analytics Engine to the surrounding Worker, returning an
-   * Effect-native client with access to the native Workers runtime binding.
-   */
-  bind: typeof AnalyticsEngineDatasetBinding.bind;
-} = Object.assign(
-  Effect.fn(function* (name: string, props?: AnalyticsEngineDatasetProps) {
-    return {
-      kind: AnalyticsEngineDatasetTypeId,
-      name,
-      dataset: props?.dataset ?? name,
-    } satisfies AnalyticsEngineDataset;
-  }),
-  {
-    bind: (...args: Parameters<typeof AnalyticsEngineDatasetBinding.bind>) =>
-      AnalyticsEngineDatasetBinding.bind(...args),
-  },
-);
+} = Effect.fn(function* (name: string, props?: AnalyticsEngineDatasetProps) {
+  return {
+    kind: AnalyticsEngineDatasetTypeId,
+    name,
+    dataset: props?.dataset ?? name,
+  } satisfies AnalyticsEngineDataset;
+});

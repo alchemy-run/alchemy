@@ -41,7 +41,7 @@ export default DynamoDBStreamFunction.make(
   },
   Effect.gen(function* () {
     const { table, queue } = yield* TableAndQueue;
-    const sink = yield* AWS.SQS.QueueSink.bind(queue);
+    const sink = yield* AWS.SQS.QueueSink(queue);
 
     yield* AWS.DynamoDB.stream(table, {
       streamViewType: "NEW_AND_OLD_IMAGES",
@@ -65,10 +65,10 @@ export default DynamoDBStreamFunction.make(
       Layer.provideMerge(
         Layer.mergeAll(
           AWS.Lambda.TableEventSource,
-          AWS.SQS.QueueSinkLive,
+          AWS.SQS.QueueSinkBinding,
           TableAndQueueLive,
         ),
-        Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchBinding),
       ),
     ),
   ),

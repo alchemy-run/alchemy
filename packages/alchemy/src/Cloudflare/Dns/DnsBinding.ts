@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import type * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
 import type { Zone } from "../Zone/Zone.ts";
@@ -19,76 +19,51 @@ export interface DnsToken {
 }
 
 /**
- * Bind an {@link AccountApiToken}'s `value` output into the Worker (as a
- * `secret_text` binding) and return the {@link DnsToken} accessor.
- */
-export const bindDnsToken = (token: AccountApiToken) =>
-  Effect.gen(function* () {
-    const value = yield* token.value;
-    return { value } satisfies DnsToken;
-  });
-
-/**
- * Shared runtime body for a DNS binding: create a token scoped to the requested
- * zone, attach the (narrow) policy, bind the token's value and the zone's id
- * into the Worker, then build the client. Pass the result to
- * `Layer.effect(<Binding>, ...)`.
+ * Shared scaffolding for the HTTP-backed DNS bindings.
+ *
+ * Creates a least-privilege {@link AccountApiToken} scoped to the requested
+ * zone, binds its `value` into the host Worker at deploy time (guarded by
+ * `__ALCHEMY_RUNTIME__` so it is a no-op once running inside the deployed
+ * Worker), then delegates to `makeClient` with the bound token and the zone's
+ * `zoneId`.
  *
  * The zone's `zoneId` is bound into the Worker at init time, so the resulting
  * client closes over it and callers never pass it per request — the
  * provisioned token only grants access to that one zone anyway.
  */
-export const makeDnsClient = <C>(
-  Policy: Binding.Policy<
-    any,
-    any,
-    (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
-  >,
-  tokenId: string,
-  makeClient: (token: DnsToken, zoneId: Effect.Effect<string>) => C,
-) =>
+export const makeHttpDnsBinding = <Client>(options: {
+  permissionGroups: ApiTokenPermissionGroupRef[];
+  makeClient: (token: DnsToken, zoneId: Effect.Effect<string>) => Client;
+}) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
-    const attach = yield* Policy;
+    const self = yield* Self;
 
     return Effect.fn(function* (zone: Zone) {
-      const token = yield* Token(tokenId);
-      yield* attach(token, zone);
+      const token = yield* Token(`${self.LogicalId}Token`);
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* token.bind`${self.LogicalId}(${zone})`({
+          policies: [
+            {
+              effect: "allow",
+              permissionGroups: options.permissionGroups,
+              resources: zone.zoneId.pipe(
+                Output.flatMap(
+                  (zoneId) =>
+                    Output.interpolate`com.cloudflare.api.account.zone.${zoneId}`,
+                ),
+                Output.map((zoneId) => ({
+                  [zoneId]: "*",
+                })),
+              ),
+            },
+          ],
+        });
+      }
+      const bound = {
+        value: yield* token.value,
+      } satisfies DnsToken;
       const zoneId = yield* zone.zoneId;
-      return makeClient(yield* bindDnsToken(token), zoneId);
+      return options.makeClient(bound, zoneId);
     });
   });
-
-/**
- * Build the deploy-time policy layer for a DNS binding: attach an allow policy
- * with the given permission groups, scoped to the requested zone
- * (`com.cloudflare.api.account.zone.<zoneId>`).
- */
-export const makeDnsPolicyLive = <Self, Id extends string>(
-  Policy: Binding.Policy<
-    Self,
-    Id,
-    (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
-  >,
-  sid: string,
-  permissionGroups: ApiTokenPermissionGroupRef[],
-) =>
-  Policy.layer.succeed((_host, token, zone) =>
-    token.bind`${sid}(${zone})`({
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups,
-          resources: zone.zoneId.pipe(
-            Output.flatMap(
-              (zoneId) =>
-                Output.interpolate`com.cloudflare.api.account.zone.${zoneId}`,
-            ),
-            Output.map((zoneId) => ({
-              [zoneId]: "*",
-            })),
-          ),
-        },
-      ],
-    }),
-  );

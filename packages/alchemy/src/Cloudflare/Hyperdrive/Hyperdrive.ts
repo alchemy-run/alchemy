@@ -12,7 +12,6 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import { HyperdriveBinding } from "./HyperdriveBinding.ts";
 
 export type HyperdriveScheme = "postgres" | "postgresql" | "mysql";
 
@@ -112,7 +111,7 @@ export type HyperdriveProps = {
   dev?: HyperdriveDevOrigin;
 };
 
-export type Hyperdrive = Resource<
+export type Connection = Resource<
   "Cloudflare.Hyperdrive",
   HyperdriveProps,
   {
@@ -139,7 +138,7 @@ export type Hyperdrive = Resource<
  * @section Creating a Hyperdrive
  * @example Public Postgres origin
  * ```typescript
- * const hd = yield* Cloudflare.Hyperdrive("my-pg", {
+ * const hd = yield* Cloudflare.Hyperdrive.Connection("my-pg", {
  *   origin: {
  *     scheme: "postgres",
  *     host: "db.example.com",
@@ -154,20 +153,18 @@ export type Hyperdrive = Resource<
  * @section Binding to a Worker
  * @example Using Hyperdrive inside a Worker
  * ```typescript
- * const hd = yield* Cloudflare.Hyperdrive.bind(MyDB);
+ * const hd = yield* Cloudflare.Hyperdrive.Connect(MyConnection);
  * const url = yield* hd.connectionString;
  * ```
  */
-export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive")({
-  bind: HyperdriveBinding.bind,
-});
+export const Connection = Resource<Connection>("Cloudflare.Hyperdrive");
 
-export const isHyperdrive = (value: unknown): value is Hyperdrive =>
+export const isHyperdrive = (value: unknown): value is Connection =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === "Cloudflare.Hyperdrive";
 
-export const HyperdriveProvider = () =>
-  Provider.succeed(Hyperdrive, {
+export const ConnectionProvider = () =>
+  Provider.succeed(Connection, {
     // The `hyperdriveId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
     stables: ["accountId"],
     list: Effect.fn(function* () {

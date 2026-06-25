@@ -16,7 +16,7 @@ import { cloneD1Database } from "./D1Clone.ts";
 import { importD1Database } from "./D1Import.ts";
 import { applyMigrations } from "./D1Migrations.ts";
 
-export const isD1Database = (value: unknown): value is D1Database =>
+export const isD1Database = (value: unknown): value is Database =>
   typeof value === "object" && (value as any)?.Type === "Cloudflare.D1Database";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
@@ -30,10 +30,7 @@ export type PrimaryLocationHint =
 
 const DEFAULT_MIGRATIONS_TABLE = "d1_migrations";
 
-export type CloneSource =
-  | D1Database
-  | { databaseId: string }
-  | { name: string };
+export type CloneSource = Database | { databaseId: string } | { name: string };
 
 export type DatabaseProps = {
   /**
@@ -110,7 +107,7 @@ export type DatabaseProps = {
   clone?: CloneSource;
 };
 
-export type D1Database = Resource<
+export type Database = Resource<
   "Cloudflare.D1Database",
   DatabaseProps,
   {
@@ -139,14 +136,14 @@ export type D1Database = Resource<
  * @section Creating a Database
  * @example Basic database
  * ```typescript
- * const db = yield* Cloudflare.D1Database("my-db");
+ * const db = yield* Cloudflare.D1.Database("my-db");
  * ```
  *
  * @example Database with location hint
  * The primary copy of the data is stored in the chosen region; reads can be
  * served closer to users when read replication is enabled.
  * ```typescript
- * const db = yield* Cloudflare.D1Database("my-db", {
+ * const db = yield* Cloudflare.D1.Database("my-db", {
  *   primaryLocationHint: "wnam",
  * });
  * ```
@@ -155,14 +152,14 @@ export type D1Database = Resource<
  * Read replication is the only mutable property after creation — toggling it
  * triggers an update rather than a replacement.
  * ```typescript
- * const db = yield* Cloudflare.D1Database("my-db", {
+ * const db = yield* Cloudflare.D1.Database("my-db", {
  *   readReplication: { mode: "auto" },
  * });
  * ```
  *
  * @example Database in a specific jurisdiction
  * ```typescript
- * const db = yield* Cloudflare.D1Database("my-db", {
+ * const db = yield* Cloudflare.D1.Database("my-db", {
  *   jurisdiction: "eu",
  * });
  * ```
@@ -180,14 +177,14 @@ export type D1Database = Resource<
  *
  * @example Apply migrations from a directory
  * ```typescript
- * const db = yield* Cloudflare.D1Database("my-db", {
+ * const db = yield* Cloudflare.D1.Database("my-db", {
  *   migrationsDir: "./migrations",
  * });
  * ```
  *
  * @example Custom migrations table (e.g. for Drizzle)
  * ```typescript
- * const db = yield* Cloudflare.D1Database("my-db", {
+ * const db = yield* Cloudflare.D1.Database("my-db", {
  *   migrationsDir: "./migrations",
  *   migrationsTable: "drizzle_migrations",
  * });
@@ -200,7 +197,7 @@ export type D1Database = Resource<
  *
  * @example Seed a database with SQL files
  * ```typescript
- * const db = yield* Cloudflare.D1Database("my-db", {
+ * const db = yield* Cloudflare.D1.Database("my-db", {
  *   importFiles: ["./seed/users.sql", "./seed/posts.sql"],
  * });
  * ```
@@ -212,22 +209,22 @@ export type D1Database = Resource<
  *
  * @example Clone by passing the source resource directly
  * ```typescript
- * const source = yield* Cloudflare.D1Database("source-db");
- * const cloned = yield* Cloudflare.D1Database("cloned-db", {
+ * const source = yield* Cloudflare.D1.Database("source-db");
+ * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
  *   clone: source,
  * });
  * ```
  *
  * @example Clone by databaseId
  * ```typescript
- * const cloned = yield* Cloudflare.D1Database("cloned-db", {
+ * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
  *   clone: { databaseId: "abcdef12-3456-7890-abcd-ef1234567890" },
  * });
  * ```
  *
  * @example Clone by name
  * ```typescript
- * const cloned = yield* Cloudflare.D1Database("cloned-db", {
+ * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
  *   clone: { name: "source-db" },
  * });
  * ```
@@ -235,7 +232,7 @@ export type D1Database = Resource<
  * @section Binding to a Worker
  * @example Using D1 inside a Worker
  * ```typescript
- * const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ * const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *
  * // Run a query
  * const results = yield* db.prepare("SELECT * FROM users WHERE id = ?")
@@ -250,10 +247,10 @@ export type D1Database = Resource<
  *
  * @see https://developers.cloudflare.com/d1/
  */
-export const D1Database = Resource<D1Database>("Cloudflare.D1Database");
+export const Database = Resource<Database>("Cloudflare.D1Database");
 
 export const DatabaseProvider = () =>
-  Provider.succeed(D1Database, {
+  Provider.succeed(Database, {
     stables: ["databaseId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

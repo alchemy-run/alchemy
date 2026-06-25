@@ -20,13 +20,13 @@ export type InferEnv<W> =
 export type GetBindingType<T> =
   T extends Effect.Effect<infer A, infer _E, infer _R>
     ? GetBindingType<A>
-    : T extends Cloudflare.FlagshipApp
+    : T extends Cloudflare.Flagship.App
       ? Flagship
       : T extends Cloudflare.Assets
         ? Service
         : T extends Rpc<infer Shape extends object>
           ? RpcWireShape<Shape> & Service
-          : T extends Cloudflare.D1Database
+          : T extends Cloudflare.D1.Database
             ? D1Database
             : T extends Cloudflare.R2Bucket
               ? R2Bucket
@@ -34,25 +34,25 @@ export type GetBindingType<T> =
                 ? KVNamespace
                 : T extends Cloudflare.Queue
                   ? Queue<unknown>
-                  : T extends Cloudflare.AiGateway
+                  : T extends Cloudflare.AiGateway.Gateway
                     ? Ai
-                    : T extends Cloudflare.AiSearchInstance
+                    : T extends Cloudflare.AiSearch.Instance
                       ? AiSearchInstance
-                      : T extends Cloudflare.AiSearchNamespace
+                      : T extends Cloudflare.AiSearch.Namespace
                         ? AiSearchNamespace
                         : T extends Cloudflare.SendEmail
                           ? SendEmail
                           : T extends Cloudflare.AnalyticsEngineDataset
                             ? AnalyticsEngineDataset
-                            : T extends Cloudflare.Artifacts
+                            : T extends Cloudflare.Artifacts.Artifacts
                               ? Artifacts
-                              : T extends Cloudflare.RateLimit
+                              : T extends Cloudflare.RateLimitMarker
                                 ? RateLimit
                                 : T extends Cloudflare.Images
                                   ? ImagesBinding
                                   : T extends Cloudflare.Browser
                                     ? BrowserRun
-                                    : T extends Cloudflare.Hyperdrive
+                                    : T extends Cloudflare.Hyperdrive.Connection
                                       ? Hyperdrive
                                       : T extends Cloudflare.VersionMetadata
                                         ? WorkerVersionMetadata

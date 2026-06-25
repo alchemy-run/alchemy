@@ -5,7 +5,7 @@ import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { CounterRpcs } from "./group.ts";
 
-export const MyDB = Cloudflare.D1Database("MyDB");
+export const MyDB = Cloudflare.D1.Database("MyDB");
 
 const DO_COUNT_KEY = "do_count";
 
@@ -22,7 +22,7 @@ export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
 // the DO's `fetch` handler will serve.
 export const CounterLive = Counter.make(
   Effect.gen(function* () {
-    const db = yield* Cloudflare.D1Connection.bind(MyDB);
+    const db = yield* Cloudflare.D1.QueryDatabase(MyDB);
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {

@@ -1,14 +1,10 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
-import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Browser as BrowserLike } from "./Browser.ts";
-import type { Providers } from "../Providers.ts";
 
 export class BrowserError extends Data.TaggedError("BrowserError")<{
   message: string;
@@ -159,51 +155,14 @@ export interface BrowserClient {
  * @product Browser Rendering
  * @category Developer Platform
  */
-export class BrowserBinding extends Binding.Service<
+export interface BrowserBinding extends Binding.Service<
   BrowserBinding,
+  "Cloudflare.Browser.Binding",
   (browser: BrowserLike) => Effect.Effect<BrowserClient>
->()("Cloudflare.Browser.Binding") {}
+> {}
 
-export const BrowserBindingLive = Layer.effect(
-  BrowserBinding,
-  Effect.gen(function* () {
-    const Policy = yield* BrowserBindingPolicy;
-    const env = yield* WorkerEnvironment;
-
-    return Effect.fn(function* (browser: BrowserLike) {
-      yield* Policy(browser);
-      const raw: Effect.Effect<cf.BrowserRun, never, RuntimeContext> =
-        Effect.sync(
-          () => (env as Record<string, cf.BrowserRun>)[browser.name]!,
-        );
-      return makeBrowserClient(raw);
-    });
-  }),
-);
-
-export class BrowserBindingPolicy extends Binding.Policy<
-  BrowserBindingPolicy,
-  (browser: BrowserLike) => Effect.Effect<void>,
-  Providers
->()("Cloudflare.Browser.Binding") {}
-
-export const BrowserBindingPolicyLive = BrowserBindingPolicy.layer.succeed(
-  Effect.fn(function* (host: ResourceLike, browser: BrowserLike) {
-    if (isWorker(host)) {
-      yield* host.bind(browser.name, {
-        bindings: [
-          {
-            type: "browser",
-            name: browser.name,
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        new Error(`BrowserBinding does not support runtime '${host.Type}'`),
-      );
-    }
-  }),
+export const BrowserBinding = Binding.Service<BrowserBinding>(
+  "Cloudflare.Browser.Binding",
 );
 
 const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, BrowserError> =>

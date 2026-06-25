@@ -1,14 +1,10 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
-import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Images as ImagesLike } from "./Images.ts";
-import type { Providers } from "../Providers.ts";
 
 export class ImagesError extends Data.TaggedError("ImagesError")<{
   message: string;
@@ -78,122 +74,21 @@ export interface ImagesClient {
 }
 
 /**
+ * The Cloudflare Images runtime binding. A single identifier that is
+ * simultaneously the binding's Context tag, its type, and the callable —
+ * `yield* Cloudflare.Images(...)` resolves through this. Prefer yielding the
+ * {@link ImagesLike} marker (`Cloudflare.Images({ name })`) directly.
+ *
  * @binding
  * @product Images
  * @category Media
  */
-export class ImagesBinding extends Binding.Service<
+export interface ImagesBinding extends Binding.Service<
   ImagesBinding,
+  "Cloudflare.Images.Binding",
   (images: ImagesLike) => Effect.Effect<ImagesClient>
->()("Cloudflare.Images.Binding") {}
+> {}
 
-export const ImagesBindingLive = Layer.effect(
-  ImagesBinding,
-  Effect.gen(function* () {
-    const Policy = yield* ImagesBindingPolicy;
-    const env = yield* WorkerEnvironment;
-
-    return Effect.fn(function* (images: ImagesLike) {
-      yield* Policy(images);
-      const raw = Effect.sync(
-        // this must be lazy because the WorkerEnvironment is not available yet
-        () => (env as Record<string, cf.ImagesBinding>)[images.name]!,
-      );
-
-      return {
-        raw,
-        info: (stream, options) =>
-          Effect.gen(function* () {
-            const binding = yield* raw;
-            const readable = yield* toCfReadable(stream);
-            return yield* tryPromise(() => binding.info(readable, options));
-          }),
-        input: (stream, options) =>
-          Effect.gen(function* () {
-            const binding = yield* raw;
-            const readable = yield* toCfReadable(stream);
-            return wrapTransformer(binding.input(readable, options));
-          }),
-      } satisfies ImagesClient;
-    });
-  }),
+export const ImagesBinding = Binding.Service<ImagesBinding>(
+  "Cloudflare.Images.Binding",
 );
-
-export class ImagesBindingPolicy extends Binding.Policy<
-  ImagesBindingPolicy,
-  (images: ImagesLike) => Effect.Effect<void>,
-  Providers
->()("Cloudflare.Images.Binding") {}
-
-export const ImagesBindingPolicyLive = ImagesBindingPolicy.layer.succeed(
-  Effect.fn(function* (host: ResourceLike, images: ImagesLike) {
-    if (isWorker(host)) {
-      yield* host.bind(images.name, {
-        bindings: [
-          {
-            type: "images",
-            name: images.name,
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        new Error(`ImagesBinding does not support runtime '${host.Type}'`),
-      );
-    }
-  }),
-);
-
-const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, ImagesError> =>
-  Effect.tryPromise({
-    try: fn,
-    catch: (error: any) =>
-      new ImagesError({
-        message: error?.message ?? "Unknown error",
-        code: typeof error?.code === "number" ? error.code : undefined,
-        cause: error,
-      }),
-  });
-
-/**
- * Convert an Effect `Stream<Uint8Array>` into the `cf.ReadableStream<Uint8Array>`
- * shape that the Cloudflare Images runtime binding expects. The two
- * `ReadableStream` types only differ at the type level; at runtime they
- * are the same Web Streams API.
- */
-const toCfReadable = <E, R>(
-  stream: Stream.Stream<Uint8Array, E, R>,
-): Effect.Effect<cf.ReadableStream<Uint8Array>, never, R> =>
-  Stream.toReadableStreamEffect(stream).pipe(
-    Effect.map((s) => s as unknown as cf.ReadableStream<Uint8Array>),
-  );
-
-const isTransformerClient = (image: unknown): image is ImageTransformerClient =>
-  typeof image === "object" && image !== null && "raw" in image;
-
-const wrapTransformer = (raw: cf.ImageTransformer): ImageTransformerClient => ({
-  raw,
-  transform: (transform) => wrapTransformer(raw.transform(transform)),
-  draw: <E, R>(
-    image: Stream.Stream<Uint8Array, E, R> | ImageTransformerClient,
-    options?: cf.ImageDrawOptions,
-  ): Effect.Effect<ImageTransformerClient, never, R> => {
-    if (isTransformerClient(image)) {
-      return Effect.succeed(wrapTransformer(raw.draw(image.raw, options)));
-    }
-    return toCfReadable(image).pipe(
-      Effect.map((readable) => wrapTransformer(raw.draw(readable, options))),
-    );
-  },
-  output: (options) =>
-    tryPromise(() => raw.output(options)).pipe(Effect.map(wrapResult)),
-});
-
-const wrapResult = (
-  raw: cf.ImageTransformationResult,
-): ImageTransformationResultClient => ({
-  raw,
-  response: Effect.sync(() => raw.response()),
-  contentType: Effect.sync(() => raw.contentType()),
-  image: (options) => Effect.sync(() => raw.image(options)),
-});

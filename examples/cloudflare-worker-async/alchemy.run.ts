@@ -4,7 +4,7 @@ import { Config } from "effect";
 import * as Effect from "effect/Effect";
 import type { Counter as CounterClass } from "./src/worker.ts";
 
-export const DB = Cloudflare.D1Database("DB");
+export const DB = Cloudflare.D1.Database("DB");
 
 export const Bucket = Cloudflare.R2Bucket("Bucket");
 

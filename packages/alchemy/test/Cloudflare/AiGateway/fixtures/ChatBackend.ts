@@ -14,7 +14,7 @@ export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatB
   "ChatBackend",
   Effect.gen(function* () {
     // Init phase: bind the AI Gateway and build the LanguageModel layer.
-    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+    const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
     const languageModel = aiGateway.model({
       model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       parameters: { temperature: 0.2, maxTokens: 512 },
@@ -27,7 +27,9 @@ export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatB
       // (in scope here).
       const persistence = yield* Chat.makePersisted({
         storeId: "alchemy.chat",
-      }).pipe(Effect.provide(Cloudflare.DurableObjectChatPersistence));
+      }).pipe(
+        Effect.provide(Cloudflare.AiGateway.DurableObjectChatPersistence),
+      );
 
       return {
         send: (threadId: string, prompt: string) =>
@@ -42,5 +44,7 @@ export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatB
           }).pipe(Effect.provide(languageModel), Effect.orDie),
       };
     });
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.AiGatewayBindingLive))),
+  }).pipe(
+    Effect.provide(Layer.mergeAll(Cloudflare.AiGateway.InferenceBinding)),
+  ),
 ) {}

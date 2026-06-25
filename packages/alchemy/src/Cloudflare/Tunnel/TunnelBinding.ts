@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import type * as Binding from "../../Binding.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -31,52 +30,28 @@ export const bindTunnelToken = (token: AccountApiToken) =>
   });
 
 /**
- * Shared runtime body for a tunnel binding: create a scoped token, attach the
- * (narrow) policy, bind the token's outputs into the Worker, then build the
- * client. Pass the result to `Layer.effect(<Binding>, ...)`.
+ * Shared runtime body for a tunnel binding. Mints a scoped
+ * {@link AccountApiToken} (with the given permission groups), attaches the
+ * narrow allow-policy to it (guarded by the runtime flag so it is a no-op once
+ * deployed), binds the token's outputs into the Worker, then builds the client.
+ *
+ * Pass the result to `Layer.effect(<Callable>, ...)`.
  */
 export const makeTunnelClient = <C>(
-  Policy: Binding.Policy<
-    any,
-    any,
-    (
-      token: AccountApiToken,
-    ) => Effect.Effect<void, never, CloudflareEnvironment>
-  >,
+  sid: string,
+  permissionGroups: ApiTokenPermissionGroupRef[],
   makeClient: (token: TunnelToken) => C,
 ) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
-    const attach = yield* Policy;
+    const env = yield* CloudflareEnvironment;
 
     return Effect.fn(function* () {
       const ctx = yield* Worker;
       const token = yield* Token(`${ctx.LogicalId}Token`);
-      yield* attach(token);
-      return makeClient(yield* bindTunnelToken(token));
-    });
-  });
-
-/**
- * Build the deploy-time policy layer for a tunnel binding: attach an allow
- * policy with the given permission groups to the binding's token.
- */
-export const makeTunnelPolicyLive = <Self, Id extends string>(
-  Policy: Binding.Policy<
-    Self,
-    Id,
-    (
-      token: AccountApiToken,
-    ) => Effect.Effect<void, never, CloudflareEnvironment>
-  >,
-  sid: string,
-  permissionGroups: ApiTokenPermissionGroupRef[],
-) =>
-  Policy.layer.succeed((_host, token) =>
-    CloudflareEnvironment.pipe(
-      Effect.flatMap((env) => env),
-      Effect.flatMap(({ accountId }) =>
-        token.bind(sid, {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { accountId } = yield* env;
+        yield* token.bind(sid, {
           policies: [
             {
               effect: "allow",
@@ -86,7 +61,8 @@ export const makeTunnelPolicyLive = <Self, Id extends string>(
               },
             },
           ],
-        }),
-      ),
-    ),
-  );
+        });
+      }
+      return makeClient(yield* bindTunnelToken(token));
+    });
+  });

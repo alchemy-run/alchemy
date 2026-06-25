@@ -1,5 +1,6 @@
 export * from "./AiGateway.ts";
-export * from "./AiGatewayBinding.ts";
+export * from "./Inference.ts";
+export * from "./InferenceBinding.ts";
 export * from "./DurableObjectChatPersistence.ts";
 export * from "./LanguageModel.ts";
 export * from "./Dataset.ts";

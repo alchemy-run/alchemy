@@ -48,7 +48,7 @@ const expectGone = (accountId: string, id: string) =>
 // value into the service token.
 const program = (
   accountId: string,
-  props?: Partial<Cloudflare.AiSearchTokenProps>,
+  props?: Partial<Cloudflare.AiSearch.TokenProps>,
 ) =>
   Effect.gen(function* () {
     const apiToken = yield* Cloudflare.AccountApiToken("TokenSource", {
@@ -60,7 +60,7 @@ const program = (
         },
       ],
     });
-    const token = yield* Cloudflare.AiSearchToken("Token", {
+    const token = yield* Cloudflare.AiSearch.Token("Token", {
       cfApiId: apiToken.tokenId,
       cfApiKey: apiToken.value,
       ...props,
@@ -166,7 +166,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(program(accountId));
 
-      const provider = yield* Provider.findProvider(Cloudflare.AiSearchToken);
+      const provider = yield* Provider.findProvider(Cloudflare.AiSearch.Token);
       const all = yield* provider.list();
 
       const found = all.find((t) => t.id === deployed.token.id);
@@ -197,7 +197,7 @@ test.provider(
         Effect.gen(function* () {
           const { apiToken, token } = yield* program(accountId);
           const bucket = yield* Cloudflare.R2Bucket("AiSearchTokenSource", {});
-          const instance = yield* Cloudflare.AiSearchInstance("Search", {
+          const instance = yield* Cloudflare.AiSearch.Instance("Search", {
             source: bucket.bucketName,
             tokenId: token.id,
           });

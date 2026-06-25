@@ -9,10 +9,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AiGatewayEvaluationTypeId = "Cloudflare.AiGateway.Evaluation" as const;
-type AiGatewayEvaluationTypeId = typeof AiGatewayEvaluationTypeId;
+const EvaluationTypeId = "Cloudflare.AiGateway.Evaluation" as const;
+type EvaluationTypeId = typeof EvaluationTypeId;
 
-export type AiGatewayEvaluationProps = {
+export type EvaluationProps = {
   /**
    * The AI Gateway the evaluation runs against. Changing the gateway
    * triggers a replacement.
@@ -27,7 +27,7 @@ export type AiGatewayEvaluationProps = {
   name?: string;
   /**
    * The datasets (saved log filters) the evaluation processes. Usually the
-   * `datasetId` attributes of `AiGatewayDataset` resources on the same
+   * `datasetId` attributes of `Dataset` resources on the same
    * gateway. Changing the datasets triggers a replacement.
    */
   datasetIds: string[];
@@ -39,7 +39,7 @@ export type AiGatewayEvaluationProps = {
   evaluationTypeIds: string[];
 };
 
-export type AiGatewayEvaluationAttributes = {
+export type EvaluationAttributes = {
   /**
    * Server-generated evaluation identifier. Stable for the lifetime of the
    * evaluation.
@@ -84,10 +84,10 @@ export type AiGatewayEvaluationAttributes = {
   modifiedAt: string;
 };
 
-export type AiGatewayEvaluation = Resource<
-  AiGatewayEvaluationTypeId,
-  AiGatewayEvaluationProps,
-  AiGatewayEvaluationAttributes,
+export type Evaluation = Resource<
+  EvaluationTypeId,
+  EvaluationProps,
+  EvaluationAttributes,
   never,
   Providers
 >;
@@ -105,15 +105,15 @@ export type AiGatewayEvaluation = Resource<
  * @section Creating an Evaluation
  * @example Evaluate a dataset for speed and cost
  * ```typescript
- * const gateway = yield* Cloudflare.AiGateway("Gateway");
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway");
  *
- * const dataset = yield* Cloudflare.AiGatewayDataset("SuccessLogs", {
+ * const dataset = yield* Cloudflare.AiGateway.Dataset("SuccessLogs", {
  *   gatewayId: gateway.gatewayId,
  *   filters: [{ key: "success", operator: "eq", value: [true] }],
  * });
  *
  * const types = yield* listEvaluationTypes(gateway.accountId);
- * const evaluation = yield* Cloudflare.AiGatewayEvaluation("Baseline", {
+ * const evaluation = yield* Cloudflare.AiGateway.Evaluation("Baseline", {
  *   gatewayId: gateway.gatewayId,
  *   datasetIds: [dataset.datasetId],
  *   evaluationTypeIds: types
@@ -124,18 +124,13 @@ export type AiGatewayEvaluation = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/evaluations/
  */
-export const AiGatewayEvaluation = Resource<AiGatewayEvaluation>(
-  AiGatewayEvaluationTypeId,
-);
+export const Evaluation = Resource<Evaluation>(EvaluationTypeId);
 
 /**
- * Returns true if the given value is an AiGatewayEvaluation resource.
+ * Returns true if the given value is an Evaluation resource.
  */
-export const isAiGatewayEvaluation = (
-  value: unknown,
-): value is AiGatewayEvaluation =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AiGatewayEvaluationTypeId;
+export const isAiGatewayEvaluation = (value: unknown): value is Evaluation =>
+  Predicate.hasProperty(value, "Type") && value.Type === EvaluationTypeId;
 
 /**
  * List the evaluation types available on the account (speed, cost,
@@ -147,8 +142,8 @@ export const listEvaluationTypes = (accountId: string) =>
     .listEvaluationTypes({ accountId, perPage: 50 })
     .pipe(Effect.map((page) => page.result));
 
-export const AiGatewayEvaluationProvider = () =>
-  Provider.succeed(AiGatewayEvaluation, {
+export const EvaluationProvider = () =>
+  Provider.succeed(Evaluation, {
     stables: ["evaluationId", "accountId", "gatewayId", "createdAt"],
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return undefined;
@@ -340,7 +335,7 @@ const toAttributes = (
     | aiGateway.ListEvaluationsResponse["result"][number],
   accountId: string,
   knownEvaluationTypeIds: string[],
-): AiGatewayEvaluationAttributes => ({
+): EvaluationAttributes => ({
   evaluationId: evaluation.id,
   accountId,
   gatewayId: evaluation.gatewayId,

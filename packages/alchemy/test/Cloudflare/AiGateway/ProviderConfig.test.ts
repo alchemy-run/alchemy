@@ -68,19 +68,19 @@ test.provider("create, noop, replace, delete a BYOK provider config", (stack) =>
       Effect.gen(function* () {
         // Cloudflare allows a single Secrets Store per account — the
         // resource adopts the existing one and never deletes it.
-        const store = yield* Cloudflare.SecretsStore("PcStore");
-        const gateway = yield* Cloudflare.AiGateway("PcGateway", {
+        const store = yield* Cloudflare.SecretsStore.Store("PcStore");
+        const gateway = yield* Cloudflare.AiGateway.Gateway("PcGateway", {
           id: LIFECYCLE_GATEWAY_ID,
           // BYOK resolution requires the gateway to reference the store.
           storeId: store.storeId,
         });
-        const secret = yield* Cloudflare.Secret("PcSecret", {
+        const secret = yield* Cloudflare.SecretsStore.Secret("PcSecret", {
           store,
           name: secretName(LIFECYCLE_GATEWAY_ID),
           value: Redacted.make(SECRET_VALUE),
           scopes: ["ai_gateway"],
         });
-        const config = yield* Cloudflare.AiGatewayProviderConfig("Byok", {
+        const config = yield* Cloudflare.AiGateway.ProviderConfig("Byok", {
           gatewayId: gateway.gatewayId,
           providerSlug: PROVIDER_SLUG,
           alias: ALIAS,
@@ -157,18 +157,18 @@ test.provider("list enumerates the deployed provider config", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const store = yield* Cloudflare.SecretsStore("PcListStore");
-        const gateway = yield* Cloudflare.AiGateway("PcListGateway", {
+        const store = yield* Cloudflare.SecretsStore.Store("PcListStore");
+        const gateway = yield* Cloudflare.AiGateway.Gateway("PcListGateway", {
           id: LIST_GATEWAY_ID,
           storeId: store.storeId,
         });
-        const secret = yield* Cloudflare.Secret("PcListSecret", {
+        const secret = yield* Cloudflare.SecretsStore.Secret("PcListSecret", {
           store,
           name: secretName(LIST_GATEWAY_ID),
           value: Redacted.make(SECRET_VALUE),
           scopes: ["ai_gateway"],
         });
-        return yield* Cloudflare.AiGatewayProviderConfig("ByokList", {
+        return yield* Cloudflare.AiGateway.ProviderConfig("ByokList", {
           gatewayId: gateway.gatewayId,
           providerSlug: PROVIDER_SLUG,
           alias: ALIAS,
@@ -179,7 +179,7 @@ test.provider("list enumerates the deployed provider config", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AiGatewayProviderConfig,
+      Cloudflare.AiGateway.ProviderConfig,
     );
     const all = yield* provider.list();
 

@@ -11,19 +11,64 @@ import type {
 } from "@distilled.cloud/cloudflare/zero-trust";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import {
-  makeTunnelClient,
-  makeTunnelPolicyLive,
-  type TunnelToken,
-} from "./TunnelBinding.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { type TunnelToken } from "./TunnelBinding.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
-import type { Providers } from "../Providers.ts";
+
+/**
+ * Binding that lets a Worker read Cloudflare Tunnels at runtime.
+ *
+ * Creates a scoped {@link AccountApiToken} with only the `Cloudflare Tunnel
+ * Read` permission and binds its outputs into the Worker (the token value as a
+ * `secret_text` binding) so runtime code can authenticate.
+ *
+ * @binding
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
+ *
+ * `TunnelRead` is a single identifier that is simultaneously the binding's
+ * Context tag, its type, and the callable — `yield* Cloudflare.TunnelRead()`.
+ *
+ * @section Reading tunnels at runtime
+ * @example Bind the read client
+ * Bind once in the Init phase; every method is available on the returned client.
+ * ```typescript
+ * const tunnels = yield* Cloudflare.TunnelRead();
+ * ```
+ *
+ * @example List tunnels
+ * ```typescript
+ * const { result } = yield* tunnels.list({ isDeleted: false });
+ * ```
+ *
+ * @example Fetch a tunnel and its connector token
+ * `getToken` returns the plaintext token used to run `cloudflared`.
+ * ```typescript
+ * const tunnel = yield* tunnels.get(tunnelId);
+ * const token = yield* tunnels.getToken(tunnelId);
+ * ```
+ *
+ * @example Read the ingress configuration
+ * ```typescript
+ * const { config } = yield* tunnels.getConfiguration(tunnelId);
+ * ```
+ *
+ * @section Runtime Layer
+ * Provide {@link TunnelReadBinding} in the Worker's runtime layer.
+ * ```typescript
+ * Effect.provide(Cloudflare.TunnelReadBinding)
+ * ```
+ */
+export interface TunnelRead extends Binding.Service<
+  TunnelRead,
+  "Cloudflare.TunnelRead",
+  () => Effect.Effect<TunnelReadClient, never, Worker | CloudflareEnvironment>
+> {}
+
+export const TunnelRead = Binding.Service<TunnelRead>("Cloudflare.TunnelRead");
 
 /** List-tunnels request, minus the account id (supplied by the binding). */
 export type ListTunnelsRequest = Omit<
@@ -102,72 +147,3 @@ export const readClient = (token: TunnelToken): TunnelReadClient => {
     ),
   };
 };
-
-/**
- * Binding that lets a Worker read Cloudflare Tunnels at runtime.
- *
- * Creates a scoped {@link AccountApiToken} with only the `Cloudflare Tunnel
- * Read` permission and binds its outputs into the Worker (the token value as a
- * `secret_text` binding) so runtime code can authenticate.
- *
- * @binding
- * @product Tunnels
- * @category Cloudflare One (Zero Trust)
- *
- * @section Reading tunnels at runtime
- * @example Bind the read client
- * Bind once in the Init phase; every method is available on the returned client.
- * ```typescript
- * const tunnels = yield* Cloudflare.TunnelRead.bind();
- * ```
- *
- * @example List tunnels
- * ```typescript
- * const { result } = yield* tunnels.list({ isDeleted: false });
- * ```
- *
- * @example Fetch a tunnel and its connector token
- * `getToken` returns the plaintext token used to run `cloudflared`.
- * ```typescript
- * const tunnel = yield* tunnels.get(tunnelId);
- * const token = yield* tunnels.getToken(tunnelId);
- * ```
- *
- * @example Read the ingress configuration
- * ```typescript
- * const { config } = yield* tunnels.getConfiguration(tunnelId);
- * ```
- *
- * @section Runtime Layer
- * Provide {@link TunnelReadLive} in the Worker's runtime layer.
- * ```typescript
- * Effect.provide(Cloudflare.TunnelReadLive)
- * ```
- */
-export class TunnelRead extends Binding.Service<
-  TunnelRead,
-  () => Effect.Effect<TunnelReadClient, never, Worker | CloudflareEnvironment>
->()("Cloudflare.TunnelRead") {}
-
-/**
- * Deploy-time policy for {@link TunnelRead}. Attaches the `Cloudflare Tunnel
- * Read` permission to the token via its binding contract.
- */
-export class TunnelReadPolicy extends Binding.Policy<
-  TunnelReadPolicy,
-  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>,
-  Providers
->()("Cloudflare.TunnelRead") {}
-
-/** Runtime layer for {@link TunnelRead}. */
-export const TunnelReadLive = Layer.effect(
-  TunnelRead,
-  makeTunnelClient(TunnelReadPolicy, readClient),
-);
-
-/** Live deploy-time policy layer for {@link TunnelReadPolicy}. */
-export const TunnelReadPolicyLive = makeTunnelPolicyLive(
-  TunnelReadPolicy,
-  "Cloudflare.TunnelRead",
-  ["Cloudflare Tunnel Read"],
-);

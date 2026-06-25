@@ -107,7 +107,7 @@ resource is declared as an Effect and `yield*`-ed inside a Stack:
 
 ```typescript
 const bucket = yield* Cloudflare.R2Bucket("Bucket");
-const db = yield* Cloudflare.D1Database("DB");
+const db = yield* Cloudflare.D1.Database("DB");
 const queue = yield* AWS.SQS.Queue("Jobs");
 ```
 

@@ -20,7 +20,7 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const dns = yield* Cloudflare.DnsReadWrite.bind(Zone);
+    const dns = yield* Cloudflare.DnsReadWrite(Zone);
 
     return {
       fetch: Effect.gen(function* () {
@@ -69,5 +69,5 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.DnsReadWriteLive)),
+  }).pipe(Effect.provide(Cloudflare.DnsReadWriteBinding)),
 ) {}

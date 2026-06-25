@@ -1,5 +1,6 @@
 export * from "./Aurora.ts";
 export * from "./Connect.ts";
+export * from "./ConnectBinding.ts";
 export * from "./DBCluster.ts";
 export * from "./DBClusterEndpoint.ts";
 export * from "./DBClusterParameterGroup.ts";

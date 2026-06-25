@@ -6,24 +6,24 @@ import type { Json } from "effect/Schema";
 import * as Binding from "../../Binding.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import type { AiGateway } from "../AiGateway/AiGateway.ts";
-import type { AiSearchInstance } from "../AiSearch/AiSearchInstance.ts";
-import type { AiSearchNamespace } from "../AiSearch/AiSearchNamespace.ts";
+import type { Gateway as AiGateway } from "../AiGateway/AiGateway.ts";
+import type { Instance as AiSearchInstance } from "../AiSearch/Instance.ts";
+import type { Namespace as AiSearchNamespace } from "../AiSearch/Namespace.ts";
 import { AnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
-import { Artifacts } from "../Artifacts/Artifacts.ts";
+import type { Artifacts } from "../Artifacts/Artifacts.ts";
 import { Browser } from "../Browser/Browser.ts";
-import type { D1Database } from "../D1/D1Database.ts";
+import type { Database as D1Database } from "../D1/D1Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
-import type { FlagshipApp } from "../Flagship/App.ts";
-import { Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
+import type { App as FlagshipApp } from "../Flagship/App.ts";
+import type { Connection as Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { Images } from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
 import type { Queue } from "../Queue/Queue.ts";
 import type { R2Bucket } from "../R2/Bucket.ts";
-import type { RateLimit } from "../RateLimit/RateLimit.ts";
+import type { RateLimitMarker } from "../RateLimit/RateLimit.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
-import type { VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
+import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
 import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import { makeRpcStub } from "./Rpc.ts";
@@ -58,7 +58,7 @@ export type WorkerBindingResource =
   | AnalyticsEngineDataset
   | SendEmail
   | Artifacts
-  | RateLimit
+  | RateLimitMarker
   | Browser
   | FlagshipApp
   | Images

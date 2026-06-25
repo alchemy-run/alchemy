@@ -1,6 +1,8 @@
 import type * as Effect from "effect/Effect";
 import { SingleShotGen } from "effect/Utils";
-import { RateLimitBinding, type RateLimitClient } from "./RateLimitBinding.ts";
+import * as Binding from "../../Binding.ts";
+import { taggedFunction } from "../../Util/effect.ts";
+import { type RateLimitClient } from "./RateLimitBinding.ts";
 
 type RateLimitTypeId = typeof RateLimitTypeId;
 const RateLimitTypeId = "Cloudflare.RateLimit" as const;
@@ -37,14 +39,14 @@ export type RateLimitProps = {
 };
 
 /**
- * The Effect yielded when a `RateLimit` is used inside a Worker init phase:
- * it attaches the `ratelimit` binding to the surrounding Worker and resolves
- * to the runtime {@link RateLimitClient}.
+ * The Effect yielded when a {@link RateLimitMarker} is used inside a Worker
+ * init phase: it attaches the `ratelimit` binding to the surrounding Worker and
+ * resolves to the runtime {@link RateLimitClient}.
  */
-type BindEffect = Effect.Effect<RateLimitClient, never, RateLimitBinding>;
+type BindEffect = Effect.Effect<RateLimitClient, never, RateLimit>;
 
 /**
- * A Cloudflare Rate Limit binding marker.
+ * The plain data marker produced by calling {@link RateLimit}.
  *
  * It is a plain data structure (so it can be declared directly on a Worker's
  * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
@@ -57,7 +59,7 @@ type BindEffect = Effect.Effect<RateLimitClient, never, RateLimitBinding>;
  * keep it as the native `cf.RateLimit` rather than `yield*`-ing it), but it is
  * iterable as one when `yield*`-ed.
  */
-export interface RateLimit {
+export interface RateLimitMarker {
   kind: RateLimitTypeId;
   name: string;
   namespaceId: string;
@@ -69,11 +71,41 @@ export interface RateLimit {
   [Symbol.iterator](): SingleShotGen<BindEffect, RateLimitClient>;
 }
 
-export const isRateLimit = (value: unknown): value is RateLimit =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value &&
-  (value as RateLimit).kind === RateLimitTypeId;
+/**
+ * The combined tag + callable form of the Rate Limit binding.
+ *
+ * `RateLimit` is a single identifier that is at once:
+ *
+ * - the Context tag (used by {@link RateLimitBinding} / `Effect.provide`),
+ * - the callable that produces a {@link RateLimitMarker} (`Cloudflare.RateLimit(props)`),
+ *   which can be declared directly on a Worker's `env` **or** `yield*`-ed inside
+ *   an Effect-native Worker to attach the binding and return the runtime
+ *   {@link RateLimitClient},
+ * - and the type.
+ *
+ * @binding
+ * @product Rate Limiting
+ * @category Application Security
+ */
+export interface RateLimit extends Binding.Service<
+  RateLimit,
+  "Cloudflare.RateLimit",
+  (rateLimit: RateLimitMarker) => Effect.Effect<RateLimitClient>
+> {
+  (props: RateLimitProps): RateLimitMarker;
+}
+
+const RateLimitTag = Binding.Service<RateLimit>("Cloudflare.RateLimit");
+
+/**
+ * `RateLimitTag` typed purely as its binding callable — `(marker) => BindEffect`
+ * — so the marker's `asEffect`/iterator resolve to the binding Effect rather
+ * than the ambiguous `(props) => RateLimitMarker` overload that `RateLimit` also
+ * carries.
+ */
+const bindTag = RateLimitTag as unknown as (
+  rateLimit: RateLimitMarker,
+) => BindEffect;
 
 /**
  * A Cloudflare Rate Limit binding for counting arbitrary keys inside Workers.
@@ -127,23 +159,16 @@ export const isRateLimit = (value: unknown): value is RateLimit =>
  *         return HttpServerResponse.text(success ? "ok" : "rate limited");
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.RateLimitBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.RateLimitBinding)),
  * );
  * ```
  *
  * @see https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
  */
-export const RateLimit: {
-  (props: RateLimitProps): RateLimit;
-  /**
-   * Bind an existing `RateLimit` marker to the surrounding Worker, returning
-   * the runtime client. Equivalent to `yield* rateLimit` — prefer yielding the
-   * marker directly.
-   */
-  bind: typeof RateLimitBinding.bind;
-} = Object.assign(
-  (props: RateLimitProps): RateLimit => {
-    const self: RateLimit = {
+export const RateLimit: RateLimit = taggedFunction(
+  RateLimitTag as any,
+  (props: RateLimitProps): RateLimitMarker => {
+    const self: RateLimitMarker = {
       kind: RateLimitTypeId,
       name: props.name ?? "RATE_LIMIT",
       namespaceId: String(props.namespaceId),
@@ -151,13 +176,15 @@ export const RateLimit: {
         limit: props.simple.limit,
         period: props.simple.period,
       },
-      asEffect: () => RateLimitBinding.bind(self),
-      [Symbol.iterator]: () => new SingleShotGen(RateLimitBinding.bind(self)),
+      asEffect: () => bindTag(self),
+      [Symbol.iterator]: () => new SingleShotGen(bindTag(self)),
     };
     return self;
   },
-  {
-    bind: (...args: Parameters<typeof RateLimitBinding.bind>) =>
-      RateLimitBinding.bind(...args),
-  },
-);
+) as unknown as RateLimit;
+
+export const isRateLimit = (value: unknown): value is RateLimitMarker =>
+  typeof value === "object" &&
+  value !== null &&
+  "kind" in value &&
+  (value as RateLimitMarker).kind === RateLimitTypeId;

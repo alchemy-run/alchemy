@@ -27,8 +27,8 @@ export default BucketEventSourceFunction.make(
       forceDestroy: true,
     });
 
-    const putObject = yield* S3.PutObject.bind(bucket);
-    const getObject = yield* S3.GetObject.bind(bucket);
+    const putObject = yield* S3.PutObject(bucket);
+    const getObject = yield* S3.GetObject(bucket);
 
     // Subscribe to object-created events under `incoming/`. Each notification
     // writes a derived object under `processed/<name>` recording the event.
@@ -99,8 +99,8 @@ export default BucketEventSourceFunction.make(
     Effect.provide(
       Layer.mergeAll(
         Lambda.BucketEventSource,
-        S3.PutObjectLive,
-        S3.GetObjectLive,
+        S3.PutObjectBinding,
+        S3.GetObjectBinding,
       ),
     ),
   ),

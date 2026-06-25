@@ -6,11 +6,11 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Effect-native Worker fixture exercising the Effect-first AI Search bindings:
- * - `AiSearchInstanceBinding.bind(search)` attaches the single-instance
- *   `ai_search` binding and returns an Effect-native `AiSearchClient`. The
+ * - `Cloudflare.AiSearch.Search(search)` attaches the single-instance
+ *   `ai_search` binding and returns an Effect-native `InstanceClient`. The
  *   `search` is the `AiSearch` construct's result — proving it's usable
- *   anywhere an `AiSearchInstance` is, here passed straight to `bind(...)`.
- * - `AiSearchNamespaceBinding.bind(namespace)` attaches the
+ *   anywhere an `AiSearchInstance` is, here passed straight to `Search(...)`.
+ * - `Cloudflare.AiSearch.SearchNamespace(namespace)` attaches the
  *   `ai_search_namespace` binding; `.get(name)` scopes to an instance.
  *
  * The `/bindings` route resolves each client's `raw` runtime handle (an
@@ -25,15 +25,15 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("AiSearchEffectBindingBucket");
-    const namespace = yield* Cloudflare.AiSearchNamespace(
+    const namespace = yield* Cloudflare.AiSearch.Namespace(
       "AiSearchEffectBindingNs",
     );
-    const aiSearch = yield* Cloudflare.AiSearch(
+    const aiSearch = yield* Cloudflare.AiSearch.AiSearch(
       "AiSearchEffectBindingInstance",
       { source: bucket },
     );
-    const search = yield* Cloudflare.AiSearchInstance.bind(aiSearch);
-    const ns = yield* Cloudflare.AiSearchNamespace.bind(namespace);
+    const search = yield* Cloudflare.AiSearch.Search(aiSearch);
+    const ns = yield* Cloudflare.AiSearch.SearchNamespace(namespace);
 
     return {
       fetch: Effect.gen(function* () {
@@ -56,8 +56,8 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.AiSearchInstanceBindingLive,
-        Cloudflare.AiSearchNamespaceBindingLive,
+        Cloudflare.AiSearch.SearchBinding,
+        Cloudflare.AiSearch.SearchNamespaceBinding,
       ),
     ),
   ),

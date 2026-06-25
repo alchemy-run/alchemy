@@ -22,7 +22,7 @@ export default class ChatBackendRpc extends Cloudflare.RpcDurableObjectNamespace
   Effect.gen(function* () {
     // Outer init: bind the AI Gateway and build the LanguageModel layer
     // once — shared across every instance hosted by this Worker.
-    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+    const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
     const languageModel = aiGateway.model({
       model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       parameters: {
@@ -35,7 +35,9 @@ export default class ChatBackendRpc extends Cloudflare.RpcDurableObjectNamespace
       // Per-instance: chat persistence backed by this DO's storage.
       const persistence = yield* Chat.makePersisted({
         storeId: "alchemy.chat",
-      }).pipe(Effect.provide(Cloudflare.DurableObjectChatPersistence));
+      }).pipe(
+        Effect.provide(Cloudflare.AiGateway.DurableObjectChatPersistence),
+      );
 
       const handlers = ChatBackendRpcs.toLayer({
         send: ({ prompt }) =>
@@ -61,5 +63,5 @@ export default class ChatBackendRpc extends Cloudflare.RpcDurableObjectNamespace
         Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
       );
     });
-  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.AiGateway.InferenceBinding)),
 ) {}

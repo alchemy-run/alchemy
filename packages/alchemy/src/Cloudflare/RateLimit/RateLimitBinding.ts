@@ -4,11 +4,11 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import type { ResourceLike } from "../../Resource.ts";
-import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
-import { type RateLimit as RateLimitLike } from "./RateLimit.ts";
-import type { Providers } from "../Providers.ts";
+import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
+import {
+  RateLimit,
+  type RateLimitMarker as RateLimitLike,
+} from "./RateLimit.ts";
 
 export class RateLimitError extends Data.TaggedError("RateLimitError")<{
   message: string;
@@ -27,22 +27,42 @@ export interface RateLimitClient {
 }
 
 /**
- * @binding
- * @product Rate Limiting
- * @category Application Security
+ * Native runtime layer for the Rate Limit binding.
+ *
+ * Provide it on the Worker effect (`Effect.provide(Cloudflare.RateLimitBinding)`)
+ * so that yielding a {@link RateLimitLike} marker attaches the `ratelimit`
+ * binding to the surrounding Worker and returns the runtime
+ * {@link RateLimitClient}.
+ *
+ * @example Bind a RateLimit inside an Effect-native Worker
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const throttle = yield* Cloudflare.RateLimit({
+ *     namespaceId: 1001,
+ *     simple: { limit: 10, period: 60 },
+ *   });
+ *   // ...
+ * }).pipe(Effect.provide(Cloudflare.RateLimitBinding))
+ * ```
  */
-export class RateLimitBinding extends Binding.Service<
-  RateLimitBinding,
-  (rateLimit: RateLimitLike) => Effect.Effect<RateLimitClient>
->()("Cloudflare.RateLimit.Binding") {}
-
-export const RateLimitBindingLive = Layer.effect(
-  RateLimitBinding,
+export const RateLimitBinding = Layer.effect(
+  RateLimit,
   Effect.gen(function* () {
-    const Policy = yield* RateLimitBindingPolicy;
+    const host = yield* Worker;
 
     return Effect.fn(function* (rateLimit: RateLimitLike) {
-      yield* Policy(rateLimit);
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* host.bind(rateLimit.name, {
+          bindings: [
+            {
+              type: "ratelimit",
+              name: rateLimit.name,
+              namespaceId: rateLimit.namespaceId,
+              simple: rateLimit.simple,
+            } as any,
+          ],
+        });
+      }
       const raw = WorkerEnvironment.useSync(
         (env) => (env as Record<string, cf.RateLimit>)[rateLimit.name]!,
       );
@@ -66,32 +86,5 @@ export const RateLimitBindingLive = Layer.effect(
           ),
       } satisfies RateLimitClient;
     });
-  }),
-);
-
-export class RateLimitBindingPolicy extends Binding.Policy<
-  RateLimitBindingPolicy,
-  (rateLimit: RateLimitLike) => Effect.Effect<void>,
-  Providers
->()("Cloudflare.RateLimit.Binding") {}
-
-export const RateLimitBindingPolicyLive = RateLimitBindingPolicy.layer.succeed(
-  Effect.fn(function* (host: ResourceLike, rateLimit: RateLimitLike) {
-    if (isWorker(host)) {
-      yield* host.bind(rateLimit.name, {
-        bindings: [
-          {
-            type: "ratelimit",
-            name: rateLimit.name,
-            namespaceId: rateLimit.namespaceId,
-            simple: rateLimit.simple,
-          } as any,
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        new Error(`RateLimitBinding does not support runtime '${host.Type}'`),
-      );
-    }
   }),
 );

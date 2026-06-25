@@ -23,7 +23,7 @@ const GATEWAY_ID_B = "alchemy-test-aigw-routing-b";
 const graph = (
   model: string,
   retries: number,
-): Cloudflare.AiGatewayRouteElement[] => [
+): Cloudflare.AiGateway.RouteElement[] => [
   {
     id: "start",
     type: "start",
@@ -74,10 +74,13 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("RoutingGateway", {
-            id: GATEWAY_ID,
-          });
-          const route = yield* Cloudflare.AiGatewayDynamicRouting("Route", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway(
+            "RoutingGateway",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          const route = yield* Cloudflare.AiGateway.DynamicRouting("Route", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-route",
             elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
@@ -113,10 +116,13 @@ test.provider(
       // version must be created AND deployed.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("RoutingGateway", {
-            id: GATEWAY_ID,
-          });
-          const route = yield* Cloudflare.AiGatewayDynamicRouting("Route", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway(
+            "RoutingGateway",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          const route = yield* Cloudflare.AiGateway.DynamicRouting("Route", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-route-v2",
             elements: graph("@cf/meta/llama-3.1-8b-instruct", 2),
@@ -147,10 +153,13 @@ test.provider(
       // Redeploying identical props is a no-op (same deployed version).
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("RoutingGateway", {
-            id: GATEWAY_ID,
-          });
-          const route = yield* Cloudflare.AiGatewayDynamicRouting("Route", {
+          const gateway = yield* Cloudflare.AiGateway.Gateway(
+            "RoutingGateway",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          const route = yield* Cloudflare.AiGateway.DynamicRouting("Route", {
             gatewayId: gateway.gatewayId,
             name: "alchemy-test-route-v2",
             elements: graph("@cf/meta/llama-3.1-8b-instruct", 2),
@@ -175,13 +184,13 @@ test.provider("replaces route when the gateway changes", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const gatewayA = yield* Cloudflare.AiGateway("RouteGatewayA", {
+        const gatewayA = yield* Cloudflare.AiGateway.Gateway("RouteGatewayA", {
           id: GATEWAY_ID,
         });
-        yield* Cloudflare.AiGateway("RouteGatewayB", {
+        yield* Cloudflare.AiGateway.Gateway("RouteGatewayB", {
           id: GATEWAY_ID_B,
         });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting(
+        const route = yield* Cloudflare.AiGateway.DynamicRouting(
           "ReplaceRoute",
           {
             gatewayId: gatewayA.gatewayId,
@@ -198,13 +207,13 @@ test.provider("replaces route when the gateway changes", (stack) =>
     // parent, and the old route is removed from gateway A.
     const moved = yield* stack.deploy(
       Effect.gen(function* () {
-        yield* Cloudflare.AiGateway("RouteGatewayA", {
+        yield* Cloudflare.AiGateway.Gateway("RouteGatewayA", {
           id: GATEWAY_ID,
         });
-        const gatewayB = yield* Cloudflare.AiGateway("RouteGatewayB", {
+        const gatewayB = yield* Cloudflare.AiGateway.Gateway("RouteGatewayB", {
           id: GATEWAY_ID_B,
         });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting(
+        const route = yield* Cloudflare.AiGateway.DynamicRouting(
           "ReplaceRoute",
           {
             gatewayId: gatewayB.gatewayId,
@@ -236,10 +245,13 @@ test.provider("recreates a route after out-of-band delete", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const gateway = yield* Cloudflare.AiGateway("HealRouteGateway", {
-          id: GATEWAY_ID,
-        });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting("HealRoute", {
+        const gateway = yield* Cloudflare.AiGateway.Gateway(
+          "HealRouteGateway",
+          {
+            id: GATEWAY_ID,
+          },
+        );
+        const route = yield* Cloudflare.AiGateway.DynamicRouting("HealRoute", {
           gatewayId: gateway.gatewayId,
           name: "alchemy-test-route-heal",
           elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
@@ -259,10 +271,13 @@ test.provider("recreates a route after out-of-band delete", (stack) =>
 
     const healed = yield* stack.deploy(
       Effect.gen(function* () {
-        const gateway = yield* Cloudflare.AiGateway("HealRouteGateway", {
-          id: GATEWAY_ID,
-        });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting("HealRoute", {
+        const gateway = yield* Cloudflare.AiGateway.Gateway(
+          "HealRouteGateway",
+          {
+            id: GATEWAY_ID,
+          },
+        );
+        const route = yield* Cloudflare.AiGateway.DynamicRouting("HealRoute", {
           gatewayId: gateway.gatewayId,
           name: "alchemy-test-route-heal",
           elements: graph("@cf/meta/llama-3.1-8b-instruct", 3),
@@ -294,20 +309,26 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.AiGateway("ListRouteGateway", {
-            id: GATEWAY_ID,
-          });
-          const route = yield* Cloudflare.AiGatewayDynamicRouting("ListRoute", {
-            gatewayId: gateway.gatewayId,
-            name: "alchemy-test-route-list",
-            elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
-          });
+          const gateway = yield* Cloudflare.AiGateway.Gateway(
+            "ListRouteGateway",
+            {
+              id: GATEWAY_ID,
+            },
+          );
+          const route = yield* Cloudflare.AiGateway.DynamicRouting(
+            "ListRoute",
+            {
+              gatewayId: gateway.gatewayId,
+              name: "alchemy-test-route-list",
+              elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
+            },
+          );
           return { route };
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AiGatewayDynamicRouting,
+        Cloudflare.AiGateway.DynamicRouting,
       );
 
       // The route appears in list() shortly after deploy, but its element graph

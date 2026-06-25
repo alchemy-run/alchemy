@@ -50,7 +50,7 @@ const IMPLS: Impl[] = [
   {
     layer: "SessionsD1",
     resourceLabel: "Sessions",
-    resourceSub: "Cloudflare.D1Database",
+    resourceSub: "Cloudflare.D1.Database",
     bindCall: "D1Database.bind",
     color: D1_COLOR,
     kind: "d1",

@@ -23,6 +23,8 @@ export type ImagesProps = {
  */
 type BindEffect = Effect.Effect<ImagesClient, never, ImagesBinding>;
 
+const bindImages = (self: Images): BindEffect => ImagesBinding(self);
+
 /**
  * Marker for a Cloudflare Images binding.
  *
@@ -79,7 +81,7 @@ export const isImages = (value: unknown): value is Images =>
  *         return yield* HttpServerResponse.json(info);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.ImagesBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.ImagesBindingLayer)),
  * );
  * ```
  *
@@ -119,19 +121,18 @@ export const Images: {
    * Effect-native client. Equivalent to `yield* images` — prefer yielding the
    * marker directly.
    */
-  bind: typeof ImagesBinding.bind;
+  bind: (images: Images) => BindEffect;
 } = Object.assign(
   (props?: ImagesProps): Images => {
     const self: Images = {
       kind: ImagesTypeId,
       name: props?.name ?? "IMAGES",
-      asEffect: () => ImagesBinding.bind(self),
-      [Symbol.iterator]: () => new SingleShotGen(ImagesBinding.bind(self)),
+      asEffect: () => bindImages(self),
+      [Symbol.iterator]: () => new SingleShotGen(bindImages(self)),
     };
     return self;
   },
   {
-    bind: (...args: Parameters<typeof ImagesBinding.bind>) =>
-      ImagesBinding.bind(...args),
+    bind: bindImages,
   },
 );

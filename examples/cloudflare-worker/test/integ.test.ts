@@ -43,7 +43,7 @@ test(
  * The stack now includes two Workers (`Api` and `SecondaryApi`) that both
  * bind the same `Agent` Durable Object, which in turn binds the `Sandbox`
  * Container. Each `yield* Agent` runs the DO's outer init, calling
- * `Cloudflare.Container.bind(Sandbox)` once per Worker, so the Sandbox
+ * `Cloudflare.Container(Sandbox)` once per Worker, so the Sandbox
  * ContainerApplication receives two bindings sharing one `namespaceId`.
  *
  * Before the dedupe fix, `getDurableObjects` counted those as two distinct

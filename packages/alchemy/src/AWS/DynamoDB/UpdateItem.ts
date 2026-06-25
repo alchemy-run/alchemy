@@ -1,10 +1,7 @@
-import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
-import type { Providers } from "../Providers.ts";
 
 export interface UpdateItemRequest extends Omit<
   DynamoDB.UpdateItemInput,
@@ -12,8 +9,9 @@ export interface UpdateItemRequest extends Omit<
 > {}
 
 /** @binding */
-export class UpdateItem extends Binding.Service<
+export interface UpdateItem extends Binding.Service<
   UpdateItem,
+  "AWS.DynamoDB.UpdateItem",
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
@@ -21,50 +19,7 @@ export class UpdateItem extends Binding.Service<
       request: UpdateItemRequest,
     ) => Effect.Effect<DynamoDB.UpdateItemOutput, DynamoDB.UpdateItemError>
   >
->()("AWS.DynamoDB.UpdateItem") {}
-
-export const UpdateItemLive = Layer.effect(
-  UpdateItem,
-  Effect.gen(function* () {
-    const Policy = yield* UpdateItemPolicy;
-    const updateItem = yield* DynamoDB.updateItem;
-
-    return Effect.fn(function* <T extends Table>(table: T) {
-      const TableName = yield* table.tableName;
-      yield* Policy(table);
-      return Effect.fn(function* (request: UpdateItemRequest) {
-        const tableName = yield* TableName;
-        return yield* updateItem({
-          ...request,
-          TableName: tableName,
-        });
-      });
-    });
-  }),
-);
-
-export class UpdateItemPolicy extends Binding.Policy<
-  UpdateItemPolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>,
-  Providers
->()("AWS.DynamoDB.UpdateItem") {}
-
-export const UpdateItemPolicyLive = UpdateItemPolicy.layer.succeed(
-  Effect.fn(function* (host, table) {
-    if (isFunction(host)) {
-      yield* host.bind`Allow(${host}, AWS.DynamoDB.UpdateItem(${table}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["dynamodb:UpdateItem"],
-            Resource: [table.tableArn],
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        `UpdateItemPolicy does not support runtime '${host.Type}'`,
-      );
-    }
-  }),
+> {}
+export const UpdateItem = Binding.Service<UpdateItem>(
+  "AWS.DynamoDB.UpdateItem",
 );

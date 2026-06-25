@@ -15,10 +15,14 @@ export interface TopicEventSourceProps {
 }
 
 /** @binding */
-export class TopicEventSource extends Binding.Service<
+export interface TopicEventSource extends Binding.Service<
   TopicEventSource,
+  "AWS.SNS.TopicEventSource",
   TopicEventSourceService
->()("AWS.SNS.TopicEventSource") {}
+> {}
+export const TopicEventSource = Binding.Service<TopicEventSource>(
+  "AWS.SNS.TopicEventSource",
+);
 
 export type TopicEventSourceService = <StreamReq = never, Req = never>(
   topic: Topic,

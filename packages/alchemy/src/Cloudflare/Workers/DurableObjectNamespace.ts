@@ -216,7 +216,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * ```typescript
  * Effect.gen(function* () {
  *   // Phase 1: resolve shared dependencies + the instance state ref
- *   const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *   const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *   const state = yield* Cloudflare.DurableObjectState;
  *
  *   return Effect.gen(function* () {
@@ -255,7 +255,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *   "Counter",
  *   Effect.gen(function* () {
  *     // init: bind resources + resolve the instance state ref
- *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *     const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *     const state = yield* Cloudflare.DurableObjectState;
  *
  *     return Effect.gen(function* () {
@@ -298,7 +298,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * export default Counter.make(
  *   Effect.gen(function* () {
  *     // init: bind resources + resolve the instance state ref
- *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *     const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *     const state = yield* Cloudflare.DurableObjectState;
  *
  *     return Effect.gen(function* () {

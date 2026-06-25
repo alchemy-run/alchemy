@@ -9,14 +9,13 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AiGatewayDynamicRoutingTypeId =
-  "Cloudflare.AiGateway.DynamicRouting" as const;
-type AiGatewayDynamicRoutingTypeId = typeof AiGatewayDynamicRoutingTypeId;
+const DynamicRoutingTypeId = "Cloudflare.AiGateway.DynamicRouting" as const;
+type DynamicRoutingTypeId = typeof DynamicRoutingTypeId;
 
 /**
  * Reference to another element in the route graph.
  */
-export type AiGatewayRouteEdge = {
+export type RouteEdge = {
   /**
    * The `id` of the element the edge points at.
    */
@@ -26,7 +25,7 @@ export type AiGatewayRouteEdge = {
 /**
  * Entry point of the route graph. Every route has exactly one.
  */
-export type AiGatewayRouteStartElement = {
+export type RouteStartElement = {
   /**
    * Unique element identifier within the route graph.
    */
@@ -35,13 +34,13 @@ export type AiGatewayRouteStartElement = {
   /**
    * The element executed first.
    */
-  outputs: { next: AiGatewayRouteEdge };
+  outputs: { next: RouteEdge };
 };
 
 /**
  * Branches the request based on conditions over request metadata.
  */
-export type AiGatewayRouteConditionalElement = {
+export type RouteConditionalElement = {
   /**
    * Unique element identifier within the route graph.
    */
@@ -54,13 +53,13 @@ export type AiGatewayRouteConditionalElement = {
   /**
    * Edges taken when the conditions evaluate true / false.
    */
-  outputs: { true: AiGatewayRouteEdge; false: AiGatewayRouteEdge };
+  outputs: { true: RouteEdge; false: RouteEdge };
 };
 
 /**
  * Splits traffic across multiple edges by percentage.
  */
-export type AiGatewayRoutePercentageElement = {
+export type RoutePercentageElement = {
   /**
    * Unique element identifier within the route graph.
    */
@@ -75,7 +74,7 @@ export type AiGatewayRoutePercentageElement = {
 /**
  * Applies a rate limit; requests over the limit take the fallback edge.
  */
-export type AiGatewayRouteRateElement = {
+export type RouteRateElement = {
   /**
    * Unique element identifier within the route graph.
    */
@@ -102,13 +101,13 @@ export type AiGatewayRouteRateElement = {
   /**
    * Edges taken when under (success) or over (fallback) the limit.
    */
-  outputs: { success: AiGatewayRouteEdge; fallback: AiGatewayRouteEdge };
+  outputs: { success: RouteEdge; fallback: RouteEdge };
 };
 
 /**
  * Sends the request to a provider/model; failures take the fallback edge.
  */
-export type AiGatewayRouteModelElement = {
+export type RouteModelElement = {
   /**
    * Unique element identifier within the route graph.
    */
@@ -135,13 +134,13 @@ export type AiGatewayRouteModelElement = {
   /**
    * Edges taken on success / failure.
    */
-  outputs: { success: AiGatewayRouteEdge; fallback: AiGatewayRouteEdge };
+  outputs: { success: RouteEdge; fallback: RouteEdge };
 };
 
 /**
  * Terminal element of the route graph.
  */
-export type AiGatewayRouteEndElement = {
+export type RouteEndElement = {
   /**
    * Unique element identifier within the route graph.
    */
@@ -157,15 +156,15 @@ export type AiGatewayRouteEndElement = {
  * A node in an AI Gateway dynamic routing graph. A well-formed graph starts
  * at a `start` element and every path terminates at an `end` element.
  */
-export type AiGatewayRouteElement =
-  | AiGatewayRouteStartElement
-  | AiGatewayRouteConditionalElement
-  | AiGatewayRoutePercentageElement
-  | AiGatewayRouteRateElement
-  | AiGatewayRouteModelElement
-  | AiGatewayRouteEndElement;
+export type RouteElement =
+  | RouteStartElement
+  | RouteConditionalElement
+  | RoutePercentageElement
+  | RouteRateElement
+  | RouteModelElement
+  | RouteEndElement;
 
-export type AiGatewayDynamicRoutingProps = {
+export type DynamicRoutingProps = {
   /**
    * The AI Gateway the route belongs to. Changing the gateway triggers a
    * replacement.
@@ -182,10 +181,10 @@ export type AiGatewayDynamicRoutingProps = {
    * The element graph describing how requests are routed. Changing the
    * graph creates a new route version and deploys it.
    */
-  elements: AiGatewayRouteElement[];
+  elements: RouteElement[];
 };
 
-export type AiGatewayDynamicRoutingAttributes = {
+export type DynamicRoutingAttributes = {
   /**
    * Server-generated route identifier. Stable across updates.
    */
@@ -205,7 +204,7 @@ export type AiGatewayDynamicRoutingAttributes = {
   /**
    * The element graph of the currently deployed route version.
    */
-  elements: AiGatewayRouteElement[];
+  elements: RouteElement[];
   /**
    * Identifier of the currently deployed route version.
    */
@@ -224,10 +223,10 @@ export type AiGatewayDynamicRoutingAttributes = {
   modifiedAt: string;
 };
 
-export type AiGatewayDynamicRouting = Resource<
-  AiGatewayDynamicRoutingTypeId,
-  AiGatewayDynamicRoutingProps,
-  AiGatewayDynamicRoutingAttributes,
+export type DynamicRouting = Resource<
+  DynamicRoutingTypeId,
+  DynamicRoutingProps,
+  DynamicRoutingAttributes,
   never,
   Providers
 >;
@@ -250,9 +249,9 @@ export type AiGatewayDynamicRouting = Resource<
  * @section Creating a Route
  * @example Route all traffic to one model
  * ```typescript
- * const gateway = yield* Cloudflare.AiGateway("Gateway");
+ * const gateway = yield* Cloudflare.AiGateway.Gateway("Gateway");
  *
- * const route = yield* Cloudflare.AiGatewayDynamicRouting("Llama", {
+ * const route = yield* Cloudflare.AiGateway.DynamicRouting("Llama", {
  *   gatewayId: gateway.gatewayId,
  *   elements: [
  *     { id: "start", type: "start", outputs: { next: { elementId: "model" } } },
@@ -278,7 +277,7 @@ export type AiGatewayDynamicRouting = Resource<
  * @section Updating a Route
  * @example Change the model — creates and deploys a new version
  * ```typescript
- * const route = yield* Cloudflare.AiGatewayDynamicRouting("Llama", {
+ * const route = yield* Cloudflare.AiGateway.DynamicRouting("Llama", {
  *   gatewayId: gateway.gatewayId,
  *   elements: [
  *     { id: "start", type: "start", outputs: { next: { elementId: "model" } } },
@@ -303,21 +302,18 @@ export type AiGatewayDynamicRouting = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/
  */
-export const AiGatewayDynamicRouting = Resource<AiGatewayDynamicRouting>(
-  AiGatewayDynamicRoutingTypeId,
-);
+export const DynamicRouting = Resource<DynamicRouting>(DynamicRoutingTypeId);
 
 /**
- * Returns true if the given value is an AiGatewayDynamicRouting resource.
+ * Returns true if the given value is an DynamicRouting resource.
  */
 export const isAiGatewayDynamicRouting = (
   value: unknown,
-): value is AiGatewayDynamicRouting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AiGatewayDynamicRoutingTypeId;
+): value is DynamicRouting =>
+  Predicate.hasProperty(value, "Type") && value.Type === DynamicRoutingTypeId;
 
-export const AiGatewayDynamicRoutingProvider = () =>
-  Provider.succeed(AiGatewayDynamicRouting, {
+export const DynamicRoutingProvider = () =>
+  Provider.succeed(DynamicRouting, {
     stables: ["routeId", "accountId", "gatewayId", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
@@ -476,7 +472,7 @@ export const AiGatewayDynamicRoutingProvider = () =>
             // A gateway removed between enumeration and its route list is
             // gone — skip it rather than failing the whole listing.
             Effect.catchTag("GatewayNotFound", () =>
-              Effect.succeed([] as AiGatewayDynamicRoutingAttributes[]),
+              Effect.succeed([] as DynamicRoutingAttributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -555,13 +551,12 @@ const createRouteName = (id: string, name: string | undefined) =>
  */
 const elementsOf = (
   route: aiGateway.GetDynamicRoutingResponse,
-): AiGatewayRouteElement[] =>
-  (route.version.data ?? []) as AiGatewayRouteElement[];
+): RouteElement[] => (route.version.data ?? []) as RouteElement[];
 
 const toAttributes = (
   route: aiGateway.GetDynamicRoutingResponse,
   accountId: string,
-): AiGatewayDynamicRoutingAttributes => ({
+): DynamicRoutingAttributes => ({
   routeId: route.id,
   accountId,
   gatewayId: route.gatewayId,

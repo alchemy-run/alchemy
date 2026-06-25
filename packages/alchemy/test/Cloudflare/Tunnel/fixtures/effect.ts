@@ -22,9 +22,9 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const read = yield* Cloudflare.TunnelRead.bind();
-    const write = yield* Cloudflare.TunnelWrite.bind();
-    const tunnels = yield* Cloudflare.TunnelReadWrite.bind();
+    const read = yield* Cloudflare.TunnelRead();
+    const write = yield* Cloudflare.TunnelWrite();
+    const tunnels = yield* Cloudflare.TunnelReadWrite();
 
     return {
       fetch: Effect.gen(function* () {
@@ -81,9 +81,9 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.TunnelReadLive,
-        Cloudflare.TunnelWriteLive,
-        Cloudflare.TunnelReadWriteLive,
+        Cloudflare.TunnelReadBinding,
+        Cloudflare.TunnelWriteBinding,
+        Cloudflare.TunnelReadWriteBinding,
       ),
     ),
   ),

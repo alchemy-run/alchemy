@@ -26,5 +26,5 @@ export default class ImagesEffectWorker extends Cloudflare.Worker<ImagesEffectWo
         return yield* HttpServerResponse.json({ mode: "effect", ...info });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.ImagesBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.ImagesBindingLayer)),
 ) {}

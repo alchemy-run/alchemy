@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import { SendEmailBinding } from "./SendEmailBinding.ts";
 
 type SendEmailTypeId = typeof SendEmailTypeId;
 const SendEmailTypeId = "Cloudflare.SendEmail" as const;
@@ -33,7 +32,7 @@ export type SendEmailProps = {
  * `SendEmail` is a Worker-only binding — it does not create any cloud-side
  * resource. The descriptor names the binding and records optional
  * destination/sender restrictions; the actual `send_email` entry is attached
- * to the Worker via {@link SendEmailBinding}.
+ * to the Worker via {@link SendBinding}.
  *
  * @resource
  *
@@ -43,7 +42,7 @@ export type SendEmailProps = {
  * const Email = Cloudflare.SendEmail("Email");
  *
  * // in the Worker effect:
- * const email = yield* Cloudflare.SendEmail.bind(Email);
+ * const email = yield* Cloudflare.Send(Email);
  * yield* email.send({
  *   from: "noreply@example.com",
  *   to: "user@example.com",
@@ -71,25 +70,18 @@ export const isSendEmail = (value: unknown): value is SendEmail =>
   "kind" in value &&
   (value as SendEmail).kind === SendEmailTypeId;
 
-export const SendEmail: {
-  (id: string, props?: SendEmailProps): Effect.Effect<SendEmail>;
-  /**
-   * Bind this `send_email` descriptor to the surrounding Worker. Returns a
-   * typed runtime client for sending email.
-   */
-  bind: typeof SendEmailBinding.bind;
-} = Object.assign(
-  Effect.fn(function* (id: string, props?: SendEmailProps) {
-    return {
-      kind: SendEmailTypeId,
-      name: id,
-      destinationAddress: props?.destinationAddress,
-      allowedDestinationAddresses: props?.allowedDestinationAddresses,
-      allowedSenderAddresses: props?.allowedSenderAddresses,
-    } satisfies SendEmail;
-  }),
-  {
-    bind: (...args: Parameters<typeof SendEmailBinding.bind>) =>
-      SendEmailBinding.bind(...args),
-  },
-);
+export const SendEmail: (
+  id: string,
+  props?: SendEmailProps,
+) => Effect.Effect<SendEmail> = Effect.fn(function* (
+  id: string,
+  props?: SendEmailProps,
+) {
+  return {
+    kind: SendEmailTypeId,
+    name: id,
+    destinationAddress: props?.destinationAddress,
+    allowedDestinationAddresses: props?.allowedDestinationAddresses,
+    allowedSenderAddresses: props?.allowedSenderAddresses,
+  } satisfies SendEmail;
+});

@@ -1,9 +1,7 @@
 export * from "./Browser.ts";
+export { BrowserBindingLive } from "./BrowserBindingLive.ts";
 export {
   BrowserBinding,
-  BrowserBindingLive,
-  BrowserBindingPolicy,
-  BrowserBindingPolicyLive,
   BrowserError,
   type BrowserClient,
   type BrowserScreenshotOptions,
