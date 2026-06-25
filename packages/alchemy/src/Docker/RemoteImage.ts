@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./DockerClient.ts";
+import { Docker } from "./Docker.ts";
 
 export interface RemoteImageProps {
   /** Docker image name, without tag. */

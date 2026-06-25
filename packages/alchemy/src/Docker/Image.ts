@@ -7,12 +7,7 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  parseRepoDigest,
-  repositoryFromImageRef,
-  withRegistryHost,
-} from "./DockerApi.ts";
-import { Docker } from "./DockerClient.ts";
+import { Docker } from "./Docker.ts";
 
 export interface DockerBuildOptions {
   /**
@@ -365,3 +360,37 @@ const comparableProps = (props: ImageProps | undefined) =>
           : undefined,
       }
     : undefined;
+
+const parseRepoDigest = (
+  imageRef: string,
+  output: string,
+): string | undefined => {
+  const match = /digest:\s+([a-z0-9]+:[a-f0-9]{64})/i.exec(output);
+  if (!match) return undefined;
+  return `${repositoryFromImageRef(imageRef)}@${match[1]}`;
+};
+
+const repositoryFromImageRef = (imageRef: string): string => {
+  const withoutDigest = imageRef.includes("@")
+    ? imageRef.slice(0, imageRef.indexOf("@"))
+    : imageRef;
+  const tagSeparator = withoutDigest.lastIndexOf(":");
+  const pathSeparator = withoutDigest.lastIndexOf("/");
+  return tagSeparator > pathSeparator
+    ? withoutDigest.slice(0, tagSeparator)
+    : withoutDigest;
+};
+
+const withRegistryHost = (
+  imageRef: string,
+  registry: { server: string },
+): string => {
+  const registryHost = registry.server.replace(/\/$/, "");
+  const firstSegment = imageRef.split("/")[0];
+  const hasRegistryPrefix =
+    imageRef.includes("/") &&
+    (firstSegment.includes(".") ||
+      firstSegment.includes(":") ||
+      firstSegment === "localhost");
+  return hasRegistryPrefix ? imageRef : `${registryHost}/${imageRef}`;
+};

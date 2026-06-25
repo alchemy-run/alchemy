@@ -47,7 +47,7 @@ export class Docker extends Context.Service<
       }) => Effect.Effect<CommandOutput, PlatformError>;
       readonly inspect: (
         name: string,
-      ) => Effect.Effect<Docker.ContainerInfo, PlatformError>;
+      ) => Effect.Effect<Docker.Container, PlatformError>;
       readonly remove: (
         name: string,
         force?: boolean,
@@ -89,7 +89,7 @@ export class Docker extends Context.Service<
       ) => Effect.Effect<CommandOutput, PlatformError>;
       readonly inspect: (
         ref: string,
-      ) => Effect.Effect<Docker.InspectedImage, PlatformError>;
+      ) => Effect.Effect<Docker.Image, PlatformError>;
       readonly remove: (
         ref: string | Array<string>,
         force?: boolean,
@@ -107,7 +107,7 @@ export class Docker extends Context.Service<
       ) => Effect.Effect<CommandOutput, PlatformError>;
       readonly inspect: (
         name: string,
-      ) => Effect.Effect<Docker.InspectedVolume, PlatformError>;
+      ) => Effect.Effect<Docker.Volume, PlatformError>;
     };
     readonly network: {
       readonly create: (options: {
@@ -127,7 +127,7 @@ export class Docker extends Context.Service<
       }) => Effect.Effect<CommandOutput, PlatformError>;
       readonly inspect: (
         name: string,
-      ) => Effect.Effect<Docker.InspectedNetwork, PlatformError>;
+      ) => Effect.Effect<Docker.Network, PlatformError>;
       readonly remove: (
         id: string,
       ) => Effect.Effect<CommandOutput, PlatformError>;
@@ -145,7 +145,7 @@ export declare namespace Docker {
     | "exited"
     | "dead";
 
-  export interface ContainerInfo {
+  export interface Container {
     Id: string;
     Name?: string;
     State: { Status: ContainerStatus };
@@ -190,13 +190,13 @@ export declare namespace Docker {
     };
   }
 
-  export interface InspectedImage {
+  export interface Image {
     Id: string;
     Created?: string;
     RepoTags?: string[] | null;
     RepoDigests?: string[] | null;
   }
-  export interface InspectedVolume {
+  export interface Volume {
     CreatedAt: string;
     Driver: string;
     Labels: Record<string, string> | null;
@@ -205,7 +205,7 @@ export declare namespace Docker {
     Options: Record<string, string> | null;
     Scope: string;
   }
-  export interface InspectedNetwork {
+  export interface Network {
     Name: string;
     Id: string;
     Created: string;
@@ -399,7 +399,7 @@ export const DockerLive = Layer.effect(
             env,
           ),
         inspect: (name) =>
-          runInspect<Docker.ContainerInfo>(["container", "inspect", name]),
+          runInspect<Docker.Container>(["container", "inspect", name]),
         remove: (name, force) =>
           run(["container", "rm", name, ...(force ? ["-f"] : [])]),
         start: (name) => run(["container", "start", name]),
@@ -421,8 +421,7 @@ export const DockerLive = Layer.effect(
             ref,
             ...(platform ? ["--platform", platform] : []),
           ]),
-        inspect: (ref) =>
-          runInspect<Docker.InspectedImage>(["image", "inspect", ref]),
+        inspect: (ref) => runInspect<Docker.Image>(["image", "inspect", ref]),
         remove: (ref, force) =>
           run([
             "image",
@@ -468,7 +467,7 @@ export const DockerLive = Layer.effect(
         create: (options) => run(["volume", "create", ...argsFrom(options)]),
         remove: (name) => run(["volume", "rm", name]),
         inspect: (name) =>
-          runInspect<Docker.InspectedVolume>(["volume", "inspect", name]),
+          runInspect<Docker.Volume>(["volume", "inspect", name]),
       },
       network: {
         create: ({ name, driver, ipv6, label }) =>
@@ -489,7 +488,7 @@ export const DockerLive = Layer.effect(
         disconnect: ({ network, container }) =>
           run(["network", "disconnect", network, container]),
         inspect: (name) =>
-          runInspect<Docker.InspectedNetwork>(["network", "inspect", name]),
+          runInspect<Docker.Network>(["network", "inspect", name]),
         remove: (id) => run(["network", "rm", id]),
       },
     });

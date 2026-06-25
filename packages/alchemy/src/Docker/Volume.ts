@@ -6,7 +6,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./DockerClient.ts";
+import { Docker } from "./Docker.ts";
 
 export interface VolumeLabel {
   /** Label name. */
@@ -164,7 +164,7 @@ const makeVolumeArgs = (id: string, props: VolumeProps, instanceId: string) =>
   );
 
 export const toVolumeAttributes = (
-  info: Docker.InspectedVolume,
+  info: Docker.Volume,
 ): Volume["Attributes"] => ({
   id: info.Name,
   name: info.Name,

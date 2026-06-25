@@ -4,7 +4,7 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
-import { Docker } from "../../Docker/DockerClient.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";

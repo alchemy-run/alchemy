@@ -16,7 +16,7 @@ import {
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
-import { Docker } from "../../Docker/DockerClient.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";

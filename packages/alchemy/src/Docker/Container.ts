@@ -8,7 +8,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./DockerClient.ts";
+import { Docker } from "./Docker.ts";
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
@@ -101,6 +101,11 @@ export interface Container extends Resource<
     createdAt: number;
     /** Image reference used to create the container. */
     imageRef: string;
+    /**
+     * Map of internal container ports to their bound host ports.
+     * Format: `"80/tcp" -> 8080`.
+     */
+    ports: Record<string, number>;
   }
 > {}
 
@@ -163,7 +168,7 @@ export const ContainerProvider = () =>
       const docker = yield* Docker;
 
       const reconcileNetworks = Effect.fn(function* (
-        live: Docker.ContainerInfo,
+        live: Docker.Container,
         news: ContainerProps,
       ) {
         const connect = new Map<string, Container.NetworkMapping>();
@@ -341,7 +346,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   );
 
 const toContainerAttributes = (
-  info: Docker.ContainerInfo,
+  info: Docker.Container,
   imageRef: string,
 ): Container["Attributes"] => ({
   id: info.Id,
@@ -349,9 +354,18 @@ const toContainerAttributes = (
   state: info.State.Status,
   createdAt: Date.parse(info.Created) || Date.now(),
   imageRef,
+  ports: Object.fromEntries(
+    Object.entries({
+      ...info.NetworkSettings.Ports,
+      ...info.HostConfig.PortBindings,
+    }).flatMap(([internal, bindings]) => {
+      if (!bindings?.[0]?.HostPort) return [];
+      return [[internal, Number.parseInt(bindings[0].HostPort, 10)]];
+    }),
+  ),
 });
 
-const infoName = (info: Docker.ContainerInfo) => {
+const infoName = (info: Docker.Container) => {
   const name = info.Name;
   return typeof name === "string" ? name.replace(/^\//, "") : info.Id;
 };

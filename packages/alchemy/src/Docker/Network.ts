@@ -6,7 +6,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./DockerClient.ts";
+import { Docker } from "./Docker.ts";
 
 export interface NetworkProps {
   /**
@@ -164,7 +164,7 @@ const makeNetworkArgs = (
   );
 
 export const toNetworkAttributes = (
-  info: Docker.InspectedNetwork,
+  info: Docker.Network,
 ): Network["Attributes"] => ({
   id: info.Id,
   name: info.Name,

@@ -1,5 +1,5 @@
 import * as Layer from "effect/Layer";
-import { DockerLive } from "../Docker/DockerClient.ts";
+import { DockerLive } from "../Docker/Docker.ts";
 import * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
