@@ -11,6 +11,10 @@ import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const timeoutHandlerPath = new URL("./timeout-handler.ts", import.meta.url)
   .pathname;
+const externalPackageHandlerPath = new URL(
+  "./external-package-handler.ts",
+  import.meta.url,
+).pathname;
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -102,6 +106,48 @@ test.provider(
         }),
       );
       expect(updatedConfig.Configuration?.Timeout).toBe(45);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 360_000 },
+);
+
+test.provider(
+  "installs explicit external packages into the deployment artifact",
+  (stack) =>
+    Effect.gen(function* () {
+      const { functionUrl } = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("InstallFn", {
+          main: externalPackageHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: true,
+          build: {
+            install: ["uuid"],
+          },
+        }),
+      );
+
+      const response = yield* HttpClient.get(functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(
+                new Error(`Function URL returned ${response.status}`),
+              ),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential(500).pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
+
+      const body = JSON.parse(yield* response.text) as { id: string };
+      expect(body.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
