@@ -21,7 +21,7 @@ import type { Providers } from "../Providers.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
   typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.Queue.Queue";
+  (value as any)?.Type === "Cloudflare.Queues.Queue";
 
 export type Props = {
   /**
@@ -32,7 +32,7 @@ export type Props = {
 };
 
 export type Queue = Resource<
-  "Cloudflare.Queue.Queue",
+  "Cloudflare.Queues.Queue",
   Props,
   {
     queueId: string;
@@ -55,19 +55,19 @@ export type Queue = Resource<
  * @section Creating a Queue
  * @example Basic queue
  * ```typescript
- * const queue = yield* Cloudflare.Queue.Queue("MyQueue");
+ * const queue = yield* Cloudflare.Queues.Queue("MyQueue");
  * ```
  *
  * @example Queue with explicit name
  * ```typescript
- * const queue = yield* Cloudflare.Queue.Queue("MyQueue", {
+ * const queue = yield* Cloudflare.Queues.Queue("MyQueue", {
  *   name: "my-app-queue",
  * });
  * ```
  *
  * @section Binding to a Worker
- * In an Effect-style Worker, use `Cloudflare.Queue.WriteQueue` in
- * the init phase and provide `Cloudflare.Queue.WriteQueueBinding` in
+ * In an Effect-style Worker, use `Cloudflare.Queues.WriteQueue` in
+ * the init phase and provide `Cloudflare.Queues.WriteQueueBinding` in
  * the runtime layer. The returned `WriteQueueClient` exposes `send`
  * and `sendBatch`.
  *
@@ -78,13 +78,13 @@ export type Queue = Resource<
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * export const Queue = Cloudflare.Queue.Queue("Queue");
+ * export const Queue = Cloudflare.Queues.Queue("Queue");
  *
  * export default Cloudflare.Worker(
  *   "Worker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const queue = yield* Cloudflare.Queue.WriteQueue(Queue);
+ *     const queue = yield* Cloudflare.Queues.WriteQueue(Queue);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -100,11 +100,11 @@ export type Queue = Resource<
  *         return HttpServerResponse.text("Not Found", { status: 404 });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.Queue.WriteQueueBinding)),
+ *   }).pipe(Effect.provide(Cloudflare.Queues.WriteQueueBinding)),
  * );
  * ```
  */
-export const Queue = Resource<Queue>("Cloudflare.Queue.Queue");
+export const Queue = Resource<Queue>("Cloudflare.Queues.Queue");
 
 export const ProviderLive = () =>
   Provider.succeed(Queue, {

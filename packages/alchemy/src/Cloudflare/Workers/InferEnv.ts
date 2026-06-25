@@ -32,7 +32,7 @@ export type GetBindingType<T> =
               ? R2Bucket
               : T extends Cloudflare.KV.Namespace
                 ? KVNamespace
-                : T extends Cloudflare.Queue.Queue
+                : T extends Cloudflare.Queues.Queue
                   ? Queue<unknown>
                   : T extends Cloudflare.AiGateway.Gateway
                     ? Ai

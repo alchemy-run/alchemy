@@ -129,7 +129,7 @@ const DIFF_LINE = mkLine(
     </span>
     <span
       style={{ color: "var(--alc-code-comment)" }}
-    >{` (Cloudflare.Queue.Queue)`}</span>
+    >{` (Cloudflare.Queues.Queue)`}</span>
     <span style={{ color: "var(--alc-success)" }}> created</span>
   </>,
 );

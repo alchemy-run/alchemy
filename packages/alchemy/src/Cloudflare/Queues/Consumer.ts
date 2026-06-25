@@ -63,7 +63,7 @@ export interface ConsumerSettings {
 }
 
 export type Consumer = Resource<
-  "Cloudflare.Queue.Consumer",
+  "Cloudflare.Queues.Consumer",
   ConsumerProps,
   {
     consumerId: string;
@@ -93,10 +93,10 @@ export type Consumer = Resource<
  * @section Registering a Consumer
  * @example Basic consumer
  * ```typescript
- * const queue = yield* Cloudflare.Queue.Queue("MyQueue");
+ * const queue = yield* Cloudflare.Queues.Queue("MyQueue");
  * const worker = yield* Cloudflare.Worker("Worker", { ... });
  *
- * yield* Cloudflare.Queue.Consumer("MyConsumer", {
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
  *   queueId: queue.queueId,
  *   scriptName: "my-worker",
  * });
@@ -104,7 +104,7 @@ export type Consumer = Resource<
  *
  * @example Consumer with settings
  * ```typescript
- * yield* Cloudflare.Queue.Consumer("MyConsumer", {
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
  *   queueId: queue.queueId,
  *   scriptName: "my-worker",
  *   settings: {
@@ -115,7 +115,7 @@ export type Consumer = Resource<
  * });
  * ```
  */
-export const Consumer = Resource<Consumer>("Cloudflare.Queue.Consumer");
+export const Consumer = Resource<Consumer>("Cloudflare.Queues.Consumer");
 
 // Cloudflare allows a single Worker consumer per queue, so the
 // first match in the paginated stream is the only one. Using

@@ -10,7 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const QueueSubscriptionTypeId = "Cloudflare.Queue.Subscription" as const;
+const QueueSubscriptionTypeId = "Cloudflare.Queues.Subscription" as const;
 type QueueSubscriptionTypeId = typeof QueueSubscriptionTypeId;
 
 /**
@@ -152,9 +152,9 @@ export type Subscription = Resource<
  * @section Creating a Subscription
  * @example R2 bucket events into a Queue
  * ```typescript
- * const queue = yield* Cloudflare.Queue.Queue("EventsQueue");
+ * const queue = yield* Cloudflare.Queues.Queue("EventsQueue");
  *
- * const subscription = yield* Cloudflare.Queue.Subscription("R2Events", {
+ * const subscription = yield* Cloudflare.Queues.Subscription("R2Events", {
  *   source: { type: "r2" },
  *   events: ["bucket.created", "bucket.deleted"],
  *   queueId: queue.queueId,
@@ -163,7 +163,7 @@ export type Subscription = Resource<
  *
  * @example KV namespace events with an explicit name
  * ```typescript
- * const subscription = yield* Cloudflare.Queue.Subscription("KvEvents", {
+ * const subscription = yield* Cloudflare.Queues.Subscription("KvEvents", {
  *   name: "kv-events",
  *   source: { type: "kv" },
  *   events: ["namespace.created"],
@@ -173,7 +173,7 @@ export type Subscription = Resource<
  *
  * @example Workers Builds events for one Worker
  * ```typescript
- * const subscription = yield* Cloudflare.Queue.Subscription("BuildEvents", {
+ * const subscription = yield* Cloudflare.Queues.Subscription("BuildEvents", {
  *   source: { type: "workersBuilds.worker", workerName: "my-worker" },
  *   events: ["build.started", "build.completed"],
  *   queueId: queue.queueId,
@@ -183,7 +183,7 @@ export type Subscription = Resource<
  * @section Pausing delivery
  * @example Disable a subscription without deleting it
  * ```typescript
- * const subscription = yield* Cloudflare.Queue.Subscription("R2Events", {
+ * const subscription = yield* Cloudflare.Queues.Subscription("R2Events", {
  *   source: { type: "r2" },
  *   events: ["bucket.created"],
  *   queueId: queue.queueId,

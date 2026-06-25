@@ -5,8 +5,8 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import { LocalContainerProvider } from "./Containers/LocalContainerProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { localRuntimeServices } from "./LocalRuntime.ts";
-import { ProviderLocal } from "./Queue/Queue.ts";
-import { ConsumerProviderLocal } from "./Queue/Consumer.ts";
+import { ProviderLocal } from "./Queues/Queue.ts";
+import { ConsumerProviderLocal } from "./Queues/Consumer.ts";
 import { LocalWorkerProvider } from "./Workers/LocalWorkerProvider.ts";
 
 const cloudflareServices = Layer.provide(

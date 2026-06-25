@@ -1,21 +1,21 @@
 ---
 title: Consume from a Queue
-description: Receive messages from a Cloudflare Queue with Cloudflare.Queue.messages(queue).subscribe(...) — Effect-style stream handler with automatic ack/retry.
+description: Receive messages from a Cloudflare Queue with Cloudflare.Queues.messages(queue).subscribe(...) — Effect-style stream handler with automatic ack/retry.
 sidebar:
   order: 10
 ---
 
 A Cloudflare Queue gives you reliable, at-least-once delivery
 between Workers. The Worker that *sends* messages uses
-`Cloudflare.Queue.WriteQueue(...)` from the [Queue producer
+`Cloudflare.Queues.WriteQueue(...)` from the [Queue producer
 binding](/providers/cloudflare/queue) — covered in the resource
 docs. This tutorial focuses on the *consumer* side: receiving
 batches with the Effect-style
-`Cloudflare.Queue.messages(queue).subscribe(...)` API.
+`Cloudflare.Queues.messages(queue).subscribe(...)` API.
 
 `subscribe(...)` does both halves in one call: it registers a
 runtime queue listener on the Worker, and it auto-creates the
-`Cloudflare.Queue.Consumer` resource that tells Cloudflare to
+`Cloudflare.Queues.Consumer` resource that tells Cloudflare to
 dispatch messages from the queue to this Worker. No separate
 deploy-time wiring is needed.
 
@@ -36,7 +36,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export const Queue = Cloudflare.Queue.Queue("Queue");
+export const Queue = Cloudflare.Queues.Queue("Queue");
 export const Bucket = Cloudflare.R2.Bucket("Bucket");
 ```
 
@@ -47,7 +47,7 @@ test can read it back.
 ## Bind the Queue producer
 
 In the Worker init phase, yield the queue resource and ask
-`Cloudflare.Queue.WriteQueue` for a typed sender. The sender exposes `send` /
+`Cloudflare.Queues.WriteQueue` for a typed sender. The sender exposes `send` /
 `sendBatch` that round-trip through Cloudflare's runtime.
 
 ```typescript
@@ -63,11 +63,11 @@ export default Cloudflare.Worker(
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.Queue.WriteQueue(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
     return { fetch: Effect.gen(function* () { return new Response("ok"); }) };
   }).pipe(
-    Effect.provide(Cloudflare.Queue.WriteQueueBinding),
+    Effect.provide(Cloudflare.Queues.WriteQueueBinding),
     Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   ),
 );
@@ -78,7 +78,7 @@ export default Cloudflare.Worker(
 
 ## Subscribe to incoming messages
 
-`Cloudflare.Queue.messages(queue).subscribe(handler)` registers a queue
+`Cloudflare.Queues.messages(queue).subscribe(handler)` registers a queue
 event listener on the Worker. The handler receives a
 `Stream.Stream<Message<Body>>` — one stream per batch — and is
 expected to return `Effect.Effect<void>`.
@@ -95,9 +95,9 @@ expected to return `Effect.Effect<void>`.
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.Queue.WriteQueue(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
-+   yield* Cloudflare.Queue.messages<QueueMessageBody>(queueResource).subscribe(
++   yield* Cloudflare.Queues.messages<QueueMessageBody>(queueResource).subscribe(
 +     (stream) =>
 +       Stream.runForEach(stream, (msg) =>
 +         bucket
@@ -130,8 +130,8 @@ retryDelay: "1 second"             // singular and plural units both work
 ```diff lang="typescript"
 +import * as Duration from "effect/Duration";
 
-- Cloudflare.Queue.messages<QueueMessageBody>(queueResource).subscribe(
-+ Cloudflare.Queue.messages<QueueMessageBody>(queueResource, {
+- Cloudflare.Queues.messages<QueueMessageBody>(queueResource).subscribe(
++ Cloudflare.Queues.messages<QueueMessageBody>(queueResource, {
 +   batchSize: 25,
 +   maxRetries: 3,
 +   maxWaitTime: "5 seconds",
@@ -151,14 +151,14 @@ alongside the other binding lives.
 
 ```diff lang="typescript"
   }).pipe(
-+   Effect.provide(Cloudflare.Queue.EventSourceLive),
-    Effect.provide(Cloudflare.Queue.WriteQueueBinding),
++   Effect.provide(Cloudflare.Queues.EventSourceLive),
+    Effect.provide(Cloudflare.Queues.WriteQueueBinding),
     Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   ),
 ```
 
 Without the live layer, the subscribe call fails at deploy with
-`Service not found: Cloudflare.Queue.EventSource`.
+`Service not found: Cloudflare.Queues.EventSource`.
 
 ## Add the producer route
 
@@ -230,7 +230,7 @@ export default {
 };
 ```
 
-`Cloudflare.Queue.messages(queue).subscribe(...)` is the same primitive
+`Cloudflare.Queues.messages(queue).subscribe(...)` is the same primitive
 on the Effect side — the Worker bundle's runtime context routes
 the dispatch to the registered listener — but you get
 `Effect.gen` composition, typed errors, automatic batch

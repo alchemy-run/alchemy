@@ -24,20 +24,20 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
 
 /**
  * End-to-end Cloudflare Queue round-trip via
- * `Cloudflare.Queue.messages(queue).subscribe(...)`.
+ * `Cloudflare.Queues.messages(queue).subscribe(...)`.
  *
  * Stack:
  *
  * - `Counter` Durable Object (per-key count + last-bodies tail).
- * - `RoundTripQueue` (Cloudflare.Queue.Queue).
+ * - `RoundTripQueue` (Cloudflare.Queues.Queue).
  * - `QueueRoundTripWorker` — exposes:
  *     - `POST /send?name=K`  →  enqueues a message via the
- *       `Cloudflare.Queue.WriteQueue` producer.
+ *       `Cloudflare.Queues.WriteQueue` producer.
  *     - subscribe handler    →  increments the named Counter DO
  *       and stores the body, via
- *       `Cloudflare.Queue.messages(RoundTripQueue).subscribe(...)`.
+ *       `Cloudflare.Queues.messages(RoundTripQueue).subscribe(...)`.
  *     - `GET /count?name=K`  →  reads the DO snapshot.
- * - `Cloudflare.Queue.Consumer` is auto-created by the policy
+ * - `Cloudflare.Queues.Consumer` is auto-created by the policy
  *   side of `messages().subscribe(...)` — there is no explicit
  *   `Consumer(...)` yield in the stack.
  *

@@ -31,13 +31,13 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
-    const queue = yield* Cloudflare.Queue.Queue("EffectWorkerQueue");
-    const queueBinding = yield* Cloudflare.Queue.Queue(queue);
+    const queue = yield* Cloudflare.Queues.Queue("EffectWorkerQueue");
+    const queueBinding = yield* Cloudflare.Queues.Queue(queue);
     const sandbox = yield* SandboxDO;
     const queueMessages = yield* QueueMessages;
     const workflow = yield* NotifyWorkflow;
 
-    yield* Cloudflare.Queue.messages<Message["body"]>(queue).subscribe(
+    yield* Cloudflare.Queues.messages<Message["body"]>(queue).subscribe(
       (stream) =>
         Stream.runForEach(stream, (msg) =>
           queueMessages
@@ -102,8 +102,8 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   }).pipe(
     Effect.provide([
       Cloudflare.KV.ReadWriteNamespaceBinding,
-      Cloudflare.Queue.WriteQueueBinding,
-      Cloudflare.Queue.EventSourceLive,
+      Cloudflare.Queues.WriteQueueBinding,
+      Cloudflare.Queues.EventSourceLive,
     ]),
   ),
 ) {}

@@ -19,7 +19,7 @@ import type { Connection as Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { Images } from "../Images/Images.ts";
 import type { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
-import type { Queue } from "../Queue/Queue.ts";
+import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { RateLimitMarker } from "./RateLimit.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";

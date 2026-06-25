@@ -101,7 +101,7 @@ import * as PageRule from "./PageRule/index.ts";
 import * as Pages from "./Pages/index.ts";
 import * as PageShield from "./PageShield/index.ts";
 import * as Pipelines from "./Pipelines/index.ts";
-import * as Queue from "./Queue/index.ts";
+import * as Queue from "./Queues/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as R2DataCatalog from "./R2DataCatalog/index.ts";
 import * as RateLimit from "./Workers/index.ts";

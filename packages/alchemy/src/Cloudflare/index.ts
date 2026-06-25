@@ -73,7 +73,7 @@ export * as PageRule from "./PageRule/index.ts";
 export * as Pages from "./Pages/index.ts";
 export * as PageShield from "./PageShield/index.ts";
 export * as Pipelines from "./Pipelines/index.ts";
-export * as Queue from "./Queue/index.ts";
+export * as Queues from "./Queues/index.ts";
 export * as R2 from "./R2/index.ts";
 export * as R2DataCatalog from "./R2DataCatalog/index.ts";
 export * as RealtimeKit from "./RealtimeKit/index.ts";

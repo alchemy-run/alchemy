@@ -12,7 +12,7 @@ export const Bucket = Cloudflare.R2.Bucket("Bucket");
 // The Worker sends a message via `env.QUEUE.send(...)` from POST /queue/send,
 // then receives and persists it via its `queue(batch)` handler — end-to-end
 // regression guard for the Queue, QueueWrite, and Consumer resources.
-export const Queue = Cloudflare.Queue.Queue("Queue");
+export const Queue = Cloudflare.Queues.Queue("Queue");
 
 export const Counter = Cloudflare.DurableObject<CounterClass>(
   "Counter",
@@ -63,7 +63,7 @@ export default Alchemy.Stack(
 
     // Register the same worker script as a consumer of Queue. The worker's
     // `queue(batch)` handler (see src/worker.ts) receives each message batch.
-    yield* Cloudflare.Queue.Consumer("Consumer", {
+    yield* Cloudflare.Queues.Consumer("Consumer", {
       queueId: queue.queueId,
       scriptName: worker.workerName,
       settings: {

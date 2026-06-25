@@ -9,7 +9,7 @@ import EffectWorker from "./src/EffectWorker.ts";
 export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 const AsyncWorker = Effect.gen(function* () {
-  const queue = yield* Cloudflare.Queue.Queue("AsyncWorkerQueue");
+  const queue = yield* Cloudflare.Queues.Queue("AsyncWorkerQueue");
   const worker = yield* Cloudflare.Worker("AsyncWorker", {
     main: "./src/AsyncWorker.ts",
     assets: {
@@ -31,7 +31,7 @@ const AsyncWorker = Effect.gen(function* () {
       ),
     },
   });
-  yield* Cloudflare.Queue.Consumer("Consumer", {
+  yield* Cloudflare.Queues.Consumer("Consumer", {
     queueId: queue.queueId,
     scriptName: worker.workerName,
   });

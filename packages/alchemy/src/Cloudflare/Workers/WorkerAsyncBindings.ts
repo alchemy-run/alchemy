@@ -18,7 +18,7 @@ import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
-import { isQueue } from "../Queue/Queue.ts";
+import { isQueue } from "../Queues/Queue.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isRateLimit } from "./RateLimit.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";

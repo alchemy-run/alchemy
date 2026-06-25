@@ -142,7 +142,7 @@ test(
 
 /**
  * Queue producer→consumer round-trip via the Effect-style
- * `Cloudflare.Queue.messages(Queue).subscribe(...)` API.
+ * `Cloudflare.Queues.messages(Queue).subscribe(...)` API.
  *
  * Producer: `POST /queue/send` returns `{ sent: { id, text, sentAt } }`
  * after enqueuing a message.

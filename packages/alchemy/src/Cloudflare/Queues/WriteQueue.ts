@@ -18,7 +18,7 @@ import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
  * @section Sending Messages
  * @example Producer route
  * ```typescript
- * const queue = yield* Cloudflare.Queue.WriteQueue(Queue);
+ * const queue = yield* Cloudflare.Queues.WriteQueue(Queue);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -43,16 +43,16 @@ import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
  *
  * `WriteQueue` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
- * `yield* Cloudflare.Queue.WriteQueue(queue)`.
+ * `yield* Cloudflare.Queues.WriteQueue(queue)`.
  */
 export interface WriteQueue extends Binding.Service<
   WriteQueue,
-  "Cloudflare.Queue.WriteQueue",
+  "Cloudflare.Queues.WriteQueue",
   (queue: Queue) => Effect.Effect<WriteQueueClient>
 > {}
 
 export const WriteQueue = Binding.Service<WriteQueue>(
-  "Cloudflare.Queue.WriteQueue",
+  "Cloudflare.Queues.WriteQueue",
 );
 
 export interface WriteQueueClient {

@@ -38,7 +38,7 @@ const DEV_STEPS: DevStep[] = [
   { kind: "reload", detail: "38ms", ms: 600 },
   { kind: "request", label: "GET /object/hello.txt", detail: "200", ms: 900 },
   { kind: "edit", label: "alchemy.run.ts", ms: 900 },
-  { kind: "diff", label: "Queue", detail: "Cloudflare.Queue.Queue", ms: 700 },
+  { kind: "diff", label: "Queue", detail: "Cloudflare.Queues.Queue", ms: 700 },
   { kind: "wire", label: "Api → Queue.bind", ms: 700 },
   { kind: "ready", ms: 1000 },
 ];

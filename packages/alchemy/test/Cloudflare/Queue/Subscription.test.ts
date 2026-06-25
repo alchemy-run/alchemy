@@ -57,7 +57,7 @@ describe.sequential("Subscription", () => {
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const queue = yield* Cloudflare.Queue.Queue("SubQueue", {
+            const queue = yield* Cloudflare.Queues.Queue("SubQueue", {
               name: "alchemy-test-sub-queue",
             });
             // Compose with an R2 bucket — the subscription delivers
@@ -66,7 +66,7 @@ describe.sequential("Subscription", () => {
             const bucket = yield* Cloudflare.R2.Bucket("SubBucket", {
               name: "alchemy-test-sub-bucket",
             });
-            const subscription = yield* Cloudflare.Queue.Subscription(
+            const subscription = yield* Cloudflare.Queues.Subscription(
               "R2Events",
               {
                 source: { type: "r2" },
@@ -115,13 +115,13 @@ describe.sequential("Subscription", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            const queueA = yield* Cloudflare.Queue.Queue("SubQueueA", {
+            const queueA = yield* Cloudflare.Queues.Queue("SubQueueA", {
               name: "alchemy-test-sub-queue-a",
             });
-            const queueB = yield* Cloudflare.Queue.Queue("SubQueueB", {
+            const queueB = yield* Cloudflare.Queues.Queue("SubQueueB", {
               name: "alchemy-test-sub-queue-b",
             });
-            const subscription = yield* Cloudflare.Queue.Subscription(
+            const subscription = yield* Cloudflare.Queues.Subscription(
               "UpdateSub",
               {
                 name: "alchemy-sub-update",
@@ -142,13 +142,13 @@ describe.sequential("Subscription", () => {
         // destination queue.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            const queueA = yield* Cloudflare.Queue.Queue("SubQueueA", {
+            const queueA = yield* Cloudflare.Queues.Queue("SubQueueA", {
               name: "alchemy-test-sub-queue-a",
             });
-            const queueB = yield* Cloudflare.Queue.Queue("SubQueueB", {
+            const queueB = yield* Cloudflare.Queues.Queue("SubQueueB", {
               name: "alchemy-test-sub-queue-b",
             });
-            const subscription = yield* Cloudflare.Queue.Subscription(
+            const subscription = yield* Cloudflare.Queues.Subscription(
               "UpdateSub",
               {
                 name: "alchemy-sub-update-v2",
@@ -200,10 +200,10 @@ describe.sequential("Subscription", () => {
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue.Queue("SubQueueR", {
+          const queue = yield* Cloudflare.Queues.Queue("SubQueueR", {
             name: "alchemy-test-sub-queue-r",
           });
-          const subscription = yield* Cloudflare.Queue.Subscription(
+          const subscription = yield* Cloudflare.Queues.Subscription(
             "ReplaceSub",
             {
               source: { type: "kv" },
@@ -219,10 +219,10 @@ describe.sequential("Subscription", () => {
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue.Queue("SubQueueR", {
+          const queue = yield* Cloudflare.Queues.Queue("SubQueueR", {
             name: "alchemy-test-sub-queue-r",
           });
-          const subscription = yield* Cloudflare.Queue.Subscription(
+          const subscription = yield* Cloudflare.Queues.Subscription(
             "ReplaceSub",
             {
               source: { type: "r2" },
@@ -266,10 +266,10 @@ describe.sequential("Subscription", () => {
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue.Queue("ListSubQueue", {
+          const queue = yield* Cloudflare.Queues.Queue("ListSubQueue", {
             name: "alchemy-test-list-sub-queue",
           });
-          const subscription = yield* Cloudflare.Queue.Subscription(
+          const subscription = yield* Cloudflare.Queues.Subscription(
             "ListR2Events",
             {
               source: { type: "r2" },
@@ -282,7 +282,7 @@ describe.sequential("Subscription", () => {
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Queue.Subscription,
+        Cloudflare.Queues.Subscription,
       );
       const all = yield* provider.list();
 

@@ -752,7 +752,7 @@ export const BucketProvider = () =>
         );
         yield* s3.putBucketNotificationConfiguration({
           Bucket: bucketName,
-          // Preserve any Topic/Queue/EventBridge config already on the bucket;
+          // Preserve any Topic/Queues/EventBridge config already on the bucket;
           // only manage the Lambda targets declared through bindings.
           NotificationConfiguration: {
             ...existing,

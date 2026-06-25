@@ -68,7 +68,7 @@ export interface BucketEventNotificationProps {
   bucketName: string;
   /**
    * ID of the Queue that receives the event messages. Pass
-   * `queue.queueId` from a `Cloudflare.Queue.Queue`.
+   * `queue.queueId` from a `Cloudflare.Queues.Queue`.
    *
    * Immutable — changing the queue triggers a replacement.
    */
@@ -135,7 +135,7 @@ export type BucketEventNotification = Resource<
  * @example Notify on every upload and delete
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
- * const queue = yield* Cloudflare.Queue.Queue("UploadEvents");
+ * const queue = yield* Cloudflare.Queues.Queue("UploadEvents");
  *
  * yield* Cloudflare.R2.BucketEventNotification("UploadNotifications", {
  *   bucketName: bucket.bucketName,

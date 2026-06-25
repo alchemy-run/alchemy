@@ -42,7 +42,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
     const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.Queue.WriteQueue(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
     const repos = yield* Cloudflare.Artifacts.ReadWriteStore(Repos);
     const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
 
@@ -50,7 +50,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     // handler; success ack()s every message in the batch, failure
     // retry()s. The persisted JSON at /queue/<id> on R2 lets the
     // integ test verify the producer→consumer round-trip.
-    yield* Cloudflare.Queue.messages<QueueMessageBody>(queueResource).subscribe(
+    yield* Cloudflare.Queues.messages<QueueMessageBody>(queueResource).subscribe(
       (stream) =>
         Stream.runForEach(stream, (msg) =>
           bucket
@@ -353,8 +353,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
         // GET  /queue/result/:id reads the bucket entry the consumer
         //                        wrote when it processed that message.
         //
-        // Producer side: `Cloudflare.Queue.WriteQueue`. Consumer side:
-        // `Cloudflare.Queue.messages(Queue).subscribe(...)` registered in
+        // Producer side: `Cloudflare.Queues.WriteQueue`. Consumer side:
+        // `Cloudflare.Queues.messages(Queue).subscribe(...)` registered in
         // the init phase (above), with `EventSourceLive` on the
         // worker layer.
         // AI Gateway smoke test — POST /ai with { prompt }.
@@ -448,8 +448,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
       Layer.mergeAll(
         Cloudflare.R2.ReadWriteBucketBinding,
         Cloudflare.KV.ReadWriteNamespaceBinding,
-        Cloudflare.Queue.WriteQueueBinding,
-        Cloudflare.Queue.EventSourceLive,
+        Cloudflare.Queues.WriteQueueBinding,
+        Cloudflare.Queues.EventSourceLive,
         Cloudflare.Artifacts.ReadWriteStoreBinding,
         Cloudflare.AiGateway.InferenceBinding,
       ),
