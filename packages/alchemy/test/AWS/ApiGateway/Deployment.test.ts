@@ -6,36 +6,36 @@ import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_APIGATEWAY_TESTS === "true";
+test.provider.skipIf(!!process.env.FAST)(
+  "create and delete deployment",
+  (stack) =>
+    Effect.gen(function* () {
+      const { deployment } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
+            endpointConfiguration: { types: ["REGIONAL"] },
+          });
+          yield* AWS.ApiGateway.Method("AgDepMock", {
+            restApi: api,
+            httpMethod: "GET",
+            authorizationType: "NONE",
+            integration: { type: "MOCK" },
+          });
+          const deployment = yield* AWS.ApiGateway.Deployment("AgDep", {
+            restApi: api,
+            description: "alchemy-test-deployment",
+          });
+          return { api, deployment };
+        }),
+      );
 
-test.provider.skipIf(!runLive)("create and delete deployment", (stack) =>
-  Effect.gen(function* () {
-    const { deployment } = yield* stack.deploy(
-      Effect.gen(function* () {
-        const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
-          endpointConfiguration: { types: ["REGIONAL"] },
-        });
-        yield* AWS.ApiGateway.Method("AgDepMock", {
-          restApi: api,
-          httpMethod: "GET",
-          authorizationType: "NONE",
-          integration: { type: "MOCK" },
-        });
-        const deployment = yield* AWS.ApiGateway.Deployment("AgDep", {
-          restApi: api,
-          description: "alchemy-test-deployment",
-        });
-        return { api, deployment };
-      }),
-    );
+      expect(deployment.deploymentId).toBeDefined();
 
-    expect(deployment.deploymentId).toBeDefined();
-
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
 );
 
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "deployment trigger change creates new deployment",
   (stack) =>
     Effect.gen(function* () {
@@ -85,7 +85,7 @@ test.provider.skipIf(!runLive)(
     }),
 );
 
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "list enumerates the deployed deployment",
   (stack) =>
     Effect.gen(function* () {

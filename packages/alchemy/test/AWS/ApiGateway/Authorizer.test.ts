@@ -10,13 +10,12 @@ import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_APIGATEWAY_TESTS === "true";
 const authorizerUri = process.env.ALCHEMY_TEST_AUTHORIZER_URI;
 
 /**
  * Requires a Lambda authorizer invocation URI accepted by API Gateway.
  */
-test.provider.skipIf(!runLive || !authorizerUri)(
+test.provider.skipIf(!!process.env.FAST)(
   "create and update Lambda TOKEN authorizer",
   (stack) =>
     Effect.gen(function* () {
@@ -63,7 +62,7 @@ test.provider.skipIf(!runLive || !authorizerUri)(
     }),
 );
 
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "list enumerates the deployed authorizer",
   (stack) =>
     Effect.gen(function* () {
