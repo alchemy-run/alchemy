@@ -20,6 +20,14 @@ export class Docker extends Context.Service<
     readonly run: (
       args: Array<string>,
     ) => Effect.Effect<CommandOutput, PlatformError>;
+    readonly materialize: (options: {
+      context: string;
+      dockerfile: string;
+      files: ReadonlyArray<{
+        path: string;
+        content: string | Uint8Array;
+      }>;
+    }) => Effect.Effect<void, PlatformError>;
     readonly container: {
       readonly create: (options: {
         name: string;
@@ -354,6 +362,27 @@ export const DockerLive = Layer.effect(
 
     return Docker.of({
       run,
+      materialize: Effect.fn((options) =>
+        Effect.forEach(
+          [
+            ...options.files,
+            { path: "Dockerfile", content: options.dockerfile },
+          ],
+          (file) => {
+            const fullPath = path.join(options.context, file.path);
+            return fs
+              .makeDirectory(path.dirname(fullPath), { recursive: true })
+              .pipe(
+                Effect.andThen(
+                  typeof file.content === "string"
+                    ? fs.writeFileString(fullPath, file.content)
+                    : fs.writeFile(fullPath, file.content),
+                ),
+              );
+          },
+          { concurrency: "unbounded" },
+        ),
+      ),
       container: {
         create: ({ image, env, ...options }) =>
           run(

@@ -1,4 +1,3 @@
-import { materializeDockerfile, writeContextFiles } from "@/Bundle/Docker";
 import { Docker, DockerLive } from "@/Docker";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "@effect/vitest";
@@ -11,39 +10,50 @@ import { spawnSync } from "node:child_process";
 const dockerDaemonOk =
   spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
-layer(NodeServices.layer)("docker context helpers", (it) => {
-  it.effect("materializes a Dockerfile in the target directory", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({
-        prefix: "alchemy-docker-ctx-",
-      });
-      const ctx = path.join(root, "ctx");
-      const dockerfile = yield* materializeDockerfile("FROM scratch\n", ctx);
-      expect(dockerfile).toBe(path.join(ctx, "Dockerfile"));
-      expect(yield* fs.exists(dockerfile)).toBe(true);
-      expect(yield* fs.readFileString(dockerfile)).toBe("FROM scratch\n");
-    }),
-  );
+layer(Layer.provideMerge(DockerLive, NodeServices.layer))(
+  "docker context helpers",
+  (it) => {
+    it.effect("materializes a Dockerfile in the target directory", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const docker = yield* Docker;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-docker-ctx-",
+        });
+        const ctx = path.join(root, "ctx");
+        yield* docker.materialize({
+          context: ctx,
+          dockerfile: "FROM scratch\n",
+          files: [],
+        });
+        const dockerfile = path.join(ctx, "Dockerfile");
+        expect(yield* fs.exists(dockerfile)).toBe(true);
+        expect(yield* fs.readFileString(dockerfile)).toBe("FROM scratch\n");
+      }),
+    );
 
-  it.effect("writes nested context files", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({
-        prefix: "alchemy-docker-path-",
-      });
-      const ctx = path.join(root, "ctx");
-      yield* writeContextFiles(ctx, [
-        { path: "nested/hello.txt", content: "hi" },
-      ]);
-      expect(
-        yield* fs.readFileString(path.join(ctx, "nested", "hello.txt")),
-      ).toBe("hi");
-    }),
-  );
-});
+    it.effect("writes nested context files", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const docker = yield* Docker;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-docker-path-",
+        });
+        const ctx = path.join(root, "ctx");
+        yield* docker.materialize({
+          context: ctx,
+          dockerfile: "FROM scratch\n",
+          files: [{ path: "nested/hello.txt", content: "hi" }],
+        });
+        expect(
+          yield* fs.readFileString(path.join(ctx, "nested", "hello.txt")),
+        ).toBe("hi");
+      }),
+    );
+  },
+);
 
 layer(Layer.provideMerge(DockerLive, NodeServices.layer))(
   "dockerBuild",
@@ -59,15 +69,16 @@ layer(Layer.provideMerge(DockerLive, NodeServices.layer))(
           });
           const ctx = path.join(root, "ctx");
           const tag = "alchemy-docker-test:minimal";
-          yield* materializeDockerfile(
-            [
+          yield* docker.materialize({
+            context: ctx,
+            dockerfile: [
               "FROM alpine:3.19",
               "RUN echo ok > /tmp/ok.txt",
               'CMD ["cat", "/tmp/ok.txt"]',
               "",
             ].join("\n"),
-            ctx,
-          );
+            files: [],
+          });
           yield* docker.image.build({
             tag,
             context: ctx,
@@ -96,15 +107,16 @@ layer(Layer.provideMerge(DockerLive, NodeServices.layer))(
           });
           const ctx = path.join(root, "ctx");
           const tag = "alchemy-docker-test:args";
-          yield* materializeDockerfile(
-            [
+          yield* docker.materialize({
+            context: ctx,
+            dockerfile: [
               "FROM alpine:3.19",
               "ARG FOO=default",
               'RUN echo "$FOO" > /out.txt',
               "",
             ].join("\n"),
-            ctx,
-          );
+            files: [],
+          });
           yield* docker.image.build({
             tag,
             context: ctx,
@@ -141,8 +153,9 @@ layer(Layer.provideMerge(DockerLive, NodeServices.layer))(
           });
           const ctx = path.join(root, "ctx");
           const tag = "alchemy-docker-test:target";
-          yield* materializeDockerfile(
-            [
+          yield* docker.materialize({
+            context: ctx,
+            dockerfile: [
               "FROM alpine:3.19 AS base",
               "RUN echo base > /stage.txt",
               "",
@@ -150,8 +163,8 @@ layer(Layer.provideMerge(DockerLive, NodeServices.layer))(
               "RUN echo secondary > /stage.txt",
               "",
             ].join("\n"),
-            ctx,
-          );
+            files: [],
+          });
           yield* docker.image.build({
             tag,
             context: ctx,

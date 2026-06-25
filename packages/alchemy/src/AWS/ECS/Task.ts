@@ -12,10 +12,6 @@ import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
-  materializeDockerfile,
-  writeContextFiles,
-} from "../../Bundle/Docker.ts";
-import {
   findCwdForBundle,
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
@@ -724,10 +720,11 @@ await Effect.runPromise(program);
         );
         const registry = credentials.proxyEndpoint.replace(/^https?:\/\//, "");
 
-        yield* materializeDockerfile(dockerfile, contextDir);
-        yield* writeContextFiles(contextDir, [
-          { path: "index.mjs", content: code },
-        ]);
+        yield* docker.materialize({
+          context: contextDir,
+          dockerfile: dockerfile,
+          files: [{ path: "index.mjs", content: code }],
+        });
         yield* docker.image.build({
           tag: imageUri,
           context: contextDir,

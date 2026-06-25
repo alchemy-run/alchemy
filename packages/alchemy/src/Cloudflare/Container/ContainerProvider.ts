@@ -5,10 +5,6 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import {
-  materializeDockerfile,
-  writeContextFiles,
-} from "../../Bundle/Docker.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -262,18 +258,14 @@ export const LiveContainerProvider = () =>
             props.external,
             props.autoInstallExternals,
           );
-          yield* materializeDockerfile(finalDockerfile, contextDir);
-          yield* writeContextFiles(
-            contextDir,
-            build.files.map((f, i) => ({
-              // Keep the entry rename to `index.mjs` so the Dockerfile
-              // ENTRYPOINT (`ENTRYPOINT ["bun", "/app/index.mjs"]`) stays
-              // valid; preserve rolldown-assigned fileNames for every other
-              // chunk so intra-bundle relative imports resolve at runtime.
+          yield* docker.materialize({
+            context: contextDir,
+            dockerfile: finalDockerfile,
+            files: build.files.map((f, i) => ({
               path: i === 0 ? "index.mjs" : f.path,
               content: f.content,
             })),
-          );
+          });
           yield* docker.image.build({
             tag: imageRef,
             context: contextDir,
