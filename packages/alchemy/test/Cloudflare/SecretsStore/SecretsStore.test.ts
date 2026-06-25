@@ -13,6 +13,9 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 /**
@@ -153,22 +156,24 @@ it.live(
 // result. Bracketed with `stack.destroy()` at start and end; note the
 // SecretsStore provider's `delete` is an intentional no-op (account-level
 // infra), so destroy never tears down the shared store.
-test.provider("list enumerates the deployed secrets store", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed secrets store",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.SecretsStore("ListStore");
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SecretsStore("ListStore");
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.SecretsStore);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.SecretsStore);
+      const all = yield* provider.list();
 
-    expect(all.length).toBeGreaterThan(0);
-    expect(all.some((s) => s.storeId === deployed.storeId)).toBe(true);
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.some((s) => s.storeId === deployed.storeId)).toBe(true);
 
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
 );

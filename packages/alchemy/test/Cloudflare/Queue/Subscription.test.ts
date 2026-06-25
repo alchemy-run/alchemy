@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -47,7 +50,7 @@ const expectGone = (accountId: string, subscriptionId: string) =>
   );
 
 describe.sequential("Subscription", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "create r2 event subscription into a queue and destroy it",
     (stack) =>
       Effect.gen(function* () {
@@ -105,7 +108,7 @@ describe.sequential("Subscription", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "update mutable props in place (same subscriptionId)",
     (stack) =>
       Effect.gen(function* () {
@@ -192,107 +195,111 @@ describe.sequential("Subscription", () => {
       }).pipe(logLevel),
   );
 
-  test.provider("replaces the subscription when the source changes", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "replaces the subscription when the source changes",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue("SubQueueR", {
-            name: "alchemy-test-sub-queue-r",
-          });
-          const subscription = yield* Cloudflare.QueueSubscription(
-            "ReplaceSub",
-            {
-              source: { type: "kv" },
-              events: ["namespace.created"],
-              queueId: queue.queueId,
-            },
-          );
-          return { queue, subscription };
-        }),
-      );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            const queue = yield* Cloudflare.Queue("SubQueueR", {
+              name: "alchemy-test-sub-queue-r",
+            });
+            const subscription = yield* Cloudflare.QueueSubscription(
+              "ReplaceSub",
+              {
+                source: { type: "kv" },
+                events: ["namespace.created"],
+                queueId: queue.queueId,
+              },
+            );
+            return { queue, subscription };
+          }),
+        );
 
-      expect(initial.subscription.source).toEqual({ type: "kv" });
+        expect(initial.subscription.source).toEqual({ type: "kv" });
 
-      const replaced = yield* stack.deploy(
-        Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue("SubQueueR", {
-            name: "alchemy-test-sub-queue-r",
-          });
-          const subscription = yield* Cloudflare.QueueSubscription(
-            "ReplaceSub",
-            {
-              source: { type: "r2" },
-              events: ["bucket.created"],
-              queueId: queue.queueId,
-            },
-          );
-          return { queue, subscription };
-        }),
-      );
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            const queue = yield* Cloudflare.Queue("SubQueueR", {
+              name: "alchemy-test-sub-queue-r",
+            });
+            const subscription = yield* Cloudflare.QueueSubscription(
+              "ReplaceSub",
+              {
+                source: { type: "r2" },
+                events: ["bucket.created"],
+                queueId: queue.queueId,
+              },
+            );
+            return { queue, subscription };
+          }),
+        );
 
-      // The source is fixed at creation — changing it produces a new
-      // subscription identity.
-      expect(replaced.subscription.subscriptionId).not.toEqual(
-        initial.subscription.subscriptionId,
-      );
-      expect(replaced.subscription.source).toEqual({ type: "r2" });
+        // The source is fixed at creation — changing it produces a new
+        // subscription identity.
+        expect(replaced.subscription.subscriptionId).not.toEqual(
+          initial.subscription.subscriptionId,
+        );
+        expect(replaced.subscription.source).toEqual({ type: "r2" });
 
-      // The old subscription is gone after the replacement settles.
-      yield* expectGone(accountId, initial.subscription.subscriptionId);
+        // The old subscription is gone after the replacement settles.
+        yield* expectGone(accountId, initial.subscription.subscriptionId);
 
-      const live = yield* getSubscription(
-        accountId,
-        replaced.subscription.subscriptionId,
-      );
-      expect(live.events).toEqual(["bucket.created"]);
+        const live = yield* getSubscription(
+          accountId,
+          replaced.subscription.subscriptionId,
+        );
+        expect(live.events).toEqual(["bucket.created"]);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      yield* expectGone(accountId, replaced.subscription.subscriptionId);
-    }).pipe(logLevel),
+        yield* expectGone(accountId, replaced.subscription.subscriptionId);
+      }).pipe(logLevel),
   );
 
   // Canonical `list()` test (account collection): deploy a subscription,
   // then enumerate every subscription in the account via the typed provider
   // and assert the deployed one is present in the exhaustively-paginated
   // result.
-  test.provider("list enumerates the deployed subscription", (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the deployed subscription",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue("ListSubQueue", {
-            name: "alchemy-test-list-sub-queue",
-          });
-          const subscription = yield* Cloudflare.QueueSubscription(
-            "ListR2Events",
-            {
-              source: { type: "r2" },
-              events: ["bucket.created"],
-              queueId: queue.queueId,
-            },
-          );
-          return { queue, subscription };
-        }),
-      );
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const queue = yield* Cloudflare.Queue("ListSubQueue", {
+              name: "alchemy-test-list-sub-queue",
+            });
+            const subscription = yield* Cloudflare.QueueSubscription(
+              "ListR2Events",
+              {
+                source: { type: "r2" },
+                events: ["bucket.created"],
+                queueId: queue.queueId,
+              },
+            );
+            return { queue, subscription };
+          }),
+        );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.QueueSubscription,
-      );
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.QueueSubscription,
+        );
+        const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (s) => s.subscriptionId === deployed.subscription.subscriptionId,
-        ),
-      ).toBe(true);
+        expect(
+          all.some(
+            (s) => s.subscriptionId === deployed.subscription.subscriptionId,
+          ),
+        ).toBe(true);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

@@ -10,6 +10,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 // Cloudflare caps Zero Trust certificate *generation* at 3 per 24h per account
@@ -104,7 +107,7 @@ const logQuotaSkip = (what: string) =>
     `skipping ${what}: Cloudflare's 3-per-24h gateway certificate creation quota is exhausted (GatewayCertificateQuotaReached)`,
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create an activated certificate, deactivate in place, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -199,7 +202,7 @@ test.provider.skipIf(!runGatewayCertTests)(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed gateway certificate",
   (stack) =>
     Effect.gen(function* () {

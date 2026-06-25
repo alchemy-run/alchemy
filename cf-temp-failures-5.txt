@@ -1,0 +1,54 @@
+# Failed Cloudflare tests (temporary account run)
+# total failed: 18 across 8 files
+
+test/Cloudflare/Container/ContainerApplication.test.ts
+  - ContainerApplication > list enumerates container applications
+      Provider not found for undefined
+
+test/Cloudflare/D1/Database.test.ts
+  - applies migrations from migrationsDir
+      Forbidden: System limit reached: databases per account (1)
+  - applies migrations using a custom migrationsTable
+      Forbidden: System limit reached: databases per account (1)
+  - create, update, delete database
+      Forbidden: System limit reached: databases per account (1)
+  - migrates legacy 2-column migration table to wrangler schema
+      Forbidden: System limit reached: databases per account (1)
+
+test/Cloudflare/Hyperdrive/Hyperdrive.test.ts
+  - create, update, delete hyperdrive
+      BadRequest: This account has reached its limit for how many Hyperdrives it can have (2)
+
+test/Cloudflare/Pages/Deployment.test.ts
+  - create, replace on branch change, and destroy a deployment
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Pages/Domain.test.ts
+  - attach and detach a custom domain
+      Error: Test timed out in 120000ms.
+  - changing the domain name triggers replacement
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Pages/Project.test.ts
+  - changing the name triggers replacement
+      Error: Test timed out in 120000ms.
+  - create and delete a project with generated name
+      Forbidden: Authentication error
+  - list enumerates the deployed project
+      Error: Test timed out in 120000ms.
+  - update mutable props in place (same project id)
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Tags/AccountResourceTags.test.ts
+  - adoption — existing tags error without adopt, take over with adopt(true)
+      Error: Test timed out in 120000ms.
+  - changing resourceId triggers replacement
+      Error: Cannot coerce Output<KvA.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+  - create, update, and clear tags on a KV namespace
+      Error: Cannot coerce Output<TagsKv.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+  - list enumerates account-wide tagged resources
+      Error: Cannot coerce Output<ListKv.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+
+test/Cloudflare/Workers/AccountSetting.test.ts
+  - AccountSetting > flips green compute, updates in place, and restores the baseline on destroy
+      Forbidden: Authentication error

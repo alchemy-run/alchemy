@@ -11,6 +11,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -69,7 +72,7 @@ const purgeRules = (zoneId: string) =>
   );
 
 describe.sequential("Rules", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "cloud connector rules — create, update in place, destroy clears the list",
     (stack) =>
       Effect.gen(function* () {
@@ -156,7 +159,7 @@ describe.sequential("Rules", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "no-op redeploy leaves the rule list untouched and ids stable",
     (stack) =>
       Effect.gen(function* () {
@@ -205,7 +208,7 @@ describe.sequential("Rules", () => {
   // every zone via `listAllZones` and reads its rules. Deploy a rule on the
   // standing test zone, then assert the test zone appears in the result with
   // the rule we created.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates rule lists across all zones",
     (stack) =>
       Effect.gen(function* () {

@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -47,7 +50,7 @@ const expectGone = (accountId: string, dnsFirewallId: string) =>
     }),
   );
 
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed DnsFirewallNotEntitled error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {
@@ -197,7 +200,7 @@ test.provider.skipIf(!entitled)(
 // account and returns the (empty) cluster Attributes array. This read-only
 // assertion proves `list()` exhaustively paginates and produces the exact
 // `read` Attributes shape.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns the DNS firewall cluster Attributes array",
   (stack) =>
     Effect.gen(function* () {

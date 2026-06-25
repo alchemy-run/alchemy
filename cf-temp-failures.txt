@@ -1,0 +1,1568 @@
+# Failed Cloudflare tests (temporary account run)
+# total failed: 551 across 232 files
+
+test/Cloudflare/Access/Application.test.ts
+  - create and delete a self_hosted application gated by a reusable policy
+      Error: Test timed out in 120000ms.
+  - !!! list enumerates the deployed access application
+      Forbidden: Requires permission "com.cloudflare.api.account.zone.create" to create zones for the selected account
+  - !!! update policies in place keeps the applicationId stable
+      Forbidden: Requires permission "com.cloudflare.api.account.zone.create" to create zones for the selected account
+
+test/Cloudflare/Access/Bookmark.test.ts
+  - !!! legacy bookmark creation surfaces the typed AccessBookmarkNotFound error
+      AssertionError: expected 'Unauthorized' to deeply equal 'AccessBookmarkNotFound'
+  - !!! list enumerates access bookmarks at the account scope
+      Unauthorized: Authentication error
+
+test/Cloudflare/Access/Certificate.test.ts
+  - !!! list enumerates account access certificates
+      Unauthorized: Authentication error
+  - !!! unentitled accounts surface the typed AccessCertificateQuotaExceeded error
+      AssertionError: expected 'Unauthorized' to deeply equal 'AccessCertificateQuotaExceeded'
+
+test/Cloudflare/Access/CustomPage.test.ts
+  - !!! list enumerates access custom pages at the account scope
+      Unauthorized: Authentication error
+  - !!! unentitled accounts surface the typed AccessCustomPagesNotEntitled error
+      AssertionError: expected 'Unauthorized' to deeply equal 'AccessCustomPagesNotEntitled'
+
+test/Cloudflare/Access/Group.test.ts
+  - create, update rules, and delete group
+      Error: Test timed out in 120000ms.
+  - !!! group can be referenced from an access policy
+      CloudflareHttpError: null
+  - !!! list enumerates the deployed access group
+      CloudflareHttpError: null
+  - rename updates the group in place
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Access/IdentityProvider.test.ts
+  - changing the type replaces the IdP
+      TooManyRequests: Please wait and consider throttling your request speed
+  - create, verify, and destroy an OIDC IdP
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed IdP
+      TooManyRequests: Please wait and consider throttling your request speed
+  - update name and config in place (same id)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Access/InfrastructureTarget.test.ts
+  - !!! list enumerates the deployed infrastructure target
+      Forbidden: Authentication error
+
+test/Cloudflare/Access/KeyConfiguration.test.ts
+  - list returns the account key configuration singleton
+      TooManyRequests: Please wait and consider throttling your request speed
+  - pins the rotation interval, updates in place, and restores on destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Access/McpPortal.test.ts
+  - create, update in place, and destroy an MCP portal
+      CloudflareHttpError: null
+  - list enumerates the deployed MCP portal
+      CloudflareHttpError: null
+
+test/Cloudflare/Access/Organization.test.ts
+  - Organization > list returns the account Access organization
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Access/Policy.test.ts
+  - adopts an out-of-band reusable policy
+      Unauthorized: Authentication error
+  - create and delete basic allow policy
+      CloudflareHttpError: null
+  - list enumerates the deployed reusable policy
+      CloudflareHttpError: null
+  - update mutates includes without replacing
+      CloudflareHttpError: null
+
+test/Cloudflare/Access/ServiceToken.test.ts
+  - create, update duration, and delete service token
+      CloudflareHttpError: null
+  - incrementing clientSecretVersion rotates the secret
+      CloudflareHttpError: null
+  - list enumerates the deployed service token
+      CloudflareHttpError: null
+
+test/Cloudflare/Access/Tag.test.ts
+  - create, verify out-of-band, and destroy tag
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed access tag
+      TooManyRequests: Please wait and consider throttling your request speed
+  - rename replaces the tag
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Account/Account.test.ts
+  - createAccount is entitlement-gated: typed AccountCreationForbidden
+      AssertionError: expected 'InternalServerError' to deeply equal 'AccountCreationForbidden'
+  - list enumerates accessible accounts (read-only)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Account/Member.test.ts
+  - create member, update roles in place, delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the account members
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - replaces the member when the email changes
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Acm/CustomTrustStore.test.ts
+  - surfaces the typed AdvancedCertificateManagerRequired error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Acm/TotalTls.test.ts
+  - !!! TotalTls > converges enabled:false as a no-op on a zone without the ACM entitlement
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! TotalTls > list enumerates the setting across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! TotalTls > surfaces the typed AdvancedCertificateManagerRequired error when enabling without the entitlement
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Addressing/AddressMap.test.ts
+  - !!! address map lifecycle (typed FeatureNotEnabled on unentitled accounts)
+      AssertionError: expected 'CloudflareHttpError' to deeply equal 'FeatureNotEnabled'
+  - !!! list enumerates the deployed address map
+      AssertionError: expected 'CloudflareHttpError' to deeply equal 'FeatureNotEnabled'
+
+test/Cloudflare/Addressing/BgpPrefix.test.ts
+  - !!! list enumerates BGP prefixes across BYOIP prefixes
+      Unauthorized: Authentication error
+
+test/Cloudflare/Addressing/Prefix.test.ts
+  - list enumerates account prefixes (read-only)
+      TooManyRequests: Please wait and consider throttling your request speed
+  - lists the services catalog and prefixes (read-only)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Addressing/PrefixDelegation.test.ts
+  - !!! list enumerates prefix delegations (read-only)
+      Unauthorized: Authentication error
+
+test/Cloudflare/Addressing/ServiceBinding.test.ts
+  - list enumerates service bindings across prefixes (read-only)
+      CloudflareHttpError: null
+
+test/Cloudflare/AiGateway/AiGatewaySpendingLimit.test.ts
+  - !!! AiGatewaySpendingLimit > create, read-back, and delete the account spending limit
+      Unauthorized: Authentication error
+  - !!! AiGatewaySpendingLimit > list enumerates the deployed account spending limit
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! AiGatewaySpendingLimit > update the spending limit in place
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/AiGateway/Dataset.test.ts
+  - !!! AiGatewayDataset > create, update, delete a dataset on a gateway
+      Unauthorized: Authentication error
+  - !!! AiGatewayDataset > list enumerates datasets across gateways
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! AiGatewayDataset > recreates a dataset after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! AiGatewayDataset > replaces dataset when the gateway changes
+      CloudflareHttpError: null
+
+test/Cloudflare/AiGateway/DynamicRouting.test.ts
+  - !!! create, update elements (new deployed version), rename, delete
+      Unauthorized: Authentication error
+  - !!! list enumerates routes across all gateways
+      Unauthorized: Authentication error
+  - !!! recreates a route after out-of-band delete
+      Unauthorized: Authentication error
+  - !!! replaces route when the gateway changes
+      Unauthorized: Authentication error
+
+test/Cloudflare/AiGateway/Evaluation.test.ts
+  - !!! create, noop, replace, delete an evaluation
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed evaluation
+      Unauthorized: Authentication error
+
+test/Cloudflare/AiGateway/ProviderConfig.test.ts
+  - create, noop, replace, delete a BYOK provider config
+      CloudflareHttpError: null
+  - list enumerates the deployed provider config
+      CloudflareHttpError: null
+
+test/Cloudflare/AiSearch/AiSearch.test.ts
+  - construct auto-creates a managed token and wires it into the instance
+      TooManyRequests: Please wait and consider throttling your request speed
+  - web-crawler source skips token minting
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/AiSearch/Instance.test.ts
+  - !!! changing the embedding model triggers a replacement
+      Unauthorized: Authentication error
+  - !!! create, update mutable props, and delete an r2-backed instance
+      Unauthorized: Authentication error
+  - !!! creates a web-crawler instance (no service token)
+      Forbidden: Authentication error
+  - !!! creates an instance in a custom namespace and moving namespaces replaces
+      CloudflareHttpError: null
+  - !!! list enumerates the deployed instance
+      Unauthorized: Authentication error
+  - !!! recreates after out-of-band delete
+      Unauthorized: Authentication error
+
+test/Cloudflare/AiSearch/Namespace.test.ts
+  - adopts the reserved default namespace without deleting it on teardown
+      TooManyRequests: Please wait and consider throttling your request speed
+  - changing the name triggers a replacement
+      TooManyRequests: Please wait and consider throttling your request speed
+  - create, update description in place, and delete a namespace
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed namespace
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/AiSearch/Token.test.ts
+  - an AI Search instance syncs with a stack-minted service token
+      TooManyRequests: Please wait and consider throttling your request speed
+  - create, rename in place, and delete a service token
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed service token
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/AiSecurity/CustomTopics.test.ts
+  - !!! surfaces the typed AiSecurityNotEntitled error on unentitled accounts
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/AiSecurity/Settings.test.ts
+  - !!! surfaces the typed AiSecurityNotEntitled error on unentitled accounts
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Alerting/NotificationPolicy.test.ts
+  - create, update, delete notification policy
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed notification policy
+      TooManyRequests: Please wait and consider throttling your request speed
+  - replaces policy when alertType changes
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Alerting/Silence.test.ts
+  - create, update window in place, delete silence
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed silence
+      TooManyRequests: Please wait and consider throttling your request speed
+  - replaces silence when the policy changes
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Alerting/Webhook.test.ts
+  - create, update, delete webhook destination
+      CloudflareHttpError: null
+  - list enumerates the deployed webhook destination
+      CloudflareHttpError: null
+
+test/Cloudflare/ApiShield/Configuration.test.ts
+  - !!! surfaces the typed NotEntitled error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/ApiShield/Label.test.ts
+  - !!! create, update description in place, destroy a label
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! generated name respects Cloudflare's 24-character limit
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed label
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! renaming a label triggers replacement
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/ApiShield/Operation.test.ts
+  - !!! changing the method triggers replacement
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create, no-op redeploy, destroy an API Shield operation
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed API Shield operation
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/ApiShield/UserSchema.test.ts
+  - !!! changing the schema source triggers replacement
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create, enable validation in place, destroy a user schema
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed user schema
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/ApiToken/AccountApiToken.test.ts
+  - !!! list enumerates the deployed account token
+      Unauthorized: Unauthorized to access requested resource
+
+test/Cloudflare/Argo/SmartRouting.test.ts
+  - !!! SmartRouting > surfaces the typed NotAuthorized error on zones without the Argo add-on
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Argo/TieredCaching.test.ts
+  - !!! TieredCaching > enables Tiered Caching and restores the original value on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! TieredCaching > list enumerates the setting across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! TieredCaching > updates enabled in place and keeps the captured initial value
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/BotManagement/BotManagement.test.ts
+  - !!! BotManagement > deploy with no settings set adopts the singleton without writing
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! BotManagement > list enumerates bot management across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! BotManagement > manages SBFM settings on the zone singleton and restores them on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! BotManagement > toggles a boolean SBFM field and restores it on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Cache/CacheReserve.test.ts
+  - !!! CacheReserve > surfaces the typed SettingUnavailableForPlan error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Cache/OriginCloudRegion.test.ts
+  - !!! creates, updates in place, replaces on ip change, and deletes the mapping
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Cache/RegionalTieredCache.test.ts
+  - !!! RegionalTieredCache > surfaces the typed SettingUnavailableForPlan error on non-Enterprise zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Cache/SmartTieredCache.test.ts
+  - !!! SmartTieredCache > enables Smart Tiered Cache and restores the original value on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! SmartTieredCache > list enumerates the setting across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! SmartTieredCache > updates the setting in place and keeps the captured initial value
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Cache/Variants.test.ts
+  - !!! Variants > creates, updates in place, and deletes the variants setting
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Variants > deploy is idempotent and converges out-of-band drift
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Variants > list enumerates the configured variants settings
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Calls/App.test.ts
+  - create and delete an app with default name
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed app
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - update name in place (same appId, secret preserved)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Calls/TurnKey.test.ts
+  - create and delete a TURN key with default name
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed TURN key
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - update name in place (same keyId, key preserved)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/CertificateAuthorities/HostnameAssociation.test.ts
+  - !!! HostnameAssociation > associates hostnames with an uploaded CA and destroys before the cert
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! HostnameAssociation > changing the certificate key replaces the association
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! HostnameAssociation > pins Managed CA hostnames, updates in place, and clears on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/ClientCertificate/ClientCertificate.test.ts
+  - !!! changing validityDays replaces — new id issued, old certificate revoked
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create signs the CSR, destroy revokes the certificate
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates client certificates across zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/CloudConnector/Rules.test.ts
+  - !!! Rules > cloud connector rules — create, update in place, destroy clears the list
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Rules > list enumerates rule lists across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Rules > no-op redeploy leaves the rule list untouched and ids stable
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/CloudforceOne/ScanConfig.test.ts
+  - list returns an array of scan configs
+      CloudflareHttpError: null
+  - unentitled accounts surface the typed Unauthorized error
+      CloudflareHttpError: null
+
+test/Cloudflare/Connectivity/DirectoryService.test.ts
+  - http service with explicit ports and default name
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed directory service
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - tcp service lifecycle: create, update, host switch
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Container/ContainerApplication.test.ts
+  - ContainerApplication > list enumerates container applications
+      Provider not found for undefined
+
+test/Cloudflare/ContentScanning/ContentScanning.test.ts
+  - !!! ContentScanning > list enumerates the status across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! ContentScanning > pins Content Scanning off on an unentitled zone and destroys cleanly
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! ContentScanning > surfaces the typed ContentScanningNotEntitled error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/ContentScanning/Expression.test.ts
+  - !!! Expression > surfaces the typed ContentScanningNotEnabled error when scanning is disabled
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/CustomCertificate/CustomCertificate.test.ts
+  - !!! surfaces the typed PlanLevelNotAllowed error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/D1/D1Database.test.ts
+  - list enumerates the deployed database
+      Forbidden: System limit reached: databases per account (1)
+
+test/Cloudflare/DdosProtection/AllowlistEntry.test.ts
+  - list returns a well-typed empty array without Magic Transit
+      TooManyRequests: Please wait and consider throttling your request speed
+  - surfaces the typed AdvancedTcpProtectionNotEntitled error without Magic Transit
+      AssertionError: expected 'TooManyRequests' to deeply equal 'AdvancedTcpProtectionNotEntitled'
+
+test/Cloudflare/DdosProtection/TcpFlowProtectionRule.test.ts
+  - list returns a well-typed empty array without Magic Transit
+      CloudflareHttpError: null
+
+test/Cloudflare/Devices/CustomProfile.test.ts
+  - create, update in place, and delete a custom device profile
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed custom device profile
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Devices/DefaultProfile.test.ts
+  - DefaultProfile > list returns the singleton default device profile
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Devices/DexTest.test.ts
+  - !!! unentitled accounts surface the typed Forbidden entitlement error
+      AssertionError: expected 'Authentication error' to contain 'dex.api.entitlements.missing'
+
+test/Cloudflare/Devices/ManagedNetwork.test.ts
+  - !!! create, update in place, and delete a managed network
+      Forbidden: Authentication error
+  - !!! list enumerates the deployed managed network
+      Forbidden: Authentication error
+
+test/Cloudflare/Devices/PostureIntegration.test.ts
+  - creates without a real provider surface the typed InvalidPostureIntegrationConfig error
+      Error: Test timed out in 90000ms.
+
+test/Cloudflare/Devices/PostureRule.test.ts
+  - !!! changing the rule type triggers a replacement
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! create, update in place, and delete a posture rule
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates the deployed posture rule
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Devices/Settings.test.ts
+  - !!! list returns the account's device settings singleton
+      Forbidden: Authentication error
+  - !!! patches disableForTime and restores the original value on destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Diagnostics/EndpointHealthcheck.test.ts
+  - creates an endpoint healthcheck, updates in place, and destroys
+      CloudflareHttpError: null
+  - list enumerates the deployed endpoint healthcheck
+      CloudflareHttpError: null
+  - rejects public IPs with the typed InvalidHealthcheckEndpoint error
+      AssertionError: expected 'CloudflareHttpError' to deeply equal 'InvalidHealthcheckEndpoint'
+
+test/Cloudflare/Dlp/Dlp.test.ts
+  - !!! unentitled accounts surface the typed Forbidden error
+      AssertionError: expected 'CloudflareHttpError' to deeply equal 'Forbidden'
+
+test/Cloudflare/Dlp/Entry.test.ts
+  - list returns the account's custom DLP entries
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Dlp/Profile.test.ts
+  - !!! list enumerates custom DLP profiles (read-only)
+      Unauthorized: Authentication error
+
+test/Cloudflare/Dns/AccountSettings.test.ts
+  - !!! AccountSettings > list returns the account's DNS settings singleton
+      Unauthorized: Authentication error
+  - !!! AccountSettings > pins a zone default and restores the pre-management value on destroy
+      CloudflareHttpError: null
+  - !!! AccountSettings > updates in place, unions managedKeys, restores all managed fields
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Dns/DnsRecord.test.ts
+  - !!! adoption — existing record errors without adopt, takes over with adopt(true)
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! changing the record type triggers replacement
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create and delete an A record with default props
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed DNS record
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! updating mutable fields patches in place
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Dns/Dnssec.test.ts
+  - !!! Dnssec > enables DNSSEC, captures the disabled baseline, destroy deactivates
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Dnssec > list enumerates active DNSSEC across zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Dnssec > updates status in place — same zone singleton, no replacement
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Dns/View.test.ts
+  - !!! list returns a well-typed array of internal DNS views
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! surfaces the typed InternalDnsNotAvailable error on unentitled accounts
+      Error: Please wait and consider throttling your request speed
+
+test/Cloudflare/Dns/ZoneSettings.test.ts
+  - !!! ZoneSettings > list enumerates DNS settings across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! ZoneSettings > pins flattenAllCnames and restores the pre-management value on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! ZoneSettings > updates in place, unions managedKeys, restores all managed fields
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Dns/ZoneTransferAcl.test.ts
+  - !!! create, update in place, and delete a zone transfer ACL
+      CloudflareHttpError: null
+  - !!! generates a deterministic name when none is provided
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates the deployed zone transfer ACLs
+      CloudflareHttpError: null
+
+test/Cloudflare/Dns/ZoneTransferIncoming.test.ts
+  - !!! incoming config does not persist on non-secondary zones (typed not-found)
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Dns/ZoneTransferOutgoing.test.ts
+  - !!! list enumerates the outgoing transfer config per zone
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! surfaces the typed OutgoingZoneTransfersNotAllowed error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Dns/ZoneTransferPeer.test.ts
+  - create with connection settings, update in place, and delete a peer
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed peer
+      CloudflareHttpError: null
+  - wires a TSIG reference through to the peer
+      CloudflareHttpError: null
+
+test/Cloudflare/Dns/ZoneTransferTsig.test.ts
+  - create, rotate the secret in place, and delete a TSIG
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed TSIG
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/DnsFirewall/DnsFirewall.test.ts
+  - list returns the DNS firewall cluster Attributes array
+      TooManyRequests: Please wait and consider throttling your request speed
+  - surfaces the typed DnsFirewallNotEntitled error on unentitled accounts
+      AssertionError: expected 'TooManyRequests' to deeply equal 'DnsFirewallNotEntitled'
+
+test/Cloudflare/Email/EmailAddress.test.ts
+  - list enumerates the deployed email address
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Email/EmailCatchAll.test.ts
+  - !!! EmailCatchAll > configures the catch-all rule and restores the baseline on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! EmailCatchAll > list enumerates the catch-all rule across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! EmailCatchAll > updates the catch-all rule in place and keeps the captured baseline
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Email/EmailRouting.test.ts
+  - !!! EmailRouting > list enumerates email routing across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Email/EmailRule.test.ts
+  - !!! EmailRule > list enumerates the deployed email rule across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Email/SendingSubdomain.test.ts
+  - !!! adoption — existing subdomain errors without adopt, takes over with adopt(true)
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! changing the name triggers replacement
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create and destroy a sending subdomain
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed sending subdomain
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/EmailSecurity/AllowPolicy.test.ts
+  - !!! list enumerates allow policies (read-only)
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! surfaces the typed EmailSecurityNotEntitled error on unentitled accounts
+      AssertionError: expected 'TooManyRequests' to deeply equal 'EmailSecurityNotEntitled'
+
+test/Cloudflare/EmailSecurity/Domain.test.ts
+  - !!! list enumerates Email Security domains (or [] when unentitled)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/EmailSecurity/ImpersonationRegistryEntry.test.ts
+  - !!! list returns the account impersonation registry
+      Forbidden: Authentication error
+
+test/Cloudflare/EmailSecurity/TrustedDomain.test.ts
+  - !!! list enumerates trusted domains
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Firewall/AccessRule.test.ts
+  - !!! account-scoped rule (no zoneId) create, update, delete
+      CloudflareHttpError: null
+  - !!! changing the configuration triggers replacement
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create and delete a zone-scoped ip rule
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed zone-scoped rule
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! update mode and notes in place (same ruleId)
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Firewall/Lockdown.test.ts
+  - !!! create, update urls/configurations/description/paused in place, destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed lockdown rule
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Firewall/UaRule.test.ts
+  - !!! create, update mode/paused/description/userAgent in place, destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates UA rules across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Flagship/App.test.ts
+  - !!! create, update, delete a Flagship app
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates the deployed Flagship app
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! recreates an app after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Flagship/Flag.test.ts
+  - !!! create, update, delete a flag in an app
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed flag
+      Unauthorized: Authentication error
+  - !!! recreates a flag after out-of-band delete
+      Unauthorized: Authentication error
+  - !!! replaces the flag when the key changes
+      Unauthorized: Authentication error
+
+test/Cloudflare/Fraud/FraudDetectionSettings.test.ts
+  - !!! FraudDetectionSettings > adopts the zone singleton without writing and restores nothing on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! FraudDetectionSettings > list enumerates the settings across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! FraudDetectionSettings > surfaces the typed FraudDetectionNotEntitled error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Gateway/Certificate.test.ts
+  - create an activated certificate, deactivate in place, destroy
+      CloudflareHttpError: null
+  - list enumerates the deployed gateway certificate
+      CloudflareHttpError: null
+
+test/Cloudflare/Gateway/Configuration.test.ts
+  - list returns the account Gateway configuration singleton
+      TooManyRequests: Please wait and consider throttling your request speed
+  - manage activityLog and protocolDetection, then restore on destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Gateway/List.test.ts
+  - !!! changing the type replaces the list
+      Unauthorized: Authentication error
+  - !!! create, verify, and destroy a DOMAIN list
+      Unauthorized: Authentication error
+  - !!! update items, description, and name in place
+      Unauthorized: Authentication error
+
+test/Cloudflare/Gateway/Location.test.ts
+  - !!! create, verify, and destroy a location
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates deployed gateway locations
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! update name and ecsSupport in place (same id)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Gateway/Logging.test.ts
+  - !!! list returns the account's Gateway logging singleton
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! manage logging settings, update in place, restore on destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Gateway/ProxyEndpoint.test.ts
+  - !!! create, update, and destroy an identity-kind proxy endpoint
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! ip-kind endpoints surface the typed entitlement error
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates the deployed proxy endpoint
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Gateway/Rule.test.ts
+  - !!! list enumerates the deployed Gateway rule
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/GoogleTagGateway/GoogleTagGateway.test.ts
+  - !!! GoogleTagGateway > configures the gateway, updates in place, and restores the baseline on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! GoogleTagGateway > no-op redeploy skips the PUT and destroy is idempotent
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Healthcheck/Healthcheck.test.ts
+  - !!! adoption — existing check errors without adopt, takes over with adopt(true)
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! changing type HTTP→TCP updates in place; delete is idempotent
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create and delete an HTTP health check with default name
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed health check across zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! update mutable props in place (same id), then no-op redeploy
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/HostnameTlsSetting/HostnameTlsSetting.test.ts
+  - !!! lists overrides and surfaces the typed AdvancedCertificateManagerRequired error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Iam/ResourceGroup.test.ts
+  - !!! create, verify out-of-band, update name+scope in place, destroy
+      Error: Please wait and consider throttling your request speed
+  - !!! list enumerates the deployed resource group
+      Unauthorized: Authentication error
+
+test/Cloudflare/Iam/UserGroup.test.ts
+  - !!! create with a policy, verify out-of-band, update policies in place, destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates the deployed user group
+      CloudflareHttpError: null
+
+test/Cloudflare/Iam/UserGroupMembership.test.ts
+  - !!! create, verify out-of-band, replace when the user group changes, destroy
+      Error: no accepted account members found
+  - !!! list enumerates memberships across all user groups in the account
+      Error: no accepted account members found
+
+test/Cloudflare/Images/SigningKey.test.ts
+  - !!! list enumerates the account's signing keys
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! surfaces the typed ImagesAccessNotEnabled error on unentitled accounts
+      AssertionError: expected 'TooManyRequests' to deeply equal 'ImagesAccessNotEnabled'
+
+test/Cloudflare/Images/Variant.test.ts
+  - !!! create, update in place, and delete a variant
+      Unauthorized: Authentication error
+  - !!! replace a variant when the name changes
+      Unauthorized: Authentication error
+
+test/Cloudflare/Intel/IndicatorFeed.test.ts
+  - !!! unentitled accounts surface the typed IndicatorFeedsNotEntitled error
+      AssertionError: expected 'Forbidden' to deeply equal 'IndicatorFeedsNotEntitled'
+
+test/Cloudflare/KeylessCertificate/KeylessCertificate.test.ts
+  - surfaces the typed KeylessSslNotAvailable error on non-Enterprise zones
+      Error: Please wait and consider throttling your request speed
+
+test/Cloudflare/LeakedCredentialCheck/Detection.test.ts
+  - !!! !!! LeakedCredentialDetection > list enumerates custom detections across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/LeakedCredentialCheck/LeakedCredentialCheck.test.ts
+  - !!! LeakedCredentialCheck > enables leaked credential checks and restores the baseline on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! LeakedCredentialCheck > list enumerates the check across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! LeakedCredentialCheck > surfaces the typed DetectionQuotaExceeded error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/LoadBalancer/LoadBalancer.test.ts
+  - !!! surfaces the typed LoadBalancingNotEnabledForZone error without the LB subscription
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/LoadBalancer/Monitor.test.ts
+  - list returns an array of monitor attributes
+      TooManyRequests: Please wait and consider throttling your request speed
+  - surfaces the typed MonitorIntervalOutOfRange error without the LB subscription
+      AssertionError: expected 'TooManyRequests' to deeply equal 'MonitorIntervalOutOfRange'
+
+test/Cloudflare/LoadBalancer/MonitorGroup.test.ts
+  - list returns an array of monitor groups
+      Unauthorized: Authentication error
+  - surfaces the typed MonitorGroupsNotEnabled error on non-Enterprise accounts
+      AssertionError: expected 'CloudflareHttpError' to deeply equal 'MonitorGroupsNotEnabled'
+
+test/Cloudflare/LoadBalancer/Pool.test.ts
+  - surfaces the typed PoolAccessFailed error without the LB subscription
+      AssertionError: expected 'TooManyRequests' to deeply equal 'PoolAccessFailed'
+
+test/Cloudflare/LoadBalancer/_diag.test.ts
+  - !!! diag list
+      Unauthorized: Authentication error
+
+test/Cloudflare/Logpush/Job.test.ts
+  - !!! create, update, and delete an account-scoped job pushing to R2
+      UnknownCloudflareError: Invalid API Token
+  - !!! list enumerates the deployed Logpush job
+      UnknownCloudflareError: Invalid API Token
+
+test/Cloudflare/LogsControl/CmbConfig.test.ts
+  - !!! list tolerates the typed LogsControlNotAuthorized error on unentitled accounts
+      Forbidden: Authentication error
+  - !!! surfaces the typed LogsControlNotAuthorized error on unentitled accounts
+      AssertionError: expected 'Forbidden' to deeply equal 'LogsControlNotAuthorized'
+
+test/Cloudflare/LogsControl/RetentionFlag.test.ts
+  - !!! surfaces the typed LogsControlNotAuthorized error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/MagicCloudNetworking/CatalogSync.test.ts
+  - !!! list enumerates account catalog syncs
+      CloudflareHttpError: null
+  - !!! unentitled accounts surface the typed FeatureNotEnabled error
+      CloudflareHttpError: null
+
+test/Cloudflare/MagicCloudNetworking/CloudIntegration.test.ts
+  - !!! list returns a well-typed array of integrations
+      CloudflareHttpError: null
+  - !!! unentitled accounts surface the typed FeatureNotEnabled error
+      CloudflareHttpError: null
+
+test/Cloudflare/MagicCloudNetworking/OnRamp.test.ts
+  - !!! list returns on-ramps or a typed [] when unentitled
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! unentitled accounts surface the typed FeatureNotEnabled error
+      CloudflareHttpError: null
+
+test/Cloudflare/MagicNetworkMonitoring/Config.test.ts
+  - !!! MagicNetworkMonitoring.Config list > list enumerates the account MNM config
+      CloudflareHttpError: null
+
+test/Cloudflare/MagicNetworkMonitoring/MagicNetworkMonitoring.test.ts
+  - !!! MagicNetworkMonitoring > creates a threshold rule, updates it in place, and replaces on type change
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! MagicNetworkMonitoring > creates, updates in place, and deletes the account config
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/MagicNetworkMonitoring/Rule.test.ts
+  - !!! MagicNetworkMonitoring.Rule > list enumerates the deployed rule
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/MagicTransit/App.test.ts
+  - !!! list enumerates account apps (well-typed [] when unentitled)
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! unentitled accounts surface the typed MagicWanUnauthorized error
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/MagicTransit/IpsecTunnel.test.ts
+  - !!! unentitled accounts surface the typed MagicTransitNotOnboarded error
+      AssertionError: expected [ 'MagicTransitNotOnboarded', …(1) ] to include 'CloudflareHttpError'
+
+test/Cloudflare/MagicTransit/Site.test.ts
+  - !!! list enumerates account Magic WAN sites
+      Forbidden: Authentication error
+  - !!! unentitled accounts surface the typed MagicWanUnauthorized error
+      AssertionError: expected [ 'MagicWanUnauthorized', 'Forbidden' ] to include 'CloudflareHttpError'
+
+test/Cloudflare/MagicTransit/SiteAcl.test.ts
+  - !!! unentitled accounts surface the typed Magic WAN error for ACL listing
+      AssertionError: expected [ 'MagicWanUnauthorized', 'Forbidden' ] to include 'TooManyRequests'
+
+test/Cloudflare/MagicTransit/SiteLan.test.ts
+  - !!! list returns a well-typed array (empty on unentitled accounts)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/MagicTransit/StaticRoute.test.ts
+  - !!! list returns a well-typed array of routes
+      Forbidden: Authentication error
+  - !!! unentitled accounts surface the typed MagicTransitNotOnboarded error
+      AssertionError: expected [ 'MagicTransitNotOnboarded', …(1) ] to include 'TooManyRequests'
+
+test/Cloudflare/ManagedTransforms/ManagedTransforms.test.ts
+  - !!! ManagedTransforms > deploy with no transforms named adopts the singleton without writing
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! ManagedTransforms > destroy restores a transform that was enabled before management
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! ManagedTransforms > manages a named transform, updates in place, and restores it on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/MtlsCertificate/MtlsCertificate.test.ts
+  - !!! MtlsCertificate > create and delete a CA certificate
+      Unauthorized: Authentication error
+  - !!! MtlsCertificate > create and delete a leaf certificate with private key
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! MtlsCertificate > list enumerates the deployed mTLS certificate
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! MtlsCertificate > replaces the certificate when the PEM changes
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/NetworkInterconnects/Settings.test.ts
+  - !!! list enumerates the CNI settings singleton
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! pins the default ASN, updates in place, and restores the original on destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Organization/Organization.test.ts
+  - !!! list either enumerates organizations or tolerates the unentitled account
+      Unauthorized: Authentication failed (status: 400)
+  - !!! unentitled accounts surface the typed Forbidden error
+      Unauthorized: Authentication failed (status: 400)
+
+test/Cloudflare/OriginCaCertificate/OriginCaCertificate.test.ts
+  - !!! issue, verify, and revoke a certificate
+      HostnameNotAuthorized: Failed to validate requested hostname origin.alchemy-test-2.us: This zone is either not part of your account, or you do not have access to it. Please contact support if using a multi-user organization.
+  - !!! list enumerates issued certificates
+      HostnameNotAuthorized: Failed to validate requested hostname origin.alchemy-test-2.us: This zone is either not part of your account, or you do not have access to it. Please contact support if using a multi-user organization.
+  - !!! replacement on hostnames change
+      HostnameNotAuthorized: Failed to validate requested hostname origin.alchemy-test-2.us: This zone is either not part of your account, or you do not have access to it. Please contact support if using a multi-user organization.
+  - !!! replacement on requestedValidity change
+      HostnameNotAuthorized: Failed to validate requested hostname origin.alchemy-test-2.us: This zone is either not part of your account, or you do not have access to it. Please contact support if using a multi-user organization.
+
+test/Cloudflare/OriginPostQuantumEncryption/OriginPostQuantumEncryption.test.ts
+  - !!! OriginPostQuantumEncryption > list enumerates the setting across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! OriginPostQuantumEncryption > no-op redeploy converges without changing the setting
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! OriginPostQuantumEncryption > pins the setting and restores the original value on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! OriginPostQuantumEncryption > updates the value in place and keeps the captured initial value
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/OriginTlsClientAuth/Certificate.test.ts
+  - !!! OriginTlsClientAuthCertificate > list enumerates the deployed zone client certificate
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! OriginTlsClientAuthCertificate > replaces the certificate when the PEM changes
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! OriginTlsClientAuthCertificate > uploads and deletes a zone client certificate
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/OriginTlsClientAuth/HostnameAssociation.test.ts
+  - !!! HostnameAssociation > associates a hostname, updates cert and enablement in place, voids on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! HostnameAssociation > replaces the association when the hostname changes
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/OriginTlsClientAuth/HostnameCertificate.test.ts
+  - !!! list enumerates the deployed hostname certificate
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! replaces the hostname certificate when the PEM changes
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! uploads and deletes a hostname client certificate
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/OriginTlsClientAuth/Setting.test.ts
+  - !!! Setting > enables AOP and restores the original value on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Setting > list enumerates the setting across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Setting > updates the enabled flag in place
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/PageRule/PageRule.test.ts
+  - !!! adoption — existing rule errors without adopt, takes over with adopt(true)
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create, verify out-of-band, and destroy a page rule
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed page rule
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! updating actions, status, priority and target syncs in place
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/PageShield/Policy.test.ts
+  - !!! surfaces the typed PolicyQuotaExceeded error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/PageShield/Settings.test.ts
+  - !!! enables Page Shield, updates in place, and restores the baseline on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates Page Shield settings across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! surfaces the typed NotEntitled error for plan-gated flags
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Pages/Deployment.test.ts
+  - create, replace on branch change, and destroy a deployment
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Pages/Domain.test.ts
+  - attach and detach a custom domain
+      Error: Test timed out in 120000ms.
+  - changing the domain name triggers replacement
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Pages/Project.test.ts
+  - changing the name triggers replacement
+      CloudflareHttpError: null
+  - create and delete a project with generated name
+      Forbidden: Authentication error
+  - list enumerates the deployed project
+      CloudflareHttpError: null
+  - update mutable props in place (same project id)
+      CloudflareHttpError: null
+
+test/Cloudflare/Pipelines/LegacyPipeline.test.ts
+  - !!! legacy pipeline: create, in-place update, replace on name change
+      UnknownCloudflareError: Invalid API Token
+
+test/Cloudflare/Pipelines/Pipeline.test.ts
+  - !!! list enumerates the deployed pipeline
+      UnknownCloudflareError: Invalid API Token
+
+test/Cloudflare/Pipelines/Pipelines.test.ts
+  - !!! end-to-end: stream → sql pipeline → r2 sink, replacement on sink change
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! stream: create with defaults, patch http in place, replace on schema change
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Pipelines/Sink.test.ts
+  - !!! list enumerates the deployed sink
+      UnknownCloudflareError: Invalid API Token
+
+test/Cloudflare/Pipelines/Stream.test.ts
+  - !!! list enumerates the deployed pipeline stream
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Queue/QueueConsumer.test.ts
+  - create, update settings, replace script, delete
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - fails clearly when queue has consumer for different script
+      AssertionError: expected '{"_id":"Exit","_tag":"Failure","cause…' to contain 'fails-clearly-when-queue-has-consumer…'
+  - list enumerates the deployed consumer
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/Queue/RoundTrip.test.ts
+  - send → subscribe handler → DO state → polled by test client
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Queue/Subscription.test.ts
+  - !!! Subscription > create r2 event subscription into a queue and destroy it
+      Unauthorized: Authentication error
+
+test/Cloudflare/R2/Bucket.test.ts
+  - create and delete bucket with default props
+      TooManyRequests: Please wait and consider throttling your request speed
+  - create, update, delete bucket
+      TooManyRequests: Please wait and consider throttling your request speed
+  - destroying a bucket empties its objects first
+      TooManyRequests: Please wait and consider throttling your request speed
+  - existing bucket (matching name) is silently adopted without --adopt
+      TooManyRequests: Please wait and consider throttling your request speed
+  - lifecycle rules are added, updated, and removed
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/R2/BucketEventNotification.test.ts
+  - changing the queue triggers a replacement
+      TooManyRequests: Please wait and consider throttling your request speed
+  - create, update rules in place, and delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates deployed bucket event notifications
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/R2/BucketSippy.test.ts
+  - list enumerates buckets that have Sippy enabled
+      TooManyRequests: Please wait and consider throttling your request speed
+  - reads the disabled baseline and surfaces typed errors without external creds
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/R2/CustomDomain.test.ts
+  - creates, updates, and deletes a bucket custom domain
+      TooManyRequests: Please wait and consider throttling your request speed
+  - creates, updates, and deletes a bucket with multiple custom domains
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/R2/R2Bucket.test.ts
+  - list enumerates the deployed R2 bucket
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/R2DataCatalog/R2DataCatalog.test.ts
+  - enable, sync maintenance config, register credential, destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed catalog
+      TooManyRequests: Please wait and consider throttling your request speed
+  - re-enables after out-of-band disable
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/RealtimeKit/App.test.ts
+  - create (or adopt), verify out-of-band, destroy forgets but keeps the app
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed RealtimeKit app
+      TooManyRequests: Please wait and consider throttling your request speed
+  - unentitled accounts surface the typed Forbidden error
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/RegionalHostname/RegionalHostname.test.ts
+  - !!! regional hostname lifecycle (typed error on unentitled zones)
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Registrar/Domain.test.ts
+  - !!! Domain > adopts a registered domain, no-op syncs, and never releases it on destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! Domain > list enumerates registrar domains on the account
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! Domain > updates settings in place and restores the baseline on destroy
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/ResourceSharing/Share.test.ts
+  - !!! list enumerates the account's sent shares (typed Attributes), and includes a deployed share when entitled
+      Forbidden: Authentication error
+  - !!! reads succeed and write-blocked accounts surface the typed Forbidden error
+      Forbidden: Authentication error
+
+test/Cloudflare/ResourceSharing/ShareResource.test.ts
+  - !!! list enumerates share resources across the account's sent shares (typed Attributes), and includes a deployed entry when entitled
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Rules/List.test.ts
+  - !!! adopts an existing list with the same name
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! changing kind replaces the list
+      Forbidden: Authentication error
+  - !!! create and delete an ip list with default name
+      Forbidden: Authentication error
+  - !!! recreates after out-of-band delete
+      Forbidden: Authentication error
+  - !!! update description and items in place (same listId)
+      Forbidden: Authentication error
+
+test/Cloudflare/Ruleset/AccountEntrypoint.test.ts
+  - !!! account entrypoint lifecycle (typed PhaseNotEntitled on unentitled accounts)
+      AssertionError: expected 'TooManyRequests' to deeply equal 'PhaseNotEntitled'
+  - !!! list enumerates the account phase entrypoints
+      AssertionError: expected 'TooManyRequests' to deeply equal 'PhaseNotEntitled'
+
+test/Cloudflare/Ruleset/CustomRuleset.test.ts
+  - !!! custom ruleset lifecycle (typed PhaseNotEntitled on unentitled accounts)
+      AssertionError: expected 'TooManyRequests' to deeply equal 'PhaseNotEntitled'
+  - !!! list enumerates the deployed custom ruleset
+      AssertionError: expected 'TooManyRequests' to deeply equal 'PhaseNotEntitled'
+
+test/Cloudflare/Ruleset/Ruleset.test.ts
+  - !!! Ruleset > creates and tears down a ruleset whose zone is provisioned in the same deploy
+      Forbidden: Requires permission "com.cloudflare.api.account.zone.create" to create zones for the selected account
+  - !!! Ruleset > creates, updates, and deletes a zone phase entrypoint ruleset
+      Forbidden: Requires permission "com.cloudflare.api.account.zone.create" to create zones for the selected account
+
+test/Cloudflare/Rum/Rule.test.ts
+  - !!! RumRule > create, update in place, and delete a rule
+      Error: zone "alchemy-test-3.us" not found in account
+  - !!! RumRule > list enumerates rules across all rulesets
+      Error: zone "alchemy-test-3.us" not found in account
+  - !!! RumRule > recreates after out-of-band delete
+      Error: zone "alchemy-test-3.us" not found in account
+
+test/Cloudflare/Rum/Site.test.ts
+  - create and delete a host (gray-clouded) site
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed RUM site
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - update mutable props in place (same siteTag)
+      TooManyRequests: Please wait and consider throttling your request speed
+  - zone (orange-clouded) site with autoInstall, replaced on identity flip
+      Error: Please wait and consider throttling your request speed
+
+test/Cloudflare/SchemaValidation/OperationSetting.test.ts
+  - !!! list enumerates the deployed per-operation override
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! sets a per-operation override, updates it in place, and clears it on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/SchemaValidation/Schema.test.ts
+  - !!! list enumerates the deployed schema across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! uploads a schema, enables in place, replaces on disable and source change, destroys
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/SchemaValidation/Settings.test.ts
+  - !!! list enumerates the schema validation settings across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! pins zone settings, updates in place, and restores the baseline on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/SecretsStore/Secret.test.ts
+  - list enumerates the deployed secret across stores
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/SecretsStore/SecretsStore.test.ts
+  - !!! list enumerates the deployed secrets store
+      Unauthorized: Authentication error
+
+test/Cloudflare/SecurityTxt/SecurityTxt.test.ts
+  - !!! SecurityTxt > creates a security.txt, verifies out-of-band, and deletes on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! SecurityTxt > disables the file without deleting it, then destroy removes it
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! SecurityTxt > list enumerates configured security.txt files
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! SecurityTxt > updates mutable fields in place (full-replace PUT)
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Snippets/Snippet.test.ts
+  - !!! create with generated name, update code in place, destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! renaming an explicit snippet triggers replacement
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Snippets/SnippetRules.test.ts
+  - !!! snippet rules — create, update, list, and destroy in dependency order
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Spectrum/Application.test.ts
+  - !!! surfaces the typed SpectrumProtocolNotAvailable error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Speed/TestSchedule.test.ts
+  - !!! adoption — existing schedule errors without adopt, takes over with adopt(true)
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Ssl/CertificatePack.test.ts
+  - !!! surfaces the typed AdvancedCertificateManagerRequired error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found
+
+test/Cloudflare/Ssl/UniversalSsl.test.ts
+  - !!! UniversalSsl > destroy restores a disabled baseline when managing from a disabled zone
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! UniversalSsl > disables Universal SSL and restores the original value on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! UniversalSsl > list enumerates the setting across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! UniversalSsl > updates enabled in place and keeps the captured initial value
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/StateStore/State.test.ts
+  - State > DELETE /resources/:fqn (deleteState) removes a single resource
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > DELETE /stacks/:stack (no stage) removes the stack from listStacks
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > DELETE /stacks/:stack?stage=... clears one stage but leaves the stack registered
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > DELETE /state/stacks/:stack wipes the test namespace (cleanup)
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /output (getStackOutput) reads back the persisted output
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /output returns undefined for an un-deployed stage
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /replaced-resources (getReplacedResources) returns status===replaced rows
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /resources (listResources) returns the FQNs in the stage
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /resources/:fqn (getState) reads back the persisted value
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /resources/:fqn returns undefined for a missing fqn
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /stacks (listStacks) includes the registered test stack
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET /stacks/:stack/stages (listStages) includes the test stage
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > GET+PUT interleaved 30x5 — engine traffic pattern
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > getVersion returns the current STATE_STORE_VERSION
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > PUT /output (setStackOutput) persists a stack output
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > PUT /resources/:fqn (setState) persists a resource
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > setState 100x concurrent — surfaces racy transient failures
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - State > setState 100x sequential — surfaces transient failures
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+
+test/Cloudflare/Stream/LiveInput.test.ts
+  - !!! create, update in place, and delete a live input
+      Unauthorized: Authentication error
+  - !!! recreates after out-of-band delete
+      Unauthorized: Authentication error
+
+test/Cloudflare/Stream/LiveInputOutput.test.ts
+  - !!! create, toggle enabled in place, replace destination, and delete
+      Unauthorized: Authentication error
+  - !!! recreates after out-of-band delete
+      Unauthorized: Authentication error
+
+test/Cloudflare/Stream/SigningKey.test.ts
+  - !!! create and delete a signing key
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates the deployed signing key
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Stream/Watermark.test.ts
+  - !!! create and delete a watermark with default name
+      CloudflareHttpError: null
+  - !!! list enumerates the deployed watermark
+      CloudflareHttpError: null
+  - !!! prop change replaces the watermark (create-only resource)
+      CloudflareHttpError: null
+
+test/Cloudflare/Stream/Webhook.test.ts
+  - !!! configure, update, and delete the account webhook
+      TooManyRequests: Please wait and consider throttling your request speed
+  - !!! list enumerates the account Stream webhook
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Tags/AccountResourceTags.test.ts
+  - adoption — existing tags error without adopt, take over with adopt(true)
+      TooManyRequests: Please wait and consider throttling your request speed
+  - changing resourceId triggers replacement
+      Error: Cannot coerce Output<KvA.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+  - create, update, and clear tags on a KV namespace
+      Error: Cannot coerce Output<TagsKv.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+  - list enumerates account-wide tagged resources
+      Error: Cannot coerce Output<ListKv.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+
+test/Cloudflare/Tags/ZoneResourceTags.test.ts
+  - !!! create, update, and clear tags on a DNS record
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates tagged zone-scoped resources
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! tag the zone itself and clear on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/TokenValidation/TokenValidation.test.ts
+  - !!! surfaces the typed TokenValidationNotEntitled error on unentitled accounts
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Tunnel/Configuration.test.ts
+  - !!! Tunnel Configuration > list enumerates configurations across all tunnels
+      Unauthorized: Authentication error
+
+test/Cloudflare/Tunnel/HostnameRoute.test.ts
+  - !!! create, update comment in place, and destroy a hostname route
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed hostname route
+      Unauthorized: Authentication error
+
+test/Cloudflare/Tunnel/Route.test.ts
+  - !!! adopt: takes over a pre-existing route
+      Unauthorized: Authentication error
+  - !!! create and delete route with default props
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed route
+      Unauthorized: Authentication error
+  - !!! updating the comment patches in place
+      Unauthorized: Authentication error
+
+test/Cloudflare/Tunnel/VirtualNetwork.test.ts
+  - !!! create, verify, and destroy a virtual network
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed virtual network
+      Unauthorized: Authentication error
+  - !!! recreates after out-of-band delete
+      Unauthorized: Authentication error
+  - !!! update name and comment in place (same id)
+      Unauthorized: Authentication error
+
+test/Cloudflare/Tunnel/WarpConnector.test.ts
+  - create, rename in place, and destroy a WARP Connector tunnel
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed WARP Connector tunnel
+      CloudflareHttpError: null
+
+test/Cloudflare/Turnstile/Widget.test.ts
+  - create and delete a widget with default name
+      TooManyRequests: Please wait and consider throttling your request speed
+  - list enumerates the deployed widget
+      TooManyRequests: Please wait and consider throttling your request speed
+  - recreates after out-of-band delete
+      TooManyRequests: Please wait and consider throttling your request speed
+  - update mutable props in place (same sitekey)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/UrlNormalization/UrlNormalization.test.ts
+  - !!! UrlNormalization > applies Cloudflare defaults when scope and type are omitted
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! UrlNormalization > configures URL normalization and resets to defaults on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! UrlNormalization > list enumerates URL normalization across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! UrlNormalization > updates scope and type in place
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Vectorize/VectorizeIndex.test.ts
+  - !!! create and delete index with explicit dimensions
+      Unauthorized: Authentication error
+  - !!! create index from a preset
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed index
+      Unauthorized: Authentication error
+  - !!! replaces index when dimensions change
+      Unauthorized: Authentication error
+
+test/Cloudflare/Vectorize/VectorizeIndexBinding.test.ts
+  - !!! VectorizeIndex.bind exercises the client surface
+      Unauthorized: Authentication error
+
+test/Cloudflare/Vectorize/VectorizeMetadataIndex.test.ts
+  - !!! Cloudflare.VectorizeMetadataIndex > create and delete a metadata index
+      CloudflareHttpError: null
+  - !!! Cloudflare.VectorizeMetadataIndex > destroy is idempotent when the parent index was deleted out-of-band
+      CloudflareHttpError: null
+  - !!! Cloudflare.VectorizeMetadataIndex > list enumerates the deployed metadata index
+      CloudflareHttpError: null
+  - !!! Cloudflare.VectorizeMetadataIndex > multiple metadata indexes on the same parent coexist
+      CloudflareHttpError: null
+  - !!! Cloudflare.VectorizeMetadataIndex > replacing the parent index also replaces the metadata index
+      CloudflareHttpError: null
+
+test/Cloudflare/VpcService/VpcService.test.ts
+  - create vpc service with ipv4 host
+      TooManyRequests: Please wait and consider throttling your request speed
+  - create, update, delete vpc service
+      CloudflareHttpError: null
+  - list enumerates the deployed vpc service
+      CloudflareHttpError: null
+
+test/Cloudflare/VpcService/VpcServiceRef.test.ts
+  - reference vpc service by name and by id
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/VulnerabilityScanner/Credential.test.ts
+  - !!! list enumerates the deployed credential
+      Unauthorized: Authentication error
+
+test/Cloudflare/VulnerabilityScanner/CredentialSet.test.ts
+  - !!! create, rename, and destroy a credential set
+      Unauthorized: Authentication error
+  - !!! credential lifecycle — create, mutate in place, rotate value, destroy
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed credential set
+      Unauthorized: Authentication error
+  - !!! moving a credential to a different set triggers replacement
+      Unauthorized: Authentication error
+
+test/Cloudflare/VulnerabilityScanner/TargetEnvironment.test.ts
+  - !!! create, verify, and destroy a target environment
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed target environment
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! updating name and description patches in place; clearing description
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/WaitingRoom/Settings.test.ts
+  - !!! Settings > list enumerates the settings across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Settings > pins the settings to the default baseline without touching the API
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! Settings > surfaces the typed ZoneNotEntitled error when enabling on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/WaitingRoom/WaitingRoom.test.ts
+  - !!! surfaces the typed ZoneNotEntitled error on unentitled zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Web3/Web3Hostname.test.ts
+  - !!! surfaces the typed Web3HostnameNotEntitled error on unentitled accounts
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Website/StaticSite.test.ts
+  - StaticSite: a bundle-only change keeps the asset manifest (hash.assets stable)
+      CloudflareHttpError: null
+  - StaticSite: class form deploys and serves the built assets
+      TooManyRequests: Please wait and consider throttling your request speed
+  - StaticSite: editing a source file republishes the assets in a single deploy
+      TooManyRequests: Please wait and consider throttling your request speed
+  - StaticSite: relocating the project (and deleting the old one) preserves hash.assets
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Website/Vite.test.ts
+  - Vite: relocating rootDir (and deleting the old one) is a no-op when sources are identical
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/Workers/AccountSetting.test.ts
+  - AccountSetting > flips green compute, updates in place, and restores the baseline on destroy
+      CloudflareHttpError: null
+  - AccountSetting > list returns the account settings singleton
+      TooManyRequests: Please wait and consider throttling your request speed
+  - AccountSetting > no-op deploy when desired settings already match the live account
+      CloudflareHttpError: null
+
+test/Cloudflare/Workers/ObservabilityDestination.test.ts
+  - create and delete a destination with default name
+      Forbidden: Authentication error
+  - list enumerates the deployed destination
+      TooManyRequests: Please wait and consider throttling your request speed
+  - replacement on name change (new slug, old destination removed)
+      TooManyRequests: Please wait and consider throttling your request speed
+  - update url, headers, and enabled in place (same slug)
+      TooManyRequests: Please wait and consider throttling your request speed
+
+test/Cloudflare/Workers/PrebuiltWorker.test.ts
+  - Cloudflare.Worker with bundle: false > uploads a prebuilt module graph byte-for-byte
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/Workers/Route.test.ts
+  - !!! adoption — existing route errors without adopt, takes over with adopt(true)
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! create and delete an opt-out route (no script)
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed route across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! route to a Worker, then update pattern and script in place
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Workers/Worker.test.ts
+  - Cloudflare.Worker > create, update, delete worker
+      Unauthorized: Authentication error
+  - Cloudflare.Worker > downstream referencing worker.url is not re-updated when the worker changes
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - Cloudflare.Worker > worker.durableObjectNamespaces stability across DO and worker changes
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/WorkersForPlatforms/DispatchNamespace.test.ts
+  - !!! create, replace, and destroy a dispatch namespace
+      Forbidden: You do not have access to dispatch namespaces. You can purchase it within the Cloudflare dashboard here: https://dash.cloudflare.com?to=/:account/workers-for-platforms - if you are an Enterprise customer please contact your account team.
+  - !!! list enumerates the deployed dispatch namespace
+      Forbidden: You do not have access to dispatch namespaces. You can purchase it within the Cloudflare dashboard here: https://dash.cloudflare.com?to=/:account/workers-for-platforms - if you are an Enterprise customer please contact your account team.
+  - !!! upload, update in place, and destroy a namespace script
+      Forbidden: You do not have access to dispatch namespaces. You can purchase it within the Cloudflare dashboard here: https://dash.cloudflare.com?to=/:account/workers-for-platforms - if you are an Enterprise customer please contact your account team.
+
+test/Cloudflare/Zaraz/ZarazConfig.test.ts
+  - !!! ZarazConfig > list enumerates Zaraz config across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Zone/CustomNameservers.test.ts
+  - !!! pins the custom nameserver toggle and leaves the zone at its baseline on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! surfaces the typed CustomNameserverSetNotFound error when enabling without an account nameserver set
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Zone/Hold.test.ts
+  - !!! list enumerates the hold state across all zones
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! surfaces the typed ZoneHoldsRequireEnterprise error on non-Enterprise zones
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Zone/Setting.test.ts
+  - !!! changing settingId replaces — old setting restored, new setting pinned
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! list enumerates the deployed (zone, setting) pair
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! pins a toggle setting and restores the original value on destroy
+      Error: zone "alchemy-test-2.us" not found in account
+  - !!! updates a numeric setting in place and keeps the captured initial value
+      Error: zone "alchemy-test-2.us" not found in account
+
+test/Cloudflare/Zone/Zone.test.ts
+  - !!! adoption — existing zone errors without adopt, takes over with adopt(true)
+      Forbidden: Requires permission "com.cloudflare.api.account.zone.create" to create zones for the selected account
+  - !!! create zone retains by default — destroy() opts in to deletion
+      Forbidden: Requires permission "com.cloudflare.api.account.zone.create" to create zones for the selected account
+  - !!! create zone retains by default — survives stack.destroy()
+      Forbidden: Requires permission "com.cloudflare.api.account.zone.create" to create zones for the selected account
+  - !!! list enumerates every zone in the account
+      AssertionError: expected undefined to be defined

@@ -7,6 +7,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -17,7 +20,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "pins the rotation interval, updates in place, and restores on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -76,7 +79,7 @@ test.provider(
 // always exists with a Cloudflare default and there is no enumeration API,
 // so `list()` reads the single instance and returns it as a one-element
 // array. Assert exactly one well-typed item scoped to the account.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns the account key configuration singleton",
   () =>
     Effect.gen(function* () {

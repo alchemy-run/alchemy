@@ -16,6 +16,9 @@ import {
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -33,7 +36,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
 // root as `cwd`.
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Vite: editing a source file republishes the assets in a single deploy",
   (stack) =>
     Effect.gen(function* () {
@@ -100,7 +103,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Vite: class form deploys and serves the built assets",
   (stack) =>
     Effect.gen(function* () {
@@ -157,7 +160,7 @@ test.provider(
 // test fail loudly if anything still depends on the recorded path.
 // ─────────────────────────────────────────────────────────────────────
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Vite: relocating rootDir (and deleting the old one) is a no-op when sources are identical",
   (stack) =>
     Effect.gen(function* () {
@@ -230,7 +233,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Vite: `env` props are inlined as `import.meta.env.*` into the bundle",
   (stack) =>
     Effect.gen(function* () {

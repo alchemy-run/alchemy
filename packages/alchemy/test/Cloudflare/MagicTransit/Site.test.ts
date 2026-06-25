@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -40,7 +43,7 @@ const expectGone = (accountId: string, siteId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "unentitled accounts surface the typed MagicWanUnauthorized error",
   (stack) =>
     Effect.gen(function* () {
@@ -85,7 +88,7 @@ test.provider(
 // `Forbidden` (403) and `list()` returns a well-typed `[]`. On entitled
 // accounts (CLOUDFLARE_TEST_MAGIC_WAN=1) we deploy a site and assert it
 // appears in the exhaustively-paginated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates account Magic WAN sites",
   (stack) =>
     Effect.gen(function* () {

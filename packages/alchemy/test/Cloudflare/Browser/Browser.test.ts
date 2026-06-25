@@ -7,6 +7,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -40,7 +43,7 @@ const readJson = (url: string) =>
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "async worker renders a page title through Browser Rendering",
   Effect.gen(function* () {
     const { asyncWorkerUrl } = yield* stack;
@@ -55,7 +58,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker exercises content via quickAction wrapper",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -70,7 +73,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker converts a page to markdown",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -83,7 +86,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker extracts links",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -96,7 +99,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker scrapes elements by selector",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -109,7 +112,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker takes a page snapshot",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -124,7 +127,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker streams a screenshot",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -137,7 +140,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker streams a PDF",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -150,7 +153,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker extracts JSON with AI",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -163,7 +166,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker calls the generic quickAction",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -176,7 +179,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker exposes the raw BrowserRun binding",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;

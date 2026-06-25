@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -47,53 +50,55 @@ describe.sequential("LeakedCredentialDetection", () => {
   // On the standard testing account no zone has detections (quota is zero),
   // so the result is a well-typed empty array. When an entitled zone is
   // supplied, deploy a detection and assert it appears in the result.
-  test.provider("list enumerates custom detections across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates custom detections across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LeakedCredentialDetection,
-      );
-
-      if (detectionZoneId) {
-        const usernameExpr =
-          'lookup_json_string(http.request.body.raw, "user")';
-        const passwordExpr =
-          'lookup_json_string(http.request.body.raw, "pass")';
-
-        const detection = yield* stack.deploy(
-          Effect.gen(function* () {
-            const check = yield* Cloudflare.LeakedCredentialCheck("Lcc", {
-              zoneId: detectionZoneId,
-              enabled: true,
-            });
-            return yield* Cloudflare.LeakedCredentialDetection(
-              "ListDetection",
-              {
-                zoneId: check.zoneId,
-                username: usernameExpr,
-                password: passwordExpr,
-              },
-            );
-          }),
+        const provider = yield* Provider.findProvider(
+          Cloudflare.LeakedCredentialDetection,
         );
 
-        const all = yield* provider.list();
-        expect(all.some((d) => d.detectionId === detection.detectionId)).toBe(
-          true,
-        );
-      } else {
-        // Read-only assertion: the result is a well-typed array (empty on the
-        // unentitled standard account). `zoneId` is resolved to prove the
-        // standing test zone exists in the enumeration scope.
-        expect(zoneId).toBeTruthy();
-        const all = yield* provider.list();
-        expect(Array.isArray(all)).toBe(true);
-      }
+        if (detectionZoneId) {
+          const usernameExpr =
+            'lookup_json_string(http.request.body.raw, "user")';
+          const passwordExpr =
+            'lookup_json_string(http.request.body.raw, "pass")';
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+          const detection = yield* stack.deploy(
+            Effect.gen(function* () {
+              const check = yield* Cloudflare.LeakedCredentialCheck("Lcc", {
+                zoneId: detectionZoneId,
+                enabled: true,
+              });
+              return yield* Cloudflare.LeakedCredentialDetection(
+                "ListDetection",
+                {
+                  zoneId: check.zoneId,
+                  username: usernameExpr,
+                  password: passwordExpr,
+                },
+              );
+            }),
+          );
+
+          const all = yield* provider.list();
+          expect(all.some((d) => d.detectionId === detection.detectionId)).toBe(
+            true,
+          );
+        } else {
+          // Read-only assertion: the result is a well-typed array (empty on the
+          // unentitled standard account). `zoneId` is resolved to prove the
+          // standing test zone exists in the enumeration scope.
+          expect(zoneId).toBeTruthy();
+          const all = yield* provider.list();
+          expect(Array.isArray(all)).toBe(true);
+        }
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

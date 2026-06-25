@@ -9,6 +9,9 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -44,7 +47,7 @@ const expectGone = (accountId: string) =>
 // The Stream webhook is an account-level singleton, so the whole
 // lifecycle lives in one sequential test to avoid the tests fighting
 // over the single slot.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "configure, update, and delete the account webhook",
   (stack) =>
     Effect.gen(function* () {
@@ -107,7 +110,7 @@ test.provider(
 // entitlement (mutating the webhook is covered by the gated lifecycle test
 // above, which fails with the typed Cloudflare `StreamSubscriptionRequired`
 // error code 10010 on un-entitled accounts).
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the account Stream webhook",
   (stack) =>
     Effect.gen(function* () {

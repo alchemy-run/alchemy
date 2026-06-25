@@ -11,6 +11,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import crypto from "node:crypto";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -111,7 +114,7 @@ const expectPipelineGone = (accountId: string, pipelineId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "stream: create with defaults, patch http in place, replace on schema change",
   (stack) =>
     Effect.gen(function* () {
@@ -217,7 +220,7 @@ const etl = (
     return { bucket, stream, sink, pipeline };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "end-to-end: stream → sql pipeline → r2 sink, replacement on sink change",
   (stack) =>
     Effect.gen(function* () {

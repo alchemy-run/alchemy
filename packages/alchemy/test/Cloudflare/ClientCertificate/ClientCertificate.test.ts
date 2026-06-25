@@ -11,6 +11,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { CSR_A, CSR_B } from "./fixtures/csr.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -66,7 +69,7 @@ const waitUntilRevoked = (zoneId: string, clientCertificateId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create signs the CSR, destroy revokes the certificate",
   (stack) =>
     Effect.gen(function* () {
@@ -134,7 +137,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "changing validityDays replaces — new id issued, old certificate revoked",
   (stack) =>
     Effect.gen(function* () {
@@ -200,7 +203,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates client certificates across zones",
   (stack) =>
     Effect.gen(function* () {

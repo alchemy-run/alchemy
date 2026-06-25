@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -66,7 +69,7 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
   );
 
 describe.sequential("UniversalSsl", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "disables Universal SSL and restores the original value on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -102,7 +105,7 @@ describe.sequential("UniversalSsl", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "updates enabled in place and keeps the captured initial value",
     (stack) =>
       Effect.gen(function* () {
@@ -148,7 +151,7 @@ describe.sequential("UniversalSsl", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "destroy restores a disabled baseline when managing from a disabled zone",
     (stack) =>
       Effect.gen(function* () {
@@ -189,19 +192,21 @@ describe.sequential("UniversalSsl", () => {
   // API for this per-zone setting, so `list()` enumerates every zone via
   // `listAllZones` and reads the singleton in each. Assert the result is
   // non-empty and contains the standing test zone.
-  test.provider("list enumerates the setting across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the setting across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.UniversalSsl);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(Cloudflare.UniversalSsl);
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

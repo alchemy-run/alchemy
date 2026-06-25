@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -125,26 +128,28 @@ describe.sequential("Organization", () => {
   // org via the same path `read` uses and returns the one-element array (or
   // `[]` when the account has never enabled Zero Trust). This is read-only —
   // it does not mutate the singleton — so it runs unconditionally.
-  test.provider("list returns the account Access organization", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list returns the account Access organization",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.AccessOrganization,
-      );
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.AccessOrganization,
+        );
+        const all = yield* provider.list();
 
-      // Singleton: zero (Zero Trust never enabled) or exactly one.
-      expect(all.length).toBeLessThanOrEqual(1);
-      for (const org of all) {
-        expect(org.accountId).toEqual(accountId);
-        expect(typeof org.authDomain).toBe("string");
-        expect(typeof org.name).toBe("string");
-      }
+        // Singleton: zero (Zero Trust never enabled) or exactly one.
+        expect(all.length).toBeLessThanOrEqual(1);
+        for (const org of all) {
+          expect(org.accountId).toEqual(accountId);
+          expect(typeof org.authDomain).toBe("string");
+          expect(typeof org.name).toBe("string");
+        }
 
-      // `stack` is unused (no resource is deployed), but keep the destroy
-      // bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused (no resource is deployed), but keep the destroy
+        // bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

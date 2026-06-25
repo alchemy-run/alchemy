@@ -14,6 +14,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Gateway } from "./fixtures/Gateway.ts";
 import TestWorker from "./fixtures/TestWorker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -23,123 +26,129 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.provider("create and delete ai gateway with default props", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "create and delete ai gateway with default props",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const gateway = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("DefaultGateway", {
-          id: "alchemy-test-ai-gateway-default",
-        });
-      }),
-    );
+      const gateway = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AiGateway("DefaultGateway", {
+            id: "alchemy-test-ai-gateway-default",
+          });
+        }),
+      );
 
-    expect(gateway.gatewayId).toEqual("alchemy-test-ai-gateway-default");
-    expect(gateway.cacheInvalidateOnUpdate).toEqual(false);
-    expect(gateway.cacheTtl).toEqual(null);
-    expect(gateway.collectLogs).toEqual(true);
-    expect(gateway.rateLimitingInterval).toEqual(null);
-    expect(gateway.rateLimitingLimit).toEqual(null);
-    expect(gateway.rateLimitingTechnique).toEqual("fixed");
+      expect(gateway.gatewayId).toEqual("alchemy-test-ai-gateway-default");
+      expect(gateway.cacheInvalidateOnUpdate).toEqual(false);
+      expect(gateway.cacheTtl).toEqual(null);
+      expect(gateway.collectLogs).toEqual(true);
+      expect(gateway.rateLimitingInterval).toEqual(null);
+      expect(gateway.rateLimitingLimit).toEqual(null);
+      expect(gateway.rateLimitingTechnique).toEqual("fixed");
 
-    const actualGateway = yield* aiGateway.getAiGateway({
-      accountId,
-      id: gateway.gatewayId,
-    });
-    expect(actualGateway.id).toEqual(gateway.gatewayId);
+      const actualGateway = yield* aiGateway.getAiGateway({
+        accountId,
+        id: gateway.gatewayId,
+      });
+      expect(actualGateway.id).toEqual(gateway.gatewayId);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
-  }).pipe(logLevel),
+      yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
+    }).pipe(logLevel),
 );
 
-test.provider("create, update, delete ai gateway", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "create, update, delete ai gateway",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const gateway = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("TestGateway", {
-          id: "alchemy-test-ai-gateway",
-          cacheTtl: 60,
-          collectLogs: true,
-          rateLimitingInterval: 60,
-          rateLimitingLimit: 100,
-          rateLimitingTechnique: "fixed",
-        });
-      }),
-    );
+      const gateway = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AiGateway("TestGateway", {
+            id: "alchemy-test-ai-gateway",
+            cacheTtl: 60,
+            collectLogs: true,
+            rateLimitingInterval: 60,
+            rateLimitingLimit: 100,
+            rateLimitingTechnique: "fixed",
+          });
+        }),
+      );
 
-    const actualGateway = yield* aiGateway.getAiGateway({
-      accountId,
-      id: gateway.gatewayId,
-    });
-    expect(actualGateway.id).toEqual(gateway.gatewayId);
-    expect(actualGateway.cacheTtl).toEqual(60);
-    expect(actualGateway.rateLimitingLimit).toEqual(100);
+      const actualGateway = yield* aiGateway.getAiGateway({
+        accountId,
+        id: gateway.gatewayId,
+      });
+      expect(actualGateway.id).toEqual(gateway.gatewayId);
+      expect(actualGateway.cacheTtl).toEqual(60);
+      expect(actualGateway.rateLimitingLimit).toEqual(100);
 
-    const updatedGateway = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("TestGateway", {
-          id: "alchemy-test-ai-gateway",
-          cacheTtl: 120,
-          collectLogs: true,
-          rateLimitingInterval: 120,
-          rateLimitingLimit: 200,
-          rateLimitingTechnique: "sliding",
-        });
-      }),
-    );
+      const updatedGateway = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AiGateway("TestGateway", {
+            id: "alchemy-test-ai-gateway",
+            cacheTtl: 120,
+            collectLogs: true,
+            rateLimitingInterval: 120,
+            rateLimitingLimit: 200,
+            rateLimitingTechnique: "sliding",
+          });
+        }),
+      );
 
-    const actualUpdatedGateway = yield* aiGateway.getAiGateway({
-      accountId,
-      id: updatedGateway.gatewayId,
-    });
-    expect(actualUpdatedGateway.cacheTtl).toEqual(120);
-    expect(actualUpdatedGateway.rateLimitingInterval).toEqual(120);
-    expect(actualUpdatedGateway.rateLimitingLimit).toEqual(200);
-    expect(actualUpdatedGateway.rateLimitingTechnique).toEqual("sliding");
+      const actualUpdatedGateway = yield* aiGateway.getAiGateway({
+        accountId,
+        id: updatedGateway.gatewayId,
+      });
+      expect(actualUpdatedGateway.cacheTtl).toEqual(120);
+      expect(actualUpdatedGateway.rateLimitingInterval).toEqual(120);
+      expect(actualUpdatedGateway.rateLimitingLimit).toEqual(200);
+      expect(actualUpdatedGateway.rateLimitingTechnique).toEqual("sliding");
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
-  }).pipe(logLevel),
+      yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
+    }).pipe(logLevel),
 );
 
-test.provider("list enumerates the deployed ai gateway", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed ai gateway",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const gatewayId = "alchemy-test-ai-gateway-list";
+      const gatewayId = "alchemy-test-ai-gateway-list";
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.AiGateway("ListGateway", {
-          id: gatewayId,
-        });
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AiGateway("ListGateway", {
+            id: gatewayId,
+          });
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.AiGateway);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.AiGateway);
+      const all = yield* provider.list();
 
-    expect(all.some((g) => g.gatewayId === deployed.gatewayId)).toBe(true);
+      expect(all.some((g) => g.gatewayId === deployed.gatewayId)).toBe(true);
 
-    yield* stack.destroy();
-    yield* waitForGatewayToBeDeleted(deployed.gatewayId, deployed.accountId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* waitForGatewayToBeDeleted(deployed.gatewayId, deployed.accountId);
+    }).pipe(logLevel),
 );
 
 // Engine-level adoption: AI Gateways have no ownership signal (Cloudflare
 // doesn't expose tags on AI Gateways), so a name match in `read` is treated
 // as silent adoption.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "existing ai gateway (matching id) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
@@ -240,7 +249,7 @@ const Stack = Alchemy.Stack(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "deployed worker can call AiGateway binding (effect-native getUrl)",
   Effect.gen(function* () {
     const out = yield* stack;

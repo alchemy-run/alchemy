@@ -9,6 +9,9 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -67,7 +70,7 @@ const expectGone = (accountId: string, bucketName: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "enable, sync maintenance config, register credential, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -165,7 +168,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed catalog",
   (stack) =>
     Effect.gen(function* () {
@@ -198,7 +201,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "re-enables after out-of-band disable",
   (stack) =>
     Effect.gen(function* () {

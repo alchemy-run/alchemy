@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -68,7 +71,7 @@ const program = (
     return { apiToken, token };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, rename in place, and delete a service token",
   (stack) =>
     Effect.gen(function* () {
@@ -116,7 +119,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "recreates after out-of-band delete",
   (stack) =>
     Effect.gen(function* () {
@@ -156,7 +159,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed service token",
   (stack) =>
     Effect.gen(function* () {
@@ -183,7 +186,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "an AI Search instance syncs with a stack-minted service token",
   (stack) =>
     Effect.gen(function* () {

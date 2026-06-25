@@ -16,21 +16,24 @@
  *   # run the Cloudflare suite against a fresh temporary account (default)
  *   bun scripts/test-with-temporary-account.ts
  *
- *   # target a narrower path / forward extra args to vitest
+ *   # target a narrower path
  *   bun scripts/test-with-temporary-account.ts test/Cloudflare/KV/Namespace.test.ts
  *
- * Note: a temporary account is brand new and unentitled — it has no zones and
- * no plan features, so zone-scoped and entitlement-gated suites will fail.
- * It is best used to smoke-test account-scoped resources (KV, R2, Queues,
- * Workers, D1, …). Pass an explicit path to scope the run.
+ *   # write a vitest JSON report
+ *   bun scripts/test-with-temporary-account.ts --json cf-temp-results.json
+ *
+ * Note: a temporary account is brand new and unentitled — it has no zones, no
+ * plan features, and tight resource caps (e.g. 5 Workers). Tests that can't pass
+ * on a temp account are gated behind `SKIP_NON_EPHEMRAL_ACCOUNT_TESTS` (set
+ * automatically here) — see scripts/skip-non-ephemeral.ts.
  */
-import { createHash } from "node:crypto";
-import * as nodePath from "node:path";
+import { fromApiToken } from "@distilled.cloud/cloudflare/Credentials";
+import * as Provisioning from "@distilled.cloud/cloudflare/provisioning";
 import { Effect } from "effect";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { fromApiToken } from "@distilled.cloud/cloudflare/Credentials";
-import * as Provisioning from "@distilled.cloud/cloudflare/provisioning";
+import { createHash } from "node:crypto";
+import * as nodePath from "node:path";
 
 const BOLD = "\x1b[1m";
 const GREEN = "\x1b[32m";
@@ -138,22 +141,41 @@ const main = async () => {
     `${DIM}Running Alchemy test suite against the temporary account…${RESET}\n`,
   );
 
-  // Default to the Cloudflare suite; allow overriding via CLI args.
-  const passthrough = process.argv.slice(2);
-  const vitestArgs = passthrough.length > 0 ? passthrough : ["test/Cloudflare"];
+  const pkgDir = nodePath.resolve(import.meta.dir, "../packages/alchemy");
 
-  const proc = Bun.spawn(["bunx", "vitest", "run", ...vitestArgs], {
-    cwd: nodePath.resolve(import.meta.dir, "../packages/alchemy"),
-    env: {
-      ...process.env,
-      // Force Alchemy's Cloudflare auth to read credentials from the
-      // environment (CI path) under a throwaway profile so it never picks up a
-      // stored profile pointing at a real account.
-      CI: "true",
-      ALCHEMY_PROFILE: "cf-temporary-account",
-      CLOUDFLARE_ACCOUNT_ID: creds.accountId,
-      CLOUDFLARE_API_TOKEN: creds.apiToken,
-    },
+  // Parse args: `--json <path>` writes a vitest JSON report; everything else is
+  // a vitest path filter (default: the whole Cloudflare suite).
+  const rawArgs = process.argv.slice(2);
+  let jsonOut: string | undefined;
+  const pathArgs: string[] = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    if (rawArgs[i] === "--json") jsonOut = rawArgs[++i];
+    else pathArgs.push(rawArgs[i]);
+  }
+  if (pathArgs.length === 0) pathArgs.push("test/Cloudflare");
+  // Absolute so the report lands here (vitest's cwd is packages/alchemy).
+  if (jsonOut) jsonOut = nodePath.resolve(jsonOut);
+
+  const env = {
+    ...process.env,
+    // Force Alchemy's Cloudflare auth to read credentials from the environment
+    // (CI path) under a throwaway profile so it never picks up a stored profile
+    // pointing at a real account.
+    CI: "true",
+    ALCHEMY_PROFILE: "cf-temporary-account",
+    CLOUDFLARE_ACCOUNT_ID: creds.accountId,
+    CLOUDFLARE_API_TOKEN: creds.apiToken,
+    // Skip tests that can't pass on a fresh, unentitled temporary account
+    // (gated via skipIf — see scripts/skip-non-ephemeral.ts).
+    SKIP_NON_EPHEMRAL_ACCOUNT_TESTS: "1",
+  };
+
+  const reporters = jsonOut
+    ? ["--reporter=default", "--reporter=json", `--outputFile=${jsonOut}`]
+    : ["--reporter=default"];
+  const proc = Bun.spawn(["bunx", "vitest", "run", ...pathArgs, ...reporters], {
+    cwd: pkgDir,
+    env,
     stdio: ["inherit", "inherit", "inherit"],
   });
 
@@ -161,7 +183,9 @@ const main = async () => {
   if (exitCode === 0) {
     console.log(`\n${GREEN}${BOLD}✓ Test suite passed${RESET}`);
   } else {
-    console.log(`\n${RED}${BOLD}✗ Test suite failed (exit ${exitCode})${RESET}`);
+    console.log(
+      `\n${RED}${BOLD}✗ Test suite failed (exit ${exitCode})${RESET}`,
+    );
   }
   process.exitCode = exitCode;
 };

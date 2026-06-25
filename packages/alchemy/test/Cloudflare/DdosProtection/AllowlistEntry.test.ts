@@ -7,6 +7,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -34,7 +37,7 @@ const accountId = Effect.gen(function* () {
 // Inverse probe: pins the typed `AdvancedTcpProtectionNotEntitled` rejection,
 // so it skips on entitled accounts (CLOUDFLARE_TEST_MAGIC_TRANSIT set), where
 // the API would accept the call.
-test.provider.skipIf(!!magicTransit)(
+test.provider.skipIf(!!magicTransit || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed AdvancedTcpProtectionNotEntitled error without Magic Transit",
   (stack) =>
     Effect.gen(function* () {
@@ -138,7 +141,7 @@ test.provider.skipIf(!magicTransit)(
 // Advanced TCP Protection entitlement the enumeration API rejects with the
 // typed `AdvancedTcpProtectionNotEntitled` error (Cloudflare code 8888), which
 // `list()` maps to a well-typed empty array — assert that here, ungated.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns a well-typed empty array without Magic Transit",
   (stack) =>
     Effect.gen(function* () {

@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -98,7 +101,7 @@ const replacementProgram = (opts: {
     return { bucket, queueA, queueB, notification };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update rules in place, and delete",
   (stack) =>
     Effect.gen(function* () {
@@ -228,7 +231,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "changing the queue triggers a replacement",
   (stack) =>
     Effect.gen(function* () {
@@ -281,7 +284,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates deployed bucket event notifications",
   (stack) =>
     Effect.gen(function* () {

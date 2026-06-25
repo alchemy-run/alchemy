@@ -9,6 +9,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "./fixtures/do-rpc/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -43,7 +46,7 @@ const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "durable object methods can use binding clients",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -71,7 +74,7 @@ test(
 // The DO exposes `tick(n): Stream<number>` and the Worker forwards it to the
 // HTTP response with `HttpServerResponse.stream`. The client reads the body as
 // newline-delimited integers. With `/tick/5` we expect ["0","1","2","3","4"].
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "tick streams sequential values from a durable object (tutorial repro)",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -201,7 +204,7 @@ const consumerWorkerScript = `export default {
 };
 `;
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "async worker durable object binding accepts scriptName",
   (scratch) =>
     Effect.gen(function* () {
@@ -266,7 +269,7 @@ test.provider(
 //   v2 — rename `DO_A` → `DO_A_v2` (className change, same binding id)
 //   v3 — add a brand-new DO class `DO_B` alongside `DO_A_v2`
 //   v4 — delete `DO_A`, keep only `DO_B`
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "durable object class migrations across redeploys",
   (scratch) =>
     Effect.gen(function* () {

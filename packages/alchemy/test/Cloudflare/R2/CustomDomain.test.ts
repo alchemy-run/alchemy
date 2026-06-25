@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -36,63 +39,65 @@ const domain3 = zoneName
   ? `alchemy-r2-test-multi-b-${suffix}.${zoneName}`
   : undefined;
 
-test.provider("creates, updates, and deletes a bucket custom domain", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "creates, updates, and deletes a bucket custom domain",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const bucket = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("DomainBucket", {
-          domains: [{ name: domain! }],
-        });
-      }),
-    );
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("DomainBucket", {
+            domains: [{ name: domain! }],
+          });
+        }),
+      );
 
-    expect(bucket.domains).toHaveLength(1);
-    expect(bucket.domains[0]?.domain).toEqual(domain);
-    expect(bucket.domains[0]?.enabled).toEqual(true);
+      expect(bucket.domains).toHaveLength(1);
+      expect(bucket.domains[0]?.domain).toEqual(domain);
+      expect(bucket.domains[0]?.enabled).toEqual(true);
 
-    const actual = yield* r2.getBucketDomainCustom({
-      accountId,
-      bucketName: bucket.bucketName,
-      domain: domain!,
-      jurisdiction: bucket.jurisdiction,
-    });
-    expect(actual.domain).toEqual(domain);
-
-    const updated = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("DomainBucket", {
-          domains: [{ name: domain!, enabled: false }],
-        });
-      }),
-    );
-
-    expect(updated.domains[0]?.enabled).toEqual(false);
-
-    yield* stack.destroy();
-
-    const deleted = yield* r2
-      .getBucketDomainCustom({
+      const actual = yield* r2.getBucketDomainCustom({
         accountId,
         bucketName: bucket.bucketName,
         domain: domain!,
         jurisdiction: bucket.jurisdiction,
-      })
-      .pipe(
-        Effect.map(() => false),
-        Effect.catchTag("DomainNotFound", () => Effect.succeed(true)),
-        Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
-      );
-    expect(deleted).toEqual(true);
+      });
+      expect(actual.domain).toEqual(domain);
 
-    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(logLevel),
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("DomainBucket", {
+            domains: [{ name: domain!, enabled: false }],
+          });
+        }),
+      );
+
+      expect(updated.domains[0]?.enabled).toEqual(false);
+
+      yield* stack.destroy();
+
+      const deleted = yield* r2
+        .getBucketDomainCustom({
+          accountId,
+          bucketName: bucket.bucketName,
+          domain: domain!,
+          jurisdiction: bucket.jurisdiction,
+        })
+        .pipe(
+          Effect.map(() => false),
+          Effect.catchTag("DomainNotFound", () => Effect.succeed(true)),
+          Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+        );
+      expect(deleted).toEqual(true);
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "creates, updates, and deletes a bucket with multiple custom domains",
   (stack) =>
     Effect.gen(function* () {

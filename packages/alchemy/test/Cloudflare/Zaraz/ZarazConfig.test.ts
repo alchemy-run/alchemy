@@ -10,6 +10,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -173,7 +176,7 @@ describe.sequential("ZarazConfig", () => {
   // API for the per-zone Zaraz config, so `list()` enumerates every zone via
   // `listAllZones` and reads the singleton in each. Read-only — asserts the
   // result is well-typed, non-empty, and contains the standing test zone.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates Zaraz config across all zones",
     (stack) =>
       Effect.gen(function* () {

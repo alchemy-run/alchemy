@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -79,7 +82,7 @@ const restoreSbfm = (zoneId: string, original: ObservedConfig) =>
   }).pipe(Effect.ignore);
 
 describe.sequential("BotManagement", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "manages SBFM settings on the zone singleton and restores them on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -153,7 +156,7 @@ describe.sequential("BotManagement", () => {
     { timeout: 240_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "deploy with no settings set adopts the singleton without writing",
     (stack) =>
       Effect.gen(function* () {
@@ -195,7 +198,7 @@ describe.sequential("BotManagement", () => {
     { timeout: 240_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "toggles a boolean SBFM field and restores it on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -241,7 +244,7 @@ describe.sequential("BotManagement", () => {
   // result is non-empty and contains the standing test zone. This is a
   // read-only assertion (no mutation), so it runs regardless of whether the
   // zone has the paid Bot Management add-on.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates bot management across all zones",
     (stack) =>
       Effect.gen(function* () {

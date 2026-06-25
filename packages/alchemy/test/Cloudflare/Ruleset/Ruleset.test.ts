@@ -11,6 +11,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -32,7 +35,7 @@ type TestRulesetPhase = typeof phase;
 // on `alchemy-test-2.us`; run them serially so they can't clobber each other
 // under the global concurrent test config.
 describe.sequential("Ruleset", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "creates, updates, and deletes a zone phase entrypoint ruleset",
     (stack) =>
       Effect.gen(function* () {
@@ -113,7 +116,7 @@ describe.sequential("Ruleset", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "creates and tears down a ruleset whose zone is provisioned in the same deploy",
     (stack) =>
       Effect.gen(function* () {

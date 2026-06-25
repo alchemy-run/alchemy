@@ -11,6 +11,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const TEST_STAGE = "test";
@@ -69,81 +72,85 @@ const seedDevQueue = (input: {
  * observes that the cached id is not a real queue and creates one. The
  * resulting `queueId` must be a live id and resolvable on Cloudflare.
  */
-test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "promotes a dev queue to a live queue on deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const devQueueId = generateLocalId();
-    yield* seedDevQueue({
-      stackName: stack.name,
-      fqn: "Q",
-      queueId: devQueueId,
-      queueName: "dev-placeholder-name",
-      accountId,
-    });
-
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
-        return { queue };
-      }),
-    );
-
-    // The dev id has been replaced with a real Cloudflare queue id.
-    expect(isLiveId(deployed.queue.queueId)).toBe(true);
-    expect(deployed.queue.queueId).not.toEqual(devQueueId);
-
-    // The promoted queue is a real, resolvable Cloudflare resource.
-    const live = yield* queues.getQueue({
-      accountId,
-      queueId: deployed.queue.queueId,
-    });
-    expect(live.queueId).toEqual(deployed.queue.queueId);
-
-    // And the persisted state now carries the live id, not the dev one.
-    const persisted = yield* Effect.gen(function* () {
-      const state = yield* yield* State;
-      return yield* state.get({
-        stack: stack.name,
-        stage: TEST_STAGE,
+      const devQueueId = generateLocalId();
+      yield* seedDevQueue({
+        stackName: stack.name,
         fqn: "Q",
+        queueId: devQueueId,
+        queueName: "dev-placeholder-name",
+        accountId,
       });
-    });
-    expect((persisted as any)?.attr?.queueId).toEqual(deployed.queue.queueId);
 
-    yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Cloudflare.Queue("Q");
+          return { queue };
+        }),
+      );
 
-    // After destroy the promoted (live) queue is gone on Cloudflare.
-    const exit = yield* Effect.exit(
-      queues.getQueue({ accountId, queueId: deployed.queue.queueId }),
-    );
-    expect(Exit.isFailure(exit)).toBe(true);
-  }).pipe(logLevel),
+      // The dev id has been replaced with a real Cloudflare queue id.
+      expect(isLiveId(deployed.queue.queueId)).toBe(true);
+      expect(deployed.queue.queueId).not.toEqual(devQueueId);
+
+      // The promoted queue is a real, resolvable Cloudflare resource.
+      const live = yield* queues.getQueue({
+        accountId,
+        queueId: deployed.queue.queueId,
+      });
+      expect(live.queueId).toEqual(deployed.queue.queueId);
+
+      // And the persisted state now carries the live id, not the dev one.
+      const persisted = yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        return yield* state.get({
+          stack: stack.name,
+          stage: TEST_STAGE,
+          fqn: "Q",
+        });
+      });
+      expect((persisted as any)?.attr?.queueId).toEqual(deployed.queue.queueId);
+
+      yield* stack.destroy();
+
+      // After destroy the promoted (live) queue is gone on Cloudflare.
+      const exit = yield* Effect.exit(
+        queues.getQueue({ accountId, queueId: deployed.queue.queueId }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+    }).pipe(logLevel),
 );
 
 // Canonical `list()` test (account-scoped collection): deploy a real
 // queue, resolve the provider from context via `findProvider`, call
 // `list()`, and assert the deployed queue appears in the exhaustively-
 // paginated result.
-test.provider("list enumerates the deployed queue", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed queue",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.Queue("ListQueue");
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Queue("ListQueue");
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.Queue);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Queue);
+      const all = yield* provider.list();
 
-    expect(all.some((q) => q.queueId === deployed.queueId)).toBe(true);
+      expect(all.some((q) => q.queueId === deployed.queueId)).toBe(true);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
 
 /**
@@ -154,34 +161,36 @@ test.provider("list enumerates the deployed queue", (stack) =>
  * malformed. The live provider's `delete` short-circuits on the non-live
  * id, so destroy succeeds and the state row is removed cleanly.
  */
-test.provider("suppresses deletion of a dev-only queue", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "suppresses deletion of a dev-only queue",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const devQueueId = generateLocalId();
-    yield* seedDevQueue({
-      stackName: stack.name,
-      fqn: "Q",
-      queueId: devQueueId,
-      queueName: "dev-placeholder-name",
-      accountId,
-    });
-
-    // Destroy must not attempt a (malformed) live delete against the dev id.
-    const exit = yield* Effect.exit(stack.destroy());
-    expect(Exit.isSuccess(exit)).toBe(true);
-
-    // The dev-only resource is removed from state.
-    const persisted = yield* Effect.gen(function* () {
-      const state = yield* yield* State;
-      return yield* state.get({
-        stack: stack.name,
-        stage: TEST_STAGE,
+      const devQueueId = generateLocalId();
+      yield* seedDevQueue({
+        stackName: stack.name,
         fqn: "Q",
+        queueId: devQueueId,
+        queueName: "dev-placeholder-name",
+        accountId,
       });
-    });
-    expect(persisted).toBeUndefined();
-  }).pipe(logLevel),
+
+      // Destroy must not attempt a (malformed) live delete against the dev id.
+      const exit = yield* Effect.exit(stack.destroy());
+      expect(Exit.isSuccess(exit)).toBe(true);
+
+      // The dev-only resource is removed from state.
+      const persisted = yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        return yield* state.get({
+          stack: stack.name,
+          stage: TEST_STAGE,
+          fqn: "Q",
+        });
+      });
+      expect(persisted).toBeUndefined();
+    }).pipe(logLevel),
 );

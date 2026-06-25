@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -47,7 +50,7 @@ const seedBaseline = (accountId: string) =>
       }),
     );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "manage activityLog and protocolDetection, then restore on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -121,7 +124,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns the account Gateway configuration singleton",
   (stack) =>
     Effect.gen(function* () {

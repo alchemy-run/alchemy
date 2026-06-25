@@ -7,6 +7,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/bindings-stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -30,7 +33,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 420_000 });
 // Deploying the Worker succeeding at all proves Cloudflare accepted both the
 // `ai_search` and `ai_search_namespace` bindings. The `/bindings` route then
 // confirms they are injected and shaped correctly at runtime.
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "worker deploys with ai_search + ai_search_namespace bindings injected",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -80,7 +83,7 @@ test(
 // and reads them through the Effect-native client. Resolving each client's
 // `raw` runtime handle proves the Effect-first path wires through to the
 // live runtime bindings.
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker resolves ai_search + ai_search_namespace via Effect clients",
   Effect.gen(function* () {
     const { effectUrl } = yield* stack;

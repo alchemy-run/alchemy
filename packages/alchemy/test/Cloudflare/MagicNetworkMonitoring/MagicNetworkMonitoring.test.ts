@@ -8,6 +8,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -69,7 +72,7 @@ const expectConfigGone = (accountId: string) =>
   );
 
 describe.sequential("MagicNetworkMonitoring", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "creates, updates in place, and deletes the account config",
     (stack) =>
       Effect.gen(function* () {
@@ -137,7 +140,7 @@ describe.sequential("MagicNetworkMonitoring", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "creates a threshold rule, updates it in place, and replaces on type change",
     (stack) =>
       Effect.gen(function* () {

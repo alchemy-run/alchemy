@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -89,7 +92,7 @@ const program = (opts: {
     return { rg, group };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create with a policy, verify out-of-band, update policies in place, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -177,7 +180,7 @@ test.provider(
 
 const UG_LIST_NAME = "alchemy-iam-ug-list";
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed user group",
   (stack) =>
     Effect.gen(function* () {

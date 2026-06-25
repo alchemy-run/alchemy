@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -56,7 +59,7 @@ const expectGone = (accountId: string, poolId: string) =>
 
 // Unentitlement probe: pins the typed plan-gate rejection, so it must skip
 // on entitled accounts — there the create would succeed instead of failing.
-test.provider.skipIf(lbEnabled)(
+test.provider.skipIf(lbEnabled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed PoolAccessFailed error without the LB subscription",
   (stack) =>
     Effect.gen(function* () {

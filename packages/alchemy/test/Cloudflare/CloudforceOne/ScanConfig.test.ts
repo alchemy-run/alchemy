@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -32,7 +35,7 @@ const probeEntitlement = (accountId: string) =>
 
 // Unentitlement probe — pins the typed Unauthorized rejection ("needs cfone.port_scan
 // entitlement") and skips on entitled accounts, where the API would accept the calls.
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "unentitled accounts surface the typed Unauthorized error",
   (stack) =>
     Effect.gen(function* () {

@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -42,7 +45,7 @@ const findByPattern = (accountId: string) =>
 
 // Unentitlement probe — pins the typed EmailSecurityNotEntitled rejection and
 // skips on entitled accounts, where the list call would succeed.
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed EmailSecurityNotEntitled error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {
@@ -73,7 +76,7 @@ test.provider.skipIf(entitled)(
 // Read-only list assertion that runs on every account. On unentitled
 // accounts the provider's list() maps the typed EmailSecurityNotEntitled
 // rejection to a well-typed empty array; entitled accounts return real rows.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates allow policies (read-only)",
   (stack) =>
     Effect.gen(function* () {

@@ -9,6 +9,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/workflow/stack.ts";
 import WorkflowTestWorker from "./fixtures/workflow/workflow-worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -83,7 +86,7 @@ const runWorkflowToCompletion = (url: string) =>
     return lastStatus;
   });
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "deployed worker can run a workflow to completion",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -124,7 +127,9 @@ test(
 // in the workflows generator/spec by the service owner, then regenerated. Once
 // applied, drop the skipIf gate (`CLOUDFLARE_TEST_WORKFLOW_LIST`) and this test
 // passes unchanged.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
+test.provider.skipIf(
+  !process.env.CLOUDFLARE_TEST_WORKFLOW_LIST || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS,
+)(
   "list enumerates the deployed workflow",
   (stack) =>
     Effect.gen(function* () {

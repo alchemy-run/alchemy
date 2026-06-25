@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -101,7 +104,7 @@ test.provider.skipIf(!entitled)(
 // and the result is an empty array — so this assertion is meaningful without
 // the add-on. On an entitled account it also asserts the deployed entry is
 // present.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates trusted domains",
   (stack) =>
     Effect.gen(function* () {

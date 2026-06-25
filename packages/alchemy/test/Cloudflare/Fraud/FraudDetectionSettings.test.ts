@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -53,7 +56,7 @@ const getSettings = (zoneId: string) =>
 
 // Both cases mutate the same zone-level fraud-detection settings singleton; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
 describe.sequential("FraudDetectionSettings", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "adopts the zone singleton without writing and restores nothing on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -126,7 +129,7 @@ describe.sequential("FraudDetectionSettings", () => {
 
   // Unentitlement probe — pins the typed FraudDetectionNotEntitled rejection (code 10400)
   // and skips on entitled zones, where the PUT would succeed and mutate live settings.
-  test.provider.skipIf(entitled)(
+  test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "surfaces the typed FraudDetectionNotEntitled error on unentitled zones",
     (stack) =>
       Effect.gen(function* () {
@@ -262,21 +265,23 @@ describe.sequential("FraudDetectionSettings", () => {
   // never trips the entitlement gate (which lives on `putFraud`), so this
   // read-only assertion always runs. Assert the result is non-empty and
   // contains the standing test zone.
-  test.provider("list enumerates the settings across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the settings across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.FraudDetectionSettings,
-      );
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.FraudDetectionSettings,
+        );
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

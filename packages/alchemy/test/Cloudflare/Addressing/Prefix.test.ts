@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -50,53 +53,59 @@ const delegateAccountId = process.env.CLOUDFLARE_TEST_BYOIP_DELEGATE_ACCOUNT_ID;
 
 // The read-only catalog endpoints are available regardless of the BYOIP
 // entitlement — exercise the distilled wiring live on every run.
-test.provider("lists the services catalog and prefixes (read-only)", (stack) =>
-  Effect.gen(function* () {
-    const accountId = yield* resolveAccountId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "lists the services catalog and prefixes (read-only)",
+  (stack) =>
+    Effect.gen(function* () {
+      const accountId = yield* resolveAccountId;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const services = yield* retryForbidden(
-      addressing.listServices.items({ accountId }).pipe(
-        Stream.runCollect,
-        Effect.map((c) => Array.from(c)),
-      ),
-    );
-    expect(Array.isArray(services)).toBe(true);
+      const services = yield* retryForbidden(
+        addressing.listServices.items({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)),
+        ),
+      );
+      expect(Array.isArray(services)).toBe(true);
 
-    const prefixes = yield* retryForbidden(
-      addressing.listPrefixes.items({ accountId }).pipe(
-        Stream.runCollect,
-        Effect.map((c) => Array.from(c)),
-      ),
-    );
-    expect(Array.isArray(prefixes)).toBe(true);
+      const prefixes = yield* retryForbidden(
+        addressing.listPrefixes.items({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)),
+        ),
+      );
+      expect(Array.isArray(prefixes)).toBe(true);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
 
 // `list()` enumerates account-scoped BYOIP prefixes via the catalog endpoint,
 // which is available regardless of the BYOIP entitlement (it returns an empty
 // array on accounts with no onboarded prefixes). The result is a well-typed
 // `AddressingPrefixAttributes[]` — the exact shape `read` produces.
-test.provider("list enumerates account prefixes (read-only)", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates account prefixes (read-only)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.AddressingPrefix);
-    const all = yield* retryForbidden(provider.list());
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AddressingPrefix,
+      );
+      const all = yield* retryForbidden(provider.list());
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const p of all) {
-      expect(typeof p.prefixId).toBe("string");
-      expect(typeof p.accountId).toBe("string");
-      expect(typeof p.cidr).toBe("string");
-      expect(typeof p.asn).toBe("number");
-    }
+      expect(Array.isArray(all)).toBe(true);
+      for (const p of all) {
+        expect(typeof p.prefixId).toBe("string");
+        expect(typeof p.accountId).toBe("string");
+        expect(typeof p.cidr).toBe("string");
+        expect(typeof p.asn).toBe("number");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
 
 test.provider.skipIf(!byoipCidr || !byoipAsn)(

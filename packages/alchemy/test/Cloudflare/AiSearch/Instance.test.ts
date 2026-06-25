@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -62,7 +65,7 @@ const program = (props?: Partial<Cloudflare.AiSearchInstanceProps>) =>
     return { bucket, instance };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update mutable props, and delete an r2-backed instance",
   (stack) =>
     Effect.gen(function* () {
@@ -145,7 +148,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "changing the embedding model triggers a replacement",
   (stack) =>
     Effect.gen(function* () {
@@ -184,7 +187,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "recreates after out-of-band delete",
   (stack) =>
     Effect.gen(function* () {
@@ -230,7 +233,7 @@ test.provider(
 // enumerates every namespace (including the account-provided `default`) and
 // fans out a paginated instance list per namespace, hydrating each into the
 // `read` Attributes shape. Deploy an instance and assert its id appears.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed instance",
   (stack) =>
     Effect.gen(function* () {
@@ -261,7 +264,7 @@ test.provider(
 // an R2 source). Cloudflare only crawls a domain the account owns, so the
 // crawl is seeded at a Worker we deploy (its `workers.dev` URL is owned by the
 // account); `parseType: "crawl"` walks pages instead of requiring a sitemap.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "creates a web-crawler instance (no service token)",
   (stack) =>
     Effect.gen(function* () {
@@ -315,7 +318,7 @@ const nsProgram = (props?: Partial<Cloudflare.AiSearchInstanceProps>) =>
     return { namespace, bucket, instance };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "creates an instance in a custom namespace and moving namespaces replaces",
   (stack) =>
     Effect.gen(function* () {

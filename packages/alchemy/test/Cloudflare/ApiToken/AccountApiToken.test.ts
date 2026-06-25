@@ -11,6 +11,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "node:test";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -185,38 +188,42 @@ describe.skip("AccountApiToken", () => {
 class TokenStillExists extends Data.TaggedError("TokenStillExists") {}
 
 describe("AccountApiToken list", () => {
-  test.provider("list enumerates the deployed account token", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the deployed account token",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const token = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.AccountApiToken("ListToken", {
-            name: "alchemy-test-acct-list",
-            policies: [
-              {
-                effect: "allow",
-                permissionGroups: ["Workers Scripts Read"],
-                resources: {
-                  [`com.cloudflare.api.account.${accountId}`]: "*",
+        const token = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.AccountApiToken("ListToken", {
+              name: "alchemy-test-acct-list",
+              policies: [
+                {
+                  effect: "allow",
+                  permissionGroups: ["Workers Scripts Read"],
+                  resources: {
+                    [`com.cloudflare.api.account.${accountId}`]: "*",
+                  },
                 },
-              },
-            ],
-          });
-        }),
-      );
+              ],
+            });
+          }),
+        );
 
-      const provider = yield* Provider.findProvider(Cloudflare.AccountApiToken);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.AccountApiToken,
+        );
+        const all = yield* provider.list();
 
-      expect(all.some((t) => t.tokenId === token.tokenId)).toBe(true);
-      const found = all.find((t) => t.tokenId === token.tokenId)!;
-      expect(found.name).toEqual(token.name);
-      expect(found.accountId).toEqual(accountId);
+        expect(all.some((t) => t.tokenId === token.tokenId)).toBe(true);
+        const found = all.find((t) => t.tokenId === token.tokenId)!;
+        expect(found.name).toEqual(token.name);
+        expect(found.accountId).toEqual(accountId);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

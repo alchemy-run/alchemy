@@ -8,6 +8,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import SendEmailWorker from "./fixtures/worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -39,7 +42,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY || skip)(destroy(Stack));
 // The send_email binding only delivers from a domain with Email Routing
 // enabled to a verified destination address — supply such a pair via
 // CLOUDFLARE_TEST_EMAIL_FROM / CLOUDFLARE_TEST_EMAIL_TO to run this test.
-test.skipIf(skip)(
+test.skipIf(skip || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "sends an email through the Worker send_email binding",
   Effect.gen(function* () {
     const { url } = yield* stack;

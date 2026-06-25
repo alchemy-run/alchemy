@@ -9,6 +9,9 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -51,27 +54,31 @@ const expectGone = (accountId: string, name: string) =>
 // `list()` swallows the `ImagesAccessNotEnabled` 5403 and returns `[]` on
 // unentitled accounts, so the result is a well-typed Attributes[] in either
 // case. On an entitled account it additionally contains the deployed key.
-test.provider("list enumerates the account's signing keys", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the account's signing keys",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.ImagesSigningKey);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ImagesSigningKey,
+      );
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const key of all) {
-      expect(typeof key.keyName).toBe("string");
-      expect(key.accountId).toEqual(accountId);
-      expect(typeof Redacted.value(key.value)).toBe("string");
-    }
+      expect(Array.isArray(all)).toBe(true);
+      for (const key of all) {
+        expect(typeof key.keyName).toBe("string");
+        expect(key.accountId).toEqual(accountId);
+        expect(typeof Redacted.value(key.value)).toBe("string");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
 
-test.provider.skipIf(keysEntitled)(
+test.provider.skipIf(keysEntitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed ImagesAccessNotEnabled error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {

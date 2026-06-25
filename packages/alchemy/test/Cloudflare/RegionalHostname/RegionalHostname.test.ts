@@ -12,6 +12,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -115,7 +118,7 @@ const purgeDnsRecord = (zoneId: string) =>
 // entitlement on the zone. The test probes a raw create once: unentitled
 // zones assert the typed error tag; entitled zones run the full lifecycle
 // (create, patch regionKey in place, destroy, verify gone).
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "regional hostname lifecycle (typed error on unentitled zones)",
   (stack) =>
     Effect.gen(function* () {

@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -16,82 +19,86 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.provider("create and delete bucket with default props", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "create and delete bucket with default props",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const bucket = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("DefaultBucket");
-      }),
-    );
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("DefaultBucket");
+        }),
+      );
 
-    expect(bucket.bucketName).toBeDefined();
-    expect(bucket.storageClass).toEqual("Standard");
-    expect(bucket.jurisdiction).toEqual("default");
+      expect(bucket.bucketName).toBeDefined();
+      expect(bucket.storageClass).toEqual("Standard");
+      expect(bucket.jurisdiction).toEqual("default");
 
-    const actualBucket = yield* getBucketWhenReady(
-      bucket.bucketName,
-      accountId,
-    );
-    expect(actualBucket.name).toEqual(bucket.bucketName);
+      const actualBucket = yield* getBucketWhenReady(
+        bucket.bucketName,
+        accountId,
+      );
+      expect(actualBucket.name).toEqual(bucket.bucketName);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(logLevel),
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
 );
 
-test.provider("create, update, delete bucket", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "create, update, delete bucket",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const bucket = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("TestBucket", {
-          name: "test-bucket-initial",
-          storageClass: "Standard",
-        });
-      }),
-    );
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("TestBucket", {
+            name: "test-bucket-initial",
+            storageClass: "Standard",
+          });
+        }),
+      );
 
-    const actualBucket = yield* getBucketWhenReady(
-      bucket.bucketName,
-      accountId,
-    );
-    expect(actualBucket.name).toEqual(bucket.bucketName);
-    expect(actualBucket.storageClass).toEqual("Standard");
+      const actualBucket = yield* getBucketWhenReady(
+        bucket.bucketName,
+        accountId,
+      );
+      expect(actualBucket.name).toEqual(bucket.bucketName);
+      expect(actualBucket.storageClass).toEqual("Standard");
 
-    const updatedBucket = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("TestBucket", {
-          name: "test-bucket-initial",
-          storageClass: "InfrequentAccess",
-        });
-      }),
-    );
+      const updatedBucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("TestBucket", {
+            name: "test-bucket-initial",
+            storageClass: "InfrequentAccess",
+          });
+        }),
+      );
 
-    const actualUpdatedBucket = yield* getBucketWhenReady(
-      updatedBucket.bucketName,
-      accountId,
-    );
-    expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
-    expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
+      const actualUpdatedBucket = yield* getBucketWhenReady(
+        updatedBucket.bucketName,
+        accountId,
+      );
+      expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
+      expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(logLevel),
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
 );
 
 // Engine-level adoption: R2 buckets have no ownership signal (Cloudflare
 // doesn't expose tags on R2 buckets), so a name match in `read` is treated
 // as silent adoption.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "existing bucket (matching name) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
@@ -152,146 +159,150 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("destroying a bucket empties its objects first", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "destroying a bucket empties its objects first",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const bucket = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("BucketWithObjects");
-      }),
-    );
-
-    const putObject = (key: string, body: string) =>
-      r2.putObject({
-        accountId,
-        bucketName: bucket.bucketName,
-        objectName: key,
-        contentType: "text/plain",
-        body: new Blob([body], { type: "text/plain" }),
-      });
-    yield* putObject("hello.txt", "hello");
-    yield* putObject("nested/world.txt", "world");
-
-    const before = yield* r2
-      .listObjects({
-        accountId,
-        bucketName: bucket.bucketName,
-        perPage: 1000,
-      })
-      .pipe(
-        Effect.flatMap((page) => {
-          const keys = (page.result ?? [])
-            .map((o) => o.key)
-            .filter((k): k is string => typeof k === "string");
-          return keys.length === 2
-            ? Effect.succeed(keys)
-            : Effect.fail(new ListLagError());
-        }),
-        Effect.retry({
-          while: (e): e is ListLagError => e instanceof ListLagError,
-          schedule: Schedule.exponential(200).pipe(
-            Schedule.both(Schedule.recurs(8)),
-          ),
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("BucketWithObjects");
         }),
       );
-    expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
 
-    yield* stack.destroy();
+      const putObject = (key: string, body: string) =>
+        r2.putObject({
+          accountId,
+          bucketName: bucket.bucketName,
+          objectName: key,
+          contentType: "text/plain",
+          body: new Blob([body], { type: "text/plain" }),
+        });
+      yield* putObject("hello.txt", "hello");
+      yield* putObject("nested/world.txt", "world");
 
-    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(logLevel),
+      const before = yield* r2
+        .listObjects({
+          accountId,
+          bucketName: bucket.bucketName,
+          perPage: 1000,
+        })
+        .pipe(
+          Effect.flatMap((page) => {
+            const keys = (page.result ?? [])
+              .map((o) => o.key)
+              .filter((k): k is string => typeof k === "string");
+            return keys.length === 2
+              ? Effect.succeed(keys)
+              : Effect.fail(new ListLagError());
+          }),
+          Effect.retry({
+            while: (e): e is ListLagError => e instanceof ListLagError,
+            schedule: Schedule.exponential(200).pipe(
+              Schedule.both(Schedule.recurs(8)),
+            ),
+          }),
+        );
+      expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
+
+      yield* stack.destroy();
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
 );
 
-test.provider("lifecycle rules are added, updated, and removed", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "lifecycle rules are added, updated, and removed",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    // Create with one rule.
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
-          lifecycleRules: [
-            {
-              id: "expire-after-30d",
-              deleteObjectsTransition: {
-                condition: { type: "Age", maxAge: 60 * 60 * 24 * 30 },
-              },
-            },
-          ],
-        });
-      }),
-    );
-
-    const initialRules = yield* r2.getBucketLifecycle({
-      accountId,
-      bucketName: initial.bucketName,
-    });
-    expect(initialRules.rules).toHaveLength(1);
-    expect(initialRules.rules?.[0]?.id).toEqual("expire-after-30d");
-    expect(initialRules.rules?.[0]?.enabled).toEqual(true);
-    expect(initialRules.rules?.[0]?.deleteObjectsTransition?.condition).toEqual(
-      { type: "Age", maxAge: 60 * 60 * 24 * 30 },
-    );
-
-    // Update: change the prefix and add a storage class transition.
-    yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
-          lifecycleRules: [
-            {
-              id: "expire-after-30d",
-              prefix: "logs/",
-              storageClassTransitions: [
-                {
-                  condition: { type: "Age", maxAge: 60 * 60 * 24 * 7 },
-                  storageClass: "InfrequentAccess",
+      // Create with one rule.
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+            lifecycleRules: [
+              {
+                id: "expire-after-30d",
+                deleteObjectsTransition: {
+                  condition: { type: "Age", maxAge: 60 * 60 * 24 * 30 },
                 },
-              ],
-              deleteObjectsTransition: {
-                condition: { type: "Age", maxAge: 60 * 60 * 24 * 30 },
               },
-            },
-          ],
-        });
-      }),
-    );
+            ],
+          });
+        }),
+      );
 
-    const updatedRules = yield* r2.getBucketLifecycle({
-      accountId,
-      bucketName: initial.bucketName,
-    });
-    expect(updatedRules.rules).toHaveLength(1);
-    expect(updatedRules.rules?.[0]?.conditions.prefix).toEqual("logs/");
-    expect(updatedRules.rules?.[0]?.storageClassTransitions).toEqual([
-      {
-        condition: { type: "Age", maxAge: 60 * 60 * 24 * 7 },
-        storageClass: "InfrequentAccess",
-      },
-    ]);
+      const initialRules = yield* r2.getBucketLifecycle({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(initialRules.rules).toHaveLength(1);
+      expect(initialRules.rules?.[0]?.id).toEqual("expire-after-30d");
+      expect(initialRules.rules?.[0]?.enabled).toEqual(true);
+      expect(
+        initialRules.rules?.[0]?.deleteObjectsTransition?.condition,
+      ).toEqual({ type: "Age", maxAge: 60 * 60 * 24 * 30 });
 
-    // Clear all rules.
-    yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
-          lifecycleRules: [],
-        });
-      }),
-    );
+      // Update: change the prefix and add a storage class transition.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+            lifecycleRules: [
+              {
+                id: "expire-after-30d",
+                prefix: "logs/",
+                storageClassTransitions: [
+                  {
+                    condition: { type: "Age", maxAge: 60 * 60 * 24 * 7 },
+                    storageClass: "InfrequentAccess",
+                  },
+                ],
+                deleteObjectsTransition: {
+                  condition: { type: "Age", maxAge: 60 * 60 * 24 * 30 },
+                },
+              },
+            ],
+          });
+        }),
+      );
 
-    const clearedRules = yield* r2.getBucketLifecycle({
-      accountId,
-      bucketName: initial.bucketName,
-    });
-    expect(clearedRules.rules ?? []).toEqual([]);
+      const updatedRules = yield* r2.getBucketLifecycle({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(updatedRules.rules).toHaveLength(1);
+      expect(updatedRules.rules?.[0]?.conditions.prefix).toEqual("logs/");
+      expect(updatedRules.rules?.[0]?.storageClassTransitions).toEqual([
+        {
+          condition: { type: "Age", maxAge: 60 * 60 * 24 * 7 },
+          storageClass: "InfrequentAccess",
+        },
+      ]);
 
-    yield* stack.destroy();
-    yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
-  }).pipe(logLevel),
+      // Clear all rules.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+            lifecycleRules: [],
+          });
+        }),
+      );
+
+      const clearedRules = yield* r2.getBucketLifecycle({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(clearedRules.rules ?? []).toEqual([]);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
+    }).pipe(logLevel),
 );
 
 // R2 bucket creates are eventually consistent — a read immediately after

@@ -18,6 +18,9 @@ import {
   KEY_8,
 } from "./fixtures/certs.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -131,7 +134,7 @@ const purgeCertificates = (zoneId: string, pems: string[]) =>
     );
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "uploads and deletes a hostname client certificate",
   (stack) =>
     Effect.gen(function* () {
@@ -165,7 +168,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "replaces the hostname certificate when the PEM changes",
   (stack) =>
     Effect.gen(function* () {
@@ -207,7 +210,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed hostname certificate",
   (stack) =>
     Effect.gen(function* () {

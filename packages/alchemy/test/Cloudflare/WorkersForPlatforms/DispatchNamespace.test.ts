@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -83,7 +86,7 @@ const expectScriptGone = (
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, replace, and destroy a dispatch namespace",
   (stack) =>
     Effect.gen(function* () {
@@ -138,7 +141,7 @@ const program = () =>
     return { namespace };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "upload, update in place, and destroy a namespace script",
   (stack) =>
     Effect.gen(function* () {
@@ -164,7 +167,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed dispatch namespace",
   (stack) =>
     Effect.gen(function* () {

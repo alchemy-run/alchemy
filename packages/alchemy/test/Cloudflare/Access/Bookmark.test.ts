@@ -7,6 +7,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -27,7 +30,7 @@ const logLevel = Effect.provideService(
 // always runs and pins the typed tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_ACCESS_BOOKMARKS;
 
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "legacy bookmark creation surfaces the typed AccessBookmarkNotFound error",
   (stack) =>
     Effect.gen(function* () {
@@ -115,7 +118,7 @@ test.provider.skipIf(!entitled)(
 // account (it returns `[]` when there are no records), so the ungated case
 // always exercises `list()` and asserts it hydrates the `read` shape. The
 // entitled path additionally deploys a bookmark and asserts its presence.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates access bookmarks at the account scope",
   (stack) =>
     Effect.gen(function* () {

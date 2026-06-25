@@ -12,6 +12,9 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -350,108 +353,112 @@ test.provider("imports SQL files via importFiles", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider("clones a database by databaseId", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const dir = yield* fs.makeTempDirectory({
-      prefix: "alchemy-d1-clone-id-",
-    });
-    const seedPath = path.join(dir, "seed.sql");
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "clones a database by databaseId",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-clone-id-",
+      });
+      const seedPath = path.join(dir, "seed.sql");
 
-    yield* fs.writeFileString(
-      seedPath,
-      [
-        "CREATE TABLE colors (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
-        "INSERT INTO colors (id, name) VALUES (1, 'red'), (2, 'green'), (3, 'blue');",
-      ].join("\n"),
-    );
+      yield* fs.writeFileString(
+        seedPath,
+        [
+          "CREATE TABLE colors (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+          "INSERT INTO colors (id, name) VALUES (1, 'red'), (2, 'green'), (3, 'blue');",
+        ].join("\n"),
+      );
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const { source, target } = yield* stack.deploy(
-      Effect.gen(function* () {
-        const source = yield* Cloudflare.D1Database("CloneByIdSource", {
-          importFiles: [seedPath],
-        });
-        const target = yield* Cloudflare.D1Database("CloneByIdTarget", {
-          clone: { databaseId: source.databaseId },
-        });
-        return { source, target };
-      }),
-    );
+      const { source, target } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const source = yield* Cloudflare.D1Database("CloneByIdSource", {
+            importFiles: [seedPath],
+          });
+          const target = yield* Cloudflare.D1Database("CloneByIdTarget", {
+            clone: { databaseId: source.databaseId },
+          });
+          return { source, target };
+        }),
+      );
 
-    expect(target.databaseId).not.toEqual(source.databaseId);
+      expect(target.databaseId).not.toEqual(source.databaseId);
 
-    const targetColors = yield* getResults<{ id: number; name: string }>(
-      accountId,
-      target.databaseId,
-      "SELECT id, name FROM colors ORDER BY id;",
-    );
-    expect(targetColors).toEqual([
-      { id: 1, name: "red" },
-      { id: 2, name: "green" },
-      { id: 3, name: "blue" },
-    ]);
+      const targetColors = yield* getResults<{ id: number; name: string }>(
+        accountId,
+        target.databaseId,
+        "SELECT id, name FROM colors ORDER BY id;",
+      );
+      expect(targetColors).toEqual([
+        { id: 1, name: "red" },
+        { id: 2, name: "green" },
+        { id: 3, name: "blue" },
+      ]);
 
-    yield* stack.destroy();
-    yield* waitForDatabaseToBeDeleted(source.databaseId, accountId);
-    yield* waitForDatabaseToBeDeleted(target.databaseId, accountId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(source.databaseId, accountId);
+      yield* waitForDatabaseToBeDeleted(target.databaseId, accountId);
+    }).pipe(logLevel),
 );
 
-test.provider("clones a database by name lookup", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const dir = yield* fs.makeTempDirectory({
-      prefix: "alchemy-d1-clone-name-",
-    });
-    const seedPath = path.join(dir, "seed.sql");
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "clones a database by name lookup",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-clone-name-",
+      });
+      const seedPath = path.join(dir, "seed.sql");
 
-    yield* fs.writeFileString(
-      seedPath,
-      [
-        "CREATE TABLE animals (id INTEGER PRIMARY KEY, kind TEXT NOT NULL);",
-        "INSERT INTO animals (id, kind) VALUES (1, 'cat'), (2, 'dog');",
-      ].join("\n"),
-    );
+      yield* fs.writeFileString(
+        seedPath,
+        [
+          "CREATE TABLE animals (id INTEGER PRIMARY KEY, kind TEXT NOT NULL);",
+          "INSERT INTO animals (id, kind) VALUES (1, 'cat'), (2, 'dog');",
+        ].join("\n"),
+      );
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const { source, target } = yield* stack.deploy(
-      Effect.gen(function* () {
-        const source = yield* Cloudflare.D1Database("CloneByNameSource", {
-          importFiles: [seedPath],
-        });
-        const target = yield* Cloudflare.D1Database("CloneByNameTarget", {
-          clone: { name: source.databaseName },
-        });
-        return { source, target };
-      }),
-    );
+      const { source, target } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const source = yield* Cloudflare.D1Database("CloneByNameSource", {
+            importFiles: [seedPath],
+          });
+          const target = yield* Cloudflare.D1Database("CloneByNameTarget", {
+            clone: { name: source.databaseName },
+          });
+          return { source, target };
+        }),
+      );
 
-    expect(target.databaseId).not.toEqual(source.databaseId);
+      expect(target.databaseId).not.toEqual(source.databaseId);
 
-    const animals = yield* getResults<{ id: number; kind: string }>(
-      accountId,
-      target.databaseId,
-      "SELECT id, kind FROM animals ORDER BY id;",
-    );
-    expect(animals).toEqual([
-      { id: 1, kind: "cat" },
-      { id: 2, kind: "dog" },
-    ]);
+      const animals = yield* getResults<{ id: number; kind: string }>(
+        accountId,
+        target.databaseId,
+        "SELECT id, kind FROM animals ORDER BY id;",
+      );
+      expect(animals).toEqual([
+        { id: 1, kind: "cat" },
+        { id: 2, kind: "dog" },
+      ]);
 
-    yield* stack.destroy();
-    yield* waitForDatabaseToBeDeleted(source.databaseId, accountId);
-    yield* waitForDatabaseToBeDeleted(target.databaseId, accountId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(source.databaseId, accountId);
+      yield* waitForDatabaseToBeDeleted(target.databaseId, accountId);
+    }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "clones a database by passing the source resource directly",
   (stack) =>
     Effect.gen(function* () {

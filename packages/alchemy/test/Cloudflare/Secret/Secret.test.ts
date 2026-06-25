@@ -14,6 +14,9 @@ import {
   OBJECT_VAR_VALUE,
   STRING_VAR_VALUE,
 } from "./fixtures/worker.ts";
+
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
 /**
  * `Config.redacted("CONFIG_SECRET")` resolves against the active
  * `ConfigProvider` at deploy time. The default provider reads from
@@ -65,7 +68,7 @@ const fetchWhenReady = (url: string) =>
     );
   });
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Config.redacted with literal default round-trips to runtime as Redacted<string>",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -83,7 +86,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Config.redacted resolved from env deploys as a secret_text and round-trips",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -100,7 +103,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Config.string round-trips to runtime as a string",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -114,7 +117,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Config.number round-trips to runtime preserving the number type",
   Effect.gen(function* () {
     const { url } = yield* stack;
@@ -128,7 +131,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "Config.string with object default round-trips to runtime preserving nested shape",
   Effect.gen(function* () {
     const { url } = yield* stack;

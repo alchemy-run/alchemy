@@ -11,6 +11,9 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -53,7 +56,7 @@ const getSchemaOob = (zoneId: string, schemaId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "uploads a schema, enables in place, replaces on disable and source change, destroys",
   (stack) =>
     Effect.gen(function* () {
@@ -150,7 +153,7 @@ test.provider(
 // Canonical `list()` test (zone-scoped collection): `list()` enumerates every
 // zone in the account via `listAllZones` and exhaustively paginates each
 // zone's schemas. Deploy a real schema and assert it appears in the result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed schema across all zones",
   (stack) =>
     Effect.gen(function* () {

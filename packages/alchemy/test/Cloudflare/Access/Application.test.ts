@@ -8,6 +8,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -24,7 +27,7 @@ const logLevel = Effect.provideService(
 const zoneName =
   process.env.CLOUDFLARE_TEST_ACCESS_ZONE_NAME ?? "alchemy-test-2.us";
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create and delete a self_hosted application gated by a reusable policy",
   (stack) =>
     Effect.gen(function* () {
@@ -117,43 +120,47 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("list enumerates the deployed access application", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed access application",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const domain = `alchemy-test-list-app.${zoneName}`;
-    const app = yield* stack.deploy(
-      Effect.gen(function* () {
-        yield* Cloudflare.Zone("TestZone", {
-          name: zoneName,
-        }).pipe(AdoptPolicy.adopt(true));
-        const policy = yield* Cloudflare.AccessPolicy("ListAllowDomain", {
-          name: "Allow example.com",
-          decision: "allow",
-          include: [{ emailDomain: { domain: "example.com" } }],
-        });
-        return yield* Cloudflare.AccessApplication("ListApp", {
-          type: "self_hosted",
-          domain,
-          sessionDuration: "24h",
-          policies: [policy.policyId],
-        });
-      }),
-    );
+      const domain = `alchemy-test-list-app.${zoneName}`;
+      const app = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Cloudflare.Zone("TestZone", {
+            name: zoneName,
+          }).pipe(AdoptPolicy.adopt(true));
+          const policy = yield* Cloudflare.AccessPolicy("ListAllowDomain", {
+            name: "Allow example.com",
+            decision: "allow",
+            include: [{ emailDomain: { domain: "example.com" } }],
+          });
+          return yield* Cloudflare.AccessApplication("ListApp", {
+            type: "self_hosted",
+            domain,
+            sessionDuration: "24h",
+            policies: [policy.policyId],
+          });
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.AccessApplication);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AccessApplication,
+      );
+      const all = yield* provider.list();
 
-    const match = all.find((a) => a.applicationId === app.applicationId);
-    expect(match).toBeDefined();
-    expect(match?.type).toEqual("self_hosted");
-    expect(match?.aud.length).toBeGreaterThan(0);
+      const match = all.find((a) => a.applicationId === app.applicationId);
+      expect(match).toBeDefined();
+      expect(match?.type).toEqual("self_hosted");
+      expect(match?.aud.length).toBeGreaterThan(0);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "update policies in place keeps the applicationId stable",
   (stack) =>
     Effect.gen(function* () {

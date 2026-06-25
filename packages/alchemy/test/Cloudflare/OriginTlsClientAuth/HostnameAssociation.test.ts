@@ -12,6 +12,9 @@ import * as Schedule from "effect/Schedule";
 import { CERT_5, CERT_6, KEY_5, KEY_6 } from "./fixtures/certs.ts";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -177,7 +180,7 @@ describe.sequential("HostnameAssociation", () => {
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "associates a hostname, updates cert and enablement in place, voids on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -255,7 +258,7 @@ describe.sequential("HostnameAssociation", () => {
     { timeout: 420_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "replaces the association when the hostname changes",
     (stack) =>
       Effect.gen(function* () {

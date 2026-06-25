@@ -12,6 +12,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 // Cloudflare counts schedule *creations* against a per-day quota and does NOT
@@ -296,7 +299,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "adoption — existing schedule errors without adopt, takes over with adopt(true)",
   (stack) =>
     Effect.gen(function* () {

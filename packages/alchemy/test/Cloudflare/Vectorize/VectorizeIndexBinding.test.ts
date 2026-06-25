@@ -9,6 +9,9 @@ import { HttpClientResponse } from "effect/unstable/http";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import VectorizeWorker from "./fixtures/vectorize-worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -24,7 +27,7 @@ const logLevel = Effect.provideService(
  * `getByIds`). Vectorize mutations are eventually consistent, so after
  * upserting we retry the query/get routes until the vectors are visible.
  */
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "VectorizeIndex.bind exercises the client surface",
   (stack) =>
     Effect.gen(function* () {

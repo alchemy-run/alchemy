@@ -5,6 +5,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -24,7 +27,7 @@ const entitled = !!process.env.CLOUDFLARE_TEST_DLP;
 // exhaustively paginated, hydrated into the exact `read` Attributes shape.
 // On an unentitled account this is the empty array (well-typed []); the
 // assertion proves the op is callable and returns the correct shape.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns the account's custom DLP entries",
   (stack) =>
     Effect.gen(function* () {

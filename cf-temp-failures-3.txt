@@ -1,0 +1,240 @@
+# Failed Cloudflare tests (temporary account run)
+# total failed: 94 across 25 files
+
+test/Cloudflare/Alerting/NotificationPolicy.test.ts
+  - !!! create, update, delete notification policy
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed notification policy
+      Unauthorized: Authentication error
+  - !!! replaces policy when alertType changes
+      Unauthorized: Authentication error
+
+test/Cloudflare/Alerting/Silence.test.ts
+  - !!! create, update window in place, delete silence
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed silence
+      Unauthorized: Authentication error
+  - !!! replaces silence when the policy changes
+      Unauthorized: Authentication error
+
+test/Cloudflare/Alerting/Webhook.test.ts
+  - create, update, delete webhook destination
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - create, update, delete webhook destination
+      Unauthorized: Authentication error
+  - list enumerates the deployed webhook destination
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - list enumerates the deployed webhook destination
+      Unauthorized: Authentication error
+
+test/Cloudflare/Calls/App.test.ts
+  - !!! create and delete an app with default name
+      Forbidden: Authentication error
+  - !!! list enumerates the deployed app
+      Forbidden: Authentication error
+  - !!! recreates after out-of-band delete
+      Forbidden: Authentication error
+  - !!! update name in place (same appId, secret preserved)
+      Forbidden: Authentication error
+
+test/Cloudflare/Connectivity/DirectoryService.test.ts
+  - !!! http service with explicit ports and default name
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed directory service
+      Unauthorized: Authentication error
+  - !!! recreates after out-of-band delete
+      Unauthorized: Authentication error
+  - !!! tcp service lifecycle: create, update, host switch
+      Unauthorized: Authentication error
+
+test/Cloudflare/Container/ContainerApplication.test.ts
+  - ContainerApplication > list enumerates container applications
+      Provider not found for undefined
+
+test/Cloudflare/D1/Database.test.ts
+  - applies migrations from migrationsDir
+      Forbidden: System limit reached: databases per account (1)
+  - !!! clones a database by databaseId
+      Forbidden: System limit reached: databases per account (1)
+  - !!! clones a database by name lookup
+      Forbidden: System limit reached: databases per account (1)
+  - !!! clones a database by passing the source resource directly
+      Forbidden: System limit reached: databases per account (1)
+  - existing database (matching name) is silently adopted without --adopt
+      Forbidden: System limit reached: databases per account (1)
+  - imports SQL files via importFiles
+      Forbidden: System limit reached: databases per account (1)
+
+test/Cloudflare/Pages/Deployment.test.ts
+  - create, replace on branch change, and destroy a deployment
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Pages/Domain.test.ts
+  - attach and detach a custom domain
+      Error: Test timed out in 120000ms.
+  - changing the domain name triggers replacement
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Pages/Project.test.ts
+  - changing the name triggers replacement
+      Error: Test timed out in 120000ms.
+  - create and delete a project with generated name
+      Forbidden: Authentication error
+  - list enumerates the deployed project
+      Error: Test timed out in 120000ms.
+  - update mutable props in place (same project id)
+      Error: Test timed out in 120000ms.
+
+test/Cloudflare/Queue/QueueConsumer.test.ts
+  - create, update settings, replace script, delete
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - fails clearly when queue has consumer for different script
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - list enumerates the deployed consumer
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - list enumerates the deployed consumer
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - promotes a dev consumer to a live consumer on deploy
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - recreates consumer after out-of-band delete
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/Queue/RoundTrip.test.ts
+  - send → subscribe handler → DO state → polled by test client
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/R2/Bucket.test.ts
+  - !!! create and delete bucket with default props
+      Unauthorized: Authentication error
+  - !!! create, update, delete bucket
+      Unauthorized: Authentication error
+  - !!! destroying a bucket empties its objects first
+      Unauthorized: Authentication error
+  - !!! existing bucket (matching name) is silently adopted without --adopt
+      Unauthorized: Authentication error
+  - !!! lifecycle rules are added, updated, and removed
+      Unauthorized: Authentication error
+
+test/Cloudflare/R2/BucketEventNotification.test.ts
+  - !!! changing the queue triggers a replacement
+      Unauthorized: Authentication error
+  - !!! create, update rules in place, and delete
+      Unauthorized: Authentication error
+  - !!! list enumerates deployed bucket event notifications
+      Unauthorized: Authentication error
+
+test/Cloudflare/R2DataCatalog/R2DataCatalog.test.ts
+  - !!! enable, sync maintenance config, register credential, destroy
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed catalog
+      Unauthorized: Authentication error
+  - !!! re-enables after out-of-band disable
+      Unauthorized: Authentication error
+
+test/Cloudflare/SecretsStore/Secret.test.ts
+  - !!! list enumerates the deployed secret across stores
+      Unauthorized: Authentication error
+
+test/Cloudflare/StateStore/State.test.ts
+  - !!! State > DELETE /resources/:fqn (deleteState) removes a single resource
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > DELETE /stacks/:stack (no stage) removes the stack from listStacks
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > DELETE /stacks/:stack?stage=... clears one stage but leaves the stack registered
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > DELETE /state/stacks/:stack wipes the test namespace (cleanup)
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /output (getStackOutput) reads back the persisted output
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /output returns undefined for an un-deployed stage
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /replaced-resources (getReplacedResources) returns status===replaced rows
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /resources (listResources) returns the FQNs in the stage
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /resources/:fqn (getState) reads back the persisted value
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /resources/:fqn returns undefined for a missing fqn
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /stacks (listStacks) includes the registered test stack
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET /stacks/:stack/stages (listStages) includes the test stage
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > GET+PUT interleaved 30x5 — engine traffic pattern
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > getVersion returns the current STATE_STORE_VERSION
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > PUT /output (setStackOutput) persists a stack output
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > PUT /resources/:fqn (setState) persists a resource
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > setState 100x concurrent — surfaces racy transient failures
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+  - !!! State > setState 100x sequential — surfaces transient failures
+      AuthError: Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.
+
+test/Cloudflare/Tags/AccountResourceTags.test.ts
+  - adoption — existing tags error without adopt, take over with adopt(true)
+      Error: Test timed out in 120000ms.
+  - changing resourceId triggers replacement
+      Error: Cannot coerce Output<KvA.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+  - create, update, and clear tags on a KV namespace
+      Error: Cannot coerce Output<TagsKv.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+  - list enumerates account-wide tagged resources
+      Error: Cannot coerce Output<ListKv.namespaceId> to a string via JS coercion. Use Output.interpolate`...` or Output.map(output, fn) to compose Outputs — the value isn't known until deploy time.
+
+test/Cloudflare/Turnstile/Widget.test.ts
+  - !!! create and delete a widget with default name
+      Unauthorized: Authentication error
+  - !!! list enumerates the deployed widget
+      Unauthorized: Authentication error
+  - !!! recreates after out-of-band delete
+      Unauthorized: Authentication error
+  - !!! update mutable props in place (same sitekey)
+      Unauthorized: Authentication error
+
+test/Cloudflare/Website/StaticSite.test.ts
+  - StaticSite: a bundle-only change keeps the asset manifest (hash.assets stable)
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - StaticSite: class form deploys and serves the built assets
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - StaticSite: editing a source file republishes the assets in a single deploy
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - StaticSite: relocating the project (and deleting the old one) preserves hash.assets
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/Website/Vite.test.ts
+  - Vite: class form deploys and serves the built assets
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/Workers/AccountSetting.test.ts
+  - AccountSetting > flips green compute, updates in place, and restores the baseline on destroy
+      Forbidden: Authentication error
+
+test/Cloudflare/Workers/ObservabilityDestination.test.ts
+  - list enumerates the deployed destination
+      Error: Test timed out in 300000ms.
+  - replacement on name change (new slug, old destination removed)
+      Error: Test timed out in 300000ms.
+  - update url, headers, and enabled in place (same slug)
+      Error: Test timed out in 300000ms.
+
+test/Cloudflare/Workers/PrebuiltWorker.test.ts
+  - Cloudflare.Worker with bundle: false > uploads a prebuilt module graph byte-for-byte
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+
+test/Cloudflare/Workers/Worker.test.ts
+  - Cloudflare.Worker > create, update, delete worker
+      Unauthorized: Authentication error
+  - Cloudflare.Worker > create, update, delete worker
+      Unauthorized: Authentication error
+  - Cloudflare.Worker > downstream referencing worker.url is not re-updated when the worker changes
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - Cloudflare.Worker > downstream referencing worker.url is not re-updated when the worker changes
+      Unauthorized: Authentication error
+  - Cloudflare.Worker > list enumerates the deployed worker
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - Cloudflare.Worker > worker.durableObjectNamespaces stability across DO and worker changes
+      Forbidden: You have exceeded the limit of 5 Workers on your account. Please refer to the Workers documentation (https://developers.cloudflare.com/workers/platform/limits/#number-of-workers) for more details.
+  - Cloudflare.Worker > worker.durableObjectNamespaces stability across DO and worker changes
+      Unauthorized: Authentication error

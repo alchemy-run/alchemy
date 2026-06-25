@@ -7,6 +7,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -28,7 +31,7 @@ const entitled = !!process.env.CLOUDFLARE_TEST_ACCESS_CUSTOM_PAGES;
 const HTML_A = "<html><body><h1>Access denied</h1></body></html>";
 const HTML_B = "<html><body><h1>Still denied</h1></body></html>";
 
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "unentitled accounts surface the typed AccessCustomPagesNotEntitled error",
   (stack) =>
     Effect.gen(function* () {
@@ -140,7 +143,7 @@ test.provider.skipIf(!entitled)(
 // `[]` when there are no records), so the ungated case always exercises
 // `list()` and asserts it hydrates the `read` shape. The entitled path
 // additionally deploys a page and asserts its presence.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates access custom pages at the account scope",
   (stack) =>
     Effect.gen(function* () {

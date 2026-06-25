@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -58,7 +61,7 @@ const expectGone = (accountId: string, monitorGroupId: string) =>
 
 // Unentitlement probe: pins the typed plan-gate rejection, so it must skip
 // on Enterprise accounts — there the create would succeed instead of failing.
-test.provider.skipIf(monitorGroupsEnabled)(
+test.provider.skipIf(monitorGroupsEnabled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed MonitorGroupsNotEnabled error on non-Enterprise accounts",
   (stack) =>
     Effect.gen(function* () {
@@ -98,14 +101,16 @@ test.provider.skipIf(monitorGroupsEnabled)(
 // Ungated probe: monitor group enumeration is account-scoped and works
 // regardless of the Enterprise entitlement — a non-entitled account simply
 // has no groups, so `list()` returns an array (typically empty here).
-test.provider("list returns an array of monitor groups", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(
-      Cloudflare.LoadBalancerMonitorGroup,
-    );
-    const all = yield* provider.list();
-    expect(Array.isArray(all)).toBe(true);
-  }).pipe(logLevel),
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list returns an array of monitor groups",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LoadBalancerMonitorGroup,
+      );
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+    }).pipe(logLevel),
 );
 
 test.provider.skipIf(!monitorGroupsEnabled)(

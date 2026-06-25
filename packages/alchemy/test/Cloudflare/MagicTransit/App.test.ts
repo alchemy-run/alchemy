@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -49,7 +52,7 @@ const expectGone = (accountId: string, appId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "unentitled accounts surface the typed MagicWanUnauthorized error",
   (stack) =>
     Effect.gen(function* () {
@@ -144,7 +147,7 @@ test.provider.skipIf(!entitled)(
 // Read-only list assertion. Always safe: on an unentitled account the
 // account-scoped apps list rejects with the typed `MagicWanUnauthorized` /
 // `Forbidden`, which `list()` maps to a well-typed empty array.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates account apps (well-typed [] when unentitled)",
   (stack) =>
     Effect.gen(function* () {

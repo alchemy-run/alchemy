@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -56,7 +59,7 @@ describe.sequential("EmailRule", () => {
   // paginates each zone's rules (skipping zones without Email Routing enabled).
   // Deploy a rule on the standing test zone, then assert it appears in the
   // exhaustively-paginated result.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates the deployed email rule across all zones",
     (stack) =>
       Effect.gen(function* () {

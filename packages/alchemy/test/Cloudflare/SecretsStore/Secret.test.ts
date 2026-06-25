@@ -6,6 +6,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -17,28 +20,30 @@ const logLevel = Effect.provideService(
 // Secrets Store and there is no account-wide secret enumeration API, so
 // `list()` enumerates every store and lists the secrets inside each. Deploy a
 // store + secret, then assert the deployed secret appears in the result.
-test.provider("list enumerates the deployed secret across stores", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed secret across stores",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        const store = yield* Cloudflare.SecretsStore("ListSecretStore");
-        return yield* Cloudflare.Secret("ListSecret", {
-          store,
-          value: Redacted.make("sk-list-test-value"),
-        });
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const store = yield* Cloudflare.SecretsStore("ListSecretStore");
+          return yield* Cloudflare.Secret("ListSecret", {
+            store,
+            value: Redacted.make("sk-list-test-value"),
+          });
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.Secret);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Secret);
+      const all = yield* provider.list();
 
-    expect(all.some((s) => s.secretId === deployed.secretId)).toBe(true);
-    const found = all.find((s) => s.secretId === deployed.secretId)!;
-    expect(found.secretName).toEqual(deployed.secretName);
-    expect(found.storeId).toEqual(deployed.storeId);
+      expect(all.some((s) => s.secretId === deployed.secretId)).toBe(true);
+      const found = all.find((s) => s.secretId === deployed.secretId)!;
+      expect(found.secretName).toEqual(deployed.secretName);
+      expect(found.storeId).toEqual(deployed.storeId);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

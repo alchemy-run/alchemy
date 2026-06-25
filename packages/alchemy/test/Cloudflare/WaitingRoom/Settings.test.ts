@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -51,7 +54,7 @@ const getSetting = (zoneId: string) =>
 
 // Both cases mutate the same zone-level Waiting Room settings singleton; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
 describe.sequential("Settings", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "pins the settings to the default baseline without touching the API",
     (stack) =>
       Effect.gen(function* () {
@@ -88,7 +91,7 @@ describe.sequential("Settings", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "surfaces the typed ZoneNotEntitled error when enabling on unentitled zones",
     (stack) =>
       Effect.gen(function* () {
@@ -154,21 +157,23 @@ describe.sequential("Settings", () => {
   // API for these per-zone settings, so `list()` enumerates every zone via
   // `listAllZones` and reads the singleton in each. Assert the result is
   // non-empty and contains the standing test zone.
-  test.provider("list enumerates the settings across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the settings across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.WaitingRoomSettings,
-      );
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.WaitingRoomSettings,
+        );
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -81,7 +84,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!!secondaryZoneId)(
+test.provider.skipIf(!!secondaryZoneId || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "incoming config does not persist on non-secondary zones (typed not-found)",
   (stack) =>
     Effect.gen(function* () {

@@ -6,6 +6,9 @@ import { MinimumLogLevel } from "effect/References";
 import { expectUrlContains } from "../Utils/Http.ts";
 import Stack from "./fixtures/env/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 // Populate process.env before deploy so the worker fixture's
 // `Config.xxx(...)` reads resolve at deploy time (default provider).
 const CONFIG_STR_VALUE = (process.env.CONFIG_STR = "config-string-value");
@@ -28,7 +31,7 @@ const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 describe.concurrent("Cloudflare.Worker env bindings", () => {
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "async worker round-trips every supported binding shape",
     Effect.gen(function* () {
       const { asyncUrl } = yield* stack;
@@ -61,7 +64,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
     }).pipe(logLevel),
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "effect worker round-trips env: literals and Redacted via WorkerEnvironment",
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;
@@ -85,7 +88,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
     }).pipe(logLevel),
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "effect worker resolves the yielded VersionMetadata binding",
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;
@@ -102,7 +105,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
     }).pipe(logLevel),
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "effect worker round-trips Config.xxx bindings captured in Init",
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;

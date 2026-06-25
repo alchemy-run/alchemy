@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -42,7 +45,7 @@ const getEntrypointRules = (accountId: string) =>
 // standard testing account every PUT fails with the typed `PhaseNotEntitled`
 // error (code 50002). The test probes once: unentitled accounts assert the
 // typed tag; entitled accounts run the full lifecycle.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "account entrypoint lifecycle (typed PhaseNotEntitled on unentitled accounts)",
   (stack) =>
     Effect.gen(function* () {
@@ -154,7 +157,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the account phase entrypoints",
   (stack) =>
     Effect.gen(function* () {

@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -49,7 +52,7 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
     }),
   );
 
-test.provider.skipIf(outgoingEntitled)(
+test.provider.skipIf(outgoingEntitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed OutgoingZoneTransfersNotAllowed error on unentitled zones",
   (stack) =>
     Effect.gen(function* () {
@@ -156,7 +159,7 @@ test.provider.skipIf(!outgoingEntitled)(
 // read-only assertion (well-typed Attributes[]) always runs; on the
 // unentitled testing account no zone returns a config, so the deployed-
 // presence assertion is gated behind an entitled zone.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the outgoing transfer config per zone",
   (stack) =>
     Effect.gen(function* () {

@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -60,7 +63,7 @@ const setBaseline = (zoneId: string, value: "on" | "off") =>
 
 // Both cases mutate the same zone-level Cache Reserve singleton; run them serially so they don't corrupt each other's captured `initialValue` under the global concurrent test config.
 describe.sequential("CacheReserve", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "surfaces the typed SettingUnavailableForPlan error on unentitled zones",
     (stack) =>
       Effect.gen(function* () {

@@ -10,6 +10,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -64,7 +67,7 @@ const expectGone = (accountId: string, gatewayId: string, routeId: string) =>
     Effect.catchTag("GatewayNotFound", () => Effect.void),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update elements (new deployed version), rename, delete",
   (stack) =>
     Effect.gen(function* () {
@@ -167,165 +170,174 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("replaces route when the gateway changes", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "replaces route when the gateway changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        const gatewayA = yield* Cloudflare.AiGateway("RouteGatewayA", {
-          id: GATEWAY_ID,
-        });
-        yield* Cloudflare.AiGateway("RouteGatewayB", {
-          id: GATEWAY_ID_B,
-        });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting(
-          "ReplaceRoute",
-          {
-            gatewayId: gatewayA.gatewayId,
-            name: "alchemy-test-route-replace",
-            elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
-          },
-        );
-        return { route };
-      }),
-    );
-    expect(initial.route.gatewayId).toEqual(GATEWAY_ID);
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          const gatewayA = yield* Cloudflare.AiGateway("RouteGatewayA", {
+            id: GATEWAY_ID,
+          });
+          yield* Cloudflare.AiGateway("RouteGatewayB", {
+            id: GATEWAY_ID_B,
+          });
+          const route = yield* Cloudflare.AiGatewayDynamicRouting(
+            "ReplaceRoute",
+            {
+              gatewayId: gatewayA.gatewayId,
+              name: "alchemy-test-route-replace",
+              elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
+            },
+          );
+          return { route };
+        }),
+      );
+      expect(initial.route.gatewayId).toEqual(GATEWAY_ID);
 
-    // Moving the route to another gateway is a replacement: new id, new
-    // parent, and the old route is removed from gateway A.
-    const moved = yield* stack.deploy(
-      Effect.gen(function* () {
-        yield* Cloudflare.AiGateway("RouteGatewayA", {
-          id: GATEWAY_ID,
-        });
-        const gatewayB = yield* Cloudflare.AiGateway("RouteGatewayB", {
-          id: GATEWAY_ID_B,
-        });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting(
-          "ReplaceRoute",
-          {
-            gatewayId: gatewayB.gatewayId,
-            name: "alchemy-test-route-replace",
-            elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
-          },
-        );
-        return { route };
-      }),
-    );
+      // Moving the route to another gateway is a replacement: new id, new
+      // parent, and the old route is removed from gateway A.
+      const moved = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Cloudflare.AiGateway("RouteGatewayA", {
+            id: GATEWAY_ID,
+          });
+          const gatewayB = yield* Cloudflare.AiGateway("RouteGatewayB", {
+            id: GATEWAY_ID_B,
+          });
+          const route = yield* Cloudflare.AiGatewayDynamicRouting(
+            "ReplaceRoute",
+            {
+              gatewayId: gatewayB.gatewayId,
+              name: "alchemy-test-route-replace",
+              elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
+            },
+          );
+          return { route };
+        }),
+      );
 
-    expect(moved.route.gatewayId).toEqual(GATEWAY_ID_B);
-    expect(moved.route.routeId).not.toEqual(initial.route.routeId);
+      expect(moved.route.gatewayId).toEqual(GATEWAY_ID_B);
+      expect(moved.route.routeId).not.toEqual(initial.route.routeId);
 
-    // The replaced route is gone from gateway A.
-    yield* expectGone(accountId, GATEWAY_ID, initial.route.routeId);
+      // The replaced route is gone from gateway A.
+      yield* expectGone(accountId, GATEWAY_ID, initial.route.routeId);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* expectGone(accountId, GATEWAY_ID_B, moved.route.routeId);
-  }).pipe(logLevel),
+      yield* expectGone(accountId, GATEWAY_ID_B, moved.route.routeId);
+    }).pipe(logLevel),
 );
 
-test.provider("recreates a route after out-of-band delete", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "recreates a route after out-of-band delete",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        const gateway = yield* Cloudflare.AiGateway("HealRouteGateway", {
-          id: GATEWAY_ID,
-        });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting("HealRoute", {
-          gatewayId: gateway.gatewayId,
-          name: "alchemy-test-route-heal",
-          elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
-        });
-        return { route };
-      }),
-    );
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          const gateway = yield* Cloudflare.AiGateway("HealRouteGateway", {
+            id: GATEWAY_ID,
+          });
+          const route = yield* Cloudflare.AiGatewayDynamicRouting("HealRoute", {
+            gatewayId: gateway.gatewayId,
+            name: "alchemy-test-route-heal",
+            elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
+          });
+          return { route };
+        }),
+      );
 
-    // Delete the route out-of-band. A redeploy with identical props is a
-    // planner no-op, so change a prop to force reconcile — it must observe
-    // the route as missing and recreate it instead of failing on a 404.
-    yield* aiGateway.deleteDynamicRouting({
-      accountId,
-      gatewayId: GATEWAY_ID,
-      id: initial.route.routeId,
-    });
+      // Delete the route out-of-band. A redeploy with identical props is a
+      // planner no-op, so change a prop to force reconcile — it must observe
+      // the route as missing and recreate it instead of failing on a 404.
+      yield* aiGateway.deleteDynamicRouting({
+        accountId,
+        gatewayId: GATEWAY_ID,
+        id: initial.route.routeId,
+      });
 
-    const healed = yield* stack.deploy(
-      Effect.gen(function* () {
-        const gateway = yield* Cloudflare.AiGateway("HealRouteGateway", {
-          id: GATEWAY_ID,
-        });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting("HealRoute", {
-          gatewayId: gateway.gatewayId,
-          name: "alchemy-test-route-heal",
-          elements: graph("@cf/meta/llama-3.1-8b-instruct", 3),
-        });
-        return { route };
-      }),
-    );
+      const healed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const gateway = yield* Cloudflare.AiGateway("HealRouteGateway", {
+            id: GATEWAY_ID,
+          });
+          const route = yield* Cloudflare.AiGatewayDynamicRouting("HealRoute", {
+            gatewayId: gateway.gatewayId,
+            name: "alchemy-test-route-heal",
+            elements: graph("@cf/meta/llama-3.1-8b-instruct", 3),
+          });
+          return { route };
+        }),
+      );
 
-    expect(healed.route.routeId).not.toEqual(initial.route.routeId);
-    expect(healed.route.elements).toEqual(
-      graph("@cf/meta/llama-3.1-8b-instruct", 3),
-    );
+      expect(healed.route.routeId).not.toEqual(initial.route.routeId);
+      expect(healed.route.elements).toEqual(
+        graph("@cf/meta/llama-3.1-8b-instruct", 3),
+      );
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* expectGone(accountId, GATEWAY_ID, healed.route.routeId);
-  }).pipe(logLevel),
+      yield* expectGone(accountId, GATEWAY_ID, healed.route.routeId);
+    }).pipe(logLevel),
 );
 
 // Canonical `list()` test (parent fan-out): routes are scoped under a gateway
 // with no account-wide route API, so `list()` enumerates every account gateway
 // and exhaustively lists each gateway's routes. Deploy a gateway + route, then
 // assert the deployed route appears in the exhaustively-paginated result.
-test.provider("list enumerates routes across all gateways", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates routes across all gateways",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        const gateway = yield* Cloudflare.AiGateway("ListRouteGateway", {
-          id: GATEWAY_ID,
-        });
-        const route = yield* Cloudflare.AiGatewayDynamicRouting("ListRoute", {
-          gatewayId: gateway.gatewayId,
-          name: "alchemy-test-route-list",
-          elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
-        });
-        return { route };
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const gateway = yield* Cloudflare.AiGateway("ListRouteGateway", {
+            id: GATEWAY_ID,
+          });
+          const route = yield* Cloudflare.AiGatewayDynamicRouting("ListRoute", {
+            gatewayId: gateway.gatewayId,
+            name: "alchemy-test-route-list",
+            elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
+          });
+          return { route };
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.AiGatewayDynamicRouting,
-    );
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AiGatewayDynamicRouting,
+      );
 
-    // The route appears in list() shortly after deploy, but its element graph
-    // is materialized from a separate deployed-version lookup that propagates
-    // with its own eventual-consistency lag. Poll until the route is present
-    // AND its graph has propagated before asserting.
-    const all = yield* poll({
-      description: "list() includes the deployed route with its element graph",
-      effect: provider.list(),
-      predicate: (all) =>
-        (all.find((r) => r.routeId === deployed.route.routeId)?.elements
-          ?.length ?? 0) > 0,
-    });
+      // The route appears in list() shortly after deploy, but its element graph
+      // is materialized from a separate deployed-version lookup that propagates
+      // with its own eventual-consistency lag. Poll until the route is present
+      // AND its graph has propagated before asserting.
+      const all = yield* poll({
+        description:
+          "list() includes the deployed route with its element graph",
+        effect: provider.list(),
+        predicate: (all) =>
+          (all.find((r) => r.routeId === deployed.route.routeId)?.elements
+            ?.length ?? 0) > 0,
+      });
 
-    const found = all.find((r) => r.routeId === deployed.route.routeId);
-    expect(found).toBeDefined();
-    expect(found?.gatewayId).toEqual(GATEWAY_ID);
-    expect(found?.name).toEqual("alchemy-test-route-list");
-    expect(found?.elements).toEqual(graph("@cf/meta/llama-3.1-8b-instruct", 1));
+      const found = all.find((r) => r.routeId === deployed.route.routeId);
+      expect(found).toBeDefined();
+      expect(found?.gatewayId).toEqual(GATEWAY_ID);
+      expect(found?.name).toEqual("alchemy-test-route-list");
+      expect(found?.elements).toEqual(
+        graph("@cf/meta/llama-3.1-8b-instruct", 1),
+      );
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

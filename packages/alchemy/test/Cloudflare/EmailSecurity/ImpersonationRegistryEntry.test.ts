@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -103,7 +106,7 @@ test.provider.skipIf(!entitled)(
 // `EmailSecurityNotEntitled` error and returns a well-typed empty array, so
 // this runs everywhere and proves the wiring (typed `findProvider`, exact
 // Attributes shape).
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns the account impersonation registry",
   (stack) =>
     Effect.gen(function* () {

@@ -13,6 +13,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -91,7 +94,7 @@ const purgeRoutes = (zoneId: string, pattern: string) =>
     ),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create and delete an opt-out route (no script)",
   (stack) =>
     Effect.gen(function* () {
@@ -127,7 +130,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "route to a Worker, then update pattern and script in place",
   (stack) =>
     Effect.gen(function* () {
@@ -191,7 +194,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "adoption — existing route errors without adopt, takes over with adopt(true)",
   (stack) =>
     Effect.gen(function* () {
@@ -259,7 +262,7 @@ const PATTERN_LIST = `alchemy-route-list.${zoneName}/*`;
 // `listAllZones`, paginates `listRoutes` per zone, and hydrates each into the
 // `read` Attributes shape. Deploy a real route and assert it appears in the
 // exhaustively-enumerated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed route across all zones",
   (stack) =>
     Effect.gen(function* () {

@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -49,7 +52,7 @@ const expectGone = (accountId: string, id: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "rejects public IPs with the typed InvalidHealthcheckEndpoint error",
   (stack) =>
     Effect.gen(function* () {
@@ -98,7 +101,7 @@ const cleanLeftovers = (accountId: string) =>
     ),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "creates an endpoint healthcheck, updates in place, and destroys",
   (stack) =>
     Effect.gen(function* () {
@@ -181,7 +184,7 @@ test.provider(
 
 // Canonical `list()` test (account collection): deploy a real healthcheck,
 // then assert its UUID appears in the exhaustively-enumerated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed endpoint healthcheck",
   (stack) =>
     Effect.gen(function* () {

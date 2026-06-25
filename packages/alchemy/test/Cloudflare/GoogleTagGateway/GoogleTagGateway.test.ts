@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -65,7 +68,7 @@ const setBaseline = (zoneId: string) =>
   );
 
 describe.sequential("GoogleTagGateway", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "configures the gateway, updates in place, and restores the baseline on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -142,7 +145,7 @@ describe.sequential("GoogleTagGateway", () => {
     { timeout: 120_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "no-op redeploy skips the PUT and destroy is idempotent",
     (stack) =>
       Effect.gen(function* () {

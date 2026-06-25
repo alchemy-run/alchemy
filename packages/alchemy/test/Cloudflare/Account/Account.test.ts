@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -61,28 +64,30 @@ test.provider("inaccessible account surfaces a typed tag", (stack) =>
 // standard token can LIST every account it can access, and the token's own
 // testing account must appear in the exhaustively-paginated result with the
 // exact `Attributes` shape `read` produces.
-test.provider("list enumerates accessible accounts (read-only)", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates accessible accounts (read-only)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.Account);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Account);
+      const all = yield* provider.list();
 
-    expect(all.length).toBeGreaterThan(0);
+      expect(all.length).toBeGreaterThan(0);
 
-    const self = all.find((a) => a.accountId === accountId);
-    expect(self).toBeDefined();
-    expect(self?.name).toBeTruthy();
-    expect(["standard", "enterprise"]).toContain(self?.type);
-    expect(typeof self?.enforceTwofactor).toEqual("boolean");
+      const self = all.find((a) => a.accountId === accountId);
+      expect(self).toBeDefined();
+      expect(self?.name).toBeTruthy();
+      expect(["standard", "enterprise"]).toContain(self?.type);
+      expect(typeof self?.enforceTwofactor).toEqual("boolean");
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
 
-test.provider.skipIf(tenantEntitled)(
+test.provider.skipIf(tenantEntitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "createAccount is entitlement-gated: typed AccountCreationForbidden",
   (stack) =>
     Effect.gen(function* () {

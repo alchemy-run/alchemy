@@ -27,6 +27,9 @@ import {
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -41,175 +44,183 @@ const doMain = pathe.resolve(
 );
 
 describe.concurrent("Cloudflare.Worker", () => {
-  test.provider("create, update, delete worker", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const s = yield* Stack;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "create, update, delete worker",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const s = yield* Stack;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          yield* R2.R2Bucket("Bucket", {
-            storageClass: "Standard",
-          });
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* R2.R2Bucket("Bucket", {
+              storageClass: "Standard",
+            });
 
-          const worker = yield* Cloudflare.Worker("TestWorker", {
-            main,
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: {
-              date: "2024-01-01",
-            },
-          });
+            const worker = yield* Cloudflare.Worker("TestWorker", {
+              main,
+              subdomain: { enabled: true, previewsEnabled: true },
+              compatibility: {
+                date: "2024-01-01",
+              },
+            });
 
-          return worker;
-        }),
-      );
+            return worker;
+          }),
+        );
 
-      const actualWorker = yield* findWorker(worker.workerName, accountId);
-      expect(actualWorker?.scriptName).toEqual(worker.workerName);
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        `alchemy:stack:${s.name}`,
-      );
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        `alchemy:stage:${s.stage}`,
-      );
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        "alchemy:id:TestWorker",
-      );
+        const actualWorker = yield* findWorker(worker.workerName, accountId);
+        expect(actualWorker?.scriptName).toEqual(worker.workerName);
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          `alchemy:stack:${s.name}`,
+        );
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          `alchemy:stage:${s.stage}`,
+        );
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          "alchemy:id:TestWorker",
+        );
 
-      // Verify the workers.dev subdomain is enabled on Cloudflare
-      // (rather than just trusting the resource's output attributes).
-      expect(worker.url).toBeDefined();
-      const initialSubdomain = yield* workers.getScriptSubdomain({
-        accountId,
-        scriptName: worker.workerName,
-      });
-      expect(initialSubdomain).toEqual({
-        enabled: true,
-        previewsEnabled: true,
-      });
+        // Verify the workers.dev subdomain is enabled on Cloudflare
+        // (rather than just trusting the resource's output attributes).
+        expect(worker.url).toBeDefined();
+        const initialSubdomain = yield* workers.getScriptSubdomain({
+          accountId,
+          scriptName: worker.workerName,
+        });
+        expect(initialSubdomain).toEqual({
+          enabled: true,
+          previewsEnabled: true,
+        });
 
-      // Update the worker
-      const updatedWorker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("TestWorker", {
-            main,
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: {
-              date: "2024-01-01",
-            },
-          });
-        }),
-      );
+        // Update the worker
+        const updatedWorker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("TestWorker", {
+              main,
+              subdomain: { enabled: true, previewsEnabled: true },
+              compatibility: {
+                date: "2024-01-01",
+              },
+            });
+          }),
+        );
 
-      const actualUpdatedWorker = yield* findWorker(
-        updatedWorker.workerName,
-        accountId,
-      );
-      expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
-      const actualUpdatedSubdomain = yield* workers.getScriptSubdomain({
-        accountId,
-        scriptName: updatedWorker.workerName,
-      });
-      expect(actualUpdatedSubdomain).toEqual({
-        enabled: true,
-        previewsEnabled: true,
-      });
+        const actualUpdatedWorker = yield* findWorker(
+          updatedWorker.workerName,
+          accountId,
+        );
+        expect(actualUpdatedWorker?.scriptName).toEqual(
+          updatedWorker.workerName,
+        );
+        const actualUpdatedSubdomain = yield* workers.getScriptSubdomain({
+          accountId,
+          scriptName: updatedWorker.workerName,
+        });
+        expect(actualUpdatedSubdomain).toEqual({
+          enabled: true,
+          previewsEnabled: true,
+        });
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-    }).pipe(logLevel),
+        yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }).pipe(logLevel),
   );
 
-  test.provider("create, update, delete worker with assets", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const s = yield* Stack;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "create, update, delete worker with assets",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const s = yield* Stack;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("TestWorkerWithAssets", {
-            main,
-            assets: pathe.resolve(import.meta.dirname, "assets"),
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: {
-              date: "2024-01-01",
-            },
-          });
-        }),
-      );
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("TestWorkerWithAssets", {
+              main,
+              assets: pathe.resolve(import.meta.dirname, "assets"),
+              subdomain: { enabled: true, previewsEnabled: true },
+              compatibility: {
+                date: "2024-01-01",
+              },
+            });
+          }),
+        );
 
-      const actualWorker = yield* findWorker(worker.workerName, accountId);
-      expect(actualWorker?.scriptName).toEqual(worker.workerName);
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        `alchemy:stack:${s.name}`,
-      );
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        `alchemy:stage:${s.stage}`,
-      );
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        "alchemy:id:TestWorkerWithAssets",
-      );
+        const actualWorker = yield* findWorker(worker.workerName, accountId);
+        expect(actualWorker?.scriptName).toEqual(worker.workerName);
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          `alchemy:stack:${s.name}`,
+        );
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          `alchemy:stage:${s.stage}`,
+        );
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          "alchemy:id:TestWorkerWithAssets",
+        );
 
-      // Verify the worker has assets
-      expect(worker.hash?.assets).toBeDefined();
+        // Verify the worker has assets
+        expect(worker.hash?.assets).toBeDefined();
 
-      // Verify the workers.dev subdomain is enabled on Cloudflare
-      // (rather than just trusting the resource's output attributes).
-      expect(worker.url).toBeDefined();
-      const assetsWorkerSubdomain = yield* workers.getScriptSubdomain({
-        accountId,
-        scriptName: worker.workerName,
-      });
-      expect(assetsWorkerSubdomain).toEqual({
-        enabled: true,
-        previewsEnabled: true,
-      });
+        // Verify the workers.dev subdomain is enabled on Cloudflare
+        // (rather than just trusting the resource's output attributes).
+        expect(worker.url).toBeDefined();
+        const assetsWorkerSubdomain = yield* workers.getScriptSubdomain({
+          accountId,
+          scriptName: worker.workerName,
+        });
+        expect(assetsWorkerSubdomain).toEqual({
+          enabled: true,
+          previewsEnabled: true,
+        });
 
-      // Update the worker
-      const updatedWorker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("TestWorkerWithAssets", {
-            main,
-            assets: pathe.resolve(import.meta.dirname, "assets"),
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: {
-              date: "2024-01-01",
-            },
-          });
-        }),
-      );
+        // Update the worker
+        const updatedWorker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("TestWorkerWithAssets", {
+              main,
+              assets: pathe.resolve(import.meta.dirname, "assets"),
+              subdomain: { enabled: true, previewsEnabled: true },
+              compatibility: {
+                date: "2024-01-01",
+              },
+            });
+          }),
+        );
 
-      const actualUpdatedWorker = yield* findWorker(
-        updatedWorker.workerName,
-        accountId,
-      );
-      expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
-      expect(updatedWorker.hash?.assets).toBeDefined();
+        const actualUpdatedWorker = yield* findWorker(
+          updatedWorker.workerName,
+          accountId,
+        );
+        expect(actualUpdatedWorker?.scriptName).toEqual(
+          updatedWorker.workerName,
+        );
+        expect(updatedWorker.hash?.assets).toBeDefined();
 
-      // Final update
-      const finalWorker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("TestWorkerWithAssets", {
-            main,
-            url: true,
-            assets: pathe.resolve(import.meta.dirname, "assets"),
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: {
-              date: "2024-01-01",
-            },
-          });
-        }),
-      );
+        // Final update
+        const finalWorker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("TestWorkerWithAssets", {
+              main,
+              url: true,
+              assets: pathe.resolve(import.meta.dirname, "assets"),
+              subdomain: { enabled: true, previewsEnabled: true },
+              compatibility: {
+                date: "2024-01-01",
+              },
+            });
+          }),
+        );
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      yield* waitForWorkerToBeDeleted(finalWorker.workerName, accountId);
-    }).pipe(logLevel),
+        yield* waitForWorkerToBeDeleted(finalWorker.workerName, accountId);
+      }).pipe(logLevel),
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -234,7 +245,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
   const assetsFixtureDir = pathe.resolve(import.meta.dirname, "assets");
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "Worker assets: relocating to a fresh path with identical bytes preserves hash and keeps assets",
     (stack) =>
       Effect.gen(function* () {
@@ -292,7 +303,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 360_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "Worker assets: editing a file changes the hash and republishes the manifest",
     (stack) =>
       Effect.gen(function* () {
@@ -353,7 +364,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 360_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "Worker assets: a bundle-only change keeps the asset manifest (hash.assets stable)",
     (stack) =>
       Effect.gen(function* () {
@@ -418,43 +429,45 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 360_000 },
   );
 
-  test.provider("create, update, delete internal worker", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const s = yield* Stack;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "create, update, delete internal worker",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const s = yield* Stack;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* InternalWorker;
-        }),
-      );
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* InternalWorker;
+          }),
+        );
 
-      const actualWorker = yield* findWorker(worker.workerName, accountId);
-      expect(actualWorker?.scriptName).toEqual(worker.workerName);
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        `alchemy:stack:${s.name}`,
-      );
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        `alchemy:stage:${s.stage}`,
-      );
-      expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
-        "alchemy:id:InternalWorker",
-      );
+        const actualWorker = yield* findWorker(worker.workerName, accountId);
+        expect(actualWorker?.scriptName).toEqual(worker.workerName);
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          `alchemy:stack:${s.name}`,
+        );
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          `alchemy:stage:${s.stage}`,
+        );
+        expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
+          "alchemy:id:InternalWorker",
+        );
 
-      const updatedWorker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* InternalWorker;
-        }),
-      );
+        const updatedWorker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* InternalWorker;
+          }),
+        );
 
-      expect(updatedWorker.workerName).toEqual(worker.workerName);
+        expect(updatedWorker.workerName).toEqual(worker.workerName);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-    }).pipe(logLevel),
+        yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }).pipe(logLevel),
   );
 
   // ── Engine-level adoption ─────────────────────────────────────────────────
@@ -477,7 +490,7 @@ describe.concurrent("Cloudflare.Worker", () => {
   // never seen it" (e.g. CLI-driven first deploy on a fresh machine, or a
   // state-store reset).
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "owned worker (matching alchemy tags) is silently adopted without --adopt",
     (stack) =>
       Effect.gen(function* () {
@@ -556,79 +569,81 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
-  test.provider("adopt(true) takes over a foreign-tagged worker", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "adopt(true) takes over a foreign-tagged worker",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Phase 1: deploy under logical id "Original" with an explicit
-      // physical name. The Cloudflare Worker is now tagged
-      // `alchemy:id:Original` — i.e. owned by *that* logical resource.
-      const physicalName = `alchemy-test-adopt-takeover-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-      const original = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("Original", {
-            main,
-            name: physicalName,
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: { date: "2024-01-01" },
-          });
-        }),
-      );
-      expect(yield* findWorker(original.workerName, accountId)).toBeDefined();
-      expect(yield* getWorkerTags(physicalName, accountId)).toContain(
-        "alchemy:id:Original",
-      );
-
-      // Wipe state for the "Original" entry; the worker stays on Cloudflare.
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: "test",
-          fqn: "Original",
-        });
-      }).pipe(Effect.provide(stack.state));
-
-      // Phase 2: redeploy under a *different* logical id with the same
-      // physical name and `adopt(true)`. `Worker.read` returns
-      // `Unowned(attrs)` because the existing tags identify a different
-      // logical id; with adopt enabled the engine takes over and the
-      // follow-up create/update rewrites the tags. (The rejection path
-      // — same scenario without `adopt(true)` — is covered by the unit
-      // tests in `plan.test.ts`.)
-      const takenOver = yield* stack
-        .deploy(
+        // Phase 1: deploy under logical id "Original" with an explicit
+        // physical name. The Cloudflare Worker is now tagged
+        // `alchemy:id:Original` — i.e. owned by *that* logical resource.
+        const physicalName = `alchemy-test-adopt-takeover-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        const original = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Worker("Different", {
+            return yield* Cloudflare.Worker("Original", {
               main,
               name: physicalName,
               subdomain: { enabled: true, previewsEnabled: true },
               compatibility: { date: "2024-01-01" },
             });
           }),
-        )
-        .pipe(adopt(true));
+        );
+        expect(yield* findWorker(original.workerName, accountId)).toBeDefined();
+        expect(yield* getWorkerTags(physicalName, accountId)).toContain(
+          "alchemy:id:Original",
+        );
 
-      expect(takenOver.workerName).toEqual(physicalName);
+        // Wipe state for the "Original" entry; the worker stays on Cloudflare.
+        yield* Effect.gen(function* () {
+          const state = yield* yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "Original",
+          });
+        }).pipe(Effect.provide(stack.state));
 
-      const newTags = yield* getWorkerTags(physicalName, accountId);
-      expect(newTags).toContain("alchemy:id:Different");
-      expect(newTags).not.toContain("alchemy:id:Original");
+        // Phase 2: redeploy under a *different* logical id with the same
+        // physical name and `adopt(true)`. `Worker.read` returns
+        // `Unowned(attrs)` because the existing tags identify a different
+        // logical id; with adopt enabled the engine takes over and the
+        // follow-up create/update rewrites the tags. (The rejection path
+        // — same scenario without `adopt(true)` — is covered by the unit
+        // tests in `plan.test.ts`.)
+        const takenOver = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Worker("Different", {
+                main,
+                name: physicalName,
+                subdomain: { enabled: true, previewsEnabled: true },
+                compatibility: { date: "2024-01-01" },
+              });
+            }),
+          )
+          .pipe(adopt(true));
 
-      yield* stack.destroy();
-      yield* waitForWorkerToBeDeleted(physicalName, accountId);
-    }).pipe(logLevel),
+        expect(takenOver.workerName).toEqual(physicalName);
+
+        const newTags = yield* getWorkerTags(physicalName, accountId);
+        expect(newTags).toContain("alchemy:id:Different");
+        expect(newTags).not.toContain("alchemy:id:Original");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(physicalName, accountId);
+      }).pipe(logLevel),
   );
 
   // First-deploy behaviour: the default (omitting `url`) must enable
   // the workers.dev subdomain, and `url: false` must disable it. Both
   // are asserted against live Cloudflare state via `getScriptSubdomain`,
   // not just the resource's output attributes.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "url defaults to enabling the workers.dev subdomain on first deploy",
     (stack) =>
       Effect.gen(function* () {
@@ -653,7 +668,7 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "url: false disables the workers.dev subdomain on first deploy",
     (stack) =>
       Effect.gen(function* () {
@@ -685,7 +700,7 @@ describe.concurrent("Cloudflare.Worker", () => {
   // drove the API call symmetrically — but the new observed-vs-
   // desired check inside reconcile must still flip the toggle when
   // props really do change.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "toggling url between deploys flips the workers.dev subdomain",
     (stack) =>
       Effect.gen(function* () {
@@ -729,7 +744,7 @@ describe.concurrent("Cloudflare.Worker", () => {
   // a redeploy must observe `previewsEnabled` and flip it back on. The
   // pre-fix reconciler diffed only `enabled` against desired, so it
   // skipped the API call and let the drift persist.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "redeploy re-enables previewsEnabled when externally disabled",
     (stack) =>
       Effect.gen(function* () {
@@ -781,7 +796,7 @@ describe.concurrent("Cloudflare.Worker", () => {
   // `domains` should reflect the workers.dev URL when the subdomain is
   // enabled and be empty when it isn't. `worker.url` is just `domains[0]`,
   // so the two must stay in lockstep across deploys.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "domains reflects the workers.dev subdomain and tracks url",
     (stack) =>
       Effect.gen(function* () {
@@ -819,7 +834,7 @@ describe.concurrent("Cloudflare.Worker", () => {
   // when the subdomain is enabled. `worker.url` is `domains[0]`, so the
   // custom domain wins.
   const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
-  test.provider.skipIf(!customDomainZone)(
+  test.provider.skipIf(!customDomainZone || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "domains puts custom domains before workers.dev and url is the first",
     (stack) =>
       Effect.gen(function* () {
@@ -870,35 +885,37 @@ describe.concurrent("Cloudflare.Worker", () => {
 
   // Canonical `list()` test (account collection): deploy a real Worker and
   // assert it shows up in the exhaustively-paginated account-wide listing.
-  test.provider("list enumerates the deployed worker", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the deployed worker",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("ListWorker", {
-            main,
-            compatibility: { date: "2024-01-01" },
-          });
-        }),
-      );
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("ListWorker", {
+              main,
+              compatibility: { date: "2024-01-01" },
+            });
+          }),
+        );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Worker);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(Cloudflare.Worker);
+        const all = yield* provider.list();
 
-      expect(all.some((w) => w.workerName === worker.workerName)).toBe(true);
-      const found = all.find((w) => w.workerName === worker.workerName);
-      expect(found?.workerId).toEqual(worker.workerId);
-      expect(found?.accountId).toEqual(accountId);
+        expect(all.some((w) => w.workerName === worker.workerName)).toBe(true);
+        const found = all.find((w) => w.workerName === worker.workerName);
+        expect(found?.workerId).toEqual(worker.workerId);
+        expect(found?.accountId).toEqual(accountId);
 
-      yield* stack.destroy();
-      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-    }).pipe(logLevel),
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "downstream referencing worker.url is not re-updated when the worker changes",
     (stack) =>
       // Regression: a downstream resource that references `worker.url` as a
@@ -949,7 +966,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "worker.durableObjectNamespaces stability across DO and worker changes",
     (stack) =>
       // Exercises plan actions for a downstream resource whose props reference

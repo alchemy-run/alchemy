@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -54,7 +57,7 @@ const cleanupRoutesByHostname = (accountId: string, hostname: string) =>
     Effect.catchTag("Forbidden", () => Effect.void),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update comment in place, and destroy a hostname route",
   (stack) =>
     Effect.gen(function* () {
@@ -127,7 +130,7 @@ test.provider(
   { timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed hostname route",
   (stack) =>
     Effect.gen(function* () {

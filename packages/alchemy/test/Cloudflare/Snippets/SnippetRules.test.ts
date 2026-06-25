@@ -11,6 +11,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -119,7 +122,7 @@ const purgeRules = (zoneId: string) =>
 // case's snippet delete races the other's rule that still references it
 // (`snippet is still used`). They are therefore folded into ONE sequential
 // case: create/update/destroy lifecycle PLUS the `list()` enumeration.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "snippet rules — create, update, list, and destroy in dependency order",
   (stack) =>
     Effect.gen(function* () {

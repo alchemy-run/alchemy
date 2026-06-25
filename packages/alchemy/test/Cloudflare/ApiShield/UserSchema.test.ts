@@ -13,6 +13,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -87,7 +90,7 @@ const purgeSchemasNamed = (zoneId: string, name: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, enable validation in place, destroy a user schema",
   (stack) =>
     Effect.gen(function* () {
@@ -143,7 +146,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "changing the schema source triggers replacement",
   (stack) =>
     Effect.gen(function* () {
@@ -197,7 +200,7 @@ test.provider(
 // Canonical `list()` test (zone-scoped collection): `list()` fans out over
 // every zone via `listAllZones` and exhaustively paginates each zone's
 // schemas. Deploy a schema, then assert its id appears in the result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed user schema",
   (stack) =>
     Effect.gen(function* () {

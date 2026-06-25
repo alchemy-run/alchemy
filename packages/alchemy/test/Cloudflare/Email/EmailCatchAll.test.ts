@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -70,7 +73,7 @@ const setBaseline = (zoneId: string) =>
   );
 
 describe.sequential("EmailCatchAll", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "configures the catch-all rule and restores the baseline on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -119,7 +122,7 @@ describe.sequential("EmailCatchAll", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "updates the catch-all rule in place and keeps the captured baseline",
     (stack) =>
       Effect.gen(function* () {
@@ -188,7 +191,7 @@ describe.sequential("EmailCatchAll", () => {
   // Email Routing enabled). Ensure Email Routing is enabled on the standing
   // test zone, then assert the result is non-empty, well-typed, and contains
   // the test zone.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates the catch-all rule across all zones",
     (stack) =>
       Effect.gen(function* () {

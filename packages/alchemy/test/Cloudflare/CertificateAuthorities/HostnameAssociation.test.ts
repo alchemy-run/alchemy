@@ -12,6 +12,9 @@ import * as Schedule from "effect/Schedule";
 import { CA_CERT_1, CA_CERT_2 } from "./fixtures/certs.ts";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -109,7 +112,7 @@ const waitForCertDelete = (accountId: string, mtlsCertificateId: string) =>
   );
 
 describe.sequential("HostnameAssociation", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "pins Managed CA hostnames, updates in place, and clears on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -157,7 +160,7 @@ describe.sequential("HostnameAssociation", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "associates hostnames with an uploaded CA and destroys before the cert",
     (stack) =>
       Effect.gen(function* () {
@@ -199,7 +202,7 @@ describe.sequential("HostnameAssociation", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "changing the certificate key replaces the association",
     (stack) =>
       Effect.gen(function* () {

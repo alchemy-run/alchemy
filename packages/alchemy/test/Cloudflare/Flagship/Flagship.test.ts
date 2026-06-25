@@ -7,6 +7,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 // The fixture stack provisions its own Flagship app via the FlagshipApp
 // resource and binds it to both workers. Each fixture worker evaluates a
 // flag and returns the result; with no matching flag configured, Flagship
@@ -51,7 +54,7 @@ const getJson = (url: string) =>
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "async worker evaluates a boolean flag via env Flagship binding",
   Effect.gen(function* () {
     const { asyncWorkerUrl } = yield* stack;
@@ -61,7 +64,7 @@ test(
   { timeout: 240_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "async worker returns fallback details for a nonexistent flag",
   Effect.gen(function* () {
     const { asyncWorkerUrl } = yield* stack;
@@ -76,7 +79,7 @@ test(
   { timeout: 240_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker evaluates a boolean flag via FlagshipApp.bind",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
@@ -86,7 +89,7 @@ test(
   { timeout: 240_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker returns fallback details for a nonexistent flag",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;

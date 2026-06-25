@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -64,7 +67,7 @@ const setBaseline = (zoneId: string, value: "enabled" | "disabled") =>
 
 // Both cases mutate the same zone-level content-scanning enablement singleton; run them serially so they don't corrupt each other's captured `initialValue` under the global concurrent test config.
 describe.sequential("ContentScanning", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "surfaces the typed ContentScanningNotEntitled error on unentitled zones",
     (stack) =>
       Effect.gen(function* () {
@@ -90,7 +93,7 @@ describe.sequential("ContentScanning", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "pins Content Scanning off on an unentitled zone and destroys cleanly",
     (stack) =>
       Effect.gen(function* () {
@@ -147,30 +150,34 @@ describe.sequential("ContentScanning", () => {
   // on every plan (only enabling is entitlement-gated), so this stays an
   // ungated read-only assertion. Assert the result is non-empty and contains
   // the standing test zone.
-  test.provider("list enumerates the status across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the status across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.ContentScanning);
-      // The freshly-minted scoped token propagates eventually-consistently, so
-      // the account-wide enumeration intermittently 403s (`Forbidden`) or 401s
-      // (`Unauthorized`). Both are transient here — ride out the blip like
-      // every other out-of-band call in this suite.
-      const all = yield* provider.list().pipe(
-        Effect.retry({
-          while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
-          schedule: forbiddenRetrySchedule,
-          times: 8,
-        }),
-      );
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ContentScanning,
+        );
+        // The freshly-minted scoped token propagates eventually-consistently, so
+        // the account-wide enumeration intermittently 403s (`Forbidden`) or 401s
+        // (`Unauthorized`). Both are transient here — ride out the blip like
+        // every other out-of-band call in this suite.
+        const all = yield* provider.list().pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+        );
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 
   test.provider.skipIf(!entitledZoneId)(

@@ -6,6 +6,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 /**
  * Live-API tests for the deployed Cloudflare State Store at
  * `alchemy-state-store`. The State service is wired up via
@@ -75,7 +78,7 @@ const replacedState = (fqn: string) => ({
 // read as one sequence (first case wipes it, the rest build it up and tear it
 // down). They must run serially under the global concurrent test config.
 describe.sequential("State", () => {
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "getVersion returns the current STATE_STORE_VERSION",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -85,7 +88,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "DELETE /state/stacks/:stack wipes the test namespace (cleanup)",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -96,7 +99,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "PUT /resources/:fqn (setState) persists a resource",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -114,7 +117,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /resources/:fqn (getState) reads back the persisted value",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -127,7 +130,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /resources/:fqn returns undefined for a missing fqn",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -141,7 +144,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /resources (listResources) returns the FQNs in the stage",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -161,7 +164,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /stacks (listStacks) includes the registered test stack",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -171,7 +174,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /stacks/:stack/stages (listStages) includes the test stage",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -181,7 +184,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "PUT /output (setStackOutput) persists a stack output",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -195,7 +198,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /output (getStackOutput) reads back the persisted output",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -205,7 +208,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /output returns undefined for an un-deployed stage",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -218,7 +221,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET /replaced-resources (getReplacedResources) returns status===replaced rows",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -239,7 +242,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "DELETE /resources/:fqn (deleteState) removes a single resource",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -253,7 +256,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "DELETE /stacks/:stack?stage=... clears one stage but leaves the stack registered",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -269,7 +272,7 @@ describe.sequential("State", () => {
     { timeout: 60_000 },
   );
 
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "DELETE /stacks/:stack (no stage) removes the stack from listStacks",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -287,7 +290,7 @@ describe.sequential("State", () => {
    * memoization, edge propagation, intermediary content-type munging)
    * one of these calls should surface it.
    */
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "setState 100x sequential — surfaces transient failures",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -326,7 +329,7 @@ describe.sequential("State", () => {
    * (`Store.getByName(stack)`) and the HttpApiBuilder layer
    * initialization that wouldn't show up serially.
    */
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "setState 100x concurrent — surfaces racy transient failures",
     Effect.gen(function* () {
       const store = yield* yield* State;
@@ -371,7 +374,7 @@ describe.sequential("State", () => {
    * pattern. The test fails on the first non-2xx so any regression of
    * the underlying issue is caught immediately.
    */
-  test(
+  test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "GET+PUT interleaved 30x5 — engine traffic pattern",
     Effect.gen(function* () {
       const store = yield* yield* State;

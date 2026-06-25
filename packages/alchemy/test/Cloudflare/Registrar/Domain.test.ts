@@ -10,6 +10,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -43,7 +46,7 @@ const findDomain = (accountId: string) =>
 
 // Both cases mutate the same registered domain's settings; run them serially so they don't corrupt each other's captured `initialSettings` under the global concurrent test config.
 describe.sequential("Domain", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "adopts a registered domain, no-op syncs, and never releases it on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -111,7 +114,7 @@ describe.sequential("Domain", () => {
     { timeout: 120_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "updates settings in place and restores the baseline on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -201,21 +204,25 @@ describe.sequential("Domain", () => {
   // created via the API, so this is read-only: `list()` enumerates whatever
   // is already on the account and we assert a well-typed Attributes[] (which
   // may legitimately be empty if the account has no registered domains).
-  test.provider("list enumerates registrar domains on the account", (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates registrar domains on the account",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.RegistrarDomain);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.RegistrarDomain,
+        );
+        const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      for (const domain of all) {
-        expect(typeof domain.domainName).toBe("string");
-        expect(typeof domain.accountId).toBe("string");
-        expect(domain.initialSettings).toBeDefined();
-      }
+        expect(Array.isArray(all)).toBe(true);
+        for (const domain of all) {
+          expect(typeof domain.domainName).toBe("string");
+          expect(typeof domain.accountId).toBe("string");
+          expect(domain.initialSettings).toBeDefined();
+        }
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

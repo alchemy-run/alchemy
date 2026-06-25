@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -60,7 +63,7 @@ const resetToDefaults = (zoneId: string) =>
   );
 
 describe.sequential("UrlNormalization", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "configures URL normalization and resets to defaults on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -98,53 +101,55 @@ describe.sequential("UrlNormalization", () => {
       }).pipe(logLevel),
   );
 
-  test.provider("updates scope and type in place", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "updates scope and type in place",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* resetToDefaults(zoneId);
+        yield* stack.destroy();
+        yield* resetToDefaults(zoneId);
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.UrlNormalization("UrlNormalization", {
-            zoneId,
-            scope: "both",
-            type: "rfc3986",
-          });
-        }),
-      );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.UrlNormalization("UrlNormalization", {
+              zoneId,
+              scope: "both",
+              type: "rfc3986",
+            });
+          }),
+        );
 
-      expect(initial.scope).toEqual("both");
-      expect(initial.type).toEqual("rfc3986");
+        expect(initial.scope).toEqual("both");
+        expect(initial.type).toEqual("rfc3986");
 
-      // Same singleton updated in place via a full-replace PUT.
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.UrlNormalization("UrlNormalization", {
-            zoneId,
-            scope: "incoming",
-            type: "cloudflare",
-          });
-        }),
-      );
+        // Same singleton updated in place via a full-replace PUT.
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.UrlNormalization("UrlNormalization", {
+              zoneId,
+              scope: "incoming",
+              type: "cloudflare",
+            });
+          }),
+        );
 
-      expect(updated.scope).toEqual("incoming");
-      expect(updated.type).toEqual("cloudflare");
+        expect(updated.scope).toEqual("incoming");
+        expect(updated.type).toEqual("cloudflare");
 
-      const live = yield* getUrlNormalization(zoneId);
-      expect(live.scope).toEqual("incoming");
-      expect(live.type).toEqual("cloudflare");
+        const live = yield* getUrlNormalization(zoneId);
+        expect(live.scope).toEqual("incoming");
+        expect(live.type).toEqual("cloudflare");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const reset = yield* getUrlNormalization(zoneId);
-      expect(reset.scope).toEqual("incoming");
-      expect(reset.type).toEqual("cloudflare");
-    }).pipe(logLevel),
+        const reset = yield* getUrlNormalization(zoneId);
+        expect(reset.scope).toEqual("incoming");
+        expect(reset.type).toEqual("cloudflare");
+      }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "applies Cloudflare defaults when scope and type are omitted",
     (stack) =>
       Effect.gen(function* () {
@@ -190,21 +195,23 @@ describe.sequential("UrlNormalization", () => {
   // API for this per-zone setting, so `list()` enumerates every zone via
   // `listAllZones` and reads the singleton in each. Assert the result is
   // non-empty and contains the standing test zone.
-  test.provider("list enumerates URL normalization across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates URL normalization across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.UrlNormalization,
-      );
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.UrlNormalization,
+        );
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

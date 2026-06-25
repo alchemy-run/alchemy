@@ -7,6 +7,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -41,7 +44,7 @@ const PROFILE = {
   externalMetadata: "alchemy:test",
 } as const;
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "unentitled accounts surface the typed Forbidden error",
   (stack) =>
     Effect.gen(function* () {
@@ -79,7 +82,7 @@ test.provider(
 // account-wide enumeration / `nuke` never blows up on a non-tenant account;
 // the raw-op probe test above already pins the typed tag. On an entitled
 // account it returns a well-typed `OrganizationAttributes[]`.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list either enumerates organizations or tolerates the unentitled account",
   (stack) =>
     Effect.gen(function* () {

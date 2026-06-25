@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -27,7 +30,7 @@ const getLiveConnector = (accountId: string, tunnelId: string) =>
     Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, rename in place, and destroy a WARP Connector tunnel",
   (stack) =>
     Effect.gen(function* () {
@@ -86,7 +89,7 @@ test.provider(
 // Canonical `list()` test (account collection): deploy a WARP Connector
 // tunnel, resolve the provider via the typed `Provider.findProvider`, and
 // assert the deployed tunnel appears in the exhaustively-paginated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed WARP Connector tunnel",
   (stack) =>
     Effect.gen(function* () {

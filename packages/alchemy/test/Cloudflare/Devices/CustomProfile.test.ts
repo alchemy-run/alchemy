@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -42,7 +45,7 @@ const expectGone = (accountId: string, policyId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update in place, and delete a custom device profile",
   (stack) =>
     Effect.gen(function* () {
@@ -118,33 +121,37 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("list enumerates the deployed custom device profile", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed custom device profile",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Cloudflare.DeviceCustomProfile("ListProfile", {
-        name: "alchemy-test-custom-profile-list",
-        match: 'identity.email == "list@alchemy-test-2.us"',
-        precedence: 12011,
-        description: "Alchemy list() test profile",
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Cloudflare.DeviceCustomProfile("ListProfile", {
+          name: "alchemy-test-custom-profile-list",
+          match: 'identity.email == "list@alchemy-test-2.us"',
+          precedence: 12011,
+          description: "Alchemy list() test profile",
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.DeviceCustomProfile,
-    );
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(
+        Cloudflare.DeviceCustomProfile,
+      );
+      const all = yield* provider.list();
 
-    // Exhaustively paginated account collection must contain the profile we
-    // just deployed, hydrated into the exact `read` Attributes shape.
-    const found = all.find((p) => p.policyId === deployed.policyId);
-    expect(found).toBeDefined();
-    expect(found?.name).toEqual("alchemy-test-custom-profile-list");
-    expect(found?.match).toEqual('identity.email == "list@alchemy-test-2.us"');
-    expect(found?.accountId).toEqual(deployed.accountId);
-    expect(found?.default).toEqual(false);
+      // Exhaustively paginated account collection must contain the profile we
+      // just deployed, hydrated into the exact `read` Attributes shape.
+      const found = all.find((p) => p.policyId === deployed.policyId);
+      expect(found).toBeDefined();
+      expect(found?.name).toEqual("alchemy-test-custom-profile-list");
+      expect(found?.match).toEqual(
+        'identity.email == "list@alchemy-test-2.us"',
+      );
+      expect(found?.accountId).toEqual(deployed.accountId);
+      expect(found?.default).toEqual(false);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

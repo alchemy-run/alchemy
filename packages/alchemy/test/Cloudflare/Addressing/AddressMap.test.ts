@@ -9,6 +9,9 @@ import * as Result from "effect/Result";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -40,7 +43,7 @@ const getMap = (accountId: string, addressMapId: string) =>
 // with the typed `FeatureNotEnabled` error
 // (`address_maps_not_enabled_on_account`). The test probes once: unentitled
 // accounts assert the typed tag; entitled accounts run the full lifecycle.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "address map lifecycle (typed FeatureNotEnabled on unentitled accounts)",
   (stack) =>
     Effect.gen(function* () {
@@ -124,7 +127,7 @@ test.provider(
 // static-IP entitlement as the lifecycle: unentitled accounts can't create
 // a map to observe, so we probe once and assert the typed `FeatureNotEnabled`
 // tag (clean skip); entitled accounts run the full deploy + list assertion.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed address map",
   (stack) =>
     Effect.gen(function* () {

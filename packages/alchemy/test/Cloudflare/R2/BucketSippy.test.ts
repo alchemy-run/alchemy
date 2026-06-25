@@ -9,6 +9,9 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -75,7 +78,7 @@ const program = (opts: { sippy: boolean }) =>
 // Ungated — exercises everything Sippy exposes without external creds:
 // the disabled baseline read, idempotent disable, and the typed failure
 // tags the provider's lifecycle operations rely on.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "reads the disabled baseline and surfaces typed errors without external creds",
   (stack) =>
     Effect.gen(function* () {
@@ -142,7 +145,7 @@ test.provider(
 // no bucket has Sippy enabled, so the enumeration is a well-typed array that
 // must NOT contain the freshly-deployed (Sippy-disabled) bucket. This still
 // exercises the bucket fan-out + per-item typed skip end-to-end.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates buckets that have Sippy enabled",
   (stack) =>
     Effect.gen(function* () {

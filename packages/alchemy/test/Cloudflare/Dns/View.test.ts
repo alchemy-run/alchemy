@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -49,7 +52,7 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
     }),
   );
 
-test.provider.skipIf(internalDnsEntitled)(
+test.provider.skipIf(internalDnsEntitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed InternalDnsNotAvailable error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {
@@ -76,7 +79,7 @@ test.provider.skipIf(internalDnsEntitled)(
 // accounts it simply returns no views. We can therefore always assert a
 // well-typed array, and only assert presence of a deployed view when the
 // account carries the Internal DNS entitlement.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns a well-typed array of internal DNS views",
   (stack) =>
     Effect.gen(function* () {

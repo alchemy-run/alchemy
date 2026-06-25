@@ -10,6 +10,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -65,7 +68,7 @@ const findSnippet = (zoneId: string, name: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create with generated name, update code in place, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -110,50 +113,52 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("renaming an explicit snippet triggers replacement", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "renaming an explicit snippet triggers replacement",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.Snippet("RenamedSnippet", {
-          zoneId,
-          name: NAME_EXPLICIT,
-          code: codeV1,
-        }).pipe(adopt(true));
-      }),
-    );
-    expect(initial.name).toEqual(NAME_EXPLICIT);
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Snippet("RenamedSnippet", {
+            zoneId,
+            name: NAME_EXPLICIT,
+            code: codeV1,
+          }).pipe(adopt(true));
+        }),
+      );
+      expect(initial.name).toEqual(NAME_EXPLICIT);
 
-    const live = yield* findSnippet(zoneId, NAME_EXPLICIT);
-    expect(live?.snippetName).toEqual(NAME_EXPLICIT);
+      const live = yield* findSnippet(zoneId, NAME_EXPLICIT);
+      expect(live?.snippetName).toEqual(NAME_EXPLICIT);
 
-    // The name is the snippet's identity — a rename is a replacement.
-    const replaced = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.Snippet("RenamedSnippet", {
-          zoneId,
-          name: NAME_REPLACED,
-          code: codeV1,
-        }).pipe(adopt(true));
-      }),
-    );
-    expect(replaced.name).toEqual(NAME_REPLACED);
+      // The name is the snippet's identity — a rename is a replacement.
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Snippet("RenamedSnippet", {
+            zoneId,
+            name: NAME_REPLACED,
+            code: codeV1,
+          }).pipe(adopt(true));
+        }),
+      );
+      expect(replaced.name).toEqual(NAME_REPLACED);
 
-    const newLive = yield* findSnippet(zoneId, NAME_REPLACED);
-    expect(newLive?.snippetName).toEqual(NAME_REPLACED);
+      const newLive = yield* findSnippet(zoneId, NAME_REPLACED);
+      expect(newLive?.snippetName).toEqual(NAME_REPLACED);
 
-    // The old snippet was deleted as part of the replacement.
-    const oldGone = yield* findSnippet(zoneId, NAME_EXPLICIT);
-    expect(oldGone).toBeUndefined();
+      // The old snippet was deleted as part of the replacement.
+      const oldGone = yield* findSnippet(zoneId, NAME_EXPLICIT);
+      expect(oldGone).toBeUndefined();
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const gone = yield* findSnippet(zoneId, NAME_REPLACED);
-    expect(gone).toBeUndefined();
-  }).pipe(logLevel),
+      const gone = yield* findSnippet(zoneId, NAME_REPLACED);
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
 );
 
 const NAME_LIST = "alchemy_snippet_list_test";

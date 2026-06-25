@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -44,7 +47,7 @@ const setBaseline = (accountId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "pins the default ASN, updates in place, and restores the original on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -115,7 +118,7 @@ test.provider(
 // rejects with the typed `Forbidden` error, which `list()` maps to `[]`
 // ("unset"). The read-only assertions below hold in both cases; the
 // entitled-account content assertion is gated on a non-empty result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the CNI settings singleton",
   (stack) =>
     Effect.gen(function* () {

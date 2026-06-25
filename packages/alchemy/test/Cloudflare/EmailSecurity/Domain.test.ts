@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -101,7 +104,7 @@ test.provider.skipIf(!sacrificialDomain)(
 // list op rejects with EmailSecurityNotEntitled / Forbidden, which the
 // provider's `list()` maps to a well-typed []. On entitled accounts every
 // onboarded domain is returned in the exact `read` Attributes shape.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates Email Security domains (or [] when unentitled)",
   (stack) =>
     Effect.gen(function* () {

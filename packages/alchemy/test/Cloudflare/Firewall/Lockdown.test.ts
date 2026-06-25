@@ -11,6 +11,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -98,7 +101,7 @@ const expectLockdownGone = (zoneId: string, lockdownId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update urls/configurations/description/paused in place, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -191,34 +194,36 @@ test.provider(
 // every zone via `listAllZones`, exhaustively paginates each zone's lockdown
 // rules, and hydrates them into the `read` Attributes shape. Deploy a rule and
 // assert it appears in the enumerated result.
-test.provider("list enumerates the deployed lockdown rule", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed lockdown rule",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-    yield* stack.destroy();
-    yield* purgeLockdowns(zoneId, [URL_LIST]);
+      yield* stack.destroy();
+      yield* purgeLockdowns(zoneId, [URL_LIST]);
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.Lockdown("ListLockdown", {
-          zoneId,
-          urls: [URL_LIST],
-          configurations: [{ target: "ip", value: IP_LIST }],
-          description: "alchemy lockdown list test",
-        }).pipe(adopt(true));
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Lockdown("ListLockdown", {
+            zoneId,
+            urls: [URL_LIST],
+            configurations: [{ target: "ip", value: IP_LIST }],
+            description: "alchemy lockdown list test",
+          }).pipe(adopt(true));
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.Lockdown);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Lockdown);
+      const all = yield* provider.list();
 
-    expect(all.some((r) => r.lockdownId === deployed.lockdownId)).toBe(true);
-    const found = all.find((r) => r.lockdownId === deployed.lockdownId);
-    expect(found?.zoneId).toEqual(zoneId);
-    expect(found?.urls).toEqual([URL_LIST]);
+      expect(all.some((r) => r.lockdownId === deployed.lockdownId)).toBe(true);
+      const found = all.find((r) => r.lockdownId === deployed.lockdownId);
+      expect(found?.zoneId).toEqual(zoneId);
+      expect(found?.urls).toEqual([URL_LIST]);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* expectLockdownGone(zoneId, deployed.lockdownId);
-  }).pipe(logLevel),
+      yield* expectLockdownGone(zoneId, deployed.lockdownId);
+    }).pipe(logLevel),
 );

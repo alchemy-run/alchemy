@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -56,7 +59,7 @@ const waitForIndexGone = (accountId: string, indexName: string) =>
   });
 
 describe.skipIf(!!process.env.FAST)("Cloudflare.VectorizeMetadataIndex", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "create and delete a metadata index",
     (stack) =>
       Effect.gen(function* () {
@@ -109,7 +112,7 @@ describe.skipIf(!!process.env.FAST)("Cloudflare.VectorizeMetadataIndex", () => {
     { timeout: 300_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "multiple metadata indexes on the same parent coexist",
     (stack) =>
       Effect.gen(function* () {
@@ -169,7 +172,7 @@ describe.skipIf(!!process.env.FAST)("Cloudflare.VectorizeMetadataIndex", () => {
     { timeout: 420_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "replacing the parent index also replaces the metadata index",
     (stack) =>
       Effect.gen(function* () {
@@ -245,7 +248,7 @@ describe.skipIf(!!process.env.FAST)("Cloudflare.VectorizeMetadataIndex", () => {
     { timeout: 600_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates the deployed metadata index",
     (stack) =>
       Effect.gen(function* () {
@@ -299,7 +302,7 @@ describe.skipIf(!!process.env.FAST)("Cloudflare.VectorizeMetadataIndex", () => {
     { timeout: 300_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "destroy is idempotent when the parent index was deleted out-of-band",
     (stack) =>
       Effect.gen(function* () {

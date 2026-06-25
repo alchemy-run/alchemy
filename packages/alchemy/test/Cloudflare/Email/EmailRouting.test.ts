@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -65,27 +68,29 @@ describe.sequential("EmailRouting", () => {
   // `listAllZones` and reads the singleton in each. Assert the result is
   // non-empty and contains the standing test zone. Capture-and-restore the
   // zone's `enabled` state so the run leaves no residue.
-  test.provider("list enumerates email routing across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates email routing across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Capture the pre-test enabled state to restore at the end.
-      const before = yield* getEmailRouting(zoneId);
+        // Capture the pre-test enabled state to restore at the end.
+        const before = yield* getEmailRouting(zoneId);
 
-      const provider = yield* Provider.findProvider(Cloudflare.EmailRouting);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(Cloudflare.EmailRouting);
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      const entry = all.find((r) => r.zoneId === zoneId);
-      expect(entry).toBeDefined();
-      expect(entry!.name).toEqual(zoneName);
+        expect(all.length).toBeGreaterThan(0);
+        const entry = all.find((r) => r.zoneId === zoneId);
+        expect(entry).toBeDefined();
+        expect(entry!.name).toEqual(zoneName);
 
-      // Restore the captured state.
-      yield* setEnabled(zoneId, before.enabled);
+        // Restore the captured state.
+        yield* setEnabled(zoneId, before.enabled);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

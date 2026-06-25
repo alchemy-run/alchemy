@@ -6,6 +6,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -34,24 +37,26 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
 // result is naturally an empty `AddressingBgpPrefixAttributes[]` — the exact
 // shape `read` produces. This exercises the distilled wiring live on every run
 // without requiring the BYOIP contract/entitlement.
-test.provider("list enumerates BGP prefixes across BYOIP prefixes", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates BGP prefixes across BYOIP prefixes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.AddressingBgpPrefix,
-    );
-    const all = yield* retryForbidden(provider.list());
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AddressingBgpPrefix,
+      );
+      const all = yield* retryForbidden(provider.list());
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const p of all) {
-      expect(typeof p.bgpPrefixId).toBe("string");
-      expect(typeof p.prefixId).toBe("string");
-      expect(typeof p.accountId).toBe("string");
-      expect(typeof p.cidr).toBe("string");
-      expect(typeof p.onDemand.advertised).toBe("boolean");
-    }
+      expect(Array.isArray(all)).toBe(true);
+      for (const p of all) {
+        expect(typeof p.bgpPrefixId).toBe("string");
+        expect(typeof p.prefixId).toBe("string");
+        expect(typeof p.accountId).toBe("string");
+        expect(typeof p.cidr).toBe("string");
+        expect(typeof p.onDemand.advertised).toBe("boolean");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -55,7 +58,7 @@ const getTotalTls = (zoneId: string) =>
 
 // Both cases mutate the same zone-level Total TLS singleton; run them serially so they don't corrupt each other's captured `initialEnabled` under the global concurrent test config.
 describe.sequential("TotalTls", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "converges enabled:false as a no-op on a zone without the ACM entitlement",
     (stack) =>
       Effect.gen(function* () {
@@ -91,7 +94,7 @@ describe.sequential("TotalTls", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "surfaces the typed AdvancedCertificateManagerRequired error when enabling without the entitlement",
     (stack) =>
       Effect.gen(function* () {
@@ -170,19 +173,21 @@ describe.sequential("TotalTls", () => {
   // `listAllZones` and reads the singleton in each (reads succeed without the
   // ACM entitlement). Assert the result is non-empty and contains the standing
   // test zone.
-  test.provider("list enumerates the setting across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the setting across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.TotalTls);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(Cloudflare.TotalTls);
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

@@ -11,6 +11,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { JWKS_KEY_1, JWKS_KEY_2 } from "./fixtures/jwks.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -70,7 +73,7 @@ const getRule = (zoneId: string, ruleId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed TokenValidationNotEntitled error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {

@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -28,7 +31,7 @@ const logLevel = Effect.provideService(
 // always runs and pins the typed tag.
 const external = !!process.env.CLOUDFLARE_TEST_POSTURE_INTEGRATION;
 
-test.provider.skipIf(external)(
+test.provider.skipIf(external || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "creates without a real provider surface the typed InvalidPostureIntegrationConfig error",
   (stack) =>
     Effect.gen(function* () {

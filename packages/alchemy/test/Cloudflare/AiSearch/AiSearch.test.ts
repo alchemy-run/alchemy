@@ -8,6 +8,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -78,7 +81,7 @@ const program = () =>
     return { bucket, search, serviceToken: search.serviceToken };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "construct auto-creates a managed token and wires it into the instance",
   (stack) =>
     Effect.gen(function* () {
@@ -126,7 +129,7 @@ const crawlerProgram = () =>
     return { target, search, serviceToken: search.serviceToken };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "web-crawler source skips token minting",
   (stack) =>
     Effect.gen(function* () {

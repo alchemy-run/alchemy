@@ -19,6 +19,9 @@ import {
   KEY_7,
 } from "./fixtures/certs.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -124,7 +127,7 @@ const purgeCertificates = (zoneId: string) =>
 // `CERT_1` concurrently churn each other (collisions + stale list views).
 // Run the cases one at a time so each owns its certificate content.
 describe.sequential("OriginTlsClientAuthCertificate", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "uploads and deletes a zone client certificate",
     (stack) =>
       Effect.gen(function* () {
@@ -159,7 +162,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
     { timeout: 120_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "replaces the certificate when the PEM changes",
     (stack) =>
       Effect.gen(function* () {
@@ -205,7 +208,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
   // every zone via `listAllZones` and enumerates the per-zone certificate store,
   // hydrating each into the same `read` Attributes shape. Deploy a certificate
   // to the standing test zone and assert it appears in the exhaustive result.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates the deployed zone client certificate",
     (stack) =>
       Effect.gen(function* () {

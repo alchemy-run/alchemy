@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -66,7 +69,7 @@ const normalizeBaseline = (accountId: string) =>
   });
 
 describe.sequential("AccountSettings", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list returns the account's DNS settings singleton",
     (stack) =>
       Effect.gen(function* () {
@@ -97,7 +100,7 @@ describe.sequential("AccountSettings", () => {
     { timeout: 120_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "pins a zone default and restores the pre-management value on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -142,7 +145,7 @@ describe.sequential("AccountSettings", () => {
     { timeout: 300_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "updates in place, unions managedKeys, restores all managed fields",
     (stack) =>
       Effect.gen(function* () {

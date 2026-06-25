@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -111,23 +114,25 @@ describe.sequential("DefaultProfile", () => {
   // reads the single profile and returns it as a one-element array — exactly
   // mirroring `read`. Read-only, so it is NOT gated behind the mutation env
   // var; it only requires the account to have Zero Trust / WARP entitlement.
-  test.provider("list returns the singleton default device profile", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list returns the singleton default device profile",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DeviceDefaultProfile,
-      );
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.DeviceDefaultProfile,
+        );
+        const all = yield* provider.list();
 
-      // Account singleton: exactly one element, well-typed Attributes.
-      expect(all.length).toEqual(1);
-      expect(all[0].accountId).toEqual(accountId);
-      expect(["include", "exclude"]).toContain(all[0].mode);
+        // Account singleton: exactly one element, well-typed Attributes.
+        expect(all.length).toEqual(1);
+        expect(all[0].accountId).toEqual(accountId);
+        expect(["include", "exclude"]).toContain(all[0].mode);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

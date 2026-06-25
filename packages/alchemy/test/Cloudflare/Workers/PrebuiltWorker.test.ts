@@ -9,6 +9,9 @@ import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -19,7 +22,7 @@ const logLevel = Effect.provideService(
 const main = pathe.resolve(import.meta.dirname, "fixtures/prebuilt/worker.mjs");
 
 describe.concurrent("Cloudflare.Worker with bundle: false", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "uploads a prebuilt module graph byte-for-byte",
     (stack) =>
       Effect.gen(function* () {

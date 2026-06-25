@@ -12,6 +12,9 @@ import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -87,7 +90,7 @@ const expectGone = (accountId: string, name: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create and delete a destination with default name",
   (stack) =>
     Effect.gen(function* () {
@@ -126,7 +129,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "update url, headers, and enabled in place (same slug)",
   (stack) =>
     Effect.gen(function* () {
@@ -232,7 +235,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "replacement on name change (new slug, old destination removed)",
   (stack) =>
     Effect.gen(function* () {
@@ -282,7 +285,7 @@ test.provider(
   { timeout: 300_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed destination",
   (stack) =>
     Effect.gen(function* () {

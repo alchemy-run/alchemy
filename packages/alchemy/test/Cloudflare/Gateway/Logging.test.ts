@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -26,7 +29,7 @@ const getLogging = (accountId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "manage logging settings, update in place, restore on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -96,7 +99,7 @@ test.provider(
 // account. `list()` reads the single instance and returns it as a
 // one-element array. Assert exactly one well-typed Attributes for the
 // ambient account.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list returns the account's Gateway logging singleton",
   (stack) =>
     Effect.gen(function* () {

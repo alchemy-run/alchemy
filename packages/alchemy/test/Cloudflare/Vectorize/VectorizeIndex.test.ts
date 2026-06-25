@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -15,120 +18,128 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.provider("create and delete index with explicit dimensions", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "create and delete index with explicit dimensions",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("DefaultIndex", {
-        dimensions: 768,
-        metric: "cosine",
-      }),
-    );
+      const index = yield* stack.deploy(
+        Cloudflare.VectorizeIndex("DefaultIndex", {
+          dimensions: 768,
+          metric: "cosine",
+        }),
+      );
 
-    expect(index.indexName).toBeDefined();
-    expect(index.dimensions).toEqual(768);
-    expect(index.metric).toEqual("cosine");
+      expect(index.indexName).toBeDefined();
+      expect(index.dimensions).toEqual(768);
+      expect(index.metric).toEqual("cosine");
 
-    const actual = yield* vectorize.getIndex({
-      accountId,
-      indexName: index.indexName,
-    });
-    expect(actual.name).toEqual(index.indexName);
-    expect(actual.config?.dimensions).toEqual(768);
+      const actual = yield* vectorize.getIndex({
+        accountId,
+        indexName: index.indexName,
+      });
+      expect(actual.name).toEqual(index.indexName);
+      expect(actual.config?.dimensions).toEqual(768);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForDelete(accountId, index.indexName);
-  }).pipe(logLevel),
+      yield* waitForDelete(accountId, index.indexName);
+    }).pipe(logLevel),
 );
 
-test.provider("create index from a preset", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "create index from a preset",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("PresetIndex", {
-        preset: "@cf/baai/bge-base-en-v1.5",
-        description: "preset index",
-      }),
-    );
+      const index = yield* stack.deploy(
+        Cloudflare.VectorizeIndex("PresetIndex", {
+          preset: "@cf/baai/bge-base-en-v1.5",
+          description: "preset index",
+        }),
+      );
 
-    const actual = yield* vectorize.getIndex({
-      accountId,
-      indexName: index.indexName,
-    });
-    // bge-base resolves to 768 dimensions.
-    expect(actual.config?.dimensions).toEqual(768);
-    expect(index.description).toEqual("preset index");
+      const actual = yield* vectorize.getIndex({
+        accountId,
+        indexName: index.indexName,
+      });
+      // bge-base resolves to 768 dimensions.
+      expect(actual.config?.dimensions).toEqual(768);
+      expect(index.description).toEqual("preset index");
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForDelete(accountId, index.indexName);
-  }).pipe(logLevel),
+      yield* waitForDelete(accountId, index.indexName);
+    }).pipe(logLevel),
 );
 
-test.provider("replaces index when dimensions change", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "replaces index when dimensions change",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ReplaceIndex", {
-        dimensions: 32,
-        metric: "cosine",
-      }),
-    );
-    expect(index.dimensions).toEqual(32);
-    expect(index.metric).toEqual("cosine");
+      const index = yield* stack.deploy(
+        Cloudflare.VectorizeIndex("ReplaceIndex", {
+          dimensions: 32,
+          metric: "cosine",
+        }),
+      );
+      expect(index.dimensions).toEqual(32);
+      expect(index.metric).toEqual("cosine");
 
-    const replaced = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ReplaceIndex", {
-        dimensions: 64,
-        metric: "euclidean",
-      }),
-    );
+      const replaced = yield* stack.deploy(
+        Cloudflare.VectorizeIndex("ReplaceIndex", {
+          dimensions: 64,
+          metric: "euclidean",
+        }),
+      );
 
-    const actual = yield* vectorize.getIndex({
-      accountId,
-      indexName: replaced.indexName,
-    });
-    expect(actual.config?.dimensions).toEqual(64);
-    expect(actual.config?.metric).toEqual("euclidean");
+      const actual = yield* vectorize.getIndex({
+        accountId,
+        indexName: replaced.indexName,
+      });
+      expect(actual.config?.dimensions).toEqual(64);
+      expect(actual.config?.metric).toEqual("euclidean");
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForDelete(accountId, replaced.indexName);
-  }).pipe(logLevel),
+      yield* waitForDelete(accountId, replaced.indexName);
+    }).pipe(logLevel),
 );
 
-test.provider("list enumerates the deployed index", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed index",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ListIndex", {
-        dimensions: 768,
-        metric: "cosine",
-      }),
-    );
+      const index = yield* stack.deploy(
+        Cloudflare.VectorizeIndex("ListIndex", {
+          dimensions: 768,
+          metric: "cosine",
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.VectorizeIndex);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.VectorizeIndex);
+      const all = yield* provider.list();
 
-    expect(all.some((x) => x.indexName === index.indexName)).toBe(true);
+      expect(all.some((x) => x.indexName === index.indexName)).toBe(true);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* waitForDelete(accountId, index.indexName);
-  }).pipe(logLevel),
+      yield* waitForDelete(accountId, index.indexName);
+    }).pipe(logLevel),
 );
 
 const waitForDelete = (accountId: string, indexName: string) =>

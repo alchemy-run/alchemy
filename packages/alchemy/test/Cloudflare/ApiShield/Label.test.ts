@@ -10,6 +10,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -65,104 +68,108 @@ const purgeLabel = (zoneId: string, name: string) =>
     }),
   );
 
-test.provider("create, update description in place, destroy a label", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "create, update description in place, destroy a label",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-    yield* stack.destroy();
-    yield* purgeLabel(zoneId, NAME_DEFAULT);
+      yield* stack.destroy();
+      yield* purgeLabel(zoneId, NAME_DEFAULT);
 
-    const label = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldLabel("DefaultLabel", {
-          zoneId,
-          name: NAME_DEFAULT,
-          description: "v1",
-        }).pipe(adopt(true));
-      }),
-    );
+      const label = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ApiShieldLabel("DefaultLabel", {
+            zoneId,
+            name: NAME_DEFAULT,
+            description: "v1",
+          }).pipe(adopt(true));
+        }),
+      );
 
-    expect(label.zoneId).toEqual(zoneId);
-    expect(label.name).toEqual(NAME_DEFAULT);
-    expect(label.description).toEqual("v1");
-    expect(label.source).toEqual("user");
+      expect(label.zoneId).toEqual(zoneId);
+      expect(label.name).toEqual(NAME_DEFAULT);
+      expect(label.description).toEqual("v1");
+      expect(label.source).toEqual("user");
 
-    const live = yield* getLabel(zoneId, NAME_DEFAULT);
-    expect(live?.name).toEqual(NAME_DEFAULT);
-    expect(live?.description).toEqual("v1");
+      const live = yield* getLabel(zoneId, NAME_DEFAULT);
+      expect(live?.name).toEqual(NAME_DEFAULT);
+      expect(live?.description).toEqual("v1");
 
-    // Update the mutable description — same identity, patched in place.
-    const updated = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldLabel("DefaultLabel", {
-          zoneId,
-          name: NAME_DEFAULT,
-          description: "v2",
-        }).pipe(adopt(true));
-      }),
-    );
-    expect(updated.name).toEqual(NAME_DEFAULT);
-    expect(updated.createdAt).toEqual(label.createdAt);
-    expect(updated.description).toEqual("v2");
+      // Update the mutable description — same identity, patched in place.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ApiShieldLabel("DefaultLabel", {
+            zoneId,
+            name: NAME_DEFAULT,
+            description: "v2",
+          }).pipe(adopt(true));
+        }),
+      );
+      expect(updated.name).toEqual(NAME_DEFAULT);
+      expect(updated.createdAt).toEqual(label.createdAt);
+      expect(updated.description).toEqual("v2");
 
-    const patched = yield* getLabel(zoneId, NAME_DEFAULT);
-    expect(patched?.description).toEqual("v2");
+      const patched = yield* getLabel(zoneId, NAME_DEFAULT);
+      expect(patched?.description).toEqual("v2");
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const gone = yield* getLabel(zoneId, NAME_DEFAULT);
-    expect(gone).toBeUndefined();
-  }).pipe(logLevel),
+      const gone = yield* getLabel(zoneId, NAME_DEFAULT);
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
 );
 
-test.provider("renaming a label triggers replacement", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "renaming a label triggers replacement",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-    yield* stack.destroy();
-    yield* purgeLabel(zoneId, NAME_RENAME_A);
-    yield* purgeLabel(zoneId, NAME_RENAME_B);
+      yield* stack.destroy();
+      yield* purgeLabel(zoneId, NAME_RENAME_A);
+      yield* purgeLabel(zoneId, NAME_RENAME_B);
 
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldLabel("RenameLabel", {
-          zoneId,
-          name: NAME_RENAME_A,
-          description: "before rename",
-        }).pipe(adopt(true));
-      }),
-    );
-    expect(initial.name).toEqual(NAME_RENAME_A);
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ApiShieldLabel("RenameLabel", {
+            zoneId,
+            name: NAME_RENAME_A,
+            description: "before rename",
+          }).pipe(adopt(true));
+        }),
+      );
+      expect(initial.name).toEqual(NAME_RENAME_A);
 
-    const replaced = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldLabel("RenameLabel", {
-          zoneId,
-          name: NAME_RENAME_B,
-          description: "after rename",
-        }).pipe(adopt(true));
-      }),
-    );
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ApiShieldLabel("RenameLabel", {
+            zoneId,
+            name: NAME_RENAME_B,
+            description: "after rename",
+          }).pipe(adopt(true));
+        }),
+      );
 
-    // The name is the label's identity — a new physical label exists.
-    expect(replaced.name).toEqual(NAME_RENAME_B);
-    expect(replaced.description).toEqual("after rename");
+      // The name is the label's identity — a new physical label exists.
+      expect(replaced.name).toEqual(NAME_RENAME_B);
+      expect(replaced.description).toEqual("after rename");
 
-    // The old label was deleted as part of the replacement.
-    const oldLabel = yield* getLabel(zoneId, NAME_RENAME_A);
-    expect(oldLabel).toBeUndefined();
+      // The old label was deleted as part of the replacement.
+      const oldLabel = yield* getLabel(zoneId, NAME_RENAME_A);
+      expect(oldLabel).toBeUndefined();
 
-    const live = yield* getLabel(zoneId, NAME_RENAME_B);
-    expect(live?.name).toEqual(NAME_RENAME_B);
+      const live = yield* getLabel(zoneId, NAME_RENAME_B);
+      expect(live?.name).toEqual(NAME_RENAME_B);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const gone = yield* getLabel(zoneId, NAME_RENAME_B);
-    expect(gone).toBeUndefined();
-  }).pipe(logLevel),
+      const gone = yield* getLabel(zoneId, NAME_RENAME_B);
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "generated name respects Cloudflare's 24-character limit",
   (stack) =>
     Effect.gen(function* () {
@@ -192,32 +199,34 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("list enumerates the deployed label", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed label",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-    yield* stack.destroy();
-    yield* purgeLabel(zoneId, NAME_LIST);
+      yield* stack.destroy();
+      yield* purgeLabel(zoneId, NAME_LIST);
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldLabel("ListLabel", {
-          zoneId,
-          name: NAME_LIST,
-          description: "listed",
-        }).pipe(adopt(true));
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ApiShieldLabel("ListLabel", {
+            zoneId,
+            name: NAME_LIST,
+            description: "listed",
+          }).pipe(adopt(true));
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.ApiShieldLabel);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.ApiShieldLabel);
+      const all = yield* provider.list();
 
-    expect(
-      all.some(
-        (label) => label.zoneId === zoneId && label.name === deployed.name,
-      ),
-    ).toBe(true);
+      expect(
+        all.some(
+          (label) => label.zoneId === zoneId && label.name === deployed.name,
+        ),
+      ).toBe(true);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

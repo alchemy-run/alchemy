@@ -9,6 +9,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Dataset } from "./fixtures/dataset.ts";
 import AnalyticsEngineTestWorker from "./fixtures/worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -37,7 +40,7 @@ const Stack = Alchemy.Stack(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "deployed worker can write data points through the Analytics Engine binding",
   Effect.gen(function* () {
     const { url } = yield* stack;

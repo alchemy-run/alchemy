@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -54,7 +57,7 @@ const listExpressions = (zoneId: string) =>
 
 // Both cases enable the same zone-level content-scanning singleton as a prerequisite; run them serially so they don't fight over that singleton under the global concurrent test config.
 describe.sequential("Expression", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "surfaces the typed ContentScanningNotEnabled error when scanning is disabled",
     (stack) =>
       Effect.gen(function* () {

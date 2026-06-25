@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -23,7 +26,7 @@ const logLevel = Effect.provideService(
 
 // Both cases drive the same per-account spending-limit singleton; run them serially so one case's amount doesn't leak into the other's read-back under the global concurrent test config.
 describe.sequential("AiGatewaySpendingLimit", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "create, read-back, and delete the account spending limit",
     (stack) =>
       Effect.gen(function* () {
@@ -73,51 +76,53 @@ describe.sequential("AiGatewaySpendingLimit", () => {
       }).pipe(logLevel),
   );
 
-  test.provider("update the spending limit in place", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "update the spending limit in place",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.AiGatewaySpendingLimit("SpendCap", {
-            amount: 100_00, // cents -> $100.00
-            duration: "weekly",
-            strategy: "fixed",
-            topUp: { amount: 10_00 },
-          });
-        }),
-      );
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.AiGatewaySpendingLimit("SpendCap", {
+              amount: 100_00, // cents -> $100.00
+              duration: "weekly",
+              strategy: "fixed",
+              topUp: { amount: 10_00 },
+            });
+          }),
+        );
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.AiGatewaySpendingLimit("SpendCap", {
-            amount: 500_00, // cents -> $500.00
-            duration: "monthly",
-            strategy: "sliding",
-            topUp: { amount: 10_00 },
-          });
-        }),
-      );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.AiGatewaySpendingLimit("SpendCap", {
+              amount: 500_00, // cents -> $500.00
+              duration: "monthly",
+              strategy: "sliding",
+              topUp: { amount: 10_00 },
+            });
+          }),
+        );
 
-      expect(updated.amount).toEqual(500_00);
-      expect(updated.duration).toEqual("monthly");
-      expect(updated.strategy).toEqual("sliding");
+        expect(updated.amount).toEqual(500_00);
+        expect(updated.duration).toEqual("monthly");
+        expect(updated.strategy).toEqual("sliding");
 
-      const live = yield* aiGateway.getBillingSpendingLimit({ accountId });
-      expect(live.config.amount).toEqual(500_00);
-      expect(live.config.duration).toEqual("monthly");
+        const live = yield* aiGateway.getBillingSpendingLimit({ accountId });
+        expect(live.config.amount).toEqual(500_00);
+        expect(live.config.duration).toEqual("monthly");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 
   // Canonical `list()` test (per-account singleton): there is no collection
   // API, so `list()` observes the one limit on the ambient account. Deploy a
   // limit, then assert it appears in the enumerated result. Bracket with
   // destroy() at start and end so the test is isolated and leaves no residue.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates the deployed account spending limit",
     (stack) =>
       Effect.gen(function* () {

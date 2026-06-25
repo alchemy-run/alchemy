@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -79,7 +82,7 @@ const normalizeBaseline = (zoneId: string) =>
   });
 
 describe.sequential("ZoneSettings", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "pins flattenAllCnames and restores the pre-management value on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -123,7 +126,7 @@ describe.sequential("ZoneSettings", () => {
     { timeout: 300_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "updates in place, unions managedKeys, restores all managed fields",
     (stack) =>
       Effect.gen(function* () {
@@ -200,19 +203,23 @@ describe.sequential("ZoneSettings", () => {
   // API for this per-zone settings object, so `list()` enumerates every zone
   // via `listAllZones` and reads the singleton in each. Assert the result is
   // non-empty and contains the standing test zone.
-  test.provider("list enumerates DNS settings across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates DNS settings across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.ZoneDnsSettings);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ZoneDnsSettings,
+        );
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookend so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

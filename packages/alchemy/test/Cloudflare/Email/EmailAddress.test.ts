@@ -7,6 +7,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -24,37 +27,39 @@ const testEmail = "alchemy-list-test@alchemy-test-2.us";
 // destination address, resolve the provider from context via the typed
 // `findProvider`, call `list()`, and assert the deployed address appears in
 // the exhaustively-paginated result.
-test.provider("list enumerates the deployed email address", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed email address",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const address = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.EmailAddress("ListAddress", {
-          email: testEmail,
-        });
-      }),
-    );
+      const address = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.EmailAddress("ListAddress", {
+            email: testEmail,
+          });
+        }),
+      );
 
-    expect(address.email).toEqual(testEmail);
+      expect(address.email).toEqual(testEmail);
 
-    const provider = yield* Provider.findProvider(Cloudflare.EmailAddress);
+      const provider = yield* Provider.findProvider(Cloudflare.EmailAddress);
 
-    // A freshly-deployed address is eventually consistent in the account-wide
-    // list(); poll until it appears before asserting.
-    const all = yield* poll({
-      description: "list() includes the deployed email address",
-      effect: provider.list(),
-      predicate: (all) => all.some((a) => a.email === testEmail),
-      schedule: Schedule.both(
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ),
-    });
+      // A freshly-deployed address is eventually consistent in the account-wide
+      // list(); poll until it appears before asserting.
+      const all = yield* poll({
+        description: "list() includes the deployed email address",
+        effect: provider.list(),
+        predicate: (all) => all.some((a) => a.email === testEmail),
+        schedule: Schedule.both(
+          Schedule.spaced("3 seconds"),
+          Schedule.recurs(20),
+        ),
+      });
 
-    expect(all.some((a) => a.addressId === address.addressId)).toBe(true);
-    expect(all.some((a) => a.email === testEmail)).toBe(true);
+      expect(all.some((a) => a.addressId === address.addressId)).toBe(true);
+      expect(all.some((a) => a.email === testEmail)).toBe(true);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

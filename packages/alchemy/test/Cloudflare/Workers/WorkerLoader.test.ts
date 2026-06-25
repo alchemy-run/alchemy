@@ -7,6 +7,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/dynamic-worker-loader/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -42,7 +45,7 @@ const readJson = (url: string) =>
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "async worker loads and proxies to a dynamic worker via env binding",
   Effect.gen(function* () {
     const { asyncWorkerUrl } = yield* stack;
@@ -52,7 +55,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker loads and proxies to a dynamic worker via yield* loader",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;

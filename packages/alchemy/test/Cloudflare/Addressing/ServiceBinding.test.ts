@@ -6,6 +6,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -33,7 +36,7 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
 // are available regardless of the BYOIP entitlement — on an account with no
 // onboarded prefixes the result is an empty, well-typed
 // `AddressingServiceBindingAttributes[]` (the exact shape `read` produces).
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates service bindings across prefixes (read-only)",
   (stack) =>
     Effect.gen(function* () {

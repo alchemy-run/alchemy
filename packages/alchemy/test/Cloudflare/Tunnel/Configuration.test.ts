@@ -6,6 +6,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -19,7 +22,7 @@ describe("Tunnel Configuration", () => {
   // enumerates every cfd_tunnel in the account and reads each tunnel's config.
   // Deploy a tunnel + configuration, then assert the deployed tunnel appears in
   // the listed result.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates configurations across all tunnels",
     (stack) =>
       Effect.gen(function* () {

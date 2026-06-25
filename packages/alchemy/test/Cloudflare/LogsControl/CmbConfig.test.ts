@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -35,7 +38,7 @@ const getCmb = (accountId: string) =>
     }),
   );
 
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed LogsControlNotAuthorized error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {
@@ -119,7 +122,7 @@ test.provider.skipIf(!entitled)(
 // account-wide enumeration / `nuke` never blows up on an unentitled account.
 // The raw-op probe test above already pins the typed tag; here we assert the
 // nuke-safe empty result.
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list tolerates the typed LogsControlNotAuthorized error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {

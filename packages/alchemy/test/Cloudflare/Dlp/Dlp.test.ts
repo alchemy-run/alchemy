@@ -6,6 +6,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -20,7 +23,7 @@ const logLevel = Effect.provideService(
 // the probe test always runs and pins the typed tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_DLP;
 
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "unentitled accounts surface the typed Forbidden error",
   (stack) =>
     Effect.gen(function* () {

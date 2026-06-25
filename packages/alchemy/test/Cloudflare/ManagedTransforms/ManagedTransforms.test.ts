@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 // The account-wide `list` test intermittently fails with a `Forbidden`
@@ -94,7 +97,7 @@ const normalizeBaseline = (zoneId: string) =>
   });
 
 describe.sequential("ManagedTransforms", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "manages a named transform, updates in place, and restores it on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -180,7 +183,7 @@ describe.sequential("ManagedTransforms", () => {
     { timeout: 240_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "destroy restores a transform that was enabled before management",
     (stack) =>
       Effect.gen(function* () {
@@ -237,7 +240,7 @@ describe.sequential("ManagedTransforms", () => {
     { timeout: 240_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "deploy with no transforms named adopts the singleton without writing",
     (stack) =>
       Effect.gen(function* () {

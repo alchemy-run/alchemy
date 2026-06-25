@@ -8,6 +8,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "./fixtures/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -77,7 +80,7 @@ const postImage = (url: string) =>
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "async worker reads image info via env Images binding",
   Effect.gen(function* () {
     const { asyncWorkerUrl } = yield* stack;
@@ -92,7 +95,7 @@ test(
   { timeout: 240_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect worker reads image info via yield* Images",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;

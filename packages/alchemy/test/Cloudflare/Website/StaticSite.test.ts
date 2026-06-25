@@ -15,6 +15,9 @@ import {
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -25,7 +28,7 @@ const logLevel = Effect.provideService(
 const fixtureDir = pathe.resolve(import.meta.dirname, "staticsite-fixture");
 const workerEntry = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "StaticSite: editing a source file republishes the assets in a single deploy",
   (stack) =>
     Effect.gen(function* () {
@@ -96,7 +99,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "StaticSite: class form deploys and serves the built assets",
   (stack) =>
     Effect.gen(function* () {
@@ -155,7 +158,7 @@ test.provider(
 //      hash and ships new bytes — repeated here for symmetry.
 // ─────────────────────────────────────────────────────────────────────
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "StaticSite: relocating the project (and deleting the old one) preserves hash.assets",
   (stack) =>
     Effect.gen(function* () {
@@ -238,7 +241,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "StaticSite: a bundle-only change keeps the asset manifest (hash.assets stable)",
   (stack) =>
     Effect.gen(function* () {

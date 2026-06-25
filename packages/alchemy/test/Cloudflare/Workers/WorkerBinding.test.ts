@@ -7,6 +7,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/worker-worker-binding/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -26,7 +29,7 @@ const coldStartRetry = Effect.retry({
   times: 10,
 });
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "target worker's own fetch handler responds",
   Effect.gen(function* () {
     const { targetUrl } = yield* stack;
@@ -39,7 +42,7 @@ test(
   { timeout: 60_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "async caller can call target's RPC method via service binding",
   Effect.gen(function* () {
     const { asyncCallerUrl } = yield* stack;
@@ -54,7 +57,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "effect caller can call target's RPC method via bindWorker",
   Effect.gen(function* () {
     const { effectCallerUrl } = yield* stack;

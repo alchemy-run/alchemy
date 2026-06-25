@@ -12,6 +12,9 @@ import * as Schedule from "effect/Schedule";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -65,7 +68,7 @@ const getCertificate = (zoneId: string, customCertificateId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed PlanLevelNotAllowed error on unentitled zones",
   (stack) =>
     Effect.gen(function* () {

@@ -10,6 +10,9 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import QueueWorker, { RoundTripQueue } from "./round-trip-worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -48,7 +51,7 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
  * RPC stub from inside the queue handler works, and the test
  * client can read the resulting DO state.
  */
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "send → subscribe handler → DO state → polled by test client",
   (stack) =>
     Effect.gen(function* () {

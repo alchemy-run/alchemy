@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -81,7 +84,7 @@ const normalizeDisabled = (zoneId: string) =>
 
 // Both cases mutate the same zone-level DNSSEC singleton with opposite desired states; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
 describe.sequential("Dnssec", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "enables DNSSEC, captures the disabled baseline, destroy deactivates",
     (stack) =>
       Effect.gen(function* () {
@@ -131,7 +134,7 @@ describe.sequential("Dnssec", () => {
     { timeout: 300_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "updates status in place — same zone singleton, no replacement",
     (stack) =>
       Effect.gen(function* () {
@@ -183,7 +186,7 @@ describe.sequential("Dnssec", () => {
   // `listAllZones` and reads each one's config, skipping disabled zones
   // (which `read` treats as "not created"). Enable DNSSEC on the test zone
   // so it appears in the result, assert it's present, then restore.
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "list enumerates active DNSSEC across zones",
     (stack) =>
       Effect.gen(function* () {

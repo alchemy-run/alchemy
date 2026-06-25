@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -78,7 +81,7 @@ const program = (props?: Cloudflare.AiSearchNamespaceProps) =>
     return { namespace };
   });
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update description in place, and delete a namespace",
   (stack) =>
     Effect.gen(function* () {
@@ -136,7 +139,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "changing the name triggers a replacement",
   (stack) =>
     Effect.gen(function* () {
@@ -172,7 +175,7 @@ test.provider(
 // namespace, resolve the provider from context via the typed
 // `findProvider`, call `list()`, and assert the deployed namespace
 // appears in the exhaustively-paginated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed namespace",
   (stack) =>
     Effect.gen(function* () {
@@ -192,7 +195,7 @@ test.provider(
   { timeout: 240_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "adopts the reserved default namespace without deleting it on teardown",
   (stack) =>
     Effect.gen(function* () {
@@ -217,7 +220,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "recreates after out-of-band delete",
   (stack) =>
     Effect.gen(function* () {

@@ -11,6 +11,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Gateway } from "./fixtures/Gateway.ts";
 import LanguageModelTestWorker from "./fixtures/LanguageModelWorker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 // Fresh `workers.dev` URLs return non-200 (404 / 500 "Script not
 // found") for a few seconds while the edge propagates. Each test uses
 // `HttpClient.filterStatusOk(yield* HttpClient.HttpClient)` so the
@@ -64,7 +67,7 @@ const parseSse = (sse: string): ReadonlyArray<StreamPart> =>
     .filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as StreamPart);
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "deployed worker generates text via AiGateway-backed LanguageModel",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -102,7 +105,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "deployed worker streams text via AiGateway-backed LanguageModel",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -132,7 +135,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "streamed parts respect ordering: text-start → text-delta+ → text-end → finish",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -179,7 +182,7 @@ test(
   { timeout: 180_000 },
 );
 
-test.skipIf(!process.env.DEBUG_RAW_STREAM)(
+test.skipIf(!process.env.DEBUG_RAW_STREAM || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "DEBUG: dump raw Workers AI SSE stream",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -220,7 +223,7 @@ test.skipIf(!process.env.DEBUG_RAW_STREAM)(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "stream finish part reports the real token counts and a `stop` reason",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -253,7 +256,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "stream emits multiple text-delta chunks for a long-form response",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -289,7 +292,7 @@ test(
 // /chat?id=... route which is wired by `ChatAgent` from the Agent
 // slice. The fixture in this slice (`LanguageModelWorker`) does not
 // include that route — the test re-activates in the Agent PR.
-test.skip(
+test.skip.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "persisted chat survives across DO invocations",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -332,7 +335,7 @@ test.skip(
   { timeout: 240_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "deployed worker invokes a tool via AiGateway-backed LanguageModel",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -387,7 +390,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "streams tool-call parts via AiGateway-backed LanguageModel",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -446,7 +449,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "concatenated tool-params-delta payloads parse back into the requested arguments",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -485,7 +488,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "streams Effect-native parts and prints them live",
   Effect.gen(function* () {
     const out = yield* stack;

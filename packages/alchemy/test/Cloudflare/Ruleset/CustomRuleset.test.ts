@@ -9,6 +9,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -42,7 +45,7 @@ const getRuleset = (accountId: string, rulesetId: string) =>
 // (code 50002: "not entitled to use the phase http_request_firewall_custom").
 // The test probes once: unentitled accounts assert the typed tag; entitled
 // accounts run the full lifecycle.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "custom ruleset lifecycle (typed PhaseNotEntitled on unentitled accounts)",
   (stack) =>
     Effect.gen(function* () {
@@ -146,7 +149,7 @@ test.provider(
 // create with the typed `PhaseNotEntitled` error, so we still verify `list()`
 // returns an array without throwing; entitled accounts additionally deploy a
 // ruleset and assert it appears in the exhaustively-paginated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed custom ruleset",
   (stack) =>
     Effect.gen(function* () {

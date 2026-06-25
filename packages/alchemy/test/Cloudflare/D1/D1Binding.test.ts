@@ -10,6 +10,9 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import D1Worker from "./d1-worker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -69,7 +72,7 @@ const retryUntilOk = <E, R>(
  * upon by the deploy-time policy and the runtime lookup match, and
  * the Cloudflare runtime actually injected the binding into `env`.
  */
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "D1Connection.bind exercises the full client surface",
   (stack) =>
     Effect.gen(function* () {

@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -61,7 +64,7 @@ const setBaseline = (zoneId: string, settingId: string, value: unknown) =>
 const valueOf = (setting: zones.GetSettingResponse): unknown =>
   (setting as { value?: unknown }).value;
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "pins a toggle setting and restores the original value on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -98,7 +101,7 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "updates a numeric setting in place and keeps the captured initial value",
   (stack) =>
     Effect.gen(function* () {
@@ -146,7 +149,7 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "changing settingId replaces — old setting restored, new setting pinned",
   (stack) =>
     Effect.gen(function* () {
@@ -205,42 +208,44 @@ test.provider(
 // setting, emitting one Attributes per (zone, setting) — the same shape
 // `read` produces. Deploy a deterministic setting on the standing test zone
 // and assert that exact (zone, setting) entry shows up in the listing.
-test.provider("list enumerates the deployed (zone, setting) pair", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed (zone, setting) pair",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-    yield* stack.destroy();
-    // Known baseline so the value we assert against is deterministic.
-    yield* setBaseline(zoneId, "always_use_https", "off");
+      yield* stack.destroy();
+      // Known baseline so the value we assert against is deterministic.
+      yield* setBaseline(zoneId, "always_use_https", "off");
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.ZoneSetting("AlwaysUseHttps", {
-          zoneId,
-          settingId: "always_use_https",
-          value: "on",
-        });
-      }),
-    );
-    expect(deployed.settingId).toEqual("always_use_https");
-    expect(deployed.value).toEqual("on");
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ZoneSetting("AlwaysUseHttps", {
+            zoneId,
+            settingId: "always_use_https",
+            value: "on",
+          });
+        }),
+      );
+      expect(deployed.settingId).toEqual("always_use_https");
+      expect(deployed.value).toEqual("on");
 
-    const provider = yield* Provider.findProvider(Cloudflare.ZoneSetting);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.ZoneSetting);
+      const all = yield* provider.list();
 
-    // The deployed (zone, setting) pair is present, hydrated into the exact
-    // `read`/`Attributes` shape (one row per (zoneId, settingId)).
-    expect(all.length).toBeGreaterThan(0);
-    const entry = all.find(
-      (s) => s.zoneId === zoneId && s.settingId === "always_use_https",
-    );
-    expect(entry).toBeDefined();
-    expect(entry?.value).toEqual("on");
+      // The deployed (zone, setting) pair is present, hydrated into the exact
+      // `read`/`Attributes` shape (one row per (zoneId, settingId)).
+      expect(all.length).toBeGreaterThan(0);
+      const entry = all.find(
+        (s) => s.zoneId === zoneId && s.settingId === "always_use_https",
+      );
+      expect(entry).toBeDefined();
+      expect(entry?.value).toEqual("on");
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    // Capture-and-restore: destroy put the setting back to its baseline.
-    const restored = yield* getSetting(zoneId, "always_use_https");
-    expect(valueOf(restored)).toEqual("off");
-  }).pipe(logLevel),
+      // Capture-and-restore: destroy put the setting back to its baseline.
+      const restored = yield* getSetting(zoneId, "always_use_https");
+      expect(valueOf(restored)).toEqual("off");
+    }).pipe(logLevel),
 );

@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -58,7 +61,7 @@ const cleanupPortalsByHostname = (accountId: string, hostname: string) =>
     Effect.catchTag("Forbidden", () => Effect.void),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update in place, and destroy an MCP portal",
   (stack) =>
     Effect.gen(function* () {
@@ -136,7 +139,7 @@ test.provider(
 // Canonical `list()` test (account collection): deploy a portal, then resolve
 // the provider via the typed helper and assert the deployed portal appears in
 // the exhaustively-paginated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed MCP portal",
   (stack) =>
     Effect.gen(function* () {

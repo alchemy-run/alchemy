@@ -13,6 +13,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -105,7 +108,7 @@ const purgeByName = (zoneId: string, name: string) =>
     ),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create and delete an HTTP health check with default name",
   (stack) =>
     Effect.gen(function* () {
@@ -147,7 +150,7 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "update mutable props in place (same id), then no-op redeploy",
   (stack) =>
     Effect.gen(function* () {
@@ -220,7 +223,7 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "changing type HTTP→TCP updates in place; delete is idempotent",
   (stack) =>
     Effect.gen(function* () {
@@ -279,7 +282,7 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "adoption — existing check errors without adopt, takes over with adopt(true)",
   (stack) =>
     Effect.gen(function* () {
@@ -349,7 +352,7 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates the deployed health check across zones",
   (stack) =>
     Effect.gen(function* () {

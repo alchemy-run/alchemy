@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { CA_CERT_1, CA_CERT_2 } from "../MtlsCertificate/fixtures/certs.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -26,7 +29,7 @@ const logLevel = Effect.provideService(
 // quota tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_ACCESS_MTLS;
 
-test.provider.skipIf(entitled)(
+test.provider.skipIf(entitled || SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "unentitled accounts surface the typed AccessCertificateQuotaExceeded error",
   (stack) =>
     Effect.gen(function* () {
@@ -135,7 +138,7 @@ test.provider.skipIf(!entitled)(
 // create quota, so the probe (which only reads) always runs. On an entitled
 // account we additionally deploy a certificate and assert it appears in the
 // exhaustively-paginated result.
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "list enumerates account access certificates",
   (stack) =>
     Effect.gen(function* () {

@@ -7,6 +7,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/stack.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
@@ -45,7 +48,7 @@ const freshKey = () => `fresh-${Math.random().toString(36).slice(2)}`;
 // suite parameterized by which deployed URL to hit.
 const behaviorSuite = (label: string, getUrl: () => Effect.Effect<string>) =>
   describe(label, () => {
-    test(
+    test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
       "throttles requests past the configured limit",
       Effect.gen(function* () {
         const url = yield* getUrl();
@@ -70,7 +73,7 @@ const behaviorSuite = (label: string, getUrl: () => Effect.Effect<string>) =>
       { timeout: 180_000 },
     );
 
-    test(
+    test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
       "tracks each key independently",
       Effect.gen(function* () {
         const url = yield* getUrl();

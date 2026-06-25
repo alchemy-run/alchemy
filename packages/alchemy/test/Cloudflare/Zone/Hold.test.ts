@@ -9,6 +9,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -68,7 +71,7 @@ const isHeld = (hold: zones.GetHoldResponse): boolean => hold.hold === true;
 const includesSubdomains = (hold: zones.GetHoldResponse): boolean =>
   hold.includeSubdomains === true || hold.includeSubdomains === "true";
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed ZoneHoldsRequireEnterprise error on non-Enterprise zones",
   (stack) =>
     Effect.gen(function* () {
@@ -105,20 +108,22 @@ test.provider(
 // `listAllZones` and reads the hold state in each. Assert the result is
 // non-empty and contains the standing test zone. This works on any plan
 // (reading the hold state needs no Enterprise entitlement).
-test.provider("list enumerates the hold state across all zones", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the hold state across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.ZoneHold);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.ZoneHold);
+      const all = yield* provider.list();
 
-    expect(all.length).toBeGreaterThan(0);
-    expect(all.some((h) => h.zoneId === zoneId)).toBe(true);
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.some((h) => h.zoneId === zoneId)).toBe(true);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
 
 test.provider.skipIf(!enterpriseZoneId)(

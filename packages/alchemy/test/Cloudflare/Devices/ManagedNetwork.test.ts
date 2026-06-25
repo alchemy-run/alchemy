@@ -8,6 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -51,7 +54,7 @@ const SHA_A =
 const SHA_B =
   "7d865e959b2466918c9863afca942d0fb89d7c9ac0c99bafc3749504ded97730" as const;
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "create, update in place, and delete a managed network",
   (stack) =>
     Effect.gen(function* () {
@@ -106,25 +109,27 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("list enumerates the deployed managed network", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+  "list enumerates the deployed managed network",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Cloudflare.DeviceManagedNetwork("ListResource", {
-        name: "alchemy-test-managed-network-list",
-        config: { tlsSockaddr: "192.0.2.3:443", sha256: SHA_A },
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Cloudflare.DeviceManagedNetwork("ListResource", {
+          name: "alchemy-test-managed-network-list",
+          config: { tlsSockaddr: "192.0.2.3:443", sha256: SHA_A },
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.DeviceManagedNetwork,
-    );
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(
+        Cloudflare.DeviceManagedNetwork,
+      );
+      const all = yield* provider.list();
 
-    expect(all.some((n) => n.networkId === deployed.networkId)).toBe(true);
+      expect(all.some((n) => n.networkId === deployed.networkId)).toBe(true);
 
-    yield* stack.destroy();
-    yield* expectGone(deployed.accountId, deployed.networkId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* expectGone(deployed.accountId, deployed.networkId);
+    }).pipe(logLevel),
 );

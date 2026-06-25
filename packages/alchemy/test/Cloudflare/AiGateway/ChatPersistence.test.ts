@@ -9,6 +9,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { Gateway } from "./fixtures/Gateway.ts";
 import ChatPersistenceTestWorker from "./fixtures/ChatPersistenceWorker.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 // Fresh `workers.dev` URLs return non-200 (404 / 500 "Script not
 // found") for a few seconds while the edge propagates. Each test uses
 // `HttpClient.filterStatusOk(yield* HttpClient.HttpClient)` so the
@@ -59,7 +62,7 @@ const retryReady = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
     Effect.retry({ schedule: readinessSchedule, times: 15 }),
   );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "first turn against a fresh thread persists user + assistant messages",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -83,7 +86,7 @@ test(
   { timeout: 180_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "persisted chat survives across DO invocations",
   Effect.gen(function* () {
     const out = yield* stack;
@@ -118,7 +121,7 @@ test(
   { timeout: 240_000 },
 );
 
-test(
+test.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "distinct thread ids map to isolated histories",
   Effect.gen(function* () {
     const out = yield* stack;

@@ -11,6 +11,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CERT_1, CERT_2 } from "./fixtures/certs.ts";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -74,7 +77,7 @@ const expectGone = (zoneId: string, keylessCertificateId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
   "surfaces the typed KeylessSslNotAvailable error on non-Enterprise zones",
   (stack) =>
     Effect.gen(function* () {

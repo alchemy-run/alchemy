@@ -10,6 +10,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { describe } from "vitest";
 
+const SKIP_NON_EPHEMRAL_ACCOUNT_TESTS =
+  process.env.SKIP_NON_EPHEMRAL_ACCOUNT_TESTS === "1";
+
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -64,7 +67,7 @@ const resetBaseline = (zoneId: string) =>
   );
 
 describe.sequential("Variants", () => {
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "creates, updates in place, and deletes the variants setting",
     (stack) =>
       Effect.gen(function* () {
@@ -136,7 +139,7 @@ describe.sequential("Variants", () => {
       }).pipe(logLevel),
   );
 
-  test.provider(
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
     "deploy is idempotent and converges out-of-band drift",
     (stack) =>
       Effect.gen(function* () {
@@ -199,31 +202,33 @@ describe.sequential("Variants", () => {
   // zone via `listAllZones` and reads the setting in each, skipping zones
   // where it was never configured. Deploy the setting on the standing test
   // zone first so it appears in the enumeration, then assert it is present.
-  test.provider("list enumerates the configured variants settings", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider.skipIf(SKIP_NON_EPHEMRAL_ACCOUNT_TESTS)(
+    "list enumerates the configured variants settings",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* resetBaseline(zoneId);
+        yield* stack.destroy();
+        yield* resetBaseline(zoneId);
 
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Variants("ImageVariants", {
-            zoneId,
-            jpeg: ["image/webp"],
-          });
-        }),
-      );
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Variants("ImageVariants", {
+              zoneId,
+              jpeg: ["image/webp"],
+            });
+          }),
+        );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Variants);
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(Cloudflare.Variants);
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      const entry = all.find((v) => v.zoneId === zoneId);
-      expect(entry).toBeDefined();
-      expect(entry!.value.jpeg).toEqual(["image/webp"]);
+        expect(all.length).toBeGreaterThan(0);
+        const entry = all.find((v) => v.zoneId === zoneId);
+        expect(entry).toBeDefined();
+        expect(entry!.value.jpeg).toEqual(["image/webp"]);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });
