@@ -6,6 +6,11 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
+// A fresh workers.dev URL transiently 404s/5xxs while the edge converges.
+// `Test.getWhenReady` / `Test.executeWhenReady` retry through that window and
+// return the first non-cold-start response to assert on.
+const { getWhenReady, executeWhenReady } = Test;
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -27,7 +32,7 @@ test(
   Effect.gen(function* () {
     const { url } = yield* stack;
 
-    const response = yield* HttpClient.get(`${url}/api-key`);
+    const response = yield* getWhenReady(`${url}/api-key`);
     expect(response.status).toBe(200);
     const body = yield* response.text;
     expect(body).toBe("SOME_API_KEY");
@@ -50,7 +55,7 @@ test(
     const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
 
-    const sendResponse = yield* HttpClient.execute(
+    const sendResponse = yield* executeWhenReady(
       HttpClientRequest.post(
         `${url}/queue/send?text=${encodeURIComponent(text)}`,
       ),

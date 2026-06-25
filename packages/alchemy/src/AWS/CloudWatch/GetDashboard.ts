@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Dashboard } from "./Dashboard.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetDashboardRequest extends Omit<
   cloudwatch.GetDashboardInput,
@@ -50,7 +51,8 @@ export const GetDashboardLive = Layer.effect(
 
 export class GetDashboardPolicy extends Binding.Policy<
   GetDashboardPolicy,
-  (dashboard: Dashboard) => Effect.Effect<void>
+  (dashboard: Dashboard) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.GetDashboard") {}
 
 export const GetDashboardPolicyLive = GetDashboardPolicy.layer.succeed(

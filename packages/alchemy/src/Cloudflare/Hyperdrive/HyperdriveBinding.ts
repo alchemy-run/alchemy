@@ -9,6 +9,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Hyperdrive } from "./Hyperdrive.ts";
 import { defaultPort, type HyperdriveDevOrigin } from "./Hyperdrive.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface HyperdriveBindingClient {
   /**
@@ -98,7 +99,8 @@ export const HyperdriveBindingLive = Layer.effect(
 
 export class HyperdriveBindingPolicy extends Binding.Policy<
   HyperdriveBindingPolicy,
-  (hyperdrive: Hyperdrive) => Effect.Effect<void>
+  (hyperdrive: Hyperdrive) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Hyperdrive.Binding") {}
 
 export const HyperdriveBindingPolicyLive = HyperdriveBindingPolicy.layer.effect(

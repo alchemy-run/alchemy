@@ -16,7 +16,7 @@ export default defineConfig({
   test: {
     env: loadEnv("test", path.resolve(import.meta.dirname, "..", ".."), ""),
     pool: "forks",
-    maxWorkers: 32,
+    maxWorkers: 16,
     sequence: { concurrent: true },
     testTimeout: 120_000,
     hookTimeout: 120_000,

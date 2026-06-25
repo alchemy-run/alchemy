@@ -17,21 +17,21 @@ import { isFlagshipApp } from "../Flagship/App.ts";
 import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/HyperdriveBinding.ts";
 import { isImages } from "../Images/Images.ts";
-import { isKVNamespace } from "../KV/KVNamespace.ts";
+import { isKVNamespace } from "../KV/Namespace.ts";
 import { isQueue } from "../Queue/Queue.ts";
-import { isR2Bucket } from "../R2/R2Bucket.ts";
+import { isR2Bucket } from "../R2/Bucket.ts";
 import { isRateLimit } from "../RateLimit/RateLimit.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
-import { isDynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import { isWorkerLoader } from "./WorkerLoader.ts";
 
-export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
+export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
@@ -237,7 +237,7 @@ const toBinding = (
       type: "version_metadata",
       name: bindingName,
     };
-  } else if (isDynamicWorkerLoader(binding)) {
+  } else if (isWorkerLoader(binding)) {
     return {
       type: "worker_loader",
       name: bindingName,

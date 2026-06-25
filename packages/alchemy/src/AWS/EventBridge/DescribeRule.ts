@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Rule } from "./Rule.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DescribeRuleRequest extends Omit<
   eventbridge.DescribeRuleRequest,
@@ -50,7 +51,8 @@ export const DescribeRuleLive = Layer.effect(
 
 export class DescribeRulePolicy extends Binding.Policy<
   DescribeRulePolicy,
-  (rule: Rule) => Effect.Effect<void>
+  (rule: Rule) => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.DescribeRule") {}
 
 export const DescribeRulePolicyLive = DescribeRulePolicy.layer.succeed(

@@ -1,9 +1,10 @@
-import * as Construct from "../../Construct.ts";
+import * as Effect from "effect/Effect";
 import type { Input, InputProps } from "../../Input.ts";
+import * as Namespace from "../../Namespace.ts";
 import { isResource } from "../../Resource.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { R2Bucket } from "../R2/R2Bucket.ts";
+import type { R2Bucket } from "../R2/Bucket.ts";
 import {
   AiSearchInstance,
   type AiSearchInstanceProps,
@@ -293,103 +294,101 @@ export type AiSearch = AiSearchInstance & {
  *
  * @see https://developers.cloudflare.com/ai-search/
  */
-export const AiSearch = Construct.fn(function* (
-  id: string,
-  props: AiSearchProps,
-) {
-  const {
-    source,
-    prefix,
-    include,
-    exclude,
-    jurisdiction,
-    parse,
-    crawl,
-    store,
-    namespace,
-    ...shared
-  } = props;
-
-  let tokenId = shared.tokenId;
-  let serviceToken: AiSearchToken | undefined;
-  let type: "r2" | "web-crawler";
-  let instanceSource: Input<string>;
-  let sourceParams: Input<AiSearchSourceParams> | undefined;
-
-  // Discriminate the data source on what `source` is: an R2Bucket (a resource)
-  // indexes a bucket and needs a service token to read it; a URL crawls a seed
-  // and doesn't.
-  if (isResource(source)) {
-    const bucket = source as R2Bucket;
-    type = "r2";
-    instanceSource = bucket.bucketName;
-    sourceParams = clean({
+export const AiSearch = (id: string, props: AiSearchProps) =>
+  Effect.gen(function* () {
+    const {
+      source,
       prefix,
-      includeItems: include,
-      excludeItems: exclude,
-      r2Jurisdiction: jurisdiction,
-    }) as Input<AiSearchSourceParams> | undefined;
+      include,
+      exclude,
+      jurisdiction,
+      parse,
+      crawl,
+      store,
+      namespace,
+      ...shared
+    } = props;
 
-    // Cloudflare requires a service token to read an R2 source and only
-    // auto-creates one via the dashboard/Wrangler — not on a programmatic
-    // API create. Mint one ourselves unless the caller passed a `tokenId`.
-    if (tokenId === undefined) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const apiToken = yield* AccountApiToken("ApiToken", {
-        policies: [
-          {
-            effect: "allow",
-            permissionGroups: ["AI Search Index Engine"],
-            resources: {
-              [`com.cloudflare.api.account.${accountId}`]: "*",
+    let tokenId = shared.tokenId;
+    let serviceToken: AiSearchToken | undefined;
+    let type: "r2" | "web-crawler";
+    let instanceSource: Input<string>;
+    let sourceParams: Input<AiSearchSourceParams> | undefined;
+
+    // Discriminate the data source on what `source` is: an R2Bucket (a resource)
+    // indexes a bucket and needs a service token to read it; a URL crawls a seed
+    // and doesn't.
+    if (isResource(source)) {
+      const bucket = source as R2Bucket;
+      type = "r2";
+      instanceSource = bucket.bucketName;
+      sourceParams = clean({
+        prefix,
+        includeItems: include,
+        excludeItems: exclude,
+        r2Jurisdiction: jurisdiction,
+      }) as Input<AiSearchSourceParams> | undefined;
+
+      // Cloudflare requires a service token to read an R2 source and only
+      // auto-creates one via the dashboard/Wrangler — not on a programmatic
+      // API create. Mint one ourselves unless the caller passed a `tokenId`.
+      if (tokenId === undefined) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const apiToken = yield* AccountApiToken("ApiToken", {
+          policies: [
+            {
+              effect: "allow",
+              permissionGroups: ["AI Search Index Engine"],
+              resources: {
+                [`com.cloudflare.api.account.${accountId}`]: "*",
+              },
             },
-          },
-        ],
+          ],
+        });
+        serviceToken = yield* AiSearchToken("Token", {
+          cfApiId: apiToken.tokenId,
+          cfApiKey: apiToken.value,
+        });
+        tokenId = serviceToken.id;
+      }
+    } else {
+      type = "web-crawler";
+      instanceSource = source as Input<string>;
+
+      const { type: parseType, ...parseOptions } = parse ?? {};
+      const webCrawler = clean({
+        parseType,
+        parseOptions: clean(parseOptions),
+        crawlOptions: crawl ? clean(crawl) : undefined,
+        storeOptions: store
+          ? clean({
+              storageId: store.bucket.bucketName,
+              storageType: "r2" as const,
+              r2Jurisdiction: store.jurisdiction,
+            })
+          : undefined,
       });
-      serviceToken = yield* AiSearchToken("Token", {
-        cfApiId: apiToken.tokenId,
-        cfApiKey: apiToken.value,
-      });
-      tokenId = serviceToken.id;
+      sourceParams = webCrawler
+        ? ({ webCrawler } as Input<AiSearchSourceParams>)
+        : undefined;
     }
-  } else {
-    type = "web-crawler";
-    instanceSource = source as Input<string>;
 
-    const { type: parseType, ...parseOptions } = parse ?? {};
-    const webCrawler = clean({
-      parseType,
-      parseOptions: clean(parseOptions),
-      crawlOptions: crawl ? clean(crawl) : undefined,
-      storeOptions: store
-        ? clean({
-            storageId: store.bucket.bucketName,
-            storageType: "r2" as const,
-            r2Jurisdiction: store.jurisdiction,
-          })
-        : undefined,
+    const instance = yield* AiSearchInstance("Instance", {
+      ...shared,
+      // The instance is keyed by namespace name; pass the namespace's `name`
+      // output so the engine orders instance-after-namespace.
+      namespace: namespace?.name,
+      type,
+      source: instanceSource,
+      tokenId,
+      sourceParams,
     });
-    sourceParams = webCrawler
-      ? ({ webCrawler } as Input<AiSearchSourceParams>)
-      : undefined;
-  }
 
-  const instance = yield* AiSearchInstance("Instance", {
-    ...shared,
-    // The instance is keyed by namespace name; pass the namespace's `name`
-    // output so the engine orders instance-after-namespace.
-    namespace: namespace?.name,
-    type,
-    source: instanceSource,
-    tokenId,
-    sourceParams,
-  });
-
-  // Return the instance itself (augmented with the managed `serviceToken`)
-  // so an `AiSearch` is usable anywhere an `AiSearchInstance` is expected —
-  // `AiSearchInstance.bind(search)`, `env: { SEARCH: search }`, etc.
-  return Object.assign(instance, { serviceToken }) as AiSearch;
-});
+    // Return the instance itself (augmented with the managed `serviceToken`)
+    // so an `AiSearch` is usable anywhere an `AiSearchInstance` is expected —
+    // `AiSearchInstance.bind(search)`, `env: { SEARCH: search }`, etc.
+    return Object.assign(instance, { serviceToken }) as AiSearch;
+  }).pipe(Namespace.push(id));
 
 /** Drop `undefined` entries; return `undefined` when nothing is left. */
 const clean = <T extends Record<string, unknown>>(

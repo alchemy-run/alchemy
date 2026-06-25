@@ -1,6 +1,7 @@
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -114,6 +115,14 @@ export const isRegionalTieredCache = (
 const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
   (props.enabled ?? true) ? "on" : "off";
 
+// Cloudflare can transiently fail to authenticate a valid token, surfacing as
+// `Unauthorized`/`Forbidden`. Retry with exponential backoff capped at 5s,
+// bounded to ~8 attempts so a persistently-failing call still fails fast.
+const transientAuthRetrySchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("5 seconds")),
+  Schedule.both(Schedule.recurs(8)),
+);
+
 export const RegionalTieredCacheProvider = () =>
   Provider.succeed(RegionalTieredCache, {
     stables: ["zoneId", "initialValue"],
@@ -129,6 +138,15 @@ export const RegionalTieredCacheProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           cache.getRegionalTieredCache({ zoneId }).pipe(
+            // Cloudflare intermittently rejects a *valid* token with
+            // `Unauthorized`/`Forbidden` (a transient edge auth failure).
+            // Retry with capped backoff rather than dropping the zone, so a
+            // genuinely accessible zone never falls out of the enumeration on
+            // a blip.
+            Effect.retry({
+              while: (e) => e._tag === "Unauthorized" || e._tag === "Forbidden",
+              schedule: transientAuthRetrySchedule,
+            }),
             Effect.map((observed) =>
               toAttributes(zoneId, observed, observed.value),
             ),

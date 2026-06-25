@@ -45,7 +45,7 @@ export const loginCommand = Command.make(
       "alchemy.configure": a.configure,
     }),
   )(
-    Effect.fnUntraced(function* ({ main, envFile, profile, configure }) {
+    Effect.fn(function* ({ main, envFile, profile, configure }) {
       const stackEffect = yield* importStack(main);
 
       const authProviders: AuthProviders["Service"] = {};

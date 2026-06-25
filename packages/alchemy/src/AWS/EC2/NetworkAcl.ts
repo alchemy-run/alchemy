@@ -180,7 +180,7 @@ export const NetworkAclProvider = () =>
           ),
         );
 
-      const toAttrs = Effect.fnUntraced(function* (acl: ec2.NetworkAcl) {
+      const toAttrs = Effect.fn(function* (acl: ec2.NetworkAcl) {
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
           networkAclId: acl.NetworkAclId as NetworkAclId,

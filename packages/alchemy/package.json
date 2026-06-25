@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.56",
+  "version": "2.0.0-beta.58",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -20,13 +20,15 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
+    "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
-    "build": "tsgo -b && tsgo -b tsconfig.bin.json && bun bundle",
+    "build": "tsc -b && tsc -b tsconfig.bin.json && bun bundle",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",
     "test": "vitest run",
-    "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
+    "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts",
+    "nuke": "cd ../../ && bun nuke"
   },
   "exports": {
     ".": {
@@ -40,6 +42,12 @@
       "bun": "./src/*.ts",
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
+    },
+    "./AI": {
+      "types": "./lib/AI/index.d.ts",
+      "bun": "./src/AI/index.ts",
+      "worker": "./src/AI/index.ts",
+      "import": "./lib/AI/index.js"
     },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",
@@ -89,11 +97,11 @@
       "worker": "./src/AWS/Lambda/*.ts",
       "import": "./lib/AWS/Lambda/*.js"
     },
-    "./Build": {
-      "types": "./lib/Build/index.d.ts",
-      "bun": "./src/Build/index.ts",
-      "worker": "./src/Build/index.ts",
-      "import": "./lib/Build/index.js"
+    "./Command": {
+      "types": "./lib/Command/index.d.ts",
+      "bun": "./src/Command/index.ts",
+      "worker": "./src/Command/index.ts",
+      "import": "./lib/Command/index.js"
     },
     "./Construct": {
       "types": "./lib/Construct/index.d.ts",
@@ -268,6 +276,12 @@
       "bun": "./src/Test/Bun.ts",
       "worker": "./src/Test/Bun.ts",
       "import": "./lib/Test/Bun.js"
+    },
+    "./Test/Http": {
+      "types": "./lib/Test/Http.d.ts",
+      "bun": "./src/Test/Http.ts",
+      "worker": "./src/Test/Http.ts",
+      "import": "./lib/Test/Http.js"
     },
     "./Util": {
       "types": "./lib/Util/index.d.ts",

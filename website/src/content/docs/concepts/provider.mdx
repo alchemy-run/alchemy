@@ -63,7 +63,7 @@ provisioning, routine updates, and adoption takeovers. Returns the
 A reconciler is a single observe → ensure → sync → return flow:
 
 ```typescript
-reconcile: Effect.fnUntraced(function* ({ news, output }) {
+reconcile: Effect.fn(function* ({ news, output }) {
   const stripe = yield* StripeClient;
 
   // Observe — fetch live state if we have a cached id.
@@ -130,7 +130,7 @@ needed when properties differ. Returns a tagged `Diff` describing
 the action:
 
 ```typescript
-diff: Effect.fnUntraced(function* ({ news, olds }) {
+diff: Effect.fn(function* ({ news, olds }) {
   if (news.region !== olds.region) {
     return { action: "replace" } as const;
   }
@@ -173,7 +173,7 @@ existing cloud infrastructure). It is the single source of truth for
 "does this resource exist, and is it ours?".
 
 ```typescript
-read: Effect.fnUntraced(function* ({ id, olds, output }) {
+read: Effect.fn(function* ({ id, olds, output }) {
   const stripe = yield* StripeClient;
   if (!output?.productId) return undefined;
   const product = yield* Effect.tryPromise(() =>
@@ -204,7 +204,7 @@ to unwrap, just a hidden symbol on the attributes object:
 ```typescript
 import { Unowned } from "alchemy/AdoptPolicy";
 
-read: Effect.fnUntraced(function* ({ id, olds }) {
+read: Effect.fn(function* ({ id, olds }) {
   const live = yield* lookup(olds.name);
   if (!live) return undefined;
   const attrs = { productId: live.id, name: live.name };

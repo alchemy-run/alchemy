@@ -7,6 +7,7 @@ import {
   getTaggableResourceArn,
   type TaggableResource,
 } from "./binding-common.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListTagsForResourceRequest extends Omit<
   cloudwatch.ListTagsForResourceInput,
@@ -53,7 +54,8 @@ export const ListTagsForResourceLive = Layer.effect(
 
 export class ListTagsForResourcePolicy extends Binding.Policy<
   ListTagsForResourcePolicy,
-  (resource: TaggableResource) => Effect.Effect<void>
+  (resource: TaggableResource) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.ListTagsForResource") {}
 
 export const ListTagsForResourcePolicyLive =

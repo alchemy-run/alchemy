@@ -49,9 +49,15 @@ const getCertificate = (zoneId: string, clientCertificateId: string) =>
   );
 
 // DELETE revokes the certificate; revoked certificates stay listed on the
-// zone forever, so "gone" means status === "revoked", not a 404. Revocation
-// transits `pending_revocation` asynchronously — poll the typed GET until it
-// lands, bounded so the test fails fast instead of riding the vitest timeout.
+// zone forever, so "gone" means the certificate is revoking, not a 404.
+// Revocation transits `pending_revocation` asynchronously and Cloudflare can
+// linger there well past the test's budget before flipping to `revoked` —
+// both states are the delete semantic (the certificate can no longer serve
+// mTLS), so treat either as "gone" and poll the typed GET until it lands,
+// bounded so the test fails fast instead of riding the vitest timeout.
+const isRevoking = (status: string | null | undefined): boolean =>
+  status === "revoked" || status === "pending_revocation";
+
 const waitUntilRevoked = (zoneId: string, clientCertificateId: string) =>
   getCertificate(zoneId, clientCertificateId).pipe(
     // Frequent, bounded spaced poll (~90s): revocation settles through
@@ -61,7 +67,7 @@ const waitUntilRevoked = (zoneId: string, clientCertificateId: string) =>
     // vitest timeout.
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (cert) => cert.status === "revoked",
+      until: (cert) => isRevoking(cert.status),
       times: 30,
     }),
   );
@@ -125,7 +131,7 @@ test.provider(
       // Destroy revokes — the certificate remains listed but transitions to
       // `revoked`, which this resource treats as deleted.
       const revoked = yield* waitUntilRevoked(zoneId, cert.clientCertificateId);
-      expect(revoked.status).toEqual("revoked");
+      expect(isRevoking(revoked.status)).toBe(true);
     }).pipe(logLevel),
   // Two deploys (issue + no-op re-deploy) on Cloudflare's per-zone-serialized
   // client-cert API plus a ~90s spaced revoke poll — under a full concurrent
@@ -177,7 +183,7 @@ test.provider(
         zoneId,
         initial.clientCertificateId,
       );
-      expect(oldCert.status).toEqual("revoked");
+      expect(isRevoking(oldCert.status)).toBe(true);
 
       // The replacement is live and untouched by the old one's revocation.
       const live = yield* getCertificate(zoneId, replaced.clientCertificateId);
@@ -189,7 +195,7 @@ test.provider(
         zoneId,
         replaced.clientCertificateId,
       );
-      expect(revoked.status).toEqual("revoked");
+      expect(isRevoking(revoked.status)).toBe(true);
     }).pipe(logLevel),
   // This is a REPLACEMENT: the second deploy issues a brand-new certificate
   // and revokes the old one, then the test runs TWO ~90s spaced revoke polls

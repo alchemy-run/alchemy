@@ -191,14 +191,33 @@ export const pushImage = Effect.fn(function* (
 ) {
   if (auth) {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const configDir = yield* fs.makeTempDirectory({
       prefix: "alchemy-docker-",
     });
+    // Write the registry credentials directly into an isolated docker config
+    // as a plaintext `auths` entry and skip `docker login` entirely.
+    //
+    // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
+    // through the shared `osxkeychain`/`desktop` credential helper *regardless*
+    // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
+    // keychain (`The specified item already exists in the keychain (-25299)`) or
+    // land the credential in the helper — leaving this isolated config without
+    // an `auths` entry, so the subsequent `docker push` fails with "no basic
+    // auth credentials". Embedding the base64 `auth` inline (the same thing
+    // `docker login` would write when no credsStore is configured) makes each
+    // deploy fully self-contained: no credential helper, no keychain, no login
+    // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
+    // global docker config (buildx builders, `docker context`, etc. intact).
+    const token = yield* Effect.sync(() =>
+      Buffer.from(`${auth.username}:${auth.password}`).toString("base64"),
+    );
+    const config = JSON.stringify({
+      auths: { [auth.server]: { auth: token } },
+    });
+    yield* fs.writeFileString(path.join(configDir, "config.json"), config);
     const env = { ...process.env, DOCKER_CONFIG: configDir };
-    return yield* Effect.gen(function* () {
-      yield* dockerLogin(auth, { env });
-      yield* runDockerCommand(["push", imageRef], { env });
-    }).pipe(
+    return yield* runDockerCommand(["push", imageRef], { env }).pipe(
       Effect.ensuring(
         fs
           .remove(configDir, { recursive: true })

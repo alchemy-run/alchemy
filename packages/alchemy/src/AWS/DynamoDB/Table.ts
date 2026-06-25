@@ -333,7 +333,14 @@ export const TableProvider = () =>
         error._tag === "InternalServerError" ||
         error._tag === "LimitExceededException" ||
         error._tag === "ResourceInUseException" ||
-        error._tag === "ResourceNotFoundException";
+        error._tag === "ResourceNotFoundException" ||
+        // Throttling: DynamoDB's control-plane API limits are low and the
+        // blanket SDK retry (10 attempts) is easily exhausted when the whole
+        // suite hammers create/update/describe concurrently. Give it the
+        // provider's much larger budget too.
+        error._tag === "ThrottlingException" ||
+        error._tag === "ProvisionedThroughputExceededException" ||
+        error._tag === "RequestLimitExceeded";
 
       const waitForControlPlaneConvergence = Schedule.fixed("1 second").pipe(
         Schedule.both(Schedule.recurs(120)),
@@ -649,7 +656,12 @@ export const TableProvider = () =>
       // resource" signal). Only retry on transient control-plane errors.
       const isRetryableReadError = (error: { _tag?: string }) =>
         error._tag === "InternalServerError" ||
-        error._tag === "LimitExceededException";
+        error._tag === "LimitExceededException" ||
+        // See `isRetryableControlPlaneError`: read-path describes throttle too
+        // under full-suite concurrency, so ride them out generously.
+        error._tag === "ThrottlingException" ||
+        error._tag === "ProvisionedThroughputExceededException" ||
+        error._tag === "RequestLimitExceeded";
 
       const readTableState = (tableName: string) =>
         Effect.gen(function* () {
@@ -947,15 +959,29 @@ export const TableProvider = () =>
               names,
               (tableName) =>
                 readTableState(tableName).pipe(
-                  // Hydrating every table fires four describe calls each;
-                  // across a busy account that trips DynamoDB's read throttle.
+                  // Hydrating every table fires four describe calls each.
+                  // Across a busy account this trips DynamoDB's read throttle,
+                  // and a table that isn't ACTIVE yet (a peer mid-create)
+                  // transiently rejects the continuous-backups/TTL describes
+                  // with ValidationException. Both are transient — retry to
+                  // converge so a table that *is* ours still hydrates fully.
                   Effect.retry({
-                    while: (e) => e._tag === "ThrottlingException",
+                    while: (e) =>
+                      e._tag === "ThrottlingException" ||
+                      e._tag === "ValidationException",
                     schedule: Schedule.exponential(250).pipe(
                       Schedule.jittered,
                       Schedule.both(Schedule.recurs(12)),
                     ),
                   }),
+                  // Last resort: if a foreign table never settles within the
+                  // retry budget (e.g. a peer is still mid-create/delete when
+                  // we give up), skip it rather than failing the whole
+                  // enumeration. Our own table is ACTIVE by the time list()
+                  // runs, so it always hydrates via the retry above.
+                  Effect.catchTag("ValidationException", () =>
+                    Effect.succeed(undefined),
+                  ),
                 ),
               { concurrency: 8 },
             );

@@ -127,10 +127,14 @@ export interface Policy<
  * absent, so the policy gracefully becomes a no-op.
  */
 export const Policy =
-  <Self, Shape extends (...args: any[]) => Effect.Effect<void, any, any>>() =>
+  <
+    Self,
+    Shape extends (...args: any[]) => Effect.Effect<void, any, any>,
+    Provider = Self,
+  >() =>
   <Identifier extends string>(
     Identifier: Identifier,
-  ): Policy<Self, `Policy<${Identifier}>`, Shape> => {
+  ): Policy<Provider, `Policy<${Identifier}>`, Shape> => {
     const self = Context.Service<Self, Shape>(`Policy<${Identifier}>`);
 
     // we use a service option because at runtime (e.g. in a Lambda Function or Cloudflare Worker)

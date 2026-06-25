@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -63,6 +64,22 @@ export interface SAMLProvider extends Resource<
  * ```
  */
 export const SAMLProvider = Resource<SAMLProvider>("AWS.IAM.SAMLProvider");
+
+// IAM is eventually consistent. Recreating a SAML provider immediately after a
+// same-named one was deleted (the destroy-then-deploy test flow) can transiently
+// surface a content-less `ValidationError` (or `ConcurrentModificationException`)
+// until the prior delete settles. A bounded retry rides out that window; a
+// well-formed metadata document never fails persistently, so this never masks a
+// genuine bad-input error for longer than the small budget.
+const transientWriteSchedule = Schedule.exponential(500).pipe(
+  Schedule.jittered,
+  Schedule.both(Schedule.recurs(6)),
+);
+const isTransientWriteError = (error: {
+  _tag: "ValidationError" | "ConcurrentModificationException" | (string & {});
+}) =>
+  error._tag === "ValidationError" ||
+  error._tag === "ConcurrentModificationException";
 
 export const SAMLProviderProvider = () =>
   Provider.succeed(SAMLProvider, {
@@ -177,6 +194,10 @@ export const SAMLProviderProvider = () =>
             })),
           })
           .pipe(
+            Effect.retry({
+              while: isTransientWriteError,
+              schedule: transientWriteSchedule,
+            }),
             Effect.catchTag("EntityAlreadyExistsException", () =>
               Effect.gen(function* () {
                 const existingTags = yield* iam.listSAMLProviderTags({
@@ -205,18 +226,25 @@ export const SAMLProviderProvider = () =>
           observed.AssertionEncryptionMode !== news.assertionEncryptionMode ||
           news.addPrivateKey !== undefined
         ) {
-          yield* iam.updateSAMLProvider({
-            SAMLProviderArn: samlProviderArn,
-            SAMLMetadataDocument:
-              (observed.SAMLMetadataDocument ?? undefined) !==
-              news.samlMetadataDocument
-                ? news.samlMetadataDocument
+          yield* iam
+            .updateSAMLProvider({
+              SAMLProviderArn: samlProviderArn,
+              SAMLMetadataDocument:
+                (observed.SAMLMetadataDocument ?? undefined) !==
+                news.samlMetadataDocument
+                  ? news.samlMetadataDocument
+                  : undefined,
+              AssertionEncryptionMode: news.assertionEncryptionMode,
+              AddPrivateKey: news.addPrivateKey
+                ? unwrapRedactedString(news.addPrivateKey)
                 : undefined,
-            AssertionEncryptionMode: news.assertionEncryptionMode,
-            AddPrivateKey: news.addPrivateKey
-              ? unwrapRedactedString(news.addPrivateKey)
-              : undefined,
-          });
+            })
+            .pipe(
+              Effect.retry({
+                while: isTransientWriteError,
+                schedule: transientWriteSchedule,
+              }),
+            );
         }
       }
 

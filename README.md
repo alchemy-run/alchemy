@@ -27,7 +27,7 @@ export default Cloudflare.Worker(
   "api",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

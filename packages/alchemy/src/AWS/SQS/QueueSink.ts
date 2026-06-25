@@ -6,6 +6,7 @@ import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
 import { SendMessageBatch } from "./SendMessageBatch.ts";
+import type { Providers } from "../Providers.ts";
 
 /** @binding */
 export class QueueSink extends Binding.Service<
@@ -38,7 +39,8 @@ export const QueueSinkLive = Layer.effect(
 
 export class QueueSinkPolicy extends Binding.Policy<
   QueueSinkPolicy,
-  (queue: Queue) => Effect.Effect<void>
+  (queue: Queue) => Effect.Effect<void>,
+  Providers
 >()("AWS.SQS.QueueSinkPolicy") {}
 
 export const QueueSinkPolicyLive = QueueSinkPolicy.layer.succeed(

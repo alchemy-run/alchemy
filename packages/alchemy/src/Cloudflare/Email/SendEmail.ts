@@ -79,7 +79,7 @@ export const SendEmail: {
    */
   bind: typeof SendEmailBinding.bind;
 } = Object.assign(
-  Effect.fnUntraced(function* (id: string, props?: SendEmailProps) {
+  Effect.fn(function* (id: string, props?: SendEmailProps) {
     return {
       kind: SendEmailTypeId,
       name: id,

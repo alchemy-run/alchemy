@@ -94,7 +94,7 @@ export const RootProvider = () =>
             const attrs: (Root["Attributes"] | undefined)[] =
               yield* Effect.forEach(
                 valid,
-                Effect.fnUntraced(function* (root) {
+                Effect.fn(function* (root) {
                   if (!root.Id || !root.Arn || !root.Name) return undefined;
                   const tags = yield* readResourceTags(root.Id).pipe(
                     Effect.catchTag("TargetNotFoundException", () =>

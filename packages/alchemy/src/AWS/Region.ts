@@ -6,6 +6,12 @@ import { AWSEnvironment } from "./Environment.ts";
 export { AWS_REGION, type RegionID } from "./Environment.ts";
 export { Region } from "@distilled.cloud/aws/Region";
 
+declare module "@distilled.cloud/aws/Region" {
+  interface Region {
+    readonly kind: "Environment";
+  }
+}
+
 export const of = (region: string) =>
   Layer.succeed(Region.Region, Effect.succeed(region));
 

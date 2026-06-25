@@ -136,9 +136,13 @@ it.live(
         );
       }).pipe(Effect.provide(layer));
 
-      expect(result).toBeInstanceOf(secretsStore.MaximumStoresExceeded);
+      // Assert on the tag, not `instanceof`: distilled errors are defined as
+      // `class X extends applyErrorMatchers(Schema.TaggedErrorClass(...))`, so
+      // the decoder constructs instances of the inner schema class — they
+      // carry the right `_tag` but are not `instanceof` the exported subclass.
       const err = result as secretsStore.MaximumStoresExceeded;
       expect(err._tag).toBe("MaximumStoresExceeded");
+      expect(err.code).toBe(1003);
       expect(err.message).toBe("maximum_stores_exceeded");
     }),
 );

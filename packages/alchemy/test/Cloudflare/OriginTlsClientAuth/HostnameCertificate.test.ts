@@ -13,9 +13,11 @@ import {
   CERT_3,
   CERT_4,
   CERT_8,
+  CERT_9,
   KEY_3,
   KEY_4,
   KEY_8,
+  KEY_9,
 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -52,6 +54,25 @@ const getCertificate = (zoneId: string, certificateId: string) =>
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,
       times: 8,
+    }),
+  );
+
+// Re-uploading a PEM that collides with a not-yet-cleared tombstone (a prior
+// run's `pending_deletion` cert for the same PEM) resurrects it under the same
+// id, and the certificate can briefly read back as `pending_deletion` before
+// transitioning to a live status. Poll until it settles, bounded.
+const waitForLive = (zoneId: string, certificateId: string) =>
+  getCertificate(zoneId, certificateId).pipe(
+    Effect.flatMap((cert) =>
+      cert.status !== "pending_deletion" && cert.status !== "deleted"
+        ? Effect.succeed(cert)
+        : Effect.fail({ _tag: "CertificateNotLive" } as const),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "CertificateNotLive",
+      schedule: Schedule.spaced("3 seconds").pipe(
+        Schedule.both(Schedule.recurs(15)),
+      ),
     }),
   );
 
@@ -118,23 +139,27 @@ test.provider(
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
+      // Dedicated PEM (CERT_9): the sibling "replaces" test churns CERT_3
+      // concurrently under the global concurrent config, and its
+      // `pending_deletion` tombstone for CERT_3 would otherwise collide here
+      // (a re-upload resurrects the half-deleted cert, which never goes live).
       yield* stack.destroy();
-      yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
+      yield* purgeCertificates(zoneId, [CERT_9]);
 
       const cert = yield* stack.deploy(
         Cloudflare.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
           zoneId,
-          certificate: CERT_3,
-          privateKey: Redacted.make(KEY_3),
+          certificate: CERT_9,
+          privateKey: Redacted.make(KEY_9),
         }),
       );
 
       expect(cert.certificateId).toBeDefined();
       expect(cert.zoneId).toEqual(zoneId);
       expect(cert.status).toBeDefined();
-      expect(cert.issuer).toContain("Alchemy AOP Test Cert 3");
+      expect(cert.issuer).toContain("Alchemy AOP Test Cert 9");
 
-      const actual = yield* getCertificate(zoneId, cert.certificateId);
+      const actual = yield* waitForLive(zoneId, cert.certificateId);
       expect(actual.id).toEqual(cert.certificateId);
       expect(actual.status).not.toEqual("deleted");
       expect(actual.status).not.toEqual("pending_deletion");

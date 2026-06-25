@@ -8,14 +8,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 export class KinesisApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KinesisApiFunction",
-  {
-    main: import.meta.filename,
-    url: true,
-  },
 ) {}
 
 export class StreamAndConsumer extends Context.Service<
@@ -52,6 +47,10 @@ export const StreamAndConsumerLive = Layer.effect(
 );
 
 export const KinesisApiFunctionLive = KinesisApiFunction.make(
+  {
+    main: import.meta.filename,
+    url: true,
+  },
   Effect.gen(function* () {
     const { stream, consumer } = yield* StreamAndConsumer;
 

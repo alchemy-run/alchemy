@@ -5,6 +5,12 @@ import { AWSEnvironment } from "./Environment.ts";
 
 export { Credentials } from "@distilled.cloud/aws/Credentials";
 
+declare module "@distilled.cloud/aws/Credentials" {
+  interface Credentials {
+    readonly kind: "Credentials";
+  }
+}
+
 /**
  * Lazy `Credentials` layer derived from the surrounding {@link AWSEnvironment}.
  * Credentials are resolved on first access (not during layer construction),

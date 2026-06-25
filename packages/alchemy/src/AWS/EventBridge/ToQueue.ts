@@ -5,6 +5,7 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
+import type { Providers } from "../Providers.ts";
 
 interface EventDescriptor {
   id?: string;
@@ -26,7 +27,8 @@ export interface QueueRouteTargetProps extends Pick<
 
 export class ToQueuePolicy extends Binding.Policy<
   ToQueuePolicy,
-  (rule: { ruleArn: unknown }, queue: Queue) => Effect.Effect<void>
+  (rule: { ruleArn: unknown }, queue: Queue) => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.ToQueue") {}
 
 export const ToQueuePolicyLive = ToQueuePolicy.layer.succeed(

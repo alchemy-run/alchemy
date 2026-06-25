@@ -17,7 +17,7 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { Command, CommandProvider } from "../Build/Command.ts";
+import * as Command from "../Command/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -40,8 +40,8 @@ import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
-import * as KMS from "./KMS/index.ts";
 import * as Kinesis from "./Kinesis/index.ts";
+import * as KMS from "./KMS/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as Logs from "./Logs/index.ts";
 import * as Organizations from "./Organizations/index.ts";
@@ -64,7 +64,6 @@ export const providers = () =>
   Layer.effect(
     Providers,
     Provider.collection([
-      Command,
       KeyPair,
       Random,
       ACM.Certificate,
@@ -589,7 +588,7 @@ export const providers = () =>
     ),
     Layer.provideMerge(
       Layer.mergeAll(
-        CommandProvider(),
+        Command.providers(),
         KeyPairProvider(),
         RandomProvider(),
         Assets.AssetsLive,
@@ -612,11 +611,57 @@ export const providers = () =>
     Layer.orDie,
   );
 
+// Node socket-level error codes that indicate a transient network failure.
+const TRANSIENT_NETWORK_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EPIPE",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EHOSTUNREACH",
+  "EAI_AGAIN",
+]);
+// Transport-termination signatures that undici/node surface as plain messages
+// (e.g. a `fetch` whose socket dies mid-body throws `TypeError: terminated`).
+const TRANSIENT_NETWORK_PATTERN =
+  /terminated|socket hang up|other side closed|fetch failed|read ETIMEDOUT|ECONNRESET|ETIMEDOUT/i;
+
+// Walk an error's cause chain looking for a transient transport failure. Used
+// to tell a Decode/EmptyBody error caused by a dropped connection (retryable)
+// apart from one caused by a genuinely malformed body (permanent).
+const hasTransientNetworkCause = (cause: unknown, depth = 0): boolean => {
+  if (cause == null || depth > 8) return false;
+  if (typeof cause === "string") return TRANSIENT_NETWORK_PATTERN.test(cause);
+  if (typeof cause !== "object") return false;
+  const code = (cause as { code?: unknown }).code;
+  if (typeof code === "string" && TRANSIENT_NETWORK_CODES.has(code)) {
+    return true;
+  }
+  const message = (cause as { message?: unknown }).message;
+  if (typeof message === "string" && TRANSIENT_NETWORK_PATTERN.test(message)) {
+    return true;
+  }
+  const nested = (cause as { cause?: unknown }).cause;
+  return nested !== undefined && nested !== cause
+    ? hasTransientNetworkCause(nested, depth + 1)
+    : false;
+};
+
 // TODO(sam): remove this once it's upstreamed to distilled
 const isHttpTransportError = (error: unknown): boolean => {
   if (!HttpClientError.isHttpClientError(error)) return false;
-  const tag = error.reason._tag;
+  const reason = error.reason;
+  const tag = reason._tag;
   if (tag === "TransportError") return true;
+  // A Decode/EmptyBody error is only transient when its underlying cause is a
+  // terminated/reset connection (e.g. a `read ETIMEDOUT` while streaming the
+  // body surfaces as a `DecodeError`). A genuine malformed-body decode is
+  // permanent — retrying it would only waste the budget and mask the bug — so
+  // gate on the cause chain rather than the tag.
+  if (tag === "DecodeError" || tag === "EmptyBodyError") {
+    return hasTransientNetworkCause(reason);
+  }
   if (
     tag === "StatusCodeError" &&
     "response" in error.reason &&
@@ -636,7 +681,7 @@ const awsRetryFactory: RetryFactory = (lastError) => ({
   schedule: pipe(
     Schedule.exponential(Duration.millis(200), 2),
     Schedule.modifyDelay(
-      Effect.fnUntraced(function* (duration) {
+      Effect.fn(function* (duration) {
         const error = yield* Ref.get(lastError);
         if (isThrottlingError(error)) {
           // Throttling: floor at 500ms (matches distilled default).
@@ -649,6 +694,10 @@ const awsRetryFactory: RetryFactory = (lastError) => ({
     ),
     capped(Duration.seconds(5)),
     jittered,
-    Schedule.both(Schedule.recurs(10)),
+    // Transient transport failures (e.g. a sustained `read ETIMEDOUT` blip
+    // against a control-plane endpoint) can outlast a 10-attempt budget. With
+    // the 5s cap above, the extra attempts add bounded backoff while making
+    // the network-flake recovery materially more robust.
+    Schedule.both(Schedule.recurs(15)),
   ),
 });

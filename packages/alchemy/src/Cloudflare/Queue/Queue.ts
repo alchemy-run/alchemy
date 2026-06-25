@@ -18,7 +18,7 @@ import {
   LocalRuntimeState,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import { QueueBinding } from "./QueueBinding.ts";
+import { QueueWrite } from "./QueueWrite.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
   typeof value === "object" && (value as any)?.Type === "Cloudflare.Queue";
@@ -66,10 +66,10 @@ export type Queue = Resource<
  * ```
  *
  * @section Binding to a Worker
- * In an Effect-style Worker, use `Cloudflare.QueueBinding.bind` in
- * the init phase and provide `Cloudflare.QueueBindingLive` in the
- * runtime layer. The returned `QueueSender` exposes `send` and
- * `sendBatch`.
+ * In an Effect-style Worker, use `Cloudflare.Queues.WriteQueue` in
+ * the init phase and provide `Cloudflare.Queues.WriteQueueBinding` in
+ * the runtime layer. The returned `WriteQueueClient` exposes `send`
+ * and `sendBatch`.
  *
  * @example Sending messages from a Worker
  * ```typescript
@@ -84,7 +84,7 @@ export type Queue = Resource<
  *   "Worker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const queue = yield* Cloudflare.QueueBinding.bind(Queue);
+ *     const queue = yield* Cloudflare.Queues.WriteQueue(Queue);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -100,12 +100,12 @@ export type Queue = Resource<
  *         return HttpServerResponse.text("Not Found", { status: 404 });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.QueueBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.Queues.WriteQueueBinding)),
  * );
  * ```
  */
 export const Queue = Resource<Queue>("Cloudflare.Queue")({
-  bind: QueueBinding.bind,
+  bind: QueueWrite.bind,
 });
 
 export const QueueProviderLive = () =>
@@ -280,7 +280,7 @@ const createQueueName = (id: string, name: string | undefined) =>
 // Cloudflare's `listQueues` accepts no name/prefix filter, so
 // adoption-by-name has to scan every page. Use the paginated
 // `.items` stream off the un-yielded operation method.
-const findQueueByName = Effect.fnUntraced(function* (queueName: string) {
+const findQueueByName = Effect.fn(function* (queueName: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* queues.listQueues.items({ accountId }).pipe(
     Stream.filter((q) => q.queueName === queueName),

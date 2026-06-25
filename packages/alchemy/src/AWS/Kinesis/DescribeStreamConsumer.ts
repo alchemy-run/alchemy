@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { StreamConsumer } from "./StreamConsumer.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DescribeStreamConsumerRequest extends Omit<
   Kinesis.DescribeStreamConsumerInput,
@@ -46,7 +47,8 @@ export const DescribeStreamConsumerLive = Layer.effect(
 
 export class DescribeStreamConsumerPolicy extends Binding.Policy<
   DescribeStreamConsumerPolicy,
-  (consumer: StreamConsumer) => Effect.Effect<void>
+  (consumer: StreamConsumer) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.DescribeStreamConsumer") {}
 
 export const DescribeStreamConsumerPolicyLive =

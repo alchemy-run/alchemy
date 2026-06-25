@@ -25,13 +25,13 @@ export const TestQueueLive = Layer.effect(
 
 export class QueueSinkFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "QueueSinkFunction",
+) {}
+
+export const QueueSinkFunctionLive = QueueSinkFunction.make(
   {
     main,
     url: true,
   },
-) {}
-
-export const QueueSinkFunctionLive = QueueSinkFunction.make(
   Effect.gen(function* () {
     const { queue } = yield* TestQueue;
     const sink = yield* AWS.SQS.QueueSink.bind(queue);

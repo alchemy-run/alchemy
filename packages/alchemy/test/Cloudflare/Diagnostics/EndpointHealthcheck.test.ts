@@ -81,7 +81,7 @@ test.provider(
 const cleanLeftovers = (accountId: string) =>
   diagnostics.listEndpointHealthchecks({ accountId }).pipe(
     Effect.flatMap(
-      Effect.fnUntraced(function* (list) {
+      Effect.fn(function* (list) {
         for (const hc of list) {
           if (hc.name?.startsWith("alchemy-diag-ehc") && hc.id) {
             yield* diagnostics

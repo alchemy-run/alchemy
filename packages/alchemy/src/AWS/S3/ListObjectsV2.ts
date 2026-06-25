@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListObjectsV2Request extends Omit<
   S3.ListObjectsV2Request,
@@ -44,7 +45,8 @@ export const ListObjectsV2Live = Layer.effect(
 
 export class ListObjectsV2Policy extends Binding.Policy<
   ListObjectsV2Policy,
-  (bucket: Bucket) => Effect.Effect<void>
+  (bucket: Bucket) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.ListObjectsV2") {}
 
 export const ListObjectsV2PolicyLive = ListObjectsV2Policy.layer.succeed(

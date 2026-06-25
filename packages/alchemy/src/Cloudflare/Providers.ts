@@ -7,9 +7,7 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
-import { Command } from "../Build/Command.ts";
-import { DevServer, DevServerProvider } from "../Build/DevServer.ts";
-import * as Build from "../Build/index.ts";
+import * as Command from "../Command/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -182,7 +180,6 @@ export const providers = () =>
       AiGateway.AiGatewayDynamicRouting,
       AiGateway.AiGatewayEvaluation,
       AiGateway.AiGatewayProviderConfig,
-      AiGateway.AiGatewaySpendingLimit,
       AiSearch.AiSearchInstance,
       AiSearch.AiSearchInstanceBindingPolicy,
       AiSearch.AiSearchNamespace,
@@ -216,9 +213,8 @@ export const providers = () =>
       ClientCertificate.ClientCertificate,
       CloudConnector.CloudConnectorRules,
       CloudforceOne.CloudforceOneScanConfig,
-      Command,
       Connectivity.DirectoryService,
-      Containers.Container,
+      Containers.ContainerPlatform,
       ContentScanning.ContentScanning,
       ContentScanning.ContentScanningExpression,
       CustomCertificates.CustomCertificate,
@@ -239,7 +235,6 @@ export const providers = () =>
       Devices.DevicePostureIntegration,
       Devices.DevicePostureRule,
       Devices.DeviceSettings,
-      DevServer,
       Diagnostics.EndpointHealthcheck,
       Dlp.DlpEntry,
       Dlp.DlpProfile,
@@ -298,7 +293,6 @@ export const providers = () =>
       KeylessCertificate.KeylessCertificate,
       KeyPair,
       KV.KVNamespace,
-      KV.KVNamespaceBindingPolicy,
       LeakedCredentialCheck.LeakedCredentialCheck,
       LeakedCredentialCheck.LeakedCredentialDetection,
       LoadBalancer.LoadBalancer,
@@ -342,12 +336,10 @@ export const providers = () =>
       Pipelines.PipelineSink,
       Pipelines.PipelineStream,
       Queue.Queue,
-      Queue.QueueBindingPolicy,
       Queue.QueueConsumer,
       Queue.QueueEventSourcePolicy,
       Queue.QueueSubscription,
       R2.R2Bucket,
-      R2.R2BucketBindingPolicy,
       R2.R2BucketEventNotification,
       R2.R2BucketSippy,
       R2DataCatalog.R2DataCatalog,
@@ -423,7 +415,6 @@ export const providers = () =>
       Workers.WorkersAccountSetting,
       Workers.WorkersSubdomain,
       WorkersForPlatforms.DispatchNamespace,
-      WorkersForPlatforms.DispatchNamespaceScript,
       Workflows.WorkflowResource,
       Zaraz.ZarazConfig,
       Zone.Zone,
@@ -439,7 +430,6 @@ export const providers = () =>
         AccessPol.AccessPolicyProvider(),
         AiGateway.AiGatewayBindingPolicyLive,
         AiGateway.AiGatewayProvider(),
-        AiGateway.AiGatewaySpendingLimitProvider(),
         AnalyticsEngine.AnalyticsEngineDatasetBindingPolicyLive,
         ApiToken.AccountApiTokenProvider(),
         ApiToken.UserApiTokenProvider(),
@@ -449,7 +439,6 @@ export const providers = () =>
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
         Devices.DeviceDefaultProfileProvider(),
-        DevServerProvider(),
         Dns.DnsReadPolicyLive,
         Dns.DnsReadWritePolicyLive,
         Dns.DnsRecordProvider(),
@@ -463,13 +452,10 @@ export const providers = () =>
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
         Images.ImagesBindingPolicyLive,
-        KV.KVNamespaceBindingPolicyLive,
         KV.KVNamespaceProvider(),
-        Queue.QueueBindingPolicyLive,
         Queue.QueueConsumerProvider(),
         Queue.QueueEventSourcePolicyLive,
         Queue.QueueProvider(),
-        R2.R2BucketBindingPolicyLive,
         R2.R2BucketProvider(),
         RateLimit.RateLimitBindingPolicyLive,
         Ruleset.RulesetProvider(),
@@ -527,7 +513,6 @@ export const providers = () =>
           AiGateway.AiGatewayEvaluationProvider(),
           AiGateway.AiGatewayProvider(),
           AiGateway.AiGatewayProviderConfigProvider(),
-          AiGateway.AiGatewaySpendingLimitProvider(),
           AiSearch.AiSearchInstanceBindingPolicyLive,
           AiSearch.AiSearchInstanceProvider(),
           AiSearch.AiSearchNamespaceBindingPolicyLive,
@@ -583,7 +568,6 @@ export const providers = () =>
           Devices.DevicePostureIntegrationProvider(),
           Devices.DevicePostureRuleProvider(),
           Devices.DeviceSettingsProvider(),
-          DevServerProvider(),
           Diagnostics.EndpointHealthcheckProvider(),
           Dlp.DlpEntryProvider(),
           Dlp.DlpProfileProvider(),
@@ -636,7 +620,6 @@ export const providers = () =>
         ),
         Layer.mergeAll(
           KeylessCertificate.KeylessCertificateProvider(),
-          KV.KVNamespaceBindingPolicyLive,
           KV.KVNamespaceProvider(),
           LeakedCredentialCheck.LeakedCredentialCheckProvider(),
           LeakedCredentialCheck.LeakedCredentialDetectionProvider(),
@@ -676,12 +659,10 @@ export const providers = () =>
           Pipelines.PipelineProvider(),
           Pipelines.PipelineSinkProvider(),
           Pipelines.PipelineStreamProvider(),
-          Queue.QueueBindingPolicyLive,
           Queue.QueueConsumerProvider(),
           Queue.QueueEventSourcePolicyLive,
           Queue.QueueProvider(),
           Queue.QueueSubscriptionProvider(),
-          R2.R2BucketBindingPolicyLive,
           R2.R2BucketEventNotificationProvider(),
           R2.R2BucketProvider(),
           R2.R2BucketSippyProvider(),
@@ -753,7 +734,6 @@ export const providers = () =>
           Workers.WorkersAccountSettingProvider(),
           Workers.WorkersSubdomainProvider(),
           WorkersForPlatforms.DispatchNamespaceProvider(),
-          WorkersForPlatforms.DispatchNamespaceScriptProvider(),
           Workflows.WorkflowProvider(),
           Zaraz.ZarazConfigProvider(),
           Zone.ZoneCustomNameserversProvider(),
@@ -779,7 +759,7 @@ export const providers = () =>
         LoadBalancer.LoadBalancerMonitorProvider(),
         LoadBalancer.LoadBalancerMonitorGroupProvider(),
         LoadBalancer.LoadBalancerPoolProvider(),
-        Build.CommandProvider(),
+        Command.providers(),
         KeyPairProvider(),
         RandomProvider(),
       ),
@@ -820,7 +800,7 @@ const cloudflareRetryFactory: Retry.Factory = (lastError) => {
     schedule: pipe(
       Schedule.exponential(Duration.millis(250), 2),
       Schedule.modifyDelay(
-        Effect.fnUntraced(function* (duration) {
+        Effect.fn(function* (duration) {
           const error = yield* Ref.get(lastError);
           // Throttling errors (429): honor a 500ms floor matching the
           // distilled default.

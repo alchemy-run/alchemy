@@ -8,6 +8,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Images as ImagesLike } from "./Images.ts";
+import type { Providers } from "../Providers.ts";
 
 export class ImagesError extends Data.TaggedError("ImagesError")<{
   message: string;
@@ -120,7 +121,8 @@ export const ImagesBindingLive = Layer.effect(
 
 export class ImagesBindingPolicy extends Binding.Policy<
   ImagesBindingPolicy,
-  (images: ImagesLike) => Effect.Effect<void>
+  (images: ImagesLike) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Images.Binding") {}
 
 export const ImagesBindingPolicyLive = ImagesBindingPolicy.layer.succeed(

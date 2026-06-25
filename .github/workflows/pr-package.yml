@@ -28,7 +28,7 @@ jobs:
       # `|| true` keeps the cp harmless in packages whose pkg dir is
       # nested differently or that don't need the root README.
       build-command: "cp ../../README.md . 2>/dev/null || true; bun run build"
-      # Every package's tsgo build pulls in the alchemy -> distilled
+      # Every package's tsc build pulls in the alchemy -> distilled
       # project-reference chain (distilled/aws is huge), so all three
       # need the larger runner — same as distilled's own CI.
       packages: |

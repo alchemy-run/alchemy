@@ -1,6 +1,6 @@
-import {
-  type CredentialsError,
-  type ResolvedCredentials,
+import type {
+  CredentialsError,
+  ResolvedCredentials,
 } from "@distilled.cloud/aws/Credentials";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -58,6 +58,7 @@ export class AWSEnvironment extends Context.Service<
   Effect.Effect<AWSEnvironmentShape>
 >()("AWS::Environment") {
   static current = AWSEnvironment.use((env) => env);
+  readonly kind = "Environment" as const;
 }
 
 export const Default = Layer.effect(

@@ -10,6 +10,7 @@ import {
 } from "./DnsBinding.ts";
 import { dnsReadClient, type DnsReadClient } from "./DnsRead.ts";
 import { dnsWriteClient, type DnsWriteClient } from "./DnsWrite.ts";
+import type { Providers } from "../Providers.ts";
 
 /** Combined read + write DNS record operations. */
 export interface DnsReadWriteClient extends DnsReadClient, DnsWriteClient {}
@@ -84,7 +85,8 @@ export class DnsReadWrite extends Binding.Service<
  */
 export class DnsReadWritePolicy extends Binding.Policy<
   DnsReadWritePolicy,
-  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
+  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.DnsReadWrite") {}
 
 /** Runtime layer for {@link DnsReadWrite}. */

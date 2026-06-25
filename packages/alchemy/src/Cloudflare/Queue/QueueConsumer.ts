@@ -236,7 +236,9 @@ export const QueueConsumerProviderLive = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const queueId = output?.queueId ?? (news.queueId as unknown as string);
+      // Only use `output.queueId` if it's a live ID (i.e. no `dev:` prefix).
+      // Otherwise, the lookup will fail because the request is malformed.
+      const queueId = isLiveId(output?.queueId) ? output.queueId : news.queueId;
 
       // Observe — prefer the cached consumerId, then fall back to
       // listConsumers (paginated) to recover from out-of-band

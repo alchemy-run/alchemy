@@ -8,6 +8,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Secret } from "./Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export class SecretError extends Data.TaggedError("SecretError")<{
   message: string;
@@ -85,7 +86,8 @@ export const SecretBindingLive = Layer.effect(
 
 export class SecretBindingPolicy extends Binding.Policy<
   SecretBindingPolicy,
-  (secret: Secret) => Effect.Effect<void>
+  (secret: Secret) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.SecretsStore.Secret") {}
 
 export const SecretBindingPolicyLive = SecretBindingPolicy.layer.succeed(

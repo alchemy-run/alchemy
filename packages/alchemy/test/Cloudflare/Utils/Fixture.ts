@@ -20,7 +20,7 @@ import * as Path from "effect/Path";
  *   of top-level entries. Defaults to copying everything in
  *   `sourceDir`.
  */
-export const cloneFixture = Effect.fnUntraced(function* (
+export const cloneFixture = Effect.fn(function* (
   sourceDir: string,
   options: {
     prefix: string;

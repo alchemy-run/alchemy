@@ -50,7 +50,7 @@ const getSetting = (zoneId: string) =>
   );
 
 // Both cases mutate the same zone-level Waiting Room settings singleton; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
-describe.sequential("Settings", () => {
+describe("Settings", () => {
   test.provider(
     "pins the settings to the default baseline without touching the API",
     (stack) =>

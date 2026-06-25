@@ -14,8 +14,8 @@ env:
   NODE_VERSION: "24"
 
 jobs:
-  docs-check:
-    runs-on: ubuntu-latest
+  check:
+    runs-on: ubuntu-22-large
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -37,5 +37,5 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - run: bun install
-      - run: bun tsgo -b
+      - run: bun tsc -b
       - run: bun run docs:check

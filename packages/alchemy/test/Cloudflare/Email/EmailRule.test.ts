@@ -89,7 +89,17 @@ describe.sequential("EmailRule", () => {
         expect(rule.ruleId).not.toEqual("");
 
         const provider = yield* Provider.findProvider(Cloudflare.EmailRule);
-        const all = yield* provider.list();
+        // The freshly-minted scoped token propagates eventually-consistently,
+        // so the account-wide enumeration intermittently 401s (`Unauthorized`,
+        // code 10000) or 403s (`Forbidden`). Both are transient here — ride
+        // out the blip like every other out-of-band call in this suite.
+        const all = yield* provider.list().pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+        );
 
         const row = all.find((r) => r.ruleId === rule.ruleId);
         expect(row).toBeDefined();

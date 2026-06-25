@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetShardIteratorRequest extends Omit<
   Kinesis.GetShardIteratorInput,
@@ -46,7 +47,8 @@ export const GetShardIteratorLive = Layer.effect(
 
 export class GetShardIteratorPolicy extends Binding.Policy<
   GetShardIteratorPolicy,
-  (stream: Stream) => Effect.Effect<void>
+  (stream: Stream) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.GetShardIterator") {}
 
 export const GetShardIteratorPolicyLive = GetShardIteratorPolicy.layer.succeed(

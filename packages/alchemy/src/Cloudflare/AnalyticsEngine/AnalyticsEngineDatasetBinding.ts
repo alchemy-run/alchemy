@@ -6,6 +6,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AnalyticsEngineDataset as AnalyticsEngineDatasetLike } from "./AnalyticsEngineDataset.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface AnalyticsEngineDataPoint {
   indexes?: string[];
@@ -49,7 +50,7 @@ export const AnalyticsEngineDatasetBindingLive = Layer.effect(
     const bind = yield* AnalyticsEngineDatasetBindingPolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fnUntraced(function* (dataset: AnalyticsEngineDatasetLike) {
+    return Effect.fn(function* (dataset: AnalyticsEngineDatasetLike) {
       yield* bind(dataset);
 
       const raw = Effect.sync(
@@ -79,12 +80,13 @@ export const AnalyticsEngineDatasetBindingLive = Layer.effect(
 
 export class AnalyticsEngineDatasetBindingPolicy extends Binding.Policy<
   AnalyticsEngineDatasetBindingPolicy,
-  (dataset: AnalyticsEngineDatasetLike) => Effect.Effect<void>
+  (dataset: AnalyticsEngineDatasetLike) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.AnalyticsEngineDataset.Binding") {}
 
 export const AnalyticsEngineDatasetBindingPolicyLive =
   AnalyticsEngineDatasetBindingPolicy.layer.succeed(
-    Effect.fnUntraced(function* (
+    Effect.fn(function* (
       host: ResourceLike,
       dataset: AnalyticsEngineDatasetLike,
     ) {

@@ -6,6 +6,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
 
@@ -59,7 +60,8 @@ export const PutObjectLive = Layer.effect(
 
 export class PutObjectPolicy extends Binding.Policy<
   PutObjectPolicy,
-  (bucket: Bucket) => Effect.Effect<void>
+  (bucket: Bucket) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.PutObject") {}
 
 export const PutObjectPolicyLive = PutObjectPolicy.layer.succeed(

@@ -1,5 +1,6 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -268,6 +269,35 @@ export const AccessApplication = Resource<AccessApplication>(
   "Cloudflare.Access.Application",
 );
 
+// Ride out the two transient failure modes Cloudflare's Access endpoints
+// exhibit under load:
+//
+//   - `AccessReferenceNotFound` (400 `policy <id> not found`): Access
+//     validates referenced entities (e.g. the `policies` an application gates
+//     on) synchronously, but a *freshly created* policy propagates
+//     eventually-consistently — so a create/update referencing it, or a list
+//     hydrating an app that references it, is briefly rejected. Distilled
+//     types this 400 distinctly (vs. a generic `BadRequest`) so we retry only
+//     this case and still fail fast on real bad requests.
+//   - `Forbidden` (403): Cloudflare frequently returns 403 when throttling a
+//     valid token rather than a dedicated rate-limit status, so a 403 here is
+//     a transient back-pressure signal, not an auth failure.
+//
+// Capped exponential, bounded to ride out the window (~45s) then fail.
+const retryTransientAccessError = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) =>
+        e._tag === "AccessReferenceNotFound" || e._tag === "Forbidden",
+      schedule: Schedule.exponential("1 second", 1.5).pipe(
+        Schedule.either(Schedule.spaced("5 seconds")),
+        Schedule.both(Schedule.recurs(12)),
+      ),
+    }),
+  );
+
 export const AccessApplicationProvider = () =>
   Provider.succeed(AccessApplication, {
     stables: ["applicationId", "aud", "type", "accountId"],
@@ -355,6 +385,9 @@ export const AccessApplicationProvider = () =>
                 : Array.from(body.destinations),
           })
           .pipe(
+            // A referenced policy may be propagating, or the call may be
+            // throttled (403) — ride out both before falling through.
+            retryTransientAccessError,
             // Distilled does not tag Conflict; surface any creation error
             // through the warp-singleton recovery path before re-failing.
             Effect.catch((err) =>
@@ -380,26 +413,30 @@ export const AccessApplicationProvider = () =>
         );
       }
       if (!bodyEqualsObserved(body, observed)) {
-        const updated = yield* zeroTrust.updateAccessApplicationForAccount({
-          accountId,
-          appId: observed.id,
-          domain: body.domain ?? observed.domain ?? "",
-          type: news.type,
-          name: resolvedName,
-          sessionDuration: body.sessionDuration,
-          allowedIdps:
-            body.allowedIdps === undefined
-              ? undefined
-              : Array.from(body.allowedIdps),
-          autoRedirectToIdentity: body.autoRedirectToIdentity,
-          appLauncherVisible: body.appLauncherVisible,
-          tags: body.tags === undefined ? undefined : Array.from(body.tags),
-          policies: toRequestPolicies(body.policies),
-          destinations:
-            body.destinations === undefined
-              ? undefined
-              : Array.from(body.destinations),
-        });
+        const updated = yield* zeroTrust
+          .updateAccessApplicationForAccount({
+            accountId,
+            appId: observed.id,
+            domain: body.domain ?? observed.domain ?? "",
+            type: news.type,
+            name: resolvedName,
+            sessionDuration: body.sessionDuration,
+            allowedIdps:
+              body.allowedIdps === undefined
+                ? undefined
+                : Array.from(body.allowedIdps),
+            autoRedirectToIdentity: body.autoRedirectToIdentity,
+            appLauncherVisible: body.appLauncherVisible,
+            tags: body.tags === undefined ? undefined : Array.from(body.tags),
+            policies: toRequestPolicies(body.policies),
+            destinations:
+              body.destinations === undefined
+                ? undefined
+                : Array.from(body.destinations),
+          })
+          // A just-added policy reference may still be propagating, or the
+          // call may be throttled (403) — ride out both.
+          .pipe(retryTransientAccessError);
         observed = narrowApp(updated as Parameters<typeof narrowApp>[0]);
       }
 
@@ -434,6 +471,12 @@ export const AccessApplicationProvider = () =>
         .pages({ accountId })
         .pipe(
           Stream.runCollect,
+          // The list hydrates each app's `policies`; Cloudflare rejects the
+          // whole enumeration with the typed `AccessReferenceNotFound` (400
+          // "policy ... not found") while a sibling app references a policy
+          // that is still propagating or mid-deletion, and 403s the call when
+          // throttling. Ride out both.
+          retryTransientAccessError,
           Effect.map((chunk) =>
             Array.from(chunk).flatMap((page) =>
               (page.result ?? []).flatMap((raw) => {

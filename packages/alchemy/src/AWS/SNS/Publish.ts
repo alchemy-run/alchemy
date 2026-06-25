@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PublishRequest extends Omit<
   sns.PublishInput,
@@ -43,7 +44,8 @@ export const PublishLive = Layer.effect(
 
 export class PublishPolicy extends Binding.Policy<
   PublishPolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.Publish") {}
 
 export const PublishPolicyLive = PublishPolicy.layer.succeed(

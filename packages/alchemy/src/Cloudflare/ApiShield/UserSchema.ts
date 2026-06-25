@@ -262,6 +262,11 @@ export const ApiShieldUserSchemaProvider = () =>
             Effect.catchTag("Forbidden", () =>
               Effect.succeed([] as ApiShieldUserSchemaAttributes[]),
             ),
+            // A zone purged (deleted) out-of-band mid-enumeration — it was in
+            // the zone list but no longer exists; drop it.
+            Effect.catchTag("ZonePurged", () =>
+              Effect.succeed([] as ApiShieldUserSchemaAttributes[]),
+            ),
           ),
         { concurrency: 10 },
       );

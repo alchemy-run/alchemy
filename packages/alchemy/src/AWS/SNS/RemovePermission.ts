@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface RemovePermissionRequest extends Omit<
   sns.RemovePermissionInput,
@@ -43,7 +44,8 @@ export const RemovePermissionLive = Layer.effect(
 
 export class RemovePermissionPolicy extends Binding.Policy<
   RemovePermissionPolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.RemovePermission") {}
 
 export const RemovePermissionPolicyLive = RemovePermissionPolicy.layer.succeed(

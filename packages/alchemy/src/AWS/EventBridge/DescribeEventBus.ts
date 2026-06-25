@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DescribeEventBusRequest extends Omit<
   eventbridge.DescribeEventBusRequest,
@@ -46,7 +47,8 @@ export const DescribeEventBusLive = Layer.effect(
 
 export class DescribeEventBusPolicy extends Binding.Policy<
   DescribeEventBusPolicy,
-  (bus: EventBus) => Effect.Effect<void>
+  (bus: EventBus) => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.DescribeEventBus") {}
 
 export const DescribeEventBusPolicyLive = DescribeEventBusPolicy.layer.succeed(

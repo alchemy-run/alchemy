@@ -6,13 +6,13 @@ const main = import.meta.filename;
 
 export class TestFunction extends Lambda.Function<Lambda.Function>()(
   "TestFunction",
+) {}
+
+export const TestFunctionLive = TestFunction.make(
   {
     main,
     url: true,
   },
-) {}
-
-export const TestFunctionLive = TestFunction.make(
   Effect.gen(function* () {
     return {
       fetch: Effect.gen(function* () {

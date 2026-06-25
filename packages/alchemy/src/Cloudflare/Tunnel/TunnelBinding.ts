@@ -1,14 +1,6 @@
-import {
-  Credentials,
-  fromApiToken,
-} from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
+import type * as Redacted from "effect/Redacted";
 import type * as Binding from "../../Binding.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -37,27 +29,6 @@ export const bindTunnelToken = (token: AccountApiToken) =>
     const accountId = yield* token.accountId;
     return { value, accountId } satisfies TunnelToken;
   });
-
-/**
- * Resolve credentials from a bound token and provide them (plus the
- * fetch-based HTTP client) to a raw SDK operation.
- */
-export const authorizeWith =
-  (token: TunnelToken) =>
-  <A, E>(
-    eff: Effect.Effect<A, E, Credentials | HttpClient>,
-  ): Effect.Effect<A, E, RuntimeContext> =>
-    token.value.pipe(
-      Effect.flatMap((value) =>
-        eff.pipe(
-          Effect.provide(
-            fromApiToken({ apiToken: Redacted.value(value) }).pipe(
-              Layer.provideMerge(FetchHttpClient.layer),
-            ),
-          ),
-        ),
-      ),
-    );
 
 /**
  * Shared runtime body for a tunnel binding: create a scoped token, attach the

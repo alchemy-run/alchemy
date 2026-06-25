@@ -108,17 +108,27 @@ test(
     const out = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
+    // The AI-Gateway-backed model can answer 200 with an empty SSE on a cold
+    // or transient call (no tokens streamed), which `filterStatusOk` does not
+    // catch. Fold the parse into the retried effect and fail on an empty /
+    // unfinished stream so the same backoff rides out the blip.
+    const parts = yield* client
       .get(`${out.url}/stream?prompt=${encodeURIComponent("Say pong.")}`)
       .pipe(
+        Effect.flatMap((res) => res.text),
+        Effect.map(parseSse),
+        Effect.flatMap((parts) =>
+          parts.some((p) => p.type === "text-delta") &&
+          parts.some((p) => p.type === "finish")
+            ? Effect.succeed(parts)
+            : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
+        ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
           times: 10,
         }),
       );
-    expect(res.status).toBe(200);
 
-    const parts = parseSse(yield* res.text);
     const text = parts
       .filter((p) => p.type === "text-delta")
       .map((p) => p.delta ?? "")
@@ -138,17 +148,25 @@ test(
     const out = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
+    // Same cold/transient empty-SSE hazard as above — retry until the stream
+    // actually carries the structural parts this test asserts ordering over.
+    const parts = yield* client
       .get(`${out.url}/stream?prompt=${encodeURIComponent("Say pong.")}`)
       .pipe(
+        Effect.flatMap((res) => res.text),
+        Effect.map(parseSse),
+        Effect.flatMap((parts) =>
+          parts.some((p) => p.type === "text-delta") &&
+          parts.some((p) => p.type === "finish")
+            ? Effect.succeed(parts)
+            : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
+        ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
           times: 10,
         }),
       );
-    expect(res.status).toBe(200);
 
-    const parts = parseSse(yield* res.text);
     const indexOfType = (type: string) =>
       parts.findIndex((p) => p.type === type);
     const lastIndexOfType = (type: string) => {

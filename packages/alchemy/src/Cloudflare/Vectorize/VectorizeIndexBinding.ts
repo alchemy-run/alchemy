@@ -6,6 +6,7 @@ import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { VectorizeIndex } from "./VectorizeIndex.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface VectorizeIndexClient {
   /**
@@ -83,7 +84,8 @@ export const VectorizeIndexBindingLive = Layer.effect(
 
 export class VectorizeIndexBindingPolicy extends Binding.Policy<
   VectorizeIndexBindingPolicy,
-  (index: VectorizeIndex) => Effect.Effect<void>
+  (index: VectorizeIndex) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Vectorize.IndexBinding") {}
 
 export const VectorizeIndexBindingPolicyLive =

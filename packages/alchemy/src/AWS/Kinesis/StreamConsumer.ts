@@ -301,6 +301,18 @@ export const StreamConsumerProvider = () =>
             Tags: desiredTags,
           })
           .pipe(
+            // The upstream Stream provider waits for ACTIVE via
+            // describeStreamSummary, but the consumer-registry control plane
+            // is eventually consistent against that: registerStreamConsumer
+            // can briefly 404 ("Stream ... not found") for a stream that
+            // describeStreamSummary already reports ACTIVE. Ride out that
+            // propagation window before giving up.
+            Effect.retry({
+              while: (e) => e._tag === "ResourceNotFoundException",
+              schedule: Schedule.exponential(500).pipe(
+                Schedule.both(Schedule.recurs(8)),
+              ),
+            }),
             Effect.asVoid,
             Effect.catchTag("ResourceInUseException", () =>
               adoptExistingConsumer(streamArn, consumerName).pipe(

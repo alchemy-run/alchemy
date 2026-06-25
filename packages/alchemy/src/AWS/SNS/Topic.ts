@@ -434,6 +434,13 @@ const readTopic = Effect.fn(function* ({
     Effect.catchTag("InvalidParameterException", () =>
       Effect.succeed(undefined),
     ),
+    // `list()` hydrates every topic in the account, so a topic deleted by a
+    // parallel test between enumeration and hydration surfaces here —
+    // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
+    // vanished topic as "not present" rather than failing the whole listing.
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed(undefined),
+    ),
   );
 
   if (!topicState) {

@@ -17,8 +17,8 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "S3EventSource");
 
-// Lambda function URL cold-start (DNS, IAM propagation, init) can take well
-// over a minute on a fresh deploy under parallel-suite load. Budget ~150s.
+// Lambda function URL cold-start plus IAM propagation can take well over a
+// minute on a fresh deploy under parallel-suite load. Budget ~150s.
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
   Schedule.both(Schedule.recurs(75)),
 );
@@ -53,7 +53,16 @@ describe("S3 Bucket Event Source", () => {
         Effect.flatMap((response) =>
           response.status === 404 || response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+            : response.text.pipe(
+                Effect.flatMap((body) =>
+                  Effect.fail(
+                    new FunctionNotReady({
+                      status: response.status,
+                      body,
+                    }),
+                  ),
+                ),
+              ),
         ),
         Effect.tapError((error) =>
           Effect.logWarning(
@@ -128,3 +137,8 @@ interface ProcessedRecord {
 }
 
 class ProcessedNotReady extends Data.TaggedError("ProcessedNotReady") {}
+
+class FunctionNotReady extends Data.TaggedError("FunctionNotReady")<{
+  readonly status: number;
+  readonly body: string;
+}> {}

@@ -328,7 +328,7 @@ export const VpcEndpointProvider = () =>
         );
       // const { accountId, region } = yield* AWSEnvironment.current;
 
-      const toAttrs = Effect.fnUntraced(function* (ep: ec2.VpcEndpoint) {
+      const toAttrs = Effect.fn(function* (ep: ec2.VpcEndpoint) {
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
           vpcEndpointId: ep.VpcEndpointId as VpcEndpointId,

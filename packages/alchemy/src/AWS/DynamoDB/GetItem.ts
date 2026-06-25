@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetItemRequest extends Omit<
   DynamoDB.GetItemInput,
@@ -61,7 +62,8 @@ export const GetItemLive = Layer.effect(
 
 export class GetItemPolicy extends Binding.Policy<
   GetItemPolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>
+  <T extends Table>(table: T) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.GetItem") {}
 
 export const GetItemPolicyLive = GetItemPolicy.layer.succeed(

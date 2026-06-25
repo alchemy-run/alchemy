@@ -14,6 +14,7 @@ import {
 import { Webhook } from "../../GitHub/Webhook.ts";
 import * as Output from "../../Output.ts";
 import { isWorker, isWorkerEvent, Worker } from "./Worker.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Deploy-time half of the GitHub event source for Cloudflare Workers.
@@ -28,7 +29,8 @@ import { isWorker, isWorkerEvent, Worker } from "./Worker.ts";
  */
 export class GitHubRepositoryEventSourcePolicy extends Binding.Policy<
   GitHubRepositoryEventSourcePolicy,
-  (props: RepositoryEventSourceProps) => Effect.Effect<void>
+  (props: RepositoryEventSourceProps) => Effect.Effect<void>,
+  Providers
 >()("GitHub.RepositoryEventSourcePolicy") {}
 
 export const GitHubRepositoryEventSourcePolicyLive =

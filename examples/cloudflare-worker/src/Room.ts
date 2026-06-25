@@ -11,9 +11,8 @@ import * as Effect from "effect/Effect";
 export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
   "Rooms",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
@@ -47,7 +46,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
               yield* broadcast(`[reminder] ${payload.message}`);
             }
           }),
-        webSocketMessage: Effect.fnUntraced(function* (
+        webSocketMessage: Effect.fn(function* (
           socket: Cloudflare.DurableWebSocket,
           message: string | ArrayBuffer,
         ) {
@@ -76,7 +75,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
             yield* peer.send(`[${label}] ${text}`);
           }
         }),
-        webSocketClose: Effect.fnUntraced(function* (
+        webSocketClose: Effect.fn(function* (
           ws: Cloudflare.DurableWebSocket,
           code: number,
           reason: string,

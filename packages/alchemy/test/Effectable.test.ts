@@ -2,7 +2,6 @@ import * as Binding from "@/Binding";
 import { Browser } from "@/Cloudflare/Browser/Browser.ts";
 import { Images } from "@/Cloudflare/Images/Images.ts";
 import { RateLimit } from "@/Cloudflare/RateLimit/RateLimit.ts";
-import { DynamicWorkerLoader } from "@/Cloudflare/Workers/DynamicWorkerLoader.ts";
 import { VersionMetadata } from "@/Cloudflare/Workers/VersionMetadata.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import { Resource } from "@/Resource";
@@ -93,7 +92,6 @@ describe("Effectable: deliberate non-Effect binding markers", () => {
     ],
     ["Browser", Browser({})],
     ["VersionMetadata", VersionMetadata({})],
-    ["DynamicWorkerLoader", DynamicWorkerLoader()],
   ];
 
   for (const [name, marker] of markers) {

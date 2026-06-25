@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { AlarmResource } from "./binding-common.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface SetAlarmStateRequest extends Omit<
   cloudwatch.SetAlarmStateInput,
@@ -50,7 +51,8 @@ export const SetAlarmStateLive = Layer.effect(
 
 export class SetAlarmStatePolicy extends Binding.Policy<
   SetAlarmStatePolicy,
-  (alarm: AlarmResource) => Effect.Effect<void>
+  (alarm: AlarmResource) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.SetAlarmState") {}
 
 export const SetAlarmStatePolicyLive = SetAlarmStatePolicy.layer.succeed(

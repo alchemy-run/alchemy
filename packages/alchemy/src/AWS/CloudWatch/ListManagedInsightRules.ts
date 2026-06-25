@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListManagedInsightRulesRequest
   extends cloudwatch.ListManagedInsightRulesInput {}
@@ -42,7 +43,8 @@ export const ListManagedInsightRulesLive = Layer.effect(
 
 export class ListManagedInsightRulesPolicy extends Binding.Policy<
   ListManagedInsightRulesPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.ListManagedInsightRules") {}
 
 export const ListManagedInsightRulesPolicyLive =

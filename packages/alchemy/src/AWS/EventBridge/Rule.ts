@@ -377,10 +377,27 @@ export const RuleProvider = () =>
                   }[] = [];
                   let ruleToken: string | undefined;
                   do {
-                    const page = yield* eventbridge.listRules({
-                      EventBusName: eventBusParam,
-                      NextToken: ruleToken,
-                    });
+                    // A peer reconciler may delete an event bus between our
+                    // `listEventBuses` snapshot and this `listRules` call —
+                    // treat a vanished bus as contributing zero rules rather
+                    // than failing the whole enumeration.
+                    const page = yield* eventbridge
+                      .listRules({
+                        EventBusName: eventBusParam,
+                        NextToken: ruleToken,
+                      })
+                      .pipe(
+                        Effect.catchTag("ResourceNotFoundException", () =>
+                          Effect.succeed(
+                            undefined as
+                              | eventbridge.ListRulesResponse
+                              | undefined,
+                          ),
+                        ),
+                      );
+                    if (!page) {
+                      break;
+                    }
                     for (const rule of page.Rules ?? []) {
                       if (!rule.Name) {
                         continue;

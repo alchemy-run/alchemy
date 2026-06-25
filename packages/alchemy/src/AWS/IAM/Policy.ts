@@ -225,7 +225,14 @@ export const PolicyProvider = () =>
                     policyDocument,
                     tags: toTagRecord(tags.Tags),
                   };
-                }),
+                }).pipe(
+                  // A peer test may delete a policy between `listPolicies` and
+                  // hydrating its tags/version — skip the vanished entry rather
+                  // than failing the whole enumeration.
+                  Effect.catchTag("NoSuchEntityException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
               { concurrency: 10 },
             );
             return rows.filter(

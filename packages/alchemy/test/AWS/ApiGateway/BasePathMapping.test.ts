@@ -17,21 +17,23 @@ const { test } = Test.make({ providers: AWS.providers() });
 const testDomainName = process.env.AWS_TEST_APIGATEWAY_DOMAIN;
 const testCertificateArn = process.env.AWS_TEST_ACM_CERTIFICATE_ARN;
 
-test.provider("list enumerates base path mappings across domains", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(BasePathMapping);
-    const all = yield* provider.list();
+test.provider.skipIf(!!process.env.FAST)(
+  "list enumerates base path mappings across domains",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(BasePathMapping);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const m of all) {
-      expect(typeof m.domainName).toBe("string");
-      expect(typeof m.basePath).toBe("string");
-      expect(typeof m.restApiId).toBe("string");
-    }
-  }),
+      expect(Array.isArray(all)).toBe(true);
+      for (const m of all) {
+        expect(typeof m.domainName).toBe("string");
+        expect(typeof m.basePath).toBe("string");
+        expect(typeof m.restApiId).toBe("string");
+      }
+    }),
 );
 
-test.provider.skipIf(!testDomainName || !testCertificateArn)(
+test.provider.skipIf(!!process.env.FAST)(
   "list includes a deployed base path mapping",
   (stack) =>
     Effect.gen(function* () {

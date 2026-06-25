@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetMetricStatisticsRequest
   extends cloudwatch.GetMetricStatisticsInput {}
@@ -40,7 +41,8 @@ export const GetMetricStatisticsLive = Layer.effect(
 
 export class GetMetricStatisticsPolicy extends Binding.Policy<
   GetMetricStatisticsPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.GetMetricStatistics") {}
 
 export const GetMetricStatisticsPolicyLive =

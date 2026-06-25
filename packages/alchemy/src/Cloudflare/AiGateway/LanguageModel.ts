@@ -507,9 +507,7 @@ const tryParseJsonArgs = (raw: unknown): unknown => {
   }
 };
 
-const parseGenerateText = Effect.fnUntraced(function* (
-  raw: Record<string, unknown>,
-) {
+const parseGenerateText = Effect.fn(function* (raw: Record<string, unknown>) {
   const idGen = yield* IdGenerator.IdGenerator;
   const decoded = decodeResponse(raw);
 

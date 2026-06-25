@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface CreateMultipartUploadRequest extends Omit<
   S3.CreateMultipartUploadRequest,
@@ -47,7 +48,8 @@ export const CreateMultipartUploadLive = Layer.effect(
 
 export class CreateMultipartUploadPolicy extends Binding.Policy<
   CreateMultipartUploadPolicy,
-  (bucket: Bucket) => Effect.Effect<void>
+  (bucket: Bucket) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.CreateMultipartUpload") {}
 
 export const CreateMultipartUploadPolicyLive =

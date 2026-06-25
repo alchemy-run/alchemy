@@ -1,6 +1,7 @@
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
@@ -105,6 +106,14 @@ export const ZoneHold = Resource<ZoneHold>(ZoneHoldTypeId);
 export const isZoneHold = (value: unknown): value is ZoneHold =>
   Predicate.hasProperty(value, "Type") && value.Type === ZoneHoldTypeId;
 
+// Cloudflare can transiently fail to authenticate a valid token, surfacing as
+// `Forbidden`. Retry with exponential backoff capped at 5s, bounded to ~8
+// attempts so a persistently-unauthorized call still fails fast.
+const forbiddenRetrySchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("5 seconds")),
+  Schedule.both(Schedule.recurs(8)),
+);
+
 export const ZoneHoldProvider = () =>
   Provider.succeed(ZoneHold, {
     stables: ["zoneId"],
@@ -119,6 +128,15 @@ export const ZoneHoldProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           zones.getHold({ zoneId }).pipe(
+            // Cloudflare intermittently rejects a *valid* token with
+            // `Forbidden` (a transient edge auth failure). It is retryable —
+            // back off and try again rather than dropping the zone, so a
+            // genuinely accessible zone (e.g. the standing test zone) never
+            // silently falls out of the enumeration on a blip.
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: forbiddenRetrySchedule,
+            }),
             Effect.map((observed) => toAttributes(zoneId, observed)),
             // Zone deleted out-of-band mid-enumeration — drop it.
             Effect.catchTag("InvalidZoneIdentifier", () =>

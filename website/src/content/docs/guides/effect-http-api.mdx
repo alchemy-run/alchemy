@@ -142,7 +142,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-+   const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
++   const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
 
     return {};
   }),
@@ -150,7 +150,7 @@ export default Cloudflare.Worker(
 ```
 
 We'll provide the runtime side of this binding
-(`Cloudflare.R2BucketBindingLive`) in step 3c when we wire up the
+(`Cloudflare.R2.ReadWriteBucketBinding`) in step 3c when we wire up the
 `fetch` handler.
 
 ### 3b. Construct the handler group inside Init
@@ -167,7 +167,7 @@ safe to call inside Init.
 ```typescript twoslash
 // @noErrors
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
 
 +   const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
 +     handlers
@@ -283,7 +283,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
 
     const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
       handlers
@@ -325,7 +325,7 @@ export default Cloudflare.Worker(
         HttpRouter.toHttpEffect,
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
 
@@ -470,9 +470,8 @@ import { Task } from "./task.ts";
 export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       const tasksGroup = HttpApiBuilder.group(TaskDOApi, "TasksDO", (handlers) =>
         handlers
           .handle("getTask", ({ path }) =>
@@ -514,7 +513,7 @@ under the hood:
 +import TasksObject, { TaskDOApi } from "./object.ts";
 
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
 +   const tasksDO = yield* TasksObject;
 +
 +   const getTaskDOClient = (id: string = "default") =>

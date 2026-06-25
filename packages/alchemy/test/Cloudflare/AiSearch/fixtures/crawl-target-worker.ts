@@ -14,10 +14,13 @@ const page = (title: string, body: string) =>
  * domain the account owns, so it can seed an AI Search web-crawler instance
  * (which rejects domains the account hasn't verified).
  *
- * The instance uses `parseType: "crawl"` to walk pages from the seed. We avoid
- * the default `sitemap` parse because Cloudflare validates the sitemap
- * synchronously at create time and discovers it via `robots.txt`, which a
- * freshly-deployed `workers.dev` URL doesn't serve reliably in time.
+ * It serves both a `robots.txt` (advertising the sitemap) and a `sitemap.xml`
+ * listing every page, plus inline links between pages. Cloudflare validates a
+ * web-crawler seed synchronously at create time and rejects with
+ * `missing_sitemap` if it finds no content — which happened intermittently
+ * when relying on link-discovery alone against a freshly-deployed
+ * `workers.dev` URL. Serving a real sitemap (and `robots.txt` pointing at it)
+ * makes the seed valid no matter which discovery path Cloudflare takes.
  */
 export default class AiSearchCrawlTargetWorker extends Cloudflare.Worker<AiSearchCrawlTargetWorker>()(
   "AiSearchCrawlTargetWorker",
@@ -28,9 +31,31 @@ export default class AiSearchCrawlTargetWorker extends Cloudflare.Worker<AiSearc
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const { pathname } = new URL(request.url);
+        // `HttpServerRequest.url` is the request path (e.g. `/docs`), not an
+        // absolute URL — `new URL(request.url)` would throw and 500. Match on
+        // the path prefix directly. Build absolute URLs from the `Host`
+        // header so the sitemap works behind the dynamic `workers.dev` host.
+        const host = request.headers.host ?? "localhost";
+        const origin = `https://${host}`;
 
-        if (pathname === "/docs") {
+        if (request.url.startsWith("/robots.txt")) {
+          return HttpServerResponse.text(
+            `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`,
+          );
+        }
+
+        if (request.url.startsWith("/sitemap.xml")) {
+          return HttpServerResponse.text(
+            `<?xml version="1.0" encoding="UTF-8"?>` +
+              `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
+              `<url><loc>${origin}/</loc></url>` +
+              `<url><loc>${origin}/docs</loc></url>` +
+              `</urlset>`,
+            { headers: { "content-type": "application/xml" } },
+          );
+        }
+
+        if (request.url.startsWith("/docs")) {
           return page(
             "Docs",
             "<h1>Alchemy docs</h1><p>Indexable documentation content.</p>",

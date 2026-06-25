@@ -275,47 +275,58 @@ test.provider("recreates a flag after out-of-band delete", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider("list enumerates the deployed flag", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed flag",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("ListApp", {
-          name: "alchemy-test-flagship-list",
-        });
-        const flag = yield* Cloudflare.FlagshipFlag("ListFlag", {
-          appId: app.appId,
-          key: "alchemy-test-flag-list",
-          defaultVariation: "off",
-          variations: { off: false, on: true },
-        });
-        return { app, flag };
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* Cloudflare.FlagshipApp("ListApp", {
+            name: "alchemy-test-flagship-list",
+          });
+          const flag = yield* Cloudflare.FlagshipFlag("ListFlag", {
+            appId: app.appId,
+            key: "alchemy-test-flag-list",
+            defaultVariation: "off",
+            variations: { off: false, on: true },
+          });
+          return { app, flag };
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Cloudflare.FlagshipFlag);
+      const provider = yield* Provider.findProvider(Cloudflare.FlagshipFlag);
 
-    // A freshly-deployed flag is eventually consistent in the account-wide
-    // list(); poll until it appears before asserting.
-    const all = yield* poll({
-      description: "list() includes the deployed flag",
-      effect: provider.list(),
-      predicate: (all) =>
+      // The flag itself is readable immediately (see the other tests' direct
+      // `getAppFlag` right after deploy). What lags is the account-wide
+      // `list()` path: the provider has no account-wide flag enumeration, so it
+      // goes `listApps -> listAppFlags`, and a freshly-created app appears in
+      // the account-wide `listApps` slower than the flag does under its own
+      // parent. Poll the full path until that app-list consistency catches up.
+      const all = yield* poll({
+        description: "list() includes the deployed flag",
+        effect: provider.list(),
+        predicate: (all) =>
+          all.some(
+            (f) =>
+              f.appId === deployed.app.appId && f.key === deployed.flag.key,
+          ),
+        schedule: Schedule.spaced("3 seconds").pipe(
+          Schedule.both(Schedule.recurs(30)),
+        ),
+      });
+
+      expect(
         all.some(
           (f) => f.appId === deployed.app.appId && f.key === deployed.flag.key,
         ),
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
-    });
+      ).toBe(true);
 
-    expect(
-      all.some(
-        (f) => f.appId === deployed.app.appId && f.key === deployed.flag.key,
-      ),
-    ).toBe(true);
-
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  // The `listApps` consistency poll above is bounded at ~90s (30 x 3s) plus
+  // per-iteration `list()` latency, on top of two deploys; size the test over
+  // that bounded worst case rather than the 120s default.
+  { timeout: 180_000 },
 );

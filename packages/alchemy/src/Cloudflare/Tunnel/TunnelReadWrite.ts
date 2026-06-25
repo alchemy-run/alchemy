@@ -11,6 +11,7 @@ import {
 } from "./TunnelBinding.ts";
 import { readClient, type TunnelReadClient } from "./TunnelRead.ts";
 import { writeClient, type TunnelWriteClient } from "./TunnelWrite.ts";
+import type { Providers } from "../Providers.ts";
 
 /** Combined read + write tunnel operations. */
 export interface TunnelReadWriteClient
@@ -78,7 +79,8 @@ export class TunnelReadWrite extends Binding.Service<
  */
 export class TunnelReadWritePolicy extends Binding.Policy<
   TunnelReadWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>
+  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>,
+  Providers
 >()("Cloudflare.TunnelReadWrite") {}
 
 /** Runtime layer for {@link TunnelReadWrite}. */

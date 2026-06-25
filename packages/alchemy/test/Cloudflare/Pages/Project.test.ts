@@ -125,7 +125,7 @@ test.provider("update mutable props in place (same project id)", (stack) =>
 
     const observed = yield* getProject(accountId, NAME_UPDATE);
     expect(observed.buildConfig?.buildCommand).toEqual("npm run build");
-    expect(observed.deploymentConfigs.production.envVars).toMatchObject({
+    expect(observed.deploymentConfigs.production?.envVars).toMatchObject({
       FOO: { value: "foo-v1" },
       DROP_ME: { value: "going-away" },
     });
@@ -160,15 +160,15 @@ test.provider("update mutable props in place (same project id)", (stack) =>
     expect(live.productionBranch).toEqual("develop");
     expect(live.buildConfig?.buildCommand).toEqual("npm run build:v2");
     expect(live.buildConfig?.destinationDir).toEqual("out");
-    expect(live.deploymentConfigs.production.compatibilityDate).toEqual(
+    expect(live.deploymentConfigs.production?.compatibilityDate).toEqual(
       "2025-06-01",
     );
-    expect(live.deploymentConfigs.production.envVars).toMatchObject({
+    expect(live.deploymentConfigs.production?.envVars).toMatchObject({
       FOO: { value: "foo-v2" },
       BAR: { value: "bar-v1" },
     });
     // PATCH deep-merges — the reconciler must null out removed env vars.
-    expect(live.deploymentConfigs.production.envVars).not.toHaveProperty(
+    expect(live.deploymentConfigs.production?.envVars).not.toHaveProperty(
       "DROP_ME",
     );
 

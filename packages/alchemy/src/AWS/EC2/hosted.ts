@@ -187,7 +187,7 @@ export const createEc2HostedSupport = ({
     const realMain = yield* fs.realPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
 
-    const buildBundle = Effect.fnUntraced(function* (
+    const buildBundle = Effect.fn(function* (
       entry: string,
       plugins?: rolldown.RolldownPluginOption,
     ) {
@@ -292,7 +292,7 @@ await Effect.runPromise(program);
       .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
       .join("\n");
 
-  const renderHostedUserData = Effect.fnUntraced(function* ({
+  const renderHostedUserData = Effect.fn(function* ({
     unitName,
     bundleKey,
     envKey,

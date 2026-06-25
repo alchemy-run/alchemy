@@ -105,7 +105,7 @@ const bootstrapCommand = Command.make(
       "alchemy.worker_name": a.workerName ?? "",
     }),
   )(
-    Effect.fnUntraced(function* ({ envFile, profile, force, workerName }) {
+    Effect.fn(function* ({ envFile, profile, force, workerName }) {
       const services = yield* cloudflareLayers(envFile, profile);
       yield* bootstrapCloudflare({
         workerName,
@@ -290,7 +290,7 @@ const createTokenCommand = Command.make(
       "alchemy.all_permissions": a.allPermissions,
     }),
   )(
-    Effect.fnUntraced(function* ({ envFile, allPermissions, name, accountId }) {
+    Effect.fn(function* ({ envFile, allPermissions, name, accountId }) {
       const configProvider = ConfigProvider.layer(
         yield* loadConfigProvider(envFile),
       );
@@ -552,14 +552,7 @@ const stateLogsCommand = Command.make(
       "alchemy.limit": a.limit,
     }),
   )(
-    Effect.fnUntraced(function* ({
-      envFile,
-      profile,
-      workerName,
-      tail,
-      limit,
-      since,
-    }) {
+    Effect.fn(function* ({ envFile, profile, workerName, tail, limit, since }) {
       const services = yield* cloudflareLayers(envFile, profile);
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
 

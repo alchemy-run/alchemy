@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Runtime binding for `secretsmanager:GetRandomPassword`.
@@ -39,7 +40,8 @@ export const GetRandomPasswordLive = Layer.effect(
 
 export class GetRandomPasswordPolicy extends Binding.Policy<
   GetRandomPasswordPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.SecretsManager.GetRandomPassword") {}
 
 export const GetRandomPasswordPolicyLive =

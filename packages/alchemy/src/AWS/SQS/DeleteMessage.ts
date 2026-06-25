@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DeleteMessageRequest extends Omit<
   sqs.DeleteMessageRequest,
@@ -44,7 +45,8 @@ export const DeleteMessageLive = Layer.effect(
 
 export class DeleteMessagePolicy extends Binding.Policy<
   DeleteMessagePolicy,
-  (queue: Queue) => Effect.Effect<void>
+  (queue: Queue) => Effect.Effect<void>,
+  Providers
 >()("AWS.SQS.DeleteMessage") {}
 
 export const DeleteMessagePolicyLive = DeleteMessagePolicy.layer.succeed(

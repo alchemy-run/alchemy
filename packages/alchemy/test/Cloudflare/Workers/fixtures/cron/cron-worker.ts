@@ -11,8 +11,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export class CronCounter extends Cloudflare.DurableObjectNamespace<CronCounter>()(
   "CronCounter",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       let times = (yield* state.storage.get<number[]>("times")) ?? [];
       return {
         record: Effect.fn(function* (time: number) {

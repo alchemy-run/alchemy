@@ -40,27 +40,11 @@ test(
   }),
 );
 
-// workers.dev subdomain takes a few seconds to propagate after first
-// enable; retry until the worker actually answers.
-const getOnce = (url: string) =>
-  Effect.gen(function* () {
-    const response = yield* HttpClient.get(url);
-    if (response.status === 404) {
-      return yield* Effect.fail(new Error("workers.dev not yet propagated"));
-    }
-    if (response.status >= 500) {
-      const body = yield* response.text;
-      return yield* Effect.fail(
-        new Error(`worker not ready yet (status ${response.status}): ${body}`),
-      );
-    }
-    return response;
-  }).pipe(
-    Effect.tapError((err) =>
-      Effect.logError(`${url} not available: ${err.message}`),
-    ),
-    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
-  );
+// Fresh `workers.dev` URLs transiently 404 (route still propagating) or 5xx
+// (Hyperdrive/PlanetScale binding still settling). `Test.getWhenReady` fails on
+// that cold-start window and retries until the worker answers; the first hit in
+// each test rides it, subsequent requests run against the warmed worker.
+const { getWhenReady } = Test;
 
 test(
   "worker exposes user CRUD through Drizzle / Hyperdrive / PlanetScale",
@@ -68,7 +52,7 @@ test(
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
 
-    const initialResponse = yield* getOnce(baseUrl);
+    const initialResponse = yield* getWhenReady(baseUrl);
     expect(initialResponse.status).toBe(200);
 
     const initialBody = (yield* initialResponse.json) as unknown as {
@@ -151,7 +135,7 @@ test(
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
 
-    yield* getOnce(baseUrl);
+    yield* getWhenReady(baseUrl);
 
     const queryOnce = Effect.gen(function* () {
       const response = yield* HttpClient.get(baseUrl);
