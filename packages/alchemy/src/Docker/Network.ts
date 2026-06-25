@@ -71,27 +71,6 @@ export interface Network extends Resource<
  */
 export const Network = Resource<Network>("Docker.Network");
 
-const networkName = (id: string, props: NetworkProps, instanceId: string) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        instanceId,
-        maxLength: 128,
-        lowercase: true,
-      });
-
-export const toNetworkAttributes = (
-  info: NetworkInfo,
-): Network["Attributes"] => ({
-  id: info.Id,
-  name: info.Name,
-  driver: info.Driver,
-  enableIPv6: info.EnableIPv6,
-  labels: info.Labels ?? {},
-  createdAt: Date.parse(info.Created) || Date.now(),
-});
-
 export const NetworkProvider = () =>
   Provider.succeed(Network, {
     list: () => Effect.succeed([]),
@@ -153,3 +132,24 @@ export const NetworkProvider = () =>
       yield* removeNetwork(output.id);
     }),
   });
+
+const networkName = (id: string, props: NetworkProps, instanceId: string) =>
+  props.name
+    ? Effect.succeed(props.name)
+    : createPhysicalName({
+        id,
+        instanceId,
+        maxLength: 128,
+        lowercase: true,
+      });
+
+export const toNetworkAttributes = (
+  info: NetworkInfo,
+): Network["Attributes"] => ({
+  id: info.Id,
+  name: info.Name,
+  driver: info.Driver,
+  enableIPv6: info.EnableIPv6,
+  labels: info.Labels ?? {},
+  createdAt: Date.parse(info.Created) || Date.now(),
+});

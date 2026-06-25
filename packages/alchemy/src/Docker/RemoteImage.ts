@@ -66,9 +66,6 @@ export interface RemoteImage extends Resource<
  */
 export const RemoteImage = Resource<RemoteImage>("Docker.RemoteImage");
 
-export const remoteImageRef = (props: RemoteImageProps): string =>
-  `${props.name}:${props.tag ?? "latest"}`;
-
 export const RemoteImageProvider = () =>
   Provider.succeed(RemoteImage, {
     list: () => Effect.succeed([]),
@@ -110,3 +107,6 @@ export const RemoteImageProvider = () =>
       // unrelated local stacks or developer workflows.
     }),
   });
+
+export const remoteImageRef = (props: RemoteImageProps): string =>
+  `${props.name}:${props.tag ?? "latest"}`;

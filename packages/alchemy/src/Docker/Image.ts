@@ -156,99 +156,6 @@ export interface Image extends Resource<
  */
 export const Image = Resource<Image>("Docker.Image");
 
-const imageSourceRef = (source: ImageSource): string =>
-  typeof source === "string" ? source : source.imageRef;
-
-const imageSourceName = (source: ImageSource): string | undefined =>
-  typeof source === "string"
-    ? repositoryFromImageRef(source)
-    : (source.name ?? repositoryFromImageRef(source.imageRef));
-
-const isLocalImageSource = (source: ImageSource): boolean =>
-  typeof source !== "string" && source.kind === "Image";
-
-const hasBuild = (
-  props: ImageProps,
-): props is Extract<ImageProps, { build: DockerBuildOptions }> =>
-  "build" in props && props.build !== undefined;
-
-export const localImageRef = (id: string, props: ImageProps): string => {
-  const tag = props.tag ?? "latest";
-  const name = hasBuild(props)
-    ? (props.name ?? id)
-    : (imageSourceName(props.image) ?? id);
-  return `${name}:${tag}`;
-};
-
-export const desiredImageRef = (id: string, props: ImageProps): string => {
-  const ref = localImageRef(id, props);
-  return props.registry && !props.skipPush
-    ? withRegistryHost(ref, props.registry)
-    : ref;
-};
-
-/**
- * Resolves the built image's repository name. When a build has no explicit
- * `name`, an engine physical name is generated (stack + stage + logical id +
- * instance id) just like other resources, then carried back on `props.name` so
- * the synchronous ref helpers stay deterministic across reconcile/diff/read.
- */
-const withResolvedName = (
-  id: string,
-  props: ImageProps,
-  instanceId: string,
-): Effect.Effect<ImageProps, never, any> =>
-  hasBuild(props) && props.name === undefined
-    ? createPhysicalName({
-        id,
-        instanceId,
-        maxLength: 128,
-        lowercase: true,
-      }).pipe(Effect.map((name): ImageProps => ({ ...props, name })))
-    : Effect.succeed(props);
-
-const resolveBuildPaths = Effect.fn(function* (build: DockerBuildOptions) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const cwd = yield* Effect.sync(() => process.cwd());
-  const context = path.resolve(build.context ?? cwd);
-  const dockerfile = build.dockerfile
-    ? path.isAbsolute(build.dockerfile)
-      ? build.dockerfile
-      : path.resolve(context, build.dockerfile)
-    : path.resolve(context, "Dockerfile");
-  if (!(yield* fs.exists(context))) {
-    return yield* Effect.die(`Docker build context does not exist: ${context}`);
-  }
-  if (!(yield* fs.exists(dockerfile))) {
-    return yield* Effect.die(`Dockerfile does not exist: ${dockerfile}`);
-  }
-  return { context, dockerfile };
-});
-
-const contextHash = Effect.fn(function* (props: ImageProps) {
-  if (!hasBuild(props)) return undefined;
-  const cwd = yield* Effect.sync(() => process.cwd());
-  return yield* hashDirectory({
-    cwd: props.build.context ?? cwd,
-    memo: props.build.memo,
-  });
-});
-
-const comparableProps = (props: ImageProps | undefined) =>
-  props
-    ? {
-        ...props,
-        registry: props.registry
-          ? {
-              server: props.registry.server,
-              username: props.registry.username,
-              password: props.registry.password,
-            }
-          : undefined,
-      }
-    : undefined;
-
 export const ImageProvider = () =>
   Provider.succeed(Image, {
     list: () => Effect.succeed([]),
@@ -348,3 +255,96 @@ export const ImageProvider = () =>
       // commonly shared by developer workflows outside Alchemy.
     }),
   });
+
+const imageSourceRef = (source: ImageSource): string =>
+  typeof source === "string" ? source : source.imageRef;
+
+const imageSourceName = (source: ImageSource): string | undefined =>
+  typeof source === "string"
+    ? repositoryFromImageRef(source)
+    : (source.name ?? repositoryFromImageRef(source.imageRef));
+
+const isLocalImageSource = (source: ImageSource): boolean =>
+  typeof source !== "string" && source.kind === "Image";
+
+const hasBuild = (
+  props: ImageProps,
+): props is Extract<ImageProps, { build: DockerBuildOptions }> =>
+  "build" in props && props.build !== undefined;
+
+export const localImageRef = (id: string, props: ImageProps): string => {
+  const tag = props.tag ?? "latest";
+  const name = hasBuild(props)
+    ? (props.name ?? id)
+    : (imageSourceName(props.image) ?? id);
+  return `${name}:${tag}`;
+};
+
+export const desiredImageRef = (id: string, props: ImageProps): string => {
+  const ref = localImageRef(id, props);
+  return props.registry && !props.skipPush
+    ? withRegistryHost(ref, props.registry)
+    : ref;
+};
+
+/**
+ * Resolves the built image's repository name. When a build has no explicit
+ * `name`, an engine physical name is generated (stack + stage + logical id +
+ * instance id) just like other resources, then carried back on `props.name` so
+ * the synchronous ref helpers stay deterministic across reconcile/diff/read.
+ */
+const withResolvedName = (
+  id: string,
+  props: ImageProps,
+  instanceId: string,
+): Effect.Effect<ImageProps, never, any> =>
+  hasBuild(props) && props.name === undefined
+    ? createPhysicalName({
+        id,
+        instanceId,
+        maxLength: 128,
+        lowercase: true,
+      }).pipe(Effect.map((name): ImageProps => ({ ...props, name })))
+    : Effect.succeed(props);
+
+const resolveBuildPaths = Effect.fn(function* (build: DockerBuildOptions) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const cwd = yield* Effect.sync(() => process.cwd());
+  const context = path.resolve(build.context ?? cwd);
+  const dockerfile = build.dockerfile
+    ? path.isAbsolute(build.dockerfile)
+      ? build.dockerfile
+      : path.resolve(context, build.dockerfile)
+    : path.resolve(context, "Dockerfile");
+  if (!(yield* fs.exists(context))) {
+    return yield* Effect.die(`Docker build context does not exist: ${context}`);
+  }
+  if (!(yield* fs.exists(dockerfile))) {
+    return yield* Effect.die(`Dockerfile does not exist: ${dockerfile}`);
+  }
+  return { context, dockerfile };
+});
+
+const contextHash = Effect.fn(function* (props: ImageProps) {
+  if (!hasBuild(props)) return undefined;
+  const cwd = yield* Effect.sync(() => process.cwd());
+  return yield* hashDirectory({
+    cwd: props.build.context ?? cwd,
+    memo: props.build.memo,
+  });
+});
+
+const comparableProps = (props: ImageProps | undefined) =>
+  props
+    ? {
+        ...props,
+        registry: props.registry
+          ? {
+              server: props.registry.server,
+              username: props.registry.username,
+              password: props.registry.password,
+            }
+          : undefined,
+      }
+    : undefined;

@@ -93,26 +93,6 @@ export interface Volume extends Resource<
  */
 export const Volume = Resource<Volume>("Docker.Volume");
 
-const volumeName = (id: string, props: VolumeProps, instanceId: string) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        instanceId,
-        maxLength: 128,
-        lowercase: true,
-      });
-
-export const toVolumeAttributes = (info: VolumeInfo): Volume["Attributes"] => ({
-  id: info.Name,
-  name: info.Name,
-  driver: info.Driver,
-  driverOpts: info.Options ?? {},
-  labels: info.Labels ?? {},
-  mountpoint: info.Mountpoint,
-  createdAt: Date.parse(info.CreatedAt) || Date.now(),
-});
-
 export const VolumeProvider = () =>
   Provider.succeed(Volume, {
     list: () => Effect.succeed([]),
@@ -168,3 +148,23 @@ export const VolumeProvider = () =>
       yield* removeVolume(output.name);
     }),
   });
+
+const volumeName = (id: string, props: VolumeProps, instanceId: string) =>
+  props.name
+    ? Effect.succeed(props.name)
+    : createPhysicalName({
+        id,
+        instanceId,
+        maxLength: 128,
+        lowercase: true,
+      });
+
+export const toVolumeAttributes = (info: VolumeInfo): Volume["Attributes"] => ({
+  id: info.Name,
+  name: info.Name,
+  driver: info.Driver,
+  driverOpts: info.Options ?? {},
+  labels: info.Labels ?? {},
+  mountpoint: info.Mountpoint,
+  createdAt: Date.parse(info.CreatedAt) || Date.now(),
+});

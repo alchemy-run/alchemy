@@ -9,8 +9,8 @@ import {
   connectNetwork,
   createContainer,
   disconnectNetwork,
-  durationToNanoseconds,
   DockerCommandError,
+  durationToNanoseconds,
   inspectContainerInfo,
   normalizeDuration,
   removeContainer,
@@ -163,6 +163,92 @@ export const inspectContainer = (
  * ```
  */
 export const Container = Resource<Container>("Docker.Container");
+
+export const ContainerProvider = () =>
+  Provider.succeed(Container, {
+    list: () => Effect.succeed([]),
+    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+      const name = yield* containerName(id, olds, instanceId);
+      const info = yield* inspectContainerInfo(name);
+      if (!info) return undefined;
+      const attrs = toContainerAttributes(info, imageRefOf(olds.image));
+      return output ? attrs : Unowned(attrs);
+    }),
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return undefined;
+      const replaceShape = (props: ContainerProps) => ({
+        name: props.name,
+        image: imageRefOf(props.image),
+        command: props.command ?? [],
+        environment: normalizeEnvironment(props.environment),
+        ports: props.ports ?? [],
+        volumes: props.volumes ?? [],
+        restart: props.restart ?? "no",
+        removeOnExit: props.removeOnExit ?? false,
+        healthcheck: props.healthcheck
+          ? {
+              ...props.healthcheck,
+              interval:
+                props.healthcheck.interval === undefined
+                  ? undefined
+                  : normalizeDuration(props.healthcheck.interval),
+              timeout:
+                props.healthcheck.timeout === undefined
+                  ? undefined
+                  : normalizeDuration(props.healthcheck.timeout),
+              startPeriod:
+                props.healthcheck.startPeriod === undefined
+                  ? undefined
+                  : normalizeDuration(props.healthcheck.startPeriod),
+              startInterval:
+                props.healthcheck.startInterval === undefined
+                  ? undefined
+                  : normalizeDuration(props.healthcheck.startInterval),
+            }
+          : undefined,
+      });
+      if (!deepEqual(replaceShape(olds), replaceShape(news))) {
+        return { action: "replace" as const, deleteFirst: true };
+      }
+      if (
+        !deepEqual(olds.networks ?? [], news.networks ?? []) ||
+        (olds.start ?? false) !== (news.start ?? false)
+      ) {
+        return { action: "update" as const };
+      }
+    }),
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
+      const name = yield* containerName(id, news, instanceId);
+      const imageRef = imageRefOf(news.image);
+      const live = yield* inspectContainerInfo(name);
+
+      if (live && shouldReplaceContainer(imageRef, news, live)) {
+        yield* session.note(`Replacing Docker container: ${name}`);
+        yield* removeContainer(name, true);
+      } else if (live) {
+        const current = yield* reconcileNetworksAndState(name, news, live);
+        if (!current) {
+          return yield* Effect.die(
+            `Docker container disappeared during reconcile: ${name}`,
+          );
+        }
+        return toContainerAttributes(current, imageRef);
+      }
+
+      yield* session.note(
+        output
+          ? `Recreating Docker container: ${name}`
+          : `Creating Docker container: ${name}`,
+      );
+      const created = yield* createAndInspect(name, imageRef, news);
+      return toContainerAttributes(created, imageRef);
+    }),
+    delete: Effect.fn(function* ({ output, session }) {
+      yield* session.note(`Removing Docker container: ${output.name}`);
+      yield* stopContainer(output.name);
+      yield* removeContainer(output.name, true);
+    }),
+  });
 
 const containerName = (id: string, props: ContainerProps, instanceId: string) =>
   props.name
@@ -409,89 +495,3 @@ const createAndInspect = Effect.fn(function* (
   }
   return info;
 });
-
-export const ContainerProvider = () =>
-  Provider.succeed(Container, {
-    list: () => Effect.succeed([]),
-    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-      const name = yield* containerName(id, olds, instanceId);
-      const info = yield* inspectContainerInfo(name);
-      if (!info) return undefined;
-      const attrs = toContainerAttributes(info, imageRefOf(olds.image));
-      return output ? attrs : Unowned(attrs);
-    }),
-    diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return undefined;
-      const replaceShape = (props: ContainerProps) => ({
-        name: props.name,
-        image: imageRefOf(props.image),
-        command: props.command ?? [],
-        environment: normalizeEnvironment(props.environment),
-        ports: props.ports ?? [],
-        volumes: props.volumes ?? [],
-        restart: props.restart ?? "no",
-        removeOnExit: props.removeOnExit ?? false,
-        healthcheck: props.healthcheck
-          ? {
-              ...props.healthcheck,
-              interval:
-                props.healthcheck.interval === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.interval),
-              timeout:
-                props.healthcheck.timeout === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.timeout),
-              startPeriod:
-                props.healthcheck.startPeriod === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.startPeriod),
-              startInterval:
-                props.healthcheck.startInterval === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.startInterval),
-            }
-          : undefined,
-      });
-      if (!deepEqual(replaceShape(olds), replaceShape(news))) {
-        return { action: "replace" as const, deleteFirst: true };
-      }
-      if (
-        !deepEqual(olds.networks ?? [], news.networks ?? []) ||
-        (olds.start ?? false) !== (news.start ?? false)
-      ) {
-        return { action: "update" as const };
-      }
-    }),
-    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
-      const name = yield* containerName(id, news, instanceId);
-      const imageRef = imageRefOf(news.image);
-      const live = yield* inspectContainerInfo(name);
-
-      if (live && shouldReplaceContainer(imageRef, news, live)) {
-        yield* session.note(`Replacing Docker container: ${name}`);
-        yield* removeContainer(name, true);
-      } else if (live) {
-        const current = yield* reconcileNetworksAndState(name, news, live);
-        if (!current) {
-          return yield* Effect.die(
-            `Docker container disappeared during reconcile: ${name}`,
-          );
-        }
-        return toContainerAttributes(current, imageRef);
-      }
-
-      yield* session.note(
-        output
-          ? `Recreating Docker container: ${name}`
-          : `Creating Docker container: ${name}`,
-      );
-      const created = yield* createAndInspect(name, imageRef, news);
-      return toContainerAttributes(created, imageRef);
-    }),
-    delete: Effect.fn(function* ({ output, session }) {
-      yield* session.note(`Removing Docker container: ${output.name}`);
-      yield* stopContainer(output.name);
-      yield* removeContainer(output.name, true);
-    }),
-  });
