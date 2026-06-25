@@ -130,7 +130,7 @@ export const Api3Live = Api3.make(
   Effect.gen(function* () {
     const agent = yield* Agent;
     return {
-      getUser: Effect.fnUntraced(function* () {
+      getUser: Effect.fn(function* () {
         const user = agent.getByName("");
 
         return {

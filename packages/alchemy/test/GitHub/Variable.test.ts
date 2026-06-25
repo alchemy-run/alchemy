@@ -13,11 +13,18 @@ const logLevel = Effect.provideService(
 );
 
 // Creating a real repository + variable requires an owner (user login or org)
-// the token can write to. Skip when unset.
+// the token can write to.
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run";
 const repo = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
 
-test.provider.skipIf(!owner)(
+// These are live GitHub tests: without a real token, credential resolution
+// hard-fails with `AuthError` (the `testing` profile falls back to the
+// `GITHUB_ACCESS_TOKEN`/`GITHUB_TOKEN` env vars). Skip — rather than fail —
+// when no token is present so the suite is deterministic off-CI.
+const hasGitHubToken =
+  !!process.env.GITHUB_ACCESS_TOKEN || !!process.env.GITHUB_TOKEN;
+
+test.provider.skipIf(!hasGitHubToken)(
   "list enumerates the deployed variable",
   (stack) =>
     Effect.gen(function* () {

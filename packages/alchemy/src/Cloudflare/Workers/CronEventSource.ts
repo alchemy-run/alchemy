@@ -53,7 +53,7 @@ export class CronEventSourcePolicy extends Binding.Policy<
 >()("Cloudflare.Workers.CronEventSource") {}
 
 export const CronEventSourcePolicyLive = CronEventSourcePolicy.layer.succeed(
-  Effect.fnUntraced(function* (host: ResourceLike, expression: string) {
+  Effect.fn(function* (host: ResourceLike, expression: string) {
     if (isWorker(host)) {
       yield* host.bind(`Cron(${expression})`, {
         crons: [expression],

@@ -41,9 +41,7 @@ export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
-  const makeOptions = Effect.fnUntraced(function* (
-    options: WorkerBundleOptions,
-  ) {
+  const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
@@ -241,7 +239,7 @@ export interface PrebuiltWorkerBundleOptions {
  * entry file is always first and never duplicated as an additional
  * module.
  */
-export const readPrebuiltWorkerBundle = Effect.fnUntraced(function* (
+export const readPrebuiltWorkerBundle = Effect.fn(function* (
   options: PrebuiltWorkerBundleOptions,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -261,7 +259,7 @@ export const readPrebuiltWorkerBundle = Effect.fnUntraced(function* (
   const root = path.dirname(main);
   const entryName = path.basename(main);
 
-  const readModuleFile = Effect.fnUntraced(function* (name: string) {
+  const readModuleFile = Effect.fn(function* (name: string) {
     const file = path.join(root, name);
     const content = yield* fs.readFile(file).pipe(
       Effect.mapError(

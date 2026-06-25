@@ -71,7 +71,7 @@ export const SendEmailBindingLive = Layer.effect(
     const bind = yield* SendEmailBindingPolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fnUntraced(function* (sender: SendEmail) {
+    return Effect.fn(function* (sender: SendEmail) {
       yield* bind(sender);
 
       const raw = Effect.sync(
@@ -108,7 +108,7 @@ export class SendEmailBindingPolicy extends Binding.Policy<
 >()("Cloudflare.SendEmail.Binding") {}
 
 export const SendEmailBindingPolicyLive = SendEmailBindingPolicy.layer.succeed(
-  Effect.fnUntraced(function* (host: ResourceLike, sender: SendEmail) {
+  Effect.fn(function* (host: ResourceLike, sender: SendEmail) {
     if (isWorker(host)) {
       yield* host.bind(sender.name, {
         bindings: [

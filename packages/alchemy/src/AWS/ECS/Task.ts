@@ -579,7 +579,7 @@ export const TaskProvider = () =>
         const realMain = yield* fs.realPath(props.main);
         const cwd = yield* findCwdForBundle(realMain);
 
-        const buildBundle = Effect.fnUntraced(function* (
+        const buildBundle = Effect.fn(function* (
           entry: string,
           plugins?: rolldown.RolldownPluginOption,
         ) {

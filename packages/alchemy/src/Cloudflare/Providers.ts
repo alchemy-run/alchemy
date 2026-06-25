@@ -800,7 +800,7 @@ const cloudflareRetryFactory: Retry.Factory = (lastError) => {
     schedule: pipe(
       Schedule.exponential(Duration.millis(250), 2),
       Schedule.modifyDelay(
-        Effect.fnUntraced(function* (duration) {
+        Effect.fn(function* (duration) {
           const error = yield* Ref.get(lastError);
           // Throttling errors (429): honor a 500ms floor matching the
           // distilled default.

@@ -130,7 +130,7 @@ export const buildFinalDockerfile = (
  * and the local provider (which writes the context to disk for the runtime to
  * `docker build`).
  */
-export const bundleContainerProgram = Effect.fnUntraced(function* ({
+export const bundleContainerProgram = Effect.fn(function* ({
   main,
   runtime,
   handler = "default",
@@ -153,7 +153,7 @@ export const bundleContainerProgram = Effect.fnUntraced(function* ({
   const realMain = yield* fs.realPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
-  const buildBundle = Effect.fnUntraced(function* (
+  const buildBundle = Effect.fn(function* (
     entry: string,
     plugins?: rolldown.RolldownPluginOption,
   ) {

@@ -134,11 +134,18 @@ test.provider(
         }),
       );
 
-      // The DO observed every message. The order is best-effort
-      // (Cloudflare may dispatch batches in parallel) so we
-      // compare as a multiset.
+      // The DO observed every message. Cloudflare Queues are
+      // *at-least-once*: a message can be delivered (and thus recorded)
+      // more than once, so `lastBodies` may legitimately contain
+      // duplicates and `count` may exceed `messages.length`. Order is
+      // also best-effort (batches dispatch in parallel). So assert every
+      // expected message was observed at least once (set containment),
+      // not exact multiset equality — the latter flakes whenever
+      // Cloudflare redelivers a message.
       expect(snapshot.count).toBeGreaterThanOrEqual(messages.length);
-      expect([...snapshot.lastBodies].sort()).toEqual([...messages].sort());
+      expect([...new Set(snapshot.lastBodies)].sort()).toEqual(
+        [...messages].sort(),
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),

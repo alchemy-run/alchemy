@@ -74,7 +74,7 @@ export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;
 };
 
-export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
+export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   workerEff:
     | (Worker & Rpc<Shape>)
     | Effect.Effect<Worker & Rpc<Shape>, never, Req>,

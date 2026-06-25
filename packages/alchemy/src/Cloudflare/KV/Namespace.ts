@@ -228,7 +228,7 @@ const createTitle = (id: string, title: string | undefined) =>
 // adoption-by-name has to scan every page. Use the paginated
 // `.items` stream off the un-yielded operation method (yielding
 // `kv.listNamespaces` collapses it to a single-page call).
-const findNamespaceByTitle = Effect.fnUntraced(function* (title: string) {
+const findNamespaceByTitle = Effect.fn(function* (title: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* kv.listNamespaces.items({ accountId }).pipe(
     Stream.filter((ns) => ns.title === title),

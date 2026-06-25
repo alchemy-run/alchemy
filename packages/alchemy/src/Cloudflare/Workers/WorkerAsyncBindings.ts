@@ -31,7 +31,7 @@ import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 
-export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
+export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {

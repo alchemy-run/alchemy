@@ -50,7 +50,7 @@ export const AnalyticsEngineDatasetBindingLive = Layer.effect(
     const bind = yield* AnalyticsEngineDatasetBindingPolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fnUntraced(function* (dataset: AnalyticsEngineDatasetLike) {
+    return Effect.fn(function* (dataset: AnalyticsEngineDatasetLike) {
       yield* bind(dataset);
 
       const raw = Effect.sync(
@@ -86,7 +86,7 @@ export class AnalyticsEngineDatasetBindingPolicy extends Binding.Policy<
 
 export const AnalyticsEngineDatasetBindingPolicyLive =
   AnalyticsEngineDatasetBindingPolicy.layer.succeed(
-    Effect.fnUntraced(function* (
+    Effect.fn(function* (
       host: ResourceLike,
       dataset: AnalyticsEngineDatasetLike,
     ) {

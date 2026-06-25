@@ -44,7 +44,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           sessions.set(id, socket);
           return response;
         }).pipe(Effect.orDie),
-        webSocketMessage: Effect.fnUntraced(function* (
+        webSocketMessage: Effect.fn(function* (
           socket: Cloudflare.DurableWebSocket,
           message: string | Uint8Array,
         ) {
@@ -58,7 +58,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
             yield* peer.send(`[${session.id}] ${text}`);
           }
         }),
-        webSocketClose: Effect.fnUntraced(function* (
+        webSocketClose: Effect.fn(function* (
           ws: Cloudflare.DurableWebSocket,
           code: number,
           reason: string,

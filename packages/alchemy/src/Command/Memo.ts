@@ -54,7 +54,7 @@ const Memo = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
-  const findUp = Effect.fnUntraced(function* (
+  const findUp = Effect.fn(function* (
     cwd: string,
     filenames: string[],
   ): Effect.fn.Return<string | undefined, PlatformError> {
@@ -73,7 +73,7 @@ const Memo = Effect.gen(function* () {
     return yield* findUp(parent, filenames);
   });
 
-  const readGitIgnoreRules = Effect.fnUntraced(function* (
+  const readGitIgnoreRules = Effect.fn(function* (
     cwd: string,
   ): Effect.fn.Return<string[], PlatformError> {
     const rules = yield* fs.readFileString(path.join(cwd, ".gitignore")).pipe(
@@ -91,7 +91,7 @@ const Memo = Effect.gen(function* () {
     return [...(yield* readGitIgnoreRules(parent)), ...rules];
   });
 
-  const resolveMemoOptions = Effect.fnUntraced(function* (
+  const resolveMemoOptions = Effect.fn(function* (
     cwd: string | undefined,
     options: MemoOptions,
   ): Effect.fn.Return<ResolvedMemoOptions, PlatformError> {
@@ -109,7 +109,7 @@ const Memo = Effect.gen(function* () {
     };
   });
 
-  const listFiles = Effect.fnUntraced(function* (
+  const listFiles = Effect.fn(function* (
     options: ResolvedMemoOptions,
   ): Effect.fn.Return<string[], PlatformError> {
     const [files, lockfile] = yield* Effect.all(
@@ -144,7 +144,7 @@ const Memo = Effect.gen(function* () {
     return files.sort();
   });
 
-  const hashFiles = Effect.fnUntraced(function* (
+  const hashFiles = Effect.fn(function* (
     cwd: string,
     files: string[],
   ): Effect.fn.Return<string, PlatformError> {

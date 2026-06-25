@@ -103,7 +103,7 @@ return {
     sessions.set(id, socket);
     return response;
   }),
-+  webSocketMessage: Effect.fnUntraced(function* (
++  webSocketMessage: Effect.fn(function* (
 +    socket: Cloudflare.DurableWebSocket,
 +    message: string | ArrayBuffer,
 +  ) {
@@ -121,7 +121,7 @@ return {
 };
 ```
 
-`Effect.fnUntraced` lets you write a generator function with
+`Effect.fn` lets you write a generator function with
 arbitrary parameters. The Cloudflare runtime calls it with the
 socket and the inbound payload (which can be a string or an
 `ArrayBuffer` depending on how the client sent it).
@@ -135,7 +135,7 @@ don't try to send to a dead socket:
 return {
   fetch: /* ... */,
   webSocketMessage: /* ... */,
-+  webSocketClose: Effect.fnUntraced(function* (
++  webSocketClose: Effect.fn(function* (
 +    ws: Cloudflare.DurableWebSocket,
 +    code: number,
 +    reason: string,
@@ -219,7 +219,7 @@ Effect.gen(function* () {
 
     return {
       fetch: /* ... */,
-      webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+      webSocketMessage: Effect.fn(function* (socket, message) {
         const attachment = socket.deserializeAttachment<{ id: string }>();
         if (!attachment) return;
         const text = typeof message === "string"
@@ -487,7 +487,7 @@ First, recognise the command inside `webSocketMessage` and schedule
 the event:
 
 ```diff lang="typescript"
-webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+webSocketMessage: Effect.fn(function* (socket, message) {
   const attachment = socket.deserializeAttachment<{ id: string }>();
   if (!attachment) return;
   const text = typeof message === "string"

@@ -444,9 +444,7 @@ export const tryFindProviderByType: {
   <P extends Policy<any, any, any>>(
     policyType: P["key"],
   ): Effect.Effect<Option.Option<Effect.Success<P>>>;
-} = Effect.fnUntraced(function* <R extends ResourceLike>(
-  resourceType: R["Type"],
-) {
+} = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
   const Tag = Provider<R>(resourceType) as unknown as Context.Service<
     Provider<R>,
     any

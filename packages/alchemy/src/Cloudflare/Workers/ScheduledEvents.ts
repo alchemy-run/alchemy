@@ -58,7 +58,7 @@ const toScheduledEvent = (row: EventRow): ScheduledEvent => ({
  * @param payload Arbitrary JSON-serialisable data delivered to the alarm handler.
  * @param repeatMs If set, the event re-schedules itself this many ms after each fire.
  */
-export const scheduleEvent = Effect.fnUntraced(function* (
+export const scheduleEvent = Effect.fn(function* (
   id: string,
   runAt: Date,
   payload: unknown,
@@ -82,7 +82,7 @@ export const scheduleEvent = Effect.fnUntraced(function* (
 /**
  * Cancel a previously scheduled event by id. No-op if the event does not exist.
  */
-export const cancelEvent = Effect.fnUntraced(function* (id: string) {
+export const cancelEvent = Effect.fn(function* (id: string) {
   yield* ensureTable;
   const ctx = yield* DurableObjectState;
 

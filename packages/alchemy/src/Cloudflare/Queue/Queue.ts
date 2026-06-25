@@ -280,7 +280,7 @@ const createQueueName = (id: string, name: string | undefined) =>
 // Cloudflare's `listQueues` accepts no name/prefix filter, so
 // adoption-by-name has to scan every page. Use the paginated
 // `.items` stream off the un-yielded operation method.
-const findQueueByName = Effect.fnUntraced(function* (queueName: string) {
+const findQueueByName = Effect.fn(function* (queueName: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* queues.listQueues.items({ accountId }).pipe(
     Stream.filter((q) => q.queueName === queueName),

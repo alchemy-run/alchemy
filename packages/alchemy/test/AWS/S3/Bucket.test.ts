@@ -631,7 +631,11 @@ test.provider("lifecycle add rule then remove", (stack) =>
       Effect.repeat({
         schedule: Schedule.spaced("3 seconds"),
         until: (r) => r === "no-lifecycle",
-        times: 10,
+        // S3 lifecycle deletion can take well over 30s to become visible on
+        // reads. Give it ~90s (30 × 3s) before failing — the loop short-circuits
+        // via `until` the moment the config clears, so this only costs wall-clock
+        // time on the (rare) slow-propagation runs that were flaking at times: 10.
+        times: 30,
       }),
     );
     expect(removed).toEqual("no-lifecycle");

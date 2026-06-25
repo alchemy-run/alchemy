@@ -674,7 +674,7 @@ export const FunctionProvider = () =>
           };
         });
 
-      const attachBindings = Effect.fnUntraced(function* ({
+      const attachBindings = Effect.fn(function* ({
         roleName,
         policyName,
         // functionArn,
@@ -726,7 +726,7 @@ export const FunctionProvider = () =>
         return env;
       });
 
-      const createRoleIfNotExists = Effect.fnUntraced(function* ({
+      const createRoleIfNotExists = Effect.fn(function* ({
         id,
         roleName,
         vpc,
@@ -791,7 +791,7 @@ export const FunctionProvider = () =>
         return role;
       });
 
-      const bundleCode = Effect.fnUntraced(function* (
+      const bundleCode = Effect.fn(function* (
         id: string,
         props: FunctionProps,
       ) {
@@ -832,7 +832,7 @@ export const FunctionProvider = () =>
           );
         };
 
-        const buildBundle = Effect.fnUntraced(function* (
+        const buildBundle = Effect.fn(function* (
           entry: string,
           plugins?: rolldown.RolldownPluginOption,
         ) {
@@ -1034,7 +1034,7 @@ export default await Effect.runPromise(handlerEffect)
         self: Effect.Effect<A, Err, R>,
       ) => Effect.Effect<A, Err, R>;
 
-      const getReservedConcurrentExecutions = Effect.fnUntraced(function* (
+      const getReservedConcurrentExecutions = Effect.fn(function* (
         functionName: string,
       ) {
         return yield* Lambda.getFunctionConcurrency({
@@ -1047,7 +1047,7 @@ export default await Effect.runPromise(handlerEffect)
         );
       });
 
-      const syncReservedConcurrentExecutions = Effect.fnUntraced(function* ({
+      const syncReservedConcurrentExecutions = Effect.fn(function* ({
         functionName,
         reservedConcurrentExecutions,
       }: {
@@ -1078,7 +1078,7 @@ export default await Effect.runPromise(handlerEffect)
         );
       });
 
-      const createOrUpdateFunction = Effect.fnUntraced(function* ({
+      const createOrUpdateFunction = Effect.fn(function* ({
         id,
         news,
         roleArn,
@@ -1273,7 +1273,7 @@ export default await Effect.runPromise(handlerEffect)
       const publicUrlAccessStatementId = "FunctionURLAllowPublicAccess";
       const publicUrlInvokeStatementId = "FunctionURLAllowPublicInvoke";
 
-      const removePublicFunctionUrlPermissions = Effect.fnUntraced(function* (
+      const removePublicFunctionUrlPermissions = Effect.fn(function* (
         functionName: string,
       ) {
         yield* Effect.all(
@@ -1311,7 +1311,7 @@ export default await Effect.runPromise(handlerEffect)
           retryFunctionMutation,
         );
 
-      const upsertPublicFunctionUrlPermissions = Effect.fnUntraced(function* (
+      const upsertPublicFunctionUrlPermissions = Effect.fn(function* (
         functionName: string,
       ) {
         yield* Effect.all(
@@ -1335,7 +1335,7 @@ export default await Effect.runPromise(handlerEffect)
         );
       });
 
-      const createOrUpdateFunctionUrl = Effect.fnUntraced(function* ({
+      const createOrUpdateFunctionUrl = Effect.fn(function* ({
         functionName,
         url,
         oldUrl,
@@ -1410,7 +1410,7 @@ export default await Effect.runPromise(handlerEffect)
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fnUntraced(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
           // If output is undefined (resource in creating state), defer to default diff
           if (!output) {
@@ -1452,7 +1452,7 @@ export default await Effect.runPromise(handlerEffect)
             return { action: "update" };
           }
         }),
-        read: Effect.fnUntraced(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output }) {
           const functionName =
             output?.functionName ??
             (yield* createFunctionName(id, olds?.functionName));
@@ -1557,7 +1557,7 @@ export default await Effect.runPromise(handlerEffect)
             );
           }),
 
-        precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+        precreate: Effect.fn(function* ({ id, news, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
@@ -1603,7 +1603,7 @@ export default await Effect.runPromise(handlerEffect)
             roleArn,
           };
         }),
-        reconcile: Effect.fnUntraced(function* ({
+        reconcile: Effect.fn(function* ({
           id,
           news,
           olds,
@@ -1673,7 +1673,7 @@ export default await Effect.runPromise(handlerEffect)
             reservedConcurrentExecutions,
           };
         }),
-        delete: Effect.fnUntraced(function* ({ output }) {
+        delete: Effect.fn(function* ({ output }) {
           yield* iam
             .listRolePolicies({
               RoleName: output.roleName,

@@ -51,7 +51,7 @@ const requestUntilReady = (
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
-      Effect.fnUntraced(function* (res) {
+      Effect.fn(function* (res) {
         return res.status >= 200 && res.status < 300
           ? res
           : yield* Effect.fail(
@@ -83,7 +83,7 @@ const postIncrementOnce = (
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
-      Effect.fnUntraced(function* (res) {
+      Effect.fn(function* (res) {
         if (res.status >= 200 && res.status < 300) {
           return res;
         }

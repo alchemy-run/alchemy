@@ -39,9 +39,7 @@ export interface Fetcher {
   ): Socket.Socket;
 }
 
-export const toCloudflareFetcher = Effect.fnUntraced(function* (
-  fetcher: Fetcher,
-) {
+export const toCloudflareFetcher = Effect.fn(function* (fetcher: Fetcher) {
   const context = yield* Effect.context();
   return {
     fetch: (input, init) =>
@@ -245,7 +243,7 @@ export const fromCloudflareSocket = (
     opts?: { readonly onOpen?: Effect.Effect<void> | undefined },
   ): Effect.Effect<void, Socket.SocketError | E, R> =>
     Effect.scopedWith(
-      Effect.fnUntraced(function* (scope) {
+      Effect.fn(function* (scope) {
         // Cloudflare exposes connection establishment as a promise rather than an
         // event emitter, so we normalize that into the same SocketOpenError shape
         // Effect uses for the official adapters.

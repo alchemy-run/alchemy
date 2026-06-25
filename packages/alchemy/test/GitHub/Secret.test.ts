@@ -20,6 +20,13 @@ const logLevel = Effect.provideService(
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run";
 const repository = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
 
+// These are live GitHub tests: without a real token, credential resolution
+// hard-fails with `AuthError` (the `testing` profile falls back to the
+// `GITHUB_ACCESS_TOKEN`/`GITHUB_TOKEN` env vars). Skip — rather than fail —
+// when no token is present so the suite is deterministic off-CI.
+const hasGitHubToken =
+  !!process.env.GITHUB_ACCESS_TOKEN || !!process.env.GITHUB_TOKEN;
+
 // GitHub never returns a secret's value, only its metadata — so `getRepoSecret`
 // succeeding (vs. 404) is how we assert presence/absence out-of-band.
 const secretExists = (name: string) =>
@@ -40,7 +47,7 @@ const secretExists = (name: string) =>
     });
   });
 
-test.provider(
+test.provider.skipIf(!hasGitHubToken)(
   "Secrets resolves Config values before wrapping them as Redacted",
   (stack) =>
     Effect.gen(function* () {
@@ -77,7 +84,7 @@ test.provider(
 // ambient owner/repo scope, and GitHub exposes no account-wide enumeration —
 // only list-secrets *within* a specific repo. So `list()` always returns `[]`,
 // even when a secret exists in the cloud.
-test.provider(
+test.provider.skipIf(!hasGitHubToken)(
   "list returns an empty array for non-enumerable GitHub secrets",
   (stack) =>
     Effect.gen(function* () {

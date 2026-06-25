@@ -102,7 +102,7 @@ const stacksCommand = Command.make(
   "stacks",
   { main: script, envFile, profile, local: localFlag },
   instrumentCommand("state.stacks")(
-    Effect.fnUntraced(function* (args) {
+    Effect.fn(function* (args) {
       yield* withStateService(args, (state) =>
         Effect.gen(function* () {
           const stacks = yield* state.listStacks();
@@ -123,7 +123,7 @@ const stagesCommand = Command.make(
   "stages",
   { stack: stackFlag, main: script, envFile, profile, local: localFlag },
   instrumentCommand("state.stages")(
-    Effect.fnUntraced(function* ({ stack: stackName, ...rest }) {
+    Effect.fn(function* ({ stack: stackName, ...rest }) {
       yield* withStateService(rest, (state) =>
         Effect.gen(function* () {
           const stages = yield* state.listStages(stackName);
@@ -151,7 +151,7 @@ const resourcesCommand = Command.make(
     local: localFlag,
   },
   instrumentCommand("state.resources")(
-    Effect.fnUntraced(function* ({ stack: stackName, stageName, ...rest }) {
+    Effect.fn(function* ({ stack: stackName, stageName, ...rest }) {
       yield* withStateService(rest, (state) =>
         Effect.gen(function* () {
           const fqns = yield* state.list({
@@ -183,12 +183,7 @@ const getCommand = Command.make(
     local: localFlag,
   },
   instrumentCommand("state.get")(
-    Effect.fnUntraced(function* ({
-      stack: stackName,
-      stageName,
-      fqn,
-      ...rest
-    }) {
+    Effect.fn(function* ({ stack: stackName, stageName, fqn, ...rest }) {
       yield* withStateService(rest, (state) =>
         Effect.gen(function* () {
           const value = yield* state.get({
@@ -214,7 +209,7 @@ const treeCommand = Command.make(
   "tree",
   { main: script, envFile, profile, local: localFlag },
   instrumentCommand("state.tree")(
-    Effect.fnUntraced(function* (args) {
+    Effect.fn(function* (args) {
       yield* withStateService(args, (state) =>
         Effect.gen(function* () {
           const stacks = [...(yield* state.listStacks())].sort();
@@ -300,7 +295,7 @@ const clearCommand = Command.make(
     yes,
   },
   instrumentCommand("state.clear")(
-    Effect.fnUntraced(function* ({
+    Effect.fn(function* ({
       stack: stackName,
       stageName,
       yes: yesFlag,

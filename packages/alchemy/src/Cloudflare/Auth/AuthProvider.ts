@@ -200,7 +200,7 @@ export const CloudflareAuth = AuthProviderLayer<
         return credentials;
       });
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const credentialType = yield* Clank.select({
         message: "Cloudflare credential type",
         options: [
@@ -263,7 +263,7 @@ export const CloudflareAuth = AuthProviderLayer<
       );
     });
 
-    const configureOAuth = Effect.fnUntraced(function* (profileName: string) {
+    const configureOAuth = Effect.fn(function* (profileName: string) {
       const scopes = yield* promptOAuthScopes();
 
       const oauthCreds = yield* oauthLogin(profileName, scopes);
@@ -323,7 +323,7 @@ export const CloudflareAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when(
           { method: "env" },
-          Effect.fnUntraced(function* () {
+          Effect.fn(function* () {
             const accountId = yield* getEnvRequired("CLOUDFLARE_ACCOUNT_ID");
             const apiToken = yield* getEnvRedacted("CLOUDFLARE_API_TOKEN");
             if (apiToken) {

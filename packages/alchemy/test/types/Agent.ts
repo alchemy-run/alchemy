@@ -108,7 +108,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
 
       return {
         getProfile: () => state.storage.get<string>("Profile"),
-        putProfile: Effect.fnUntraced(function* (value: string) {
+        putProfile: Effect.fn(function* (value: string) {
           yield* state.storage.put("Profile", value);
         }),
         eval: (code: string) =>
@@ -129,7 +129,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           sessions.set(id, socket);
           return response;
         }),
-        webSocketMessage: Effect.fnUntraced(function* (
+        webSocketMessage: Effect.fn(function* (
           socket: Cloudflare.DurableWebSocket,
           message: string | Uint8Array,
         ) {
@@ -143,7 +143,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
             yield* peer.send(`[${session.id}] ${text}`);
           }
         }),
-        webSocketClose: Effect.fnUntraced(function* (
+        webSocketClose: Effect.fn(function* (
           ws: Cloudflare.DurableWebSocket,
           code: number,
           reason: string,

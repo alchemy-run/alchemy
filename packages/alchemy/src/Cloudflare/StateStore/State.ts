@@ -447,7 +447,7 @@ const hasLocalStack = (stage: string) =>
  * store, and removing entries that happen to be missing locally would
  * be catastrophic.
  */
-const hoistBootstrapStack = Effect.fnUntraced(function* ({
+const hoistBootstrapStack = Effect.fn(function* ({
   source,
   destination,
 }: {
@@ -469,7 +469,7 @@ const hoistBootstrapStack = Effect.fnUntraced(function* ({
   });
   yield* Effect.forEach(
     fqns,
-    Effect.fnUntraced(function* (fqn) {
+    Effect.fn(function* (fqn) {
       const value = yield* source.state.get({
         stack,
         stage: source.stage,
@@ -619,7 +619,7 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
     );
   });
 
-const makeCloudflareStateStore = Effect.fnUntraced(function* ({
+const makeCloudflareStateStore = Effect.fn(function* ({
   url,
   authToken,
 }: {

@@ -46,7 +46,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
               yield* broadcast(`[reminder] ${payload.message}`);
             }
           }),
-        webSocketMessage: Effect.fnUntraced(function* (
+        webSocketMessage: Effect.fn(function* (
           socket: Cloudflare.DurableWebSocket,
           message: string | ArrayBuffer,
         ) {
@@ -75,7 +75,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
             yield* peer.send(`[${label}] ${text}`);
           }
         }),
-        webSocketClose: Effect.fnUntraced(function* (
+        webSocketClose: Effect.fn(function* (
           ws: Cloudflare.DurableWebSocket,
           code: number,
           reason: string,

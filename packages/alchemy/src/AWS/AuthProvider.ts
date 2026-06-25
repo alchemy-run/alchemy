@@ -117,7 +117,7 @@ export const AwsAuth = AuthProviderLayer<
         ),
       );
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const accessKeyId = yield* Clank.text({
         message: "AWS Access Key ID",
         validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -210,7 +210,7 @@ export const AwsAuth = AuthProviderLayer<
         .pipe(
           Match.when(
             { method: "env" },
-            Effect.fnUntraced(function* () {
+            Effect.fn(function* () {
               const accessKeyId =
                 yield* getEnvRedactedRequired("AWS_ACCESS_KEY_ID");
               const secretAccessKey = yield* getEnvRedactedRequired(
@@ -353,7 +353,7 @@ export const AwsAuth = AuthProviderLayer<
     const prettyPrint = (profileName: string, config: AwsAuthConfig) =>
       resolveCredentials(profileName, config).pipe(
         Effect.tap(
-          Effect.fnUntraced(function* (creds) {
+          Effect.fn(function* (creds) {
             const { accessKeyId, secretAccessKey, sessionToken } =
               yield* creds.credentials;
             yield* Console.log(

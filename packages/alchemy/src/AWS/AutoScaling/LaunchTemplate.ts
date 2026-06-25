@@ -303,7 +303,7 @@ export const LaunchTemplateProvider = () =>
         return Number(versionNumber);
       });
 
-      const toAttributes = Effect.fnUntraced(function* (
+      const toAttributes = Effect.fn(function* (
         template: ec2.LaunchTemplate,
         runtime: Partial<LaunchTemplate["Attributes"]> = {},
       ) {

@@ -386,9 +386,7 @@ export const InstanceProvider = () =>
             .map((tag) => [tag.Key, tag.Value]),
         );
 
-      const toAttributes = Effect.fnUntraced(function* (
-        instance: ec2.Instance,
-      ) {
+      const toAttributes = Effect.fn(function* (instance: ec2.Instance) {
         return {
           instanceId: instance.InstanceId as InstanceId,
           instanceArn: yield* toInstanceArn(instance.InstanceId as InstanceId),

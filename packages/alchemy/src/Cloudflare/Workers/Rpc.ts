@@ -90,7 +90,7 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
     // can `yield* counter.getByName(id).method(args)` directly. The proxy
     // records the `.method(args)` ops and replays them against the
     // resolved client when the chain is yielded.
-    getByName: Effect.fnUntraced(function* (id: string) {
+    getByName: Effect.fn(function* (id: string) {
       const httpClient = HttpClient.layerMergedContext(
         Effect.sync(() => {
           const stub = namespace.getByName(id);

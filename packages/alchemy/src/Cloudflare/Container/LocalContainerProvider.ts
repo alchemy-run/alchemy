@@ -46,7 +46,7 @@ export const LocalContainerProvider = () =>
       // Dockerfile) into a stable build context directory. `Docker.build` in
       // cloudflare-runtime reads `dockerfile` as a file path and uses
       // `context` as the build context, so we point `dev` at both.
-      const prepareImage = Effect.fnUntraced(function* (
+      const prepareImage = Effect.fn(function* (
         id: string,
         news: ContainerApplicationProps,
       ) {
@@ -119,7 +119,7 @@ export const LocalContainerProvider = () =>
           checks: props.checks,
         }) as ContainerApplication.Configuration;
 
-      const makeAttributes = Effect.fnUntraced(function* ({
+      const makeAttributes = Effect.fn(function* ({
         id,
         news,
         output,

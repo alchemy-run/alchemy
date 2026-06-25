@@ -84,7 +84,7 @@ export default class Store extends DurableObjectNamespace<Store>()(
         /**
          * (Root DO only) List every stack name ever registered.
          */
-        listStacks: Effect.fnUntraced(function* () {
+        listStacks: Effect.fn(function* () {
           const entries = yield* storage.list<number>({
             prefix: STACK_INDEX_PREFIX,
           });

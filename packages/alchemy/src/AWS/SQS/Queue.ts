@@ -282,7 +282,7 @@ export const QueueProvider = () =>
   Provider.effect(
     Queue,
     Effect.gen(function* () {
-      const createQueueName = Effect.fnUntraced(function* (
+      const createQueueName = Effect.fn(function* (
         id: string,
         props: {
           queueName?: string | undefined;

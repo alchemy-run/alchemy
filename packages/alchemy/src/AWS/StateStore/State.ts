@@ -290,7 +290,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         run((bucket) => listChildren(bucket, `${prefix}${stack}/`)),
       get: (request) =>
         run((bucket) => readJson<PersistedState>(bucket, resourceKey(request))),
-      getReplacedResources: Effect.fnUntraced(function* (request) {
+      getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.all(
           (yield* state.list(request)).map((fqn) =>
             state.get({

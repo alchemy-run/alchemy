@@ -219,7 +219,7 @@ export const apply = <P extends Plan>(
 // downstream resources can resolve stable identifiers without deadlocking.
 // The actual output lives in the mutable `tracker` map, not in the Deferred.
 
-const executePlan = Effect.fnUntraced(function* (
+const executePlan = Effect.fn(function* (
   plan: Plan,
   tracker: Record<string, ResourceTracker>,
   terminalStatuses: Map<
@@ -1199,7 +1199,7 @@ const executeActionNode = (
 // resource whose resolved inputs differ from what it was last applied with.
 // Repeat until no resource needs updating.
 
-const converge = Effect.fnUntraced(function* (
+const converge = Effect.fn(function* (
   plan: Plan,
   tracker: Record<string, ResourceTracker>,
   terminalStatuses: Map<
@@ -1392,7 +1392,7 @@ const converge = Effect.fnUntraced(function* (
 
 // ── Phase 2: delete orphans and old replaced resources ─────────────────────
 
-const collectGarbage = Effect.fnUntraced(function* (
+const collectGarbage = Effect.fn(function* (
   plan: Plan,
   session: PlanStatusSession,
 ) {
@@ -1427,7 +1427,7 @@ const collectGarbage = Effect.fnUntraced(function* (
     { concurrency: "unbounded" },
   );
 
-  const deleteGraph = Effect.fnUntraced(function* (
+  const deleteGraph = Effect.fn(function* (
     deletionGraph: Record<string, Delete | ReplacedResourceState | undefined>,
   ) {
     const deletions: {

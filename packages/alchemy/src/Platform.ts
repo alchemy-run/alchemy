@@ -359,11 +359,7 @@ export const Platform = <
               Effect.sync(() => hooks.createRuntimeContext(id)),
               Effect.context<never>(),
             ]),
-            Effect.fnUntraced(function* ([
-              props,
-              runtimeContext,
-              outerServices,
-            ]) {
+            Effect.fn(function* ([props, runtimeContext, outerServices]) {
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
@@ -399,7 +395,7 @@ export const Platform = <
                       const phase = yield* ALCHEMY_PHASE;
 
                       return ConfigProvider.make(
-                        Effect.fnUntraced(function* (path) {
+                        Effect.fn(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before

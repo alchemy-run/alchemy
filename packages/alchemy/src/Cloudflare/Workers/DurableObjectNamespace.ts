@@ -226,7 +226,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *     return {
  *       save: (data: string) => db.exec("INSERT ..."),
  *       fetch: Effect.gen(function* () { ... }),
- *       webSocketMessage: Effect.fnUntraced(function* (ws, msg) { ... }),
+ *       webSocketMessage: Effect.fn(function* (ws, msg) { ... }),
  *     };
  *   });
  * })
@@ -542,7 +542,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * @example Handling messages and close events
  * ```typescript
  * return {
- *   webSocketMessage: Effect.fnUntraced(function* (
+ *   webSocketMessage: Effect.fn(function* (
  *     socket: Cloudflare.DurableWebSocket,
  *     message: string | Uint8Array,
  *   ) {
@@ -551,7 +551,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *       : new TextDecoder().decode(message);
  *     // process the message
  *   }),
- *   webSocketClose: Effect.fnUntraced(function* (
+ *   webSocketClose: Effect.fn(function* (
  *     ws: Cloudflare.DurableWebSocket,
  *     code: number,
  *     reason: string,
@@ -589,7 +589,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *         sessions.set(id, socket);
  *         return response;
  *       }),
- *       webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+ *       webSocketMessage: Effect.fn(function* (socket, message) {
  *         const text =
  *           typeof message === "string" ? message : new TextDecoder().decode(message);
  *         for (const peer of sessions.values()) {
@@ -855,7 +855,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
           };
         });
 
-      const make = Effect.fnUntraced(function* (
+      const make = Effect.fn(function* (
         impl: Effect.Effect<
           Effect.Effect<DurableObjectShape>,
           never,

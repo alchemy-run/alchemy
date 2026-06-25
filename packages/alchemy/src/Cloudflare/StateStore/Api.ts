@@ -116,7 +116,7 @@ export default Worker(
       BearerTokenValidator,
       BearerTokenValidator.of({
         // @ts-expect-error - TODO(sam): fix RuntimeContext color here
-        validate: Effect.fnUntraced(function* (token) {
+        validate: Effect.fn(function* (token) {
           const expected = yield* remoteSecret.get();
           return !!expected &&
             timingSafeEqual(token.trim(), Redacted.value(expected).trim())

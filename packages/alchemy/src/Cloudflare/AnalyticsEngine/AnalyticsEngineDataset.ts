@@ -65,10 +65,7 @@ export const AnalyticsEngineDataset: {
    */
   bind: typeof AnalyticsEngineDatasetBinding.bind;
 } = Object.assign(
-  Effect.fnUntraced(function* (
-    name: string,
-    props?: AnalyticsEngineDatasetProps,
-  ) {
+  Effect.fn(function* (name: string, props?: AnalyticsEngineDatasetProps) {
     return {
       kind: AnalyticsEngineDatasetTypeId,
       name,

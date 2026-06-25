@@ -353,7 +353,7 @@ export const R2BucketProvider = () =>
   Provider.effect(
     R2Bucket,
     Effect.gen(function* () {
-      const emptyBucket = Effect.fnUntraced(function* (
+      const emptyBucket = Effect.fn(function* (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
       ) {
@@ -399,7 +399,7 @@ export const R2BucketProvider = () =>
         return location.toLowerCase() as R2Bucket.Location;
       };
 
-      const listCustomDomains = Effect.fnUntraced(function* (
+      const listCustomDomains = Effect.fn(function* (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
         // `NoSuchBucket` after a *create* is endpoint-consistency lag worth

@@ -150,7 +150,7 @@ export const ContainerPlatform: Platform<
     },
   },
   {
-    bind: Effect.fnUntraced(function* <Shape, Req = never>(
+    bind: Effect.fn(function* <Shape, Req = never>(
       containerEff:
         | (ContainerApplication & Rpc<Shape>)
         | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
