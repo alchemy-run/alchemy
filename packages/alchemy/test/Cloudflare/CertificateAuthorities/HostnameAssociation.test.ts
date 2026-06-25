@@ -101,9 +101,12 @@ const waitForCertDelete = (accountId: string, mtlsCertificateId: string) =>
     Effect.catchTag("CertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      // Bounded: 10 polls x 3s = max ~30s of waiting.
+      // Bounded: 30 polls x 3s = max ~90s of waiting. The CA certificate
+      // delete only completes once the hostname-association clear (issued
+      // first by destroy) has propagated, and under full-suite load that
+      // combined window was observed to exceed the previous ~30s budget.
       schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
+        Schedule.both(Schedule.recurs(30)),
       ),
     }),
   );

@@ -828,11 +828,18 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
       // A full-body update PUT re-sends `source`, which makes Cloudflare
       // re-validate the (write-only, auto-provisioned) R2 service token and
       // re-fetch a web-crawler seed — opening a fresh propagation window each
-      // time. Gentle exponential growth keeps the per-attempt delay bounded
-      // (~17s max) while giving the source longer overall to settle (~70s
-      // across 10 attempts).
-      schedule: Schedule.exponential("1 second", 1.5),
-      times: 10,
+      // time. The window stretches under full-suite parallel load (token
+      // propagation across the edge contends with every other test's calls),
+      // so the budget is generous (~2 min). Crucially the per-attempt delay is
+      // *capped* at 6s (`either` takes the min of the two schedules): an
+      // uncapped exponential balloons to ~38s gaps by attempt 10, so it polls
+      // sparsely and detects a settled token tens of seconds late. Capped
+      // polling detects within 6s of propagation completing while still
+      // covering a long total window.
+      schedule: Schedule.exponential("1 second", 1.5).pipe(
+        Schedule.either(Schedule.spaced("6 seconds")),
+      ),
+      times: 22,
     }),
   );
 
