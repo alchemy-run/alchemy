@@ -68,7 +68,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const initial = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("TimeoutFn", {
+        AWS.Lambda.Function("TimeoutFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -83,7 +83,7 @@ test.provider(
       expect(initialConfig.Configuration?.Timeout).toBe(15);
 
       yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("TimeoutFn", {
+        AWS.Lambda.Function("TimeoutFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -162,7 +162,7 @@ test.provider(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("ArchitectureFn", {
+        AWS.Lambda.Function("ArchitectureFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -174,7 +174,7 @@ test.provider(
       yield* waitForArchitecture(initial.functionName, "arm64");
 
       const updated = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("ArchitectureFn", {
+        AWS.Lambda.Function("ArchitectureFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -198,7 +198,7 @@ test.provider(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("ConcurrencyFn", {
+        AWS.Lambda.Function("ConcurrencyFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -210,7 +210,7 @@ test.provider(
       yield* waitForReservedConcurrency(initial.functionName, undefined);
 
       const updated = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("ConcurrencyFn", {
+        AWS.Lambda.Function("ConcurrencyFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -224,7 +224,7 @@ test.provider(
       yield* waitForReservedConcurrency(updated.functionName, 0);
 
       const removed = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("ConcurrencyFn", {
+        AWS.Lambda.Function("ConcurrencyFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -253,7 +253,7 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("ListFn", {
+        AWS.Lambda.Function("ListFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -279,7 +279,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const initial = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("IamUrlFn", {
+        AWS.Lambda.Function("IamUrlFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
@@ -298,7 +298,7 @@ test.provider(
       });
 
       const updated = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("IamUrlFn", {
+        AWS.Lambda.Function("IamUrlFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,

@@ -32,7 +32,7 @@ export default Cloudflare.Worker(
   "Api",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const kv = yield* Cloudflare.KVNamespaceBinding.bind(MyKV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
 
     return {
       fetch: Effect.gen(function* () {
@@ -46,7 +46,7 @@ export default Cloudflare.Worker(
 
 This works, but the handler is welded to KV. The `fetch` body
 mentions `kv.get`, knows the value shape comes back as `"json"`,
-and propagates `KVNamespaceError`. Moving the data to DynamoDB or
+and propagates `NamespaceError`. Moving the data to DynamoDB or
 swapping in an in-memory fake for tests means rewriting `fetch` —
 not just the storage wiring.
 
@@ -89,7 +89,7 @@ export const JobServiceKV = Layer.effect(
   JobService,
   Effect.gen(function* () {
     const MyKV = yield* Cloudflare.KVNamespace("MyKV");
-    const kv = yield* Cloudflare.KVNamespaceBinding.bind(MyKV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
 
     return {
       getJob: Effect.fn(function* (id: string) {
@@ -105,7 +105,7 @@ Three things happen in one expression:
 1. **The KV namespace is a real resource.** It joins the
    [Stack](/concepts/stack), goes through plan/create/update like
    anything else.
-2. **The binding is wired** — `KVNamespaceBinding.bind(MyKV)`
+2. **The binding is wired** — `KV.ReadWriteNamespace(MyKV)`
    attaches the KV namespace to whichever Worker eventually consumes
    this Layer.
 3. **A typed `JobService` is returned.** Callers see only `getJob`.
@@ -148,7 +148,7 @@ The handler that called `kv.get` directly had a `fetch` body typed
 roughly:
 
 ```typescript
-Effect.Effect<Response, KVNamespaceError, Alchemy.RuntimeContext>
+Effect.Effect<Response, NamespaceError, Alchemy.RuntimeContext>
 ```
 
 The KV-specific error and the implicit dependence on a Cloudflare
@@ -162,8 +162,8 @@ Effect.Effect<Response, JobError, Alchemy.RuntimeContext>
 The Cloudflare-specific surface is gone — absorbed by the Layer:
 
 ```typescript
-export const KVNamespaceBindingLive = Layer.effect(
-  KVNamespaceBinding,
+export const ReadWriteNamespaceBinding = Layer.effect(
+  NamespaceReadWrite,
   Effect.gen(function* () {
     const env = yield* WorkerEnvironment; // ← required here, once
     // ...returns a client that closes over env
@@ -171,7 +171,7 @@ export const KVNamespaceBindingLive = Layer.effect(
 );
 ```
 
-The Worker that consumes `KVNamespaceBindingLive` satisfies
+The Worker that consumes `ReadWriteNamespaceBinding` satisfies
 `WorkerEnvironment` in one place; downstream callers see only
 `RuntimeContext`. Try the swap on a Cloudflare Worker:
 
@@ -197,7 +197,7 @@ Cloudflare.Worker(
   { main: import.meta.filename },
   Effect.gen(function* () {
     // ─── Init: declare dependencies ───
-    const kv = yield* Cloudflare.KVNamespaceBinding.bind(MyKV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
 
     return {
       // ─── Runtime: use them ───
@@ -214,7 +214,7 @@ inside the runtime closure. It is not provided at plantime, cold
 start init, or anywhere else. So an Effect like:
 
 ```typescript
-kv.get(...): Effect.Effect<Job | null, KVNamespaceError, Alchemy.RuntimeContext>
+kv.get(...): Effect.Effect<Job | null, NamespaceError, Alchemy.RuntimeContext>
 ```
 
 is one the type system *guarantees* can only run in the runtime

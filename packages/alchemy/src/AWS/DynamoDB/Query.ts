@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface QueryRequest extends Omit<DynamoDB.QueryInput, "TableName"> {}
 
@@ -42,7 +43,8 @@ export const QueryLive = Layer.effect(
 
 export class QueryPolicy extends Binding.Policy<
   QueryPolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>
+  <T extends Table>(table: T) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.Query") {}
 
 export const QueryPolicyLive = QueryPolicy.layer.succeed(

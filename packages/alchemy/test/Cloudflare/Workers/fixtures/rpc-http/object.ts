@@ -14,8 +14,8 @@ import { DoRpcs } from "./group.ts";
  */
 export default class RpcHttpTestObject extends Cloudflare.DurableObjectNamespace<RpcHttpTestObject>()(
   "RpcHttpTestObject",
-  Effect.gen(function* () {
-    return Effect.gen(function* () {
+  Effect.succeed(
+    Effect.gen(function* () {
       let counter = 0;
 
       const handlersLayer = DoRpcs.toLayer({
@@ -58,6 +58,6 @@ export default class RpcHttpTestObject extends Cloudflare.DurableObjectNamespace
           ),
         ),
       };
-    });
-  }),
+    }),
+  ),
 ) {}

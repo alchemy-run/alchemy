@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface TestEventPatternRequest
   extends eventbridge.TestEventPatternRequest {}
@@ -37,7 +38,8 @@ export const TestEventPatternLive = Layer.effect(
 
 export class TestEventPatternPolicy extends Binding.Policy<
   TestEventPatternPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.TestEventPattern") {}
 
 export const TestEventPatternPolicyLive = TestEventPatternPolicy.layer.succeed(

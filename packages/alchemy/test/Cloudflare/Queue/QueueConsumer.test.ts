@@ -10,6 +10,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -218,12 +219,22 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
     // The new consumer must be reachable on Cloudflare — the previous
     // implementation died with "already exists but could not be found"
     // because listConsumers was single-page and ConsumerAlreadyExists
-    // was caught by a generic `Effect.catch`.
-    const live = yield* queues.getConsumer({
-      accountId,
-      queueId: recovered.queue.queueId,
-      consumerId: recovered.consumer.consumerId,
-    });
+    // was caught by a generic `Effect.catch`. A freshly-created consumer
+    // can briefly 404 from this out-of-band read under load, so ride out
+    // the read-after-create lag before asserting.
+    const live = yield* queues
+      .getConsumer({
+        accountId,
+        queueId: recovered.queue.queueId,
+        consumerId: recovered.consumer.consumerId,
+      })
+      .pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ConsumerNotFound",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
+        }),
+      );
     expect("scriptName" in live ? live.scriptName : undefined).toEqual(
       recovered.worker.workerName,
     );

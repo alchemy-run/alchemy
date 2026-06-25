@@ -6,6 +6,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import { PutRecords } from "./PutRecords.ts";
 import type { Stream } from "./Stream.ts";
+import type { Providers } from "../Providers.ts";
 
 export type StreamSinkRecord = Kinesis.PutRecordsRequestEntry;
 
@@ -45,7 +46,8 @@ export const StreamSinkLive = Layer.effect(
 
 export class StreamSinkPolicy extends Binding.Policy<
   StreamSinkPolicy,
-  (stream: Stream) => Effect.Effect<void>
+  (stream: Stream) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.StreamSink") {}
 
 export const StreamSinkPolicyLive = StreamSinkPolicy.layer.succeed(

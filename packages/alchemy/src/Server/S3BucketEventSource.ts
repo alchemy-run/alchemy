@@ -9,6 +9,7 @@ import type {
 import * as S3 from "../AWS/S3/index.ts";
 import type { S3EventType } from "../AWS/S3/S3Event.ts";
 import * as SQS from "../AWS/SQS/index.ts";
+import type { Providers } from "../AWS/Providers.ts";
 import * as Binding from "../Binding.ts";
 import { SQSQueueEventSource } from "./SQSQueueEventSource.ts";
 
@@ -64,7 +65,8 @@ export class S3BucketEventSourcePolicy extends Binding.Policy<
       queue: SQS.Queue;
       events?: S3.S3EventType[];
     },
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void>,
+  Providers
 >()("Process.S3BucketEventSource") {}
 
 export const S3BucketEventSourcePolicyLive =

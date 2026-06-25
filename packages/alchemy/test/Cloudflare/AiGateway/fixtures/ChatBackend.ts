@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { Chat } from "effect/unstable/ai";
@@ -41,5 +42,5 @@ export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatB
           }).pipe(Effect.provide(languageModel), Effect.orDie),
       };
     });
-  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.AiGatewayBindingLive))),
 ) {}

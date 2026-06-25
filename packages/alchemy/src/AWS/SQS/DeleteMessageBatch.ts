@@ -6,6 +6,7 @@ import * as Output from "../../Output.ts";
 import { isInstance } from "../EC2/Instance.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DeleteMessageBatchRequest extends Omit<
   sqs.DeleteMessageBatchRequest,
@@ -48,7 +49,8 @@ export const DeleteMessageBatchLive = Layer.effect(
 
 export class DeleteMessageBatchPolicy extends Binding.Policy<
   DeleteMessageBatchPolicy,
-  (queue: Queue) => Effect.Effect<void>
+  (queue: Queue) => Effect.Effect<void>,
+  Providers
 >()("AWS.SQS.DeleteMessageBatch") {}
 
 export const DeleteMessageBatchPolicyLive =

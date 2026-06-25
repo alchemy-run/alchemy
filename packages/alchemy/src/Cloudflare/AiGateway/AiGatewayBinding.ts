@@ -7,6 +7,7 @@ import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { Providers } from "../Providers.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AiGateway as AiGatewayResource } from "./AiGateway.ts";
 import {
@@ -193,7 +194,8 @@ export const AiGatewayBindingLive = Layer.effect(
  */
 export class AiGatewayBindingPolicy extends Binding.Policy<
   AiGatewayBindingPolicy,
-  (gateway: AiGatewayResource) => Effect.Effect<void>
+  (gateway: AiGatewayResource) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.AiGateway.Binding") {}
 
 /**

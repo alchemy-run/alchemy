@@ -41,4 +41,11 @@ minimumReleaseAgeExcludes = [
   "@typescript/typescript-openbsd-arm64",
   "@typescript/typescript-openbsd-x64",
   "@typescript/typescript-sunos-x64",
+  "@typescript/native-preview-linux-arm64",
+  "@typescript/native-preview-linux-x64",
+  "@typescript/native-preview-linux-arm",
+  "@typescript/native-preview-win32-x64",
+  "@typescript/native-preview-win32-arm64",
+  "@typescript/native-preview-darwin-x64",
+  "@typescript/native-preview-darwin-arm64",
 ]

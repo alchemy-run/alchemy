@@ -1,3 +1,4 @@
+import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -7,12 +8,15 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Scope } from "effect/Scope";
+import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
+import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import type { PolicyLike } from "./Binding.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
+import type { Named, Tag } from "./Named.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -38,18 +42,62 @@ export interface PlatformProps {
 }
 
 export type Main<InitServices = never> = void | {
-  fetch:
-    | HttpEffect<InitServices | PlatformServices>
+  fetch?:
+    | HttpEffect<InitServices | PlatformServices | RuntimeContext | Scope>
     | Effect.Effect<
-        HttpEffect<InitServices | PlatformServices>,
+        HttpEffect<InitServices | PlatformServices | RuntimeContext | Scope>,
         never,
         InitServices | PlatformServices
       >;
 };
 
+export interface MainRpc<Req = never> {
+  [key: string]:
+    | Effect.Effect<
+        any,
+        any,
+        PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req
+      >
+    | Stream.Stream<
+        any,
+        any,
+        PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req
+      >
+    | ((
+        ...args: any[]
+      ) =>
+        | Effect.Effect<
+            any,
+            any,
+            PlatformServices | RuntimeContext | Scope | Req
+          >
+        | Stream.Stream<
+            any,
+            any,
+            PlatformServices | RuntimeContext | Scope | Req
+          >);
+}
+
+// Strip `void`/`undefined`/`never` from `Shape` before intersecting it with
+// `BaseShape`. This matters when `Shape` fails its `extends MainShape`
+// constraint (e.g. a `fetch` handler that leaks an error): TS clamps `Shape`
+// to the constraint union `void | { fetch: ... }`, and a *distributive*
+// conditional would split that into `BaseShape | ({ fetch } & BaseShape)` — a
+// union. Feeding a union into the `new (_: never): ...` construct signature
+// makes the base class a union type, which surfaces as the cryptic
+// ts(2509) "Base constructor return type ... is not an object type" instead of
+// the real assignability error on the `impl` argument. Excluding `void` here
+// keeps the construct-sig return a single object type, so only the actionable
+// error remains.
+export type MakeShape<Shape, BaseShape> = [
+  Exclude<Shape, void | undefined>,
+] extends [never]
+  ? Exclude<BaseShape, void | undefined>
+  : Exclude<Shape, void | undefined> & Exclude<BaseShape, void | undefined>;
+
 // services provided to the Resource
 export type PlatformServices =
-  | RuntimeContext
+  | NodeServices
   | ExecutionContext
   | HttpClient
   | PolicyLike
@@ -71,39 +119,43 @@ export interface Platform<
   Provider: Provider<Resource>;
 
   <Self, Shape, Deps = never>(): {
-    <PropsReq = never>(
-      id: string,
-      props:
-        | InputProps<Resource["Props"]>
-        | Effect.Effect<
-            InputProps<Resource["Props"]>,
-            ConfigError.ConfigError,
-            PropsReq
-          >,
+    <const Id extends string>(
+      id: Id,
     ): Effect.Effect<
       Resource & Rpc<Self> & Dependencies<Deps>,
       never,
-      Resource["Providers"] | PropsReq
-    > & {
-      make<InitReq = never>(
-        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
-      ): Layer.Layer<
-        Self,
-        never,
-        | Resource["Providers"]
-        | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
-      >;
-      new (_: never): MakeShape<Shape, BaseShape>;
-      of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
-    };
+      Resource["Providers"]
+    > &
+      Named<Id> & {
+        make<PropsReq = never, InitReq = never>(
+          props:
+            | InputProps<Resource["Props"]>
+            | Effect.Effect<
+                InputProps<Resource["Props"]>,
+                ConfigError.ConfigError,
+                PropsReq
+              >,
+          impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+        ): Layer.Layer<
+          Self,
+          never,
+          | Resource["Providers"]
+          | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
+        >;
+        new (
+          _: never,
+        ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
+        of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
+      };
   };
   <Self>(): {
     <
+      const Id extends string,
       Shape extends MainShape,
       PropsReq = never,
       InitReq extends Services | PlatformServices | Resource = never,
     >(
-      id: string,
+      id: Id,
       props:
         | InputProps<Resource["Props"]>
         | Effect.Effect<Resource["Props"], ConfigError.ConfigError, PropsReq>,
@@ -112,78 +164,72 @@ export interface Platform<
       Resource & Rpc<Self>,
       never,
       | Resource["Providers"]
-      | PropsReq
+      | Exclude<PropsReq, Services | PlatformServices | Resource>
       | Exclude<InitReq, Services | PlatformServices | Resource>
-    > & {
-      new (_: never): MakeShape<Shape, BaseShape>;
-    };
-    <Shape, PropsReq = never>(
-      id: string,
-      props:
-        | InputProps<Resource["Props"]>
-        | Effect.Effect<
-            InputProps<Resource["Props"]>,
-            ConfigError.ConfigError,
-            PropsReq
-          >,
-    ): Effect.Effect<
-      Resource & Rpc<Self>,
-      never,
-      Resource["Providers"] | PropsReq
-    > & {
-      make<InitReq extends Services | PlatformServices | Resource = never>(
-        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
-      ): Layer.Layer<
-        Self,
-        never,
-        | Resource["Providers"]
-        | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
-      >;
-      new (_: never): MakeShape<Shape, BaseShape>;
-    } & (<InitReq extends Services | PlatformServices | Resource = never>(
-        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
-      ) => Effect.Effect<
-        Resource & Rpc<Self>,
-        never,
-        | Resource["Providers"]
-        | PropsReq
-        | Exclude<InitReq, Services | PlatformServices | Resource>
-      >);
+    > &
+      Named<Id> & {
+        new (
+          _: never,
+        ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
+      };
+
+    <const Id extends string>(
+      id: Id,
+    ): Effect.Effect<Resource & Rpc<Self>, never, Resource["Providers"]> &
+      Named<Id> & {
+        make<
+          PropsReq = never,
+          InitReq extends Services | PlatformServices | Resource = never,
+        >(
+          props:
+            | InputProps<Resource["Props"]>
+            | Effect.Effect<
+                InputProps<Resource["Props"]>,
+                ConfigError.ConfigError,
+                PropsReq
+              >,
+          impl: Effect.Effect<MainShape, ConfigError.ConfigError, InitReq>,
+        ): Layer.Layer<
+          Self,
+          never,
+          | Resource["Providers"]
+          | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
+        >;
+        new (_: never): BaseShape & Named<Id> & Tag<Resource["Type"]>;
+      };
   };
-  // <PropsReq = never, InitReq extends Services | PlatformServices = never>(
-  //   id: string,
-  //   props:
-  //     | InputProps<Resource["Props"]>
-  //     | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
-  // ): Effect.Effect<
-  //   Resource,
-  //   never,
-  //   | Resource["Providers"]
-  //   | PropsReq
-  //   | Exclude<InitReq, Services | PlatformServices>
-  // >;
-  <
-    Shape extends MainShape,
-    PropsReq = never,
-    InitReq extends Services | PlatformServices = never,
-  >(
+  <PropsReq = never, InitReq extends Services | PlatformServices = never>(
     id: string,
     props:
       | InputProps<Resource["Props"]>
       | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
-    impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
   ): Effect.Effect<
-    Resource & Rpc<Shape>,
+    Resource,
     never,
     | Resource["Providers"]
     | PropsReq
     | Exclude<InitReq, Services | PlatformServices>
   >;
+  <
+    const Id extends string,
+    Shape extends MainShape,
+    PropsReq = never,
+    InitReq extends Services | PlatformServices = never,
+  >(
+    id: Id,
+    props:
+      | InputProps<Resource["Props"]>
+      | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
+    impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+  ): Effect.Effect<
+    Resource & Rpc<Shape> & Named<Id>,
+    never,
+    | Resource["Providers"]
+    | PropsReq
+    | Exclude<InitReq, Services | PlatformServices>
+  > &
+    Named<Id>;
 }
-
-type MakeShape<Shape, BaseShape> = Shape extends never | undefined | void
-  ? BaseShape
-  : Shape & BaseShape;
 
 export const Platform = <
   R extends ResourceLike<
@@ -223,7 +269,7 @@ export const Platform = <
       return (id: string, props?: any, impl?: Impl) =>
         constructor(id, props, impl, true);
     } else if (!impl) {
-      const cls = makeClass(id, props);
+      const cls = makeClass(id);
       const evaluate = () =>
         (!isTag
           ? // this is a non-tagged resource yielded without providing an implementation
@@ -270,8 +316,8 @@ export const Platform = <
           ),
         );
       return Object.assign(
-        function (impl: Impl) {
-          return cls.Self.pipe(Effect.provide(cls.make(impl)));
+        function (props: Props, impl: Impl) {
+          return cls.Self.pipe(Effect.provide(cls.make(props, impl)));
         },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
@@ -291,19 +337,19 @@ export const Platform = <
       // impl was provided inline, this is a non-tagged eager instance
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
-      const cls = makeClass(id, props);
-      return cls.Self.pipe(Effect.provide(cls.make(impl)), effectClass);
+      const cls = makeClass(id);
+      return cls.Self.pipe(Effect.provide(cls.make(props, impl)), effectClass);
     }
   };
 
-  const makeClass = (id: string, props: Props) => {
+  const makeClass = (id: string) => {
     class Platform {
       static readonly Self = Self(`${type}<${id}>`);
       static readonly Platform = Context.Service<Platform, Platform>(
         `Platform<${type}<${id}>>`,
       );
       static of = (shape: any) => shape;
-      static make = (impl: Impl) => {
+      static make = (props: Props, impl: Impl) => {
         // build the Layer once for the root Self
         const SelfLayer = Layer.effect(
           Self,
@@ -343,7 +389,6 @@ export const Platform = <
                       }) ?? Effect.die("No serve handler"))
                     : Effect.void,
                 ),
-
                 Effect.provide(
                   Layer.effect(
                     ConfigProvider.ConfigProvider,

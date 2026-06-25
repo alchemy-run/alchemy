@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PutEventsRequest extends Omit<
   eventbridge.PutEventsRequest,
@@ -56,7 +57,8 @@ export const PutEventsLive = Layer.effect(
 
 export class PutEventsPolicy extends Binding.Policy<
   PutEventsPolicy,
-  (bus?: EventBus) => Effect.Effect<void>
+  (bus?: EventBus) => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.PutEvents") {}
 
 export const PutEventsPolicyLive = PutEventsPolicy.layer.effect(

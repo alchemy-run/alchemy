@@ -6,6 +6,7 @@ import * as Output from "../../Output.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListRulesRequest extends Omit<
   eventbridge.ListRulesRequest,
@@ -51,7 +52,8 @@ export const ListRulesLive = Layer.effect(
 
 export class ListRulesPolicy extends Binding.Policy<
   ListRulesPolicy,
-  (bus?: EventBus) => Effect.Effect<void>
+  (bus?: EventBus) => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.ListRules") {}
 
 export const ListRulesPolicyLive = ListRulesPolicy.layer.effect(

@@ -12,6 +12,7 @@ import {
 } from "../Kinesis/StreamEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export const isKinesisStreamEvent = (
   event: any,
@@ -63,7 +64,8 @@ export const StreamEventSource = Layer.effect(
 
 export class StreamEventSourcePolicy extends Binding.Policy<
   StreamEventSourcePolicy,
-  (stream: KinesisStream, props: StreamEventSourceProps) => Effect.Effect<void>
+  (stream: KinesisStream, props: StreamEventSourceProps) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.StreamEventSource") {}
 
 export const StreamEventSourcePolicyLive = StreamEventSourcePolicy.layer.effect(

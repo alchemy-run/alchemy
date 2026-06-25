@@ -30,7 +30,7 @@ test.provider(
         };
       }) =>
         Effect.gen(function* () {
-          const fn = yield* AWS.Lambda.Function<{}>()("AliasFn", {
+          const fn = yield* AWS.Lambda.Function("AliasFn", {
             main: timeoutHandlerPath,
             handler: "handler",
             isExternal: true,

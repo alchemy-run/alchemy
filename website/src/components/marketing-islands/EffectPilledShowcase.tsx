@@ -67,8 +67,8 @@ const STREAM_CODE = `export default AWS.Lambda.Function(
 const DO_CODE = `export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
   "Rooms",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
       return {
@@ -84,14 +84,13 @@ const DO_CODE = `export default class Room extends Cloudflare.DurableObjectNames
 
 const CONTAINER_CODE = `export class Sandbox extends Cloudflare.Container<Sandbox, {
   exec: (cmd: string) => Effect.Effect<ExecResult>;
-}>()(
-  "Sandbox",
-  Stack.useSync((stack) => ({
-    instanceType: stack.stage === "prod" ? "standard-1" : "dev",
-  })),
-) {}
+}>()("Sandbox") {}
 
 export const SandboxLive = Sandbox.make(
+  Stack.useSync((stack) => ({
+    main: import.meta.filename,
+    instanceType: stack.stage === "prod" ? "standard-1" : "dev",
+  })),
   Effect.gen(function* () {
     const cp = yield* ChildProcessSpawner;
     return Sandbox.of({

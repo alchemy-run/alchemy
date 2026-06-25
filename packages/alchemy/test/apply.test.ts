@@ -1,5 +1,5 @@
 import { Cli } from "@/Cli/Cli";
-import * as Construct from "@/Construct";
+import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
@@ -263,26 +263,27 @@ describe("basic operations", () => {
     "should resolve bindings inside constructs using namespaced resources",
     (stack) =>
       Effect.gen(function* () {
-        const Site = Construct.fn(function* (_id: string, _props: {}) {
-          const bucket = yield* BindingTarget("Bucket", {
-            string: "bucket-value",
-          });
-          const distribution = yield* BindingTarget("Distribution", {
-            string: "distribution-value",
-          });
+        const Site = (id: string, _props: {}) =>
+          Effect.gen(function* () {
+            const bucket = yield* BindingTarget("Bucket", {
+              string: "bucket-value",
+            });
+            const distribution = yield* BindingTarget("Distribution", {
+              string: "distribution-value",
+            });
 
-          yield* bucket.bind("Policy", {
-            env: {
-              BUCKET: bucket.string,
-              DISTRIBUTION: distribution.string,
-            },
-          });
+            yield* bucket.bind("Policy", {
+              env: {
+                BUCKET: bucket.string,
+                DISTRIBUTION: distribution.string,
+              },
+            });
 
-          return {
-            bucket,
-            distribution,
-          };
-        });
+            return {
+              bucket,
+              distribution,
+            };
+          }).pipe(Namespace.push(id));
 
         const output = yield* Site("MarketingSite", {}).pipe(stack.deploy);
 
@@ -454,13 +455,13 @@ describe("FQN separator in logical ID", () => {
         // child resource's logical ID is "owner/repo".
         const fqn = "ReleaseService/alchemy-run/alchemy-effect";
 
-        const Host = Construct.fn(function* (_id: string, _props: {}) {
-          return yield* TestResource("alchemy-run/alchemy-effect", {
-            string: "v1",
-          });
-        });
-
-        yield* stack.deploy(Host("ReleaseService", {}));
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* TestResource("alchemy-run/alchemy-effect", {
+              string: "v1",
+            });
+          }).pipe(Namespace.push("ReleaseService")),
+        );
 
         expect((yield* getState(fqn))?.status).toEqual("created");
 
@@ -4174,12 +4175,10 @@ describe("artifacts", () => {
     "isolates artifact bags by FQN for namespaced resources with the same leaf logical ID",
     (stack) =>
       Effect.gen(function* () {
-        const Site = Construct.fn(function* (
-          _id: string,
-          props: { value: string },
-        ) {
-          return yield* ArtifactProbe("Shared", { value: props.value });
-        });
+        const Site = (id: string, props: { value: string }) =>
+          Effect.gen(function* () {
+            return yield* ArtifactProbe("Shared", { value: props.value });
+          }).pipe(Namespace.push(id));
 
         yield* Effect.gen(function* () {
           yield* Site("Left", { value: "left-v1" });

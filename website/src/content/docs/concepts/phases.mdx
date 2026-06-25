@@ -30,7 +30,7 @@ Cloudflare.Worker(
   { main: import.meta.filename },
   Effect.gen(function* () {
     // ─── Init phase ───
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
 
     return {
       // ─── Runtime phase ───
@@ -139,8 +139,8 @@ The init/runtime split lets you write code that:
 ```typescript
 Effect.gen(function* () {
   // Init: runs once per cold start
-  const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
-  const kv = yield* Cloudflare.KVNamespace.bind(KV);
+  const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+  const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
   return {
     // Runtime: runs per request

@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { Scope } from "effect/Scope";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -10,10 +11,15 @@ import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
-import type { PlatformServices } from "../../Platform.ts";
+import type { MainRpc, PlatformServices } from "../../Platform.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
+import type { Container } from "../Container/Container.ts";
+import {
+  DurableObjectState,
+  fromDurableObjectState,
+} from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
@@ -21,7 +27,7 @@ import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 export interface DurableObjectExport {
   readonly kind: "durableObject";
   readonly constructor: Effect.Effect<
-    DurableObjectShape,
+    Effect.Effect<DurableObjectShape, never, RuntimeContext>,
     never,
     DurableObjectState
   >;
@@ -79,7 +85,7 @@ export interface DurableObjectNamespace<
 }
 
 export interface DurableObjectShape {
-  fetch?: HttpEffect<DurableObjectState>;
+  fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: (
     alarmInfo?: AlarmInvocationInfo,
   ) => Effect.Effect<void, never, never>;
@@ -140,31 +146,38 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
           | Dependencies<Self>
           | Effect.Effect<Dependencies<Self>, never, Req>,
       ): Effect.Effect<DurableObjectNamespace<Self>, never, Worker | Req>;
-      make<InitReq = never>(
+      make<Req = never>(
         impl: Effect.Effect<
-          Effect.Effect<Shape, never, DurableObjectServices>,
+          Effect.Effect<
+            Shape,
+            never,
+            RuntimeContext | DurableObjectState | Scope
+          >,
           never,
-          InitReq
+          DurableObjectServices | Req
         >,
-      ): Layer.Layer<
-        Self,
-        never,
-        Worker | Exclude<InitReq, DurableObjectServices>
-      >;
+      ): Layer.Layer<Self, never, Worker | Req>;
     };
   };
   <Self>(): {
-    <Shape, InitReq = never>(
+    <
+      Shape extends MainRpc<DurableObjectState>,
+      Req extends DurableObjectServices | Container.Application<any> = never,
+    >(
       name: string,
       impl: Effect.Effect<
-        Effect.Effect<Shape, never, DurableObjectServices>,
+        Effect.Effect<
+          Shape,
+          never,
+          RuntimeContext | DurableObjectState | Scope
+        >,
         never,
-        InitReq
+        Req
       >,
     ): Effect.Effect<
       DurableObjectNamespace<Self>,
       never,
-      Worker | Exclude<InitReq, DurableObjectServices>
+      Worker | Extract<Req, Container.Application<any>>
     > & {
       new (_: never): Shape;
     };
@@ -175,11 +188,7 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
   ): DurableObjectNamespaceLike<Shape>;
   <Shape, InitReq = never>(
     name: string,
-    impl: Effect.Effect<
-      Effect.Effect<Shape, never, DurableObjectServices>,
-      never,
-      InitReq
-    >,
+    impl: Effect.Effect<Shape, never, DurableObjectServices | InitReq>,
   ): Effect.Effect<
     DurableObjectNamespace<Shape>,
     never,
@@ -198,18 +207,22 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * A Durable Object uses a two-phase pattern with two nested `Effect.gen`
  * blocks. The outer Effect resolves shared dependencies (other DOs,
- * containers, etc.). The inner Effect runs once per instance and returns
- * the object's public methods and WebSocket handlers.
+ * containers, etc.) and the instance state *reference*
+ * (`Cloudflare.DurableObjectState`). The inner Effect returns the
+ * object's public methods and WebSocket handlers — and is the only
+ * place the state's `RuntimeContext`-colored methods (`storage.get`,
+ * `storage.put`, …) can actually run.
  *
  * ```typescript
  * Effect.gen(function* () {
- *   // Phase 1: resolve shared dependencies
+ *   // Phase 1: resolve shared dependencies + the instance state ref
  *   const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *   const state = yield* Cloudflare.DurableObjectState;
  *
  *   return Effect.gen(function* () {
- *     // Phase 2: per-instance setup and public API
- *     const state = yield* Cloudflare.DurableObjectState;
- *
+ *     // Phase 2: per-instance setup and public API. `state`'s methods
+ *     // (storage.get/put, …) are RuntimeContext-colored, so the actual
+ *     // I/O happens here, in the runtime closure.
  *     return {
  *       save: (data: string) => db.exec("INSERT ..."),
  *       fetch: Effect.gen(function* () { ... }),
@@ -241,15 +254,16 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * export default class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
  *   "Counter",
  *   Effect.gen(function* () {
- *     // init: bind resources
+ *     // init: bind resources + resolve the instance state ref
  *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *     const state = yield* Cloudflare.DurableObjectState;
  *
  *     return Effect.gen(function* () {
- *       const state = yield* Cloudflare.DurableObjectState;
+ *       // runtime: state's storage methods are RuntimeContext-colored,
+ *       // so the reads/writes live here
  *       const count = (yield* state.storage.get<number>("count")) ?? 0;
  *
  *       return {
- *         // runtime: use them
  *         increment: () =>
  *           Effect.gen(function* () {
  *             const next = count + 1;
@@ -283,15 +297,16 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * export default Counter.make(
  *   Effect.gen(function* () {
- *     // init: bind resources
+ *     // init: bind resources + resolve the instance state ref
  *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *     const state = yield* Cloudflare.DurableObjectState;
  *
  *     return Effect.gen(function* () {
- *       const state = yield* Cloudflare.DurableObjectState;
+ *       // runtime: state's storage methods are RuntimeContext-colored,
+ *       // so the reads/writes live here
  *       const count = (yield* state.storage.get<number>("count")) ?? 0;
  *
  *       return {
- *         // runtime: use them
  *         increment: () =>
  *           Effect.gen(function* () {
  *             const next = count + 1;
@@ -493,14 +508,15 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * @section Accessing Instance State
  * Each Durable Object instance has its own transactional key-value
- * storage via `Cloudflare.DurableObjectState`. Use `storage.get` and
- * `storage.put` inside the inner Effect to persist data across requests
- * and restarts.
+ * storage via `Cloudflare.DurableObjectState`. Resolve the `state`
+ * *reference* in the outer (init) Effect, but call its methods —
+ * `storage.get`, `storage.put`, … — only from the inner (runtime)
+ * Effect: those methods are `RuntimeContext`-colored, so the type
+ * system only allows them inside the runtime closure.
  *
  * @example Reading and writing durable storage
  * ```typescript
- * const state = yield* Cloudflare.DurableObjectState;
- *
+ * // inner (runtime) Effect — `state` was resolved in the outer Effect
  * yield* state.storage.put("counter", 42);
  * const value = yield* state.storage.get("counter");
  * ```
@@ -546,37 +562,42 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * ```
  *
  * @example Recovering sessions after hibernation
- * Place the rehydration loop **inside the inner `Effect.gen`** so
- * it runs every time the DO instance is reconstructed (including
- * after Cloudflare wakes the DO from hibernation).
+ * Resolve the `state` reference in the outer Effect, but place the
+ * rehydration loop (`state.getWebSockets()` is `RuntimeContext`-colored)
+ * **inside the inner `Effect.gen`** so it runs every time the DO
+ * instance is reconstructed (including after Cloudflare wakes the DO
+ * from hibernation).
  *
  * ```typescript
- * return Effect.gen(function* () {
+ * Effect.gen(function* () {
  *   const state = yield* Cloudflare.DurableObjectState;
- *   const sessions = new Map<string, Cloudflare.DurableWebSocket>();
  *
- *   // Rehydrate the in-memory session map after hibernation.
- *   for (const socket of yield* state.getWebSockets()) {
- *     const data = socket.deserializeAttachment<{ id: string }>();
- *     if (data) sessions.set(data.id, socket);
- *   }
+ *   return Effect.gen(function* () {
+ *     const sessions = new Map<string, Cloudflare.DurableWebSocket>();
  *
- *   return {
- *     fetch: Effect.gen(function* () {
- *       const [response, socket] = yield* Cloudflare.upgrade();
- *       const id = crypto.randomUUID();
- *       socket.serializeAttachment({ id });
- *       sessions.set(id, socket);
- *       return response;
- *     }),
- *     webSocketMessage: Effect.fnUntraced(function* (socket, message) {
- *       const text =
- *         typeof message === "string" ? message : new TextDecoder().decode(message);
- *       for (const peer of sessions.values()) {
- *         yield* peer.send(text);
- *       }
- *     }),
- *   };
+ *     // Rehydrate the in-memory session map after hibernation.
+ *     for (const socket of yield* state.getWebSockets()) {
+ *       const data = socket.deserializeAttachment<{ id: string }>();
+ *       if (data) sessions.set(data.id, socket);
+ *     }
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const [response, socket] = yield* Cloudflare.upgrade();
+ *         const id = crypto.randomUUID();
+ *         socket.serializeAttachment({ id });
+ *         sessions.set(id, socket);
+ *         return response;
+ *       }),
+ *       webSocketMessage: Effect.fnUntraced(function* (socket, message) {
+ *         const text =
+ *           typeof message === "string" ? message : new TextDecoder().decode(message);
+ *         for (const peer of sessions.values()) {
+ *           yield* peer.send(text);
+ *         }
+ *       }),
+ *     };
+ *   });
  * });
  * ```
  *
@@ -836,7 +857,9 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
 
       const make = Effect.fnUntraced(function* (
         impl: Effect.Effect<
-          Effect.Effect<DurableObjectShape, never, DurableObjectState>
+          Effect.Effect<DurableObjectShape>,
+          never,
+          DurableObjectState
         >,
       ) {
         // Register the local DO binding (no `scriptName`) and obtain the
@@ -845,12 +868,29 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
         // and also return it so a `Layer.effect(tag, make(impl))` Layer
         // resolves the tag to a concrete namespace value.
         const self = yield* binding();
+        const phase = yield* ALCHEMY_PHASE;
+        const constructor = impl.pipe(
+          Effect.provide(
+            Layer.succeed(DurableObjectNamespaceScope, self as any),
+          ),
+        );
+        if (phase === "plan") {
+          // during plan time, we evaluate the constructor with a mock DurableObjectState
+          // to trigger discovery of bindings
+          yield* constructor.pipe(
+            Effect.provide(
+              Layer.succeed(
+                DurableObjectState,
+                // mock during plan time
+                fromDurableObjectState({ storage: {} } as any),
+              ),
+            ),
+          );
+        }
         yield* (yield* Worker).export(namespace, {
           kind: "durableObject",
           // initialize the object's constructor (apply infra dependencies)
-          constructor: yield* impl.pipe(
-            Effect.provideService(DurableObjectNamespaceScope, self as any),
-          ),
+          constructor,
           // grab the object's infra dependencies so we can apply them when calling the instance's methods
           services: yield* Effect.context<Effect.Services<typeof impl>>(),
         } satisfies DurableObjectExport);
@@ -869,7 +909,19 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
       } else if (Effect.isEffect(propsOrImpl)) {
         // inline Effect DO
         return effectClass(
-          Effect.tap(binding(), () => make(propsOrImpl as any)),
+          Effect.tap(binding(), () =>
+            make(propsOrImpl as any).pipe(
+              Effect.provideService(
+                DurableObjectState,
+                fromDurableObjectState(
+                  // everything is lazy, so this should build a proper mock
+                  {
+                    storage: {},
+                  } as any,
+                ),
+              ),
+            ),
+          ),
         );
       } else {
         // Tagged Effect DO. Yielding the class resolves the `tag`, which

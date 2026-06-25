@@ -492,7 +492,7 @@ concurrency), factor it into its own Worker:
 +  "Backend",
 +  { main: import.meta.filename },
 +  Effect.gen(function* () {
-+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
++    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
 +
 +    return {
 +      hello: Effect.fn("Backend.hello")(function* (key: string) {
@@ -513,7 +513,7 @@ concurrency), factor it into its own Worker:
 +        return HttpServerResponse.raw(object.body);
 +      }),
 +    };
-+  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
++  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 +) {}
 ```
 

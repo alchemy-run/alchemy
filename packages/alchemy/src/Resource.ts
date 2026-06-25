@@ -39,6 +39,26 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   ): Effect.Effect<R, never, PropsReq | Req>;
 };
 
+export interface ResourceClassLike<R extends ResourceLike> {
+  Type: R["Type"];
+  Props: R["Props"];
+  Self: Self<R>;
+  Provider: Provider<R>;
+}
+
+export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
+  R,
+  R["Providers"] extends undefined ? Provider<R> : R["Providers"]
+> &
+  Effect.Effect<ResourceConstructor<R>> & {
+    Self: Self<R>;
+    Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
+  };
+
 export type ResourceClassWithMethods<
   R extends ResourceLike,
   Methods extends { [key: string]: any },
@@ -54,19 +74,6 @@ export type ResourceClassWithMethods<
       options?: { stage?: string; stack?: string },
     ): Effect.Effect<R>;
   } & Methods;
-
-export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
-  R,
-  R["Providers"] extends undefined ? Provider<R> : R["Providers"]
-> &
-  Effect.Effect<ResourceConstructor<R>> & {
-    Self: Self<R>;
-    Provider: Provider<R>;
-    ref(
-      id: string,
-      options?: { stage?: string; stack?: string },
-    ): Effect.Effect<R>;
-  };
 
 export type LogicalId = string;
 

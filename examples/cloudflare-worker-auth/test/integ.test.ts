@@ -2,7 +2,6 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
@@ -18,6 +17,8 @@ const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 180_000,
 });
+
+const { executeWhenReady } = Test;
 
 /**
  * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/598
@@ -59,17 +60,11 @@ test(
     const get = (req: HttpClientRequest.HttpClientRequest) =>
       client.execute(req);
 
-    // Warm up through edge propagation — fresh workers.dev URLs take a few
-    // seconds to start serving. The public route needs no auth.
-    yield* client.get(url).pipe(
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 10,
-      }),
-    );
-
-    // Valid token -> 200
-    const ok = yield* get(
+    // Valid token -> 200. `Test.executeWhenReady` rides out the fresh-deploy
+    // cold-start window: a `404` while the route propagates, or a `500` while
+    // the Secrets Store binding is still settling. Deliberate `401`s (below)
+    // are NOT in that window, so they're observed immediately.
+    const ok = yield* executeWhenReady(
       HttpClientRequest.get(protectedUrl).pipe(
         HttpClientRequest.bearerToken(authToken),
       ),

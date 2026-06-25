@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { Subnet, VpcId } from "@/AWS/EC2";
+import { Subnet } from "@/AWS/EC2";
 import { LoadBalancer } from "@/AWS/ELBv2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
@@ -7,6 +7,7 @@ import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +16,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// The testing account is at its VPC limit and has no default VPC, so we reuse an
-// existing VPC and carve two stack-owned subnets (subnets don't count against
-// the VPC limit). An ALB needs subnets in at least two distinct AZs.
+// Reuse the account/region default VPC and carve stack-owned subnets (subnets
+// don't count against the VPC limit). An ALB needs subnets in at least two AZs.
 test.provider(
   "list enumerates the deployed load balancer",
   (stack) =>
@@ -33,28 +33,19 @@ test.provider(
       expect(az1).toBeTruthy();
       expect(az2).toBeTruthy();
 
-      // Pick an existing VPC with room to carve /24 subnets.
-      const vpcs = yield* EC2.describeVpcs({});
-      const vpc = (vpcs.Vpcs ?? []).find((v) => {
-        if (v.State !== "available" || !v.VpcId || !v.CidrBlock) return false;
-        const prefix = Number(v.CidrBlock.split("/")[1]);
-        return Number.isFinite(prefix) && prefix <= 23;
-      });
-      const vpcId = VpcId(vpc?.VpcId!);
-      expect(vpcId).toBeTruthy();
-      const [a, b] = vpc!.CidrBlock!.split("/")[0].split(".");
+      const defaultVpc = yield* getDefaultVpc;
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const subnet1 = yield* Subnet("ListLbSubnet1", {
-            vpcId,
-            cidrBlock: `${a}.${b}.222.0/24`,
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(222),
             availabilityZone: az1,
           });
 
           const subnet2 = yield* Subnet("ListLbSubnet2", {
-            vpcId,
-            cidrBlock: `${a}.${b}.223.0/24`,
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(223),
             availabilityZone: az2,
           });
 

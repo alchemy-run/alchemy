@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface SetTopicAttributesRequest extends Omit<
   sns.SetTopicAttributesInput,
@@ -46,7 +47,8 @@ export const SetTopicAttributesLive = Layer.effect(
 
 export class SetTopicAttributesPolicy extends Binding.Policy<
   SetTopicAttributesPolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.SetTopicAttributes") {}
 
 export const SetTopicAttributesPolicyLive =

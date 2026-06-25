@@ -7,7 +7,7 @@ sidebar:
 
 A Cloudflare Queue gives you reliable, at-least-once delivery
 between Workers. The Worker that *sends* messages uses
-`Cloudflare.QueueBinding.bind(...)` from the [Queue producer
+`Cloudflare.Queues.WriteQueue(...)` from the [Queue producer
 binding](/providers/cloudflare/queue) — covered in the resource
 docs. This tutorial focuses on the *consumer* side: receiving
 batches with the Effect-style
@@ -47,7 +47,7 @@ test can read it back.
 ## Bind the Queue producer
 
 In the Worker init phase, yield the queue resource and ask
-`QueueBinding` for a typed sender. The sender exposes `send` /
+`Cloudflare.Queues.WriteQueue` for a typed sender. The sender exposes `send` /
 `sendBatch` that round-trip through Cloudflare's runtime.
 
 ```typescript
@@ -61,14 +61,14 @@ export default Cloudflare.Worker(
   "Api",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.QueueBinding.bind(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
     return { fetch: Effect.gen(function* () { return new Response("ok"); }) };
   }).pipe(
-    Effect.provide(Cloudflare.QueueBindingLive),
-    Effect.provide(Cloudflare.R2BucketBindingLive),
+    Effect.provide(Cloudflare.Queues.WriteQueueBinding),
+    Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   ),
 );
 ```
@@ -93,9 +93,9 @@ expected to return `Effect.Effect<void>`.
 +}
 
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.QueueBinding.bind(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
 +   yield* Cloudflare.messages<QueueMessageBody>(queueResource).subscribe(
 +     (stream) =>
@@ -152,8 +152,8 @@ alongside the other binding lives.
 ```diff lang="typescript"
   }).pipe(
 +   Effect.provide(Cloudflare.QueueEventSourceLive),
-    Effect.provide(Cloudflare.QueueBindingLive),
-    Effect.provide(Cloudflare.R2BucketBindingLive),
+    Effect.provide(Cloudflare.Queues.WriteQueueBinding),
+    Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   ),
 ```
 

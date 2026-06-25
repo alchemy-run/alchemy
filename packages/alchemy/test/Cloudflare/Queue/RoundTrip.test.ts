@@ -32,7 +32,7 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
  * - `RoundTripQueue` (Cloudflare.Queue).
  * - `QueueRoundTripWorker` — exposes:
  *     - `POST /send?name=K`  →  enqueues a message via the
- *       `Cloudflare.QueueBinding` producer.
+ *       `Cloudflare.Queues.WriteQueue` producer.
  *     - subscribe handler    →  increments the named Counter DO
  *       and stores the body, via
  *       `Cloudflare.messages(RoundTripQueue).subscribe(...)`.

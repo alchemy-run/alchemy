@@ -8,7 +8,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { KVNamespaceBinding } from "./KVNamespaceBinding.ts";
 
 export const isKVNamespace = (value: unknown): value is KVNamespace =>
   typeof value === "object" &&
@@ -54,7 +53,7 @@ export type KVNamespace = Resource<
  * @section Binding to a Worker
  * @example Using KV inside a Worker
  * ```typescript
- * const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ * const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  * // Read a value
  * const value = yield* kv.get("my-key");
@@ -62,10 +61,14 @@ export type KVNamespace = Resource<
  * // Write a value
  * yield* kv.put("my-key", "hello world");
  * ```
+ *
+ * Provide `Cloudflare.KV.ReadWriteNamespaceBinding` (native Worker
+ * binding) or `Cloudflare.KV.ReadWriteNamespaceHttp` (scoped HTTP
+ * token) in the worker's runtime layer. Use `Cloudflare.KV.ReadNamespace`
+ * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
+ * write-only access.
  */
-export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace")({
-  bind: KVNamespaceBinding.bind,
-});
+export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace");
 
 export const KVNamespaceProvider = () =>
   Provider.succeed(KVNamespace, {

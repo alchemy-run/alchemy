@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import { Task, isTask } from "./Task.ts";
 import type { Cluster } from "./Cluster.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface RunTaskRequest extends Omit<
   ECS.RunTaskRequest,
@@ -49,7 +50,8 @@ export const RunTaskLive = Layer.effect(
 
 export class RunTaskPolicy extends Binding.Policy<
   RunTaskPolicy,
-  (cluster: Cluster, task: Task) => Effect.Effect<void>
+  (cluster: Cluster, task: Task) => Effect.Effect<void>,
+  Providers
 >()("AWS.ECS.RunTask") {}
 
 export const RunTaskPolicyLive = RunTaskPolicy.layer.succeed(

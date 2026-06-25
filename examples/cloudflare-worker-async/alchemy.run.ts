@@ -11,7 +11,7 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 // Queue producer + consumer wiring (both sides exercised by the same worker).
 // The Worker sends a message via `env.QUEUE.send(...)` from POST /queue/send,
 // then receives and persists it via its `queue(batch)` handler — end-to-end
-// regression guard for the Queue, QueueBinding, and QueueConsumer resources.
+// regression guard for the Queue, QueueWrite, and QueueConsumer resources.
 export const Queue = Cloudflare.Queue("Queue");
 
 export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
@@ -20,6 +20,14 @@ export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
     className: "Counter",
   },
 );
+
+export const ClaudeCode = Cloudflare.Container("ClaudeCode", {
+  dockerfile: `
+    FROM alpine:latest
+    RUN curl -fsSL https://claude.ai/install.sh | bash
+  `,
+  context: ".",
+});
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 

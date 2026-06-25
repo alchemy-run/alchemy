@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Secret } from "./Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PutSecretValueRequest extends Omit<
   secretsmanager.PutSecretValueRequest,
@@ -50,7 +51,8 @@ export const PutSecretValueLive = Layer.effect(
 
 export class PutSecretValuePolicy extends Binding.Policy<
   PutSecretValuePolicy,
-  (secret: Secret) => Effect.Effect<void>
+  (secret: Secret) => Effect.Effect<void>,
+  Providers
 >()("AWS.SecretsManager.PutSecretValue") {}
 
 export const PutSecretValuePolicyLive = PutSecretValuePolicy.layer.succeed(

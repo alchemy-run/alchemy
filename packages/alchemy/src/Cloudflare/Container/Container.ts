@@ -1,23 +1,36 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { HttpServer, type HttpEffect } from "../../Http.ts";
-import * as Output from "../../Output.ts";
-import { Platform } from "../../Platform.ts";
-import * as Server from "../../Server/index.ts";
+import * as Layer from "effect/Layer";
+import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { InputProps } from "../../Input.ts";
+import type { Named } from "../../Named.ts";
+import type { ResourceClassLike } from "../../Resource.ts";
+import type { Rpc } from "../../Rpc.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { Props } from "../../State/ResourceState.ts";
+import { effectClass } from "../../Util/effect.ts";
 import type { Fetcher } from "../Fetcher.ts";
+import type { Providers } from "../Providers.ts";
+import { type WorkerShape } from "../Workers/Worker.ts";
 import type {
   ContainerApplication,
   ContainerApplicationProps,
-  ContainerServices,
-  ContainerShape,
 } from "./ContainerApplication.ts";
-import { bindContainer } from "./ContainerBinding.ts";
+import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";
 export type ContainerTypeId = typeof ContainerTypeId;
+
+export const ContainerTag = (
+  id: string,
+): Context.Key<Container.Instance, Container.Instance> =>
+  Context.Service<Container.Instance>(`Container<${id}>`);
 
 export const isContainer = <T>(value: T): value is T & Container =>
   typeof value === "object" &&
@@ -32,20 +45,65 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
 
 export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
 
-export interface ContainerProps extends ContainerApplicationProps {
+/**
+ * Bundle an Effect-native program into a generated image. Alchemy bundles
+ * {@link main} and bakes it in as the container's entrypoint.
+ */
+export interface EffectfulContainerProps extends ContainerApplicationProps {
+  /** Entrypoint file for the Effect program, typically `import.meta.filename`. */
   main: string;
 }
+/**
+ * Build the container image from your own Dockerfile and build context — no
+ * Effect program is bundled. The image is shipped as-is.
+ */
+export interface ExternalContainerProps extends ContainerApplicationProps {
+  /**
+   * The build context directory containing the Dockerfile and any files it
+   * copies.
+   *
+   * @default `./`
+   */
+  context?: string;
+  /**
+   * The Dockerfile to build, resolved relative to {@link context}.
+   *
+   * @default `<context>/Dockerfile`
+   */
+  dockerfile?: string;
+}
+/**
+ * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
+ * Cloudflare's managed registry without building anything.
+ */
+export interface RemoteContainerProps extends ContainerApplicationProps {
+  /**
+   * The pre-built image to pull and re-push.
+   *
+   * E.g. `ghcr.io/alpine/alpine:latest`
+   */
+  image: string;
+}
 
-export type Container = {
-  get running(): Effect.Effect<boolean>;
-  start(options?: ContainerStartupOptions): Effect.Effect<void>;
-  monitor(): Effect.Effect<void, ContainerError>;
-  destroy(error?: any): Effect.Effect<void>;
-  signal(signo: number): Effect.Effect<void>;
-  getTcpPort(port: number): Effect.Effect<Fetcher>;
-  setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void>;
-  interceptOutboundHttp(addr: string, binding: Fetcher): Effect.Effect<void>;
-  interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void>;
+export type Container<Id extends string = string> = Named<Id> & {
+  get running(): Effect.Effect<boolean, never, RuntimeContext>;
+  start(
+    options?: ContainerStartupOptions,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
+  destroy(error?: any): Effect.Effect<void, never, RuntimeContext>;
+  signal(signo: number): Effect.Effect<void, never, RuntimeContext>;
+  getTcpPort(port: number): Effect.Effect<Fetcher, never, RuntimeContext>;
+  setInactivityTimeout(
+    durationMs: number | bigint,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  interceptOutboundHttp(
+    addr: string,
+    binding: Fetcher,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  interceptAllOutboundHttp(
+    binding: Fetcher,
+  ): Effect.Effect<void, never, RuntimeContext>;
 };
 
 /**
@@ -78,7 +136,8 @@ export type Container = {
  *
  * @example Container class
  * ```typescript
- * // src/Sandbox.ts
+ * // src/Sandbox.ts — the tag carries only the name + typed shape;
+ * // configuration lives on `.make()`.
  * export class Sandbox extends Cloudflare.Container<
  *   Sandbox,
  *   {
@@ -88,25 +147,27 @@ export type Container = {
  *       stderr: string;
  *     }>;
  *   }
- * >()(
- *   "Sandbox",
- *   { main: import.meta.filename },
- * ) {}
+ * >()("Sandbox") {}
  * ```
  *
  * @example Container .make()
  * ```typescript
- * // src/Sandbox.runtime.ts
+ * // src/Sandbox.runtime.ts — props are the first argument to `.make()`
  * export default Sandbox.make(
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const cp = yield* ChildProcessSpawner;
  *
  *     return Sandbox.of({
- *       exec: (cmd) =>
- *         cp.spawn(ChildProcess.make(cmd, { shell: true })).pipe(
- *           Effect.map(({ exitCode, stdout, stderr }) => ({
- *             exitCode, stdout, stderr,
- *           })),
+ *       exec: (command) =>
+ *         cp.spawn(ChildProcess.make(command, { shell: true })).pipe(
+ *           Effect.flatMap(({ exitCode, stdout, stderr }) =>
+ *             Effect.all({
+ *               exitCode,
+ *               stdout: stdout.pipe(Stream.decodeText, Stream.mkString),
+ *               stderr: stderr.pipe(Stream.decodeText, Stream.mkString),
+ *             }),
+ *           ),
  *           Effect.scoped,
  *         ),
  *       fetch: Effect.succeed(
@@ -117,24 +178,101 @@ export type Container = {
  * );
  * ```
  *
+ * @section Image Sources
+ * A container's image comes from one of three sources, picked by which
+ * prop you set:
+ *
+ * - `main` — bundle your Effect program into a generated image.
+ * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
+ * - `image` — pull a pre-built remote image and re-push it.
+ *
+ * Only the `main` source bundles and injects an Effect runtime — so it
+ * has a typed shape and a `.make(props, impl)` runtime. The other two
+ * ship an arbitrary image as-is: they have no runtime to provide, so
+ * you declare the class with its props inline and register it purely
+ * via `Cloudflare.layerContainer` from the hosting Durable Object.
+ *
+ * @example Effect-native image (`main`)
+ * ```typescript
+ * // Alchemy bundles this file's Effect program and bakes it into a
+ * // generated image as the entrypoint.
+ * export class Sandbox extends Cloudflare.Container<
+ *   Sandbox,
+ *   { ping: () => Effect.Effect<string> }
+ * >()("Sandbox") {}
+ *
+ * export default Sandbox.make(
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     return Sandbox.of({
+ *       ping: () => Effect.succeed("pong"),
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     });
+ *   }),
+ * );
+ * ```
+ *
+ * @example Build your own Dockerfile (`context` / `dockerfile`)
+ * ```typescript
+ * // Alchemy builds the Dockerfile against the context directory — no
+ * // Effect bundling, no `.make()`. `dockerfile` defaults to
+ * // `<context>/Dockerfile`. The props are declared inline on the tag.
+ * export class Web extends Cloudflare.Container<Web>()("Web", {
+ *   context: `${import.meta.dirname}/context`,
+ * }) {}
+ * ```
+ *
+ * @example Remote image (`image`)
+ * ```typescript
+ * // Alchemy pulls the public image and re-pushes it to Cloudflare's
+ * // registry — no build, no bundling, no `.make()`.
+ * export class Echo extends Cloudflare.Container<Echo>()("Echo", {
+ *   image: "mendhak/http-https-echo:latest",
+ * }) {}
+ * ```
+ *
+ * @example Reaching an arbitrary image's port from a Durable Object
+ * ```typescript
+ * // `external` and `remote` images expose no RPC methods, so the DO
+ * // talks to them purely over their TCP port via `getTcpPort`.
+ * export class WebObject extends Cloudflare.DurableObjectNamespace<WebObject>()(
+ *   "WebObject",
+ *   Effect.gen(function* () {
+ *     const web = yield* Web;
+ *     return Effect.gen(function* () {
+ *       return {
+ *         hello: () =>
+ *           Effect.gen(function* () {
+ *             const { fetch } = yield* web.getTcpPort(8080);
+ *             const res = yield* fetch(HttpClientRequest.get("http://container/"));
+ *             return yield* res.text;
+ *           }),
+ *       };
+ *     });
+ *   }).pipe(Effect.provide(Cloudflare.layerContainer(Web))),
+ * ) {}
+ * ```
+ *
  * @section Configuration
- * The props object accepts `main` (entrypoint file), `instanceType`
- * (compute size), `runtime` (`"bun"` or `"node"`), and
- * `observability` settings. Use `Stack.useSync` to read the
- * surrounding stack at declaration time and pick a beefier
+ * The props object — the first argument to `.make()` — accepts `main`
+ * (entrypoint file), `instanceType` (compute size), `runtime`
+ * (`"bun"` or `"node"`), and `observability` settings. Use
+ * `Stack.useSync` to read the surrounding stack and pick a beefier
  * `instanceType` in prod while keeping the cheap `dev` instance for
  * preview environments.
  *
  * @example Stage-dependent configuration
  * ```typescript
- * export class Sandbox extends Cloudflare.Container<Sandbox>()(
- *   "Sandbox",
+ * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
  *     main: import.meta.filename,
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
  *   })),
- * ) {}
+ *   Effect.gen(function* () {
+ *     return Sandbox.of({ exec: (cmd) => ... });
+ *   }),
+ * );
  * ```
  *
  * @section Stack-level wiring
@@ -159,162 +297,166 @@ export type Container = {
  * ```
  *
  * @section Calling from a Durable Object
- * Use `Cloudflare.Container.bind(Sandbox)` in the **outer** init
- * phase of a Durable Object — only the class is imported, so the
- * DO bundle stays tiny. Then `Cloudflare.start(sandbox)` in the
- * **inner** per-instance phase ensures the container is running
- * and gives you a typed handle that exposes every method declared
- * on the container's shape **plus** a `getTcpPort` helper.
+ * `yield* Sandbox` resolves a **running** container instance — every
+ * method declared on the container's shape **plus** a `getTcpPort`
+ * helper. Provide `Cloudflare.layerContainer(Sandbox, …)` on the
+ * DO's init to configure how the container runs; that layer binds,
+ * starts, and monitors it and satisfies the `Sandbox` tag. Because
+ * only the class is imported, the runtime implementation in
+ * `Sandbox.runtime.ts` is tree-shaken out of the DO's bundle.
  *
- * @example Binding and starting a container from a DO
+ * @example Running a container from a DO
  * ```typescript
  * export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
  *   "Agents",
  *   Effect.gen(function* () {
- *     // OUTER (init): only the class is referenced — the runtime
- *     // implementation in `Sandbox.runtime.ts` is tree-shaken out
- *     // of this DO's bundle.
- *     const sandbox = yield* Cloudflare.Container.bind(Sandbox);
+ *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
- *       // INNER (per-instance): start the container and expose RPC.
- *       const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- *
  *       return {
- *         exec: (cmd: string) => container.exec(cmd),
+ *         exec: (cmd: string) => sandbox.exec(cmd),
  *       };
  *     });
- *   }),
+ *   }).pipe(
+ *     Effect.provide(
+ *       Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
+ *     ),
+ *   ),
  * ) {}
  * ```
  *
- * @section Starting from a Durable Object
- * Use `Cloudflare.Container.bind` in the outer init phase to bind
- * the container class, then `Cloudflare.start` in the inner
- * per-instance phase to start it. Because the DO only imports the
- * class, the runtime implementation is completely excluded from the
- * DO's bundle.
- *
- * @example Binding and starting a container
- * ```typescript
- * // init (outer Effect) — only imports the class
- * const sandbox = yield* Cloudflare.Container.bind(Sandbox);
- *
- * // per-instance (inner Effect)
- * return Effect.gen(function* () {
- *   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- *
- *   return {
- *     exec: (cmd: string) => container.exec(cmd),
- *   };
- * });
- * ```
- *
  * @section HTTP Requests to Container Ports
- * Use `getTcpPort` to get a `fetch` handle for a specific port on
- * the running container. This lets you make HTTP requests to
+ * Use `getTcpPort` on the running container instance to get a `fetch`
+ * handle for a specific port. This lets you make HTTP requests to
  * servers running inside the container process.
  *
  * @example Fetching from a container port
  * ```typescript
- * const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- * const { fetch } = yield* container.getTcpPort(3000);
+ * export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
  *
- * const response = yield* fetch(
- *   HttpClientRequest.get("http://container/health"),
- * );
+ *     return Effect.gen(function* () {
+ *       const { fetch } = yield* sandbox.getTcpPort(3000);
+ *
+ *       return {
+ *         health: () =>
+ *           Effect.gen(function* () {
+ *             const response = yield* fetch(
+ *               HttpClientRequest.get("http://container/health"),
+ *             );
+ *             return yield* response.text;
+ *           }),
+ *       };
+ *     });
+ *   }).pipe(
+ *     Effect.provide(
+ *       Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
+ *     ),
+ *   ),
+ * ) {}
  * ```
  */
-export const Container: Platform<
-  ContainerApplication,
-  ContainerServices,
-  ContainerShape,
-  Server.ProcessContext,
-  Container
-> & {
-  bind: typeof bindContainer;
-} = Platform(
-  "Cloudflare.Container",
-  {
-    createRuntimeContext: (id: string): Server.ProcessContext => {
-      const runners: Effect.Effect<void, never, any>[] = [];
-      const env: Record<string, any> = {};
-
-      const serve = <Req = never>(handler: HttpEffect<Req>) =>
-        Effect.sync(() => {
-          runners.push(
-            Effect.gen(function* () {
-              const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
-                Effect.map(Option.getOrUndefined),
-              );
-              if (httpServer) {
-                yield* httpServer.serve(handler);
-                yield* Effect.never;
-              } else {
-                // this should only happen at plantime, validate?
-              }
-            }).pipe(Effect.orDie),
-          );
-        });
-
-      return {
-        Type: ContainerTypeId,
-        LogicalId: id,
-        id,
-        env,
-        set: (bindingId: string, output: Output.Output) =>
-          Effect.sync(() => {
-            const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-            env[key] = output.pipe(
-              Output.map((value) => JSON.stringify(value)),
-            );
-            return key;
-          }),
-        get: <T>(key: string) =>
-          Config.string(key)
-
-            .pipe(
-              Effect.flatMap((value) =>
-                Effect.try({
-                  try: () => JSON.parse(value) as T,
-                  catch: (error) => error as Error,
-                }),
-              ),
-              Effect.catch((cause) =>
-                Effect.die(
-                  new Error(`Failed to get environment variable: ${key}`, {
-                    cause,
-                  }),
-                ),
-              ),
-            ),
-        run: ((effect: Effect.Effect<void, never, any>) =>
-          Effect.sync(() => {
-            runners.push(effect);
-          })) as unknown as Server.ProcessContext["run"],
-        serve,
-        exports: Effect.sync(() => ({
-          default: Effect.all(
-            runners.map((eff) =>
-              Effect.forever(
-                eff.pipe(
-                  // Log and ignore errors (daemon mode, it should just re-run)
-                  Effect.tapError((err) => Effect.logError(err)),
-                  Effect.ignore,
-                  // TODO(sam): ignore cause? for now, let that actually kill the server
-                  // Effect.ignoreCause
-                ),
-              ),
-            ),
-            {
-              concurrency: "unbounded",
-            },
-          ),
-        })),
-      } as Server.ProcessContext;
-    },
+export const Container: ResourceClassLike<ContainerApplication> & {
+  <const Id extends string>(
+    id: Id,
+    props: InputProps<ExternalContainerProps | RemoteContainerProps>,
+  ): Container.Decl<Container<Id>, {}, Id>;
+  <Self>(): {
+    <
+      const Id extends string,
+      Props extends InputProps<ExternalContainerProps | RemoteContainerProps>,
+    >(
+      id: Id,
+      props: Props,
+    ): Container.Decl<Self, {}, Id>;
+  };
+  <Self, Shape>(): {
+    <const Id extends string>(
+      id: Id,
+    ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
+  };
+} = Object.assign(
+  (...args: any[]) => {
+    if (args.length === 0) {
+      return (...args: any[]) => {
+        if (args.length === 1) {
+          const [id] = args as [string];
+          const tag = ContainerPlatform()(id);
+          // `yield* MyContainer` resolves the *started* instance tag, which is
+          // provided by `layerContainer(MyContainer)`. The bind effect (which
+          // registers the DO + Worker bindings and produces the runtime
+          // handle) is stashed so `startContainer` can run it from inside that
+          // layer — see ContainerPlatform.bind / StartContainer.ts.
+          return Object.assign(effectClass(ContainerTag(id)), {
+            "~alchemy/Id": id,
+            "~alchemy/Container/Binding": ContainerPlatform.bind(tag),
+            make: (props: any, impl: any) => tag.make(props, impl),
+            // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
+            Application: tag,
+            of: (shape: any) => shape,
+          });
+        } else {
+          return Container(...(args as [string, any]));
+        }
+      };
+    } else {
+      const [id, props] = args as [string, any];
+      const resource = ContainerPlatform(id, props);
+      return Object.assign(effectClass(ContainerTag(id)), {
+        "~alchemy/Id": id,
+        "~alchemy/Container/Binding": ContainerPlatform.bind(resource),
+        // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
+        Application: resource,
+        of: (shape: any) => shape,
+      });
+    }
   },
   {
-    bind: bindContainer,
+    Type: ContainerTypeId,
   },
-);
+) as any;
+
+export declare namespace Container {
+  export interface Decl<
+    Self = any,
+    Shape = any,
+    Id extends string = string,
+    Req = never,
+  >
+    extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
+    new (): Container<Id> & Shape;
+    make: <InitReq = never, WorkerReq = never>(
+      props: Props,
+      impl: Effect.Effect<
+        Shape & WorkerShape<WorkerReq>,
+        Config.ConfigError,
+        InitReq
+      >,
+    ) => Layer.Layer<Application<Self>, never, Providers>;
+    of(shape: Shape & WorkerShape): Shape;
+  }
+  export namespace Decl {
+    export type Any = Decl<any, any, string, any>;
+  }
+
+  export interface Application<Self> {
+    "~alchemy/Kind": "ContainerApplication";
+    "~alchemy/Self": Self;
+  }
+
+  export type Instance<Shape = any> = Container &
+    Shape & {
+      getTcpPort: (portNumber: number) => Effect.Effect<{
+        fetch: {
+          (
+            request: HttpClientRequest.HttpClientRequest,
+          ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
+          (
+            request: HttpServerRequest.HttpServerRequest,
+          ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
+        };
+      }>;
+    };
+}

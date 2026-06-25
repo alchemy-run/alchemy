@@ -220,7 +220,7 @@ export const ClientCertificateProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.result ?? [])
-                    .filter((cert) => cert.status !== "revoked")
+                    .filter((cert) => !isGone(cert.status))
                     .map(
                       (cert): ClientCertificateAttributes =>
                         toAttributes(cert, zone.id),
@@ -261,15 +261,15 @@ export const ClientCertificateProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (zoneId === undefined) return undefined;
 
-      // Owned path: refresh by our persisted certificate id. A revoked
-      // certificate stays listed on the zone forever — revocation is the
-      // delete semantic, so report it as gone.
+      // Owned path: refresh by our persisted certificate id. A revoked (or
+      // asynchronously revoking) certificate stays listed on the zone forever
+      // — revocation is the delete semantic, so report it as gone.
       if (output?.clientCertificateId) {
         const observed = yield* getCertificate(
           zoneId,
           output.clientCertificateId,
         );
-        if (observed && observed.status !== "revoked") {
+        if (observed && !isGone(observed.status)) {
           return toAttributes(observed, zoneId);
         }
         return undefined;
@@ -298,7 +298,7 @@ export const ClientCertificateProvider = () =>
       let observed = output?.clientCertificateId
         ? yield* getCertificate(zoneId, output.clientCertificateId)
         : undefined;
-      if (observed?.status === "revoked") observed = undefined;
+      if (observed && isGone(observed.status)) observed = undefined;
 
       // 2. Fall back to scanning the zone for a non-revoked certificate
       //    issued from the same CSR with the same validity. Matching on
@@ -336,11 +336,7 @@ export const ClientCertificateProvider = () =>
         output.zoneId,
         output.clientCertificateId,
       );
-      if (
-        !observed ||
-        observed.status === "revoked" ||
-        observed.status === "pending_revocation"
-      ) {
+      if (!observed || isGone(observed.status)) {
         return;
       }
       yield* clientCertificates
@@ -390,7 +386,7 @@ const findByCsr = (zoneId: string, csr: string, validityDays: number) =>
     .pipe(
       Stream.filter(
         (cert) =>
-          cert.status !== "revoked" &&
+          !isGone(cert.status) &&
           cert.validityDays === validityDays &&
           typeof cert.csr === "string" &&
           normalizePem(cert.csr) === normalizePem(csr),
@@ -399,6 +395,17 @@ const findByCsr = (zoneId: string, csr: string, validityDays: number) =>
       Effect.map(Option.getOrUndefined),
       Effect.map((cert): ObservedCertificate | undefined => cert),
     );
+
+/**
+ * A certificate is "gone" once it is `revoked` or asynchronously transitioning
+ * to it (`pending_revocation`). Revocation is the delete semantic, and a
+ * revoking certificate can no longer serve mTLS — so it must never be adopted,
+ * reused, listed, or treated as live. Without this, a prior run's async revoke
+ * leaves a `pending_revocation` certificate that a fresh deploy would otherwise
+ * mistake for an existing live certificate matching the CSR.
+ */
+const isGone = (status: string | null | undefined): boolean =>
+  status === "revoked" || status === "pending_revocation";
 
 /** Normalize PEM content for comparison (CRLF + trailing-newline noise). */
 const normalizePem = (pem: string | undefined): string | undefined =>

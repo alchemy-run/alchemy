@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { AlarmMuteRule } from "./AlarmMuteRule.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetAlarmMuteRuleRequest extends Omit<
   cloudwatch.GetAlarmMuteRuleInput,
@@ -50,7 +51,8 @@ export const GetAlarmMuteRuleLive = Layer.effect(
 
 export class GetAlarmMuteRulePolicy extends Binding.Policy<
   GetAlarmMuteRulePolicy,
-  (rule: AlarmMuteRule) => Effect.Effect<void>
+  (rule: AlarmMuteRule) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.GetAlarmMuteRule") {}
 
 export const GetAlarmMuteRulePolicyLive = GetAlarmMuteRulePolicy.layer.succeed(

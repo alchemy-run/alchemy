@@ -13,6 +13,7 @@ import {
 } from "../SNS/TopicEventSource.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
+import type { Providers } from "../Providers.ts";
 
 export const isSNSEvent = (event: any): event is lambda.SNSEvent =>
   Array.isArray(event?.Records) &&
@@ -63,7 +64,8 @@ export const TopicEventSource = Layer.effect(
 
 export class TopicEventSourcePolicy extends Binding.Policy<
   TopicEventSourcePolicy,
-  (topic: Topic, props?: TopicEventSourceProps) => Effect.Effect<void>
+  (topic: Topic, props?: TopicEventSourceProps) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.TopicEventSource") {}
 
 export const TopicEventSourcePolicyLive = TopicEventSourcePolicy.layer.effect(

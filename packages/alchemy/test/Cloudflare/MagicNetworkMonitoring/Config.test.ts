@@ -1,8 +1,8 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
-import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -16,15 +16,30 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// The scoped API token the harness mints propagates eventually-
-// consistently across Cloudflare's edge — ride out 403 blips
-// (`Forbidden`, declared in the distilled error union) on the test's own
-// out-of-band calls.
-const forbiddenRetry = {
-  while: (e: { _tag: string }) => e._tag === "Forbidden",
-  schedule: Schedule.exponential("500 millis"),
-  times: 8,
-} as const;
+// The MNM config is an account singleton served from an eventually-consistent
+// store: an immediate `list()` right after a create (or a destroy) can still
+// observe the prior state, so the freshly-created config reads back as absent
+// (`[]`) for a beat. Poll `list()` until the element count settles to the
+// expected value before asserting on it (bounded ~30s).
+const listUntilCount = <A>(
+  list: () => Effect.Effect<A[], unknown>,
+  expected: number,
+) =>
+  list().pipe(
+    Effect.flatMap((all) =>
+      all.length === expected
+        ? Effect.succeed(all)
+        : Effect.fail(
+            new Error(`expected ${expected} MNM configs, got ${all.length}`),
+          ),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential("500 millis").pipe(
+        Schedule.either(Schedule.spaced("3 seconds")),
+      ),
+      times: 12,
+    }),
+  );
 
 describe.sequential("MagicNetworkMonitoring.Config list", () => {
   test.provider("list enumerates the account MNM config", (stack) =>
@@ -32,28 +47,26 @@ describe.sequential("MagicNetworkMonitoring.Config list", () => {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
-      // The config is an account singleton with no ownership markers — a
-      // leftover from an interrupted run would surface as `Unowned` and
-      // block this stack's create, so normalize to "absent" first.
-      yield* mnm.deleteConfig({ accountId }).pipe(
-        Effect.catchTag("MnmConfigNotFound", () => Effect.void),
-        Effect.retry(forbiddenRetry),
-      );
 
       const deployed = yield* stack.deploy(
+        // The config is an account singleton with no ownership markers, so a
+        // leftover from an interrupted run surfaces as `Unowned`. Adopt it
+        // rather than failing with `OwnedBySomeoneElse` or racing an
+        // out-of-band delete against the singleton's eventual consistency.
         Cloudflare.MagicNetworkMonitoringConfig("Config", {
           name: "alchemy-mnm-list-test",
           defaultSampling: 1,
-        }),
+        }).pipe(adopt(true)),
       );
 
       const provider = yield* Provider.findProvider(
         Cloudflare.MagicNetworkMonitoringConfig,
       );
-      const all = yield* provider.list();
-
       // Account singleton: when present, exactly one element with the full
-      // Attributes shape (the same object `read` returns).
+      // Attributes shape (the same object `read` returns). Poll through the
+      // create's read-after-write lag.
+      const all = yield* listUntilCount(() => provider.list(), 1);
+
       expect(all.length).toEqual(1);
       const config = all[0];
       expect(config.accountId).toEqual(accountId);
@@ -65,7 +78,8 @@ describe.sequential("MagicNetworkMonitoring.Config list", () => {
       yield* stack.destroy();
 
       // With the singleton unset, `list` returns the empty array, not a throw.
-      const afterDestroy = yield* provider.list();
+      // Poll through the destroy's read-after-write lag.
+      const afterDestroy = yield* listUntilCount(() => provider.list(), 0);
       expect(afterDestroy).toEqual([]);
     }).pipe(logLevel),
   );

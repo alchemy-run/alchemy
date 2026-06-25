@@ -12,6 +12,7 @@ import {
 } from "../SQS/QueueEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
   Array.isArray(event?.Records) &&
@@ -53,7 +54,8 @@ export const QueueEventSource = Layer.effect(
 
 export class QueueEventSourcePolicy extends Binding.Policy<
   QueueEventSourcePolicy,
-  (queue: Queue, props: QueueEventSourceProps) => Effect.Effect<void>
+  (queue: Queue, props: QueueEventSourceProps) => Effect.Effect<void>,
+  Providers
 >()("AWS.SQS.QueueEventSourcePolicy") {}
 
 export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(

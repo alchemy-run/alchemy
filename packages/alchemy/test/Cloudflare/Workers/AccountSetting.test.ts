@@ -32,6 +32,24 @@ const getLiveSetting = Effect.gen(function* () {
   );
 });
 
+// `getAccountSetting` is eventually consistent: right after a PUT it can keep
+// echoing the pre-write `greenCompute` for a few seconds (more often under the
+// concurrent suite). Poll the live singleton until it reflects the value we
+// just wrote before asserting, bounded so a genuinely-stuck write fails fast.
+const waitForGreenCompute = (expected: boolean | undefined) =>
+  getLiveSetting.pipe(
+    Effect.flatMap((live) =>
+      (live.greenCompute ?? false) === (expected ?? false)
+        ? Effect.succeed(live)
+        : Effect.fail({ _tag: "GreenComputeNotApplied" as const }),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "GreenComputeNotApplied",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+  );
+
 // Both cases mutate the same account-level Workers settings singleton; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
 describe.sequential("AccountSetting", () => {
   test.provider(
@@ -59,8 +77,8 @@ describe.sequential("AccountSetting", () => {
         // The pre-management value was captured for restore-on-destroy.
         expect(created.initialGreenCompute).toEqual(baseline.greenCompute);
 
-        // Out-of-band verify the live account state.
-        const live = yield* getLiveSetting;
+        // Out-of-band verify the live account state (poll through edge lag).
+        const live = yield* waitForGreenCompute(flipped);
         expect(live.greenCompute ?? false).toEqual(flipped);
 
         // Update in place — set it back to the baseline value. Same
@@ -76,14 +94,14 @@ describe.sequential("AccountSetting", () => {
         expect(updated.greenCompute ?? false).toEqual(baselineGreen);
         expect(updated.initialGreenCompute).toEqual(baseline.greenCompute);
 
-        const liveAfterUpdate = yield* getLiveSetting;
+        const liveAfterUpdate = yield* waitForGreenCompute(baselineGreen);
         expect(liveAfterUpdate.greenCompute ?? false).toEqual(baselineGreen);
 
         // Destroy — restores the pre-management values (already at the
         // baseline here, so this also exercises the idempotent no-op path).
         yield* stack.destroy();
 
-        const restored = yield* getLiveSetting;
+        const restored = yield* waitForGreenCompute(baselineGreen);
         expect(restored.greenCompute ?? false).toEqual(baselineGreen);
         expect(restored.defaultUsageModel).toEqual(baseline.defaultUsageModel);
       }).pipe(logLevel),

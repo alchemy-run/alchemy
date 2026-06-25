@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 import type { AlarmResource } from "./binding-common.ts";
 
 export interface DescribeAlarmContributorsRequest extends Omit<
@@ -53,7 +54,8 @@ export const DescribeAlarmContributorsLive = Layer.effect(
 
 export class DescribeAlarmContributorsPolicy extends Binding.Policy<
   DescribeAlarmContributorsPolicy,
-  (alarm: AlarmResource) => Effect.Effect<void>
+  (alarm: AlarmResource) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.DescribeAlarmContributors") {}
 
 export const DescribeAlarmContributorsPolicyLive =

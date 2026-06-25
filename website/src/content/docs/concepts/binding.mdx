@@ -18,7 +18,7 @@ bindings fit into a Platform's runtime, see
 ## A binding in one line
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
 
 // later, in fetch:
 yield* bucket.put("hello.txt", "world");
@@ -41,7 +41,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     return {
       fetch: Effect.gen(function* () {
         const obj = yield* bucket.get("key");
@@ -118,8 +118,8 @@ On Cloudflare, the same call attaches a native Worker binding (R2,
 KV, D1, Durable Object…) instead of an IAM policy:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
-const kv = yield* Cloudflare.KVNamespace.bind(Sessions);
+const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
 ```
 
 The runtime API is identical to the AWS counterpart — code that

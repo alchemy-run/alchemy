@@ -7,6 +7,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -142,7 +143,24 @@ test.provider("list enumerates the deployed access application", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(Cloudflare.AccessApplication);
-    const all = yield* provider.list();
+
+    // `list()` enumerates every Access application in the account. The
+    // provider already rides out the transient enumeration failures internally
+    // (the typed `AccessReferenceNotFound` from a sibling app mid-teardown
+    // still referencing a deleted policy, plus throttling 403s), so here we
+    // only poll until our own freshly created app becomes visible.
+    const all = yield* provider.list().pipe(
+      Effect.flatMap((rows) =>
+        rows.some((a) => a.applicationId === app.applicationId)
+          ? Effect.succeed(rows)
+          : Effect.fail({ _tag: "AppNotListed" as const }),
+      ),
+      Effect.retry({
+        while: (e) => e._tag === "AppNotListed",
+        schedule: Schedule.spaced("2 seconds"),
+        times: 15,
+      }),
+    );
 
     const match = all.find((a) => a.applicationId === app.applicationId);
     expect(match).toBeDefined();

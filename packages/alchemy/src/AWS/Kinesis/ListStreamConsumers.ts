@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListStreamConsumersRequest extends Omit<
   Kinesis.ListStreamConsumersInput,
@@ -46,7 +47,8 @@ export const ListStreamConsumersLive = Layer.effect(
 
 export class ListStreamConsumersPolicy extends Binding.Policy<
   ListStreamConsumersPolicy,
-  (stream: Stream) => Effect.Effect<void>
+  (stream: Stream) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.ListStreamConsumers") {}
 
 export const ListStreamConsumersPolicyLive =

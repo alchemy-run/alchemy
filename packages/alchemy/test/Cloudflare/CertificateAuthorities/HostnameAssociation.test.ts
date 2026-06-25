@@ -83,10 +83,11 @@ const waitForHostnames = (
     ),
     Effect.retry({
       while: (e) => e._tag === "HostnamesNotConverged",
-      // Bounded: 15 polls x 3s = max ~45s of waiting (the clear after a
-      // destroy was once observed to take just over 30s to converge).
+      // Bounded: 25 polls x 3s = max ~75s. PUT→GET convergence at the edge
+      // runs well past the earlier ~30s under full-suite parallel load (the
+      // API is being throttled, which stretches the propagation window).
       schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
+        Schedule.both(Schedule.recurs(25)),
       ),
     }),
   );
@@ -101,9 +102,12 @@ const waitForCertDelete = (accountId: string, mtlsCertificateId: string) =>
     Effect.catchTag("CertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      // Bounded: 10 polls x 3s = max ~30s of waiting.
+      // Bounded: 30 polls x 3s = max ~90s of waiting. The CA certificate
+      // delete only completes once the hostname-association clear (issued
+      // first by destroy) has propagated, and under full-suite load that
+      // combined window was observed to exceed the previous ~30s budget.
       schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
+        Schedule.both(Schedule.recurs(30)),
       ),
     }),
   );
@@ -155,6 +159,9 @@ describe.sequential("HostnameAssociation", () => {
         // Destroy cleared the association (PUT of an empty hostname list).
         yield* waitForHostnames(zoneId, []);
       }).pipe(logLevel),
+    // Three sequential edge-convergence waits (create, update, clear), each up
+    // to ~75s under throttled full-suite load, exceed the 120s default.
+    { timeout: 300_000 },
   );
 
   test.provider(

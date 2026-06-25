@@ -128,7 +128,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-+   const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
++   const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
 
     return {};
   }),
@@ -136,7 +136,7 @@ export default Cloudflare.Worker(
 ```
 
 We'll provide the runtime side of this binding
-(`Cloudflare.R2BucketBindingLive`) in step 3c when we wire up the
+(`Cloudflare.R2.ReadWriteBucketBinding`) in step 3c when we wire up the
 `fetch` handler.
 
 ### 3b. Construct the handlers inside Init
@@ -153,7 +153,7 @@ is pure construction — it builds a value, it doesn't run the server.
 ```typescript twoslash
 // @noErrors
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
 
 +   const handlersLayer = TaskRpcs.toLayer({
 +     getTask: ({ id }) =>
@@ -231,7 +231,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
+    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
 
     const handlersLayer = TaskRpcs.toLayer({
       getTask: ({ id }) =>
@@ -266,7 +266,7 @@ export default Cloudflare.Worker(
         Effect.provide(RpcSerialization.layerJson),
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
 
@@ -441,9 +441,8 @@ import { Task, TaskNotFound } from "./task.ts";
 export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       const handlersLayer = InnerRpcs.toLayer({
         getTask: ({ id }) =>
           state.storage.get<Task>(id).pipe(
@@ -466,59 +465,64 @@ export default class TasksObject extends Cloudflare.DurableObjectNamespace<Tasks
 ) {}
 ```
 
-### Bridge the DO into a typed RpcClient
+### Bridge the DO into the Worker
 
 `Cloudflare.toHttpClient(stub)` produces an `HttpClient` whose
-`execute` calls into the DO's `fetch`. Provide that as the transport
-for `RpcClient.layerProtocolHttp` and you get a typed
-`RpcClient<DoRpcs>`:
+`execute` calls into the DO's `fetch`. Plug it into
+`RpcClient.layerProtocolHttp` to get a typed `RpcClient<DoRpcs>`,
+then the `*DO` handlers just forward the typed call. Here's the
+whole Worker — the R2-backed handlers are unchanged, the new
+`makeDOClient` and `getTaskDO` / `createTaskDO` proxies are added:
 
-```diff lang="typescript"
-+import * as HttpClient from "effect/unstable/http/HttpClient";
-+import * as RpcClient from "effect/unstable/rpc/RpcClient";
-+import TasksObject from "./object.ts";
-+import { DoRpcs } from "./rpcs.ts";
-
+```typescript
+// src/worker.ts
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.filename },
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
-+   const tasksDO = yield* TasksObject;
-+
-+   const makeDOClient = (id: string = "default") =>
-+     RpcClient.make(DoRpcs).pipe(
-+       Effect.provide(
-+         RpcClient.layerProtocolHttp({ url: "http://localhost" }).pipe(
-+           Layer.provide(
-+             Layer.succeed(
-+               HttpClient.HttpClient,
-+               Cloudflare.toHttpClient(tasksDO.getByName(id)),
-+             ),
-+           ),
-+           Layer.provide(RpcSerialization.layerNdjson),
-+         ),
-+       ),
-+     );
-```
+    const tasks = yield* Cloudflare.R2.ReadWrite(Tasks);
+    const tasksDO = yield* TasksObject;
 
-The `url` is a placeholder — the request never hits the network; it
-short-circuits to `tasksDO.getByName(id).fetch`.
+    // A per-request typed RpcClient that short-circuits to the DO's
+    // `fetch`. The `url` is a placeholder — the request never hits the
+    // network; it routes straight to `tasksDO.getByName(id).fetch`.
+    const makeDOClient = (id: string = "default") =>
+      RpcClient.make(DoRpcs).pipe(
+        Effect.provide(
+          RpcClient.layerProtocolHttp({ url: "http://localhost" }).pipe(
+            Layer.provide(
+              Layer.succeed(
+                HttpClient.HttpClient,
+                Cloudflare.toHttpClient(tasksDO.getByName(id)),
+              ),
+            ),
+            Layer.provide(RpcSerialization.layerNdjson),
+          ),
+        ),
+      );
 
-### Wire the proxy handlers
-
-The Worker's `*DO` handlers just construct a per-request DO client
-and forward the typed call:
-
-```diff lang="typescript"
     const handlersLayer = TaskRpcs.toLayer({
+      // R2-backed handlers — unchanged
       getTask: /* ... R2 implementation ... */,
       createTask: /* ... R2 implementation ... */,
-+     getTaskDO: (payload) =>
-+       makeDOClient().pipe(Effect.flatMap((client) => client.getTask(payload))),
-+     createTaskDO: (payload) =>
-+       makeDOClient().pipe(Effect.flatMap((client) => client.createTask(payload))),
+      // DO-backed proxies — forward the typed call to the DO
+      getTaskDO: (payload) =>
+        makeDOClient().pipe(Effect.flatMap((client) => client.getTask(payload))),
+      createTaskDO: (payload) =>
+        makeDOClient().pipe(Effect.flatMap((client) => client.createTask(payload))),
     });
+
+    return {
+      fetch: RpcServer.toHttpEffect(TaskRpcs).pipe(
+        Effect.provide(handlersLayer),
+        Effect.provide(RpcSerialization.layerNdjson),
+      ),
+    };
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
+);
 ```
 
-For streaming RPCs the same pattern works with `Stream.unwrap`:
+For streaming RPCs the same proxy pattern works with `Stream.unwrap`:
 
 ```typescript
 countTasksDO: (payload) =>
@@ -642,8 +646,8 @@ export default class Counter extends Cloudflare.RpcDurableObjectNamespace<Counte
   "Counter",
   { schema: CounterRpcs },
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       const handlers = CounterRpcs.toLayer({ /* ... */ });
       return RpcServer.toHttpEffect(CounterRpcs).pipe(
         Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
@@ -674,8 +678,8 @@ export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
 // Runtime lives in a separate Layer — only the host Worker imports it.
 export default Counter.make(
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       const handlers = CounterRpcs.toLayer({ /* ... */ });
       return RpcServer.toHttpEffect(CounterRpcs).pipe(
         Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),

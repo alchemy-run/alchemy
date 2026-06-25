@@ -9,7 +9,6 @@ import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
-import { Container } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerApplicationProps,
@@ -18,7 +17,9 @@ import {
   buildFinalDockerfile,
   bundleContainerProgram,
   createContainerApplicationName,
+  foldEnvIntoEnvironmentVariables,
 } from "./ContainerBundle.ts";
+import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /**
  * Local (dev) provider for Cloudflare Container applications.
@@ -36,7 +37,7 @@ import {
  */
 export const LocalContainerProvider = () =>
   RpcProvider.effect(
-    Container,
+    ContainerPlatform,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       const { dotAlchemy } = yield* AlchemyContext;
@@ -92,7 +93,10 @@ export const LocalContainerProvider = () =>
         };
       }, Artifacts.cached("container-image"));
 
-      const placeholderConfiguration = (props: ContainerApplicationProps) =>
+      const placeholderConfiguration = (
+        props: ContainerApplicationProps,
+        accountId: string,
+      ) =>
         normalizeNulls({
           image: "local",
           instanceType: props.instanceType,
@@ -102,7 +106,10 @@ export const LocalContainerProvider = () =>
           vcpu: props.vcpu,
           memory: props.memory,
           disk: props.disk,
-          environmentVariables: props.environmentVariables,
+          environmentVariables: foldEnvIntoEnvironmentVariables(
+            props,
+            accountId,
+          ),
           labels: props.labels,
           network: props.network,
           command: props.command,
@@ -132,7 +139,7 @@ export const LocalContainerProvider = () =>
           maxInstances: news.maxInstances ?? 1,
           constraints: news.constraints,
           affinities: news.affinities,
-          configuration: placeholderConfiguration(news),
+          configuration: placeholderConfiguration(news, accountId),
           durableObjects: undefined,
           createdAt: new Date().toISOString(),
           version: 1,

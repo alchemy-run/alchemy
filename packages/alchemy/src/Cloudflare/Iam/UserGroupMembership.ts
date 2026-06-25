@@ -126,6 +126,13 @@ export const IamUserGroupMembershipProvider = () =>
               Effect.catchTag("UserGroupNotFound", () =>
                 Effect.succeed([] as IamUserGroupMembershipAttributes[]),
               ),
+              // A group whose policy Cloudflare can't validate rejects the
+              // member listing with a 400 ("Policy validation failed"). It's
+              // not ours to enumerate — contribute nothing rather than failing
+              // the whole account-wide listing.
+              Effect.catchTag("PolicyValidationFailed", () =>
+                Effect.succeed([] as IamUserGroupMembershipAttributes[]),
+              ),
             ),
         { concurrency: 10 },
       );

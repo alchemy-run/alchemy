@@ -13,6 +13,7 @@ import type { Platform } from "./Platform.ts";
 import type {
   ResourceBinding,
   ResourceClass,
+  ResourceClassLike,
   ResourceLike,
 } from "./Resource.ts";
 
@@ -251,7 +252,7 @@ export const effect = <
   LogsReq = never,
   ListReq = never,
 >(
-  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   eff: Effect.Effect<
     ProviderService<
       R,
@@ -352,7 +353,7 @@ export interface ProviderCollectionService {
 
 export const collection = <
   R extends
-    | ResourceClass<any>
+    | ResourceClassLike<any>
     | Platform<any, any, any, any, any>
     | Policy<any, any, any>,
 >(
@@ -428,7 +429,7 @@ export const findProviderByType: {
  */
 export const findProvider: {
   <R extends ResourceLike>(
-    resource: ResourceClass<R> | Platform<R, any, any, any, any>,
+    resource: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   ): Effect.Effect<ProviderService<R>>;
   <P extends Policy<any, any, any>>(
     policy: P,

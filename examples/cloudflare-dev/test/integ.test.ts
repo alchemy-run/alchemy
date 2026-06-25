@@ -127,7 +127,7 @@ test(
 );
 
 /**
- * EffectWorker binds a KV namespace via `Cloudflare.KVNamespace.bind(KV)`
+ * EffectWorker binds a KV namespace via `Cloudflare.KV.ReadWriteNamespace(KV)`
  * and returns the result of `kv.list()` as JSON. A successful response
  * proves the Effect-style binding wired the runtime SDK and the
  * `WorkerEnvironment` service was provisioned for the fetch handler.

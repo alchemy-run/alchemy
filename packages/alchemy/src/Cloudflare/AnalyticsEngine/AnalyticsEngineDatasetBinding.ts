@@ -6,6 +6,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AnalyticsEngineDataset as AnalyticsEngineDatasetLike } from "./AnalyticsEngineDataset.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface AnalyticsEngineDataPoint {
   indexes?: string[];
@@ -79,7 +80,8 @@ export const AnalyticsEngineDatasetBindingLive = Layer.effect(
 
 export class AnalyticsEngineDatasetBindingPolicy extends Binding.Policy<
   AnalyticsEngineDatasetBindingPolicy,
-  (dataset: AnalyticsEngineDatasetLike) => Effect.Effect<void>
+  (dataset: AnalyticsEngineDatasetLike) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.AnalyticsEngineDataset.Binding") {}
 
 export const AnalyticsEngineDatasetBindingPolicyLive =

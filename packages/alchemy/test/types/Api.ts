@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -111,16 +112,21 @@ export default class Api extends Cloudflare.Worker<Api>()(
 export class Api3 extends Cloudflare.Worker<
   Api3,
   {
-    getUser: () => Effect.Effect<{ id: string; name: string }>;
+    getUser: () => Effect.Effect<
+      { id: string; name: string },
+      never,
+      RuntimeContext
+    >;
   }
->()("Api3", {
-  main: import.meta.filename,
-  observability: {
-    enabled: true,
-  },
-}) {}
+>()("Api3") {}
 
 export const Api3Live = Api3.make(
+  {
+    main: import.meta.filename,
+    observability: {
+      enabled: true,
+    },
+  },
   Effect.gen(function* () {
     const agent = yield* Agent;
     return {

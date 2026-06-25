@@ -7,7 +7,7 @@ import type {
   ResourceState,
 } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
-import * as Secret from "../SecretsStore/Secret.ts";
+import * as Secret from "../SecretsStore/index.ts";
 import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { EncryptionKey } from "./Token.ts";
@@ -19,13 +19,10 @@ export default class Store extends DurableObjectNamespace<Store>()(
     // The actual secret read happens inside each DO instance below,
     // since `SecretClient.get()` needs the per-instance worker env.
     const encryptionSecret = yield* Secret.Secret.bind(EncryptionKey);
+    const state = yield* DurableObjectState;
+    const storage = state.storage;
 
     return Effect.gen(function* () {
-      // Inner (per-instance) phase — set up storage and the AES key.
-      // The key is imported once per DO boot and reused thereafter.
-      const doState = yield* DurableObjectState;
-      const storage = doState.storage;
-
       const keyHex = yield* encryptionSecret
         .get()
         .pipe(Effect.map(Redacted.value), Effect.orDie);
@@ -256,7 +253,7 @@ export default class Store extends DurableObjectNamespace<Store>()(
           ),
       };
     });
-  }),
+  }).pipe(Effect.provide(Secret.SecretBindingLive)),
 ) {
   /**
    * Well-known DO name whose sole job is to track the set of stacks

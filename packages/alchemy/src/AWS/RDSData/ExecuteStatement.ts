@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ExecuteStatementOptions {
   secret: Secret;
@@ -66,7 +67,8 @@ export const ExecuteStatementLive = Layer.effect(
 
 export class ExecuteStatementPolicy extends Binding.Policy<
   ExecuteStatementPolicy,
-  (cluster: DBCluster, options: ExecuteStatementOptions) => Effect.Effect<void>
+  (cluster: DBCluster, options: ExecuteStatementOptions) => Effect.Effect<void>,
+  Providers
 >()("AWS.RDSData.ExecuteStatement") {}
 
 export const ExecuteStatementPolicyLive = ExecuteStatementPolicy.layer.succeed(

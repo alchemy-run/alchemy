@@ -6,6 +6,7 @@ import * as Output from "../../Output.ts";
 import { isInstance } from "../EC2/Instance.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ReceiveMessageRequest extends Omit<
   sqs.ReceiveMessageRequest,
@@ -45,7 +46,8 @@ export const ReceiveMessageLive = Layer.effect(
 
 export class ReceiveMessagePolicy extends Binding.Policy<
   ReceiveMessagePolicy,
-  (queue: Queue) => Effect.Effect<void>
+  (queue: Queue) => Effect.Effect<void>,
+  Providers
 >()("AWS.SQS.ReceiveMessage") {}
 
 export const ReceiveMessagePolicyLive = ReceiveMessagePolicy.layer.succeed(

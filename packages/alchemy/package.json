@@ -20,6 +20,7 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
+    "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
     "build": "tsc -b && tsc -b tsconfig.bin.json && bun bundle",
     "bundle": "tsdown",
@@ -41,6 +42,12 @@
       "bun": "./src/*.ts",
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
+    },
+    "./AI": {
+      "types": "./lib/AI/index.d.ts",
+      "bun": "./src/AI/index.ts",
+      "worker": "./src/AI/index.ts",
+      "import": "./lib/AI/index.js"
     },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",
@@ -263,6 +270,12 @@
       "bun": "./src/Test/Bun.ts",
       "worker": "./src/Test/Bun.ts",
       "import": "./lib/Test/Bun.js"
+    },
+    "./Test/Http": {
+      "types": "./lib/Test/Http.d.ts",
+      "bun": "./src/Test/Http.ts",
+      "worker": "./src/Test/Http.ts",
+      "import": "./lib/Test/Http.js"
     },
     "./Util": {
       "types": "./lib/Util/index.d.ts",

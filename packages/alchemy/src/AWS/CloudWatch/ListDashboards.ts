@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListDashboardsRequest extends cloudwatch.ListDashboardsInput {}
 
@@ -39,7 +40,8 @@ export const ListDashboardsLive = Layer.effect(
 
 export class ListDashboardsPolicy extends Binding.Policy<
   ListDashboardsPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.ListDashboards") {}
 
 export const ListDashboardsPolicyLive = ListDashboardsPolicy.layer.succeed(

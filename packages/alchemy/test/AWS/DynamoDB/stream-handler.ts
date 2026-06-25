@@ -6,9 +6,6 @@ import * as Stream from "effect/Stream";
 
 export class DynamoDBStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "DynamoDBStreamFunction",
-  {
-    main: import.meta.filename,
-  },
 ) {}
 
 export class TableAndQueue extends Context.Service<
@@ -38,37 +35,41 @@ const TableAndQueueLive = Layer.effect(
   }),
 );
 
-const eff = Effect.gen(function* () {
-  const { table, queue } = yield* TableAndQueue;
-  const sink = yield* AWS.SQS.QueueSink.bind(queue);
+export default DynamoDBStreamFunction.make(
+  {
+    main: import.meta.filename,
+  },
+  Effect.gen(function* () {
+    const { table, queue } = yield* TableAndQueue;
+    const sink = yield* AWS.SQS.QueueSink.bind(queue);
 
-  yield* AWS.DynamoDB.stream(table, {
-    streamViewType: "NEW_AND_OLD_IMAGES",
-    startingPosition: "TRIM_HORIZON",
-    batchSize: 10,
-  }).process((stream) =>
-    stream.pipe(
-      Stream.map((record) =>
-        JSON.stringify({
-          eventName: record.eventName,
-          keys: record.dynamodb.Keys,
-          newImage: record.dynamodb.NewImage,
-          oldImage: record.dynamodb.OldImage,
-        }),
+    yield* AWS.DynamoDB.stream(table, {
+      streamViewType: "NEW_AND_OLD_IMAGES",
+      startingPosition: "TRIM_HORIZON",
+      batchSize: 10,
+    }).process((stream) =>
+      stream.pipe(
+        Stream.map((record) =>
+          JSON.stringify({
+            eventName: record.eventName,
+            keys: record.dynamodb.Keys,
+            newImage: record.dynamodb.NewImage,
+            oldImage: record.dynamodb.OldImage,
+          }),
+        ),
+        Stream.run(sink),
       ),
-      Stream.run(sink),
-    ),
-  );
-}).pipe(
-  Effect.provide(
-    Layer.provideMerge(
-      Layer.mergeAll(AWS.Lambda.TableEventSource, AWS.SQS.QueueSinkLive),
-      Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
+    );
+  }).pipe(
+    Effect.provide(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          AWS.Lambda.TableEventSource,
+          AWS.SQS.QueueSinkLive,
+          TableAndQueueLive,
+        ),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
+      ),
     ),
   ),
-);
-
-// @ts-expect-error
-export default DynamoDBStreamFunction.make(eff).pipe(
-  Layer.provideMerge(TableAndQueueLive),
 );

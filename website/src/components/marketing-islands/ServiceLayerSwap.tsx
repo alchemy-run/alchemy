@@ -35,7 +35,7 @@ const IMPLS: Impl[] = [
     layer: "SessionsKV",
     resourceLabel: "Sessions",
     resourceSub: "Cloudflare.KVNamespace",
-    bindCall: "KVNamespace.bind",
+    bindCall: "KV.ReadWriteNamespace",
     color: CF_COLOR,
     kind: "kv",
   },

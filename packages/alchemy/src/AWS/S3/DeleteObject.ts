@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DeleteObjectRequest extends Omit<
   S3.DeleteObjectRequest,
@@ -44,7 +45,8 @@ export const DeleteObjectLive = Layer.effect(
 
 export class DeleteObjectPolicy extends Binding.Policy<
   DeleteObjectPolicy,
-  (bucket: Bucket) => Effect.Effect<void>
+  (bucket: Bucket) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.DeleteObject") {}
 
 export const DeleteObjectPolicyLive = DeleteObjectPolicy.layer.succeed(
