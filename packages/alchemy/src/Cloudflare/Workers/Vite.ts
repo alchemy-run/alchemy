@@ -1,5 +1,4 @@
 import cloudflare, {
-  type BuildResult,
   type CloudflareVitePluginOptions,
 } from "@distilled.cloud/cloudflare-vite-plugin";
 import * as Deferred from "effect/Deferred";
@@ -9,6 +8,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
+import type { BundleError } from "../../Bundle/Bundle.ts";
+import {
+  makeViteOutputPlugin,
+  type ViteBuildOutput,
+} from "../../Bundle/Vite.ts";
 
 export const viteDev = (
   rootDir: string = process.cwd(),
@@ -38,31 +42,30 @@ export const viteBuild = (
   rootDir: string = process.cwd(),
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
-): Effect.Effect<BuildResult> => {
-  const deferred = Deferred.makeUnsafe<BuildResult>();
-  return Effect.promise(async () => {
-    const vite = await loadVite(rootDir);
-    const builder = await vite.createBuilder(
-      {
+) =>
+  Effect.gen(function* () {
+    const deferred = yield* Deferred.make<ViteBuildOutput, BundleError>();
+    const plugin = yield* makeViteOutputPlugin({
+      viteEnvironments: pluginOptions.viteEnvironments,
+      deferred,
+    });
+    yield* Effect.promise(async () => {
+      const vite = await loadVite(rootDir);
+      const builder = await vite.createBuilder({
         root: rootDir,
         define: getDefine(env),
-        plugins: [
-          cloudflare({
-            ...pluginOptions,
-            onBuildComplete: (result) => {
-              Deferred.doneUnsafe(deferred, Effect.succeed(result));
-            },
-          }),
-        ],
-      },
-      // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
-      // Originally we used `undefined` here, but this caused the static site build to fail.
-      // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
-      null,
-    );
-    await builder.buildApp();
-  }).pipe(Effect.andThen(Deferred.await(deferred)));
-};
+        plugins: [cloudflare(pluginOptions), plugin],
+      });
+      await builder.buildApp();
+    });
+    const { assets, server } = yield* Deferred.await(deferred);
+    if (!assets && !server) {
+      return yield* Effect.die(
+        new Error("Vite build produced neither assets nor server output"),
+      );
+    }
+    return { assets, server };
+  });
 
 // Emulate `vite build` env semantics for `props.env`: only
 // keys with Vite's default `VITE_` prefix are inlined into

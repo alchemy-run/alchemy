@@ -26,9 +26,9 @@ export default Alchemy.Stack(
           "vite.config.ts",
         ],
       },
-      viteEnvironment: {
-        name: "rsc",
-        childEnvironments: ["ssr"],
+      viteEnvironments: {
+        entry: "rsc",
+        children: ["ssr"],
       },
     });
 

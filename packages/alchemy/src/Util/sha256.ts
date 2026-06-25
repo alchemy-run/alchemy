@@ -4,11 +4,13 @@ import { stableValue } from "./stable.ts";
 type Input = ArrayBuffer | Uint8Array | string;
 
 export const sha256 = (input: Input) =>
-  Effect.promise(async () => {
-    const digest = await crypto.subtle.digest("SHA-256", toArrayBuffer(input));
-    const hashArray = Array.from(new Uint8Array(digest));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  });
+  Effect.promise(() => sha256Promise(input));
+
+export const sha256Promise = async (input: Input) => {
+  const digest = await crypto.subtle.digest("SHA-256", toArrayBuffer(input));
+  const hashArray = Array.from(new Uint8Array(digest));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+};
 
 export const sha256Object = (input: object) =>
   sha256(JSON.stringify(stableValue(input)));

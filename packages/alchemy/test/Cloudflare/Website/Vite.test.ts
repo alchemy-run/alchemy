@@ -1,6 +1,5 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Vite from "@/Cloudflare/Workers/Vite.ts";
 import * as Test from "@/Test/Vitest";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "@effect/vitest";
@@ -353,45 +352,18 @@ test.provider(
         "package.json",
         "vite.config.ts",
       ];
-      const compatibility = {
-        date: "2026-03-17",
-        flags: ["nodejs_compat"],
-      };
-      const assets = {
-        runWorkerFirst: ["/api/*"],
-      };
-      // Direct build assertion covers the distilled Vite manifest contract;
-      // the live deploy assertion below proves Cloudflare.Vite consumes the
-      // same manifest bundle instead of falling back to the legacy ssr output.
-      const build = yield* Vite.viteBuild(
-        rootDir,
-        {},
-        {
-          compatibilityDate: compatibility.date,
-          compatibilityFlags: compatibility.flags,
-        },
-      );
-      // const distilled = build.distilled;
-      // expect(distilled).toBeDefined();
-      // expect(distilled!.manifest.workers.app.main).toBe("server/worker.js");
-      // expect(distilled!.manifest.workers.app.modules).toContainEqual({
-      //   path: "server/worker.js",
-      //   type: "esm",
-      // });
-      // expect(distilled!.manifest.assets?.runWorkerFirst).toEqual(["/api/*"]);
-      // expect(distilled!.bundle.files).toContainEqual(
-      //   expect.objectContaining({
-      //     path: "server/worker.js",
-      //     contentType: "application/javascript+module",
-      //   }),
-      // );
 
       const site = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Vite("ViteDo", {
             ...viteProps(rootDir, memoInclude),
-            compatibility,
-            assets,
+            compatibility: {
+              date: "2026-03-17",
+              flags: ["nodejs_compat"],
+            },
+            assets: {
+              runWorkerFirst: ["/api/*"],
+            },
             env: {
               Counter: Cloudflare.DurableObjectNamespace<ViteDoCounter>(
                 "Counter",
@@ -405,7 +377,6 @@ test.provider(
       );
 
       expect(site.url).toBeDefined();
-      // expect(site.hash?.bundle).toEqual(distilled!.bundle.hash);
       yield* expectWorkerExists(site.workerName, accountId);
       yield* expectUrlContains(`${site.url!}/`, "Vite DO fixture", {
         timeout: "120 seconds",
@@ -472,40 +443,6 @@ test.provider(
       };
       const viteEnvironments = { entry: "rsc", children: ["ssr"] };
 
-      // Direct build assertion covers the RSC manifest shape: one Worker
-      // module set that folds both the rsc entry and ssr child chunks without
-      // leaking client assets into the uploaded Worker bundle.
-      const build = yield* Vite.viteBuild(
-        rootDir,
-        {},
-        {
-          compatibilityDate: compatibility.date,
-          compatibilityFlags: compatibility.flags,
-          viteEnvironments,
-        },
-      );
-      // const distilled = build.client;
-      // expect(distilled).toBeDefined();
-      // const worker = distilled!.manifest.workers.app;
-      // const modulePaths = worker.modules.map((module) => module.path);
-      // expect(worker.main).toBe("server/entry.worker.js");
-      // expect(worker.compatibilityDate).toBe(compatibility.date);
-      // expect(worker.compatibilityFlags).toEqual(compatibility.flags);
-      // expect(modulePaths).toContain(worker.main);
-      // expect(modulePaths).toContain("ssr/worker-ssr.js");
-      // expect(modulePaths.some((path) => path.startsWith("ssr/"))).toBe(true);
-      // expect(modulePaths.some((path) => path.startsWith("client/"))).toBe(
-      //   false,
-      // );
-      // expect(distilled!.manifest.assets?.directory).toBe("client");
-      // expect(distilled!.manifest.assets?.runWorkerFirst).toBe(true);
-      // expect(distilled!.bundle.files).toContainEqual(
-      //   expect.objectContaining({
-      //     path: "server/entry.worker.js",
-      //     contentType: "application/javascript+module",
-      //   }),
-      // );
-
       const site = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Vite("ReactRouterRsc", {
@@ -518,7 +455,6 @@ test.provider(
       );
 
       expect(site.url).toBeDefined();
-      // expect(site.hash?.bundle).toEqual(distilled!.bundle.hash);
       yield* expectWorkerExists(site.workerName, accountId);
       yield* expectUrlContains(`${site.url!}/`, "React Router Vite", {
         timeout: "120 seconds",
