@@ -144,12 +144,11 @@ test.provider("list enumerates the deployed access application", (stack) =>
 
     const provider = yield* Provider.findProvider(Cloudflare.AccessApplication);
 
-    // `list()` enumerates every Access application in the account. Under a full
-    // concurrent run a sibling test may be mid-teardown of an application that
-    // still references a policy it just deleted, and Cloudflare rejects the
-    // whole list with a `BadRequest` ("policy ... not found") until that app is
-    // gone. The fresh scoped token can also 403 while it propagates. Retry the
-    // enumeration on either, and poll until our own app appears.
+    // `list()` enumerates every Access application in the account. The
+    // provider already rides out the transient enumeration failures internally
+    // (the typed `AccessReferenceNotFound` from a sibling app mid-teardown
+    // still referencing a deleted policy, plus throttling 403s), so here we
+    // only poll until our own freshly created app becomes visible.
     const all = yield* provider.list().pipe(
       Effect.flatMap((rows) =>
         rows.some((a) => a.applicationId === app.applicationId)
@@ -157,10 +156,7 @@ test.provider("list enumerates the deployed access application", (stack) =>
           : Effect.fail({ _tag: "AppNotListed" as const }),
       ),
       Effect.retry({
-        while: (e) =>
-          e._tag === "BadRequest" ||
-          e._tag === "Forbidden" ||
-          e._tag === "AppNotListed",
+        while: (e) => e._tag === "AppNotListed",
         schedule: Schedule.spaced("2 seconds"),
         times: 15,
       }),
