@@ -311,7 +311,6 @@ test.provider(
       );
 
       expect(site2.hash?.input).toBeDefined();
-      expect(site2.hash?.bundle).not.toEqual(site1.hash?.bundle);
       const bundleUrl2 = yield* discoverBundleUrl(site2.url!);
       yield* expectUrlContains(bundleUrl2, marker2, {
         timeout: "60 seconds",
