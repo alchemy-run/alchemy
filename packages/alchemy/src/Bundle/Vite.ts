@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as vite from "vite";
-import { sha256, sha256Promise } from "../Util/index.ts";
+import { sha256 } from "../Util/index.ts";
 import {
   BundleError,
   bundleErrorFromUnknown,
@@ -15,106 +15,53 @@ import {
 } from "./Bundle.ts";
 
 export interface ViteBuildOutput {
-  readonly assets: string | undefined;
-  readonly server: BundleOutput | undefined;
+  readonly clientDirectory: string | undefined;
+  // This is emitted as an Effect instead of a value so we can process it in parallel with reading the client assets.
+  readonly serverBundle: Effect.Effect<BundleOutput | undefined, BundleError>;
 }
 
+// `@vitejs/plugin-rsc` writes these modules separately after build completes instead of emitting them as chunks.
+// So, we need to detect them and read them from the file system manually.
 const RSC_MANIFEST = {
   "virtual:vite-rsc/assets-manifest": "__vite_rsc_assets_manifest.js",
   "virtual:vite-rsc/environment-imports": "__vite_rsc_env_imports_manifest.js",
 } as const;
+type RscManifestId = keyof typeof RSC_MANIFEST;
 
-type ChunkMap = Map<string, Effect.Effect<BundleFile, BundleError>>;
-
-export const makeViteOutputPlugin = Effect.fn(function* (input: {
-  readonly viteEnvironments?: {
-    readonly entry?: string;
-    readonly children?: string[];
-  };
-  readonly deferred: Deferred.Deferred<ViteBuildOutput, BundleError>;
+/**
+ * A Vite plugin that collects the output of the build and makes it available as an Effect.
+ * @param entryEnvironment - The environment to use as the entry point for the server bundle. Defaults to "ssr".
+ */
+export const viteBuildOutputPlugin = Effect.fn(function* ({
+  entryEnvironment = "ssr",
+}: {
+  entryEnvironment?: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  let clientDirectory: string | undefined;
+  let serverEntry: string | undefined;
+  const serverChunks = new Map<
+    string,
+    Effect.Effect<BundleFile, BundleError>
+  >();
+  const deferred = yield* Deferred.make<ViteBuildOutput, BundleError>();
 
-  const fileName = (name: string, environment: vite.Environment) =>
-    `${environment.name}/${name}`;
-
-  const makeRscManifestChunk = (
-    name: string,
-    environment: vite.Environment,
-  ) => {
-    return fs
-      .readFile(
-        path.resolve(
-          environment.config.root,
-          environment.config.build.outDir,
-          name,
-        ),
-      )
-      .pipe(
-        Effect.flatMap((content) =>
-          sha256(content).pipe(
-            Effect.map((hash) => ({
-              path: fileName(name, environment),
-              content,
-              hash,
-            })),
-          ),
-        ),
-        Effect.mapError(bundleErrorFromUnknown),
-      );
-  };
-
-  let assets: string | undefined;
-  let entry: string | undefined;
-  const chunks: ChunkMap = new Map();
-  const getChunk = (path: string) => {
-    const chunk = chunks.get(path);
-    if (!chunk) {
-      return Effect.die(
-        new Cause.NoSuchElementError(`Chunk ${path} not found`),
-      );
-    }
-    return chunk;
-  };
-
-  const buildResult = Effect.gen(function* () {
-    if (!entry) {
-      return { assets, server: undefined };
-    }
-    const keys = Array.from(chunks.keys()).sort((a, b) => a.localeCompare(b));
-    const server: NonEmptyArray<Effect.Effect<BundleFile, BundleError>> = [
-      getChunk(entry),
-    ];
-    for (const key of keys) {
-      if (key === entry) continue;
-      server.push(getChunk(key));
-    }
-    return {
-      assets,
-      server: yield* Effect.all(server, { concurrency: "unbounded" }).pipe(
-        Effect.flatMap(bundleOutputFromFiles),
-      ),
-    };
-  });
-
-  return {
+  const plugin: vite.Plugin = {
     name: "alchemy:build-output",
     sharedDuringBuild: true,
     async writeBundle(_, bundle) {
       if (this.environment.name === "client") {
-        assets = path.resolve(
+        clientDirectory = path.resolve(
           this.environment.config.root,
           this.environment.config.build.outDir,
         );
         return;
       }
-      const isEntryEnvironment =
-        this.environment.name === (input.viteEnvironments?.entry ?? "ssr");
       const files = Object.values(bundle);
-      if (isEntryEnvironment) {
+      if (this.environment.name === entryEnvironment) {
         if (files[0].type === "chunk" && files[0].isEntry) {
-          entry = fileName(files[0].fileName, this.environment);
+          serverEntry = fileName(files[0].fileName, this.environment);
         } else {
           throw new Error(
             `Entry chunk not found for environment "${this.environment.name}"`,
@@ -130,27 +77,104 @@ export const makeViteOutputPlugin = Effect.fn(function* (input: {
                   self in RSC_MANIFEST,
               )
               .forEach((id) => {
-                const name = fileName(RSC_MANIFEST[id], this.environment);
-                if (!chunks.has(name)) {
-                  chunks.set(
-                    name,
-                    makeRscManifestChunk(RSC_MANIFEST[id], this.environment),
-                  );
-                }
+                serverChunks.set(
+                  RSC_MANIFEST[id],
+                  readRscManifestChunk(id, this.environment),
+                );
               });
           }
           const name = fileName(file.fileName, this.environment);
           const content = file.type === "chunk" ? file.code : file.source;
-          const hash = await sha256Promise(content);
-          chunks.set(name, Effect.succeed({ path: name, content, hash }));
+          serverChunks.set(
+            name,
+            sha256(content).pipe(
+              Effect.map((hash) => ({ path: name, content, hash })),
+            ),
+          );
         }),
       );
     },
     buildApp: {
       order: "post",
       async handler() {
-        Deferred.doneUnsafe(input.deferred, buildResult);
+        Deferred.doneUnsafe(
+          deferred,
+          Effect.succeed({
+            clientDirectory,
+            serverBundle: makeServerBundle(),
+          }),
+        );
       },
     },
-  } satisfies vite.Plugin;
+  };
+
+  // The server bundle may include chunks from more than one Vite environment, so we need to prefix them with the environment-specific output directory.
+  // Flattening them doesn't work because of relative imports between environments.
+  const fileName = (name: string, environment: vite.Environment) =>
+    `${environment.config.build.outDir}/${name}`;
+
+  // Manually read the RSC manifest chunk from the file system.
+  // This is only safe to run *after* the build has completed.
+  const readRscManifestChunk = (
+    id: RscManifestId,
+    environment: vite.Environment,
+  ) => {
+    const name = RSC_MANIFEST[id];
+    return fs
+      .readFile(
+        path.resolve(
+          environment.config.root,
+          environment.config.build.outDir,
+          name,
+        ),
+      )
+      .pipe(
+        Effect.flatMap((content) =>
+          sha256(content).pipe(
+            Effect.map(
+              (hash): BundleFile => ({
+                path: fileName(name, environment),
+                content,
+                hash,
+              }),
+            ),
+          ),
+        ),
+        Effect.mapError(bundleErrorFromUnknown),
+      );
+  };
+
+  const makeServerBundle = () => {
+    if (!serverEntry && !serverChunks.size) return Effect.undefined;
+    if (!serverEntry)
+      return Effect.die(new Cause.NoSuchElementError("Missing server entry"));
+    const filePaths = Array.from(serverChunks.keys()).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const server: NonEmptyArray<Effect.Effect<BundleFile, BundleError>> = [
+      getChunk(serverEntry),
+    ];
+    for (const filePath of filePaths) {
+      if (filePath === serverEntry) continue;
+      server.push(getChunk(filePath));
+    }
+    return Effect.all(server, { concurrency: "unbounded" }).pipe(
+      Effect.flatMap(bundleOutputFromFiles),
+    );
+  };
+
+  const getChunk = (path: string) => {
+    const chunk = serverChunks.get(path);
+    if (!chunk) {
+      return Effect.die(
+        new Cause.NoSuchElementError(`Chunk ${path} not found`),
+      );
+    }
+    return chunk;
+  };
+
+  return {
+    plugin,
+    output: Deferred.await(deferred),
+  };
 });

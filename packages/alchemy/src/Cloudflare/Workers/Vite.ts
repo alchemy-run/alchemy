@@ -1,18 +1,13 @@
 import cloudflare, {
   type CloudflareVitePluginOptions,
 } from "@distilled.cloud/cloudflare-vite-plugin";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
-import type { BundleError } from "../../Bundle/Bundle.ts";
-import {
-  makeViteOutputPlugin,
-  type ViteBuildOutput,
-} from "../../Bundle/Vite.ts";
+import { viteBuildOutputPlugin } from "../../Bundle/Vite.ts";
 
 export const viteDev = (
   rootDir: string = process.cwd(),
@@ -44,27 +39,19 @@ export const viteBuild = (
   pluginOptions: CloudflareVitePluginOptions,
 ) =>
   Effect.gen(function* () {
-    const deferred = yield* Deferred.make<ViteBuildOutput, BundleError>();
-    const plugin = yield* makeViteOutputPlugin({
-      viteEnvironments: pluginOptions.viteEnvironments,
-      deferred,
+    const outputPlugin = yield* viteBuildOutputPlugin({
+      entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
     yield* Effect.promise(async () => {
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder({
         root: rootDir,
         define: getDefine(env),
-        plugins: [cloudflare(pluginOptions), plugin],
+        plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
       });
       await builder.buildApp();
     });
-    const { assets, server } = yield* Deferred.await(deferred);
-    if (!assets && !server) {
-      return yield* Effect.die(
-        new Error("Vite build produced neither assets nor server output"),
-      );
-    }
-    return { assets, server };
+    return yield* outputPlugin.output;
   });
 
 // Emulate `vite build` env semantics for `props.env`: only

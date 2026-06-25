@@ -1275,7 +1275,7 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const output = yield* Vite.viteBuild(
+        const { clientDirectory, serverBundle } = yield* Vite.viteBuild(
           props.vite?.rootDir,
           Object.fromEntries(
             (yield* Effect.all(
@@ -1302,15 +1302,29 @@ export const LiveWorkerProvider = () =>
             viteEnvironments: props.vite?.viteEnvironments,
           },
         );
-        const assets = output.assets
-          ? yield* readAssets({
-              ...(props.assets && typeof props.assets !== "string"
-                ? props.assets
-                : undefined),
-              directory: output.assets,
-            })
-          : undefined;
-        return { assets, bundle: output.server };
+        const [assets, bundle] = yield* Effect.all(
+          [
+            clientDirectory
+              ? readAssets({
+                  ...(props.assets && typeof props.assets !== "string"
+                    ? props.assets
+                    : undefined),
+                  directory: path.resolve(
+                    props.vite?.rootDir ?? process.cwd(),
+                    clientDirectory,
+                  ),
+                })
+              : Effect.undefined,
+            serverBundle,
+          ],
+          { concurrency: "unbounded" },
+        );
+        if (!assets && !bundle) {
+          return yield* Effect.die(
+            new Error("Vite build produced neither assets nor server output"),
+          );
+        }
+        return { assets, bundle };
       });
 
       const prepareAssetsAndBundle = (
