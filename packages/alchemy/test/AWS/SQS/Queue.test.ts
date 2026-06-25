@@ -20,8 +20,12 @@ const { test } = Test.make({ providers: AWS.providers() });
 // wait can run ~135s under full-suite parallel load. Combined with a deploy
 // that overshoots the 120s default test timeout, so default the per-test
 // timeout to 240s (callers may still pass an explicit longer timeout).
-const provider: typeof test.provider = (name, fn, opts) =>
-  test.provider(name, fn, opts ?? { timeout: 240_000 });
+const provider: typeof test.provider = ((name, fn, opts) =>
+  test.provider(
+    name,
+    fn,
+    opts ?? { timeout: 240_000 },
+  )) as typeof test.provider;
 
 provider("create and delete queue with default props", (stack) =>
   Effect.gen(function* () {
@@ -340,16 +344,17 @@ provider(
         stack.deploy(
           Effect.gen(function* () {
             const dlq = yield* Queue("RedriveDLQ");
-            const source = yield* Queue("RedriveSource", {
-              ...(withRedrive
+            const source = yield* Queue(
+              "RedriveSource",
+              withRedrive
                 ? {
                     redrivePolicy: {
                       deadLetterTargetArn: dlq.queueArn,
                       maxReceiveCount: 3,
                     },
                   }
-                : {}),
-            });
+                : {},
+            );
             return { dlq, source };
           }),
         );

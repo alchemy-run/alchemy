@@ -118,7 +118,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { functionUrl } = yield* stack.deploy(
-        AWS.Lambda.Function<{}>()("InstallFn", {
+        AWS.Lambda.Function("InstallFn", {
           main: externalPackageHandlerPath,
           handler: "handler",
           isExternal: true,
