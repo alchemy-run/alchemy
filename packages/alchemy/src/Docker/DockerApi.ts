@@ -98,6 +98,7 @@ export interface ContainerInfo {
 
 export interface ImageInspectInfo {
   Id: string;
+  Created?: string;
   RepoTags?: string[] | null;
   RepoDigests?: string[] | null;
 }
@@ -465,6 +466,14 @@ export const inspectImageInfo = (imageRef: string) =>
   inspectJson<ImageInspectInfo[]>(["image", "inspect", imageRef]).pipe(
     Effect.map((images) => images?.[0]),
   );
+
+/**
+ * Milliseconds-since-epoch creation time reported by Docker for an inspected
+ * image. Returns `0` when Docker does not report a parseable timestamp so the
+ * value stays deterministic (no wall-clock fallback).
+ */
+export const imageCreatedAt = (info: ImageInspectInfo | undefined): number =>
+  Date.parse(info?.Created ?? "") || 0;
 
 export const createVolume = Effect.fn(function* (input: {
   name: string;

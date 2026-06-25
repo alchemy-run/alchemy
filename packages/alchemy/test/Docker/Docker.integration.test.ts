@@ -123,7 +123,7 @@ test.provider("provider diff canaries for replacements and registry refs", () =>
         name: "ghcr.io/acme/app",
         imageRef: "ghcr.io/acme/app:latest",
         tag: "latest",
-        builtAt: Date.now(),
+        builtAt: 0,
       },
     });
     expect(imageDiff).toBeUndefined();
@@ -180,7 +180,10 @@ describe.sequential("Docker resources", () => {
     "network adopts an existing same-name Docker network with stack adoption",
     (stack) =>
       Effect.gen(function* () {
-        const networkName = `alchemy-test-network-${Date.now()}`;
+        const networkName = "alchemy-test-network-adopt-existing";
+        yield* runDockerCommand(["network", "rm", networkName]).pipe(
+          Effect.ignore,
+        );
         yield* runDockerCommand(["network", "create", networkName]);
         try {
           const network = yield* stack.deploy(
@@ -206,7 +209,10 @@ describe.sequential("Docker resources", () => {
     "volume adopts an existing Docker volume",
     (stack) =>
       Effect.gen(function* () {
-        const volumeName = `alchemy-test-volume-${Date.now()}`;
+        const volumeName = "alchemy-test-volume-adopt-existing";
+        yield* runDockerCommand(["volume", "rm", volumeName]).pipe(
+          Effect.ignore,
+        );
         yield* runDockerCommand(["volume", "create", volumeName]);
         try {
           const volume = yield* stack.deploy(
@@ -269,7 +275,7 @@ describe.sequential("Docker resources", () => {
         const root = yield* fs.makeTempDirectory({
           prefix: "alchemy-docker-image-",
         });
-        const imageName = `alchemy-test-image-${Date.now()}`;
+        let imageRef: string | undefined;
         try {
           yield* fs.writeFileString(
             path.join(root, "Dockerfile"),
@@ -277,21 +283,24 @@ describe.sequential("Docker resources", () => {
           );
           const image = yield* stack.deploy(
             Effect.gen(function* () {
+              // No explicit name: the engine auto-generates the physical name.
               return yield* Docker.Image("tiny-image", {
-                name: imageName,
                 tag: "latest",
                 build: { context: root },
               });
             }),
           );
-          expect(image.imageRef).toBe(`${imageName}:latest`);
+          imageRef = image.imageRef;
+          expect(image.imageRef.endsWith(":latest")).toBe(true);
           expect(image.imageId?.length).toBeGreaterThan(0);
           expect(image.contextHash?.length).toBeGreaterThan(0);
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
-          yield* runDockerCommand(["rmi", "-f", `${imageName}:latest`]).pipe(
-            Effect.ignore,
-          );
+          if (imageRef) {
+            yield* runDockerCommand(["rmi", "-f", imageRef]).pipe(
+              Effect.ignore,
+            );
+          }
           yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
         }
       }),
@@ -321,28 +330,31 @@ describe.sequential("Docker resources", () => {
     "container inspect returns bound host ports",
     (stack) =>
       Effect.gen(function* () {
-        const containerName = `alchemy-test-container-${Date.now()}`;
         const hostPort = yield* freeHostPort;
+        let containerName: string | undefined;
         try {
           const container = yield* stack.deploy(
             Effect.gen(function* () {
+              // No explicit name: rely on the engine-generated physical name.
               return yield* Docker.Container("nginx-container", {
-                name: containerName,
                 image: "nginx:alpine",
                 ports: [{ external: hostPort, internal: 80 }],
                 start: true,
               });
             }),
           );
-          expect(container.name).toBe(containerName);
+          containerName = container.name;
+          expect(container.name.length).toBeGreaterThan(0);
           expect(container.state).toBe("running");
           const runtime = yield* Docker.inspectContainer(container.name);
           expect(runtime.ports["80/tcp"]).toBe(hostPort);
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
-          yield* runDockerCommand(["rm", "-f", containerName]).pipe(
-            Effect.ignore,
-          );
+          if (containerName) {
+            yield* runDockerCommand(["rm", "-f", containerName]).pipe(
+              Effect.ignore,
+            );
+          }
         }
       }),
     { timeout: 120000 },
@@ -352,40 +364,47 @@ describe.sequential("Docker resources", () => {
     "container network aliases update without replacing the container",
     (stack) =>
       Effect.gen(function* () {
-        const networkName = `alchemy-test-network-alias-${Date.now()}`;
-        const containerName = `alchemy-test-alias-container-${Date.now()}`;
+        let containerName: string | undefined;
+        let networkName: string | undefined;
         try {
+          // No explicit names: the engine generates stable physical names that
+          // stay constant across the two deploys (same instance id).
           const deployWithAlias = (alias: string) =>
             stack.deploy(
               Effect.gen(function* () {
-                yield* Docker.Network("alias-network", {
-                  name: networkName,
-                });
-                return yield* Docker.Container("alias-container", {
-                  name: containerName,
+                const network = yield* Docker.Network("alias-network");
+                const container = yield* Docker.Container("alias-container", {
                   image: "nginx:alpine",
-                  networks: [{ name: networkName, aliases: [alias] }],
+                  networks: [{ name: network.name, aliases: [alias] }],
                 });
+                return { container, network };
               }),
             );
 
           const first = yield* deployWithAlias("old-alias");
+          containerName = first.container.name;
+          networkName = first.network.name;
           const second = yield* deployWithAlias("new-alias");
-          expect(second.id).toBe(first.id);
+          expect(second.container.id).toBe(first.container.id);
 
-          const info = yield* inspectContainerInfo(containerName);
+          const info = yield* inspectContainerInfo(second.container.name);
           const aliases =
-            info?.NetworkSettings.Networks?.[networkName]?.Aliases ?? [];
+            info?.NetworkSettings.Networks?.[second.network.name]?.Aliases ??
+            [];
           expect(aliases).toContain("new-alias");
           expect(aliases).not.toContain("old-alias");
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
-          yield* runDockerCommand(["rm", "-f", containerName]).pipe(
-            Effect.ignore,
-          );
-          yield* runDockerCommand(["network", "rm", networkName]).pipe(
-            Effect.ignore,
-          );
+          if (containerName) {
+            yield* runDockerCommand(["rm", "-f", containerName]).pipe(
+              Effect.ignore,
+            );
+          }
+          if (networkName) {
+            yield* runDockerCommand(["network", "rm", networkName]).pipe(
+              Effect.ignore,
+            );
+          }
         }
       }),
     { timeout: 120000 },

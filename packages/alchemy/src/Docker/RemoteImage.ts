@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { imageId, inspectImageInfo, pullImage } from "./DockerApi.ts";
+import { imageCreatedAt, inspectImageInfo, pullImage } from "./DockerApi.ts";
 
 export interface RemoteImageProps {
   /** Docker image name, without tag. */
@@ -80,7 +80,7 @@ export const RemoteImageProvider = () =>
         kind: "RemoteImage" as const,
         imageRef: ref,
         imageId: image.Id,
-        createdAt: output?.createdAt ?? Date.now(),
+        createdAt: output?.createdAt ?? imageCreatedAt(image),
         name: olds.name,
         tag: olds.tag ?? "latest",
       };
@@ -95,13 +95,12 @@ export const RemoteImageProvider = () =>
       const ref = remoteImageRef(news);
       yield* session.note(`Pulling Docker image: ${ref}`);
       yield* pullImage(ref, { platform: news.platform });
+      const inspected = yield* inspectImageInfo(ref);
       return {
         kind: "RemoteImage" as const,
         imageRef: ref,
-        imageId: yield* imageId(ref).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
-        ),
-        createdAt: Date.now(),
+        imageId: inspected?.Id,
+        createdAt: imageCreatedAt(inspected),
         name: news.name,
         tag: news.tag ?? "latest",
       };

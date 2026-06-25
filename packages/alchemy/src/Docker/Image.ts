@@ -4,11 +4,12 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
   buildImage,
-  imageId,
+  imageCreatedAt,
   inspectImageInfo,
   pullImage,
   pushImageToRegistry,
@@ -186,13 +187,31 @@ export const desiredImageRef = (id: string, props: ImageProps): string => {
     : ref;
 };
 
-const buildContext = (build: DockerBuildOptions | undefined) =>
-  build?.context ?? process.cwd();
+/**
+ * Resolves the built image's repository name. When a build has no explicit
+ * `name`, an engine physical name is generated (stack + stage + logical id +
+ * instance id) just like other resources, then carried back on `props.name` so
+ * the synchronous ref helpers stay deterministic across reconcile/diff/read.
+ */
+const withResolvedName = (
+  id: string,
+  props: ImageProps,
+  instanceId: string,
+): Effect.Effect<ImageProps, never, any> =>
+  hasBuild(props) && props.name === undefined
+    ? createPhysicalName({
+        id,
+        instanceId,
+        maxLength: 128,
+        lowercase: true,
+      }).pipe(Effect.map((name): ImageProps => ({ ...props, name })))
+    : Effect.succeed(props);
 
 const resolveBuildPaths = Effect.fn(function* (build: DockerBuildOptions) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const context = path.resolve(build.context ?? process.cwd());
+  const cwd = yield* Effect.sync(() => process.cwd());
+  const context = path.resolve(build.context ?? cwd);
   const dockerfile = build.dockerfile
     ? path.isAbsolute(build.dockerfile)
       ? build.dockerfile
@@ -207,10 +226,14 @@ const resolveBuildPaths = Effect.fn(function* (build: DockerBuildOptions) {
   return { context, dockerfile };
 });
 
-const contextHash = (props: ImageProps) =>
-  hasBuild(props)
-    ? hashDirectory({ cwd: buildContext(props.build), memo: props.build.memo })
-    : Effect.succeed(undefined);
+const contextHash = Effect.fn(function* (props: ImageProps) {
+  if (!hasBuild(props)) return undefined;
+  const cwd = yield* Effect.sync(() => process.cwd());
+  return yield* hashDirectory({
+    cwd: props.build.context ?? cwd,
+    memo: props.build.memo,
+  });
+});
 
 const comparableProps = (props: ImageProps | undefined) =>
   props
@@ -229,8 +252,9 @@ const comparableProps = (props: ImageProps | undefined) =>
 export const ImageProvider = () =>
   Provider.succeed(Image, {
     list: () => Effect.succeed([]),
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const ref = output?.imageRef ?? localImageRef(id, olds);
+    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+      const props = yield* withResolvedName(id, olds, instanceId);
+      const ref = output?.imageRef ?? localImageRef(id, props);
       const image = yield* inspectImageInfo(ref);
       if (!image) return undefined;
       return {
@@ -240,51 +264,49 @@ export const ImageProvider = () =>
         imageId: image.Id,
         repoDigest: output?.repoDigest,
         tag: output?.tag ?? olds.tag ?? "latest",
-        builtAt: output?.builtAt ?? Date.now(),
+        builtAt: output?.builtAt ?? imageCreatedAt(image),
         contextHash: output?.contextHash,
       };
     }),
-    diff: Effect.fn(function* ({ id, news, olds, output }) {
+    diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
       if (!isResolved(news)) return undefined;
       if (!output) return undefined;
+      const props = yield* withResolvedName(id, news, instanceId);
       const nextHash = yield* contextHash(news);
       if (
         !deepEqual(comparableProps(olds), comparableProps(news)) ||
-        output.imageRef !== desiredImageRef(id, news) ||
+        output.imageRef !== desiredImageRef(id, props) ||
         output.contextHash !== nextHash
       ) {
         return { action: "update" as const };
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news, session }) {
-      const tag = news.tag ?? "latest";
-      const ref = localImageRef(id, news);
-      let currentImageId: string | undefined;
+    reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
+      const props = yield* withResolvedName(id, news, instanceId);
+      const tag = props.tag ?? "latest";
+      const ref = localImageRef(id, props);
       let finalRef = ref;
       let repoDigest: string | undefined;
       let nextContextHash: string | undefined;
 
-      if (hasBuild(news)) {
-        const paths = yield* resolveBuildPaths(news.build);
+      if (hasBuild(props)) {
+        const paths = yield* resolveBuildPaths(props.build);
         yield* session.note(`Building Docker image: ${ref}`);
         yield* buildImage({
           tag: ref,
           context: paths.context,
           dockerfile: paths.dockerfile,
-          platform: news.build.platform,
-          target: news.build.target,
-          args: news.build.args,
-          cacheFrom: news.build.cacheFrom,
-          cacheTo: news.build.cacheTo,
-          options: news.build.options,
+          platform: props.build.platform,
+          target: props.build.target,
+          args: props.build.args,
+          cacheFrom: props.build.cacheFrom,
+          cacheTo: props.build.cacheTo,
+          options: props.build.options,
         });
-        nextContextHash = yield* contextHash(news);
-        currentImageId = yield* imageId(ref).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
-        );
+        nextContextHash = yield* contextHash(props);
       } else {
-        const sourceRef = imageSourceRef(news.image);
-        if (!isLocalImageSource(news.image)) {
+        const sourceRef = imageSourceRef(props.image);
+        if (!isLocalImageSource(props.image)) {
           const source = yield* inspectImageInfo(sourceRef);
           if (!source) {
             yield* session.note(`Pulling Docker image: ${sourceRef}`);
@@ -293,15 +315,18 @@ export const ImageProvider = () =>
         }
         yield* session.note(`Tagging Docker image: ${sourceRef} -> ${ref}`);
         yield* tagImage(sourceRef, ref);
-        currentImageId = yield* imageId(ref).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
-        );
       }
 
-      if (news.registry && !news.skipPush) {
+      // Read the freshly built/tagged image's id and creation time straight
+      // from Docker rather than synthesizing a wall-clock timestamp.
+      const inspected = yield* inspectImageInfo(ref);
+      const currentImageId = inspected?.Id;
+      const builtAt = imageCreatedAt(inspected);
+
+      if (props.registry && !props.skipPush) {
         const pushed = yield* pushImageToRegistry(
           ref,
-          news.registry satisfies RegistryPushCredentials,
+          props.registry satisfies RegistryPushCredentials,
         );
         finalRef = pushed.imageRef;
         repoDigest = pushed.repoDigest;
@@ -314,7 +339,7 @@ export const ImageProvider = () =>
         imageId: currentImageId,
         repoDigest,
         tag,
-        builtAt: Date.now(),
+        builtAt,
         contextHash: nextContextHash,
       };
     }),
