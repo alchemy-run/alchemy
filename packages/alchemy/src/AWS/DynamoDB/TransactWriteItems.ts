@@ -117,15 +117,17 @@ export const TransactWriteItemsLive = Layer.effect(
         ),
       );
 
-      const getTableName = (tableId: string) => {
+      const getTableName = Effect.fn(function* (tableId: string) {
         const TableName = tableNames.get(tableId);
         if (!TableName) {
-          throw new Error(
-            `TransactWriteItems request references unbound table '${tableId}'`,
+          return yield* Effect.die(
+            new Error(
+              `TransactWriteItems request references unbound table '${tableId}'`,
+            ),
           );
         }
-        return TableName;
-      };
+        return yield* TableName;
+      });
 
       yield* Policy(...sortedTables);
 
@@ -166,8 +168,10 @@ export const TransactWriteItemsLive = Layer.effect(
                   },
                 };
               }
-              throw new Error(
-                "TransactWriteItems request item must include one DynamoDB operation",
+              return yield* Effect.die(
+                new Error(
+                  "TransactWriteItems request item must include one DynamoDB operation",
+                ),
               );
             }),
         );

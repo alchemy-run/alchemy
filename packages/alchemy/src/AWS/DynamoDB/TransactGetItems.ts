@@ -90,15 +90,17 @@ export const TransactGetItemsLive = Layer.effect(
         ),
       );
 
-      const getTableName = (tableId: string) => {
+      const getTableName = Effect.fn(function* (tableId: string) {
         const TableName = tableNames.get(tableId);
         if (!TableName) {
-          throw new Error(
-            `TransactGetItems request references unbound table '${tableId}'`,
+          return yield* Effect.die(
+            new Error(
+              `TransactGetItems request references unbound table '${tableId}'`,
+            ),
           );
         }
-        return TableName;
-      };
+        return yield* TableName;
+      });
 
       yield* Policy(...sortedTables);
 

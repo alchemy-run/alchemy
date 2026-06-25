@@ -28,6 +28,7 @@ import { Worker, type WorkerProps } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
+import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjectNamespaces extends Data.TaggedError(
   "MissingDurableObjectNamespaces",
@@ -495,9 +496,15 @@ export const LiveWorkerProvider = () =>
                       : Redacted.isRedacted(value) &&
                           typeof Redacted.value(value) === "string"
                         ? Redacted.value(value)
-                        : Effect.isEffect(value)
-                          ? yield* value as Effect.Effect<any>
-                          : undefined,
+                        : // A `WorkerLoader` is a real Effect that also carries
+                          // the `~alchemy/Kind` marker — it is a binding, not a
+                          // runnable env value. Check it before `Effect.isEffect`
+                          // so we don't execute it as an inlined env entry.
+                          isWorkerLoader(value)
+                          ? undefined
+                          : Effect.isEffect(value)
+                            ? yield* value as Effect.Effect<any>
+                            : undefined,
                   ];
                 }),
               ),

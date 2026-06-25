@@ -4,6 +4,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -25,6 +26,8 @@ const forbiddenRetry = {
   schedule: Schedule.exponential("500 millis"),
   times: 8,
 } as const;
+
+class MnmRuleNotListed extends Data.TaggedError("MnmRuleNotListed")<{}> {}
 
 // Canonical `list()` test (account-scoped collection): deploy a config +
 // rule, then resolve the provider via the typed `Provider.findProvider`
@@ -69,7 +72,19 @@ describe.sequential("MagicNetworkMonitoring.Rule", () => {
       const provider = yield* Provider.findProvider(
         Cloudflare.MagicNetworkMonitoringRule,
       );
-      const all = yield* provider.list();
+      const all = yield* provider.list().pipe(
+        Effect.flatMap((all) =>
+          all.some((r) => r.ruleId === rule.ruleId)
+            ? Effect.succeed(all)
+            : Effect.fail(new MnmRuleNotListed()),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "MnmRuleNotListed",
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
 
       // The exhaustively-paginated result contains the deployed rule, and
       // each element carries the full `read` Attributes shape.

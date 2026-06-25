@@ -393,13 +393,45 @@ const ensureStateBucket = (bucket: string, region: string) =>
             }),
       })
       .pipe(
-        // a concurrent deploy may have created it between head and create
-        Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
+        // Many callers race to create the shared default state bucket on first
+        // use. The loser sees the create already done
+        // (`BucketAlreadyOwnedByYou`/`BucketAlreadyExists`) or mid-flight
+        // (`OperationAborted` — "a conflicting conditional operation is in
+        // progress"). All mean "someone else is creating it" — fall through to
+        // the readiness wait.
+        Effect.catchTag(
+          [
+            "BucketAlreadyOwnedByYou",
+            "BucketAlreadyExists",
+            "OperationAborted",
+          ],
+          () => Effect.void,
+        ),
       );
 
-    // wait for the bucket to become available (eventual consistency)
-    yield* Effect.retry(
-      s3.headBucket({ Bucket: bucket }),
-      Schedule.exponential(100).pipe(Schedule.both(Schedule.recurs(10))),
-    );
-  });
+    // Wait for the bucket to become available. Under a concurrent create the
+    // bucket is briefly not yet head-able (NotFound/NoSuchBucket) and object
+    // ops would race ahead of it — keep polling until HEAD succeeds.
+    yield* s3
+      .headBucket({ Bucket: bucket })
+      .pipe(
+        Effect.retry(
+          Schedule.spaced("1 second").pipe(Schedule.both(Schedule.recurs(15))),
+        ),
+      );
+  }).pipe(
+    // The whole observe→create→wait sequence races other first-callers of the
+    // shared bucket; `OperationAborted` (conflicting create) and a transiently
+    // absent bucket (`NoSuchBucket`/`NotFound`) are the faces of that race.
+    // Retry the entire sequence so a concurrent create that is still settling
+    // converges instead of surfacing as a `StateStoreError`.
+    Effect.retry({
+      while: (e) =>
+        e._tag === "OperationAborted" ||
+        e._tag === "NoSuchBucket" ||
+        e._tag === "NotFound",
+      schedule: Schedule.spaced("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );

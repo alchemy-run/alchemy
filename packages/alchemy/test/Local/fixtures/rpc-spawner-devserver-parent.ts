@@ -1,21 +1,21 @@
-// Test fixture: boots an RpcSpawner, starts the Build.DevServer RPC sidecar,
+// Test fixture: boots an RpcSpawner, starts the Command.Dev RPC sidecar,
 // reconciles a real DevServer through that sidecar, prints the dev-server pid,
 // then idles until the test harness kills this parent process.
 // Relative imports (not `@/` alias) so this file runs under both Bun and Node
 // without a paths-aware loader.
-import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
-import type { RpcProxyApi } from "@/Local/RpcServer.ts";
-import { layerServer, RpcSpawner } from "@/Local/RpcSpawner.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { newWebSocketRpcSession } from "capnweb";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import fs from "node:fs";
+import { unwrapRpcHandlers } from "../../../src/Local/RpcSerialization.ts";
+import type { RpcProxyApi } from "../../../src/Local/RpcServer.ts";
+import { layerServer, RpcSpawner } from "../../../src/Local/RpcSpawner.ts";
+import { PlatformServices } from "../../../src/Util/PlatformServices.ts";
 
 const sidecarEntry = process.argv[2];
 const command = process.argv[3];
@@ -49,7 +49,7 @@ const program = Effect.gen(function* () {
   const session = newWebSocketRpcSession<RpcProxyApi>(wsUrl);
   const wrapped = yield* Effect.promise(
     () =>
-      session.getProvider("Build.DevServer") as ReturnType<
+      session.getProvider("Command.Dev") as ReturnType<
         RpcProxyApi["getProvider"]
       >,
   );
@@ -68,8 +68,9 @@ const program = Effect.gen(function* () {
     bindings: [],
   });
 
-  const pid = yield* Effect.sync(() => {
-    const content = fs.readFileSync(pidFile, "utf8");
+  const pid = yield* Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const content = yield* fs.readFileString(pidFile);
     return (JSON.parse(content) as { pid: number }).pid;
   }).pipe(Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 50 }));
 
@@ -87,6 +88,7 @@ program
         layerServer({ profile: undefined, envFile: undefined }),
         PlatformServices,
       ),
+      PlatformServices,
       FetchHttpClient.layer,
     ]),
     Effect.scoped,

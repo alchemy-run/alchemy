@@ -79,15 +79,17 @@ export const BatchGetItemLive = Layer.effect(
         ),
       );
 
-      const getTableName = (tableId: string) => {
+      const getTableName = Effect.fn(function* (tableId: string) {
         const TableName = tableNames.get(tableId);
         if (!TableName) {
-          throw new Error(
-            `BatchGetItem request references unbound table '${tableId}'`,
+          return yield* Effect.die(
+            new Error(
+              `BatchGetItem request references unbound table '${tableId}'`,
+            ),
           );
         }
-        return TableName;
-      };
+        return yield* TableName;
+      });
 
       yield* Policy(...sortedTables);
 
