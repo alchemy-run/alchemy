@@ -1,13 +1,19 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
 import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Docker } from "./Docker.ts";
+import {
+  type ImageRegistry,
+  parseCreatedAt,
+  parseRepoDigest,
+  repositoryFromImageRef,
+  withRegistryHost,
+} from "./Registry.ts";
 
 export interface DockerBuildOptions {
   /**
@@ -38,41 +44,18 @@ export interface DockerBuildOptions {
   memo?: MemoOptions;
 }
 
-export interface ImageRegistry {
-  /** Registry host, e.g. `ghcr.io`. */
-  server: string;
-  /** Registry username. */
-  username: string;
-  /** Registry password. Use `Redacted.make(...)` or `Config.redacted(...)`. */
-  password: Redacted.Redacted<string>;
-}
-
-export type ImageSource =
-  | string
-  | { imageRef: string; name?: string; kind?: "Image" | "RemoteImage" };
-
-export type ImageProps = {
+export interface ImageProps {
   /** Image tag. @default "latest" */
   tag?: string;
   /** Registry credentials for push. */
   registry?: ImageRegistry;
   /** Skip registry push even when `registry` is set. @default false */
   skipPush?: boolean;
-} & (
-  | {
-      /** Existing image reference or another Docker image resource. */
-      image: ImageSource;
-      build?: never;
-      name?: never;
-    }
-  | {
-      /** Repository/name for the built image. @default Logical id */
-      name?: string;
-      /** Docker build configuration. */
-      build: DockerBuildOptions;
-      image?: never;
-    }
-);
+  /** Repository/name for the built image. @default Logical id */
+  name?: string;
+  /** Docker build configuration. */
+  build: DockerBuildOptions;
+}
 
 export interface Image extends Resource<
   "Docker.Image",
@@ -82,27 +65,30 @@ export interface Image extends Resource<
     name: string;
     /** Final image reference. Includes registry host when pushed there. */
     imageRef: string;
-    /** Local image id after build/tag when available. */
-    imageId?: string;
+    /** Local image id after build/tag. */
+    imageId: string;
     /** Registry digest after push when available. */
     repoDigest?: string;
     /** Tag used for the local image. */
     tag: string;
     /** Build timestamp in milliseconds since epoch. */
     builtAt: number;
-    /** Hash of build-context files when `build` is used. */
+    /** Hash of the build-context files. */
     contextHash?: string;
   }
 > {}
 
 /**
- * Builds, pulls, tags, and optionally pushes Docker images through the active
- * Docker context.
+ * Builds, tags, and optionally pushes Docker images through the active Docker
+ * context.
  *
  * This resource uses the Docker CLI and whatever daemon or remote context the
  * CLI is configured to target. It is separate from `Cloudflare.Container`;
  * registry image references are the boundary between Docker-managed images and
  * cloud container platforms.
+ *
+ * `Image` always builds from a Dockerfile. To pull (and optionally re-tag and
+ * push) an existing registry image, use `Docker.RemoteImage`.
  *
  * @resource
  *
@@ -117,15 +103,6 @@ export interface Image extends Resource<
  *     dockerfile: "Dockerfile",
  *     args: { NODE_ENV: "production" },
  *   },
- * });
- * ```
- *
- * @section Tagging Remote Images
- * @example Pull and tag an image reference
- * ```typescript
- * const image = yield* Docker.Image("nginx", {
- *   image: "nginx:alpine",
- *   tag: "app-base",
  * });
  * ```
  *
@@ -157,7 +134,6 @@ export const ImageProvider = () =>
       >();
 
       const contextHash = Effect.fn(function* (props: ImageProps) {
-        if (!hasBuild(props)) return undefined;
         const cwd = yield* Effect.sync(() => process.cwd());
         return yield* hashDirectory({
           cwd: props.build.context ?? cwd,
@@ -207,7 +183,7 @@ export const ImageProvider = () =>
             imageId: image.Id,
             repoDigest: output?.repoDigest,
             tag: output?.tag ?? olds.tag ?? "latest",
-            builtAt: output?.builtAt ?? Date.parse(image.Created ?? ""),
+            builtAt: output?.builtAt ?? parseCreatedAt(image.Created),
             contextHash: output?.contextHash,
           };
         }),
@@ -228,52 +204,27 @@ export const ImageProvider = () =>
           const props = yield* withResolvedName(id, news, instanceId);
           const tag = props.tag ?? "latest";
           const ref = localImageRef(id, props);
-          let finalRef = ref;
-          let repoDigest: string | undefined;
-          let nextContextHash: string | undefined;
 
-          if (hasBuild(props)) {
-            const paths = yield* resolveBuildPaths(props.build);
-            yield* session.note(`Building Docker image: ${ref}`);
-            yield* docker.image.build({
-              tag: ref,
-              context: paths.context,
-              file: paths.dockerfile,
-              platform: props.build.platform,
-              target: props.build.target,
-              "build-arg": props.build.args,
-              "cache-from": props.build.cacheFrom,
-              "cache-to": props.build.cacheTo,
-              args: props.build.options,
-            });
-            nextContextHash = yield* contextHash(props);
-          } else {
-            const sourceRef = imageSourceRef(props.image);
-            if (!isLocalImageSource(props.image)) {
-              const source = yield* docker.image
-                .inspect(sourceRef)
-                .pipe(
-                  Effect.catchReason(
-                    "PlatformError",
-                    "NotFound",
-                    () => Effect.undefined,
-                  ),
-                );
-              if (!source) {
-                yield* session.note(`Pulling Docker image: ${sourceRef}`);
-                yield* docker.image.pull(sourceRef);
-              }
-            }
-            yield* session.note(`Tagging Docker image: ${sourceRef} -> ${ref}`);
-            yield* docker.image.tag(sourceRef, ref);
-          }
+          const paths = yield* resolveBuildPaths(props.build);
+          yield* session.note(`Building Docker image: ${ref}`);
+          yield* docker.image.build({
+            tag: ref,
+            context: paths.context,
+            file: paths.dockerfile,
+            platform: props.build.platform,
+            target: props.build.target,
+            "build-arg": props.build.args,
+            "cache-from": props.build.cacheFrom,
+            "cache-to": props.build.cacheTo,
+            args: props.build.options,
+          });
+          const nextContextHash = yield* contextHash(props);
 
-          // Read the freshly built/tagged image's id and creation time straight
-          // from Docker rather than synthesizing a wall-clock timestamp.
+          // Read the freshly built image's id and creation time straight from
+          // Docker rather than synthesizing a wall-clock timestamp.
           const inspected = yield* docker.image.inspect(ref);
-          const currentImageId = inspected?.Id;
-          const builtAt = Date.parse(inspected?.Created ?? "");
 
+          let repoDigest: string | undefined;
           if (props.registry && !props.skipPush) {
             repoDigest = yield* docker.image
               .push(ref, props.registry)
@@ -283,12 +234,12 @@ export const ImageProvider = () =>
           }
 
           return {
-            name: repositoryFromImageRef(finalRef),
-            imageRef: finalRef,
-            imageId: currentImageId,
+            name: repositoryFromImageRef(ref),
+            imageRef: ref,
+            imageId: inspected.Id,
             repoDigest,
             tag,
-            builtAt,
+            builtAt: parseCreatedAt(inspected.Created),
             contextHash: nextContextHash,
           };
         }),
@@ -307,29 +258,8 @@ export const ImageProvider = () =>
     }),
   );
 
-const imageSourceRef = (source: ImageSource): string =>
-  typeof source === "string" ? source : source.imageRef;
-
-const imageSourceName = (source: ImageSource): string | undefined =>
-  typeof source === "string"
-    ? repositoryFromImageRef(source)
-    : (source.name ?? repositoryFromImageRef(source.imageRef));
-
-const isLocalImageSource = (source: ImageSource): boolean =>
-  typeof source !== "string" && source.kind === "Image";
-
-const hasBuild = (
-  props: ImageProps,
-): props is Extract<ImageProps, { build: DockerBuildOptions }> =>
-  "build" in props && props.build !== undefined;
-
-export const localImageRef = (id: string, props: ImageProps): string => {
-  const tag = props.tag ?? "latest";
-  const name = hasBuild(props)
-    ? (props.name ?? id)
-    : (imageSourceName(props.image) ?? id);
-  return `${name}:${tag}`;
-};
+export const localImageRef = (id: string, props: ImageProps): string =>
+  `${props.name ?? id}:${props.tag ?? "latest"}`;
 
 export const desiredImageRef = (id: string, props: ImageProps): string => {
   const ref = localImageRef(id, props);
@@ -345,7 +275,7 @@ export const desiredImageRef = (id: string, props: ImageProps): string => {
  * the synchronous ref helpers stay deterministic across reconcile/diff/read.
  */
 const withResolvedName = (id: string, props: ImageProps, instanceId: string) =>
-  hasBuild(props) && props.name === undefined
+  props.name === undefined
     ? createPhysicalName({
         id,
         instanceId,
@@ -367,37 +297,3 @@ const comparableProps = (props: ImageProps | undefined) =>
           : undefined,
       }
     : undefined;
-
-const parseRepoDigest = (
-  imageRef: string,
-  output: string,
-): string | undefined => {
-  const match = /digest:\s+([a-z0-9]+:[a-f0-9]{64})/i.exec(output);
-  if (!match) return undefined;
-  return `${repositoryFromImageRef(imageRef)}@${match[1]}`;
-};
-
-const repositoryFromImageRef = (imageRef: string): string => {
-  const withoutDigest = imageRef.includes("@")
-    ? imageRef.slice(0, imageRef.indexOf("@"))
-    : imageRef;
-  const tagSeparator = withoutDigest.lastIndexOf(":");
-  const pathSeparator = withoutDigest.lastIndexOf("/");
-  return tagSeparator > pathSeparator
-    ? withoutDigest.slice(0, tagSeparator)
-    : withoutDigest;
-};
-
-const withRegistryHost = (
-  imageRef: string,
-  registry: { server: string },
-): string => {
-  const registryHost = registry.server.replace(/\/$/, "");
-  const firstSegment = imageRef.split("/")[0];
-  const hasRegistryPrefix =
-    imageRef.includes("/") &&
-    (firstSegment.includes(".") ||
-      firstSegment.includes(":") ||
-      firstSegment === "localhost");
-  return hasRegistryPrefix ? imageRef : `${registryHost}/${imageRef}`;
-};

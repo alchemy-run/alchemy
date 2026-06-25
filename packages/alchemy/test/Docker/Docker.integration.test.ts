@@ -1,4 +1,5 @@
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import { hashDirectory } from "@/Command/Memo";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
@@ -109,38 +110,49 @@ test.provider("provider diff canaries for replacements and registry refs", () =>
     });
     expect(networkDiff).toEqual({ action: "replace", deleteFirst: true });
 
-    const imageDiff = yield* imageProvider.diff!({
-      id: "app-image",
-      instanceId: "instance",
-      olds: {
-        image: "acme/app:base",
-        tag: "latest",
-        registry: {
-          server: "ghcr.io",
-          username: "octocat",
-          password: Redacted.make("token"),
-        },
-      },
-      news: {
-        image: "acme/app:base",
-        tag: "latest",
-        registry: {
-          server: "ghcr.io",
-          username: "octocat",
-          password: Redacted.make("token"),
-        },
-      },
-      oldBindings: [],
-      newBindings: [],
-      output: {
-        kind: "Image",
-        name: "ghcr.io/acme/app",
-        imageRef: "ghcr.io/acme/app:latest",
-        tag: "latest",
-        builtAt: 0,
-      },
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const buildDir = yield* fs.makeTempDirectory({
+      prefix: "alchemy-docker-canary-",
     });
-    expect(imageDiff).toBeUndefined();
+    try {
+      yield* fs.writeFileString(
+        path.join(buildDir, "Dockerfile"),
+        "FROM scratch\n",
+      );
+      const contextHash = yield* hashDirectory({ cwd: buildDir });
+      const imageProps = {
+        name: "acme/app",
+        tag: "latest",
+        build: { context: buildDir },
+        registry: {
+          server: "ghcr.io",
+          username: "octocat",
+          password: Redacted.make("token"),
+        },
+      };
+      // No change + registry-host prefixing must not trigger a spurious update:
+      // desiredImageRef("acme/app:latest") resolves to "ghcr.io/acme/app:latest".
+      const imageDiff = yield* imageProvider.diff!({
+        id: "app-image",
+        instanceId: "instance",
+        olds: imageProps,
+        news: imageProps,
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          name: "ghcr.io/acme/app",
+          imageRef: "ghcr.io/acme/app:latest",
+          imageId: "sha256:0",
+          tag: "latest",
+          builtAt: 0,
+          contextHash,
+        },
+      });
+      expect(imageDiff).toBeUndefined();
+    } finally {
+      yield* fs.remove(buildDir, { recursive: true }).pipe(Effect.ignore);
+    }
   }),
 );
 
@@ -246,34 +258,38 @@ describe.sequential("Docker resources", () => {
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
-    "image string source pulls before tagging when the source tag is absent",
+    "remote image pulls then re-tags under a new repository",
     (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const sourceRef = "hello-world:latest";
-        const targetTag = "alchemy-test-remote-source";
-        const targetRef = `hello-world:${targetTag}`;
+        const targetName = "alchemy-test-hello";
+        const targetTag = "retagged";
+        const targetRef = `${targetName}:${targetTag}`;
         yield* docker.image
-          .remove([targetRef, sourceRef], true)
+          .remove([targetRef], true)
           .pipe(
             Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
           );
         try {
           const image = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Docker.Image("remote-source-image", {
-                image: sourceRef,
-                tag: targetTag,
+              return yield* Docker.RemoteImage("retagged-hello", {
+                name: "hello-world",
+                tag: "latest",
+                targetName,
+                targetTag,
               });
             }),
           );
           expect(image.imageRef).toBe(targetRef);
+          expect(image.name).toBe(targetName);
+          expect(image.tag).toBe(targetTag);
           expect(image.imageId?.length).toBeGreaterThan(0);
+          const inspected = yield* docker.image.inspect(targetRef);
+          expect(inspected.Id.length).toBeGreaterThan(0);
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
-          yield* docker.image
-            .remove([targetRef, sourceRef], true)
-            .pipe(Effect.ignore);
+          yield* docker.image.remove([targetRef], true).pipe(Effect.ignore);
         }
       }),
     { timeout: 120000 },
