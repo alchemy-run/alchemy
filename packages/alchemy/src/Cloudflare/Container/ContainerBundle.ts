@@ -85,6 +85,25 @@ export const createContainerApplicationName = (
   });
 
 /**
+ * Strip a version/tag suffix from a dependency specifier so it can be matched
+ * against the bare import specifier the bundler sees. An `external` entry may
+ * carry a version for the in-image `bun add` (e.g. when the package's npm
+ * `latest` tag is a placeholder and the real build lives under a pre-release
+ * tag — `@ai-sdk/harness-opencode@1.0.0-beta.1`), but Rolldown matches the
+ * import as written (`@ai-sdk/harness-opencode`), so the version must be
+ * dropped for the externalization check.
+ *
+ * - `sharp` → `sharp`
+ * - `@scope/pkg` → `@scope/pkg`
+ * - `@scope/pkg@1.2.3` → `@scope/pkg`
+ * - `pkg@1.2.3` → `pkg`
+ */
+export const externalMatchSpecifier = (spec: string): string => {
+  const at = spec.lastIndexOf("@");
+  return at > 0 ? spec.slice(0, at) : spec;
+};
+
+/**
  * Build the final Dockerfile used for a container image. Starts from the
  * user-provided Dockerfile (or a runtime-appropriate default), then appends
  * the statements that copy the bundled program and set the entrypoint.
@@ -165,7 +184,9 @@ export const bundleContainerProgram = Effect.fn(function* ({
           "cloudflare:workers",
           "cloudflare:workflows",
           ...(runtime === "bun" ? ["bun", "bun:*"] : []),
-          ...external,
+          // External specifiers may carry a version for the in-image install;
+          // Rolldown matches the bare import, so strip it here.
+          ...external.map(externalMatchSpecifier),
         ],
         platform: "node",
         resolve: {

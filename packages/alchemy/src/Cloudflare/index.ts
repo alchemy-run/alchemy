@@ -15,6 +15,7 @@ export * from "./Access/Tag.ts";
 export * from "./Account/index.ts";
 export * from "./Acm/index.ts";
 export * from "./Addressing/index.ts";
+export * from "./AI/index.ts";
 export * from "./AiGateway/index.ts";
 export * from "./AiSearch/index.ts";
 export * from "./AiSecurity/index.ts";

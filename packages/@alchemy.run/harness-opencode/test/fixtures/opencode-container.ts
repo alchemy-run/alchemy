@@ -1,0 +1,9 @@
+import { OpenCodeContainer } from "@alchemy.run/harness-opencode";
+import * as Config from "effect/Config";
+
+export default OpenCodeContainer({
+  main: import.meta.filename,
+  anthropic: {
+    apiKey: Config.redacted("ANTHROPIC_API_KEY"),
+  },
+});

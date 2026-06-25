@@ -1,0 +1,36 @@
+{
+  "name": "@alchemy.run/harness-ai-sdk",
+  "version": "2.0.0-beta.57",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "packages/@alchemy.run/harness-ai-sdk"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "default": "./lib/index.js",
+      "types": "./lib/index.d.ts"
+    }
+  },
+  "dependencies": {
+    "@ai-sdk/harness": "catalog:",
+    "@ai-sdk/provider-utils": "catalog:",
+    "ai": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "ws": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

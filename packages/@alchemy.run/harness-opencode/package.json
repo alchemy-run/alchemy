@@ -1,0 +1,36 @@
+{
+  "name": "@alchemy.run/harness-opencode",
+  "version": "2.0.0-beta.57",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "packages/@alchemy.run/harness-opencode"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "doppler run -- bun test",
+    "test:integ": "doppler run -- bun test test/integ.test.ts"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "default": "./lib/index.js",
+      "types": "./lib/index.d.ts"
+    }
+  },
+  "dependencies": {
+    "@ai-sdk/harness-opencode": "catalog:",
+    "@alchemy.run/harness-ai-sdk": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

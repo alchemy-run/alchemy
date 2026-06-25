@@ -97,7 +97,14 @@ export const BunHttpServer = () =>
         serve: (handler, options) =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
-            const server = yield* BunHttpServerPlatform.make({ port });
+            // Bun defaults to a 10s `idleTimeout`, which aborts long-lived
+            // streaming RPC responses (e.g. a coding-agent `prompt` turn whose
+            // first byte only arrives after the harness boots). Raise it to
+            // Bun's maximum so the connection survives slow/streaming handlers.
+            const server = yield* BunHttpServerPlatform.make({
+              port,
+              idleTimeout: 255,
+            });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };

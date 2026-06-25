@@ -14,7 +14,7 @@
       "path": "../../packages/alchemy/tsconfig.json"
     },
     {
-      "path": "../../packages/better-auth/tsconfig.json"
+      "path": "../../packages/@alchemy.run/better-auth/tsconfig.json"
     }
   ]
 }

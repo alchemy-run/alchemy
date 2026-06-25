@@ -97,8 +97,7 @@ export const isRpcStreamErrorMarker = (
   typeof value === "object" &&
   value !== null &&
   "_tag" in value &&
-  value._tag === StreamErrorTag &&
-  "error" in value;
+  value._tag === StreamErrorTag;
 
 export const isRpcErrorEnvelope = (value: unknown): value is RpcErrorEnvelope =>
   typeof value === "object" &&
@@ -241,7 +240,12 @@ export const decodeRpcResult = (
 
 const encodeStreamErrorMarker = (cause: Cause.Cause<unknown>): string => {
   const failReason = cause.reasons.find(Cause.isFailReason);
-  const error = failReason ? encodeRpcError(failReason.error) : undefined;
+  // Surface defects/interrupts too — without this, a stream that dies (e.g. a
+  // rejected `Effect.promise`) would encode an empty marker and the remote
+  // error would be lost.
+  const error = failReason
+    ? encodeRpcError(failReason.error)
+    : encodeRpcError(Cause.squash(cause));
   return (
     JSON.stringify({
       _tag: StreamErrorTag,

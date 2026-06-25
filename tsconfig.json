@@ -39,10 +39,19 @@
       "path": "./packages/alchemy/tsconfig.test.json"
     },
     {
-      "path": "./packages/better-auth/tsconfig.json"
+      "path": "./packages/@alchemy.run/harness-ai-sdk/tsconfig.json"
     },
     {
-      "path": "./packages/pr-package/tsconfig.json"
+      "path": "./packages/@alchemy.run/harness-opencode/tsconfig.json"
+    },
+    {
+      "path": "./packages/@alchemy.run/harness-opencode/tsconfig.test.json"
+    },
+    {
+      "path": "./packages/@alchemy.run/better-auth/tsconfig.json"
+    },
+    {
+      "path": "./packages/@alchemy.run/pr-package/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2
     // {
@@ -116,6 +125,9 @@
     },
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
+    },
+    {
+      "path": "./services/forked/tsconfig.json"
     }
   ],
   "compilerOptions": {
