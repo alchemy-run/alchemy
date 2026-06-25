@@ -1,15 +1,12 @@
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import { identity } from "effect/Function";
 import { Unowned } from "../AdoptPolicy.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  createNetwork,
-  inspectNetworkInfo,
-  removeNetwork,
-  type NetworkInfo,
-} from "./DockerApi.ts";
+import { Docker } from "./DockerClient.ts";
 
 export interface NetworkProps {
   /**
@@ -72,69 +69,78 @@ export interface Network extends Resource<
 export const Network = Resource<Network>("Docker.Network");
 
 export const NetworkProvider = () =>
-  Provider.succeed(Network, {
-    list: () => Effect.succeed([]),
-    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-      const name = yield* networkName(id, olds ?? {}, instanceId);
-      const info = yield* inspectNetworkInfo(name);
-      if (!info) return undefined;
-      const attrs = toNetworkAttributes(info);
-      return output ? attrs : Unowned(attrs);
-    }),
-    diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return undefined;
-      const oldComparable = {
-        name: olds?.name,
-        driver: olds?.driver ?? "bridge",
-        enableIPv6: olds?.enableIPv6 ?? false,
-        labels: olds?.labels ?? {},
-      };
-      const newComparable = {
-        name: news?.name,
-        driver: news?.driver ?? "bridge",
-        enableIPv6: news?.enableIPv6 ?? false,
-        labels: news?.labels ?? {},
-      };
-      if (!deepEqual(oldComparable, newComparable)) {
-        return { action: "replace" as const, deleteFirst: true };
-      }
-    }),
-    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
-      const name =
-        output?.name ?? (yield* networkName(id, news ?? {}, instanceId));
-      const existing = yield* inspectNetworkInfo(name);
-      if (existing) {
-        return toNetworkAttributes(existing);
-      }
-      yield* session.note(`Creating Docker network: ${name}`);
-      const createdId = yield* createNetwork({
-        name,
-        driver: news?.driver ?? "bridge",
-        enableIPv6: news?.enableIPv6,
-        labels: news?.labels,
-      }).pipe(
-        Effect.catchIf(
-          (error) =>
-            error.message.includes(`network with name ${name} already exists`),
-          () => Effect.succeed(undefined),
-        ),
-      );
-      const info = yield* inspectNetworkInfo(createdId ?? name);
-      if (!info) {
-        return yield* Effect.die(
-          `Docker network could not be inspected: ${name}`,
-        );
-      }
-      return toNetworkAttributes(info);
-    }),
-    delete: Effect.fn(function* ({ output, session }) {
-      yield* session.note(`Removing Docker network: ${output.name}`);
-      yield* removeNetwork(output.id);
-    }),
-  });
+  Provider.effect(
+    Network,
+    Effect.gen(function* () {
+      const docker = yield* Docker;
 
-const networkName = (id: string, props: NetworkProps, instanceId: string) =>
-  props.name
+      return Network.Provider.of({
+        list: () => Effect.succeed([]),
+        read: Effect.fn(({ id, instanceId, olds, output }) =>
+          networkName(id, olds ?? {}, instanceId).pipe(
+            Effect.flatMap(docker.network.inspect),
+            Effect.map(toNetworkAttributes),
+            Effect.map(output ? identity : Unowned),
+            Effect.catchReason(
+              "PlatformError",
+              "NotFound",
+              () => Effect.undefined,
+            ),
+          ),
+        ),
+        diff: Effect.fn(function* ({ id, output, instanceId, news }) {
+          if (!isResolved(news) || !output) return undefined;
+          const args = yield* makeNetworkArgs(id, news, instanceId);
+          if (
+            output.name !== args.name ||
+            output.driver !== args.driver ||
+            output.enableIPv6 !== args.ipv6 ||
+            !Equal.equals(output.labels, args.label)
+          ) {
+            return { action: "replace", deleteFirst: true };
+          }
+          return { action: "noop" };
+        }),
+        reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
+          if (output) {
+            const refreshed = yield* docker.network.inspect(output.id).pipe(
+              Effect.map(toNetworkAttributes),
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.undefined,
+              ),
+            );
+            if (refreshed) return refreshed;
+          }
+          return yield* makeNetworkArgs(id, news, instanceId).pipe(
+            Effect.flatMap(docker.network.create),
+            Effect.map((result) => result.stdout),
+            Effect.flatMap((createdId) => docker.network.inspect(createdId)),
+            Effect.map(toNetworkAttributes),
+          );
+        }),
+        delete: Effect.fn(({ output }) =>
+          docker.network
+            .remove(output.id)
+            .pipe(
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.void,
+              ),
+            ),
+        ),
+      });
+    }),
+  );
+
+const networkName = (
+  id: string,
+  props: NetworkProps | undefined,
+  instanceId: string,
+) =>
+  props?.name
     ? Effect.succeed(props.name)
     : createPhysicalName({
         id,
@@ -143,8 +149,22 @@ const networkName = (id: string, props: NetworkProps, instanceId: string) =>
         lowercase: true,
       });
 
+const makeNetworkArgs = (
+  id: string,
+  props: NetworkProps | undefined,
+  instanceId: string,
+) =>
+  networkName(id, props, instanceId).pipe(
+    Effect.map((name) => ({
+      name,
+      driver: props?.driver ?? "bridge",
+      ipv6: props?.enableIPv6 ?? false,
+      label: props?.labels ?? {},
+    })),
+  );
+
 export const toNetworkAttributes = (
-  info: NetworkInfo,
+  info: Docker.InspectedNetwork,
 ): Network["Attributes"] => ({
   id: info.Id,
   name: info.Name,

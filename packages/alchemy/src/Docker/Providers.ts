@@ -1,6 +1,7 @@
 import * as Layer from "effect/Layer";
 import * as Provider from "../Provider.ts";
 import { Container, ContainerProvider } from "./Container.ts";
+import { DockerLive } from "./DockerClient.ts";
 import { Image, ImageProvider } from "./Image.ts";
 import { Network, NetworkProvider } from "./Network.ts";
 import { RemoteImage, RemoteImageProvider } from "./RemoteImage.ts";
@@ -32,4 +33,5 @@ export const providers = () =>
         VolumeProvider(),
       ),
     ),
+    Layer.provideMerge(DockerLive),
   );

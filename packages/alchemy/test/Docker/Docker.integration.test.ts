@@ -1,6 +1,5 @@
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Docker from "@/Docker";
-import { inspectContainerInfo, runDockerCommand } from "@/Docker/DockerApi";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Vitest";
@@ -80,7 +79,15 @@ test.provider("provider diff canaries for replacements and registry refs", () =>
       news: { name: "data", labels: { usage: "new" } },
       oldBindings: [],
       newBindings: [],
-      output: undefined,
+      output: {
+        id: "data",
+        name: "data",
+        driver: "local",
+        driverOpts: {},
+        labels: { usage: "old" },
+        mountpoint: undefined,
+        createdAt: 0,
+      },
     });
     expect(volumeDiff).toEqual({ action: "replace", deleteFirst: true });
 
@@ -91,7 +98,14 @@ test.provider("provider diff canaries for replacements and registry refs", () =>
       news: { name: "app", labels: { usage: "new" } },
       oldBindings: [],
       newBindings: [],
-      output: undefined,
+      output: {
+        id: "app",
+        name: "app",
+        driver: "bridge",
+        enableIPv6: false,
+        labels: { usage: "old" },
+        createdAt: 0,
+      },
     });
     expect(networkDiff).toEqual({ action: "replace", deleteFirst: true });
 
@@ -135,11 +149,14 @@ describe.sequential("Docker resources", () => {
     "network refuses pre-existing Docker network unless explicitly adopted",
     (stack) =>
       Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
         const networkName = "alchemy-test-network-adoption";
-        yield* runDockerCommand(["network", "rm", networkName]).pipe(
-          Effect.ignore,
-        );
-        yield* runDockerCommand(["network", "create", networkName]);
+        yield* docker.network
+          .remove(networkName)
+          .pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          );
+        yield* docker.network.create({ name: networkName, driver: "bridge" });
         try {
           const error = yield* stack
             .deploy(
@@ -168,9 +185,7 @@ describe.sequential("Docker resources", () => {
           expect(network.id.length).toBeGreaterThan(0);
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
-          yield* runDockerCommand(["network", "rm", networkName]).pipe(
-            Effect.ignore,
-          );
+          yield* docker.network.remove(networkName).pipe(Effect.ignore);
         }
       }),
     { timeout: 120000 },
@@ -180,27 +195,27 @@ describe.sequential("Docker resources", () => {
     "network adopts an existing same-name Docker network with stack adoption",
     (stack) =>
       Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
         const networkName = "alchemy-test-network-adopt-existing";
-        yield* runDockerCommand(["network", "rm", networkName]).pipe(
-          Effect.ignore,
+        yield* docker.network
+          .remove(networkName)
+          .pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          );
+        yield* docker.network.create({ name: networkName, driver: "bridge" });
+        const networkInfo = yield* docker.network.inspect(networkName);
+        console.log(networkInfo);
+        const network = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Docker.Network("existing-network", {
+              name: networkName,
+              driver: "bridge",
+            });
+          }),
         );
-        yield* runDockerCommand(["network", "create", networkName]);
-        try {
-          const network = yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Docker.Network("existing-network", {
-                name: networkName,
-              });
-            }),
-          );
-          expect(network.name).toBe(networkName);
-          expect(network.id.length).toBeGreaterThan(0);
-        } finally {
-          yield* stack.destroy().pipe(Effect.ignore);
-          yield* runDockerCommand(["network", "rm", networkName]).pipe(
-            Effect.ignore,
-          );
-        }
+        expect(network.name).toBe(networkName);
+        expect(network.id.length).toBeGreaterThan(0);
+        yield* stack.destroy();
       }),
     { timeout: 120000 },
   );
@@ -209,28 +224,23 @@ describe.sequential("Docker resources", () => {
     "volume adopts an existing Docker volume",
     (stack) =>
       Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
         const volumeName = "alchemy-test-volume-adopt-existing";
-        yield* runDockerCommand(["volume", "rm", volumeName]).pipe(
-          Effect.ignore,
+        yield* docker.volume
+          .remove(volumeName)
+          .pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          );
+        yield* docker.volume.create({ name: volumeName });
+        const volume = yield* stack.deploy(
+          Docker.Volume("existing-volume", {
+            name: volumeName,
+          }),
         );
-        yield* runDockerCommand(["volume", "create", volumeName]);
-        try {
-          const volume = yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Docker.Volume("existing-volume", {
-                name: volumeName,
-              });
-            }),
-          );
-          expect(volume.name).toBe(volumeName);
-          expect(volume.id).toBe(volumeName);
-          expect(volume.driver).toBe("local");
-        } finally {
-          yield* stack.destroy().pipe(Effect.ignore);
-          yield* runDockerCommand(["volume", "rm", volumeName]).pipe(
-            Effect.ignore,
-          );
-        }
+        expect(volume.name).toBe(volumeName);
+        expect(volume.id).toBe(volumeName);
+        expect(volume.driver).toBe("local");
+        yield* stack.destroy();
       }),
     { timeout: 120000 },
   );
@@ -239,12 +249,15 @@ describe.sequential("Docker resources", () => {
     "image string source pulls before tagging when the source tag is absent",
     (stack) =>
       Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
         const sourceRef = "hello-world:latest";
         const targetTag = "alchemy-test-remote-source";
         const targetRef = `hello-world:${targetTag}`;
-        yield* runDockerCommand(["rmi", "-f", targetRef, sourceRef]).pipe(
-          Effect.ignore,
-        );
+        yield* docker.image
+          .remove([targetRef, sourceRef], true)
+          .pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          );
         try {
           const image = yield* stack.deploy(
             Effect.gen(function* () {
@@ -258,9 +271,9 @@ describe.sequential("Docker resources", () => {
           expect(image.imageId?.length).toBeGreaterThan(0);
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
-          yield* runDockerCommand(["rmi", "-f", targetRef, sourceRef]).pipe(
-            Effect.ignore,
-          );
+          yield* docker.image
+            .remove([targetRef, sourceRef], true)
+            .pipe(Effect.ignore);
         }
       }),
     { timeout: 120000 },
@@ -272,6 +285,7 @@ describe.sequential("Docker resources", () => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
+        const docker = yield* Docker.Docker;
         const root = yield* fs.makeTempDirectory({
           prefix: "alchemy-docker-image-",
         });
@@ -297,9 +311,7 @@ describe.sequential("Docker resources", () => {
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
           if (imageRef) {
-            yield* runDockerCommand(["rmi", "-f", imageRef]).pipe(
-              Effect.ignore,
-            );
+            yield* docker.image.remove(imageRef, true).pipe(Effect.ignore);
           }
           yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
         }
@@ -330,6 +342,7 @@ describe.sequential("Docker resources", () => {
     "container inspect returns bound host ports",
     (stack) =>
       Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
         const hostPort = yield* freeHostPort;
         let containerName: string | undefined;
         try {
@@ -346,14 +359,19 @@ describe.sequential("Docker resources", () => {
           containerName = container.name;
           expect(container.name.length).toBeGreaterThan(0);
           expect(container.state).toBe("running");
-          const runtime = yield* Docker.inspectContainer(container.name);
-          expect(runtime.ports["80/tcp"]).toBe(hostPort);
+          const runtime = yield* docker.container.inspect(container.name);
+          expect(runtime.NetworkSettings.Ports).toMatchObject({
+            "80/tcp": [
+              { HostIp: "0.0.0.0", HostPort: `${hostPort}` },
+              { HostIp: "::", HostPort: `${hostPort}` },
+            ],
+          });
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
           if (containerName) {
-            yield* runDockerCommand(["rm", "-f", containerName]).pipe(
-              Effect.ignore,
-            );
+            yield* docker.container
+              .remove(containerName, true)
+              .pipe(Effect.ignore);
           }
         }
       }),
@@ -364,6 +382,7 @@ describe.sequential("Docker resources", () => {
     "container network aliases update without replacing the container",
     (stack) =>
       Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
         let containerName: string | undefined;
         let networkName: string | undefined;
         try {
@@ -387,7 +406,7 @@ describe.sequential("Docker resources", () => {
           const second = yield* deployWithAlias("new-alias");
           expect(second.container.id).toBe(first.container.id);
 
-          const info = yield* inspectContainerInfo(second.container.name);
+          const info = yield* docker.container.inspect(second.container.name);
           const aliases =
             info?.NetworkSettings.Networks?.[second.network.name]?.Aliases ??
             [];
@@ -396,14 +415,12 @@ describe.sequential("Docker resources", () => {
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
           if (containerName) {
-            yield* runDockerCommand(["rm", "-f", containerName]).pipe(
-              Effect.ignore,
-            );
+            yield* docker.container
+              .remove(containerName, true)
+              .pipe(Effect.ignore);
           }
           if (networkName) {
-            yield* runDockerCommand(["network", "rm", networkName]).pipe(
-              Effect.ignore,
-            );
+            yield* docker.network.remove(networkName).pipe(Effect.ignore);
           }
         }
       }),

@@ -1,50 +1,18 @@
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import { identity } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  connectNetwork,
-  createContainer,
-  disconnectNetwork,
-  DockerCommandError,
-  durationToNanoseconds,
-  inspectContainerInfo,
-  normalizeDuration,
-  removeContainer,
-  startContainer,
-  stopContainer,
-  toRuntimeInfo,
-  type ContainerInfo,
-  type ContainerRuntimeInfo,
-  type ContainerStatus,
-  type Duration,
-  type HealthcheckConfig,
-  type NetworkMapping,
-  type PortMapping,
-  type SecretString,
-  type VolumeMapping,
-} from "./DockerApi.ts";
-
-export { DockerCommandError };
-export type {
-  ContainerRuntimeInfo,
-  ContainerStatus,
-  Duration,
-  HealthcheckConfig,
-  NetworkMapping,
-  PortMapping,
-  SecretString,
-  VolumeMapping,
-};
-
-export type ContainerImage = string | { imageRef: string };
+import { Docker } from "./DockerClient.ts";
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
-  image: ContainerImage;
+  image: Container.Image;
   /**
    * Container name.
    *
@@ -54,21 +22,69 @@ export interface ContainerProps {
   /** Command to run in the container. */
   command?: string[];
   /** Container environment variables. Use Redacted for secrets. */
-  environment?: Record<string, SecretString>;
+  environment?: Record<string, string | Redacted.Redacted<string>>;
   /** Host/container port mappings. */
-  ports?: PortMapping[];
+  ports?: Container.PortMapping[];
   /** Volume or bind mounts. */
-  volumes?: VolumeMapping[];
+  volumes?: Container.VolumeMapping[];
   /** Restart policy. */
   restart?: "no" | "always" | "on-failure" | "unless-stopped";
   /** Networks to connect after create. */
-  networks?: NetworkMapping[];
+  networks?: Container.NetworkMapping[];
   /** Remove the container when it exits. @default false */
   removeOnExit?: boolean;
   /** Start the container after creation/reconciliation. @default false */
   start?: boolean;
   /** Docker healthcheck configuration. */
-  healthcheck?: HealthcheckConfig;
+  healthcheck?: Container.HealthcheckConfig;
+}
+
+export declare namespace Container {
+  type Image = string | { imageRef: string };
+  type Status =
+    | "created"
+    | "running"
+    | "paused"
+    | "restarting"
+    | "removing"
+    | "exited"
+    | "dead";
+  interface PortMapping {
+    /** External port on the host. */
+    external: number | string;
+    /** Internal port inside the container. */
+    internal: number | string;
+    /** Protocol used for the mapping. @default "tcp" */
+    protocol?: "tcp" | "udp";
+  }
+  interface VolumeMapping {
+    /** Host path or named volume source. */
+    hostPath: string;
+    /** Container path. */
+    containerPath: string;
+    /** Mount read-only. @default false */
+    readOnly?: boolean;
+  }
+  interface NetworkMapping {
+    /** Network name or ID. */
+    name: string;
+    /** Network aliases for the container. */
+    aliases?: string[];
+  }
+  interface HealthcheckConfig {
+    /** Command to run for health checks. */
+    cmd: string[] | string;
+    /** Time between checks. */
+    interval?: Duration.Input;
+    /** Maximum time a check may run. */
+    timeout?: Duration.Input;
+    /** Consecutive failures before unhealthy. */
+    retries?: number;
+    /** Startup grace period. */
+    startPeriod?: Duration.Input;
+    /** Check interval during startup. Requires Docker API 1.44+. */
+    startInterval?: Duration.Input;
+  }
 }
 
 export interface Container extends Resource<
@@ -80,37 +96,13 @@ export interface Container extends Resource<
     /** Docker container name. */
     name: string;
     /** Docker container state. */
-    state: ContainerStatus;
+    state: Container.Status;
     /** Creation timestamp in milliseconds since epoch. */
     createdAt: number;
     /** Image reference used to create the container. */
     imageRef: string;
   }
 > {}
-
-/**
- * Inspect a Docker container by name and return normalized runtime details.
- *
- * This is a small public wrapper around Docker's raw inspect output. It returns
- * the stable data Alchemy callers typically need, including bound host ports.
- */
-export const inspectContainer = (
-  name: string,
-): Effect.Effect<ContainerRuntimeInfo, DockerCommandError, any> =>
-  Effect.gen(function* () {
-    const info = yield* inspectContainerInfo(name);
-    if (!info) {
-      return yield* Effect.fail(
-        new DockerCommandError({
-          command: `docker container inspect ${name}`,
-          stderr: `Docker container not found: ${name}`,
-          exitCode: 1,
-          message: `Docker container not found: ${name}`,
-        }),
-      );
-    }
-    return toRuntimeInfo(info);
-  });
 
 /**
  * A Docker container managed through the active Docker context.
@@ -165,90 +157,134 @@ export const inspectContainer = (
 export const Container = Resource<Container>("Docker.Container");
 
 export const ContainerProvider = () =>
-  Provider.succeed(Container, {
-    list: () => Effect.succeed([]),
-    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-      const name = yield* containerName(id, olds, instanceId);
-      const info = yield* inspectContainerInfo(name);
-      if (!info) return undefined;
-      const attrs = toContainerAttributes(info, imageRefOf(olds.image));
-      return output ? attrs : Unowned(attrs);
-    }),
-    diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return undefined;
-      const replaceShape = (props: ContainerProps) => ({
-        name: props.name,
-        image: imageRefOf(props.image),
-        command: props.command ?? [],
-        environment: normalizeEnvironment(props.environment),
-        ports: props.ports ?? [],
-        volumes: props.volumes ?? [],
-        restart: props.restart ?? "no",
-        removeOnExit: props.removeOnExit ?? false,
-        healthcheck: props.healthcheck
-          ? {
-              ...props.healthcheck,
-              interval:
-                props.healthcheck.interval === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.interval),
-              timeout:
-                props.healthcheck.timeout === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.timeout),
-              startPeriod:
-                props.healthcheck.startPeriod === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.startPeriod),
-              startInterval:
-                props.healthcheck.startInterval === undefined
-                  ? undefined
-                  : normalizeDuration(props.healthcheck.startInterval),
-            }
-          : undefined,
-      });
-      if (!deepEqual(replaceShape(olds), replaceShape(news))) {
-        return { action: "replace" as const, deleteFirst: true };
-      }
-      if (
-        !deepEqual(olds.networks ?? [], news.networks ?? []) ||
-        (olds.start ?? false) !== (news.start ?? false)
+  Provider.effect(
+    Container,
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+
+      const reconcileNetworks = Effect.fn(function* (
+        live: Docker.ContainerInfo,
+        news: ContainerProps,
       ) {
-        return { action: "update" as const };
-      }
-    }),
-    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
-      const name = yield* containerName(id, news, instanceId);
-      const imageRef = imageRefOf(news.image);
-      const live = yield* inspectContainerInfo(name);
-
-      if (live && shouldReplaceContainer(imageRef, news, live)) {
-        yield* session.note(`Replacing Docker container: ${name}`);
-        yield* removeContainer(name, true);
-      } else if (live) {
-        const current = yield* reconcileNetworksAndState(name, news, live);
-        if (!current) {
-          return yield* Effect.die(
-            `Docker container disappeared during reconcile: ${name}`,
-          );
+        const connect = new Map<string, Container.NetworkMapping>();
+        const disconnect = new Set<string>();
+        const noop = new Set<string>();
+        for (const network of news.networks ?? []) {
+          const entry = live.NetworkSettings.Networks?.[network.name];
+          if (!entry) {
+            connect.set(network.name, network);
+          } else if (
+            !Equal.equals(entry.Aliases ?? [], network.aliases ?? [])
+          ) {
+            connect.set(network.name, network);
+            disconnect.add(network.name);
+          } else {
+            noop.add(network.name);
+          }
         }
-        return toContainerAttributes(current, imageRef);
-      }
+        for (const key of Object.keys(live.NetworkSettings.Networks ?? {})) {
+          if (!noop.has(key)) {
+            disconnect.add(key);
+          }
+        }
+        yield* Effect.forEach(
+          disconnect,
+          (network) =>
+            docker.network.disconnect({ network, container: live.Id }),
+          { concurrency: "unbounded" },
+        );
+        yield* Effect.forEach(
+          connect.values(),
+          (network) =>
+            docker.network.connect({
+              network: network.name,
+              container: live.Id,
+              alias: network.aliases,
+            }),
+          { concurrency: "unbounded" },
+        );
+      });
 
-      yield* session.note(
-        output
-          ? `Recreating Docker container: ${name}`
-          : `Creating Docker container: ${name}`,
-      );
-      const created = yield* createAndInspect(name, imageRef, news);
-      return toContainerAttributes(created, imageRef);
+      return Container.Provider.of({
+        list: () => Effect.succeed([]),
+        read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const name = yield* containerName(id, olds, instanceId);
+          return yield* docker.container.inspect(name).pipe(
+            Effect.map((info) =>
+              toContainerAttributes(info, normalizeImageRef(olds.image)),
+            ),
+            Effect.map(output ? identity : Unowned),
+            Effect.catchReason(
+              "PlatformError",
+              "NotFound",
+              () => Effect.undefined,
+            ),
+          );
+        }),
+        diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
+          if (!isResolved(news)) return undefined;
+          const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
+          const newArgs = yield* makeCreateArgs(id, news, instanceId);
+          if (!Equal.equals(oldArgs, newArgs)) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
+          if (
+            !Equal.equals(olds.networks ?? [], news.networks ?? []) ||
+            (olds.start ?? false) !== (news.start ?? false)
+          ) {
+            return { action: "update" as const };
+          }
+        }),
+        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+          const args = yield* makeCreateArgs(id, news, instanceId);
+          const live = yield* docker.container
+            .inspect(args.name)
+            .pipe(
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.undefined,
+              ),
+            );
+
+          if (live) {
+            yield* reconcileNetworks(live, news);
+            if (news.start && live.State.Status !== "running") {
+              yield* docker.container.start(live.Id);
+            }
+            return yield* docker.container
+              .inspect(live.Id)
+              .pipe(
+                Effect.map((info) => toContainerAttributes(info, args.image)),
+              );
+          }
+
+          const { stdout: containerId } = yield* docker.container.create(args);
+          yield* Effect.forEach(
+            news.networks ?? [],
+            (network) =>
+              docker.network.connect({
+                network: network.name,
+                container: containerId,
+                alias: network.aliases,
+              }),
+            { concurrency: "unbounded" },
+          );
+          if (news.start) {
+            yield* docker.container.start(containerId);
+          }
+          const info = yield* docker.container.inspect(containerId);
+          return toContainerAttributes(info, args.image);
+        }),
+        delete: Effect.fn(({ output }) =>
+          docker.container.stop(output.name).pipe(
+            Effect.andThen(docker.container.remove(output.name, true)),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          ),
+        ),
+      });
     }),
-    delete: Effect.fn(function* ({ output, session }) {
-      yield* session.note(`Removing Docker container: ${output.name}`);
-      yield* stopContainer(output.name);
-      yield* removeContainer(output.name, true);
-    }),
-  });
+  );
 
 const containerName = (id: string, props: ContainerProps, instanceId: string) =>
   props.name
@@ -260,11 +296,52 @@ const containerName = (id: string, props: ContainerProps, instanceId: string) =>
         lowercase: true,
       });
 
-export const imageRefOf = (image: ContainerImage): string =>
+const normalizeImageRef = (image: Container.Image): string =>
   typeof image === "string" ? image : image.imageRef;
 
+const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
+  containerName(id, news, instanceId).pipe(
+    Effect.map((name) => ({
+      name,
+      image: normalizeImageRef(news.image),
+      command: news.command,
+      env: normalizeEnvironment(news.environment),
+      volume: news.volumes?.map(
+        (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+      ),
+      p: news.ports?.map(
+        (port) => `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
+      ),
+      restart: news.restart ?? "no",
+      rm: news.removeOnExit ?? false,
+      ...(news.healthcheck
+        ? {
+            "health-cmd": Array.isArray(news.healthcheck.cmd)
+              ? news.healthcheck.cmd.join(" ")
+              : news.healthcheck.cmd,
+            "health-interval": normalizeDuration(news.healthcheck.interval),
+            "health-timeout": normalizeDuration(news.healthcheck.timeout),
+            "health-retries": news.healthcheck.retries ?? 0,
+            "health-start-period": normalizeDuration(
+              news.healthcheck.startPeriod,
+            ),
+            "health-start-interval": normalizeDuration(
+              news.healthcheck.startInterval,
+            ),
+          }
+        : {
+            "health-cmd": undefined,
+            "health-interval": undefined,
+            "health-timeout": undefined,
+            "health-retries": undefined,
+            "health-start-period": undefined,
+            "health-start-interval": undefined,
+          }),
+    })),
+  );
+
 const toContainerAttributes = (
-  info: ContainerInfo,
+  info: Docker.ContainerInfo,
   imageRef: string,
 ): Container["Attributes"] => ({
   id: info.Id,
@@ -274,224 +351,25 @@ const toContainerAttributes = (
   imageRef,
 });
 
-const infoName = (info: ContainerInfo) => {
+const infoName = (info: Docker.ContainerInfo) => {
   const name = info.Name;
   return typeof name === "string" ? name.replace(/^\//, "") : info.Id;
 };
 
-export const normalizeEnvironment = (
-  environment: Record<string, SecretString> | undefined,
+const normalizeEnvironment = (
+  environment: Record<string, string | Redacted.Redacted<string>> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(environment ?? {}).map(([key, value]) => [
       key,
-      typeof value === "string" ? value : Redacted.value(value),
+      Redacted.isRedacted(value) ? Redacted.value(value) : value,
     ]),
   );
 
-const normalizePortMappings = (
-  ports: PortMapping[] | undefined,
-): Map<string, string> => {
-  const map = new Map<string, string>();
-  for (const port of ports ?? []) {
-    map.set(`${port.external}`, `${port.internal}/${port.protocol ?? "tcp"}`);
-  }
-  return map;
+const normalizeDuration = (
+  input: Duration.Input | undefined,
+): string | undefined => {
+  if (!input) return undefined;
+  const duration = Duration.fromInputUnsafe(input);
+  return Duration.toNanosUnsafe(duration).toString();
 };
-
-const normalizeVolumeMappings = (
-  volumes: VolumeMapping[] | undefined,
-): Set<string> => {
-  const set = new Set<string>();
-  for (const volume of volumes ?? []) {
-    set.add(
-      `${volume.hostPath}:${volume.containerPath}${volume.readOnly ? ":ro" : ""}`,
-    );
-  }
-  return set;
-};
-
-export const compareEnv = (
-  desired: Record<string, string> | undefined,
-  actual: string[] | null,
-): boolean => {
-  const desiredEntries = Object.entries(desired ?? {}).sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
-  const actualEntries = (actual ?? [])
-    .flatMap((entry) => {
-      const index = entry.indexOf("=");
-      return index === -1
-        ? []
-        : [[entry.slice(0, index), entry.slice(index + 1)] as const];
-    })
-    .filter(([key]) => key in (desired ?? {}))
-    .sort(([a], [b]) => a.localeCompare(b));
-  return deepEqual(desiredEntries, actualEntries);
-};
-
-export const comparePorts = (
-  desired: PortMapping[] | undefined,
-  actual: Record<
-    string,
-    Array<{ HostIp: string; HostPort: string }> | null
-  > | null,
-): boolean => {
-  const desiredMap = normalizePortMappings(desired);
-  const actualMap = new Map<string, string>();
-  for (const [containerPort, bindings] of Object.entries(actual ?? {})) {
-    const hostPort = bindings?.[0]?.HostPort;
-    if (hostPort) actualMap.set(hostPort, containerPort);
-  }
-  return deepEqual([...desiredMap.entries()], [...actualMap.entries()]);
-};
-
-export const compareVolumes = (
-  desired: VolumeMapping[] | undefined,
-  actual: string[] | null,
-): boolean => deepEqual([...normalizeVolumeMappings(desired)], actual ?? []);
-
-export const compareHealthcheck = (
-  desired: HealthcheckConfig | undefined,
-  actual:
-    | {
-        Test: string[] | null;
-        Interval?: number;
-        Timeout?: number;
-        Retries?: number;
-        StartPeriod?: number;
-        StartInterval?: number;
-      }
-    | null
-    | undefined,
-): boolean => {
-  if (!desired) return true;
-  if (!actual) return false;
-  const desiredCommand = Array.isArray(desired.cmd)
-    ? desired.cmd.join(" ")
-    : desired.cmd;
-  const actualCommand = actual.Test ? actual.Test.slice(1).join(" ") : "";
-  return (
-    desiredCommand === actualCommand &&
-    durationToNanoseconds(desired.interval) === (actual.Interval ?? 0) &&
-    durationToNanoseconds(desired.timeout) === (actual.Timeout ?? 0) &&
-    (desired.retries ?? 0) === (actual.Retries ?? 0) &&
-    durationToNanoseconds(desired.startPeriod) === (actual.StartPeriod ?? 0) &&
-    durationToNanoseconds(desired.startInterval) === (actual.StartInterval ?? 0)
-  );
-};
-
-export const compareRestartPolicy = (
-  desired: ContainerProps["restart"],
-  actual: ContainerInfo["HostConfig"]["RestartPolicy"],
-): boolean => (desired ?? "no") === (actual?.Name || "no");
-
-export const shouldReplaceContainer = (
-  imageRef: string,
-  props: ContainerProps,
-  info: ContainerInfo,
-): boolean => {
-  if (info.Config.Image !== imageRef) return true;
-  const actualCommand = info.Config.Cmd ?? [];
-  if (props.command && !deepEqual(props.command, actualCommand)) return true;
-  if (!compareEnv(normalizeEnvironment(props.environment), info.Config.Env)) {
-    return true;
-  }
-  if (!comparePorts(props.ports, info.HostConfig.PortBindings)) return true;
-  if (!compareVolumes(props.volumes, info.HostConfig.Binds)) return true;
-  if (!compareHealthcheck(props.healthcheck, info.Config.Healthcheck)) {
-    return true;
-  }
-  if (!compareRestartPolicy(props.restart, info.HostConfig.RestartPolicy)) {
-    return true;
-  }
-  if ((props.removeOnExit ?? false) !== info.HostConfig.AutoRemove) {
-    return true;
-  }
-  return false;
-};
-
-const networkChanges = (
-  props: ContainerProps,
-  info: ContainerInfo,
-): { connect: NetworkMapping[]; disconnect: string[] } => {
-  const current = info.NetworkSettings.Networks ?? {};
-  const currentNames = new Set(Object.keys(current));
-  const desired = new Map((props.networks ?? []).map((n) => [n.name, n]));
-  const connect: NetworkMapping[] = [];
-  const disconnect: string[] = [];
-  for (const network of currentNames) {
-    if (!desired.has(network) && network !== "bridge") {
-      disconnect.push(network);
-    }
-  }
-  for (const [name, network] of desired) {
-    if (!currentNames.has(name)) {
-      connect.push(network);
-      continue;
-    }
-    const desiredAliases = network.aliases ?? [];
-    const actualAliases = current[name]?.Aliases ?? [];
-    if (
-      name !== "bridge" &&
-      desiredAliases.length > 0 &&
-      !desiredAliases.every((alias) => actualAliases.includes(alias))
-    ) {
-      disconnect.push(name);
-      connect.push(network);
-    }
-  }
-  return { connect, disconnect };
-};
-
-const reconcileNetworksAndState = Effect.fn(function* (
-  name: string,
-  props: ContainerProps,
-  info: ContainerInfo,
-) {
-  const changes = networkChanges(props, info);
-  for (const network of changes.disconnect) {
-    yield* disconnectNetwork(info.Id, network);
-  }
-  for (const network of changes.connect) {
-    yield* connectNetwork(info.Id, network);
-  }
-  if (props.start && info.State.Status !== "running") {
-    yield* startContainer(info.Id);
-  }
-  if (props.start === false && info.State.Status === "running") {
-    yield* stopContainer(info.Id);
-  }
-  return yield* inspectContainerInfo(name);
-});
-
-const createAndInspect = Effect.fn(function* (
-  name: string,
-  imageRef: string,
-  props: ContainerProps,
-) {
-  const id = yield* createContainer({
-    image: imageRef,
-    name,
-    command: props.command,
-    environment: props.environment,
-    ports: props.ports,
-    volumes: props.volumes,
-    restart: props.restart,
-    removeOnExit: props.removeOnExit,
-    healthcheck: props.healthcheck,
-  });
-  for (const network of props.networks ?? []) {
-    yield* connectNetwork(id, network);
-  }
-  if (props.start) {
-    yield* startContainer(id);
-  }
-  const info = yield* inspectContainerInfo(name);
-  if (!info) {
-    return yield* Effect.die(
-      `Docker container was created but could not be inspected: ${name}`,
-    );
-  }
-  return info;
-});

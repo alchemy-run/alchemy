@@ -1,16 +1,12 @@
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import { identity } from "effect/Function";
 import { Unowned } from "../AdoptPolicy.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  createVolume,
-  inspectVolumeInfo,
-  normalizeLabels,
-  removeVolume,
-  type VolumeInfo,
-} from "./DockerApi.ts";
+import { Docker } from "./DockerClient.ts";
 
 export interface VolumeLabel {
   /** Label name. */
@@ -31,7 +27,7 @@ export interface VolumeProps {
   /** Driver-specific options. */
   driverOpts?: Record<string, string>;
   /** Custom metadata labels. */
-  labels?: VolumeLabel[] | Record<string, string>;
+  labels?: Record<string, string>;
 }
 
 export interface Volume extends Resource<
@@ -94,60 +90,58 @@ export interface Volume extends Resource<
 export const Volume = Resource<Volume>("Docker.Volume");
 
 export const VolumeProvider = () =>
-  Provider.succeed(Volume, {
-    list: () => Effect.succeed([]),
-    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-      const name = yield* volumeName(id, olds ?? {}, instanceId);
-      const info = yield* inspectVolumeInfo(name);
-      if (!info) return undefined;
-      const attrs = toVolumeAttributes(info);
-      return output ? attrs : Unowned(attrs);
-    }),
-    diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return undefined;
-      const oldComparable = {
-        name: olds?.name,
-        driver: olds?.driver ?? "local",
-        driverOpts: olds?.driverOpts ?? {},
-        labels: normalizeLabels(olds?.labels),
-      };
-      const newComparable = {
-        name: news?.name,
-        driver: news?.driver ?? "local",
-        driverOpts: news?.driverOpts ?? {},
-        labels: normalizeLabels(news?.labels),
-      };
-      if (!deepEqual(oldComparable, newComparable)) {
-        return { action: "replace" as const, deleteFirst: true };
-      }
-    }),
-    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
-      const name =
-        output?.name ?? (yield* volumeName(id, news ?? {}, instanceId));
-      const existing = yield* inspectVolumeInfo(name);
-      if (existing) {
-        return toVolumeAttributes(existing);
-      }
-      yield* session.note(`Creating Docker volume: ${name}`);
-      const createdName = yield* createVolume({
-        name,
-        driver: news?.driver ?? "local",
-        driverOpts: news?.driverOpts,
-        labels: normalizeLabels(news?.labels),
+  Provider.effect(
+    Volume,
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+
+      return Volume.Provider.of({
+        list: () => Effect.succeed([]),
+        read: Effect.fn(({ id, instanceId, olds, output }) =>
+          volumeName(id, olds ?? {}, instanceId).pipe(
+            Effect.flatMap(docker.volume.inspect),
+            Effect.map(toVolumeAttributes),
+            Effect.map(output ? identity : Unowned),
+            Effect.catchReason(
+              "PlatformError",
+              "NotFound",
+              () => Effect.undefined,
+            ),
+          ),
+        ),
+        diff: Effect.fn(function* ({ id, instanceId, output, news }) {
+          if (!isResolved(news)) return undefined;
+          const args = yield* makeVolumeArgs(id, news, instanceId);
+          if (
+            output?.name !== args.name ||
+            output?.driver !== args.driver ||
+            !Equal.equals(output?.driverOpts, args.driverOpts) ||
+            !Equal.equals(output?.labels, args.labels)
+          ) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
+        }),
+        reconcile: Effect.fn(({ id, instanceId, news }) =>
+          makeVolumeArgs(id, news, instanceId).pipe(
+            Effect.flatMap(docker.volume.create),
+            Effect.flatMap((result) => docker.volume.inspect(result.stdout)),
+            Effect.map(toVolumeAttributes),
+          ),
+        ),
+        delete: Effect.fn(({ output }) =>
+          docker.volume
+            .remove(output.name)
+            .pipe(
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.void,
+              ),
+            ),
+        ),
       });
-      const info = yield* inspectVolumeInfo(createdName);
-      if (!info) {
-        return yield* Effect.die(
-          `Docker volume was created but could not be inspected: ${createdName}`,
-        );
-      }
-      return toVolumeAttributes(info);
     }),
-    delete: Effect.fn(function* ({ output, session }) {
-      yield* session.note(`Removing Docker volume: ${output.name}`);
-      yield* removeVolume(output.name);
-    }),
-  });
+  );
 
 const volumeName = (id: string, props: VolumeProps, instanceId: string) =>
   props.name
@@ -159,7 +153,19 @@ const volumeName = (id: string, props: VolumeProps, instanceId: string) =>
         lowercase: true,
       });
 
-export const toVolumeAttributes = (info: VolumeInfo): Volume["Attributes"] => ({
+const makeVolumeArgs = (id: string, props: VolumeProps, instanceId: string) =>
+  volumeName(id, props, instanceId).pipe(
+    Effect.map((name) => ({
+      name,
+      driver: props.driver ?? "local",
+      driverOpts: props.driverOpts,
+      labels: props.labels,
+    })),
+  );
+
+export const toVolumeAttributes = (
+  info: Docker.InspectedVolume,
+): Volume["Attributes"] => ({
   id: info.Name,
   name: info.Name,
   driver: info.Driver,

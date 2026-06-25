@@ -3,32 +3,16 @@ import {
   buildImageBuildArgs,
   buildNetworkCreateArgs,
   buildVolumeCreateArgs,
-  durationToNanoseconds,
-  normalizeDuration,
   parseRepoDigest,
   repositoryFromImageRef,
   toRuntimeInfo,
   withRegistryHost,
 } from "@/Docker/DockerApi";
-import { compareEnv, compareHealthcheck } from "@/Docker/Container";
 import { desiredImageRef, localImageRef } from "@/Docker/Image";
 import { describe, expect, it } from "@effect/vitest";
 import * as Redacted from "effect/Redacted";
 
 describe("Docker CLI helpers", () => {
-  it("normalizes Docker duration values", () => {
-    expect(normalizeDuration(30)).toBe("30s");
-    expect(normalizeDuration("500ms")).toBe("500ms");
-    expect(durationToNanoseconds("1.5s")).toBe(1_500_000_000);
-    expect(durationToNanoseconds("2m")).toBe(120_000_000_000);
-    const invalidDuration = "30" as unknown as Parameters<
-      typeof normalizeDuration
-    >[0];
-    expect(() => normalizeDuration(invalidDuration)).toThrow(
-      /Invalid duration format/,
-    );
-  });
-
   it("builds volume create argv", () => {
     expect(
       buildVolumeCreateArgs({
@@ -152,31 +136,6 @@ describe("Docker CLI helpers", () => {
         },
       }),
     ).toEqual({ ports: { "80/tcp": 8080, "81/tcp": 8081 } });
-  });
-
-  it("compares Redacted env and healthcheck values", () => {
-    expect(
-      compareEnv({ TOKEN: Redacted.value(Redacted.make("abc")) }, [
-        "PATH=/usr/bin",
-        "TOKEN=abc",
-      ]),
-    ).toBe(true);
-    expect(
-      compareHealthcheck(
-        { cmd: "curl -f http://localhost/", interval: "5s" },
-        {
-          Test: ["CMD-SHELL", "curl -f http://localhost/"],
-          Interval: 5_000_000_000,
-        },
-      ),
-    ).toBe(true);
-    expect(
-      compareHealthcheck(undefined, {
-        Test: ["CMD-SHELL", "curl -f http://localhost/"],
-        Interval: 5_000_000_000,
-      }),
-    ).toBe(true);
-    expect(compareHealthcheck({ cmd: "true" }, undefined)).toBe(false);
   });
 
   it("normalizes registry push refs and parses repo digest", () => {

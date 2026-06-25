@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { imageCreatedAt, inspectImageInfo, pullImage } from "./DockerApi.ts";
+import { Docker } from "./DockerClient.ts";
 
 export interface RemoteImageProps {
   /** Docker image name, without tag. */
@@ -23,7 +23,6 @@ export interface RemoteImage extends Resource<
   "Docker.RemoteImage",
   RemoteImageProps,
   {
-    kind: "RemoteImage";
     /** Full image reference. */
     imageRef: string;
     /** Local image id after pull when available. */
@@ -67,46 +66,60 @@ export interface RemoteImage extends Resource<
 export const RemoteImage = Resource<RemoteImage>("Docker.RemoteImage");
 
 export const RemoteImageProvider = () =>
-  Provider.succeed(RemoteImage, {
-    list: () => Effect.succeed([]),
-    read: Effect.fn(function* ({ olds, output }) {
-      const ref = output?.imageRef ?? remoteImageRef(olds);
-      const image = yield* inspectImageInfo(ref);
-      if (!image) return undefined;
-      return {
-        kind: "RemoteImage" as const,
-        imageRef: ref,
-        imageId: image.Id,
-        createdAt: output?.createdAt ?? imageCreatedAt(image),
-        name: olds.name,
-        tag: olds.tag ?? "latest",
-      };
+  Provider.effect(
+    RemoteImage,
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+
+      return RemoteImage.Provider.of({
+        list: () => Effect.succeed([]),
+        read: Effect.fn(function* ({ olds, output }) {
+          const ref = output?.imageRef ?? remoteImageRef(olds);
+          return yield* docker.image.inspect(ref).pipe(
+            Effect.map((image) => ({
+              imageRef: ref,
+              imageId: image.Id,
+              createdAt: output?.createdAt ?? Date.parse(image.Created ?? ""),
+              name: olds.name,
+              tag: olds.tag ?? "latest",
+            })),
+            Effect.catchReason(
+              "PlatformError",
+              "NotFound",
+              () => Effect.undefined,
+            ),
+          );
+        }),
+        diff: Effect.fn(function* ({ output, news }) {
+          if (!isResolved(news)) return undefined;
+          if (
+            !output ||
+            news.alwaysPull !== false ||
+            output.imageRef !== remoteImageRef(news)
+          ) {
+            return { action: "update" };
+          }
+        }),
+        reconcile: Effect.fn(function* ({ news, session }) {
+          const ref = remoteImageRef(news);
+          yield* session.note(`Pulling Docker image: ${ref}`);
+          yield* docker.image.pull(ref, news.platform);
+          const inspected = yield* docker.image.inspect(ref);
+          return {
+            imageRef: ref,
+            imageId: inspected.Id,
+            createdAt: Date.parse(inspected.Created ?? ""),
+            name: news.name,
+            tag: news.tag ?? "latest",
+          };
+        }),
+        delete: Effect.fn(function* () {
+          // Remote images are not removed on destroy because tags may be shared by
+          // unrelated local stacks or developer workflows.
+        }),
+      });
     }),
-    diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return undefined;
-      if (!deepEqual(olds, news) || news.alwaysPull !== false) {
-        return { action: "update" as const };
-      }
-    }),
-    reconcile: Effect.fn(function* ({ news, session }) {
-      const ref = remoteImageRef(news);
-      yield* session.note(`Pulling Docker image: ${ref}`);
-      yield* pullImage(ref, { platform: news.platform });
-      const inspected = yield* inspectImageInfo(ref);
-      return {
-        kind: "RemoteImage" as const,
-        imageRef: ref,
-        imageId: inspected?.Id,
-        createdAt: imageCreatedAt(inspected),
-        name: news.name,
-        tag: news.tag ?? "latest",
-      };
-    }),
-    delete: Effect.fn(function* () {
-      // Remote images are not removed on destroy because tags may be shared by
-      // unrelated local stacks or developer workflows.
-    }),
-  });
+  );
 
 export const remoteImageRef = (props: RemoteImageProps): string =>
   `${props.name}:${props.tag ?? "latest"}`;
