@@ -29,3 +29,28 @@ export const ALCHEMY_PHASE = Config.string("ALCHEMY_PHASE").pipe(
   }),
   Effect.orDie,
 );
+
+/**
+ * Whether the program is running under `alchemy dev` (local development with
+ * hot reload), exposed as the `ALCHEMY_DEV` environment variable / config key.
+ *
+ * The `alchemy dev` CLI command sets `ALCHEMY_DEV=true` on the spawned process;
+ * every other entrypoint (`deploy`, `plan`, deployed runtime) leaves it unset,
+ * so it defaults to `false`. Accepts the usual truthy strings (`true`, `1`,
+ * `yes`, `on`).
+ *
+ * Read it from user code to branch on dev mode:
+ *
+ * ```typescript
+ * import { ALCHEMY_DEV } from "alchemy";
+ *
+ * Effect.gen(function* () {
+ *   if (yield* ALCHEMY_DEV) {
+ *     // local-dev-only behavior
+ *   }
+ * });
+ * ```
+ */
+export const ALCHEMY_DEV = Config.boolean("ALCHEMY_DEV").pipe(
+  Config.withDefault(false),
+);
