@@ -2,6 +2,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { flow } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import {
@@ -10,9 +11,11 @@ import {
   type SystemErrorTag,
 } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
+import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
 
 export class Docker extends Context.Service<
   Docker,
@@ -67,18 +70,21 @@ export class Docker extends Context.Service<
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly image: {
-      /** Builds a new image. */
-      readonly build: (options: {
-        context: string;
-        tag: string;
-        file?: string;
-        platform?: string;
-        target?: string;
-        "build-arg"?: Record<string, string>;
-        "cache-from"?: Array<string>;
-        "cache-to"?: Array<string>;
-        args?: Array<string>;
-      }) => Effect.Effect<CommandOutput, PlatformError>;
+      /** Builds a new image. If a session is provided, build logs will be emitted as session notes. */
+      readonly build: (
+        options: {
+          context: string;
+          tag: string;
+          file?: string;
+          platform?: string;
+          target?: string;
+          "build-arg"?: Record<string, string>;
+          "cache-from"?: Array<string>;
+          "cache-to"?: Array<string>;
+          args?: Array<string>;
+        },
+        session?: ScopedPlanStatusSession,
+      ) => Effect.Effect<CommandOutput, PlatformError>;
       /** Pulls an image. */
       readonly pull: (
         ref: string,
@@ -257,7 +263,15 @@ export const DockerLive = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const bin = yield* DockerBin;
 
-    const run = (args: Array<string>, env?: Record<string, string>) =>
+    const run = (
+      args: Array<string>,
+      env?: Record<string, string>,
+      tap: (
+        stream: Stream.Stream<string, PlatformError, never>,
+      ) => Stream.Stream<string, PlatformError, never> = Stream.tap(
+        Effect.logDebug,
+      ),
+    ) =>
       ChildProcess.make(bin, args, {
         stdin: "ignore",
         stdout: "pipe",
@@ -273,13 +287,13 @@ export const DockerLive = Layer.effect(
               exitCode: child.exitCode,
               stdout: child.stdout.pipe(
                 Stream.decodeText,
-                Stream.tap(Effect.logDebug),
+                tap,
                 Stream.mkString,
                 Effect.map((stdout) => stdout.trim()),
               ),
               stderr: child.stderr.pipe(
                 Stream.decodeText,
-                Stream.tap(Effect.logDebug),
+                tap,
                 Stream.mkString,
                 Effect.map((stderr) => stderr.trim()),
               ),
@@ -378,14 +392,24 @@ export const DockerLive = Layer.effect(
         stop: (name) => run(["container", "stop", name]),
       },
       image: {
-        build: ({ context, args, ...options }) =>
-          run([
-            "image",
-            "build",
-            context,
-            ...formatArgs(options),
-            ...(args ?? []),
-          ]),
+        build: ({ context, args, ...options }, session) =>
+          run(
+            [
+              "image",
+              "build",
+              context,
+              ...formatArgs(options),
+              ...(args ?? []),
+            ],
+            undefined,
+            session
+              ? Stream.tapSink(
+                  Sink.make<string>()(
+                    flow(Stream.splitLines, Stream.runForEach(session.note)),
+                  ),
+                )
+              : undefined,
+          ),
         pull: (ref, platform) =>
           run([
             "image",

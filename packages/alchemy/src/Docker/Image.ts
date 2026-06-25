@@ -207,17 +207,20 @@ export const ImageProvider = () =>
 
           const paths = yield* resolveBuildPaths(props.build);
           yield* session.note(`Building Docker image: ${ref}`);
-          yield* docker.image.build({
-            tag: ref,
-            context: paths.context,
-            file: paths.dockerfile,
-            platform: props.build.platform,
-            target: props.build.target,
-            "build-arg": props.build.args,
-            "cache-from": props.build.cacheFrom,
-            "cache-to": props.build.cacheTo,
-            args: props.build.options,
-          });
+          yield* docker.image.build(
+            {
+              tag: ref,
+              context: paths.context,
+              file: paths.dockerfile,
+              platform: props.build.platform,
+              target: props.build.target,
+              "build-arg": props.build.args,
+              "cache-from": props.build.cacheFrom,
+              "cache-to": props.build.cacheTo,
+              args: props.build.options,
+            },
+            session,
+          );
           const nextContextHash = yield* contextHash(props);
 
           // Read the freshly built image's id and creation time straight from
