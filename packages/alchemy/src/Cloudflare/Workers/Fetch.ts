@@ -40,7 +40,7 @@ export const FetchBinding = Layer.effect(
 
     return Effect.fn(function* (worker: Worker) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isWorker(host)) {
           yield* host.bind`${host}`({
             bindings: [

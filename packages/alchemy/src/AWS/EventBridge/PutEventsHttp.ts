@@ -15,7 +15,7 @@ export const PutEventsHttp = Layer.effect(
     return Effect.fn(function* (bus?: EventBus) {
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           const { accountId, region } =
             yield* AWSEnvironment.current as unknown as Effect.Effect<{

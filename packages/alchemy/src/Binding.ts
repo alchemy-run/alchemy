@@ -89,7 +89,7 @@ export const Service = <
  * skips it, so leaking a `Self` requirement onto the runtime client would be
  * wrong. Narrow it with `isWorker`/`isFunction` before calling `host.bind`.
  */
-export const host = Self as unknown as Effect.Effect<ResourceLike>;
+export const Host = Self as unknown as Effect.Effect<ResourceLike>;
 
 export interface PolicyLike {
   kind: "Policy";

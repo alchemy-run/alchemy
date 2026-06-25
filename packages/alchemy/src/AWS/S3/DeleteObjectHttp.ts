@@ -16,7 +16,7 @@ export const DeleteObjectHttp = Layer.effect(
     return Effect.fn(function* (bucket: Bucket) {
       const BucketName = yield* bucket.bucketName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.S3.DeleteObject(${bucket}))`({
             policyStatements: [

@@ -19,7 +19,7 @@ export const ExecuteTransactionHttp = Layer.effect(
         const sortedTables = [...tables].sort((a, b) =>
           a.LogicalId.localeCompare(b.LogicalId),
         );
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.DynamoDB.ExecuteTransaction(${sortedTables}))`(
             {

@@ -15,7 +15,7 @@ export const QueueSinkHttp = Layer.effect(
 
     return Effect.fn(function* (queue: Queue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.SQS.QueueSink(${queue}))`({
             policyStatements: [

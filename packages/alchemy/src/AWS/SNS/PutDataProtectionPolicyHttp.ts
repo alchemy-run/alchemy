@@ -17,7 +17,7 @@ export const PutDataProtectionPolicyHttp = Layer.effect(
     return Effect.fn(function* (topic: Topic) {
       const TopicArn = yield* topic.topicArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.SNS.PutDataProtectionPolicy(${topic}))`(
             {

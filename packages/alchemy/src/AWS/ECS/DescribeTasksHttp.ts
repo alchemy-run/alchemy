@@ -14,7 +14,7 @@ export const DescribeTasksHttp = Layer.effect(
 
     return Effect.fn(function* (cluster: Cluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host) || isTask(host)) {
           yield* host.bind`Allow(${host}, AWS.ECS.DescribeTasks(${cluster}))`({
             policyStatements: [

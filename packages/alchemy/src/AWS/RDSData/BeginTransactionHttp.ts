@@ -21,7 +21,7 @@ export const BeginTransactionHttp = Layer.effect(
       const resourceArn = yield* cluster.dbClusterArn;
       const secretArn = yield* options.secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.RDSData.BeginTransaction(${cluster}))`(
             {

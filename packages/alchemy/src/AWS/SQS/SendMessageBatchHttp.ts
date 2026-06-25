@@ -18,7 +18,7 @@ export const SendMessageBatchHttp = Layer.effect(
     return Effect.fn(function* (queue: Queue) {
       const QueueUrl = yield* queue.queueUrl;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.SQS.SendMessageBatch(${queue}))`({
             policyStatements: [

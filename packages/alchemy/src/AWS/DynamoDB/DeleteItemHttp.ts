@@ -14,7 +14,7 @@ export const DeleteItemHttp = Layer.effect(
     return Effect.fn(function* <T extends Table>(table: T) {
       const TableName = yield* table.tableName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.DynamoDB.DeleteItem(${table}))`({
             policyStatements: [

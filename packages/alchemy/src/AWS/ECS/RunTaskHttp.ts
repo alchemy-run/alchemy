@@ -14,7 +14,7 @@ export const RunTaskHttp = Layer.effect(
 
     return Effect.fn(function* (cluster: Cluster, task: Task) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host) || isTask(host)) {
           yield* host.bind`Allow(${host}, AWS.ECS.RunTask(${cluster}, ${task}))`(
             {

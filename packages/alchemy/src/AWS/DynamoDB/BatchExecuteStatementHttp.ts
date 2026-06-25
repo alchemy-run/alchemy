@@ -19,7 +19,7 @@ export const BatchExecuteStatementHttp = Layer.effect(
     return Effect.fn(function* (...tables: BatchExecuteStatementTables) {
       const sortedTables = sortBatchExecuteStatementTables(tables);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchExecuteStatement(${sortedTables}))`(
             {

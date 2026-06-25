@@ -17,7 +17,7 @@ export const DescribeStreamConsumerHttp = Layer.effect(
     return Effect.fn(function* (consumer: StreamConsumer) {
       const ConsumerARN = yield* consumer.consumerArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.Kinesis.DescribeStreamConsumer(${consumer}))`(
             {

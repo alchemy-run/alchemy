@@ -14,7 +14,7 @@ export const DescribeSecretHttp = Layer.effect(
     return Effect.fn(function* (secret: Secret) {
       const SecretId = yield* secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.SecretsManager.DescribeSecret(${secret}))`(
             {

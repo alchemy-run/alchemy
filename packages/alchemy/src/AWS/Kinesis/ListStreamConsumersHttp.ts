@@ -17,7 +17,7 @@ export const ListStreamConsumersHttp = Layer.effect(
     return Effect.fn(function* (stream: Stream) {
       const StreamARN = yield* stream.streamArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.Kinesis.ListStreamConsumers(${stream}))`(
             {

@@ -21,7 +21,7 @@ export const RestoreTableToPointInTimeHttp = Layer.effect(
       const SourceTableName = yield* from.tableName;
       const TargetTableName = yield* to.tableName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.DynamoDB.RestoreTableToPointInTime(${from}, ${to}))`(
             {

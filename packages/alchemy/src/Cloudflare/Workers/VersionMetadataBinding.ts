@@ -50,7 +50,7 @@ export const VersionMetadataBindingLayer = Layer.effect(
   Effect.gen(function* () {
     return Effect.fn(function* (versionMetadata: VersionMetadataLike) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isWorker(host)) {
           yield* host.bind(versionMetadata.name, {
             bindings: [

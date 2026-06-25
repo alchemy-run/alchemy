@@ -17,7 +17,7 @@ export const SetSubscriptionAttributesHttp = Layer.effect(
     return Effect.fn(function* (subscription: Subscription) {
       const SubscriptionArn = yield* subscription.subscriptionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.SNS.SetSubscriptionAttributes(${subscription}))`(
             {

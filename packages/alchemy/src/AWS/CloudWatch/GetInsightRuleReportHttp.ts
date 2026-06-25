@@ -17,7 +17,7 @@ export const GetInsightRuleReportHttp = Layer.effect(
     return Effect.fn(function* (rule: InsightRule) {
       const RuleName = yield* rule.ruleName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.CloudWatch.GetInsightRuleReport(${rule}))`(
             {

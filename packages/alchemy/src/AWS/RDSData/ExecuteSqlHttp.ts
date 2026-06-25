@@ -22,7 +22,7 @@ export const ExecuteSqlHttp = Layer.effect(
       const clusterArn = yield* cluster.dbClusterArn;
       const secretArn = yield* options.secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.RDSData.ExecuteSql(${cluster}))`({
             policyStatements: [

@@ -18,7 +18,7 @@ export const DescribeAlarmContributorsHttp = Layer.effect(
     return Effect.fn(function* (alarm: AlarmResource) {
       const AlarmName = yield* alarm.alarmName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.CloudWatch.DescribeAlarmContributors(${alarm}))`(
             {

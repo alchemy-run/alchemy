@@ -47,7 +47,7 @@ export const TransactGetItemsHttp = Layer.effect(
       });
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.host;
+        const host = yield* Binding.Host;
         if (isFunction(host)) {
           yield* host.bind`Allow(${host}, AWS.DynamoDB.TransactGetItems(${sortedTables}))`(
             {
