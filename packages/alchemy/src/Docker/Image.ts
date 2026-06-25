@@ -149,7 +149,42 @@ export const ImageProvider = () =>
   Provider.effect(
     Image,
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const docker = yield* Docker;
+      const context = yield* Effect.context<
+        FileSystem.FileSystem | Path.Path
+      >();
+
+      const contextHash = Effect.fn(function* (props: ImageProps) {
+        if (!hasBuild(props)) return undefined;
+        const cwd = yield* Effect.sync(() => process.cwd());
+        return yield* hashDirectory({
+          cwd: props.build.context ?? cwd,
+          memo: props.build.memo,
+        });
+      }, Effect.provide(context));
+
+      const resolveBuildPaths = Effect.fn(function* (
+        build: DockerBuildOptions,
+      ) {
+        const cwd = yield* Effect.sync(() => process.cwd());
+        const context = path.resolve(build.context ?? cwd);
+        const dockerfile = build.dockerfile
+          ? path.isAbsolute(build.dockerfile)
+            ? build.dockerfile
+            : path.resolve(context, build.dockerfile)
+          : path.resolve(context, "Dockerfile");
+        if (!(yield* fs.exists(context))) {
+          return yield* Effect.die(
+            `Docker build context does not exist: ${context}`,
+          );
+        }
+        if (!(yield* fs.exists(dockerfile))) {
+          return yield* Effect.die(`Dockerfile does not exist: ${dockerfile}`);
+        }
+        return { context, dockerfile };
+      });
 
       return Image.Provider.of({
         list: () => Effect.succeed([]),
@@ -309,11 +344,7 @@ export const desiredImageRef = (id: string, props: ImageProps): string => {
  * instance id) just like other resources, then carried back on `props.name` so
  * the synchronous ref helpers stay deterministic across reconcile/diff/read.
  */
-const withResolvedName = (
-  id: string,
-  props: ImageProps,
-  instanceId: string,
-): Effect.Effect<ImageProps, never, any> =>
+const withResolvedName = (id: string, props: ImageProps, instanceId: string) =>
   hasBuild(props) && props.name === undefined
     ? createPhysicalName({
         id,
@@ -322,34 +353,6 @@ const withResolvedName = (
         lowercase: true,
       }).pipe(Effect.map((name): ImageProps => ({ ...props, name })))
     : Effect.succeed(props);
-
-const resolveBuildPaths = Effect.fn(function* (build: DockerBuildOptions) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const cwd = yield* Effect.sync(() => process.cwd());
-  const context = path.resolve(build.context ?? cwd);
-  const dockerfile = build.dockerfile
-    ? path.isAbsolute(build.dockerfile)
-      ? build.dockerfile
-      : path.resolve(context, build.dockerfile)
-    : path.resolve(context, "Dockerfile");
-  if (!(yield* fs.exists(context))) {
-    return yield* Effect.die(`Docker build context does not exist: ${context}`);
-  }
-  if (!(yield* fs.exists(dockerfile))) {
-    return yield* Effect.die(`Dockerfile does not exist: ${dockerfile}`);
-  }
-  return { context, dockerfile };
-});
-
-const contextHash = Effect.fn(function* (props: ImageProps) {
-  if (!hasBuild(props)) return undefined;
-  const cwd = yield* Effect.sync(() => process.cwd());
-  return yield* hashDirectory({
-    cwd: props.build.context ?? cwd,
-    memo: props.build.memo,
-  });
-});
 
 const comparableProps = (props: ImageProps | undefined) =>
   props
