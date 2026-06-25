@@ -413,14 +413,14 @@ const createAndInspect = Effect.fn(function* (
 export const ContainerProvider = () =>
   Provider.succeed(Container, {
     list: () => Effect.succeed([]),
-    read: Effect.fnUntraced(function* ({ id, instanceId, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
       const name = yield* containerName(id, olds, instanceId);
       const info = yield* inspectContainerInfo(name);
       if (!info) return undefined;
       const attrs = toContainerAttributes(info, imageRefOf(olds.image));
       return output ? attrs : Unowned(attrs);
     }),
-    diff: Effect.fnUntraced(function* ({ news, olds }) {
+    diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
       const replaceShape = (props: ContainerProps) => ({
         name: props.name,
@@ -463,13 +463,7 @@ export const ContainerProvider = () =>
         return { action: "update" as const };
       }
     }),
-    reconcile: Effect.fnUntraced(function* ({
-      id,
-      instanceId,
-      news,
-      output,
-      session,
-    }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
       const name = yield* containerName(id, news, instanceId);
       const imageRef = imageRefOf(news.image);
       const live = yield* inspectContainerInfo(name);
@@ -495,7 +489,7 @@ export const ContainerProvider = () =>
       const created = yield* createAndInspect(name, imageRef, news);
       return toContainerAttributes(created, imageRef);
     }),
-    delete: Effect.fnUntraced(function* ({ output, session }) {
+    delete: Effect.fn(function* ({ output, session }) {
       yield* session.note(`Removing Docker container: ${output.name}`);
       yield* stopContainer(output.name);
       yield* removeContainer(output.name, true);

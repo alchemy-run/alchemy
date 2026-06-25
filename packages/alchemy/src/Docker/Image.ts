@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { hashDirectory, type MemoOptions } from "../Build/Memo.ts";
+import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -229,7 +229,7 @@ const comparableProps = (props: ImageProps | undefined) =>
 export const ImageProvider = () =>
   Provider.succeed(Image, {
     list: () => Effect.succeed([]),
-    read: Effect.fnUntraced(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output }) {
       const ref = output?.imageRef ?? localImageRef(id, olds);
       const image = yield* inspectImageInfo(ref);
       if (!image) return undefined;
@@ -244,7 +244,7 @@ export const ImageProvider = () =>
         contextHash: output?.contextHash,
       };
     }),
-    diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
+    diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
       if (!output) return undefined;
       const nextHash = yield* contextHash(news);
@@ -256,7 +256,7 @@ export const ImageProvider = () =>
         return { action: "update" as const };
       }
     }),
-    reconcile: Effect.fnUntraced(function* ({ id, news, session }) {
+    reconcile: Effect.fn(function* ({ id, news, session }) {
       const tag = news.tag ?? "latest";
       const ref = localImageRef(id, news);
       let currentImageId: string | undefined;
@@ -318,7 +318,7 @@ export const ImageProvider = () =>
         contextHash: nextContextHash,
       };
     }),
-    delete: Effect.fnUntraced(function* () {
+    delete: Effect.fn(function* () {
       // Docker images are intentionally left in place. Tags and image ids are
       // commonly shared by developer workflows outside Alchemy.
     }),

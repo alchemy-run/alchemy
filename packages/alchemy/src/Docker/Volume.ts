@@ -116,14 +116,14 @@ export const toVolumeAttributes = (info: VolumeInfo): Volume["Attributes"] => ({
 export const VolumeProvider = () =>
   Provider.succeed(Volume, {
     list: () => Effect.succeed([]),
-    read: Effect.fnUntraced(function* ({ id, instanceId, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
       const name = yield* volumeName(id, olds ?? {}, instanceId);
       const info = yield* inspectVolumeInfo(name);
       if (!info) return undefined;
       const attrs = toVolumeAttributes(info);
       return output ? attrs : Unowned(attrs);
     }),
-    diff: Effect.fnUntraced(function* ({ news, olds }) {
+    diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
       const oldComparable = {
         name: olds?.name,
@@ -141,13 +141,7 @@ export const VolumeProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
     }),
-    reconcile: Effect.fnUntraced(function* ({
-      id,
-      instanceId,
-      news,
-      output,
-      session,
-    }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
       const name =
         output?.name ?? (yield* volumeName(id, news ?? {}, instanceId));
       const existing = yield* inspectVolumeInfo(name);
@@ -169,7 +163,7 @@ export const VolumeProvider = () =>
       }
       return toVolumeAttributes(info);
     }),
-    delete: Effect.fnUntraced(function* ({ output, session }) {
+    delete: Effect.fn(function* ({ output, session }) {
       yield* session.note(`Removing Docker volume: ${output.name}`);
       yield* removeVolume(output.name);
     }),

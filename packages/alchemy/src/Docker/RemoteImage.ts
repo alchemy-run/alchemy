@@ -72,7 +72,7 @@ export const remoteImageRef = (props: RemoteImageProps): string =>
 export const RemoteImageProvider = () =>
   Provider.succeed(RemoteImage, {
     list: () => Effect.succeed([]),
-    read: Effect.fnUntraced(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const ref = output?.imageRef ?? remoteImageRef(olds);
       const image = yield* inspectImageInfo(ref);
       if (!image) return undefined;
@@ -85,13 +85,13 @@ export const RemoteImageProvider = () =>
         tag: olds.tag ?? "latest",
       };
     }),
-    diff: Effect.fnUntraced(function* ({ news, olds }) {
+    diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
       if (!deepEqual(olds, news) || news.alwaysPull !== false) {
         return { action: "update" as const };
       }
     }),
-    reconcile: Effect.fnUntraced(function* ({ news, session }) {
+    reconcile: Effect.fn(function* ({ news, session }) {
       const ref = remoteImageRef(news);
       yield* session.note(`Pulling Docker image: ${ref}`);
       yield* pullImage(ref, { platform: news.platform });
@@ -106,7 +106,7 @@ export const RemoteImageProvider = () =>
         tag: news.tag ?? "latest",
       };
     }),
-    delete: Effect.fnUntraced(function* () {
+    delete: Effect.fn(function* () {
       // Remote images are not removed on destroy because tags may be shared by
       // unrelated local stacks or developer workflows.
     }),

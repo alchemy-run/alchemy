@@ -95,14 +95,14 @@ export const toNetworkAttributes = (
 export const NetworkProvider = () =>
   Provider.succeed(Network, {
     list: () => Effect.succeed([]),
-    read: Effect.fnUntraced(function* ({ id, instanceId, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output }) {
       const name = yield* networkName(id, olds ?? {}, instanceId);
       const info = yield* inspectNetworkInfo(name);
       if (!info) return undefined;
       const attrs = toNetworkAttributes(info);
       return output ? attrs : Unowned(attrs);
     }),
-    diff: Effect.fnUntraced(function* ({ news, olds }) {
+    diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
       const oldComparable = {
         name: olds?.name,
@@ -120,13 +120,7 @@ export const NetworkProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
     }),
-    reconcile: Effect.fnUntraced(function* ({
-      id,
-      instanceId,
-      news,
-      output,
-      session,
-    }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
       const name =
         output?.name ?? (yield* networkName(id, news ?? {}, instanceId));
       const existing = yield* inspectNetworkInfo(name);
@@ -154,7 +148,7 @@ export const NetworkProvider = () =>
       }
       return toNetworkAttributes(info);
     }),
-    delete: Effect.fnUntraced(function* ({ output, session }) {
+    delete: Effect.fn(function* ({ output, session }) {
       yield* session.note(`Removing Docker network: ${output.name}`);
       yield* removeNetwork(output.id);
     }),
