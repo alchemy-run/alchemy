@@ -448,18 +448,20 @@ export const DockerLive = Layer.effect(
           const dir = yield* fs.makeTempDirectoryScoped({
             prefix: "alchemy-docker-",
           });
-          yield* fs.writeFileString(
-            path.join(dir, "config.json"),
-            JSON.stringify({
+          const config = yield* Effect.sync(() => {
+            const password = Redacted.isRedacted(credentials.password)
+              ? Redacted.value(credentials.password)
+              : credentials.password;
+            const auth = Buffer.from(
+              `${credentials.username}:${password}`,
+            ).toString("base64");
+            return JSON.stringify({
               auths: {
-                [credentials.server]: {
-                  auth: Buffer.from(
-                    `${credentials.username}:${Redacted.isRedacted(credentials.password) ? Redacted.value(credentials.password) : credentials.password}`,
-                  ).toString("base64"),
-                },
+                [credentials.server]: { auth },
               },
-            }),
-          );
+            });
+          });
+          yield* fs.writeFileString(path.join(dir, "config.json"), config);
           return yield* run(["push", ref], { DOCKER_CONFIG: dir });
         }, Effect.scoped),
       },

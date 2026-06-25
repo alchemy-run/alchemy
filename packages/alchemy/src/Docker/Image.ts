@@ -78,14 +78,13 @@ export interface Image extends Resource<
   "Docker.Image",
   ImageProps,
   {
-    kind: "Image";
     /** Image repository/name without tag. */
     name: string;
     /** Final image reference. Includes registry host when pushed there. */
     imageRef: string;
     /** Local image id after build/tag when available. */
     imageId?: string;
-    /** Registry repository digest after push when available. */
+    /** Registry digest after push when available. */
     repoDigest?: string;
     /** Tag used for the local image. */
     tag: string;
@@ -168,7 +167,6 @@ export const ImageProvider = () =>
             );
           if (!image) return undefined;
           return {
-            kind: "Image" as const,
             name: output?.name ?? repositoryFromImageRef(ref),
             imageRef: ref,
             imageId: image.Id,
@@ -250,7 +248,6 @@ export const ImageProvider = () =>
           }
 
           return {
-            kind: "Image" as const,
             name: repositoryFromImageRef(finalRef),
             imageRef: finalRef,
             imageId: currentImageId,
@@ -260,10 +257,17 @@ export const ImageProvider = () =>
             contextHash: nextContextHash,
           };
         }),
-        delete: Effect.fn(function* () {
-          // Docker images are intentionally left in place. Tags and image ids are
-          // commonly shared by developer workflows outside Alchemy.
-        }),
+        delete: Effect.fn(({ output }) =>
+          docker.image
+            .remove(output.imageRef)
+            .pipe(
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.void,
+              ),
+            ),
+        ),
       });
     }),
   );
