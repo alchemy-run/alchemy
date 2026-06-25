@@ -78,8 +78,8 @@ export const QueueSinkFunctionLive = QueueSinkFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(TestQueueLive, AWS.SQS.QueueSinkBinding),
-        Layer.mergeAll(AWS.SQS.SendMessageBatchBinding),
+        Layer.mergeAll(TestQueueLive, AWS.SQS.QueueSinkHttp),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchHttp),
       ),
     ),
   ),

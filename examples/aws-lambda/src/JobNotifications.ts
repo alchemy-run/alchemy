@@ -85,6 +85,6 @@ export const JobNotificationsSNS = Layer.effect(
   }),
 ).pipe(
   Layer.provideMerge(
-    Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishBinding),
+    Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishHttp),
   ),
 );

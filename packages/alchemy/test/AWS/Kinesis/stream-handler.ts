@@ -74,8 +74,8 @@ export default KinesisStreamFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(AWS.Lambda.StreamEventSource, AWS.SQS.QueueSinkBinding),
-        Layer.mergeAll(AWS.SQS.SendMessageBatchBinding, StreamAndQueueLive),
+        Layer.mergeAll(AWS.Lambda.StreamEventSource, AWS.SQS.QueueSinkHttp),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchHttp, StreamAndQueueLive),
       ),
     ),
   ),

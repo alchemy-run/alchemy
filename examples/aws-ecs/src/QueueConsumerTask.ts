@@ -32,8 +32,8 @@ export default class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()
       Layer.provideMerge(
         Layer.mergeAll(Server.SQSQueueEventSource, JobsQueueLive),
         Layer.mergeAll(
-          AWS.SQS.ReceiveMessageBinding,
-          AWS.SQS.DeleteMessageBatchBinding,
+          AWS.SQS.ReceiveMessageHttp,
+          AWS.SQS.DeleteMessageBatchHttp,
         ),
       ),
     ),

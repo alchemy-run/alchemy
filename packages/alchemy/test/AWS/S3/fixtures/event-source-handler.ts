@@ -99,8 +99,8 @@ export default BucketEventSourceFunction.make(
     Effect.provide(
       Layer.mergeAll(
         Lambda.BucketEventSource,
-        S3.PutObjectBinding,
-        S3.GetObjectBinding,
+        S3.PutObjectHttp,
+        S3.GetObjectHttp,
       ),
     ),
   ),

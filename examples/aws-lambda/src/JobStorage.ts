@@ -126,12 +126,12 @@ export const JobStorageDynamoDB = Layer.provideMerge(
       });
     }),
   ),
-  Layer.mergeAll(Lambda.TableEventSource, SQS.QueueSinkBinding).pipe(
+  Layer.mergeAll(Lambda.TableEventSource, SQS.QueueSinkHttp).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        DynamoDB.GetItemBinding,
-        DynamoDB.PutItemBinding,
-        SQS.SendMessageBatchBinding,
+        DynamoDB.GetItemHttp,
+        DynamoDB.PutItemHttp,
+        SQS.SendMessageBatchHttp,
       ),
     ),
   ),
@@ -218,12 +218,12 @@ export const JobStorageS3 = Layer.provideMerge(
       });
     }),
   ),
-  Layer.mergeAll(Lambda.BucketEventSource, SQS.QueueSinkBinding).pipe(
+  Layer.mergeAll(Lambda.BucketEventSource, SQS.QueueSinkHttp).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        S3.GetObjectBinding,
-        S3.PutObjectBinding,
-        SQS.SendMessageBatchBinding,
+        S3.GetObjectHttp,
+        S3.PutObjectHttp,
+        SQS.SendMessageBatchHttp,
       ),
     ),
   ),

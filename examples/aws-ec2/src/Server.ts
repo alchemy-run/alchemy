@@ -79,9 +79,9 @@ export default class Server extends AWS.EC2.Instance<Server>()(
       Layer.provideMerge(
         Layer.mergeAll(NetworkLive, SQSQueueEventSource),
         Layer.mergeAll(
-          AWS.SQS.DeleteMessageBatchBinding,
-          AWS.SQS.ReceiveMessageBinding,
-          AWS.SQS.SendMessageBinding,
+          AWS.SQS.DeleteMessageBatchHttp,
+          AWS.SQS.ReceiveMessageHttp,
+          AWS.SQS.SendMessageHttp,
         ),
       ),
     ),
