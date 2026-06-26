@@ -60,6 +60,7 @@ import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
+import { sha256 } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
@@ -501,7 +502,7 @@ export const LocalWorkerProvider = () =>
             props: news,
             bindings: newBindings,
           };
-          const signature = structuralSignature(options);
+          const signature = yield* structuralSignature(options);
           if (instances.get(options.id)?.signature === signature) {
             return { action: "noop" };
           }
@@ -576,7 +577,7 @@ export const LocalWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const options = { id, props: news as WorkerPropsWithDev, bindings };
-          const signature = structuralSignature(options);
+          const signature = yield* structuralSignature(options);
           const existing = instances.get(options.id);
           if (existing) {
             if (existing.signature === signature) {
@@ -745,9 +746,11 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
  * the dev Worker would never restart with the new bindings.
  *
  * A canonical JSON serialization (sorted keys, unwrapped `Redacted`,
- * cycle-safe) gives an exact comparison instead of a lossy fingerprint.
+ * cycle-safe) gives an exact comparison instead of a lossy fingerprint. We
+ * hash that serialization with SHA-256 so each retained signature is a fixed
+ * 64-char digest rather than a copy of the whole props/bindings blob.
  */
-const structuralSignature = (value: unknown): string => {
+const structuralSignature = (value: unknown): Effect.Effect<string> => {
   const seen = new WeakSet<object>();
   const normalize = (input: unknown): unknown => {
     if (typeof input === "bigint") return `bigint:${input.toString()}`;
@@ -768,7 +771,7 @@ const structuralSignature = (value: unknown): string => {
         ]),
     );
   };
-  return JSON.stringify(normalize(value));
+  return sha256(JSON.stringify(normalize(value)));
 };
 
 const toRuntimeAssets = (
