@@ -86,25 +86,68 @@ export interface RepoClient {
 }
 
 /**
- * Effect-native client for a Cloudflare Artifacts namespace binding.
- *
- * Wraps the runtime {@link Artifacts} binding so each method returns an
- * Effect tagged with {@link ArtifactsError}.
+ * Read-only client surface for an Artifacts namespace binding (look up + list).
  */
-export interface ReadWriteStoreClient {
+export interface ReadStoreClient {
+  /** Effect resolving to the raw Cloudflare runtime binding. */
+  raw: Effect.Effect<Artifacts, never, RuntimeContext>;
+  /** Look up an existing repo by name. Fails with `ArtifactsError` if missing. */
+  get(name: string): Effect.Effect<RepoClient, ArtifactsError, RuntimeContext>;
+  list(
+    opts?: ListOptions,
+  ): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, RuntimeContext>;
+}
+
+/**
+ * Write client surface for an Artifacts namespace binding (create / delete / import).
+ */
+export interface WriteStoreClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */
   raw: Effect.Effect<Artifacts, never, RuntimeContext>;
   create(
     name: string,
     opts?: CreateOptions,
   ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
-  /** Look up an existing repo by name. Fails with `ArtifactsError` if missing. */
-  get(name: string): Effect.Effect<RepoClient, ArtifactsError, RuntimeContext>;
-  list(
-    opts?: ListOptions,
-  ): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, RuntimeContext>;
   delete(name: string): Effect.Effect<boolean, ArtifactsError, RuntimeContext>;
   import(
     opts: ImportOptions,
   ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
 }
+
+/**
+ * Full read + write client for a Cloudflare Artifacts namespace binding.
+ */
+export interface ReadWriteStoreClient
+  extends ReadStoreClient, WriteStoreClient {}
+
+/**
+ * Bind a Cloudflare Artifacts namespace with read-only access
+ * (`Cloudflare.Artifacts.ReadStore(Repos)`): `get` / `list` / `raw`.
+ * @binding
+ * @product Artifacts
+ * @category Developer Platform
+ */
+export interface ReadStore extends Binding.Service<
+  ReadStore,
+  "Cloudflare.Artifacts.ReadStore",
+  (artifacts: ArtifactsLike) => Effect.Effect<ReadStoreClient>
+> {}
+export const ReadStore = Binding.Service<ReadStore>(
+  "Cloudflare.Artifacts.ReadStore",
+);
+
+/**
+ * Bind a Cloudflare Artifacts namespace with write access
+ * (`Cloudflare.Artifacts.WriteStore(Repos)`): `create` / `delete` / `import`.
+ * @binding
+ * @product Artifacts
+ * @category Developer Platform
+ */
+export interface WriteStore extends Binding.Service<
+  WriteStore,
+  "Cloudflare.Artifacts.WriteStore",
+  (artifacts: ArtifactsLike) => Effect.Effect<WriteStoreClient>
+> {}
+export const WriteStore = Binding.Service<WriteStore>(
+  "Cloudflare.Artifacts.WriteStore",
+);

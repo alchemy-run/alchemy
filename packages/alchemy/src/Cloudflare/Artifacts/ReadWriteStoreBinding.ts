@@ -4,66 +4,12 @@ import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
 import {
   ArtifactsError,
+  ReadStore,
+  ReadWriteStore,
   type ReadWriteStoreClient,
   type RepoClient,
-  ReadWriteStore,
+  WriteStore,
 } from "./ReadWriteStore.ts";
-
-/**
- * Implementation of the {@link ReadWriteStore} binding that uses a Worker
- * binding. Registers the `artifacts` binding on the host Worker at deploy time,
- * then exposes the Effect-native client.
- */
-export const ReadWriteStoreBinding = Layer.effect(
-  ReadWriteStore,
-  Effect.gen(function* () {
-    const env = yield* WorkerEnvironment;
-    const host = yield* Worker;
-
-    return Effect.fn(function* (artifacts: ArtifactsLike) {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* host.bind(artifacts.name, {
-          bindings: [
-            {
-              type: "artifacts",
-              name: artifacts.name,
-              namespace: artifacts.namespace,
-            } as any,
-          ],
-        });
-      }
-      const raw = Effect.sync(
-        () => (env as Record<string, Artifacts>)[artifacts.name]!,
-      );
-
-      const use = <T>(
-        fn: (raw: Artifacts) => Promise<T>,
-      ): Effect.Effect<T, ArtifactsError> =>
-        raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
-
-      return {
-        raw,
-        create: (name, opts) => use((raw) => raw.create(name, opts)),
-        get: (name) =>
-          use((raw) => raw.get(name)).pipe(
-            Effect.flatMap((repo) =>
-              repo == null
-                ? Effect.fail(
-                    new ArtifactsError({
-                      message: `Artifacts repo '${name}' not found`,
-                      cause: new Error("not_found"),
-                    }),
-                  )
-                : Effect.succeed(wrapRepo(repo as ArtifactsRepo)),
-            ),
-          ),
-        list: (opts) => use((raw) => raw.list(opts)),
-        delete: (name) => use((raw) => raw.delete(name)),
-        import: (opts) => use((raw) => raw.import(opts)),
-      } satisfies ReadWriteStoreClient;
-    });
-  }),
-);
 
 const tryPromise = <T>(
   fn: () => Promise<T>,
@@ -84,3 +30,69 @@ const wrapRepo = (raw: ArtifactsRepo): RepoClient => ({
   revokeToken: (tokenOrId) => tryPromise(() => raw.revokeToken(tokenOrId)),
   fork: (name, opts) => tryPromise(() => raw.fork(name, opts)),
 });
+
+/**
+ * Builds the full Artifacts client over the native worker binding. Each access
+ * level (Read / Write / ReadWrite) returns this same object typed to its subset
+ * — least-privilege by construction at the call site.
+ */
+const makeArtifactsClient = (
+  env: Record<string, Artifacts>,
+  artifacts: ArtifactsLike,
+): ReadWriteStoreClient => {
+  const raw = Effect.sync(() => env[artifacts.name]!);
+  const use = <T>(
+    fn: (raw: Artifacts) => Promise<T>,
+  ): Effect.Effect<T, ArtifactsError> =>
+    raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
+  return {
+    raw,
+    create: (name, opts) => use((raw) => raw.create(name, opts)),
+    get: (name) =>
+      use((raw) => raw.get(name)).pipe(
+        Effect.flatMap((repo) =>
+          repo == null
+            ? Effect.fail(
+                new ArtifactsError({
+                  message: `Artifacts repo '${name}' not found`,
+                  cause: new Error("not_found"),
+                }),
+              )
+            : Effect.succeed(wrapRepo(repo as ArtifactsRepo)),
+        ),
+      ),
+    list: (opts) => use((raw) => raw.list(opts)),
+    delete: (name) => use((raw) => raw.delete(name)),
+    import: (opts) => use((raw) => raw.import(opts)),
+  };
+};
+
+const makeBinding = <Self>(tag: Self) =>
+  Layer.effect(
+    tag as any,
+    Effect.gen(function* () {
+      const env = yield* WorkerEnvironment;
+      const host = yield* Worker;
+      return Effect.fn(function* (artifacts: ArtifactsLike) {
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* host.bind(artifacts.name, {
+            bindings: [
+              {
+                type: "artifacts",
+                name: artifacts.name,
+                namespace: artifacts.namespace,
+              } as any,
+            ],
+          });
+        }
+        return makeArtifactsClient(env as Record<string, Artifacts>, artifacts);
+      });
+    }),
+  ) as Layer.Layer<Self, never, Worker | WorkerEnvironment>;
+
+/** Read-only Artifacts binding (`get`/`list`/`raw`). */
+export const ReadStoreBinding = makeBinding(ReadStore);
+/** Write Artifacts binding (`create`/`delete`/`import`). */
+export const WriteStoreBinding = makeBinding(WriteStore);
+/** Full read + write Artifacts binding. */
+export const ReadWriteStoreBinding = makeBinding(ReadWriteStore);
