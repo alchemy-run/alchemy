@@ -5,15 +5,13 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Binding from "../../Binding.ts";
-import type { ResourceLike } from "../../Resource.ts";
+import * as Namespace from "../../Namespace.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { FunctionContext } from "../../Serverless/Function.ts";
 import * as DurationUtil from "../../Util/Duration.ts";
-import { isWorker, isWorkerEvent } from "../Workers/Worker.ts";
+import { isWorkerEvent, Worker } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
 import { Consumer } from "./Consumer.ts";
-import type { Providers } from "../Providers.ts";
 
 /**
  * Subscriber settings — the same shape Cloudflare's `Consumer`
@@ -173,60 +171,11 @@ export class EventSource extends Context.Service<
 >()("Cloudflare.Queues.EventSource") {}
 
 /**
- * Deploy-time policy that yields a `Cloudflare.Queues.Consumer`
- * resource pointing the host Worker at the queue. Provided in
- * `Cloudflare.providers()` and used by {@link EventSourceLive}
- * via `yield* EventSourcePolicy(...)`. At runtime the policy
- * is absent, so the call is a no-op.
- */
-export class EventSourcePolicy extends Binding.Policy<
-  EventSourcePolicy,
-  (queue: Queue, props: MessagesProps) => Effect.Effect<void>,
-  Providers
->()("Cloudflare.Queues.EventSource") {}
-
-export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
-  // Cast: yielding `Consumer(...)` requires the Cloudflare
-  // `Providers` services, which the deploy-time stack provides
-  // when this policy runs (the worker's init scope inherits the
-  // stack's services). `Binding.Policy.layer.succeed` types the
-  // body as `Effect<void, never, never>` to keep most policies
-  // simple; we step around that constraint here because we
-  // genuinely need to spawn a sibling resource at deploy time.
-  ((host: ResourceLike, queue: Queue, props: MessagesProps) =>
-    Effect.gen(function* () {
-      if (!isWorker(host)) {
-        return yield* Effect.die(
-          `Cloudflare.Queues.consumeQueueMessages(...) is only supported on ` +
-            `Cloudflare.Worker hosts (got '${host.Type}').`,
-        );
-      }
-      // Yield the Consumer resource as a sibling of the
-      // Worker. The engine creates / updates / destroys it
-      // alongside the Worker's lifecycle; the consumer's
-      // reconciler waits for the Worker upload to expose the
-      // `queue` handler before completing (see PR #257 for the
-      // 11001 retry).
-      yield* Consumer(`${queue.LogicalId}Consumer`, {
-        queueId: queue.queueId,
-        scriptName: host.workerName,
-        settings: toConsumerSettings(props),
-        deadLetterQueue: props.deadLetterQueue,
-      });
-    })) as unknown as (
-    host: ResourceLike,
-    queue: Queue,
-    props: MessagesProps,
-  ) => Effect.Effect<void>,
-);
-
-/**
  * Runtime layer for {@link consumeQueueMessages}. Wires each
  * `consumeQueueMessages(queue, handler)` call in the Worker init phase to
- * a `queue` event listener on the runtime context, and asks the
- * deploy-time policy ({@link EventSourcePolicy}, provided in
- * `Cloudflare.providers()`) to yield the matching
- * `Cloudflare.Queues.Consumer` resource.
+ * a `queue` event listener on the runtime context, and (at deploy
+ * time) yields the matching `Cloudflare.Queues.Consumer` resource so
+ * Cloudflare dispatches messages from the queue to this Worker.
  *
  * Provide alongside other Cloudflare runtime layers (e.g.
  * `WriteQueueBinding`) on the Worker effect.
@@ -234,7 +183,7 @@ export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
 export const EventSourceLive = Layer.effect(
   EventSource,
   Effect.gen(function* () {
-    const policy = yield* EventSourcePolicy;
+    const host = yield* Worker;
     return Effect.fn(function* <Body, Req>(
       queue: Queue,
       props: MessagesProps,
@@ -242,11 +191,30 @@ export const EventSourceLive = Layer.effect(
         stream: Stream.Stream<Message<Body>>,
       ) => Effect.Effect<void, unknown, any>,
     ) {
-      // Deploy-time: ensure the Consumer resource exists. At
-      // runtime this Layer's `policy` resolves to the no-op variant
-      // (Binding.Policy provides that automatically via
-      // `Effect.serviceOption`), so this becomes a no-op.
-      yield* policy(queue, props);
+      // Deploy-time: yield the Consumer resource as a sibling of the
+      // Worker so Cloudflare dispatches messages from the queue to it.
+      // Skipped once running inside the deployed Worker (the global
+      // guard), where the only work is registering the runtime handler
+      // below. Namespaced under the host so the Consumer's logical
+      // identity matches the previous Binding.Policy.
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* Namespace.push(
+          host.LogicalId,
+          Effect.gen(function* () {
+            // The engine creates / updates / destroys the Consumer
+            // alongside the Worker's lifecycle; the consumer's
+            // reconciler waits for the Worker upload to expose the
+            // `queue` handler before completing (see PR #257 for the
+            // 11001 retry).
+            yield* Consumer(`${queue.LogicalId}Consumer`, {
+              queueId: queue.queueId,
+              scriptName: host.workerName,
+              settings: toConsumerSettings(props),
+              deadLetterQueue: props.deadLetterQueue,
+            });
+          }),
+        );
+      }
 
       // Resolve the runtime context per-call rather than at layer
       // construction. Capturing it on the layer would leak the

@@ -3,7 +3,6 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
-import * as Binding from "../../Binding.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { Gateway as AiGateway } from "../AiGateway/AiGateway.ts";
@@ -18,7 +17,6 @@ import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { Images } from "../Images/Images.ts";
 import type { Namespace } from "../KV/Namespace.ts";
-import type { Providers } from "../Providers.ts";
 import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { RateLimitMarker } from "./RateLimit.ts";
@@ -28,7 +26,7 @@ import type { Assets } from "./Assets.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import type { VersionMetadata } from "./VersionMetadata.ts";
-import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
+import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
 
 export type WorkerBinding = Exclude<
@@ -103,34 +101,3 @@ export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   );
   return makeRpcStub<Shape>(stubEff);
 });
-
-/**
- * @binding
- * @product Workers
- * @category Workers & Compute
- */
-export class BindWorkerPolicy extends Binding.Policy<
-  BindWorkerPolicy,
-  (worker: Worker) => Effect.Effect<void>,
-  Providers
->()("Cloudflare.Worker.Bind") {}
-
-export const BindWorkerPolicyLive = BindWorkerPolicy.layer.succeed(
-  Effect.fn(function* (host, worker: Worker) {
-    if (isWorker(host)) {
-      yield* host.bind`${worker}`({
-        bindings: [
-          {
-            type: "service",
-            name: worker.LogicalId,
-            service: worker.workerName,
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        new Error(`BindWorkerPolicy does not support runtime '${host.Type}'`),
-      );
-    }
-  }),
-);

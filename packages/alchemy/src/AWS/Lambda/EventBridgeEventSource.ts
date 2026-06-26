@@ -2,7 +2,6 @@ import type * as lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Binding from "../../Binding.ts";
 import {
   EventSource as EventBridgeEventSource,
   matchesEventPattern,
@@ -13,7 +12,6 @@ import {
 } from "../EventBridge/EventSource.ts";
 import { toLambda as createLambdaRoute } from "../EventBridge/ToLambda.ts";
 import * as Lambda from "./Function.ts";
-import type { Providers } from "../Providers.ts";
 
 /**
  * Narrow an arbitrary Lambda invocation payload to an EventBridge event.
@@ -113,7 +111,6 @@ export const EventSource = Layer.effect(
   EventBridgeEventSource,
   Effect.gen(function* () {
     const host = yield* Lambda.Function;
-    const bind = yield* EventSourcePolicy;
 
     return Effect.fn(function* <
       Detail = unknown,
@@ -130,7 +127,13 @@ export const EventSource = Layer.effect(
         events: Stream.Stream<EventRecord<Detail>, never, StreamReq>,
       ) => Effect.Effect<void, never, Req>,
     ) {
-      yield* bind(descriptor);
+      // Deploy-time: create the backing EventBridge rule + Lambda permission
+      // targeting this function. Skipped once running inside the deployed
+      // Function (the global guard), where the only work is registering the
+      // runtime handler below.
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* createLambdaRoute(descriptor, host).pipe(Effect.asVoid);
+      }
 
       yield* host.listen(
         Effect.sync(() => (event: any) => {
@@ -146,39 +149,4 @@ export const EventSource = Layer.effect(
       );
     }) as EventSourceService;
   }),
-);
-
-/**
- * Deploy-time policy/service bridge for EventBridge subscriptions.
- *
- * Runtime-specific implementations use this to materialize the infrastructure
- * wiring required by `consumeBusEvents(...)`.
- */
-export class EventSourcePolicy extends Binding.Policy<
-  EventSourcePolicy,
-  (
-    descriptor: Parameters<EventSourceService>[0],
-  ) => Effect.Effect<void, never, any>,
-  Providers
->()("AWS.EventBridge.EventSource") {}
-
-/**
- * Lambda-specific EventBridge subscription wiring.
- *
- * Subscribing a Lambda function to an EventBridge pattern creates a backing
- * rule with `toLambda(host)` so the function can receive matching events
- * without manual rule/permission setup.
- */
-export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
-  Effect.fn(function* (host, descriptor) {
-    if (Lambda.isFunction(host)) {
-      yield* createLambdaRoute(descriptor, host).pipe(Effect.asVoid);
-    } else {
-      return yield* Effect.die(
-        new Error(
-          `EventBridge EventSource does not support runtime '${host.Type}'`,
-        ),
-      );
-    }
-  }) as any,
 );

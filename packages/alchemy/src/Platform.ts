@@ -11,7 +11,6 @@ import type { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import type { PolicyLike } from "./Binding.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
@@ -100,7 +99,6 @@ export type PlatformServices =
   | NodeServices
   | ExecutionContext
   | HttpClient
-  | PolicyLike
   | Provider<any>
   | ProviderCollectionLike
   | Scope

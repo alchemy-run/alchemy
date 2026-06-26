@@ -211,23 +211,27 @@ same `Stream` you'd write in a plain Effect program.
 
 ## How it works under the hood
 
-Internally each binding splits into two layers — and which one runs
-depends on the [phase](/concepts/phases):
+Each binding is a single `Binding.Service` — the typed SDK wrapper
+that gets bundled into your function (this is what `bucket.get(...)`
+actually calls). Its setup Effect also performs the deploy-time wiring
+(IAM, Worker bindings, env vars), guarded so it only runs at plan time:
 
-- **`Binding.Service`** — the runtime SDK wrapper that gets bundled
-  into your function. This is what `bucket.get(...)` actually calls.
-- **`Binding.Policy`** — the deploy-time logic that emits IAM,
-  Worker bindings, and env vars. This is **not** included in the
-  runtime bundle.
+```typescript
+if (!globalThis.__ALCHEMY_RUNTIME__) {
+  // deploy-time only: register IAM / native bindings / env on the host
+  yield* host.bind`${resource}`(/* … */);
+}
+// always: return the typed runtime client
+```
 
-At plantime the Policy layer is provided, so `bind()` records what
-the function needs. At runtime the Policy layer is absent, so the
-same call resolves to just the lightweight Service wrapper. The
-runtime bundle stays small because none of the planning code ships.
+At plantime the guard is open, so `bind()` records what the function
+needs. At runtime (`globalThis.__ALCHEMY_RUNTIME__` is set) the guard
+is skipped, so the same call resolves to just the lightweight client.
+The runtime bundle stays small because the planning branch never runs.
 
-See [Plantime and Runtime › `Binding.Service` vs
-`Binding.Policy`](/concepts/phases#bindingservice-vs-bindingpolicy)
-for a deeper look.
+See [Plantime and Runtime › The `__ALCHEMY_RUNTIME__`
+guard](/concepts/phases#the-__alchemy_runtime__-guard) for a deeper
+look.
 
 ## All of Effect, on every binding
 

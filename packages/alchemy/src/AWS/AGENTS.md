@@ -237,7 +237,7 @@ Binding conventions:
 - never use `Resource: ["*"]` for a resource-bound binding if it can be avoided by passing canonical resources to `.bind(...)`
 - if an operation touches `1..*` canonical resources, model the binding to accept those resources explicitly so the policy can enumerate only those ARNs
 - `Resource: ["*"]` is only acceptable when the operation is truly service-scoped or AWS does not support narrower resource-level IAM for that API
-- do not add IAM `Sid` fields in `Binding.Policy` statements unless there is a demonstrated AWS requirement for one
+- do not add IAM `Sid` fields in binding policy statements unless there is a demonstrated AWS requirement for one
 
 Example:
 

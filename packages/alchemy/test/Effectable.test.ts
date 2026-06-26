@@ -60,17 +60,6 @@ describe("Effectable: migrated constructs are real Effects", () => {
   );
 
   test(
-    "Binding.Policy is an Effect",
-    Effect.gen(function* () {
-      const Policy = Binding.Policy<
-        any,
-        (resource: any) => Effect.Effect<void>
-      >()("Test.EffectablePolicy");
-      expect(Effect.isEffect(Policy)).toBe(true);
-    }),
-  );
-
-  test(
     "Platform/Worker construct is an Effect",
     Effect.gen(function* () {
       const w = Worker("EffectableProbeWorker", { main: "./unused.ts" });

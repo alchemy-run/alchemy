@@ -10,11 +10,8 @@ export * from "./AlchemyContext.ts";
 export * from "./Apply.ts";
 export {
   Service as BindingService,
-  Policy,
   type ServiceLike as BindingServiceLike,
   type ServiceShape as BindingServiceShape,
-  type PolicyLike,
-  type PolicyShape,
 } from "./Binding.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";
