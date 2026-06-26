@@ -61,7 +61,7 @@ export default Cloudflare.Worker(
   "Api",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     const queueResource = yield* Queue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
@@ -93,7 +93,7 @@ expected to return `Effect.Effect<void>`.
 +}
 
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     const queueResource = yield* Queue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
