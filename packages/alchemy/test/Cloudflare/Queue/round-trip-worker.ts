@@ -61,7 +61,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
   Effect.gen(function* () {
     const counters = yield* Counter;
     const queueResource = yield* RoundTripQueue;
-    const queue = yield* Cloudflare.QueueBinding.bind(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
     // Effect-style queue consumer. The handler delegates to the
     // Counter DO so the test can verify the message landed by
@@ -110,7 +110,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
       }),
     };
   }).pipe(
-    Effect.provide(Cloudflare.QueueBindingLive),
+    Effect.provide(Cloudflare.Queues.WriteQueueBinding),
     Effect.provide(Cloudflare.QueueEventSourceLive),
   ),
 ) {}

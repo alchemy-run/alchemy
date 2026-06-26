@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 type TransactGetItemsTables = [Table, ...Table[]];
 
@@ -89,15 +90,17 @@ export const TransactGetItemsLive = Layer.effect(
         ),
       );
 
-      const getTableName = (tableId: string) => {
+      const getTableName = Effect.fn(function* (tableId: string) {
         const TableName = tableNames.get(tableId);
         if (!TableName) {
-          throw new Error(
-            `TransactGetItems request references unbound table '${tableId}'`,
+          return yield* Effect.die(
+            new Error(
+              `TransactGetItems request references unbound table '${tableId}'`,
+            ),
           );
         }
-        return TableName;
-      };
+        return yield* TableName;
+      });
 
       yield* Policy(...sortedTables);
 
@@ -126,7 +129,8 @@ export const TransactGetItemsLive = Layer.effect(
 
 export class TransactGetItemsPolicy extends Binding.Policy<
   TransactGetItemsPolicy,
-  (...tables: TransactGetItemsTables) => Effect.Effect<void>
+  (...tables: TransactGetItemsTables) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.TransactGetItems") {}
 
 export const TransactGetItemsPolicyLive = TransactGetItemsPolicy.layer.succeed(

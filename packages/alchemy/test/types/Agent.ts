@@ -17,88 +17,85 @@ const _agentEff = Effect.gen(function* () {
 
 const _gen = Effect.gen(function* () {
   // bind the Sandbox Container to the Agent DO
-  const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+  const sandbox = yield* Sandbox;
 
   return Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
 
     // get the container instance
-    const container = yield* Cloudflare.start(sandbox, {
-      enableInternet: true,
-    });
-
-    container.getTcpPort(1080);
-    container.getUser();
+    sandbox.getTcpPort(1080);
+    sandbox.getUser();
 
     return {
       getProfile: () => state.storage.get<string>("Profile"),
     };
-  });
+  }).pipe(
+    Effect.provide(
+      Cloudflare.layerContainer(Sandbox, {
+        enableInternet: true,
+      }),
+    ),
+  );
 });
 
 export const Agent2 = Cloudflare.DurableObjectNamespace(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Sandbox;
+    const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
-      // get the container instance
-      const container = yield* Cloudflare.start(sandbox, {
-        enableInternet: true,
-      });
-
-      container.getTcpPort(1080);
-      container.getUser();
+      sandbox.getTcpPort(1080);
+      sandbox.getUser();
 
       return {
         getProfile: () => state.storage.get<string>("Profile"),
       };
     });
-  }),
+  }).pipe(
+    Effect.provide(
+      Cloudflare.layerContainer(Sandbox, {
+        enableInternet: true,
+      }),
+    ),
+  ),
 );
 
 export class Agent3 extends Cloudflare.DurableObjectNamespace<Agent3>()(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Sandbox;
+    const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       // get the container instance
-      const container = yield* Cloudflare.start(sandbox, {
-        enableInternet: true,
-      });
-
-      container.getTcpPort(1080);
-      container.getUser();
+      sandbox.getTcpPort(1080);
+      sandbox.getUser();
 
       return {
         getProfile: () => state.storage.get<string>("Profile"),
       };
     });
-  }),
+  }).pipe(
+    Effect.provide(
+      Cloudflare.layerContainer(Sandbox, {
+        enableInternet: true,
+      }),
+    ),
+  ),
 ) {}
 
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Sandbox;
+    const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
-      // get the container instance
-      const container = yield* Cloudflare.start(sandbox, {
-        enableInternet: true,
-      });
-
-      const connection = yield* container.getTcpPort(1080);
+      const connection = yield* sandbox.getTcpPort(1080);
 
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
@@ -111,7 +108,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
 
       return {
         getProfile: () => state.storage.get<string>("Profile"),
-        putProfile: Effect.fnUntraced(function* (value: string) {
+        putProfile: Effect.fn(function* (value: string) {
           yield* state.storage.put("Profile", value);
         }),
         eval: (code: string) =>
@@ -132,7 +129,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           sessions.set(id, socket);
           return response;
         }),
-        webSocketMessage: Effect.fnUntraced(function* (
+        webSocketMessage: Effect.fn(function* (
           socket: Cloudflare.DurableWebSocket,
           message: string | Uint8Array,
         ) {
@@ -146,7 +143,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
             yield* peer.send(`[${session.id}] ${text}`);
           }
         }),
-        webSocketClose: Effect.fnUntraced(function* (
+        webSocketClose: Effect.fn(function* (
           ws: Cloudflare.DurableWebSocket,
           code: number,
           reason: string,
@@ -160,5 +157,11 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
         }),
       };
     });
-  }),
+  }).pipe(
+    Effect.provide(
+      Cloudflare.layerContainer(Sandbox, {
+        enableInternet: true,
+      }),
+    ),
+  ),
 ) {}

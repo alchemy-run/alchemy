@@ -26,11 +26,11 @@ const DEVSERVER_PARENT_TS = fileURLToPath(
   new URL("./fixtures/rpc-spawner-devserver-parent.ts", import.meta.url),
 );
 const DEVSERVER_SIDECAR_TS_URL = new URL(
-  "../../src/Build/Local.ts",
+  "../../src/Command/Local.ts",
   import.meta.url,
 ).toString();
 const LONG_RUNNING_CJS = fileURLToPath(
-  new URL("../Build/fixture/long-running.cjs", import.meta.url),
+  new URL("../Command/fixture/long-running.cjs", import.meta.url),
 );
 
 for (const runtime of runtimes()) {

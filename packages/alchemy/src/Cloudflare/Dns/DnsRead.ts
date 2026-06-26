@@ -13,11 +13,12 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { Zone } from "../Zone/Zone.ts";
 import {
-  authorizeDns,
   type DnsToken,
   makeDnsClient,
   makeDnsPolicyLive,
 } from "./DnsBinding.ts";
+import { authorizeWith } from "../HttpClientUtils.ts";
+import type { Providers } from "../Providers.ts";
 
 /** List-records request, minus the zone id (bound at `.bind(zone)` time). */
 export type ListRecordsRequestInput = Omit<ListRecordsRequest, "zoneId">;
@@ -42,7 +43,7 @@ export const dnsReadClient = (
   token: DnsToken,
   zoneId: Effect.Effect<string>,
 ): DnsReadClient => {
-  const authorize = authorizeDns(token);
+  const authorize = authorizeWith(token);
   return {
     getDnsRecord: Effect.fn("Cloudflare.Dns.getDnsRecord")(
       function* (dnsRecordId) {
@@ -114,7 +115,8 @@ export class DnsRead extends Binding.Service<
  */
 export class DnsReadPolicy extends Binding.Policy<
   DnsReadPolicy,
-  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
+  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.DnsRead") {}
 
 /** Runtime layer for {@link DnsRead}. */

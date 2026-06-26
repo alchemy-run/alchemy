@@ -22,10 +22,9 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Pre-Create** - an optional operation that creates a stub of a Resource before reconcile runs. Used to resolve circular dependencies — e.g. Function A and B depend on each other, so we create a stub of Function A first and then `reconcile` later wires up the real dependency.
 - **Reconcile** - converges a Resource's actual cloud state to the desired state described by the new Input Properties. Called for both first-time provisioning and subsequent updates. The provider receives `output` (current Attributes) and `olds` (previous Props) which may both be `undefined` on a greenfield create, both defined on an update, or `output !== undefined && olds === undefined` on an adoption. See the **Reconciler doctrine** section below for the required shape.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
-- **Capability** - a runtime requirement of a Function (e.g. require `SQS.SendMessage` on a `SQS.Queue`). Each Capability is split into two parts: a `Binding.Service` (runtime SDK wrapper) and a `Binding.Policy` (deploy-time IAM/binding attachment).
-- **Binding.Service** - an Effect Service that wraps an SDK client and exposes a `.bind(resource)` method returning a typed callable for runtime use. Provided as a Layer on the **Function** Effect so it gets bundled into the Lambda/Worker. See [Binding](./packages/alchemy/src/Binding.ts).
-- **Binding.Policy** - an Effect Service that runs only at deploy time to attach IAM policies (AWS) or bindings (Cloudflare) to a Function's role/config. At runtime, `Binding.Policy` uses `Effect.serviceOption` so it gracefully becomes a no-op when the layer is not provided. Policy layers are provided on the **Stack** via `AWS.providers()()`, not on the Function.
-- **Binding** - data attached to a Resource via `resource.bind(data)`. A Binding is a `{ context: PolicyContext, data: BindingData }` tuple that is collected on the Stack during plan/deploy. Bindings enable circular references between Resources — the `Binding.Policy` calls `ctx.bind({ policyStatements: [...] })` on the target Function, which records the binding data on the Stack. The Resource Provider then receives the resolved binding data in its `reconcile` lifecycle operation via the `bindings` parameter.
+- **Capability** - a runtime requirement of a Function (e.g. require read access to an `R2Bucket`, or `SQS.SendMessage` on a `SQS.Queue`). A Capability is modeled as one or more `Binding.Service`s. Where the underlying API distinguishes access levels, split it into `Read` / `Write` / `ReadWrite` services (see the **Read/Write/ReadWrite binding convention** below); otherwise a single service suffices. Each service typically ships two interchangeable implementations: a native **binding** (`*Binding`) and a token-scoped **HTTP** client (`*Http`).
+- **Binding.Service** - an Effect Service that exposes a `.bind(resource)` method returning a typed runtime client. Its outer (init) Effect resolves the host Function/Worker and its environment, then registers the deploy-time binding — environment variables, IAM policy statements (AWS), or a native Cloudflare binding — by calling ``host.bind`${resource}`(data)``, guarded by `!globalThis.__ALCHEMY_RUNTIME__` so it is a no-op once running inside the deployed Function/Worker. Provided as a Layer on the **Function/Worker** Effect so it gets bundled into the Lambda/Worker. See [Binding](./packages/alchemy/src/Binding.ts).
+- **Binding** - data attached to a target Function/Worker via ``host.bind`${resource}`(data)`` from inside a `Binding.Service`. The binding data is collected on the Stack during plan/deploy. Bindings enable circular references between Resources — e.g. a capability binds `{ policyStatements: [...] }` (AWS) or `{ bindings: [...] }` (Cloudflare) onto the host. The Resource Provider then receives the resolved binding data in its `reconcile` lifecycle operation via the `bindings` parameter.
 - **Binding Contract** - the shape of data a Resource accepts from Bindings. For example, a Lambda Function accepts `{ env?: Record<string, any>, policyStatements?: PolicyStatement[] }` because it needs environment variables and IAM policies. A Cloudflare Worker accepts `{ bindings: Worker.Binding[] }` for its native binding system. The Binding Contract is declared as the fourth type parameter on the `Resource` interface. See [Lambda Function](./packages/alchemy/src/AWS/Lambda/Function.ts) and [Cloudflare Worker](./packages/alchemy/src/Cloudflare/Workers/Worker.ts).
 - **Dependency** - Resources depend on other Resources through two mechanisms:
   - Output Properties of one Resource passed as Input Properties to another Resource (non-circular, directed acyclic graph)
@@ -39,7 +38,7 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Physical Name** - a unique name for a Resource, e.g. `my-bucket-1234567890`. It is usually best to generate them using the built-in createPhysicalName utility function which generates
 - **Logical ID** - the logical ID identifying a resource within a Stack, e.g. `my-bucket`. It is stable across creates, updates, deletes and replaces.
 - **Instance ID** - a unique identifier for an instance of a Resource. It is stable across creates, updates and deletes. It changes when a resource is replaced. It is truncated and used as the suffix of the Physical Name.
-- **Event Source** - a special kind of Binding between a Function and a Resource that produces events that invoke the Function, e.g. `SQS.QueueEventSource`. Event Sources are implemented as Binding.Service + Binding.Policy pairs, where the attach logic creates/updates the event source mapping via the cloud provider API.
+- **Event Source** - a special kind of Binding between a Function and a Resource that produces events that invoke the Function, e.g. `SQS.QueueEventSource`. Implemented as a `Binding.Service` whose init Effect both registers the runtime event listener on the host and, at deploy time, yields the event-source mapping resource (or calls the cloud provider API to create/update it).
 - **Replacement** - the process of replacing a Resource with a new one. A new one is created, downstream dependencies are updated with the new reference, and then the old one is deleted. Or, the old one is deleted first and then the new one is created.
 - **Dependency Violation** - an error that some APIs call when an operation cannot be performed because a dependency is not met. E.g. you cannot delete an EIP until the NAT Gateway it is attached to is deleted. Lifecycle operations typically retry Dependency Violations.
 - **Eventual Consistency** - create/update/delete operations can be eventually consistent leading to a variety of failure modes. For example, a Resource may be created but not yet available for use, or a Resource may be deleted but still appear in the console. Errors caused by eventual consistency should be retried, and lifecycle operations/tests should be carefully designed to wait for consistency before proceeding.
@@ -49,25 +48,42 @@ A Resource Provider implements the following Lifecycle Operations:
 
 # File System Conventions
 
-Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Capabilities (Binding.Service + Binding.Policy) are in separate files named after the capability.
+Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Each Capability lives in its own file(s) named after the capability and access level (`Binding.Service` contract + the `*Binding` / `*Http` implementations).
 
 ```sh
 # source files
-packages/alchemy/src/{Cloud}/{Service}/index.ts         # re-exports all resources and capabilities
+packages/alchemy/src/{Cloud}/{Service}/index.ts         # re-exports resources, capability contracts, and impl layers
 packages/alchemy/src/{Cloud}/{Service}/{Resource}.ts    # resource contract + resource provider
-packages/alchemy/src/{Cloud}/{Service}/{Capability}.ts  # Binding.Service + Binding.Policy for a capability
+packages/alchemy/src/{Cloud}/{Service}/{Capability}.ts  # Binding.Service contract + runtime client interface
 # test files
 packages/alchemy/test/{Cloud}/{Service}/{Resource}.test.ts
 # docs (auto-generated from source-code JSDoc - DO NOT manually edit)
 website/src/content/docs/providers/{Cloud}/{Resource}.md  # API reference, generated by `bun generate:api-reference`
 ```
 
+A capability that exposes distinct access levels is split into a contract per level plus interchangeable native-binding and HTTP implementations, with shared scaffolding kept in *un-exported* helper files (see the **Read/Write/ReadWrite binding convention** below). For example, the Cloudflare R2 bucket capability:
+
+```sh
+packages/alchemy/src/Cloudflare/R2/BucketTypes.ts          # shared types + error (exported)
+packages/alchemy/src/Cloudflare/R2/BucketRead.ts           # BucketRead Binding.Service + ReadBucketClient (exported)
+packages/alchemy/src/Cloudflare/R2/BucketWrite.ts          # BucketWrite Binding.Service + WriteBucketClient (exported)
+packages/alchemy/src/Cloudflare/R2/BucketReadWrite.ts      # BucketReadWrite Binding.Service + ReadWriteBucketClient (exported)
+packages/alchemy/src/Cloudflare/R2/BucketBinding.ts        # shared worker-binding scaffolding (NOT exported from index)
+packages/alchemy/src/Cloudflare/R2/BucketReadBinding.ts    # ReadBucketBinding layer + makeRead (exported)
+packages/alchemy/src/Cloudflare/R2/BucketWriteBinding.ts   # WriteBucketBinding layer + makeWrite (exported)
+packages/alchemy/src/Cloudflare/R2/BucketReadWriteBinding.ts # ReadWriteBucketBinding layer (exported)
+packages/alchemy/src/Cloudflare/R2/BucketHttp.ts           # shared HTTP/token scaffolding (NOT exported from index)
+packages/alchemy/src/Cloudflare/R2/BucketReadHttp.ts       # ReadBucketHttp layer (exported)
+packages/alchemy/src/Cloudflare/R2/BucketWriteHttp.ts      # WriteBucketHttp layer (exported)
+packages/alchemy/src/Cloudflare/R2/BucketReadWriteHttp.ts  # ReadWriteBucketHttp layer (exported)
+```
+
 Examples of actual paths:
 
 ```sh
 packages/alchemy/src/AWS/S3/Bucket.ts          # S3 Bucket resource + provider
-packages/alchemy/src/AWS/S3/GetObject.ts       # S3 GetObject Binding.Service + Binding.Policy
-packages/alchemy/src/AWS/S3/PutObject.ts       # S3 PutObject Binding.Service + Binding.Policy
+packages/alchemy/src/AWS/S3/GetObject.ts       # S3 GetObject capability (Binding.Service)
+packages/alchemy/src/AWS/S3/PutObject.ts       # S3 PutObject capability (Binding.Service)
 packages/alchemy/src/AWS/SQS/Queue.ts          # SQS Queue resource + provider
 packages/alchemy/src/AWS/SQS/SendMessage.ts    # SQS SendMessage capability
 packages/alchemy/src/AWS/Kinesis/Stream.ts     # Kinesis Stream resource + provider
@@ -437,44 +453,73 @@ export interface LoadBalancerProps {
 `Input<T>` in a *function signature* is still legitimate when the function genuinely receives unresolved values at runtime (e.g. helpers that resolve tag maps, or `DurableObjectNamespace.from(scriptName: Input<string>)`).
 :::
 
-7. Implement the Capabilities as `Binding.Service` + `Binding.Policy` pairs in `packages/alchemy/src/{Cloud}/{Service}/{Capability}.ts`.
+7. Implement each Capability as a `Binding.Service` in `packages/alchemy/src/{Cloud}/{Service}/{Capability}.ts`.
 
-Each capability has two parts:
+A single `Binding.Service` does both halves of a capability in one Effect:
 
-- **`Binding.Service`** — runtime SDK wrapper, provided on the Function Effect (bundled into Lambda/Worker)
-- **`Binding.Policy`** — deploy-time IAM policy attachment, provided on the Stack via `AWS.providers()()` (never bundled)
+- **Init (outer) Effect** — resolves the host Function/Worker and its environment, then registers the deploy-time binding by calling ``host.bind`${resource}`(data)`` (environment variables + IAM policy statements for AWS, native bindings for Cloudflare), guarded by `!globalThis.__ALCHEMY_RUNTIME__` so it becomes a no-op once running inside the deployed Function/Worker.
+- **Runtime (inner) callable** — the typed client returned to the caller; its methods require `Alchemy.RuntimeContext` (see below).
+
+There is no separate deploy-time policy object and nothing to register in `providers()` — the implementation layer is provided directly on the Function/Worker Effect.
 
 Read through the established capabilities to understand the pattern:
 
-- [S3 GetObject](./packages/alchemy/src/AWS/S3/GetObject.ts) — `Binding.Service` + `Binding.Policy`
-- [S3 PutObject](./packages/alchemy/src/AWS/S3/PutObject.ts) — `Binding.Service` + `Binding.Policy`
-- [SQS SendMessage](./packages/alchemy/src/AWS/SQS/SendMessage.ts) — `Binding.Service` + `Binding.Policy`
-- [DynamoDB GetItem](./packages/alchemy/src/AWS/DynamoDB/GetItem.ts) — `Binding.Service` + `Binding.Policy`
-- [Kinesis PutRecord](./packages/alchemy/src/AWS/Kinesis/PutRecord.ts) — `Binding.Service` + `Binding.Policy`
-- [Lambda InvokeFunction](./packages/alchemy/src/AWS/Lambda/InvokeFunction.ts) — `Binding.Service` + `Binding.Policy`
+- [S3 GetObject](./packages/alchemy/src/AWS/S3/GetObject.ts), [S3 PutObject](./packages/alchemy/src/AWS/S3/PutObject.ts)
+- [SQS SendMessage](./packages/alchemy/src/AWS/SQS/SendMessage.ts), [DynamoDB GetItem](./packages/alchemy/src/AWS/DynamoDB/GetItem.ts)
+- [Kinesis PutRecord](./packages/alchemy/src/AWS/Kinesis/PutRecord.ts), [Lambda InvokeFunction](./packages/alchemy/src/AWS/Lambda/InvokeFunction.ts)
+- Access-split Cloudflare capabilities: [R2 Bucket](./packages/alchemy/src/Cloudflare/R2/), [KV Namespace](./packages/alchemy/src/Cloudflare/KV/), [Queue](./packages/alchemy/src/Cloudflare/Queue/)
 
 For Event Sources, see:
 
 - [SQS QueueEventSource](./packages/alchemy/src/AWS/SQS/QueueEventSource.ts)
 - [S3 BucketEventSource](./packages/alchemy/src/AWS/S3/BucketEventSource.ts)
 
-The `Binding.Policy` implementation calls `ctx.bind({ policyStatements: [...] })` on the target Function, which records binding data on the Stack. The `Binding.Service` implementation resolves the Policy via `yield* Policy(resource)`, then returns a typed callable that wraps the SDK client. At runtime, the Policy is not provided and becomes a no-op.
-
-Each capability exports four things:
+Each capability exports its contract plus one or more implementation layers:
 
 ```ts
-// 1. The Binding.Service class
+// 1. The Binding.Service class (the contract) + a bind alias for ergonomic use
 export class PutRecord extends Binding.Service<...>()("AWS.Kinesis.PutRecord") {}
+export const putRecord = PutRecord.bind;
 
-// 2. The Binding.Service Live layer (provided on Function Effect)
-export const PutRecordLive = Layer.effect(PutRecord, ...);
-
-// 3. The Binding.Policy class
-export class PutRecordPolicy extends Binding.Policy<...>()("AWS.Kinesis.PutRecord") {}
-
-// 4. The Binding.Policy Live layer (provided on Stack via AWS.providers()())
-export const PutRecordPolicyLive = Layer.effect(PutRecordPolicy, ...);
+// 2. The implementation layer — resolves the host + environment, registers the
+//    binding inline (guarded by __ALCHEMY_RUNTIME__), and returns the runtime client.
+export const PutRecordLive = Layer.effect(
+  PutRecord,
+  Effect.gen(function* () {
+    const host = yield* Worker; // or the AWS Function host
+    const env = yield* WorkerEnvironment; // or Lambda.FunctionEnvironment
+    return Effect.fn(function* (stream: Stream) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        // AWS: { policyStatements: [...] }   Cloudflare: { bindings: [...] }
+        yield* host.bind`${stream}`({ policyStatements: [...] });
+      }
+      return /* typed runtime client closing over `env` */;
+    });
+  }),
+);
 ```
+
+Provide the implementation layer on the **Function/Worker** Effect (`Effect.provide(PutRecordLive)`).
+
+### Read/Write/ReadWrite binding convention
+
+When a capability's API distinguishes access levels (R2 `head`/`get`/`list` vs `put`/`delete`; KV `get`/`getWithMetadata`/`list` vs `put`/`delete`), split it into three `Binding.Service`s so consumers can request least privilege, each with two interchangeable implementations:
+
+- **`{Cap}Read.ts` / `{Cap}Write.ts` / `{Cap}ReadWrite.ts`** — the `Binding.Service` class + runtime client interface + a `bind` alias (e.g. `ReadBucket = BucketRead.bind`). `ReadWrite`'s client interface `extends` both the `Read` and `Write` client interfaces.
+- **`{Cap}Binding.ts`** — *shared* worker-binding scaffolding: a `make{Cap}Binding({ makeClient })` that resolves `WorkerEnvironment` + host `Worker`, registers the native binding via ``host.bind`${resource}`(...)`` (guarded by `__ALCHEMY_RUNTIME__`), plus a `make{Cap}Helpers` returning the low-level `raw`/`use`/`tryPromise` primitives. **Do NOT export this file from `index.ts`.**
+- **`{Cap}ReadBinding.ts` / `{Cap}WriteBinding.ts` / `{Cap}ReadWriteBinding.ts`** — `Layer.effect` implementations over the native binding (`ReadBucketBinding`, …) plus the `makeRead`/`makeWrite` client builders. `ReadWrite` composes the read + write builders.
+- **`{Cap}Http.ts`** — *shared* HTTP/token scaffolding: a `makeHttp{Cap}Binding({ permissionGroups, makeClient })` that mints a scoped `AccountApiToken` with the right permission groups, binds the token's `value`/`accountId` into the Worker, and resolves the per-operation scope. **Do NOT export this file from `index.ts`.**
+- **`{Cap}ReadHttp.ts` / `{Cap}WriteHttp.ts` / `{Cap}ReadWriteHttp.ts`** — `Layer.effect` implementations over the cloud's HTTP API (`ReadBucketHttp`, …). Operations the HTTP API can't support `Effect.die` with a typed error.
+
+Rules:
+
+- **Keep shared scaffolding internal.** Re-export only the contracts, the per-level layers, and the client builders from `index.ts`. Exporting `{Cap}Binding.ts`/`{Cap}Http.ts` leaks generic helper names into the flat `Cloudflare`/`AWS` namespace and collides across services.
+- **Use service-unique helper names.** Avoid generic `makeHelpers`/`makeWrite`; prefix with the capability (`makeQueueHelpers`, `makeWriteQueueClient`) so re-exported builders never clash.
+- **Namespace the public surface.** Export the service both flatly and as a namespace (`export * as KV from "./KV/index.ts"`) so callers write `Cloudflare.KV.ReadWriteNamespace(ns)`. The bind-alias callables drop the redundant service prefix (`ReadWriteNamespace`, not `ReadWriteKVNamespace`); the underlying classes/interfaces keep it (`KVNamespaceReadWrite`, `ReadWriteKVNamespaceClient`).
+- **No resource-level `bind`.** The Resource is plain `Resource<T>("Cloud.Type")` with no `bind:` field; callers bind via the namespaced capability, not `resource.bind`.
+- **Single-mode capabilities stay single.** A producer-only capability (e.g. Cloudflare Queue's send-only producer, which has no runtime read) ships just the `Write` service — don't invent a `Read` the runtime can't satisfy. The HTTP impl can still cover both directions where the API does.
+
+Reference: [Cloudflare R2 Bucket](./packages/alchemy/src/Cloudflare/R2/), [KV Namespace](./packages/alchemy/src/Cloudflare/KV/), [Queue](./packages/alchemy/src/Cloudflare/Queue/).
 
 ### Runtime-only methods: color with `Alchemy.RuntimeContext`
 
@@ -508,10 +553,7 @@ Rules:
 
 Why this matters: consumers can build cloud-agnostic services on top of bindings using `Layer.effect(Tag, ...)` without polluting their service interface with `WorkerEnvironment`. See [Layers concept](./website/src/content/docs/concepts/layers.mdx).
 
-After implementing, register the Policy in `AWS.providers()()`:
-
-- Add the `*PolicyLive` layer to `bindings()` in [Providers.ts](./packages/alchemy/src/AWS/Providers.ts)
-- Re-export from the service's `index.ts`
+After implementing, re-export the contract and implementation layers from the service's `index.ts` (but keep the shared `{Cap}Binding.ts`/`{Cap}Http.ts` scaffolding un-exported).
 
 :::tip
 If you need to know what AWS region or account ID the resource is being created/updated in, you can use this inside any of the lifecycle operations.

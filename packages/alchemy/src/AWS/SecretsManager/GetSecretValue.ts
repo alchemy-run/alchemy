@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Secret } from "./Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetSecretValueRequest extends Omit<
   secretsmanager.GetSecretValueRequest,
@@ -50,7 +51,8 @@ export const GetSecretValueLive = Layer.effect(
 
 export class GetSecretValuePolicy extends Binding.Policy<
   GetSecretValuePolicy,
-  (secret: Secret) => Effect.Effect<void>
+  (secret: Secret) => Effect.Effect<void>,
+  Providers
 >()("AWS.SecretsManager.GetSecretValue") {}
 
 export const GetSecretValuePolicyLive = GetSecretValuePolicy.layer.succeed(

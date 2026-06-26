@@ -12,13 +12,13 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 // resource and grants the role the SQS read permissions the mapping needs.
 export class EventSourceMappingFunction extends Lambda.Function<EventSourceMappingFunction>()(
   "EventSourceMappingFunction",
+) {}
+
+export default EventSourceMappingFunction.make(
   {
     main: import.meta.filename,
     url: false,
   },
-) {}
-
-export default EventSourceMappingFunction.make(
   Effect.gen(function* () {
     const queue = yield* SQS.Queue("EventSourceMappingQueue");
 

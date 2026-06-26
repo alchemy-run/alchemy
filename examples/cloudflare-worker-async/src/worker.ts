@@ -26,7 +26,7 @@ export default {
 
     // Queue producer — POST /queue/send?text=...
     //
-    // Exercises Cloudflare.QueueBinding by calling `env.Queue.send(...)`.
+    // Exercises Cloudflare.Queues.WriteQueue by calling `env.Queue.send(...)`.
     // The message is persisted by the consumer handler into R2 at /queue/<id>
     // so the integ test can read it back and assert the full round-trip.
     if (request.method === "POST" && path === "/queue/send") {

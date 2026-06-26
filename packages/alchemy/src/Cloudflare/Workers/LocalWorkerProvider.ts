@@ -103,9 +103,7 @@ export const LocalWorkerProvider = () =>
         }
       >();
 
-      const getQueueConsumers = Effect.fnUntraced(function* (
-        scriptName: string,
-      ) {
+      const getQueueConsumers = Effect.fn(function* (scriptName: string) {
         const consumers: RuntimeQueueConsumer[] = [];
         for (const consumer of MutableHashMap.values(
           localRuntimeState.queueConsumers,
@@ -200,7 +198,7 @@ export const LocalWorkerProvider = () =>
         return modules;
       });
 
-      const serveScoped = Effect.fnUntraced(function* (
+      const serveScoped = Effect.fn(function* (
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
@@ -353,7 +351,7 @@ export const LocalWorkerProvider = () =>
 
       type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
-      const runWorker = Effect.fnUntraced(function* (worker: WorkerConfig) {
+      const runWorker = Effect.fn(function* (worker: WorkerConfig) {
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
@@ -406,7 +404,7 @@ export const LocalWorkerProvider = () =>
         return proxy.url;
       });
 
-      const runVite = Effect.fnUntraced(function* (
+      const runVite = Effect.fn(function* (
         worker: WorkerConfig,
         rootDir: string | undefined,
       ) {
@@ -622,7 +620,7 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-export const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
+export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,

@@ -681,7 +681,7 @@ const awsRetryFactory: RetryFactory = (lastError) => ({
   schedule: pipe(
     Schedule.exponential(Duration.millis(200), 2),
     Schedule.modifyDelay(
-      Effect.fnUntraced(function* (duration) {
+      Effect.fn(function* (duration) {
         const error = yield* Ref.get(lastError);
         if (isThrottlingError(error)) {
           // Throttling: floor at 500ms (matches distilled default).

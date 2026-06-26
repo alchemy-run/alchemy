@@ -57,7 +57,7 @@ export const NeonAuth = AuthProviderLayer<
     const profiles = yield* AlchemyProfile;
     const store = yield* CredentialsStore;
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const apiKey = yield* Clank.password({
         message: "Neon API Key",
         validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -108,7 +108,7 @@ export const NeonAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when(
           { method: "env" },
-          Effect.fnUntraced(function* () {
+          Effect.fn(function* () {
             const apiKey = yield* getEnvRedacted("NEON_API_KEY");
             if (!apiKey) {
               return yield* new AuthError({

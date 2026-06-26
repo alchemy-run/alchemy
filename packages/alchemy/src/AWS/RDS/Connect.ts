@@ -11,6 +11,7 @@ import type { Secret } from "../SecretsManager/Secret.ts";
 import type { DBCluster } from "./DBCluster.ts";
 import type { DBProxy } from "./DBProxy.ts";
 import type { DBProxyEndpoint } from "./DBProxyEndpoint.ts";
+import type { Providers } from "../Providers.ts";
 
 type ConnectResource = DBCluster | DBProxy | DBProxyEndpoint;
 
@@ -101,7 +102,8 @@ export const ConnectLive = Layer.effect(
 
 export class ConnectPolicy extends Binding.Policy<
   ConnectPolicy,
-  (resource: ConnectResource, options: ConnectOptions) => Effect.Effect<void>
+  (resource: ConnectResource, options: ConnectOptions) => Effect.Effect<void>,
+  Providers
 >()("AWS.RDS.Connect") {}
 
 export const ConnectPolicyLive = ConnectPolicy.layer.succeed(

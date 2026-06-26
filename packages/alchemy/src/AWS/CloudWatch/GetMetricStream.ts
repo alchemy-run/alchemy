@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { MetricStream } from "./MetricStream.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetMetricStreamRequest extends Omit<
   cloudwatch.GetMetricStreamInput,
@@ -50,7 +51,8 @@ export const GetMetricStreamLive = Layer.effect(
 
 export class GetMetricStreamPolicy extends Binding.Policy<
   GetMetricStreamPolicy,
-  (metricStream: MetricStream) => Effect.Effect<void>
+  (metricStream: MetricStream) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.GetMetricStream") {}
 
 export const GetMetricStreamPolicyLive = GetMetricStreamPolicy.layer.succeed(

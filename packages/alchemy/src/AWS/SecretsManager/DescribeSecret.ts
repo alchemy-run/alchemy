@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Secret } from "./Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Runtime binding for `secretsmanager:DescribeSecret`.
@@ -41,7 +42,8 @@ export const DescribeSecretLive = Layer.effect(
 
 export class DescribeSecretPolicy extends Binding.Policy<
   DescribeSecretPolicy,
-  (secret: Secret) => Effect.Effect<void>
+  (secret: Secret) => Effect.Effect<void>,
+  Providers
 >()("AWS.SecretsManager.DescribeSecret") {}
 
 export const DescribeSecretPolicyLive = DescribeSecretPolicy.layer.succeed(

@@ -8,6 +8,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Browser as BrowserLike } from "./Browser.ts";
+import type { Providers } from "../Providers.ts";
 
 export class BrowserError extends Data.TaggedError("BrowserError")<{
   message: string;
@@ -182,7 +183,8 @@ export const BrowserBindingLive = Layer.effect(
 
 export class BrowserBindingPolicy extends Binding.Policy<
   BrowserBindingPolicy,
-  (browser: BrowserLike) => Effect.Effect<void>
+  (browser: BrowserLike) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Browser.Binding") {}
 
 export const BrowserBindingPolicyLive = BrowserBindingPolicy.layer.succeed(

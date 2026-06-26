@@ -13,6 +13,7 @@ import {
 } from "../EventBridge/EventSource.ts";
 import { toLambda as createLambdaRoute } from "../EventBridge/ToLambda.ts";
 import * as Lambda from "./Function.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Narrow an arbitrary Lambda invocation payload to an EventBridge event.
@@ -158,7 +159,8 @@ export class EventSourcePolicy extends Binding.Policy<
   EventSourcePolicy,
   (
     descriptor: Parameters<EventSourceService>[0],
-  ) => Effect.Effect<void, never, any>
+  ) => Effect.Effect<void, never, any>,
+  Providers
 >()("AWS.EventBridge.EventSource") {}
 
 /**

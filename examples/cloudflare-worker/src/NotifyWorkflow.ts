@@ -20,15 +20,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       Config.withDefault(WORKFLOW_SECRET_VALUE),
     );
 
-    // Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
-    //
-    // The kv binding internally yields `Cloudflare.WorkerEnvironment` —
-    // before that PR, accessing `WorkerEnvironment` inside a workflow body
-    // crashed because `provideService(WorkerEnvironment, env)` was applied
-    // to the outer `Effect.succeed(body)` wrapper (a no-op) instead of
-    // `body` itself in `Workflow.ts`. Exercising `kv.put` / `kv.get` from
-    // inside a `task` keeps the integ test catching any future regression.
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;

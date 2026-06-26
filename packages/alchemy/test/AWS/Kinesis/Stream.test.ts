@@ -12,7 +12,7 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-describe.skipIf(!!process.env.NO_SLOW_TESTS)("AWS.Kinesis.Stream", () => {
+describe.skipIf(!!process.env.FAST)("AWS.Kinesis.Stream", () => {
   test.provider(
     "create and delete stream with default props",
     (stack) =>

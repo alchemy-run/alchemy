@@ -48,9 +48,9 @@
     "setup": "effect-language-service patch && bun run download:external",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:canary": "SMOKE_CANARY=1 bun test --only-failures ./test/smoke.test.ts",
-    "test:examples": "bun run --filter ./examples/cloudflare-worker --filter ./examples/cloudflare-worker-auth --filter ./examples/cloudflare-worker-async --filter ./examples/cloudflare-tanstack --filter ./examples/cloudflare-tanstack-start-solid --filter ./examples/aws-lambda test && bun format",
+    "test:examples": "bun scripts/test-examples.ts",
     "test": "cd ./packages/alchemy && bun vitest run",
-    "test:fast": "FAST=1 NO_SLOW_TESTS=1 cd ./packages/alchemy && bun vitest run"
+    "test:fast": "FAST=1 cd ./packages/alchemy && bun vitest run"
   },
   "workspaces": {
     "packages": [

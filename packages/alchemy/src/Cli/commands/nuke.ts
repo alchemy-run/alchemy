@@ -293,7 +293,7 @@ const nukeCommand = Command.make(
     "alchemy.profile": a.profile,
     "alchemy.main": a.main,
   }))(
-    Effect.fnUntraced(function* ({
+    Effect.fn(function* ({
       main,
       envFile,
       profile,

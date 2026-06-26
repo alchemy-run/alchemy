@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DescribeAccountSettingsRequest
   extends Kinesis.DescribeAccountSettingsInput {}
@@ -37,7 +38,8 @@ export const DescribeAccountSettingsLive = Layer.effect(
 
 export class DescribeAccountSettingsPolicy extends Binding.Policy<
   DescribeAccountSettingsPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.DescribeAccountSettings") {}
 
 export const DescribeAccountSettingsPolicyLive =

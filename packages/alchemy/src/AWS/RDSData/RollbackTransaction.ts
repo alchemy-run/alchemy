@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface RollbackTransactionOptions {
   secret: Secret;
@@ -65,7 +66,8 @@ export class RollbackTransactionPolicy extends Binding.Policy<
   (
     cluster: DBCluster,
     options: RollbackTransactionOptions,
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void>,
+  Providers
 >()("AWS.RDSData.RollbackTransaction") {}
 
 export const RollbackTransactionPolicyLive =

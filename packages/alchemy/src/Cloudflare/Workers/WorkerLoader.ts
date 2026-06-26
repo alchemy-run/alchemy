@@ -49,20 +49,32 @@ export type WorkerLoader = {
   ): Effect.Effect<WorkerStub, never, RuntimeContext>;
 };
 
+/**
+ * Effect returned by `WorkerLoader(name)`.
+ *
+ * It is a real `Effect` — `yield* WorkerLoader(name)` inside a Worker init
+ * attaches the binding and resolves the runtime handle — but it also carries
+ * the `~alchemy/Kind` marker statically, so when it is declared on a Worker's
+ * `env` the binding machinery recognises it as a `worker_loader` binding
+ * (`isWorkerLoader`) instead of running it. Every env-resolution site that
+ * branches on "is this a runnable Effect?" therefore checks `~alchemy/Kind`
+ * (via `isWorkerLoader` or `isYieldableEffectLike`) before `Effect.isEffect`.
+ */
 export interface WorkerLoaderEffect extends Effect.Effect<
   WorkerLoader,
   never,
   WorkerEnvironment | Worker
 > {
-  "alchemy/Kind": WorkerLoaderTypeId;
+  "~alchemy/Kind": WorkerLoaderTypeId;
+  "~alchemy/Name": string;
   name: string;
 }
 
 export const isWorkerLoader = (value: unknown): value is WorkerLoader =>
   typeof value === "object" &&
   value !== null &&
-  "alchemy/Kind" in value &&
-  (value as WorkerLoaderEffect)["alchemy/Kind"] === WorkerLoaderTypeId;
+  "~alchemy/Kind" in value &&
+  (value as WorkerLoaderEffect)["~alchemy/Kind"] === WorkerLoaderTypeId;
 
 export interface WorkerLoaderClass extends Context.Service<
   WorkerLoader,
@@ -281,7 +293,8 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
           } satisfies WorkerLoader;
         }),
         {
-          kind: WorkerLoaderTypeId,
+          "~alchemy/Name": name,
+          "~alchemy/Kind": WorkerLoaderTypeId,
           name,
         },
       ),

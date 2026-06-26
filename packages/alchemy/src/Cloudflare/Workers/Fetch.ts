@@ -10,6 +10,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as UrlParams from "effect/unstable/http/UrlParams";
 import * as Binding from "../../Binding.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * @binding
@@ -123,7 +124,8 @@ const doFetch = (
 
 export class FetchPolicy extends Binding.Policy<
   FetchPolicy,
-  (worker: Worker) => Effect.Effect<void>
+  (worker: Worker) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Fetch") {}
 
 export const FetchPolicyLive = FetchPolicy.layer.succeed(

@@ -1,6 +1,9 @@
 {
   "files": [],
-  "exclude": ["node_modules", "dist"],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
   "references": [
     // distilled (dependencies first so `tsgo -b` emits their `lib/` before the
     // packages that consume them — otherwise a clean build races the not-yet-emitted
@@ -74,6 +77,9 @@
     },
     {
       "path": "./examples/aws-vite/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-agent/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-static-site/tsconfig.json"

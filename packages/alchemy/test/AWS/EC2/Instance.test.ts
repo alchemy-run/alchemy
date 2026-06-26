@@ -37,7 +37,7 @@ test.provider(
             vpcId: vpc.vpcId,
             cidrBlock: "10.0.1.0/24",
           });
-          return yield* Instance<{}>()("ListInstance", {
+          return yield* Instance("ListInstance", {
             imageId,
             instanceType: "t3.micro",
             subnetId: subnet.subnetId,

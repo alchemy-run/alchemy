@@ -508,6 +508,12 @@ export const CertificateProvider = () =>
                 CertificateArn: output.certificateArn,
               })
               .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "ConflictException",
+                  schedule: Schedule.fixed("2 seconds").pipe(
+                    Schedule.both(Schedule.recurs(15)),
+                  ),
+                }),
                 Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               ),
           );

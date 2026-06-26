@@ -10,13 +10,13 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 
 export class DynamoDBTestFunction extends Lambda.Function<Lambda.Function>()(
   "DynamoDBTestFunction",
+) {}
+
+export default DynamoDBTestFunction.make(
   {
     main,
     url: true,
   },
-) {}
-
-export default DynamoDBTestFunction.make(
   Effect.gen(function* () {
     const sourceTable = yield* DynamoDB.Table("TestTable", {
       partitionKey: "pk",

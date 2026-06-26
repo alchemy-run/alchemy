@@ -9,6 +9,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { FlagshipApp } from "./App.ts";
+import type { Providers } from "../Providers.ts";
 
 export class FlagshipError extends Data.TaggedError("FlagshipError")<{
   message: string;
@@ -151,7 +152,8 @@ export const FlagshipBindingLive = Layer.effect(
 
 export class FlagshipBindingPolicy extends Binding.Policy<
   FlagshipBindingPolicy,
-  (app: FlagshipApp) => Effect.Effect<void>
+  (app: FlagshipApp) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Flagship.Binding") {}
 
 export const FlagshipBindingPolicyLive = FlagshipBindingPolicy.layer.succeed(

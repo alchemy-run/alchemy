@@ -48,9 +48,7 @@ identifier you can `yield*` from anywhere.
 // src/A.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export class A extends Cloudflare.Worker<A>()("A", {
-  main: import.meta.filename,
-}) {}
+export class A extends Cloudflare.Worker<A, {}>()("A") {}
 ```
 
 `A` is now a Tag. Importing it from another file does **not** force
@@ -65,9 +63,7 @@ Do the same for `B`. Both files only declare identity at this point.
 // src/B.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export class B extends Cloudflare.Worker<B>()("B", {
-  main: import.meta.filename,
-}) {}
+export class B extends Cloudflare.Worker<B, {}>()("B") {}
 ```
 
 Now `A` and `B` can freely `import` each other — neither side
@@ -85,11 +81,10 @@ will dispatch to B's deployed URL at runtime.
 + import * as Effect from "effect/Effect";
 + import { B } from "./B.ts";
 
-  export class A extends Cloudflare.Worker<A>()("A", {
-    main: import.meta.filename,
-  }) {}
+  export class A extends Cloudflare.Worker<A, {}>()("A") {}
 
 + export default A.make(
++   { main: import.meta.filename },
 +   Effect.gen(function* () {
 +     const b = yield* Cloudflare.Worker.bind(B);
 +     return {
@@ -116,11 +111,10 @@ binds it.
 + import * as Effect from "effect/Effect";
 + import { A } from "./A.ts";
 
-  export class B extends Cloudflare.Worker<B>()("B", {
-    main: import.meta.filename,
-  }) {}
+  export class B extends Cloudflare.Worker<B, {}>()("B") {}
 
 + export default B.make(
++   { main: import.meta.filename },
 +   Effect.gen(function* () {
 +     const a = yield* Cloudflare.Worker.bind(A);
 +     return {

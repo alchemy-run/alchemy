@@ -20,6 +20,12 @@ import {
 
 export { Credentials, fromEnv } from "@distilled.cloud/cloudflare/Credentials";
 
+declare module "@distilled.cloud/cloudflare/Credentials" {
+  interface Credentials {
+    readonly kind: "Credentials";
+  }
+}
+
 /**
  * Build a `Credentials` layer that resolves Cloudflare credentials via the
  * Alchemy AuthProvider using the configured profile (defaults to "default",

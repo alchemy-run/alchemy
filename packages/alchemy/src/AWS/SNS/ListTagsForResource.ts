@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListTagsForResourceRequest extends Omit<
   sns.ListTagsForResourceRequest,
@@ -46,7 +47,8 @@ export const ListTagsForResourceLive = Layer.effect(
 
 export class ListTagsForResourcePolicy extends Binding.Policy<
   ListTagsForResourcePolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.ListTagsForResource") {}
 
 export const ListTagsForResourcePolicyLive =

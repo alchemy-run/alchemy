@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DescribeInsightRulesRequest
   extends cloudwatch.DescribeInsightRulesInput {}
@@ -40,7 +41,8 @@ export const DescribeInsightRulesLive = Layer.effect(
 
 export class DescribeInsightRulesPolicy extends Binding.Policy<
   DescribeInsightRulesPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.DescribeInsightRules") {}
 
 export const DescribeInsightRulesPolicyLive =

@@ -12,7 +12,7 @@ export interface FindImageOptions {
   virtualizationType?: "hvm" | "paravirtual";
 }
 
-const findLatestImage = Effect.fnUntraced(function* ({
+const findLatestImage = Effect.fn(function* ({
   owners,
   name,
   architecture = "x86_64",
@@ -46,7 +46,7 @@ const findLatestImage = Effect.fnUntraced(function* ({
   return latest.ImageId;
 });
 
-const findFirstImage = Effect.fnUntraced(function* <Req = never>(
+const findFirstImage = Effect.fn(function* <Req = never>(
   lookups: ReadonlyArray<Effect.Effect<string | undefined, never, Req>>,
   errorMessage: string,
 ) {

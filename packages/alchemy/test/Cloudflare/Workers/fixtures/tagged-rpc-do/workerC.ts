@@ -11,9 +11,6 @@ import { Counter, CounterLive } from "./object.ts";
 // instances of the same `Counter` class.
 export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
   "WorkerC",
-  {
-    main: import.meta.filename,
-  },
 ) {}
 
 // Layer — uses `Counter.from(WorkerC)` (self-reference) instead of
@@ -21,6 +18,9 @@ export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
 // `.from(Self)` form is the recommended style for code that may be
 // extracted into a reusable Layer.
 export default WorkerC.make(
+  {
+    main: import.meta.filename,
+  },
   Effect.gen(function* () {
     const counter = yield* Counter.from(WorkerC);
 

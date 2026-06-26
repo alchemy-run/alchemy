@@ -10,7 +10,7 @@ import { Artifacts, ArtifactStore, makeScopedArtifacts } from "../Artifacts.ts";
 import { InstanceId } from "../InstanceId.ts";
 import type { Platform } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import type { ResourceClass, ResourceLike } from "../Resource.ts";
+import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { RpcProviderProxy } from "./RpcProviderProxy.ts";
@@ -165,7 +165,7 @@ export const effect = <
   LogsReq = never,
   ListReq = never,
 >(
-  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   serverEntryUrl: string,
   eff: Effect.Effect<
     RpcProviderService<

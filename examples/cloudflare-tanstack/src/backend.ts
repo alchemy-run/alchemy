@@ -11,7 +11,7 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
       // RPC method — read an object from R2 by key, returning the body as
@@ -61,5 +61,5 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
         ),
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}

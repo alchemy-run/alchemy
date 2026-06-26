@@ -13,6 +13,7 @@ import {
 import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { HttpEffect } from "../../Http.ts";
+import type { InputProps } from "../../Input.ts";
 import type { Rpc as RpcShape } from "../../Rpc.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import type { Worker, WorkerProps } from "./Worker.ts";
@@ -22,10 +23,7 @@ import { Worker as WorkerCtor, WorkerEnvironment } from "./Worker.ts";
  * Props for {@link RpcWorker}. Same shape as {@link WorkerProps} with
  * an additional `schema` field carrying the rpc group definition.
  */
-export type RpcWorkerProps<Rpcs extends Rpc.Any> = Omit<
-  WorkerProps,
-  "schema"
-> & {
+export type RpcWorkerProps<Rpcs extends Rpc.Any> = {
   /**
    * The {@link RpcGroup.RpcGroup} served on this worker's `fetch`
    * handler. The same value should be importable by any consumer of
@@ -106,6 +104,7 @@ export interface RpcWorkerClass extends Effect.Effect<
     ): RpcWorkerYieldable<Self, Rpcs, Deps> & {
       new (_: never): {};
       make<InnerR = never, InitReq = never>(
+        props: InputProps<WorkerProps>,
         impl: Effect.Effect<
           Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
           ConfigError,
@@ -116,7 +115,7 @@ export interface RpcWorkerClass extends Effect.Effect<
     /** Inline-impl form. */
     <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
       id: string,
-      props: RpcWorkerProps<Rpcs>,
+      props: RpcWorkerProps<Rpcs> & InputProps<WorkerProps>,
       impl: Effect.Effect<
         Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
         ConfigError,
@@ -515,19 +514,20 @@ const wrapImpl = (impl: Effect.Effect<Effect.Effect<HttpEffect<any>>>) =>
   );
 
 const buildModular = (id: string, props: RpcWorkerProps<any>) => {
-  const { schema, ...workerProps } = props;
+  const { schema } = props;
   // Delegate to `Cloudflare.Worker<Self>()(id, props)` (modular form)
   // so we inherit its `static make(impl)` plumbing for free. We just
   // wrap the user's HttpEffect-returning impl into the `{ fetch }`
   // shape `Cloudflare.Worker` expects, and stash the rpc schema on
   // the class so `RpcWorker.bind(WorkerClass)` can recover it.
-  const Underlying: any = (WorkerCtor as any)()(id, workerProps);
+  const Underlying: any = (WorkerCtor as any)()(id);
   // `Underlying` is itself an Effect (the no-impl Worker class), so hand it
   // straight to `effectClass` rather than reaching for a removed `.asEffect()`.
   const klass = class extends effectClass(Underlying as Effect.Effect<Worker>) {
     static make = (
+      props: InputProps<WorkerProps>,
       impl: Effect.Effect<Effect.Effect<HttpEffect<any>>>,
-    ): Layer.Layer<any, never, any> => Underlying.make(wrapImpl(impl));
+    ): Layer.Layer<any, never, any> => Underlying.make(props, wrapImpl(impl));
   } as unknown as Record<symbol | string, unknown>;
   klass[SchemaSymbol] = schema;
   return klass;

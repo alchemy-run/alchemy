@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PutDataProtectionPolicyRequest extends Omit<
   sns.PutDataProtectionPolicyInput,
@@ -46,7 +47,8 @@ export const PutDataProtectionPolicyLive = Layer.effect(
 
 export class PutDataProtectionPolicyPolicy extends Binding.Policy<
   PutDataProtectionPolicyPolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.PutDataProtectionPolicy") {}
 
 export const PutDataProtectionPolicyPolicyLive =

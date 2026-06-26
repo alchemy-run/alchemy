@@ -470,7 +470,7 @@ export const BucketProvider = () =>
         } while (keyMarker);
       });
 
-      const ensureBucketExists = Effect.fnUntraced(function* ({
+      const ensureBucketExists = Effect.fn(function* ({
         id,
         news = {},
       }: {
@@ -575,7 +575,7 @@ export const BucketProvider = () =>
           Effect.catch(() => Effect.succeed({})),
         );
 
-      const syncBucketTags = Effect.fnUntraced(function* ({
+      const syncBucketTags = Effect.fn(function* ({
         bucketName,
         oldTags,
         newTags,
@@ -634,7 +634,7 @@ export const BucketProvider = () =>
         yield* session.note(`Removed all tags from bucket: ${bucketName}`);
       });
 
-      const syncBucketPolicy = Effect.fnUntraced(function* ({
+      const syncBucketPolicy = Effect.fn(function* ({
         bucketName,
         bindings,
         explicitStatements,
@@ -715,7 +715,7 @@ export const BucketProvider = () =>
           })),
         );
 
-      const syncBucketNotifications = Effect.fnUntraced(function* ({
+      const syncBucketNotifications = Effect.fn(function* ({
         bucketName,
         bindings,
         session,
@@ -774,7 +774,7 @@ export const BucketProvider = () =>
       // a typed tag in distilled (see processes/AWS/catalog/S3.md), so we
       // `Effect.catchTag` it rather than inspecting status codes.
 
-      const syncBucketVersioning = Effect.fnUntraced(function* ({
+      const syncBucketVersioning = Effect.fn(function* ({
         bucketName,
         versioning,
         mfaDelete,
@@ -805,7 +805,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket versioning: ${bucketName}`);
       });
 
-      const syncBucketEncryption = Effect.fnUntraced(function* ({
+      const syncBucketEncryption = Effect.fn(function* ({
         bucketName,
         encryption,
         session,
@@ -848,7 +848,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket encryption: ${bucketName}`);
       });
 
-      const syncPublicAccessBlock = Effect.fnUntraced(function* ({
+      const syncPublicAccessBlock = Effect.fn(function* ({
         bucketName,
         publicAccessBlock,
         session,
@@ -903,7 +903,7 @@ export const BucketProvider = () =>
           })),
         );
 
-      const syncBucketCors = Effect.fnUntraced(function* ({
+      const syncBucketCors = Effect.fn(function* ({
         bucketName,
         cors,
         session,
@@ -941,7 +941,7 @@ export const BucketProvider = () =>
           ),
         );
 
-      const syncBucketLifecycle = Effect.fnUntraced(function* ({
+      const syncBucketLifecycle = Effect.fn(function* ({
         bucketName,
         lifecycleRules,
         session,
@@ -973,7 +973,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket lifecycle: ${bucketName}`);
       });
 
-      const syncBucketOwnershipControls = Effect.fnUntraced(function* ({
+      const syncBucketOwnershipControls = Effect.fn(function* ({
         bucketName,
         objectOwnership,
         session,
@@ -1004,7 +1004,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated object ownership: ${bucketName}`);
       });
 
-      const syncBucketAcl = Effect.fnUntraced(function* ({
+      const syncBucketAcl = Effect.fn(function* ({
         bucketName,
         acl,
         session,
@@ -1020,7 +1020,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket ACL: ${bucketName}`);
       });
 
-      const syncBucketLogging = Effect.fnUntraced(function* ({
+      const syncBucketLogging = Effect.fn(function* ({
         bucketName,
         logging,
         session,
@@ -1054,7 +1054,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket logging: ${bucketName}`);
       });
 
-      const syncTransferAcceleration = Effect.fnUntraced(function* ({
+      const syncTransferAcceleration = Effect.fn(function* ({
         bucketName,
         transferAcceleration,
         session,
@@ -1075,7 +1075,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated transfer acceleration: ${bucketName}`);
       });
 
-      const syncRequestPayment = Effect.fnUntraced(function* ({
+      const syncRequestPayment = Effect.fn(function* ({
         bucketName,
         requestPayer,
         session,
@@ -1096,7 +1096,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated request payment: ${bucketName}`);
       });
 
-      const syncBucketWebsite = Effect.fnUntraced(function* ({
+      const syncBucketWebsite = Effect.fn(function* ({
         bucketName,
         website,
         session,
@@ -1157,7 +1157,7 @@ export const BucketProvider = () =>
           ),
         });
 
-      const syncBucketReplication = Effect.fnUntraced(function* ({
+      const syncBucketReplication = Effect.fn(function* ({
         bucketName,
         replication,
         session,
@@ -1189,7 +1189,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket replication: ${bucketName}`);
       });
 
-      const syncIntelligentTiering = Effect.fnUntraced(function* ({
+      const syncIntelligentTiering = Effect.fn(function* ({
         bucketName,
         intelligentTiering,
         oldIntelligentTiering,
@@ -1261,7 +1261,7 @@ export const BucketProvider = () =>
         }
       });
 
-      const syncObjectLockRetention = Effect.fnUntraced(function* ({
+      const syncObjectLockRetention = Effect.fn(function* ({
         bucketName,
         objectLockConfiguration,
         session,

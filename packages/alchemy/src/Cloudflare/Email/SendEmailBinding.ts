@@ -7,6 +7,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { SendEmail } from "./SendEmail.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Email body shape for the builder-form `send` call. Either `text`, `html`,
@@ -70,7 +71,7 @@ export const SendEmailBindingLive = Layer.effect(
     const bind = yield* SendEmailBindingPolicy;
     const env = yield* WorkerEnvironment;
 
-    return Effect.fnUntraced(function* (sender: SendEmail) {
+    return Effect.fn(function* (sender: SendEmail) {
       yield* bind(sender);
 
       const raw = Effect.sync(
@@ -102,11 +103,12 @@ export const SendEmailBindingLive = Layer.effect(
 
 export class SendEmailBindingPolicy extends Binding.Policy<
   SendEmailBindingPolicy,
-  (sender: SendEmail) => Effect.Effect<void>
+  (sender: SendEmail) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.SendEmail.Binding") {}
 
 export const SendEmailBindingPolicyLive = SendEmailBindingPolicy.layer.succeed(
-  Effect.fnUntraced(function* (host: ResourceLike, sender: SendEmail) {
+  Effect.fn(function* (host: ResourceLike, sender: SendEmail) {
     if (isWorker(host)) {
       yield* host.bind(sender.name, {
         bindings: [

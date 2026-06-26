@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DeleteItemRequest extends Omit<
   DynamoDB.DeleteItemInput,
@@ -44,7 +45,8 @@ export const DeleteItemLive = Layer.effect(
 
 export class DeleteItemPolicy extends Binding.Policy<
   DeleteItemPolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>
+  <T extends Table>(table: T) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.DeleteItem") {}
 
 export const DeleteItemPolicyLive = DeleteItemPolicy.layer.succeed(

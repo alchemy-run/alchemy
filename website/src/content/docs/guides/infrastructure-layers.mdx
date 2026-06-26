@@ -93,7 +93,7 @@ Layer.
 
 ## Bind the namespace
 
-`KVNamespaceBinding.bind(Namespace)` wires the namespace into the
+`KV.ReadWriteNamespace(Namespace)` wires the namespace into the
 consuming Worker — binding name, IAM, env injection — and returns
 a typed client.
 
@@ -102,7 +102,7 @@ a typed client.
    JobService,
    Effect.gen(function* () {
      const Namespace = yield* Cloudflare.KVNamespace("Jobs");
-+    const kv = yield* Cloudflare.KVNamespaceBinding.bind(Namespace);
++    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Namespace);
 
      return {
        // ...
@@ -211,24 +211,24 @@ KV namespace resource into the Stack:
 ```
 
 The Worker still doesn't type-check — `JobServiceKV` itself depends
-on `KVNamespaceBinding`, which is satisfied by
-`KVNamespaceBindingLive`.
+on `NamespaceReadWrite`, which is satisfied by
+`ReadWriteNamespaceBinding`.
 
 ## Provide the runtime binding
 
 `Layer.provide` satisfies `JobServiceKV`'s dependency on
-`KVNamespaceBinding` privately, so the consumer only sees `JobService`:
+`NamespaceReadWrite` privately, so the consumer only sees `JobService`:
 
 ```diff lang="typescript"
    }).pipe(
      Effect.provide(
 -      JobServiceKV,
-+      JobServiceKV.pipe(Layer.provide(Cloudflare.KVNamespaceBindingLive)),
++      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
      ),
    ),
 ```
 
-`KVNamespaceBindingLive` requires `WorkerEnvironment`, which the
+`ReadWriteNamespaceBinding` requires `WorkerEnvironment`, which the
 Cloudflare Worker runtime satisfies automatically at cold start.
 
 ## Reuse a Layer across Workers
@@ -247,7 +247,7 @@ has a stable logical id:
      // ...
    }).pipe(
      Effect.provide(
-+      JobServiceKV.pipe(Layer.provide(Cloudflare.KVNamespaceBindingLive)),
++      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
      ),
    ),
  );
@@ -302,8 +302,8 @@ runtime binding provided to that Layer — swap over:
 ```diff lang="typescript"
    }).pipe(
      Effect.provide(
--      JobServiceKV.pipe(Layer.provide(Cloudflare.KVNamespaceBindingLive)),
-+      JobServiceR2.pipe(Layer.provide(Cloudflare.R2BucketBindingLive)),
+-      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
++      JobServiceR2.pipe(Layer.provide(Cloudflare.R2.ReadWriteBucketBinding)),
      ),
    ),
 ```

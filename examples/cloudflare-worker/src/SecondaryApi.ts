@@ -9,15 +9,15 @@ import Agent from "./Agent.ts";
 // ContainerApplication carrying the Agent namespace. With two Workers binding
 // the same DO, the Sandbox ends up with two bindings that share a single
 // `namespaceId` — the regression case for the dedupe fix in this PR.
-export class SecondaryApi extends Cloudflare.Worker<SecondaryApi>()(
+export class SecondaryApi extends Cloudflare.Worker<SecondaryApi, {}>()(
   "SecondaryApi",
+) {}
+
+export default SecondaryApi.make(
   {
     main: import.meta.filename,
     observability: { enabled: true },
   },
-) {}
-
-export default SecondaryApi.make(
   Effect.gen(function* () {
     const agents = yield* Agent;
 

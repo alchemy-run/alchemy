@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface AddPermissionRequest extends Omit<
   sns.AddPermissionInput,
@@ -43,7 +44,8 @@ export const AddPermissionLive = Layer.effect(
 
 export class AddPermissionPolicy extends Binding.Policy<
   AddPermissionPolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.AddPermission") {}
 
 export const AddPermissionPolicyLive = AddPermissionPolicy.layer.succeed(

@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Subscription } from "./Subscription.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ConfirmSubscriptionRequest extends Omit<
   sns.ConfirmSubscriptionInput,
@@ -46,7 +47,8 @@ export const ConfirmSubscriptionLive = Layer.effect(
 
 export class ConfirmSubscriptionPolicy extends Binding.Policy<
   ConfirmSubscriptionPolicy,
-  (subscription: Subscription) => Effect.Effect<void>
+  (subscription: Subscription) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.ConfirmSubscription") {}
 
 export const ConfirmSubscriptionPolicyLive =

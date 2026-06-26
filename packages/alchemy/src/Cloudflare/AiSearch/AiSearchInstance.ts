@@ -802,27 +802,44 @@ export const AiSearchInstanceProvider = () =>
   });
 
 /**
- * On a greenfield create Cloudflare auto-provisions an R2 service token for
- * the instance to read its source bucket. That token is validated
- * eventually-consistently, so the create/update PUT can transiently reject
- * with `InvalidTokenCredentials` (code 7012, message
- * `ai_search_instance_invalid_token`) before the token has propagated. Ride
- * the blip out with a short, bounded retry; a genuinely invalid token still
- * fails once the retries are exhausted.
+ * Ride out the two eventual-consistency windows Cloudflare opens when an
+ * instance's source is (re)validated at create/update time:
+ *
+ *   - `InvalidTokenCredentials` (code 7012, message
+ *     `ai_search_instance_invalid_token`): on a greenfield create Cloudflare
+ *     auto-provisions an R2 service token for the instance to read its source
+ *     bucket, and validates it eventually-consistently.
+ *   - `MissingSitemap` (400, message `missing_sitemap`): a `web-crawler`
+ *     source is fetched synchronously at validation time. A freshly-deployed
+ *     seed (e.g. a brand-new `workers.dev` URL) is reachable from the test's
+ *     own vantage well before Cloudflare's crawler infrastructure can fetch
+ *     it, so the first validation can spuriously report no content.
+ *
+ * Both settle within a bounded window; a genuinely invalid token or
+ * unreachable/empty seed still fails once the retries are exhausted.
  */
 const retryTokenPropagation = <A, E extends { _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (e) => e._tag === "InvalidTokenCredentials",
+      while: (e) =>
+        e._tag === "InvalidTokenCredentials" || e._tag === "MissingSitemap",
       // A full-body update PUT re-sends `source`, which makes Cloudflare
-      // re-validate the (write-only, auto-provisioned) R2 service token —
-      // opening a fresh propagation window each time. Gentle exponential
-      // growth keeps the per-attempt delay bounded (~17s max) while giving
-      // the token longer overall to settle (~70s across 10 attempts).
-      schedule: Schedule.exponential("1 second", 1.5),
-      times: 10,
+      // re-validate the (write-only, auto-provisioned) R2 service token and
+      // re-fetch a web-crawler seed — opening a fresh propagation window each
+      // time. The window stretches under full-suite parallel load (token
+      // propagation across the edge contends with every other test's calls),
+      // so the budget is generous (~2 min). Crucially the per-attempt delay is
+      // *capped* at 6s (`either` takes the min of the two schedules): an
+      // uncapped exponential balloons to ~38s gaps by attempt 10, so it polls
+      // sparsely and detects a settled token tens of seconds late. Capped
+      // polling detects within 6s of propagation completing while still
+      // covering a long total window.
+      schedule: Schedule.exponential("1 second", 1.5).pipe(
+        Schedule.either(Schedule.spaced("6 seconds")),
+      ),
+      times: 22,
     }),
   );
 

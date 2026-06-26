@@ -9,8 +9,8 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { CERT_5, CERT_6, KEY_5, KEY_6 } from "./fixtures/certs.ts";
 import { describe } from "vitest";
+import { CERT_5, CERT_6, KEY_5, KEY_6 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -158,7 +158,7 @@ const program = (opts: {
     return { cert5, cert6, association };
   });
 
-describe.sequential("HostnameAssociation", () => {
+describe.skipIf(!!process.env.FAST)("HostnameAssociation", () => {
   // Hostname associations are keyed entirely by {zoneId, hostname} and
   // Cloudflare exposes no endpoint that enumerates which hostnames in a zone
   // have an AOP association, so `list()` is non-listable and returns []. This

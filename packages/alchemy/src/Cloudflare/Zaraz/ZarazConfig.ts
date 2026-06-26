@@ -291,7 +291,7 @@ export const ZarazConfigProvider = () =>
     }),
   });
 
-const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
+const resolve = Effect.fn(function* (zone: ZoneReference) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* resolveZoneId({
     accountId,

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListTablesRequest extends DynamoDB.ListTablesInput {}
 
@@ -33,7 +34,8 @@ export const ListTablesLive = Layer.effect(
 
 export class ListTablesPolicy extends Binding.Policy<
   ListTablesPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.ListTables") {}
 
 export const ListTablesPolicyLive = ListTablesPolicy.layer.succeed(

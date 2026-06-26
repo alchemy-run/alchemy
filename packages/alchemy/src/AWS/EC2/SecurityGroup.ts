@@ -384,7 +384,7 @@ export const SecurityGroupProvider = () =>
           Filters: [{ Name: "group-id", Values: [groupId] }],
         });
 
-      const toAttrs = Effect.fnUntraced(function* (
+      const toAttrs = Effect.fn(function* (
         sg: ec2.SecurityGroup,
         rules: ec2.SecurityGroupRule[],
       ) {

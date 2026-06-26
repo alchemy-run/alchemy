@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { Gateway } from "./src/AiGateway.ts";
 import Api from "./src/Api.ts";
 import { Bucket } from "./src/Bucket.ts";
+import SandboxLive from "./src/Sandbox.ts";
 import SecondaryApiLive, { SecondaryApi } from "./src/SecondaryApi.ts";
 import WorkerTagLive, { WorkerTag } from "./src/WorkerTag.ts";
 
@@ -52,5 +53,5 @@ export default Alchemy.Stack(
       secondaryApiUrl: secondaryApi.url.as<string>(),
       deployedAt: announcement.deployedAt,
     };
-  }).pipe(Effect.provide([WorkerTagLive, SecondaryApiLive])),
+  }).pipe(Effect.provide([WorkerTagLive, SecondaryApiLive, SandboxLive])),
 );

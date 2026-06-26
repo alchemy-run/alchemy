@@ -4,6 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import type { VersionMetadata as VersionMetadataLike } from "./VersionMetadata.ts";
 import { isWorker, WorkerEnvironment } from "./Worker.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Runtime value Cloudflare exposes for a `version_metadata` binding — the
@@ -58,7 +59,8 @@ export const VersionMetadataBindingLive = Layer.effect(
 
 export class VersionMetadataBindingPolicy extends Binding.Policy<
   VersionMetadataBindingPolicy,
-  (versionMetadata: VersionMetadataLike) => Effect.Effect<void>
+  (versionMetadata: VersionMetadataLike) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.VersionMetadata") {}
 
 export const VersionMetadataBindingPolicyLive =

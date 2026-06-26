@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { InsightRule } from "./InsightRule.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetInsightRuleReportRequest extends Omit<
   cloudwatch.GetInsightRuleReportInput,
@@ -50,7 +51,8 @@ export const GetInsightRuleReportLive = Layer.effect(
 
 export class GetInsightRuleReportPolicy extends Binding.Policy<
   GetInsightRuleReportPolicy,
-  (rule: InsightRule) => Effect.Effect<void>
+  (rule: InsightRule) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.GetInsightRuleReport") {}
 
 export const GetInsightRuleReportPolicyLive =

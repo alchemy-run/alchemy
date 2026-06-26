@@ -8,6 +8,7 @@ import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type RateLimit as RateLimitLike } from "./RateLimit.ts";
+import type { Providers } from "../Providers.ts";
 
 export class RateLimitError extends Data.TaggedError("RateLimitError")<{
   message: string;
@@ -70,7 +71,8 @@ export const RateLimitBindingLive = Layer.effect(
 
 export class RateLimitBindingPolicy extends Binding.Policy<
   RateLimitBindingPolicy,
-  (rateLimit: RateLimitLike) => Effect.Effect<void>
+  (rateLimit: RateLimitLike) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.RateLimit.Binding") {}
 
 export const RateLimitBindingPolicyLive = RateLimitBindingPolicy.layer.succeed(

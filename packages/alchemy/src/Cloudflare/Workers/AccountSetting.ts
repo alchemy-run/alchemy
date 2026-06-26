@@ -199,15 +199,18 @@ export const WorkersAccountSettingProvider = () =>
       }
 
       yield* workers.putAccountSetting({ accountId, ...desired });
-      // 4. Return — re-read for fresh attributes (the PUT response body
-      //    uses a different key shape than the GET response).
-      const final = yield* workers.getAccountSetting({ accountId });
-      return toAttributes(
+      // 4. Return — the PUT is authoritative for what we just wrote. We do
+      //    NOT re-read here: `getAccountSetting` is eventually consistent and
+      //    can briefly echo the pre-write values right after a PUT (observed
+      //    under concurrent load), which would surface a stale `greenCompute`
+      //    in the reconcile output. The values we sent are the new state.
+      return {
         accountId,
-        final,
+        defaultUsageModel: desired.defaultUsageModel,
+        greenCompute: desired.greenCompute,
         initialDefaultUsageModel,
         initialGreenCompute,
-      );
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {

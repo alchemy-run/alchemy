@@ -132,7 +132,7 @@ const createServiceName = (id: string, name: string | undefined) =>
     });
   });
 
-const findServiceByName = Effect.fnUntraced(function* (name: string) {
+const findServiceByName = Effect.fn(function* (name: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* connectivity.listDirectoryServices.items({ accountId }).pipe(
     Stream.filter((s) => s.name === name),

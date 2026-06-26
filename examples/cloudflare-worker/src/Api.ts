@@ -39,10 +39,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const rooms = yield* Room;
     const notifier = yield* NotifyWorkflow;
     const loader = yield* Cloudflare.WorkerLoader("Loader");
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
     const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.QueueBinding.bind(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
     const repos = yield* Cloudflare.Artifacts.bind(Repos);
     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
 
@@ -353,7 +353,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         // GET  /queue/result/:id reads the bucket entry the consumer
         //                        wrote when it processed that message.
         //
-        // Producer side: `Cloudflare.QueueBinding`. Consumer side:
+        // Producer side: `Cloudflare.Queues.WriteQueue`. Consumer side:
         // `Cloudflare.messages(Queue).subscribe(...)` registered in
         // the init phase (above), with `QueueEventSourceLive` on the
         // worker layer.
@@ -446,9 +446,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.R2BucketBindingLive,
-        Cloudflare.KVNamespaceBindingLive,
-        Cloudflare.QueueBindingLive,
+        Cloudflare.R2.ReadWriteBucketBinding,
+        Cloudflare.KV.ReadWriteNamespaceBinding,
+        Cloudflare.Queues.WriteQueueBinding,
         Cloudflare.QueueEventSourceLive,
         Cloudflare.ArtifactsBindingLive,
         Cloudflare.AiGatewayBindingLive,

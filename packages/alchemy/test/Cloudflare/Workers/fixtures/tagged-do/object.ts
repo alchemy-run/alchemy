@@ -24,10 +24,9 @@ export class Counter extends Cloudflare.DurableObjectNamespace<
 export const CounterLive = Counter.make(
   Effect.gen(function* () {
     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+    const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       // D1's `exec()` splits on newlines and rejects multi-line statements
       // ("incomplete input: SQLITE_ERROR"). Keep the DDL on a single line.
       yield* db.exec(

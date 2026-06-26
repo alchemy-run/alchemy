@@ -5,6 +5,7 @@ import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
+import type { Providers } from "../Providers.ts";
 
 interface EventDescriptor {
   id?: string;
@@ -28,7 +29,8 @@ export class ToLambdaPolicy extends Binding.Policy<
     routeId: string,
     rule: { ruleArn: unknown },
     fn: LambdaFunction,
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.ToLambda") {}
 
 export const ToLambdaPolicyLive = ToLambdaPolicy.layer.succeed(

@@ -22,11 +22,12 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { Zone } from "../Zone/Zone.ts";
 import {
-  authorizeDns,
   type DnsToken,
   makeDnsClient,
   makeDnsPolicyLive,
 } from "./DnsBinding.ts";
+import { authorizeWith } from "../HttpClientUtils.ts";
+import type { Providers } from "../Providers.ts";
 
 /** Create-record request, minus the zone id (bound at `.bind(zone)` time). */
 export type CreateRecordRequestInput = Omit<CreateRecordRequest, "zoneId">;
@@ -80,7 +81,7 @@ export const dnsWriteClient = (
   token: DnsToken,
   zoneId: Effect.Effect<string>,
 ): DnsWriteClient => {
-  const authorize = authorizeDns(token);
+  const authorize = authorizeWith(token);
   return {
     createDnsRecord: Effect.fn("Cloudflare.Dns.createDnsRecord")(
       function* (request) {
@@ -194,7 +195,8 @@ export class DnsWrite extends Binding.Service<
  */
 export class DnsWritePolicy extends Binding.Policy<
   DnsWritePolicy,
-  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
+  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.DnsWrite") {}
 
 /** Runtime layer for {@link DnsWrite}. */

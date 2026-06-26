@@ -1,6 +1,7 @@
 import * as waitingRooms from "@distilled.cloud/cloudflare/waiting-rooms";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -111,6 +112,20 @@ export const WaitingRoomSettingsProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           waitingRooms.getSetting({ zoneId }).pipe(
+            // A freshly-minted scoped token propagates eventually-
+            // consistently across Cloudflare's edge — ride out transient
+            // 403 blips before giving up on a zone. The backoff is CAPPED at
+            // 5s and bounded to ~8 attempts (~40s): an uncapped
+            // `Schedule.exponential` reaches a 64s single delay by the 8th
+            // retry (~128s total) which, fanned across every zone, blows the
+            // test timeout when a zone is persistently 403.
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.either(Schedule.spaced("5 seconds")),
+                Schedule.both(Schedule.recurs(8)),
+              ),
+            }),
             Effect.map((observed) =>
               toAttributes(
                 zoneId,
@@ -118,8 +133,11 @@ export const WaitingRoomSettingsProvider = () =>
                 observed.searchEngineCrawlerBypass,
               ),
             ),
-            // Plan-gated or partial zones reject the route; skip them.
+            // Plan-gated or partial zones reject the route; a zone the token
+            // still can't read (persistent 403) isn't ours to enumerate —
+            // skip both rather than failing the whole listing.
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );

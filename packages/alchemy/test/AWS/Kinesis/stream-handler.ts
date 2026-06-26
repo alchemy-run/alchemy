@@ -7,10 +7,6 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export class KinesisStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KinesisStreamFunction",
-  {
-    main: import.meta.filename,
-    url: true,
-  },
 ) {}
 
 export class StreamAndQueue extends Context.Service<
@@ -37,6 +33,10 @@ export const StreamAndQueueLive = Layer.effect(
   }),
 );
 export default KinesisStreamFunction.make(
+  {
+    main: import.meta.filename,
+    url: true,
+  },
   Effect.gen(function* () {
     const { stream, queue } = yield* StreamAndQueue;
     const sink = yield* AWS.SQS.QueueSink.bind(queue);

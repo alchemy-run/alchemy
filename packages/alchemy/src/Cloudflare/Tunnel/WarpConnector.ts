@@ -271,7 +271,7 @@ const resolveName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
-const toAttributes = Effect.fnUntraced(function* (
+const toAttributes = Effect.fn(function* (
   tunnel: ObservedConnector,
   accountId: string,
 ) {

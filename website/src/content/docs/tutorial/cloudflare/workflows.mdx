@@ -88,7 +88,7 @@ something binds to it.
 
 ## Bind KV to the workflow
 
-`Cloudflare.KVNamespace.bind(KV)` belongs in the workflow's outer
+`Cloudflare.KV.ReadWriteNamespace(KV)` belongs in the workflow's outer
 init phase. It registers the binding on the workflow's worker and
 returns a typed Effect-native client whose methods (`get`, `put`,
 `list`, `delete`) are Effects you can `yield*` directly:
@@ -104,7 +104,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
   "Notifier",
   Effect.gen(function* () {
     const rooms = yield* Room;
-+   const kv = yield* Cloudflare.KVNamespace.bind(KV);
++   const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
@@ -136,7 +136,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
   "Notifier",
   Effect.gen(function* () {
     const rooms = yield* Room;
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
@@ -184,7 +184,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
   "Notifier",
   Effect.gen(function* () {
     const rooms = yield* Room;
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
@@ -230,7 +230,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
   "Notifier",
   Effect.gen(function* () {
     const rooms = yield* Room;
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;

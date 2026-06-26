@@ -118,7 +118,7 @@ export const makeLocalState = () =>
           Effect.map((file) => parseState(file.toString())),
           recover,
         ),
-      getReplacedResources: Effect.fnUntraced(function* (request) {
+      getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.all(
           (yield* state.list(request)).map((fqn) =>
             state.get({

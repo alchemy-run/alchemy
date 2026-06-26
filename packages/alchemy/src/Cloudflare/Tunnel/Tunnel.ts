@@ -401,7 +401,7 @@ const writeConfiguration = (
     });
   });
 
-const findTunnelByName = Effect.fnUntraced(function* (name: string) {
+const findTunnelByName = Effect.fn(function* (name: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* zeroTrust.listTunnels
     .items({

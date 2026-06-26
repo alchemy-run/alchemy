@@ -13,9 +13,11 @@ import {
   CERT_3,
   CERT_4,
   CERT_8,
+  CERT_9,
   KEY_3,
   KEY_4,
   KEY_8,
+  KEY_9,
 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -137,21 +139,25 @@ test.provider(
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
+      // Dedicated PEM (CERT_9): the sibling "replaces" test churns CERT_3
+      // concurrently under the global concurrent config, and its
+      // `pending_deletion` tombstone for CERT_3 would otherwise collide here
+      // (a re-upload resurrects the half-deleted cert, which never goes live).
       yield* stack.destroy();
-      yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
+      yield* purgeCertificates(zoneId, [CERT_9]);
 
       const cert = yield* stack.deploy(
         Cloudflare.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
           zoneId,
-          certificate: CERT_3,
-          privateKey: Redacted.make(KEY_3),
+          certificate: CERT_9,
+          privateKey: Redacted.make(KEY_9),
         }),
       );
 
       expect(cert.certificateId).toBeDefined();
       expect(cert.zoneId).toEqual(zoneId);
       expect(cert.status).toBeDefined();
-      expect(cert.issuer).toContain("Alchemy AOP Test Cert 3");
+      expect(cert.issuer).toContain("Alchemy AOP Test Cert 9");
 
       const actual = yield* waitForLive(zoneId, cert.certificateId);
       expect(actual.id).toEqual(cert.certificateId);

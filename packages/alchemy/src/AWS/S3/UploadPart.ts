@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface UploadPartRequest extends Omit<
   S3.UploadPartRequest,
@@ -44,7 +45,8 @@ export const UploadPartLive = Layer.effect(
 
 export class UploadPartPolicy extends Binding.Policy<
   UploadPartPolicy,
-  (bucket: Bucket) => Effect.Effect<void>
+  (bucket: Bucket) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.UploadPart") {}
 
 export const UploadPartPolicyLive = UploadPartPolicy.layer.succeed(

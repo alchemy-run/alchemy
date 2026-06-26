@@ -10,7 +10,7 @@ const KV = Cloudflare.KVNamespace("DurableObjectWorkerEnvironmentKV", {
 export class WorkerEnvironmentKVObject extends Cloudflare.DurableObjectNamespace<WorkerEnvironmentKVObject>()(
   "WorkerEnvironmentKVObject",
   Effect.gen(function* () {
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.gen(function* () {
       return {
@@ -26,5 +26,5 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObjectNamespace
           ),
       };
     });
-  }).pipe(Effect.provide(Cloudflare.KVNamespaceBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
 ) {}

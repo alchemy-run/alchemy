@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import { type AlarmResource, sortAlarmResources } from "./binding-common.ts";
+import type { Providers } from "../Providers.ts";
 
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
@@ -47,7 +48,8 @@ export const DisableAlarmActionsLive = Layer.effect(
 
 export class DisableAlarmActionsPolicy extends Binding.Policy<
   DisableAlarmActionsPolicy,
-  (...alarms: AlarmResources) => Effect.Effect<void>
+  (...alarms: AlarmResources) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.DisableAlarmActions") {}
 
 export const DisableAlarmActionsPolicyLive =

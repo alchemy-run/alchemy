@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface UpdateTimeToLiveRequest extends Omit<
   DynamoDB.UpdateTimeToLiveInput,
@@ -46,7 +47,8 @@ export const UpdateTimeToLiveLive = Layer.effect(
 
 export class UpdateTimeToLivePolicy extends Binding.Policy<
   UpdateTimeToLivePolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>
+  <T extends Table>(table: T) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.UpdateTimeToLive") {}
 
 export const UpdateTimeToLivePolicyLive = UpdateTimeToLivePolicy.layer.succeed(

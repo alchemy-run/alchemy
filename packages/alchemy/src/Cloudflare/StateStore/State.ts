@@ -21,6 +21,7 @@ import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
+import { RandomProvider } from "../../Random.ts";
 import * as Alchemy from "../../Stack.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
@@ -325,7 +326,7 @@ const deployStateStore = ({
       stack: Alchemy.Stack(
         "CloudflareStateStore",
         {
-          providers: Cloudflare.providers(),
+          providers: Layer.mergeAll(Cloudflare.providers(), RandomProvider()),
           state: stateLayer,
         },
         Effect.gen(function* () {
@@ -446,7 +447,7 @@ const hasLocalStack = (stage: string) =>
  * store, and removing entries that happen to be missing locally would
  * be catastrophic.
  */
-const hoistBootstrapStack = Effect.fnUntraced(function* ({
+const hoistBootstrapStack = Effect.fn(function* ({
   source,
   destination,
 }: {
@@ -468,7 +469,7 @@ const hoistBootstrapStack = Effect.fnUntraced(function* ({
   });
   yield* Effect.forEach(
     fqns,
-    Effect.fnUntraced(function* (fqn) {
+    Effect.fn(function* (fqn) {
       const value = yield* source.state.get({
         stack,
         stage: source.stage,
@@ -618,7 +619,7 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
     );
   });
 
-const makeCloudflareStateStore = Effect.fnUntraced(function* ({
+const makeCloudflareStateStore = Effect.fn(function* ({
   url,
   authToken,
 }: {

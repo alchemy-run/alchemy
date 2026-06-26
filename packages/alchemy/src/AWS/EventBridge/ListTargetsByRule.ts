@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Rule } from "./Rule.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListTargetsByRuleRequest extends Omit<
   eventbridge.ListTargetsByRuleRequest,
@@ -50,7 +51,8 @@ export const ListTargetsByRuleLive = Layer.effect(
 
 export class ListTargetsByRulePolicy extends Binding.Policy<
   ListTargetsByRulePolicy,
-  (rule: Rule) => Effect.Effect<void>
+  (rule: Rule) => Effect.Effect<void>,
+  Providers
 >()("AWS.EventBridge.ListTargetsByRule") {}
 
 export const ListTargetsByRulePolicyLive =

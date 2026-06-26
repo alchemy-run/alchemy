@@ -87,6 +87,55 @@ export declare namespace BundleWatchEvent {
 }
 
 /**
+ * Compile-time constants substituted into every bundle via rolldown's
+ * `transform.define`.
+ *
+ * `globalThis.__ALCHEMY_RUNTIME__` is the runtime-phase flag: it is folded to
+ * `true` in all bundled (runtime) artifacts — deployed Workers, Lambdas,
+ * Containers, etc. — so any plan-only code guarded by
+ * `if (!globalThis.__ALCHEMY_RUNTIME__)` becomes `if (!true)` and is
+ * dead-code-eliminated from what ships.
+ *
+ * When the same source runs WITHOUT the bundler (the plan process executing
+ * `.ts` directly with bun/node), `globalThis.__ALCHEMY_RUNTIME__` reads as
+ * `undefined` (falsy) rather than throwing, so plan-only branches run.
+ * See `ALCHEMY_PHASE` in `Phase.ts`.
+ */
+const ALCHEMY_DEFINE: Record<string, string> = {
+  "globalThis.__ALCHEMY_RUNTIME__": "true",
+};
+
+/**
+ * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define`, letting
+ * the framework flags win over any caller-provided keys.
+ */
+const withAlchemyDefine = (
+  inputOptions: rolldown.InputOptions,
+): rolldown.InputOptions => ({
+  ...inputOptions,
+  transform: {
+    ...inputOptions.transform,
+    define: {
+      ...inputOptions.transform?.define,
+      ...ALCHEMY_DEFINE,
+    },
+  },
+});
+
+/**
+ * Default `minify` to `"dce-only"` when the caller hasn't chosen a mode, so the
+ * `if (false) { … }` branches produced by {@link ALCHEMY_DEFINE} are physically
+ * removed from every bundle (define alone only folds the condition; removal
+ * needs DCE). Callers that opt into full minification (e.g. Workers) keep it.
+ */
+const withDceDefault = (
+  outputOptions?: rolldown.OutputOptions,
+): rolldown.OutputOptions => ({
+  ...outputOptions,
+  minify: outputOptions?.minify ?? "dce-only",
+});
+
+/**
  * Build a bundle using rolldown from the given input options and output options.
  * @param inputOptions - The input options for the bundle.
  * @param outputOptions - The output options for the bundle.
@@ -100,7 +149,7 @@ export const build = (
   Effect.tryPromise({
     try: async () => {
       const bundle = await rolldown.rolldown({
-        ...inputOptions,
+        ...withAlchemyDefine(inputOptions),
         plugins: [inputOptions.plugins, builtInPlugins(extra)],
         optimization: inputOptions.optimization ?? {
           inlineConst: {
@@ -109,7 +158,7 @@ export const build = (
           },
         },
       });
-      const result = await bundle.write(outputOptions);
+      const result = await bundle.write(withDceDefault(outputOptions));
       await bundle.close();
       return result.output;
     },
@@ -141,7 +190,7 @@ export const watch = (
     Effect.acquireRelease(
       Effect.sync(() => {
         const watcher = rolldown.watch({
-          ...inputOptions,
+          ...withAlchemyDefine(inputOptions),
           plugins: [
             inputOptions.plugins,
             builtInPlugins(extra),
@@ -171,7 +220,7 @@ export const watch = (
             // they stay watched and local HMR is unaffected.
             exclude: ["**/node_modules/**"],
           },
-          output: outputOptions,
+          output: withDceDefault(outputOptions),
         });
         watcher.on("event", (event) => {
           if (event.code === "ERROR") {

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListTopicsRequest extends sns.ListTopicsInput {}
 
@@ -33,7 +34,8 @@ export const ListTopicsLive = Layer.effect(
 
 export class ListTopicsPolicy extends Binding.Policy<
   ListTopicsPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.ListTopics") {}
 
 export const ListTopicsPolicyLive = ListTopicsPolicy.layer.succeed(

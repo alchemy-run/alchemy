@@ -1,20 +1,24 @@
 import type * as runtime from "@cloudflare/workers-types";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { KVNamespace } from "./KVNamespace.ts";
+import type { KVNamespace } from "./Namespace.ts";
+import type { KVNamespaceError } from "./NamespaceTypes.ts";
 
-export class KVNamespaceError extends Data.TaggedError("KVNamespaceError")<{
-  message: string;
-  cause: Error;
-}> {}
+/**
+ * @binding
+ * @product KV
+ * @category Storage & Databases
+ */
+export class KVNamespaceRead extends Binding.Service<
+  KVNamespaceRead,
+  (namespace: KVNamespace) => Effect.Effect<ReadKVNamespaceClient>
+>()("Cloudflare.KVNamespace.Read") {}
 
-export interface KVNamespaceClient<Key extends string = string> {
-  raw: Effect.Effect<runtime.KVNamespace, never, WorkerEnvironment>;
+export const ReadNamespace = KVNamespaceRead.bind;
+
+export interface ReadKVNamespaceClient<Key extends string = string> {
+  raw: Effect.Effect<runtime.KVNamespace, never, RuntimeContext>;
   get(
     key: Key,
     options?: Partial<KVNamespaceGetOptions<undefined>>,
@@ -98,11 +102,6 @@ export interface KVNamespaceClient<Key extends string = string> {
     KVNamespaceError,
     RuntimeContext
   >;
-  put(
-    key: Key,
-    value: string | ArrayBuffer | ArrayBufferView | ReadableStream,
-    options?: KVNamespacePutOptions,
-  ): Effect.Effect<void, KVNamespaceError, RuntimeContext>;
   getWithMetadata<Metadata = unknown>(
     key: Key,
     options?: Partial<KVNamespaceGetOptions<undefined>>,
@@ -215,92 +214,4 @@ export interface KVNamespaceClient<Key extends string = string> {
     KVNamespaceError,
     RuntimeContext
   >;
-  delete(key: Key): Effect.Effect<void, KVNamespaceError, RuntimeContext>;
 }
-
-/**
- * @binding
- * @product KV
- * @category Storage & Databases
- */
-export class KVNamespaceBinding extends Binding.Service<
-  KVNamespaceBinding,
-  (bucket: KVNamespace) => Effect.Effect<KVNamespaceClient>
->()("Cloudflare.KVNamespace") {}
-
-export const KVNamespaceBindingLive = Layer.effect(
-  KVNamespaceBinding,
-  Effect.gen(function* () {
-    const bind = yield* KVNamespaceBindingPolicy;
-    const env = yield* WorkerEnvironment;
-
-    return Effect.fn(function* (bucket: KVNamespace) {
-      yield* bind(bucket);
-      const raw = Effect.sync(
-        // this must be lazy because the WorkerEnvironment is not available yet
-        () => (env as Record<string, runtime.KVNamespace>)[bucket.LogicalId],
-      );
-      const tryPromise = <T>(
-        fn: () => Promise<T>,
-      ): Effect.Effect<T, KVNamespaceError> =>
-        Effect.tryPromise({
-          try: fn,
-          catch: (error: any) =>
-            new KVNamespaceError({
-              message: error.message ?? "Unknown error",
-              cause: error,
-            }),
-        });
-
-      const use = <T>(
-        fn: (raw: runtime.KVNamespace<string>) => Promise<T>,
-      ): Effect.Effect<T, KVNamespaceError> =>
-        raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
-
-      // @ts-expect-error
-      return {
-        raw: raw,
-        // @ts-expect-error
-        get: (...args: Parameters<runtime.KVNamespace["get"]>) =>
-          use((raw) => raw.get(...args)),
-        // @ts-expect-error
-        getWithMetadata: (
-          ...args: Parameters<runtime.KVNamespace["getWithMetadata"]>
-        ) => use((raw) => raw.getWithMetadata(...args)),
-        // @ts-expect-error
-        put: (...args: Parameters<runtime.KVNamespace["put"]>) =>
-          use((raw) => raw.put(...args)),
-        list: (...args: Parameters<runtime.KVNamespace["list"]>) =>
-          use((raw) => raw.list(...args)),
-        delete: (...args: Parameters<runtime.KVNamespace["delete"]>) =>
-          use((raw) => raw.delete(...args)),
-      } satisfies KVNamespaceClient as KVNamespaceClient;
-    });
-  }),
-);
-
-export class KVNamespaceBindingPolicy extends Binding.Policy<
-  KVNamespaceBindingPolicy,
-  (bucket: KVNamespace) => Effect.Effect<void>
->()("Cloudflare.KVNamespace") {}
-
-export const KVNamespaceBindingPolicyLive =
-  KVNamespaceBindingPolicy.layer.succeed(
-    Effect.fn(function* (host: ResourceLike, namespace: KVNamespace) {
-      if (isWorker(host)) {
-        yield* host.bind`${namespace}`({
-          bindings: [
-            {
-              type: "kv_namespace",
-              name: namespace.LogicalId,
-              namespaceId: namespace.namespaceId,
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          new Error(`BucketBinding does not support runtime '${host.Type}'`),
-        );
-      }
-    }),
-  );

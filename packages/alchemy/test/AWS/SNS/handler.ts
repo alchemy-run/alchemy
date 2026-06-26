@@ -11,14 +11,14 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 
 export class SNSEventFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "SNSEventFunction",
+) {}
+
+export const SNSEventFunctionLive = SNSEventFunction.make(
   {
     main,
     handler: "SNSEventFunctionLive",
     url: true,
   },
-) {}
-
-export const SNSEventFunctionLive = SNSEventFunction.make(
   Effect.gen(function* () {
     // no-op, we're just gonna be targeted manualy by the Subscription
   }),
@@ -80,6 +80,9 @@ export const TopicAndQueueLive = Layer.effect(
 
 export class SNSApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "SNSApiFunction",
+) {}
+
+export const SNSApiFunctionLive = SNSApiFunction.make(
   {
     main,
     url: true,
@@ -87,9 +90,6 @@ export class SNSApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
       DEBUG: "true",
     },
   },
-) {}
-
-export const SNSApiFunctionLive = SNSApiFunction.make(
   Effect.gen(function* () {
     const { topic, queue, subscription, queueSubscription } =
       yield* TopicAndQueue;

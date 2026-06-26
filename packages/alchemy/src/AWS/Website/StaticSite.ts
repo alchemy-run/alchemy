@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import * as Command from "../../Command/index.ts";
-import * as Construct from "../../Construct.ts";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -153,304 +152,308 @@ export interface StaticSiteProps {
  * });
  * ```
  */
-export const StaticSite = Construct.fn(function* (
-  id: string,
-  props: StaticSiteProps,
-) {
-  const domain = normalizeDomain(props.domain);
-  const sitePath = (props.path ?? ".") as string;
-  const indexPage = props.indexPage ?? "index.html";
-  const assetPrefix = normalizePrefix(props.assets?.path);
-  const assetRoutes = [...(props.assets?.routes ?? [])]
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map(normalizeRoutePath);
-  const invalidationProps =
-    props.invalidation !== undefined
-      ? props.invalidation
-      : { paths: "all" as const, wait: false };
+export const StaticSite = (id: string, props: StaticSiteProps) =>
+  Effect.gen(function* () {
+    const domain = normalizeDomain(props.domain);
+    const sitePath = (props.path ?? ".") as string;
+    const indexPage = props.indexPage ?? "index.html";
+    const assetPrefix = normalizePrefix(props.assets?.path);
+    const assetRoutes = [...(props.assets?.routes ?? [])]
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map(normalizeRoutePath);
+    const invalidationProps =
+      props.invalidation !== undefined
+        ? props.invalidation
+        : { paths: "all" as const, wait: false };
 
-  if (props.router && props.domain) {
-    return yield* Effect.die(
-      `Cannot provide both "domain" and "router". Use the "domain" prop on the Router component.`,
-    );
-  }
-  if (props.router && props.edge) {
-    return yield* Effect.die(
-      `Cannot provide both "edge" and "router". Use the "edge" prop on the Router component.`,
-    );
-  }
-
-  const build = props.build
-    ? yield* Command.Build("Build", {
-        command: props.build.command,
-        cwd: sitePath,
-        memo: {
-          include: props.build.include,
-          exclude: props.build.exclude,
-          lockfile: props.build.lockfile,
-        },
-        outdir: props.build.output,
-        env: props.environment,
-      })
-    : undefined;
-
-  const uploadSourcePath = (build?.outdir ?? sitePath) as string;
-
-  const providedBucket = props.assets?.bucket;
-  const bucket =
-    providedBucket ??
-    (yield* Bucket("Bucket", {
-      bucketName: props.bucketName,
-      forceDestroy: props.forceDestroy,
-      tags: props.tags,
-    }));
-
-  const routerAttachment = props.router;
-  const routerPathPrefix = routerAttachment?.path
-    ? "/" + routerAttachment.path.replace(/^\//, "").replace(/\/$/, "")
-    : undefined;
-
-  const files = yield* AssetDeployment("Files", {
-    bucket: bucket,
-    sourcePath: uploadSourcePath,
-    prefix: normalizeUploadPrefix(assetPrefix, routerPathPrefix),
-    purge: props.assets?.purge ?? true,
-    fileOptions: props.assets?.fileOptions,
-    textEncoding: props.assets?.textEncoding,
-  });
-
-  const stack = yield* Stack;
-  const stage = yield* Stage;
-  const ns = yield* Namespace.CurrentNamespace;
-  const fqn = ns ? toPath(ns).join("/") : id;
-  const kvNamespace = createHash("md5")
-    .update(`${stack.name}-${stage}-${fqn}`)
-    .digest("hex")
-    .substring(0, 4);
-
-  const kvEntries = buildKvEntries(
-    uploadSourcePath,
-    bucket,
-    assetPrefix,
-    assetRoutes,
-    indexPage,
-    props.errorPage,
-    routerPathPrefix,
-  );
-
-  let distributionId: Input<string>;
-  let kvStoreArn: Input<string>;
-  let distribution: Distribution | undefined;
-  let prodUrl: Input<string> | undefined;
-
-  if (routerAttachment) {
-    kvStoreArn = routerAttachment.instance.kvStoreArn;
-    distributionId = routerAttachment.instance.distributionId;
-    const hostPattern = routerAttachment.domain
-      ? routerAttachment.domain
-          .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-          .replace(/\*/g, ".*")
-      : undefined;
-    yield* KvRoutesUpdate("RoutesUpdate", {
-      store: kvStoreArn,
-      namespace: routerAttachment.instance.kvNamespace as any,
-      key: "routes",
-      entry: [
-        "site",
-        kvNamespace,
-        hostPattern ?? "",
-        routerPathPrefix ?? "/",
-      ].join(","),
-    });
-    prodUrl = routerAttachment.domain
-      ? `https://${routerAttachment.domain}${routerPathPrefix ?? ""}`
-      : Output.interpolate`${routerAttachment.instance.url}${routerPathPrefix ?? ""}`;
-  } else {
-    if (
-      domain &&
-      !domain.cert &&
-      !domain.hostedZoneId &&
-      domain.dns === false
-    ) {
+    if (props.router && props.domain) {
       return yield* Effect.die(
-        "StaticSite domain configuration with `dns: false` requires `cert`.",
+        `Cannot provide both "domain" and "router". Use the "domain" prop on the Router component.`,
+      );
+    }
+    if (props.router && props.edge) {
+      return yield* Effect.die(
+        `Cannot provide both "edge" and "router". Use the "edge" prop on the Router component.`,
       );
     }
 
-    const certificate =
-      !domain || domain.cert
-        ? domain?.cert
-          ? { certificateArn: domain.cert }
-          : undefined
-        : yield* Certificate("Certificate", {
-            domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
-            hostedZoneId: domain.hostedZoneId,
-            tags: props.tags,
-          });
-
-    const kvStore = yield* KeyValueStore("KvStore", {});
-    kvStoreArn = kvStore.keyValueStoreArn;
-
-    const viewerRequest = yield* CloudFrontFunction("ViewerRequest", {
-      comment: `${id} viewer request`,
-      code: buildRequestFunctionCode({
-        kvNamespace,
-        userInjection: props.edge?.viewerRequest?.injection,
-        blockCloudfrontUrl: !!domain,
-      }),
-      keyValueStoreArns: [kvStore.keyValueStoreArn],
-    });
-
-    const viewerResponse = props.edge?.viewerResponse
-      ? yield* CloudFrontFunction("ViewerResponse", {
-          comment: `${id} viewer response`,
-          code: buildResponseFunctionCode(props.edge.viewerResponse.injection),
-          keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
-            ? [props.edge.viewerResponse.keyValueStoreArn]
-            : undefined,
+    const build = props.build
+      ? yield* Command.Build("Build", {
+          command: props.build.command,
+          cwd: sitePath,
+          memo: {
+            include: props.build.include,
+            exclude: props.build.exclude,
+            lockfile: props.build.lockfile,
+          },
+          outdir: props.build.output,
+          env: props.environment,
         })
       : undefined;
 
-    const functionAssociations = [
-      {
-        eventType: "viewer-request" as const,
-        functionArn: viewerRequest.functionArn,
-      },
-      ...(viewerResponse
-        ? [
-            {
-              eventType: "viewer-response" as const,
-              functionArn: viewerResponse.functionArn,
-            },
-          ]
-        : []),
-    ];
+    const uploadSourcePath = (build?.outdir ?? sitePath) as string;
 
-    const errorPage = "/" + (props.errorPage ?? indexPage).replace(/^\//, "");
-    const customErrorResponses = props.errorPage
-      ? [
-          {
-            ErrorCode: 403,
-            ResponseCode: "404",
-            ResponsePagePath: errorPage,
-            ErrorCachingMinTTL: 0,
-          },
-          {
-            ErrorCode: 404,
-            ResponseCode: "404",
-            ResponsePagePath: errorPage,
-            ErrorCachingMinTTL: 0,
-          },
-        ]
+    const providedBucket = props.assets?.bucket;
+    const bucket =
+      providedBucket ??
+      (yield* Bucket("Bucket", {
+        bucketName: props.bucketName,
+        forceDestroy: props.forceDestroy,
+        tags: props.tags,
+      }));
+
+    const routerAttachment = props.router;
+    const routerPathPrefix = routerAttachment?.path
+      ? "/" + routerAttachment.path.replace(/^\//, "").replace(/\/$/, "")
       : undefined;
 
-    distribution = yield* Distribution("Distribution", {
-      aliases: domain
-        ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
-        : undefined,
-      origins: [
-        {
-          id: "default",
-          domainName: "placeholder.alchemy.run",
-          customOriginConfig: {
-            httpPort: 80,
-            httpsPort: 443,
-            originProtocolPolicy: "https-only",
-            originReadTimeout: 20,
-            originSslProtocols: ["TLSv1.2"],
-          },
-        },
-      ],
-      defaultCacheBehavior: {
-        targetOriginId: "default",
-        viewerProtocolPolicy: "redirect-to-https",
-        allowedMethods: [
-          "DELETE",
-          "GET",
-          "HEAD",
-          "OPTIONS",
-          "PATCH",
-          "POST",
-          "PUT",
-        ],
-        cachedMethods: ["GET", "HEAD"],
-        compress: true,
-        cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
-        functionAssociations,
-      },
-      customErrorResponses,
-      viewerCertificate: certificate
-        ? {
-            acmCertificateArn: certificate.certificateArn,
-            sslSupportMethod: "sni-only",
-            minimumProtocolVersion: "TLSv1.2_2021",
-          }
-        : undefined,
-      tags: props.tags,
+    const files = yield* AssetDeployment("Files", {
+      bucket: bucket,
+      sourcePath: uploadSourcePath,
+      prefix: normalizeUploadPrefix(assetPrefix, routerPathPrefix),
+      purge: props.assets?.purge ?? true,
+      fileOptions: props.assets?.fileOptions,
+      textEncoding: props.assets?.textEncoding,
     });
 
-    const dist = distribution;
-    distributionId = dist.distributionId;
+    const stack = yield* Stack;
+    const stage = yield* Stage;
+    const ns = yield* Namespace.CurrentNamespace;
+    const fqn = ns ? toPath(ns).join("/") : id;
+    const kvNamespace = createHash("md5")
+      .update(`${stack.name}-${stage}-${fqn}`)
+      .digest("hex")
+      .substring(0, 4);
 
-    if (domain?.hostedZoneId && domain.dns !== false) {
-      yield* Effect.forEach(
-        [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
-        (name, index) =>
-          Route53Record(`AliasRecord${index + 1}`, {
-            hostedZoneId: domain.hostedZoneId!,
-            name,
-            type: "A",
-            aliasTarget: {
-              hostedZoneId: dist.hostedZoneId,
-              dnsName: dist.domainName,
+    const kvEntries = buildKvEntries(
+      uploadSourcePath,
+      bucket,
+      assetPrefix,
+      assetRoutes,
+      indexPage,
+      props.errorPage,
+      routerPathPrefix,
+    );
+
+    let distributionId: Input<string>;
+    let kvStoreArn: Input<string>;
+    let distribution: Distribution | undefined;
+    let prodUrl: Input<string> | undefined;
+
+    if (routerAttachment) {
+      kvStoreArn = routerAttachment.instance.kvStoreArn;
+      distributionId = routerAttachment.instance.distributionId;
+      const hostPattern = routerAttachment.domain
+        ? routerAttachment.domain
+            .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+            .replace(/\*/g, ".*")
+        : undefined;
+      yield* KvRoutesUpdate("RoutesUpdate", {
+        store: kvStoreArn,
+        namespace: routerAttachment.instance.kvNamespace as any,
+        key: "routes",
+        entry: [
+          "site",
+          kvNamespace,
+          hostPattern ?? "",
+          routerPathPrefix ?? "/",
+        ].join(","),
+      });
+      prodUrl = routerAttachment.domain
+        ? `https://${routerAttachment.domain}${routerPathPrefix ?? ""}`
+        : Output.interpolate`${routerAttachment.instance.url}${routerPathPrefix ?? ""}`;
+    } else {
+      if (
+        domain &&
+        !domain.cert &&
+        !domain.hostedZoneId &&
+        domain.dns === false
+      ) {
+        return yield* Effect.die(
+          "StaticSite domain configuration with `dns: false` requires `cert`.",
+        );
+      }
+
+      const certificate =
+        !domain || domain.cert
+          ? domain?.cert
+            ? { certificateArn: domain.cert }
+            : undefined
+          : yield* Certificate("Certificate", {
+              domainName: domain.name,
+              subjectAlternativeNames: [
+                ...(domain.aliases ?? []),
+                ...(domain.redirects ?? []),
+              ],
+              hostedZoneId: domain.hostedZoneId,
+              tags: props.tags,
+            });
+
+      const kvStore = yield* KeyValueStore("KvStore", {});
+      kvStoreArn = kvStore.keyValueStoreArn;
+
+      const viewerRequest = yield* CloudFrontFunction("ViewerRequest", {
+        comment: `${id} viewer request`,
+        code: buildRequestFunctionCode({
+          kvNamespace,
+          userInjection: props.edge?.viewerRequest?.injection,
+          blockCloudfrontUrl: !!domain,
+        }),
+        keyValueStoreArns: [kvStore.keyValueStoreArn],
+      });
+
+      const viewerResponse = props.edge?.viewerResponse
+        ? yield* CloudFrontFunction("ViewerResponse", {
+            comment: `${id} viewer response`,
+            code: buildResponseFunctionCode(
+              props.edge.viewerResponse.injection,
+            ),
+            keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
+              ? [props.edge.viewerResponse.keyValueStoreArn]
+              : undefined,
+          })
+        : undefined;
+
+      const functionAssociations = [
+        {
+          eventType: "viewer-request" as const,
+          functionArn: viewerRequest.functionArn,
+        },
+        ...(viewerResponse
+          ? [
+              {
+                eventType: "viewer-response" as const,
+                functionArn: viewerResponse.functionArn,
+              },
+            ]
+          : []),
+      ];
+
+      const errorPage = "/" + (props.errorPage ?? indexPage).replace(/^\//, "");
+      const customErrorResponses = props.errorPage
+        ? [
+            {
+              ErrorCode: 403,
+              ResponseCode: "404",
+              ResponsePagePath: errorPage,
+              ErrorCachingMinTTL: 0,
             },
-          }),
-        { concurrency: "unbounded" },
-      );
+            {
+              ErrorCode: 404,
+              ResponseCode: "404",
+              ResponsePagePath: errorPage,
+              ErrorCachingMinTTL: 0,
+            },
+          ]
+        : undefined;
+
+      distribution = yield* Distribution("Distribution", {
+        aliases: domain
+          ? [
+              domain.name,
+              ...(domain.aliases ?? []),
+              ...(domain.redirects ?? []),
+            ]
+          : undefined,
+        origins: [
+          {
+            id: "default",
+            domainName: "placeholder.alchemy.run",
+            customOriginConfig: {
+              httpPort: 80,
+              httpsPort: 443,
+              originProtocolPolicy: "https-only",
+              originReadTimeout: 20,
+              originSslProtocols: ["TLSv1.2"],
+            },
+          },
+        ],
+        defaultCacheBehavior: {
+          targetOriginId: "default",
+          viewerProtocolPolicy: "redirect-to-https",
+          allowedMethods: [
+            "DELETE",
+            "GET",
+            "HEAD",
+            "OPTIONS",
+            "PATCH",
+            "POST",
+            "PUT",
+          ],
+          cachedMethods: ["GET", "HEAD"],
+          compress: true,
+          cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+          functionAssociations,
+        },
+        customErrorResponses,
+        viewerCertificate: certificate
+          ? {
+              acmCertificateArn: certificate.certificateArn,
+              sslSupportMethod: "sni-only",
+              minimumProtocolVersion: "TLSv1.2_2021",
+            }
+          : undefined,
+        tags: props.tags,
+      });
+
+      const dist = distribution;
+      distributionId = dist.distributionId;
+
+      if (domain?.hostedZoneId && domain.dns !== false) {
+        yield* Effect.forEach(
+          [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
+          (name, index) =>
+            Route53Record(`AliasRecord${index + 1}`, {
+              hostedZoneId: domain.hostedZoneId!,
+              name,
+              type: "A",
+              aliasTarget: {
+                hostedZoneId: dist.hostedZoneId,
+                dnsName: dist.domainName,
+              },
+            }),
+          { concurrency: "unbounded" },
+        );
+      }
+
+      prodUrl = domain
+        ? Output.interpolate`https://${domain.name}`
+        : Output.interpolate`https://${dist.domainName}`;
     }
 
-    prodUrl = domain
-      ? Output.interpolate`https://${domain.name}`
-      : Output.interpolate`https://${dist.domainName}`;
-  }
+    yield* KvEntries("KvEntries", {
+      store: kvStoreArn,
+      namespace: kvNamespace,
+      entries: kvEntries,
+      purge: props.assets?.purge ?? true,
+    });
 
-  yield* KvEntries("KvEntries", {
-    store: kvStoreArn,
-    namespace: kvNamespace,
-    entries: kvEntries,
-    purge: props.assets?.purge ?? true,
-  });
+    const invalidation =
+      invalidationProps === false
+        ? undefined
+        : yield* Invalidation("Invalidation", {
+            distributionId: distributionId,
+            version: files.version,
+            wait: invalidationProps?.wait,
+            paths:
+              invalidationProps?.paths === "all" || !invalidationProps?.paths
+                ? ["/*"]
+                : invalidationProps.paths === "versioned"
+                  ? [`/${indexPage.replace(/^\/+/, "")}`]
+                  : invalidationProps.paths,
+          });
 
-  const invalidation =
-    invalidationProps === false
-      ? undefined
-      : yield* Invalidation("Invalidation", {
-          distributionId: distributionId,
-          version: files.version,
-          wait: invalidationProps?.wait,
-          paths:
-            invalidationProps?.paths === "all" || !invalidationProps?.paths
-              ? ["/*"]
-              : invalidationProps.paths === "versioned"
-                ? [`/${indexPage.replace(/^\/+/, "")}`]
-                : invalidationProps.paths,
-        });
-
-  return {
-    bucket: bucket,
-    build,
-    files,
-    distribution,
-    invalidation,
-    kvNamespace,
-    url: prodUrl,
-  };
-});
+    return {
+      bucket: bucket,
+      build,
+      files,
+      distribution,
+      invalidation,
+      kvNamespace,
+      url: prodUrl,
+    };
+  }).pipe(Namespace.push(id));
 
 const buildKvEntries = (
   outputPath: string,

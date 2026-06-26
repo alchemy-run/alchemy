@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PutRecordsRequest extends Omit<
   Kinesis.PutRecordsInput,
@@ -44,7 +45,8 @@ export const PutRecordsLive = Layer.effect(
 
 export class PutRecordsPolicy extends Binding.Policy<
   PutRecordsPolicy,
-  (stream: Stream) => Effect.Effect<void>
+  (stream: Stream) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.PutRecords") {}
 
 export const PutRecordsPolicyLive = PutRecordsPolicy.layer.succeed(

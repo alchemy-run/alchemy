@@ -24,6 +24,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 600_000,
 });
 
+// A fresh `workers.dev` URL transiently 404s/5xxs while the route propagates;
+// `HttpClient.execute` resolves on those, so retry until the worker answers.
+const { executeWhenReady } = Test;
+
 test(
   "integ",
   Effect.gen(function* () {
@@ -154,7 +158,7 @@ test(
     const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
 
-    const sendResponse = yield* HttpClient.execute(
+    const sendResponse = yield* executeWhenReady(
       HttpClientRequest.post(`${url}/queue/send`).pipe(
         HttpClientRequest.setBody(HttpBody.text(text)),
       ),

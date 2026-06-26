@@ -83,7 +83,8 @@ export const isEffectClassLike = (
 export const isYieldableEffectLike = (
   value: unknown,
 ): value is YieldableEffectLike =>
-  isYieldableEffect(value) || isEffectClassLike(value);
+  (isYieldableEffect(value) || isEffectClassLike(value)) &&
+  !("~alchemy/Kind" in value);
 
 export type UnwrapEffect<T> =
   T extends Effect.Effect<infer A, any, any> ? A : T;

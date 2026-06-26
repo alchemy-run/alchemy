@@ -96,7 +96,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
   Effect.gen(function* () {
     const store = yield* CredentialsStore;
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const tokenId = yield* Clank.text({
         message: "Planetscale Service Token ID",
         validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -163,7 +163,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when(
           { method: "env" },
-          Effect.fnUntraced(function* () {
+          Effect.fn(function* () {
             const tokenId = yield* getEnvRedactedRequired(
               "PLANETSCALE_API_TOKEN_ID",
             );

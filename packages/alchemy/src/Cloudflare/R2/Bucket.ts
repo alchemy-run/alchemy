@@ -10,9 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
-import { R2BucketBinding } from "./R2BucketBinding.ts";
 
-export const isR2Bucket = (value: unknown): value is R2Bucket =>
+export const isR2Bucket = (value: any): value is R2Bucket =>
   typeof value === "object" && (value as any)?.Type === "Cloudflare.R2Bucket";
 
 export type R2BucketName = string;
@@ -173,7 +172,7 @@ export type R2Bucket = Resource<
  * @section Binding to a Worker
  * @example Reading and writing objects
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
  *
  * // Write an object
  * yield* bucket.put("hello.txt", "Hello, World!");
@@ -187,7 +186,7 @@ export type R2Bucket = Resource<
  *
  * @example Streaming upload with content length
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
  *
  * yield* bucket.put("upload.bin", request.stream, {
  *   contentLength: Number(request.headers["content-length"] ?? 0),
@@ -300,9 +299,7 @@ export type R2Bucket = Resource<
  * });
  * ```
  */
-export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({
-  bind: R2BucketBinding.bind,
-});
+export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket");
 
 export declare namespace R2Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
@@ -356,7 +353,7 @@ export const R2BucketProvider = () =>
   Provider.effect(
     R2Bucket,
     Effect.gen(function* () {
-      const emptyBucket = Effect.fnUntraced(function* (
+      const emptyBucket = Effect.fn(function* (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
       ) {
@@ -402,7 +399,7 @@ export const R2BucketProvider = () =>
         return location.toLowerCase() as R2Bucket.Location;
       };
 
-      const listCustomDomains = Effect.fnUntraced(function* (
+      const listCustomDomains = Effect.fn(function* (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
         // `NoSuchBucket` after a *create* is endpoint-consistency lag worth
