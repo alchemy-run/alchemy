@@ -229,6 +229,9 @@ export const ImageProvider = () =>
 
           let repoDigest: string | undefined;
           if (props.registry && !props.skipPush) {
+            yield* session.note(
+              `Pushing image to registry "${props.registry.server}"`,
+            );
             repoDigest = yield* docker.image
               .push(ref, props.registry)
               .pipe(

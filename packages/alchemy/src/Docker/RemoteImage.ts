@@ -163,7 +163,9 @@ export const RemoteImageProvider = () =>
 
           let repoDigest: string | undefined;
           if (news.registry && !news.skipPush) {
-            yield* session.note(`Pushing Docker image: ${finalRef}`);
+            yield* session.note(
+              `Pushing image to registry "${news.registry.server}"`,
+            );
             repoDigest = yield* docker.image
               .push(finalRef, news.registry)
               .pipe(
