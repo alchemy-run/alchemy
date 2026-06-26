@@ -1,4 +1,3 @@
-import * as Binding from "@/Binding";
 import { Browser } from "@/Cloudflare/Workers/Browser.ts";
 import { Images } from "@/Cloudflare/Images/Images.ts";
 import { RateLimit } from "@/Cloudflare/Workers/RateLimit.ts";
