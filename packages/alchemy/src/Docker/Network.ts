@@ -155,12 +155,14 @@ const makeNetworkArgs = (
   instanceId: string,
 ) =>
   networkName(id, props, instanceId).pipe(
-    Effect.map((name) => ({
-      name,
-      driver: props?.driver ?? "bridge",
-      ipv6: props?.enableIPv6 ?? false,
-      label: props?.labels ?? {},
-    })),
+    Effect.map(
+      (name): Parameters<Docker["Service"]["network"]["create"]>[0] => ({
+        name,
+        driver: props?.driver ?? "bridge",
+        ipv6: props?.enableIPv6 ?? false,
+        label: props?.labels ?? {},
+      }),
+    ),
   );
 
 export const toNetworkAttributes = (

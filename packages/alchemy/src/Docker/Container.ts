@@ -306,43 +306,46 @@ const normalizeImageRef = (image: Container.Image): string =>
 
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   containerName(id, news, instanceId).pipe(
-    Effect.map((name) => ({
-      name,
-      image: normalizeImageRef(news.image),
-      command: news.command,
-      env: normalizeEnvironment(news.environment),
-      volume: news.volumes?.map(
-        (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
-      ),
-      p: news.ports?.map(
-        (port) => `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
-      ),
-      restart: news.restart ?? "no",
-      rm: news.removeOnExit ?? false,
-      ...(news.healthcheck
-        ? {
-            "health-cmd": Array.isArray(news.healthcheck.cmd)
-              ? news.healthcheck.cmd.join(" ")
-              : news.healthcheck.cmd,
-            "health-interval": normalizeDuration(news.healthcheck.interval),
-            "health-timeout": normalizeDuration(news.healthcheck.timeout),
-            "health-retries": news.healthcheck.retries ?? 0,
-            "health-start-period": normalizeDuration(
-              news.healthcheck.startPeriod,
-            ),
-            "health-start-interval": normalizeDuration(
-              news.healthcheck.startInterval,
-            ),
-          }
-        : {
-            "health-cmd": undefined,
-            "health-interval": undefined,
-            "health-timeout": undefined,
-            "health-retries": undefined,
-            "health-start-period": undefined,
-            "health-start-interval": undefined,
-          }),
-    })),
+    Effect.map(
+      (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
+        name,
+        image: normalizeImageRef(news.image),
+        command: news.command,
+        env: normalizeEnvironment(news.environment),
+        volume: news.volumes?.map(
+          (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+        ),
+        p: news.ports?.map(
+          (port) =>
+            `${port.external}:${port.internal}/${port.protocol ?? "tcp"}`,
+        ),
+        restart: news.restart ?? "no",
+        rm: news.removeOnExit ?? false,
+        ...(news.healthcheck
+          ? {
+              "health-cmd": Array.isArray(news.healthcheck.cmd)
+                ? news.healthcheck.cmd.join(" ")
+                : news.healthcheck.cmd,
+              "health-interval": normalizeDuration(news.healthcheck.interval),
+              "health-timeout": normalizeDuration(news.healthcheck.timeout),
+              "health-retries": news.healthcheck.retries ?? 0,
+              "health-start-period": normalizeDuration(
+                news.healthcheck.startPeriod,
+              ),
+              "health-start-interval": normalizeDuration(
+                news.healthcheck.startInterval,
+              ),
+            }
+          : {
+              "health-cmd": undefined,
+              "health-interval": undefined,
+              "health-timeout": undefined,
+              "health-retries": undefined,
+              "health-start-period": undefined,
+              "health-start-interval": undefined,
+            }),
+      }),
+    ),
   );
 
 const toContainerAttributes = (

@@ -115,8 +115,8 @@ export const VolumeProvider = () =>
           if (
             output?.name !== args.name ||
             output?.driver !== args.driver ||
-            !Equal.equals(output?.driverOpts, args.driverOpts) ||
-            !Equal.equals(output?.labels, args.labels)
+            !Equal.equals(output?.driverOpts ?? {}, args.opt ?? {}) ||
+            !Equal.equals(output?.labels ?? {}, args.label ?? {})
           ) {
             return { action: "replace" as const, deleteFirst: true };
           }
@@ -155,12 +155,14 @@ const volumeName = (id: string, props: VolumeProps, instanceId: string) =>
 
 const makeVolumeArgs = (id: string, props: VolumeProps, instanceId: string) =>
   volumeName(id, props, instanceId).pipe(
-    Effect.map((name) => ({
-      name,
-      driver: props.driver ?? "local",
-      driverOpts: props.driverOpts,
-      labels: props.labels,
-    })),
+    Effect.map(
+      (name): Parameters<Docker["Service"]["volume"]["create"]>[0] => ({
+        name,
+        driver: props.driver ?? "local",
+        opt: props.driverOpts,
+        label: props.labels,
+      }),
+    ),
   );
 
 export const toVolumeAttributes = (
