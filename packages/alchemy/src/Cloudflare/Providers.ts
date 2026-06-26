@@ -132,7 +132,7 @@ import * as VulnScanner from "./VulnerabilityScanner/index.ts";
 import * as WaitingRoom from "./WaitingRoom/index.ts";
 import * as Web3 from "./Web3/index.ts";
 import * as Workers from "./Workers/index.ts";
-import * as Workflows from "./Workers/Workflow.ts";
+import * as Workflows from "./Workflows/Workflow.ts";
 import * as WorkersForPlatforms from "./WorkersForPlatforms/index.ts";
 import * as Zaraz from "./Zaraz/index.ts";
 import * as Zone from "./Zone/index.ts";

@@ -27,7 +27,7 @@ export default class DrizzleWorkflow extends Cloudflare.Workflow<DrizzleWorkflow
     const db = yield* Drizzle.postgres(conn.connectionString, { relations });
 
     return Effect.fn(function* (input: { id: number; name: string }) {
-      const inserted = yield* Cloudflare.Workers.task(
+      const inserted = yield* Cloudflare.Workflows.task(
         "insert-widget",
         Effect.gen(function* () {
           const [row] = yield* db
@@ -42,9 +42,9 @@ export default class DrizzleWorkflow extends Cloudflare.Workflow<DrizzleWorkflow
         }).pipe(Effect.orDie),
       );
 
-      yield* Cloudflare.Workers.sleep("settle", "1 second");
+      yield* Cloudflare.Workflows.sleep("settle", "1 second");
 
-      const rows = yield* Cloudflare.Workers.task(
+      const rows = yield* Cloudflare.Workflows.task(
         "select-widget",
         Effect.gen(function* () {
           return yield* db

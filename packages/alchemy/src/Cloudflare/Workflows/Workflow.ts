@@ -12,7 +12,11 @@ import { Resource } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
+import {
+  Worker,
+  WorkerEnvironment,
+  type WorkerServices,
+} from "../Workers/Worker.ts";
 
 type WorkflowTypeId = "Cloudflare.Workflow";
 const WorkflowTypeId: WorkflowTypeId = "Cloudflare.Workflow";
@@ -32,7 +36,7 @@ export class WorkflowEvent extends Context.Service<
     timestamp: Date;
     instanceId: string;
   }
->()("Cloudflare.Workers.WorkflowEvent") {}
+>()("Cloudflare.Workflows.WorkflowEvent") {}
 
 /**
  * Internal service that wraps the Cloudflare `WorkflowStep` object.
@@ -45,7 +49,7 @@ export class WorkflowStep extends Context.Service<
     sleep(name: string, duration: string | number): Effect.Effect<void>;
     sleepUntil(name: string, timestamp: Date | number): Effect.Effect<void>;
   }
->()("Cloudflare.Workers.WorkflowStep") {}
+>()("Cloudflare.Workflows.WorkflowStep") {}
 
 // ---------------------------------------------------------------------------
 // User-facing step primitives
@@ -232,8 +236,8 @@ export class WorkflowScope extends Context.Service<
  *
  *   return Effect.fn(function* (input: { orderId: string }) {
  *     // Phase 2: workflow body (durable steps)
- *     const result = yield* Cloudflare.Workers.task("process", doWork(input.orderId));
- *     yield* Cloudflare.Workers.sleep("cooldown", "10 seconds");
+ *     const result = yield* Cloudflare.Workflows.task("process", doWork(input.orderId));
+ *     yield* Cloudflare.Workflows.sleep("cooldown", "10 seconds");
  *     return result;
  *   });
  * })
@@ -259,7 +263,7 @@ export class WorkflowScope extends Context.Service<
  * @section Step Primitives
  * @example Running a named task
  * ```typescript
- * const result = yield* Cloudflare.Workers.task(
+ * const result = yield* Cloudflare.Workflows.task(
  *   "process-order",
  *   Effect.succeed({ orderId: "abc", total: 42 }),
  * );
@@ -267,7 +271,7 @@ export class WorkflowScope extends Context.Service<
  *
  * @example Sleeping between steps
  * ```typescript
- * yield* Cloudflare.Workers.sleep("cooldown", "30 seconds");
+ * yield* Cloudflare.Workflows.sleep("cooldown", "30 seconds");
  * ```
  *
  * @example Accessing env bindings inside a task
@@ -284,7 +288,7 @@ export class WorkflowScope extends Context.Service<
  *   return Effect.fn(function* (input: { roomId: string; message: string }) {
  *     const { roomId, message } = input;
  *
- *     const stored = yield* Cloudflare.Workers.task(
+ *     const stored = yield* Cloudflare.Workflows.task(
  *       "kv-roundtrip",
  *       Effect.gen(function* () {
  *         const key = `workflow:${roomId}`;

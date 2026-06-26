@@ -14,7 +14,7 @@ import {
   WorkerTypeId,
   type WorkerEvent,
 } from "./Worker.ts";
-import type { WorkflowExport } from "./Workflow.ts";
+import type { WorkflowExport } from "../Workflows/Workflow.ts";
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;

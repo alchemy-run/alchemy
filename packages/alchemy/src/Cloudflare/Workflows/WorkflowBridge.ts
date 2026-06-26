@@ -4,8 +4,8 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { ExecutionContext } from "../../ExecutionContext.ts";
-import { isScopeEjected } from "./HttpServer.ts";
-import { getWorkerExport } from "./WorkerBridge.ts";
+import { isScopeEjected } from "../Workers/HttpServer.ts";
+import { getWorkerExport } from "../Workers/WorkerBridge.ts";
 import {
   WorkflowEvent as WorkflowEventService,
   type WorkflowExport,

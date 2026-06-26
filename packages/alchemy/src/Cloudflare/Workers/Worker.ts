@@ -42,7 +42,7 @@ import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
-import type { WorkflowExport } from "./Workflow.ts";
+import type { WorkflowExport } from "../Workflows/Workflow.ts";
 
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;

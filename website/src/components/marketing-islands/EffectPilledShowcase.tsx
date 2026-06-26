@@ -104,12 +104,12 @@ const WORKFLOW_CODE = `export default class Notifier extends Cloudflare.Workflow
   Effect.gen(function* () {
     const rooms = yield* Room;
     return Effect.gen(function* () {
-      const { roomId, message } = (yield* Cloudflare.Workers.WorkflowEvent).payload;
-      yield* Cloudflare.Workers.task("store",     rooms.getByName(roomId).store(message));
-      yield* Cloudflare.Workers.task("process",   processMessage(message));
-      yield* Cloudflare.Workers.task("broadcast", rooms.getByName(roomId).broadcast(message));
-      yield* Cloudflare.Workers.sleep("cooldown", "2 seconds");
-      yield* Cloudflare.Workers.task("finalize",  rooms.getByName(roomId).cleanup());
+      const { roomId, message } = (yield* Cloudflare.Workflows.WorkflowEvent).payload;
+      yield* Cloudflare.Workflows.task("store",     rooms.getByName(roomId).store(message));
+      yield* Cloudflare.Workflows.task("process",   processMessage(message));
+      yield* Cloudflare.Workflows.task("broadcast", rooms.getByName(roomId).broadcast(message));
+      yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
+      yield* Cloudflare.Workflows.task("finalize",  rooms.getByName(roomId).cleanup());
     });
   }),
 ) {}`;

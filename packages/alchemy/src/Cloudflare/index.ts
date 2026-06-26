@@ -104,6 +104,7 @@ export * as WaitingRoom from "./WaitingRoom/index.ts";
 export * as Web3 from "./Web3/index.ts";
 export * as Website from "./Website/index.ts";
 export * as Workers from "./Workers/index.ts";
+export * as Workflows from "./Workflows/index.ts";
 export * as WorkersForPlatforms from "./WorkersForPlatforms/index.ts";
 export * as Zaraz from "./Zaraz/index.ts";
 export * as Zone from "./Zone/index.ts";
@@ -116,11 +117,11 @@ export {
   DurableObjectState,
   RpcWorker,
   RpcDurableObject,
-  Workflow,
   WorkerLoader,
   Browser,
   RateLimit,
   Request,
 } from "./Workers/index.ts";
 export type { InferEnv } from "./Workers/index.ts";
+export { Workflow } from "./Workflows/index.ts";
 export { Container } from "./Containers/index.ts";

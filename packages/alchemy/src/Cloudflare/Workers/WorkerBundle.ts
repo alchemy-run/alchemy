@@ -15,7 +15,10 @@ import {
   isDurableObjectExport,
   type DurableObjectExport,
 } from "./DurableObject.ts";
-import { isWorkflowExport, type WorkflowExport } from "./Workflow.ts";
+import {
+  isWorkflowExport,
+  type WorkflowExport,
+} from "../Workflows/Workflow.ts";
 
 export interface WorkerBundleOptions {
   id: string;
