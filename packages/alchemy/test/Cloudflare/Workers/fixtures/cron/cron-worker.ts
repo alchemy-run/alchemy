@@ -45,7 +45,7 @@ export default class CronTestWorker extends Cloudflare.Worker<CronTestWorker>()(
   Effect.gen(function* () {
     const counters = yield* CronCounter;
 
-    yield* Cloudflare.Workers.cron("* * * * *").subscribe((controller) =>
+    yield* Cloudflare.Workers.cron("* * * * *", (controller) =>
       counters.getByName("default").record(controller.scheduledTime),
     );
 

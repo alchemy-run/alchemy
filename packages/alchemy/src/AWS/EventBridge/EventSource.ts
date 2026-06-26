@@ -66,14 +66,21 @@ export type EventSourceService = <
 ) => Effect.Effect<void, never, never>;
 
 export const events = (...args: any[]) => {
+  // The handler is now the LAST positional argument instead of a chained
+  // `.subscribe(handler)`. If the final arg is a function, peel it off and
+  // run the subscribe body directly; otherwise expose the routing builder.
+  const last = args[args.length - 1];
+  if (typeof last === "function") {
+    const process = last as (
+      events: Stream.Stream<EventRecord, never, never>,
+    ) => Effect.Effect<void, never, never>;
+    const descriptor = parseEventDescriptor(args.slice(0, -1));
+    return EventSource.use((source) => source(descriptor, process));
+  }
+
   const descriptor = parseEventDescriptor(args);
 
   return {
-    subscribe: <Detail = unknown, Req = never, StreamReq = never>(
-      process: (
-        events: Stream.Stream<EventRecord<Detail>, never, StreamReq>,
-      ) => Effect.Effect<void, never, Req>,
-    ) => EventSource.use((source) => source(descriptor, process)),
     toLambda: (fn: LambdaFunction, props: LambdaRouteTargetProps = {}) =>
       createLambdaRoute(descriptor, fn, props),
     toQueue: (queue: Queue, props: QueueRouteTargetProps = {}) =>

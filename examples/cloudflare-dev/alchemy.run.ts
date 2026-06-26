@@ -21,10 +21,9 @@ const AsyncWorker = Effect.gen(function* () {
         className: "Counter",
       }),
       QUEUE: queue,
-      MESSAGES: Cloudflare.DurableObject<QueueMessages>(
-        "QueueMessages",
-        { className: "QueueMessages" },
-      ),
+      MESSAGES: Cloudflare.DurableObject<QueueMessages>("QueueMessages", {
+        className: "QueueMessages",
+      }),
       MY_VARIABLE: "my-variable-abc123",
       MY_SECRET: Config.redacted("MY_SECRET").pipe(
         Config.withDefault(Redacted.make("my-secret-abc123")),

@@ -1,6 +1,6 @@
 ---
 title: Consume from a Queue
-description: Receive messages from a Cloudflare Queue with Cloudflare.Queues.messages(queue).subscribe(...) — Effect-style stream handler with automatic ack/retry.
+description: Receive messages from a Cloudflare Queue with Cloudflare.Queues.messages(queue, handler) — Effect-style stream handler with automatic ack/retry.
 sidebar:
   order: 10
 ---
@@ -11,9 +11,9 @@ between Workers. The Worker that *sends* messages uses
 binding](/providers/cloudflare/queue) — covered in the resource
 docs. This tutorial focuses on the *consumer* side: receiving
 batches with the Effect-style
-`Cloudflare.Queues.messages(queue).subscribe(...)` API.
+`Cloudflare.Queues.messages(queue, handler)` API.
 
-`subscribe(...)` does both halves in one call: it registers a
+`messages(...)` does both halves in one call: it registers a
 runtime queue listener on the Worker, and it auto-creates the
 `Cloudflare.Queues.Consumer` resource that tells Cloudflare to
 dispatch messages from the queue to this Worker. No separate
@@ -78,7 +78,7 @@ export default Cloudflare.Worker(
 
 ## Subscribe to incoming messages
 
-`Cloudflare.Queues.messages(queue).subscribe(handler)` registers a queue
+`Cloudflare.Queues.messages(queue, handler)` registers a queue
 event listener on the Worker. The handler receives a
 `Stream.Stream<Message<Body>>` — one stream per batch — and is
 expected to return `Effect.Effect<void>`.
@@ -97,7 +97,8 @@ expected to return `Effect.Effect<void>`.
     const queueResource = yield* Queue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
-+   yield* Cloudflare.Queues.messages<QueueMessageBody>(queueResource).subscribe(
++   yield* Cloudflare.Queues.messages<QueueMessageBody>(
++     queueResource,
 +     (stream) =>
 +       Stream.runForEach(stream, (msg) =>
 +         bucket
@@ -130,13 +131,16 @@ retryDelay: "1 second"             // singular and plural units both work
 ```diff lang="typescript"
 +import * as Duration from "effect/Duration";
 
-- Cloudflare.Queues.messages<QueueMessageBody>(queueResource).subscribe(
-+ Cloudflare.Queues.messages<QueueMessageBody>(queueResource, {
-+   batchSize: 25,
-+   maxRetries: 3,
-+   maxWaitTime: "5 seconds",
-+   retryDelay: Duration.seconds(30),
-+ }).subscribe(
+- Cloudflare.Queues.messages<QueueMessageBody>(queueResource, (stream) =>
++ Cloudflare.Queues.messages<QueueMessageBody>(
++   queueResource,
++   {
++     batchSize: 25,
++     maxRetries: 3,
++     maxWaitTime: "5 seconds",
++     retryDelay: Duration.seconds(30),
++   },
++   (stream) =>
 ```
 
 `maxWaitTime` is rounded up to whole milliseconds and `retryDelay`
@@ -144,7 +148,7 @@ to whole seconds when forwarded to Cloudflare.
 
 ## Provide the runtime layer
 
-`messages(...).subscribe(...)` is a `Context.Service` call —
+`messages(...)` is a `Context.Service` call —
 `EventSourceLive` is the layer that registers the listener
 with the Worker's runtime context. Add it to the layer stack
 alongside the other binding lives.
@@ -157,7 +161,7 @@ alongside the other binding lives.
   ),
 ```
 
-Without the live layer, the subscribe call fails at deploy with
+Without the live layer, the `messages` call fails at deploy with
 `Service not found: Cloudflare.Queues.EventSource`.
 
 ## Add the producer route
@@ -230,8 +234,8 @@ export default {
 };
 ```
 
-`Cloudflare.Queues.messages(queue).subscribe(...)` is the same primitive
+`Cloudflare.Queues.messages(queue, handler)` is the same primitive
 on the Effect side — the Worker bundle's runtime context routes
 the dispatch to the registered listener — but you get
 `Effect.gen` composition, typed errors, automatic batch
-ack/retry, and the same surface as `AWS.SQS.messages(queue).subscribe(...)`.
+ack/retry, and the same surface as `AWS.SQS.messages(queue, handler)`.

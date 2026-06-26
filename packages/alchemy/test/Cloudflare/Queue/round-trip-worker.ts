@@ -74,15 +74,18 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     // and-forward path into Cloudflare's Consumer settings.
     // Values are kept small so the round-trip latency stays well
     // under the test's 240s timeout.
-    yield* Cloudflare.Queues.messages<QueueMessageBody>(queueResource, {
-      batchSize: 10,
-      maxRetries: 3,
-      maxWaitTime: Duration.millis(500),
-      retryDelay: "1 second",
-    }).subscribe((stream) =>
-      Stream.runForEach(stream, (msg) =>
-        counters.getByName(msg.body.name).record(msg.body.text),
-      ),
+    yield* Cloudflare.Queues.messages<QueueMessageBody>(
+      queueResource,
+      {
+        batchSize: 10,
+        maxRetries: 3,
+        maxWaitTime: Duration.millis(500),
+        retryDelay: "1 second",
+      },
+      (stream) =>
+        Stream.runForEach(stream, (msg) =>
+          counters.getByName(msg.body.name).record(msg.body.text),
+        ),
     );
 
     return {

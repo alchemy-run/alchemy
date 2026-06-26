@@ -201,7 +201,7 @@ export const JobStorageS3 = Layer.provideMerge(
           ),
         );
 
-      yield* S3.notifications(bucket).subscribe((stream) =>
+      yield* S3.notifications(bucket, (stream) =>
         stream.pipe(
           Stream.flatMap((item) =>
             Stream.fromEffect(getJob(item.key).pipe(Effect.orDie)),

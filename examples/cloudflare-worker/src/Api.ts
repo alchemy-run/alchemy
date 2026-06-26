@@ -50,7 +50,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
     // handler; success ack()s every message in the batch, failure
     // retry()s. The persisted JSON at /queue/<id> on R2 lets the
     // integ test verify the producer→consumer round-trip.
-    yield* Cloudflare.Queues.messages<QueueMessageBody>(queueResource).subscribe(
+    yield* Cloudflare.Queues.messages<QueueMessageBody>(
+      queueResource,
       (stream) =>
         Stream.runForEach(stream, (msg) =>
           bucket

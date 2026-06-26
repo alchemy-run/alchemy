@@ -15,17 +15,20 @@ export default class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()
   },
   Effect.gen(function* () {
     const queue = yield* JobsQueue;
-    yield* AWS.SQS.messages(queue, {
-      batchSize: 10,
-      maximumBatchingWindowInSeconds: 20,
-    }).subscribe((stream) =>
-      stream.pipe(
-        Stream.runForEach((record) =>
-          Effect.logInfo(
-            `processed SQS message ${record.messageId}: ${record.body ?? ""}`,
+    yield* AWS.SQS.messages(
+      queue,
+      {
+        batchSize: 10,
+        maximumBatchingWindowInSeconds: 20,
+      },
+      (stream) =>
+        stream.pipe(
+          Stream.runForEach((record) =>
+            Effect.logInfo(
+              `processed SQS message ${record.messageId}: ${record.body ?? ""}`,
+            ),
           ),
         ),
-      ),
     );
   }).pipe(
     Effect.provide(

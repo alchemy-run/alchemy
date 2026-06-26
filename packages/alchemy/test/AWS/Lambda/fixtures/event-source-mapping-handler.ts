@@ -22,9 +22,7 @@ export default EventSourceMappingFunction.make(
   Effect.gen(function* () {
     const queue = yield* SQS.Queue("EventSourceMappingQueue");
 
-    yield* SQS.messages(queue).subscribe((stream) =>
-      stream.pipe(Stream.runDrain),
-    );
+    yield* SQS.messages(queue, (stream) => stream.pipe(Stream.runDrain));
 
     return {
       fetch: Effect.gen(function* () {

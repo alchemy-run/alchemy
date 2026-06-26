@@ -17,7 +17,7 @@ import type { Providers } from "../Providers.ts";
 
 /**
  * Subscriber settings — the same shape Cloudflare's `Consumer`
- * accepts. `messages(queue, props).subscribe(...)` passes these
+ * accepts. `messages(queue, props, handler)` passes these
  * through to the auto-created `Cloudflare.Queues.Consumer` so a single
  * call captures both runtime and deploy-time intent.
  */
@@ -69,7 +69,7 @@ export type Message<Body = unknown> = cf.Message<Body>;
 /**
  * Subscribe to a Cloudflare Queue with an Effect stream handler.
  *
- * Mirrors `AWS.SQS.messages(queue).subscribe(...)` on the
+ * Mirrors `AWS.SQS.messages(queue, handler)` on the
  * Cloudflare side. Wires both halves of the consumer in one call:
  *
  * - **Runtime**: registers a `queue` event listener on the Worker.
@@ -95,28 +95,59 @@ export type Message<Body = unknown> = cf.Message<Body>;
  * import * as Effect from "effect/Effect";
  * import * as Stream from "effect/Stream";
  *
- * yield* Cloudflare.Queues.messages<MyEvent>(queueResource, {
- *   batchSize: 25,
- *   maxRetries: 3,
- *   maxWaitTime: "5 seconds",
- *   retryDelay: Duration.seconds(30),
- * }).subscribe((stream) =>
- *   Stream.runForEach(stream, (msg) =>
- *     Effect.log(`event ${msg.body.id}`),
- *   ),
+ * yield* Cloudflare.Queues.messages<MyEvent>(
+ *   queueResource,
+ *   {
+ *     batchSize: 25,
+ *     maxRetries: 3,
+ *     maxWaitTime: "5 seconds",
+ *     retryDelay: Duration.seconds(30),
+ *   },
+ *   (stream) =>
+ *     Stream.runForEach(stream, (msg) =>
+ *       Effect.log(`event ${msg.body.id}`),
+ *     ),
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Without options — handler is the second argument.
+ * yield* Cloudflare.Queues.messages<MyEvent>(queueResource, (stream) =>
+ *   Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
  * );
  * ```
  */
-export const messages = <Body = unknown>(
+export function messages<Body = unknown>(
   queue: Queue,
-  props: MessagesProps = {},
-) => ({
-  subscribe: <Req = never>(
-    process: (
-      stream: Stream.Stream<Message<Body>>,
-    ) => Effect.Effect<void, unknown, Req>,
-  ) => EventSource.use((source) => source<Body, Req>(queue, props, process)),
-});
+  process: (
+    stream: Stream.Stream<Message<Body>>,
+  ) => Effect.Effect<void, unknown, any>,
+): Effect.Effect<void, never, EventSource>;
+export function messages<Body = unknown>(
+  queue: Queue,
+  props: MessagesProps,
+  process: (
+    stream: Stream.Stream<Message<Body>>,
+  ) => Effect.Effect<void, unknown, any>,
+): Effect.Effect<void, never, EventSource>;
+export function messages<Body = unknown>(
+  queue: Queue,
+  propsOrProcess:
+    | MessagesProps
+    | ((
+        stream: Stream.Stream<Message<Body>>,
+      ) => Effect.Effect<void, unknown, any>),
+  maybeProcess?: (
+    stream: Stream.Stream<Message<Body>>,
+  ) => Effect.Effect<void, unknown, any>,
+): Effect.Effect<void, never, EventSource> {
+  const [props, process] =
+    typeof propsOrProcess === "function"
+      ? [{} as MessagesProps, propsOrProcess]
+      : [propsOrProcess, maybeProcess!];
+  return EventSource.use((source) => source<Body>(queue, props, process));
+}
 
 // `Req` is the handler's requirements. The service registers the
 // handler with the Worker's runtime context, where the runtime
@@ -124,12 +155,12 @@ export const messages = <Body = unknown>(
 // dispatch fires — so the requirement is satisfied at handler
 // invocation, NOT at subscribe time. We drop `Req` from the return
 // to keep init effects clean (mirrors `AWS.SQS.EventSourceService`).
-export type EventSourceService = <Body = unknown, Req = never>(
+export type EventSourceService = <Body = unknown>(
   queue: Queue,
   props: MessagesProps,
   process: (
     stream: Stream.Stream<Message<Body>>,
-  ) => Effect.Effect<void, unknown, Req>,
+  ) => Effect.Effect<void, unknown, any>,
 ) => Effect.Effect<void, never, never>;
 
 /**
@@ -166,7 +197,7 @@ export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
     Effect.gen(function* () {
       if (!isWorker(host)) {
         return yield* Effect.die(
-          `Cloudflare.Queues.messages(...).subscribe(...) is only supported on ` +
+          `Cloudflare.Queues.messages(...) is only supported on ` +
             `Cloudflare.Worker hosts (got '${host.Type}').`,
         );
       }
@@ -191,7 +222,7 @@ export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
 
 /**
  * Runtime layer for {@link messages}. Wires each
- * `messages(queue).subscribe(...)` call in the Worker init phase to
+ * `messages(queue, handler)` call in the Worker init phase to
  * a `queue` event listener on the runtime context, and asks the
  * deploy-time policy ({@link EventSourcePolicy}, provided in
  * `Cloudflare.providers()`) to yield the matching
@@ -209,7 +240,7 @@ export const EventSourceLive = Layer.effect(
       props: MessagesProps,
       process: (
         stream: Stream.Stream<Message<Body>>,
-      ) => Effect.Effect<void, unknown, Req>,
+      ) => Effect.Effect<void, unknown, any>,
     ) {
       // Deploy-time: ensure the Consumer resource exists. At
       // runtime this Layer's `policy` resolves to the no-op variant

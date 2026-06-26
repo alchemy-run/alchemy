@@ -38,7 +38,8 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
             return yield* response.text;
           }).pipe(Effect.orDie),
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+          const [response, socket] =
+            yield* Cloudflare.WebSocket.upgradeConnection();
           const id = "TODO";
           socket.serializeAttachment({ id });
           sessions.set(id, socket);

@@ -32,26 +32,29 @@ export default BucketEventSourceFunction.make(
 
     // Subscribe to object-created events under `incoming/`. Each notification
     // writes a derived object under `processed/<name>` recording the event.
-    yield* S3.notifications(bucket, {
-      events: ["s3:ObjectCreated:*"],
-      prefix: INCOMING_PREFIX,
-    }).subscribe((stream) =>
-      stream.pipe(
-        Stream.runForEach((event) =>
-          Effect.gen(function* () {
-            const name = event.key.slice(INCOMING_PREFIX.length);
-            yield* putObject({
-              Key: `${PROCESSED_PREFIX}${name}`,
-              Body: JSON.stringify({
-                key: event.key,
-                size: event.size,
-                eTag: event.eTag,
-              }),
-              ContentType: "application/json",
-            });
-          }).pipe(Effect.orDie),
+    yield* S3.notifications(
+      bucket,
+      {
+        events: ["s3:ObjectCreated:*"],
+        prefix: INCOMING_PREFIX,
+      },
+      (stream) =>
+        stream.pipe(
+          Stream.runForEach((event) =>
+            Effect.gen(function* () {
+              const name = event.key.slice(INCOMING_PREFIX.length);
+              yield* putObject({
+                Key: `${PROCESSED_PREFIX}${name}`,
+                Body: JSON.stringify({
+                  key: event.key,
+                  size: event.size,
+                  eTag: event.eTag,
+                }),
+                ContentType: "application/json",
+              });
+            }).pipe(Effect.orDie),
+          ),
         ),
-      ),
     );
 
     return {

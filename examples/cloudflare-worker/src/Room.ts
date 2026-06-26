@@ -31,7 +31,8 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
 
       return {
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+          const [response, socket] =
+            yield* Cloudflare.WebSocket.upgradeConnection();
           const id = crypto.randomUUID();
           socket.serializeAttachment({ id });
           sessions.set(id, socket);
@@ -63,7 +64,9 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
             const msg = remindMatch[2];
             const id = crypto.randomUUID();
             const runAt = new Date(Date.now() + delaySec * 1000);
-            yield* Cloudflare.Workers.scheduleEvent(id, runAt, { message: msg });
+            yield* Cloudflare.Workers.scheduleEvent(id, runAt, {
+              message: msg,
+            });
             yield* socket.send(
               `[system] Reminder scheduled in ${delaySec}s: "${msg}"`,
             );

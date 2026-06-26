@@ -21,18 +21,17 @@ import type { Providers } from "../Providers.ts";
  * @category Workers & Compute
  * @example
  * ```typescript
- * yield* Cloudflare.Workers.cron("0 12 * * *").subscribe((controller) =>
+ * yield* Cloudflare.Workers.cron("0 12 * * *", (controller) =>
  *   Effect.log(`scheduled at ${controller.scheduledTime}`),
  * );
  * ```
  */
-export const cron = (expression: string) => ({
-  subscribe: <Req = never>(
-    process: (
-      controller: cf.ScheduledController,
-    ) => Effect.Effect<void, unknown, Req>,
-  ) => CronEventSource.use((source) => source(expression, process)),
-});
+export const cron = <Req = never>(
+  expression: string,
+  process: (
+    controller: cf.ScheduledController,
+  ) => Effect.Effect<void, unknown, Req>,
+) => CronEventSource.use((source) => source(expression, process));
 
 export type CronEventSourceService = <Req = never>(
   expression: string,
@@ -60,7 +59,7 @@ export const CronEventSourcePolicyLive = CronEventSourcePolicy.layer.succeed(
       });
     } else {
       return yield* Effect.die(
-        `Cloudflare.Workers.cron(...).subscribe(...) is only supported on ` +
+        `Cloudflare.Workers.cron(...) is only supported on ` +
           `Cloudflare.Worker hosts (got '${host.Type}').`,
       );
     }

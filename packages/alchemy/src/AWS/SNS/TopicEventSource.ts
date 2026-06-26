@@ -32,13 +32,29 @@ export type TopicEventSourceService = <StreamReq = never, Req = never>(
   ) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
 
-export const notifications = <T extends Topic>(
+type TopicEventSourceHandler<Req, StreamReq> = (
+  stream: Stream.Stream<TopicNotification, never, StreamReq>,
+) => Effect.Effect<void, never, Req>;
+
+export function notifications<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
-  props: TopicEventSourceProps = {},
-) => ({
-  subscribe: <Req = never, StreamReq = never>(
-    process: (
-      stream: Stream.Stream<TopicNotification, never, StreamReq>,
-    ) => Effect.Effect<void, never, Req>,
-  ) => TopicEventSource.use((source) => source(topic, props, process)),
-});
+  process: TopicEventSourceHandler<Req, StreamReq>,
+): Effect.Effect<void, never, TopicEventSource>;
+export function notifications<T extends Topic, Req = never, StreamReq = never>(
+  topic: T,
+  props: TopicEventSourceProps,
+  process: TopicEventSourceHandler<Req, StreamReq>,
+): Effect.Effect<void, never, TopicEventSource>;
+export function notifications<T extends Topic, Req = never, StreamReq = never>(
+  topic: T,
+  propsOrProcess:
+    | TopicEventSourceProps
+    | TopicEventSourceHandler<Req, StreamReq>,
+  maybeProcess?: TopicEventSourceHandler<Req, StreamReq>,
+) {
+  const [props, process] =
+    typeof propsOrProcess === "function"
+      ? [{} as TopicEventSourceProps, propsOrProcess]
+      : [propsOrProcess, maybeProcess!];
+  return TopicEventSource.use((source) => source(topic, props, process));
+}
