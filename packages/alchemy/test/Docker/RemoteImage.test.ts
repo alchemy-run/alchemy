@@ -14,25 +14,6 @@ import { describe } from "vitest";
 const dockerDaemonOk =
   spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
-const freeHostPort = Effect.promise(
-  () =>
-    new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.unref();
-      server.on("error", reject);
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        const port =
-          typeof address === "object" && address ? address.port : undefined;
-        server.close((error) => {
-          if (error) reject(error);
-          else if (port) resolve(port);
-          else reject(new Error("Failed to allocate a free host port"));
-        });
-      });
-    }),
-);
-
 const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
@@ -179,3 +160,22 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
       }),
   );
 });
+
+const freeHostPort = Effect.promise(
+  () =>
+    new Promise<number>((resolve, reject) => {
+      const server = createServer();
+      server.unref();
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        const port =
+          typeof address === "object" && address ? address.port : undefined;
+        server.close((error) => {
+          if (error) reject(error);
+          else if (port) resolve(port);
+          else reject(new Error("Failed to allocate a free host port"));
+        });
+      });
+    }),
+);
