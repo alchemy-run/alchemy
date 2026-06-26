@@ -18,7 +18,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
-import { fromWebSocket } from "./WebSocket.ts";
+import { fromWebSocket } from "../WebSocket/WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
 /**

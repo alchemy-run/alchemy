@@ -10,7 +10,7 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const sessions = new Map<string, Cloudflare.Workers.DurableWebSocket>();
+      const sessions = new Map<string, Cloudflare.WebSocket.Socket>();
 
       for (const socket of yield* state.getWebSockets()) {
         const session = socket.deserializeAttachment<{ id: string }>();
@@ -38,14 +38,14 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
             return yield* response.text;
           }).pipe(Effect.orDie),
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.Workers.upgrade();
+          const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
           const id = "TODO";
           socket.serializeAttachment({ id });
           sessions.set(id, socket);
           return response;
         }).pipe(Effect.orDie),
         webSocketMessage: Effect.fn(function* (
-          socket: Cloudflare.Workers.DurableWebSocket,
+          socket: Cloudflare.WebSocket.Socket,
           message: string | Uint8Array,
         ) {
           const session = socket.deserializeAttachment<{ id: string }>();
@@ -59,7 +59,7 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
           }
         }),
         webSocketClose: Effect.fn(function* (
-          ws: Cloudflare.Workers.DurableWebSocket,
+          ws: Cloudflare.WebSocket.Socket,
           code: number,
           reason: string,
           _wasClean: boolean,

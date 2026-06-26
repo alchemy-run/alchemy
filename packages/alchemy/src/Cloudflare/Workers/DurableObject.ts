@@ -21,7 +21,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import { type DurableWebSocket } from "./WebSocket.ts";
+import { type Socket } from "../WebSocket/WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 export interface DurableObjectExport {
@@ -90,11 +90,11 @@ export interface DurableObjectShape {
     alarmInfo?: AlarmInvocationInfo,
   ) => Effect.Effect<void, never, never>;
   webSocketMessage?: (
-    socket: DurableWebSocket,
+    socket: Socket,
     message: string | ArrayBuffer,
   ) => Effect.Effect<void>;
   webSocketClose?: (
-    socket: DurableWebSocket,
+    socket: Socket,
     code: number,
     reason: string,
     wasClean: boolean,
@@ -521,7 +521,7 @@ export class DurableObjectScope extends Context.Service<
  * @section WebSocket Hibernation
  * Durable Objects support WebSocket hibernation — the runtime can
  * evict the object from memory while keeping connections open. Use
- * `Cloudflare.Workers.upgrade()` to accept a connection, and return
+ * `Cloudflare.WebSocket.upgradeConnection()` to accept a connection, and return
  * `webSocketMessage` / `webSocketClose` handlers to process events
  * when the object wakes back up.
  *
@@ -529,7 +529,7 @@ export class DurableObjectScope extends Context.Service<
  * ```typescript
  * return {
  *   fetch: Effect.gen(function* () {
- *     const [response, socket] = yield* Cloudflare.Workers.upgrade();
+ *     const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
  *     socket.serializeAttachment({ id: crypto.randomUUID() });
  *     return response;
  *   }),
@@ -540,7 +540,7 @@ export class DurableObjectScope extends Context.Service<
  * ```typescript
  * return {
  *   webSocketMessage: Effect.fn(function* (
- *     socket: Cloudflare.Workers.DurableWebSocket,
+ *     socket: Cloudflare.WebSocket.Socket,
  *     message: string | Uint8Array,
  *   ) {
  *     const text = typeof message === "string"
@@ -549,7 +549,7 @@ export class DurableObjectScope extends Context.Service<
  *     // process the message
  *   }),
  *   webSocketClose: Effect.fn(function* (
- *     ws: Cloudflare.Workers.DurableWebSocket,
+ *     ws: Cloudflare.WebSocket.Socket,
  *     code: number,
  *     reason: string,
  *   ) {
@@ -570,7 +570,7 @@ export class DurableObjectScope extends Context.Service<
  *   const state = yield* Cloudflare.DurableObjectState;
  *
  *   return Effect.gen(function* () {
- *     const sessions = new Map<string, Cloudflare.Workers.DurableWebSocket>();
+ *     const sessions = new Map<string, Cloudflare.WebSocket.Socket>();
  *
  *     // Rehydrate the in-memory session map after hibernation.
  *     for (const socket of yield* state.getWebSockets()) {
@@ -580,7 +580,7 @@ export class DurableObjectScope extends Context.Service<
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const [response, socket] = yield* Cloudflare.Workers.upgrade();
+ *         const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
  *         const id = crypto.randomUUID();
  *         socket.serializeAttachment({ id });
  *         sessions.set(id, socket);

@@ -102,6 +102,7 @@ export * as VpcService from "./VpcService/index.ts";
 export * as VulnerabilityScanner from "./VulnerabilityScanner/index.ts";
 export * as WaitingRoom from "./WaitingRoom/index.ts";
 export * as Web3 from "./Web3/index.ts";
+export * as WebSocket from "./WebSocket/index.ts";
 export * as Website from "./Website/index.ts";
 export * as Workers from "./Workers/index.ts";
 export * as Workflows from "./Workflows/index.ts";

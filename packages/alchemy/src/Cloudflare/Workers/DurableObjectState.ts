@@ -6,7 +6,7 @@ import {
   fromDurableObjectStorage,
   type DurableObjectStorage,
 } from "./DurableObjectStorage.ts";
-import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
+import { fromWebSocket, type Socket } from "../WebSocket/WebSocket.ts";
 
 export class DurableObjectState extends Context.Service<
   DurableObjectState,
@@ -18,12 +18,10 @@ export class DurableObjectState extends Context.Service<
       callback: () => Effect.Effect<T, never, RuntimeContext>,
     ): Effect.Effect<T, never, RuntimeContext>;
     acceptWebSocket(
-      ws: DurableWebSocket,
+      ws: Socket,
       tags?: string[],
     ): Effect.Effect<void, never, RuntimeContext>;
-    getWebSockets(
-      tag?: string,
-    ): Effect.Effect<DurableWebSocket[], never, RuntimeContext>;
+    getWebSockets(tag?: string): Effect.Effect<Socket[], never, RuntimeContext>;
     setWebSocketAutoResponse(
       maybeReqResp?: cf.WebSocketRequestResponsePair,
     ): Effect.Effect<void, never, RuntimeContext>;
@@ -58,7 +56,7 @@ export const fromDurableObjectState = (
     Effect.tryPromise(() =>
       state.blockConcurrencyWhile(() => Effect.runPromise(callback())),
     ),
-  acceptWebSocket: (ws: DurableWebSocket, tags?: string[]) =>
+  acceptWebSocket: (ws: Socket, tags?: string[]) =>
     Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
   getWebSockets: (tag?: string) =>
     Effect.sync(() => state.getWebSockets(tag).map(fromWebSocket)),
