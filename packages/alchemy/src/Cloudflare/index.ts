@@ -126,3 +126,8 @@ export {
 export type { InferEnv } from "./Workers/index.ts";
 export { Workflow } from "./Workflows/index.ts";
 export { Container } from "./Containers/index.ts";
+
+// runtime bridge factories — the generated Worker entry imports these from
+// "alchemy/Cloudflare" (see Workers/WorkerBundle.ts), so they must stay top-level.
+export { makeWorkerBridge, makeDurableObjectBridge } from "./Workers/index.ts";
+export { makeWorkflowBridge } from "./Workflows/index.ts";
