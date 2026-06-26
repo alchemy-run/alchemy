@@ -71,6 +71,27 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * @section React Server Components
+ * Frameworks that emit more than one server environment (e.g. React
+ * Server Components, which split into an `rsc` environment and an `ssr`
+ * environment) need `viteEnvironments` to declare which environment
+ * produces the deployed Worker entry and which additional server
+ * environments to bundle alongside it. The `client` environment is
+ * always deployed as static assets.
+ *
+ * @example React Router with RSC
+ * ```typescript
+ * const app = yield* Cloudflare.Vite("ReactRouterRSC", {
+ *   compatibility: {
+ *     flags: ["nodejs_compat"],
+ *   },
+ *   viteEnvironments: {
+ *     entry: "rsc",
+ *     children: ["ssr"],
+ *   },
+ * });
+ * ```
+ *
  * @section Single-Page Applications
  * For SPAs (React, Vue, etc.), configure asset handling so all
  * routes fall back to `index.html`.

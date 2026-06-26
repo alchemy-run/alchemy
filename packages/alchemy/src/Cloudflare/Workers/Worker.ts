@@ -361,12 +361,25 @@ export interface ViteOptions {
    */
   memo?: MemoOptions;
   /**
-   * Vite environments to build.
-   * @default { entry: "ssr" }
+   * Selects which Vite environments make up the deployed Worker, for
+   * frameworks that build more than one (e.g. React Server Components).
+   *
+   * A single-environment SSR build needs no configuration. For a
+   * multi-environment build, point `entry` at the environment that
+   * produces the server entry chunk and list the remaining server-side
+   * environments in `children` so their chunks are bundled alongside it.
+   * The `client` environment is always treated as static assets.
+   *
+   * @example React Router / React Server Components
+   * ```typescript
+   * viteEnvironments: { entry: "rsc", children: ["ssr"] }
+   * ```
+   *
+   * @default { entry: "ssr", children: [] }
    */
   viteEnvironments?: {
-    entry: string;
-    children: string[];
+    entry?: string;
+    children?: string[];
   };
 }
 

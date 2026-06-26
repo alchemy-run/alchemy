@@ -60,13 +60,15 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
       }
       const files = Object.values(bundle);
       if (this.environment.name === entryEnvironment) {
-        if (files[0].type === "chunk" && files[0].isEntry) {
-          serverEntry = fileName(files[0].fileName, this.environment);
-        } else {
+        const entryChunk = files.find(
+          (file) => file.type === "chunk" && file.isEntry,
+        );
+        if (!entryChunk) {
           throw new Error(
             `Entry chunk not found for environment "${this.environment.name}"`,
           );
         }
+        serverEntry = fileName(entryChunk.fileName, this.environment);
       }
       await Promise.all(
         files.map(async (file) => {
