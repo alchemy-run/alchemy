@@ -32,7 +32,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 // fast instead of an uncapped exponential blowing past the test timeout
 // while riding out fresh-workers.dev cold-start propagation.
 const ready = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
+  Schedule.both(Schedule.recurs(45)),
 );
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
