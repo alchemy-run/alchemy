@@ -51,6 +51,7 @@ export class Docker extends Context.Service<
         "health-start-interval": string | undefined;
         p: Array<string> | undefined;
         command: Array<string> | undefined;
+        label?: Record<string, string>;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a container. */
       readonly inspect: (
@@ -182,6 +183,7 @@ export declare namespace Docker {
       Image: string;
       Cmd: string[] | null;
       Env: string[] | null;
+      Labels: Record<string, string> | null;
       Healthcheck?: {
         Test: string[] | null;
         Interval?: number;
@@ -371,7 +373,7 @@ export const DockerLive = Layer.effect(
         ),
       ),
       container: {
-        create: ({ image, env, ...options }) =>
+        create: ({ image, env, command, ...options }) =>
           run(
             [
               "container",
@@ -381,7 +383,7 @@ export const DockerLive = Layer.effect(
                 env: env ? Object.keys(env) : undefined,
               }),
               image,
-              ...(options.command ?? []),
+              ...(command ?? []),
             ],
             env,
           ),

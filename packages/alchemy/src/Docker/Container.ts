@@ -1,13 +1,13 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import { identity } from "effect/Function";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { Docker, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -172,14 +172,12 @@ export const Container = Resource<Container>("Docker.Container");
  */
 export const inspectContainer = (
   name: string,
-): Effect.Effect<
-  Exclude<Container["Attributes"], "imageRef">,
-  PlatformError,
-  Docker
-> =>
+): Effect.Effect<Container["Attributes"], PlatformError, Docker> =>
   Docker.pipe(
     Effect.flatMap((docker) => docker.container.inspect(name)),
-    Effect.map((container) => toContainerAttributes(container, undefined!)),
+    Effect.map((container) =>
+      toContainerAttributes(container, container.Config.Image),
+    ),
   );
 
 export const ContainerProvider = () =>
@@ -235,17 +233,28 @@ export const ContainerProvider = () =>
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* dockerPhysicalName(id, olds, instanceId);
-          return yield* docker.container.inspect(name).pipe(
-            Effect.map((info) =>
-              toContainerAttributes(info, normalizeImageRef(olds.image)),
-            ),
-            Effect.map(output ? identity : Unowned),
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
+          const info = yield* docker.container
+            .inspect(name)
+            .pipe(
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.undefined,
+              ),
+            );
+          if (!info) return undefined;
+          const attrs = toContainerAttributes(
+            info,
+            normalizeImageRef(olds.image),
           );
+          if (output) return attrs;
+          // Without prior state, only adopt a container that carries our
+          // branding; anything else is foreign and gated behind `--adopt`.
+          const owned = yield* hasAlchemyTags(
+            id,
+            info.Config.Labels ?? undefined,
+          );
+          return owned ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -277,6 +286,8 @@ export const ContainerProvider = () =>
             yield* reconcileNetworks(live, news);
             if (news.start && live.State.Status !== "running") {
               yield* docker.container.start(live.Id);
+            } else if (!news.start && live.State.Status === "running") {
+              yield* docker.container.stop(live.Id);
             }
             return yield* docker.container
               .inspect(live.Id)
@@ -285,7 +296,11 @@ export const ContainerProvider = () =>
               );
           }
 
-          const { stdout: containerId } = yield* docker.container.create(args);
+          const internalTags = yield* createInternalTags(id);
+          const { stdout: containerId } = yield* docker.container.create({
+            ...args,
+            label: internalTags,
+          });
           yield* Effect.forEach(
             news.networks ?? [],
             (network) =>

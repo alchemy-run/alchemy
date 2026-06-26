@@ -1,10 +1,14 @@
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import { identity } from "effect/Function";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  createInternalTags,
+  hasAlchemyTags,
+  stripInternalTags,
+} from "../Tags.ts";
 import { Docker, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -99,18 +103,25 @@ export const VolumeProvider = () =>
 
       return Volume.Provider.of({
         list: () => Effect.succeed([]),
-        read: Effect.fn(({ id, instanceId, olds, output }) =>
-          dockerPhysicalName(id, olds, instanceId).pipe(
-            Effect.flatMap(docker.volume.inspect),
-            Effect.map(toVolumeAttributes),
-            Effect.map(output ? identity : Unowned),
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
-          ),
-        ),
+        read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const name = yield* dockerPhysicalName(id, olds, instanceId);
+          const info = yield* docker.volume
+            .inspect(name)
+            .pipe(
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.undefined,
+              ),
+            );
+          if (!info) return undefined;
+          const attrs = toVolumeAttributes(info);
+          if (output) return attrs;
+          // Without prior state, only adopt a volume that carries our branding;
+          // anything else is foreign and gated behind `--adopt`.
+          const owned = yield* hasAlchemyTags(id, info.Labels ?? undefined);
+          return owned ? attrs : Unowned(attrs);
+        }),
         diff: Effect.fn(function* ({ id, instanceId, output, news }) {
           if (!isResolved(news)) return undefined;
           const args = yield* makeVolumeArgs(id, news, instanceId);
@@ -118,18 +129,24 @@ export const VolumeProvider = () =>
             output?.name !== args.name ||
             output?.driver !== args.driver ||
             !Equal.equals(output?.driverOpts ?? {}, args.opt ?? {}) ||
-            !Equal.equals(output?.labels ?? {}, args.label ?? {})
+            // Compare only user labels; internal `alchemy::*` branding lives on
+            // the observed volume but must not drive replacement.
+            !Equal.equals(stripInternalTags(output?.labels), args.label ?? {})
           ) {
             return { action: "replace" as const, deleteFirst: true };
           }
         }),
-        reconcile: Effect.fn(({ id, instanceId, news }) =>
-          makeVolumeArgs(id, news, instanceId).pipe(
-            Effect.flatMap(docker.volume.create),
-            Effect.flatMap((result) => docker.volume.inspect(result.stdout)),
-            Effect.map(toVolumeAttributes),
-          ),
-        ),
+        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+          const args = yield* makeVolumeArgs(id, news, instanceId);
+          const internalTags = yield* createInternalTags(id);
+          const result = yield* docker.volume.create({
+            ...args,
+            label: { ...internalTags, ...args.label },
+          });
+          return toVolumeAttributes(
+            yield* docker.volume.inspect(result.stdout),
+          );
+        }),
         delete: Effect.fn(({ output }) =>
           docker.volume
             .remove(output.name)

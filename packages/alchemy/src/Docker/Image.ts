@@ -43,14 +43,18 @@ export interface DockerBuildOptions {
 }
 
 export interface ImageProps {
+  /**
+   * Repository/name for the built image.
+   *
+   * @default Generated from stack, stage, logical id, and instance id.
+   */
+  name?: string;
   /** Image tag. @default "latest" */
   tag?: string;
   /** Registry credentials for push. */
   registry?: ImageRegistry;
   /** Skip registry push even when `registry` is set. @default false */
   skipPush?: boolean;
-  /** Repository/name for the built image. @default Logical id */
-  name?: string;
   /** Docker build configuration. */
   build: DockerBuildOptions;
 }

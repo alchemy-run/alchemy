@@ -1,10 +1,14 @@
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import { identity } from "effect/Function";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  createInternalTags,
+  hasAlchemyTags,
+  stripInternalTags,
+} from "../Tags.ts";
 import { Docker, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -78,18 +82,25 @@ export const NetworkProvider = () =>
 
       return Network.Provider.of({
         list: () => Effect.succeed([]),
-        read: Effect.fn(({ id, instanceId, olds, output }) =>
-          dockerPhysicalName(id, olds, instanceId).pipe(
-            Effect.flatMap(docker.network.inspect),
-            Effect.map(toNetworkAttributes),
-            Effect.map(output ? identity : Unowned),
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
-          ),
-        ),
+        read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const name = yield* dockerPhysicalName(id, olds, instanceId);
+          const info = yield* docker.network
+            .inspect(name)
+            .pipe(
+              Effect.catchReason(
+                "PlatformError",
+                "NotFound",
+                () => Effect.undefined,
+              ),
+            );
+          if (!info) return undefined;
+          const attrs = toNetworkAttributes(info);
+          if (output) return attrs;
+          // Without prior state, only adopt a network that carries our branding;
+          // anything else is foreign and gated behind `--adopt`.
+          const owned = yield* hasAlchemyTags(id, info.Labels ?? undefined);
+          return owned ? attrs : Unowned(attrs);
+        }),
         diff: Effect.fn(function* ({ id, output, instanceId, news }) {
           if (!isResolved(news) || !output) return undefined;
           const args = yield* makeNetworkArgs(id, news, instanceId);
@@ -97,11 +108,12 @@ export const NetworkProvider = () =>
             output.name !== args.name ||
             output.driver !== args.driver ||
             output.enableIPv6 !== args.ipv6 ||
-            !Equal.equals(output.labels, args.label)
+            // Compare only user labels; internal `alchemy::*` branding lives on
+            // the observed network but must not drive replacement.
+            !Equal.equals(stripInternalTags(output.labels), args.label ?? {})
           ) {
             return { action: "replace", deleteFirst: true };
           }
-          return { action: "noop" };
         }),
         reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
           if (output) {
@@ -115,12 +127,13 @@ export const NetworkProvider = () =>
             );
             if (refreshed) return refreshed;
           }
-          return yield* makeNetworkArgs(id, news, instanceId).pipe(
-            Effect.flatMap(docker.network.create),
-            Effect.map((result) => result.stdout),
-            Effect.flatMap((createdId) => docker.network.inspect(createdId)),
-            Effect.map(toNetworkAttributes),
-          );
+          const args = yield* makeNetworkArgs(id, news, instanceId);
+          const internalTags = yield* createInternalTags(id);
+          const { stdout: createdId } = yield* docker.network.create({
+            ...args,
+            label: { ...internalTags, ...args.label },
+          });
+          return toNetworkAttributes(yield* docker.network.inspect(createdId));
         }),
         delete: Effect.fn(({ output }) =>
           docker.network
