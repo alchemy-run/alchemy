@@ -95,8 +95,13 @@ describe.sequential("Docker.Volume", () => {
     "replaces a volume when its labels change",
     (stack) =>
       Effect.gen(function* () {
-        // Auto-generated name: a replacement gets a fresh physical name, so the
-        // new volume is a real create (a same-name `volume create` is a no-op).
+        const docker = yield* Docker.Docker;
+        const volumeName = "alchemy-test-volume-replace";
+        yield* docker.volume
+          .remove(volumeName)
+          .pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+          );
         const first = yield* stack.deploy(
           Docker.Volume("replaceable-volume", {
             labels: { generation: "1" },

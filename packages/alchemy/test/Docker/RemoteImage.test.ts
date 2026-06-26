@@ -6,9 +6,9 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { createServer } from "node:net";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { describe } from "vitest";
 
 const dockerDaemonOk =
@@ -74,7 +74,7 @@ test.provider("diff pulls again unless alwaysPull is disabled", () =>
   }),
 );
 
-describe.sequential("Docker.RemoteImage", () => {
+describe("Docker.RemoteImage", { concurrent: false }, () => {
   test.provider.skipIf(!dockerDaemonOk)(
     "pulls a Docker image reference",
     (stack) =>
@@ -89,7 +89,6 @@ describe.sequential("Docker.RemoteImage", () => {
         expect(image.imageRef).toBe("nginx:alpine");
         expect(image.imageId.length).toBeGreaterThan(0);
       }),
-    { timeout: 120000 },
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
@@ -121,7 +120,6 @@ describe.sequential("Docker.RemoteImage", () => {
         const inspected = yield* docker.image.inspect(targetRef);
         expect(inspected.Id.length).toBeGreaterThan(0);
       }),
-    { timeout: 120000 },
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
@@ -179,6 +177,5 @@ describe.sequential("Docker.RemoteImage", () => {
         expect(image.repoDigest).toBeDefined();
         expect(image.repoDigest).toContain(`${targetName}@sha256:`);
       }),
-    { timeout: 180000 },
   );
 });

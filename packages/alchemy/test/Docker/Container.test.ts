@@ -11,29 +11,6 @@ import { describe } from "vitest";
 const dockerDaemonOk =
   spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
-const freeHostPort = Effect.promise(
-  () =>
-    new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.unref();
-      server.on("error", reject);
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        const port =
-          typeof address === "object" && address ? address.port : undefined;
-        server.close((error) => {
-          if (error) {
-            reject(error);
-          } else if (port) {
-            resolve(port);
-          } else {
-            reject(new Error("Failed to allocate a free host port"));
-          }
-        });
-      });
-    }),
-);
-
 const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
@@ -63,7 +40,7 @@ test.provider("diff replaces a container when its image changes", () =>
   }),
 );
 
-describe.sequential("Docker.Container", () => {
+describe("Docker.Container", { concurrent: false }, () => {
   test.provider.skipIf(!dockerDaemonOk)(
     "publishes and inspects bound host ports",
     (stack) =>
@@ -89,7 +66,6 @@ describe.sequential("Docker.Container", () => {
           ],
         });
       }),
-    { timeout: 120000 },
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
@@ -105,7 +81,6 @@ describe.sequential("Docker.Container", () => {
         expect(container.state).toBe("created");
         expect(container.imageRef).toBe("nginx:alpine");
       }),
-    { timeout: 120000 },
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
@@ -137,7 +112,6 @@ describe.sequential("Docker.Container", () => {
         expect(aliases).toContain("new-alias");
         expect(aliases).not.toContain("old-alias");
       }),
-    { timeout: 120000 },
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
@@ -161,6 +135,28 @@ describe.sequential("Docker.Container", () => {
         expect(second.id).not.toBe(first.id);
         expect(second.ports["80/tcp"]).toBe(secondPort);
       }),
-    { timeout: 120000 },
   );
 });
+
+const freeHostPort = Effect.promise(
+  () =>
+    new Promise<number>((resolve, reject) => {
+      const server = createServer();
+      server.unref();
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        const port =
+          typeof address === "object" && address ? address.port : undefined;
+        server.close((error) => {
+          if (error) {
+            reject(error);
+          } else if (port) {
+            resolve(port);
+          } else {
+            reject(new Error("Failed to allocate a free host port"));
+          }
+        });
+      });
+    }),
+);

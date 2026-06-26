@@ -108,7 +108,7 @@ test.provider("diff does not flag a spurious update when nothing changed", () =>
   }),
 );
 
-describe.sequential("Docker.Image", () => {
+describe("Docker.Image", { concurrent: false }, () => {
   test.provider.skipIf(!dockerDaemonOk)(
     "builds a tiny Dockerfile with an auto-generated name",
     (stack) =>

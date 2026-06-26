@@ -15,29 +15,7 @@ const dockerDaemonOk =
 const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
-  adopt: true,
 });
-
-const { test: nonAdoptTest } = Test.make({
-  providers: Docker.providers(),
-  state: inMemoryState(),
-});
-
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
-  cause.reasons
-    .map((reason) =>
-      Cause.isFailReason(reason)
-        ? reason.error
-        : Cause.isDieReason(reason)
-          ? reason.defect
-          : undefined,
-    )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
 
 test.provider("diff replaces a network when labels change", () =>
   Effect.gen(function* () {
@@ -62,26 +40,24 @@ test.provider("diff replaces a network when labels change", () =>
   }),
 );
 
-describe.sequential("Docker.Network", () => {
-  test.provider.skipIf(!dockerDaemonOk)(
-    "creates a bridge network",
-    (stack) =>
-      Effect.gen(function* () {
-        const network = yield* stack.deploy(
-          Docker.Network("created-network", {
-            name: "alchemy-test-network-create",
-            labels: { "com.alchemy.test": "true" },
-          }),
-        );
-        expect(network.name).toBe("alchemy-test-network-create");
-        expect(network.driver).toBe("bridge");
-        expect(network.id.length).toBeGreaterThan(0);
-        expect(network.labels["com.alchemy.test"]).toBe("true");
-      }),
-    { timeout: 120000 },
+describe("Docker.Network", { concurrent: false }, () => {
+  test.provider.skipIf(!dockerDaemonOk)("creates a bridge network", (stack) =>
+    Effect.gen(function* () {
+      const network = yield* stack.deploy(
+        Docker.Network("created-network", {
+          labels: { "com.alchemy.test": "true" },
+        }),
+      );
+      expect(network).toMatchObject({
+        name: expect.any(String),
+        driver: "bridge",
+        id: expect.any(String),
+        labels: { "com.alchemy.test": "true" },
+      });
+    }),
   );
 
-  nonAdoptTest.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!dockerDaemonOk)(
     "refuses a pre-existing network unless explicitly adopted",
     (stack) =>
       Effect.gen(function* () {
@@ -113,7 +89,6 @@ describe.sequential("Docker.Network", () => {
         expect(network.name).toBe(networkName);
         expect(network.id.length).toBeGreaterThan(0);
       }),
-    { timeout: 120000 },
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
@@ -136,12 +111,11 @@ describe.sequential("Docker.Network", () => {
           Docker.Network("existing-network", {
             name: networkName,
             driver: "bridge",
-          }),
+          }).pipe(adopt(true)),
         );
         expect(network.name).toBe(networkName);
         expect(network.id.length).toBeGreaterThan(0);
       }),
-    { timeout: 120000 },
   );
 
   test.provider.skipIf(!dockerDaemonOk)(
@@ -149,8 +123,6 @@ describe.sequential("Docker.Network", () => {
     (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        // Auto-generated name: a replacement gets a fresh physical name, so
-        // the new network never collides with the one being torn down.
         const name = "alchemy-test-network-replace";
         yield* docker.network
           .remove(name)
@@ -172,6 +144,21 @@ describe.sequential("Docker.Network", () => {
         expect(second.id).not.toBe(first.id);
         expect(second.labels.generation).toBe("2");
       }),
-    { timeout: 120000 },
   );
 });
+
+const findOwnedError = (
+  cause: Cause.Cause<unknown>,
+): OwnedBySomeoneElse | undefined =>
+  cause.reasons
+    .map((reason) =>
+      Cause.isFailReason(reason)
+        ? reason.error
+        : Cause.isDieReason(reason)
+          ? reason.defect
+          : undefined,
+    )
+    .find(
+      (value): value is OwnedBySomeoneElse =>
+        value instanceof OwnedBySomeoneElse,
+    );
