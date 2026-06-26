@@ -378,7 +378,7 @@ When the event source needs an intermediate canonical resource, the binding shou
 create that resource automatically instead of forcing user code to instantiate it.
 SNS is the reference case:
 
-- the public binding is `notifications(topic).subscribe(...)`
+- the public binding is `notifications(topic, handler)`
 - the Lambda runtime policy creates the `Subscription` resource automatically
 - any service-to-Lambda invoke permission stays in the runtime policy layer that
   wires the event source, not in user code
