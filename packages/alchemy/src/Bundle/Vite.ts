@@ -77,8 +77,19 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
                   self in RSC_MANIFEST,
               )
               .forEach((id) => {
+                // Key by the environment-prefixed path, NOT the bare manifest
+                // filename. `@vitejs/plugin-rsc` emits a copy of the same-named
+                // manifest into every environment's outDir (e.g. both
+                // `dist/rsc/__vite_rsc_assets_manifest.js` and
+                // `dist/ssr/__vite_rsc_assets_manifest.js`), and each
+                // environment's chunks import their own copy via a relative
+                // specifier. Keying by the bare filename collapses them into a
+                // single entry, dropping every copy but the last — so the
+                // entry worker's `import "../__vite_rsc_assets_manifest.js"`
+                // resolves to a module that isn't in the bundle and the
+                // deployed Worker fails at startup.
                 serverChunks.set(
-                  RSC_MANIFEST[id],
+                  fileName(RSC_MANIFEST[id], this.environment),
                   readRscManifestChunk(id, this.environment),
                 );
               });
@@ -110,8 +121,19 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
 
   // The server bundle may include chunks from more than one Vite environment, so we need to prefix them with the environment-specific output directory.
   // Flattening them doesn't work because of relative imports between environments.
-  const fileName = (name: string, environment: vite.Environment) =>
-    `${environment.config.build.outDir}/${name}`;
+  //
+  // `build.outDir` can be resolved to an absolute path (e.g. `@vitejs/plugin-rsc`
+  // does this), which would leak the build machine's filesystem path into the
+  // worker module names and produce non-portable, leading-`/` specifiers that
+  // Cloudflare rejects. Normalize it back to a path relative to the project root
+  // so module names match the single-environment case (`dist/ssr/worker.js`).
+  const fileName = (name: string, environment: vite.Environment) => {
+    const outDir = environment.config.build.outDir;
+    const relativeOutDir = path.isAbsolute(outDir)
+      ? path.relative(environment.config.root, outDir)
+      : outDir;
+    return `${relativeOutDir}/${name}`;
+  };
 
   // Manually read the RSC manifest chunk from the file system.
   // This is only safe to run *after* the build has completed.

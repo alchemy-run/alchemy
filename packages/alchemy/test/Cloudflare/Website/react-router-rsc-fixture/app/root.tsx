@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { Link, Outlet } from "react-router";
 
 export function Layout({ children }: { children: React.ReactNode }) {

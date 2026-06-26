@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 const Component = () => {
   return (
     <main>

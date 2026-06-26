@@ -1,4 +1,4 @@
-import type * as WorkerSsr from "./worker-ssr";
+/// <reference types="@vitejs/plugin-rsc/types" />
 import handler from "./entry.rsc.single";
 
 // The distilled Cloudflare worker wrapper expects a `{ fetch }` default export;
@@ -12,8 +12,9 @@ export default {
     // `ssr` environment via `loadModule`. Exercises a custom (non-`index`) ssr
     // input + cross-environment load through the distilled plugin.
     if (url.pathname === "/worker-render") {
-      const { renderWorkerHtml } =
-        await import.meta.viteRsc.loadModule<WorkerSsr>("ssr", "worker-ssr");
+      const { renderWorkerHtml } = await import.meta.viteRsc.loadModule<
+        typeof import("./worker-ssr")
+      >("ssr", "worker-ssr");
       return Response.json({ ok: true, html: renderWorkerHtml() });
     }
 

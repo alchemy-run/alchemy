@@ -545,24 +545,30 @@ devTest.provider(
         const first = yield* deploy("DevBucketA", "dev-marker-v1");
         bucketNames.add(first.bucket.bucketName);
         expect(first.worker.url).toBeDefined();
-        yield* expectUrlContains(`${first.worker.url!}/`, "hmr-marker-v1", {
-          timeout: "30 seconds",
-          label: "tanstack dev initial route",
-        });
+        const r2Url = (base: string) =>
+          joinUrl(base, `/api/r2?key=${encodeURIComponent(key)}`);
+        yield* expectUrlContains(
+          joinUrl(first.worker.url!, "/"),
+          "hmr-marker-v1",
+          {
+            timeout: "30 seconds",
+            label: "tanstack dev initial route",
+          },
+        );
 
         const env1 = yield* fetchJsonReady<{ marker: string }>(
-          `${first.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          r2Url(first.worker.url!),
         );
         expect(env1.marker).toBe("dev-marker-v1");
 
         const put1 = yield* putTextJsonReady<{ ok: boolean }>(
-          `${first.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          r2Url(first.worker.url!),
           "from-a",
         );
         expect(put1.ok).toBe(true);
 
         const get1 = yield* fetchJsonReady<{ value: string | null }>(
-          `${first.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          r2Url(first.worker.url!),
         );
         expect(get1.value).toBe("from-a");
 
@@ -573,35 +579,39 @@ devTest.provider(
           indexRoutePath,
           tanstackIndexRouteSource("hmr-marker-v2"),
         );
-        yield* expectUrlContains(`${first.worker.url!}/`, "hmr-marker-v2", {
-          timeout: "30 seconds",
-          label: "tanstack dev updated route",
-        });
+        yield* expectUrlContains(
+          joinUrl(first.worker.url!, "/"),
+          "hmr-marker-v2",
+          {
+            timeout: "30 seconds",
+            label: "tanstack dev updated route",
+          },
+        );
 
         const second = yield* deploy("DevBucketB", "dev-marker-v2");
         bucketNames.add(second.bucket.bucketName);
         expect(second.worker.url).toBe(first.worker.url);
 
         const env2 = yield* fetchJsonReady<{ marker: string }>(
-          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          r2Url(second.worker.url!),
         );
         expect(env2.marker).toBe("dev-marker-v2");
 
         // The Worker was rebound to DevBucketB. The object written through
         // DevBucketA should not be visible through the new binding.
         const reboundRead = yield* fetchJsonReady<{ value: string | null }>(
-          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          r2Url(second.worker.url!),
         );
         expect(reboundRead.value).toBeNull();
 
         const put2 = yield* putTextJsonReady<{ ok: boolean }>(
-          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          r2Url(second.worker.url!),
           "from-b",
         );
         expect(put2.ok).toBe(true);
 
         const get2 = yield* fetchJsonReady<{ value: string | null }>(
-          `${second.worker.url!}/api/r2?key=${encodeURIComponent(key)}`,
+          r2Url(second.worker.url!),
         );
         expect(get2.value).toBe("from-b");
       });
@@ -626,6 +636,13 @@ devTest.provider(
 const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
+
+// The local dev provider returns `worker.url` from `URL#toString()`, which
+// keeps a trailing slash (`http://localhost:PORT/`), whereas the cloud
+// provider returns a bare origin (`https://….workers.dev`). Join without
+// producing a `//` path that the dev server's router won't match.
+const joinUrl = (base: string, path: string) =>
+  `${base.replace(/\/+$/, "")}${path}`;
 
 const fetchJsonReady = <T>(url: string) =>
   Effect.gen(function* () {
@@ -676,7 +693,16 @@ const discoverBundleUrl = (siteUrl: string) =>
   Effect.gen(function* () {
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     return yield* Effect.gen(function* () {
-      const res = yield* client.get(`${siteUrl}/`);
+      // Cache-bust the index fetch. Without this, a freshly redeployed
+      // site can serve an edge-cached `index.html` that still points at
+      // the *previous* bundle hash; we'd then latch onto the stale
+      // bundle URL and never observe the new marker (the bundle filename
+      // is content-addressed, so the old asset keeps the old contents
+      // forever). The unique query string defeats the CDN cache key.
+      const res = yield* client.get(`${siteUrl}/`, {
+        urlParams: { __alchemy_cb: String(Date.now()) },
+        headers: { "cache-control": "no-cache", pragma: "no-cache" },
+      });
       const html = yield* res.text;
       const match = html.match(
         /<script[^>]+src="(\/assets\/[^"]+\.js)"[^>]*>/i,

@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import {
   createFromReadableStream,
   createTemporaryReferenceSet,

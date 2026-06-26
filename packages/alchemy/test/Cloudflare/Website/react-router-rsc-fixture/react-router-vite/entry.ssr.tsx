@@ -1,3 +1,5 @@
+/** @jsxImportSource react */
+/// <reference types="@vitejs/plugin-rsc/types" />
 import { createFromReadableStream } from "@vitejs/plugin-rsc/ssr";
 import { renderToReadableStream as renderHTMLToReadableStream } from "react-dom/server.edge";
 import {

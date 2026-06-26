@@ -343,6 +343,7 @@
     "@types/pg": "^8.11.0",
     "@types/picomatch": "^4.0.0",
     "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "catalog:fixtures",
     "@vitejs/plugin-rsc": "catalog:fixtures",
