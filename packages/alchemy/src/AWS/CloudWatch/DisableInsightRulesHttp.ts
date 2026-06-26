@@ -38,11 +38,13 @@ export const DisableInsightRulesHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* () {
-        return yield* disableInsightRules({
-          RuleNames: yield* Effect.forEach(RuleNames, (ruleName) => ruleName),
-        });
-      });
+      return Effect.fn(`AWS.CloudWatch.DisableInsightRules(${sorted})`)(
+        function* () {
+          return yield* disableInsightRules({
+            RuleNames: yield* Effect.forEach(RuleNames, (ruleName) => ruleName),
+          });
+        },
+      );
     });
   }),
 );

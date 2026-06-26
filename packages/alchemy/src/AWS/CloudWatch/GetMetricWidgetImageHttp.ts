@@ -30,7 +30,9 @@ export const GetMetricWidgetImageHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: GetMetricWidgetImageRequest) {
+      return Effect.fn(`AWS.CloudWatch.GetMetricWidgetImage`)(function* (
+        request: GetMetricWidgetImageRequest,
+      ) {
         return yield* getMetricWidgetImage(request);
       });
     });

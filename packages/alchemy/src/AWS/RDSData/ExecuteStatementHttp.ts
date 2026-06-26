@@ -45,17 +45,19 @@ export const ExecuteStatementHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: ExecuteStatementRequest) {
-        const clusterArn = yield* resourceArn;
-        const resolvedSecretArn = yield* secretArn;
-        return yield* executeStatement({
-          ...request,
-          resourceArn: clusterArn,
-          secretArn: resolvedSecretArn,
-          database: options.database,
-          schema: options.schema,
-        });
-      });
+      return Effect.fn(`AWS.RDSData.ExecuteStatement(${cluster.LogicalId})`)(
+        function* (request: ExecuteStatementRequest) {
+          const clusterArn = yield* resourceArn;
+          const resolvedSecretArn = yield* secretArn;
+          return yield* executeStatement({
+            ...request,
+            resourceArn: clusterArn,
+            secretArn: resolvedSecretArn,
+            database: options.database,
+            schema: options.schema,
+          });
+        },
+      );
     });
   }),
 );

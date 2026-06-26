@@ -30,7 +30,9 @@ export const GetMetricStatisticsHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: GetMetricStatisticsRequest) {
+      return Effect.fn(`AWS.CloudWatch.GetMetricStatistics`)(function* (
+        request: GetMetricStatisticsRequest,
+      ) {
         return yield* getMetricStatistics(request);
       });
     });

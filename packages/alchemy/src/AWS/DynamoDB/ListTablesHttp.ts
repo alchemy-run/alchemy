@@ -25,7 +25,9 @@ export const ListTablesHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: ListTablesRequest) {
+      return Effect.fn("AWS.DynamoDB.ListTables")(function* (
+        request?: ListTablesRequest,
+      ) {
         return yield* listTables(request ?? {});
       });
     });

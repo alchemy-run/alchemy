@@ -32,12 +32,14 @@ export const DescribeEventBusHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeEventBusRequest) {
-        return yield* describeEventBus({
-          ...request,
-          Name: yield* Name,
-        });
-      });
+      return Effect.fn(`AWS.EventBridge.DescribeEventBus(${bus.LogicalId})`)(
+        function* (request?: DescribeEventBusRequest) {
+          return yield* describeEventBus({
+            ...request,
+            Name: yield* Name,
+          });
+        },
+      );
     });
   }),
 );

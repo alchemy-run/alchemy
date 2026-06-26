@@ -31,12 +31,14 @@ export const InvokeFunctionHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: InvokeFunctionRequest) {
-        return yield* invoke({
-          ...request,
-          FunctionName: yield* FunctionArn,
-        });
-      });
+      return Effect.fn(`AWS.Lambda.InvokeFunction(${func.LogicalId})`)(
+        function* (request: InvokeFunctionRequest) {
+          return yield* invoke({
+            ...request,
+            FunctionName: yield* FunctionArn,
+          });
+        },
+      );
     });
   }),
 );

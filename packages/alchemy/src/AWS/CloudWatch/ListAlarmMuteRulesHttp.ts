@@ -30,7 +30,9 @@ export const ListAlarmMuteRulesHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: ListAlarmMuteRulesRequest = {}) {
+      return Effect.fn(`AWS.CloudWatch.ListAlarmMuteRules`)(function* (
+        request: ListAlarmMuteRulesRequest = {},
+      ) {
         return yield* listAlarmMuteRules(request);
       });
     });

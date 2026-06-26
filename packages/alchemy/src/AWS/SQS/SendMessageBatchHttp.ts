@@ -31,12 +31,14 @@ export const SendMessageBatchHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: SendMessageBatchRequest) {
-        return yield* sendMessageBatch({
-          ...request,
-          QueueUrl: yield* QueueUrl,
-        });
-      });
+      return Effect.fn(`AWS.SQS.SendMessageBatch(${queue.LogicalId})`)(
+        function* (request: SendMessageBatchRequest) {
+          return yield* sendMessageBatch({
+            ...request,
+            QueueUrl: yield* QueueUrl,
+          });
+        },
+      );
     });
   }),
 );

@@ -28,7 +28,9 @@ export const ListObjectsV2Http = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: ListObjectsV2Request) {
+      return Effect.fn(`AWS.S3.ListObjectsV2(${bucket.LogicalId})`)(function* (
+        request?: ListObjectsV2Request,
+      ) {
         return yield* listObjectsV2({
           ...request,
           Bucket: yield* BucketName,

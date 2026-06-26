@@ -27,13 +27,15 @@ export const UpdateItemHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: UpdateItemRequest) {
-        const tableName = yield* TableName;
-        return yield* updateItem({
-          ...request,
-          TableName: tableName,
-        });
-      });
+      return Effect.fn(`AWS.DynamoDB.UpdateItem(${table.LogicalId})`)(
+        function* (request: UpdateItemRequest) {
+          const tableName = yield* TableName;
+          return yield* updateItem({
+            ...request,
+            TableName: tableName,
+          });
+        },
+      );
     });
   }),
 );

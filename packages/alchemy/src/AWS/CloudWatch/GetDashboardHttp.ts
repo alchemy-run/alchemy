@@ -30,12 +30,14 @@ export const GetDashboardHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* (request: GetDashboardRequest = {}) {
-        return yield* getDashboard({
-          ...request,
-          DashboardName: yield* DashboardName,
-        });
-      });
+      return Effect.fn(`AWS.CloudWatch.GetDashboard(${dashboard.LogicalId})`)(
+        function* (request: GetDashboardRequest = {}) {
+          return yield* getDashboard({
+            ...request,
+            DashboardName: yield* DashboardName,
+          });
+        },
+      );
     });
   }),
 );

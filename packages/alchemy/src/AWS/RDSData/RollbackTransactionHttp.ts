@@ -51,15 +51,17 @@ export const RollbackTransactionHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: RollbackTransactionRequest) {
-        const clusterArn = yield* resourceArn;
-        const resolvedSecretArn = yield* secretArn;
-        return yield* rollbackTransaction({
-          ...request,
-          resourceArn: clusterArn,
-          secretArn: resolvedSecretArn,
-        });
-      });
+      return Effect.fn(`AWS.RDSData.RollbackTransaction(${cluster.LogicalId})`)(
+        function* (request: RollbackTransactionRequest) {
+          const clusterArn = yield* resourceArn;
+          const resolvedSecretArn = yield* secretArn;
+          return yield* rollbackTransaction({
+            ...request,
+            resourceArn: clusterArn,
+            secretArn: resolvedSecretArn,
+          });
+        },
+      );
     });
   }),
 );

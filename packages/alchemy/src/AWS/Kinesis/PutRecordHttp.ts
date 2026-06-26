@@ -28,7 +28,9 @@ export const PutRecordHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: PutRecordRequest) {
+      return Effect.fn(`AWS.Kinesis.PutRecord(${stream.LogicalId})`)(function* (
+        request: PutRecordRequest,
+      ) {
         return yield* putRecord({
           ...request,
           StreamName: yield* StreamName,

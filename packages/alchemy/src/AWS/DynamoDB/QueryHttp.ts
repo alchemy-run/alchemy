@@ -31,7 +31,9 @@ export const QueryHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: QueryRequest) {
+      return Effect.fn(`AWS.DynamoDB.Query(${table.LogicalId})`)(function* (
+        request: QueryRequest,
+      ) {
         const tableName = yield* TableName;
         return yield* query({
           ...request,

@@ -28,7 +28,9 @@ export const ListDashboardsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: ListDashboardsRequest = {}) {
+      return Effect.fn(`AWS.CloudWatch.ListDashboards`)(function* (
+        request: ListDashboardsRequest = {},
+      ) {
         return yield* listDashboards(request);
       });
     });

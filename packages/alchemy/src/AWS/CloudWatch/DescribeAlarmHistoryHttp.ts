@@ -30,7 +30,9 @@ export const DescribeAlarmHistoryHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: DescribeAlarmHistoryRequest = {}) {
+      return Effect.fn(`AWS.CloudWatch.DescribeAlarmHistory`)(function* (
+        request: DescribeAlarmHistoryRequest = {},
+      ) {
         return yield* describeAlarmHistory(request);
       });
     });

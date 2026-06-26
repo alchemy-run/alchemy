@@ -54,20 +54,22 @@ export const BatchWriteItemHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* (request: BatchWriteItemRequest) {
-        const requestItems = yield* Effect.forEach(
-          Object.entries(request.RequestItems),
-          ([tableId, writes]) =>
-            Effect.gen(function* () {
-              return [yield* getTableName(tableId), writes] as const;
-            }),
-        );
+      return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(
+        function* (request: BatchWriteItemRequest) {
+          const requestItems = yield* Effect.forEach(
+            Object.entries(request.RequestItems),
+            ([tableId, writes]) =>
+              Effect.gen(function* () {
+                return [yield* getTableName(tableId), writes] as const;
+              }),
+          );
 
-        return yield* batchWriteItem({
-          ...request,
-          RequestItems: Object.fromEntries(requestItems),
-        });
-      });
+          return yield* batchWriteItem({
+            ...request,
+            RequestItems: Object.fromEntries(requestItems),
+          });
+        },
+      );
     });
   }),
 );

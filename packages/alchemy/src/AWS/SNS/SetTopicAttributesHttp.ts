@@ -32,12 +32,14 @@ export const SetTopicAttributesHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: SetTopicAttributesRequest) {
-        return yield* setTopicAttributes({
-          ...request,
-          TopicArn: yield* TopicArn,
-        });
-      });
+      return Effect.fn(`AWS.SNS.SetTopicAttributes(${topic.LogicalId})`)(
+        function* (request: SetTopicAttributesRequest) {
+          return yield* setTopicAttributes({
+            ...request,
+            TopicArn: yield* TopicArn,
+          });
+        },
+      );
     });
   }),
 );

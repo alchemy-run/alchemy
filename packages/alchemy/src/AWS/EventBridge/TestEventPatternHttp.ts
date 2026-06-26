@@ -28,7 +28,9 @@ export const TestEventPatternHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: TestEventPatternRequest) {
+      return Effect.fn(`AWS.EventBridge.TestEventPattern`)(function* (
+        request: TestEventPatternRequest,
+      ) {
         return yield* testEventPattern(request);
       });
     });

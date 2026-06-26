@@ -34,14 +34,16 @@ export const DisableAlarmActionsHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* () {
-        return yield* disableAlarmActions({
-          AlarmNames: yield* Effect.forEach(
-            AlarmNames,
-            (alarmName) => alarmName,
-          ),
-        });
-      });
+      return Effect.fn(`AWS.CloudWatch.DisableAlarmActions(${sorted})`)(
+        function* () {
+          return yield* disableAlarmActions({
+            AlarmNames: yield* Effect.forEach(
+              AlarmNames,
+              (alarmName) => alarmName,
+            ),
+          });
+        },
+      );
     });
   }),
 );

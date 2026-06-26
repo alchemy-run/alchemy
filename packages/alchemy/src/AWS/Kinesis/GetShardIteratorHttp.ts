@@ -32,12 +32,14 @@ export const GetShardIteratorHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: GetShardIteratorRequest) {
-        return yield* getShardIterator({
-          ...request,
-          StreamARN: yield* StreamARN,
-        });
-      });
+      return Effect.fn(`AWS.Kinesis.GetShardIterator(${stream.LogicalId})`)(
+        function* (request: GetShardIteratorRequest) {
+          return yield* getShardIterator({
+            ...request,
+            StreamARN: yield* StreamARN,
+          });
+        },
+      );
     });
   }),
 );

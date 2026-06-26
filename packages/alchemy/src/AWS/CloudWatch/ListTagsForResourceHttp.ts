@@ -35,7 +35,9 @@ export const ListTagsForResourceHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: ListTagsForResourceRequest = {}) {
+      return Effect.fn(
+        `AWS.CloudWatch.ListTagsForResource(${resource.LogicalId})`,
+      )(function* (request: ListTagsForResourceRequest = {}) {
         return yield* listTagsForResource({
           ...request,
           ResourceARN: yield* ResourceARN,

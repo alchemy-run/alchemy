@@ -39,16 +39,18 @@ export const ListRulesHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: ListRulesRequest) {
-        const eventBusName = EventBusName ? yield* EventBusName : undefined;
-        return yield* listRules({
-          ...request,
-          EventBusName:
-            eventBusName && eventBusName !== "default"
-              ? eventBusName
-              : undefined,
-        });
-      });
+      return Effect.fn(`AWS.EventBridge.ListRules(${bus?.LogicalId})`)(
+        function* (request?: ListRulesRequest) {
+          const eventBusName = EventBusName ? yield* EventBusName : undefined;
+          return yield* listRules({
+            ...request,
+            EventBusName:
+              eventBusName && eventBusName !== "default"
+                ? eventBusName
+                : undefined,
+          });
+        },
+      );
     });
   }),
 );

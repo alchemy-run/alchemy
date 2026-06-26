@@ -30,12 +30,14 @@ export const RemovePermissionHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: RemovePermissionRequest) {
-        return yield* removePermission({
-          ...request,
-          TopicArn: yield* TopicArn,
-        });
-      });
+      return Effect.fn(`AWS.SNS.RemovePermission(${topic.LogicalId})`)(
+        function* (request: RemovePermissionRequest) {
+          return yield* removePermission({
+            ...request,
+            TopicArn: yield* TopicArn,
+          });
+        },
+      );
     });
   }),
 );

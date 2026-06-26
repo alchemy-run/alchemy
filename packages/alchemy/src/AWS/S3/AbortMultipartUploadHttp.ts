@@ -33,12 +33,14 @@ export const AbortMultipartUploadHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: AbortMultipartUploadRequest) {
-        return yield* abortMultipartUpload({
-          ...request,
-          Bucket: yield* BucketName,
-        });
-      });
+      return Effect.fn(`AWS.S3.AbortMultipartUpload(${bucket.LogicalId})`)(
+        function* (request: AbortMultipartUploadRequest) {
+          return yield* abortMultipartUpload({
+            ...request,
+            Bucket: yield* BucketName,
+          });
+        },
+      );
     });
   }),
 );

@@ -29,12 +29,14 @@ export const DescribeTableHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeTableRequest) {
-        return yield* describeTable({
-          ...request,
-          TableName: yield* TableName,
-        });
-      });
+      return Effect.fn(`AWS.DynamoDB.DescribeTable(${table.LogicalId})`)(
+        function* (request?: DescribeTableRequest) {
+          return yield* describeTable({
+            ...request,
+            TableName: yield* TableName,
+          });
+        },
+      );
     });
   }),
 );

@@ -39,19 +39,21 @@ export const PutEventsHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: PutEventsRequest) {
-        const eventBusName = EventBusName ? yield* EventBusName : undefined;
-        return yield* putEvents({
-          ...request,
-          Entries: request.Entries.map((entry) => ({
-            ...entry,
-            EventBusName:
-              eventBusName && eventBusName !== "default"
-                ? eventBusName
-                : undefined,
-          })),
-        });
-      });
+      return Effect.fn(`AWS.EventBridge.PutEvents(${bus?.LogicalId})`)(
+        function* (request: PutEventsRequest) {
+          const eventBusName = EventBusName ? yield* EventBusName : undefined;
+          return yield* putEvents({
+            ...request,
+            Entries: request.Entries.map((entry) => ({
+              ...entry,
+              EventBusName:
+                eventBusName && eventBusName !== "default"
+                  ? eventBusName
+                  : undefined,
+            })),
+          });
+        },
+      );
     });
   }),
 );

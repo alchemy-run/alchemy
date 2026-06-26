@@ -29,7 +29,9 @@ export const CopyObjectHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: CopyObjectRequest) {
+      return Effect.fn(`AWS.S3.CopyObject(${bucket.LogicalId})`)(function* (
+        request: CopyObjectRequest,
+      ) {
         return yield* copyObject({
           ...request,
           Bucket: yield* BucketName,

@@ -32,12 +32,14 @@ export const ListTagsForResourceHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: ListTagsForResourceRequest) {
-        return yield* listTagsForResource({
-          ...request,
-          ResourceArn: yield* TopicArn,
-        });
-      });
+      return Effect.fn(`AWS.SNS.ListTagsForResource(${topic.LogicalId})`)(
+        function* (request?: ListTagsForResourceRequest) {
+          return yield* listTagsForResource({
+            ...request,
+            ResourceArn: yield* TopicArn,
+          });
+        },
+      );
     });
   }),
 );

@@ -30,7 +30,9 @@ export const DescribeAlarmsForMetricHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: DescribeAlarmsForMetricRequest) {
+      return Effect.fn(`AWS.CloudWatch.DescribeAlarmsForMetric`)(function* (
+        request: DescribeAlarmsForMetricRequest,
+      ) {
         return yield* describeAlarmsForMetric(request);
       });
     });

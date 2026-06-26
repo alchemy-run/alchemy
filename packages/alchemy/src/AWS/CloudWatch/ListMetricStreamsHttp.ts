@@ -28,7 +28,9 @@ export const ListMetricStreamsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: ListMetricStreamsRequest = {}) {
+      return Effect.fn(`AWS.CloudWatch.ListMetricStreams`)(function* (
+        request: ListMetricStreamsRequest = {},
+      ) {
         return yield* listMetricStreams(request);
       });
     });

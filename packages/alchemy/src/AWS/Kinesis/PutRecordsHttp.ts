@@ -28,12 +28,14 @@ export const PutRecordsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: PutRecordsRequest) {
-        return yield* putRecords({
-          ...request,
-          StreamName: yield* StreamName,
-        });
-      });
+      return Effect.fn(`AWS.Kinesis.PutRecords(${stream.LogicalId})`)(
+        function* (request: PutRecordsRequest) {
+          return yield* putRecords({
+            ...request,
+            StreamName: yield* StreamName,
+          });
+        },
+      );
     });
   }),
 );

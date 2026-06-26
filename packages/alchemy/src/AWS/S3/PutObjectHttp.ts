@@ -29,7 +29,9 @@ export const PutObjectHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: PutObjectRequest) {
+      return Effect.fn(`AWS.S3.PutObject(${bucket.LogicalId})`)(function* (
+        request: PutObjectRequest,
+      ) {
         return yield* putObject({
           ...request,
           Bucket: yield* BucketName,

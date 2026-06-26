@@ -35,7 +35,9 @@ export const PutSecretValueHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: PutSecretValueRequest) {
+      return Effect.fn(
+        `AWS.SecretsManager.PutSecretValue(${secret.LogicalId})`,
+      )(function* (request: PutSecretValueRequest) {
         const secretId = yield* SecretId;
         return yield* putSecretValue({
           ...request,

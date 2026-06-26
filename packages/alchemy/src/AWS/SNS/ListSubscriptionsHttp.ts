@@ -28,7 +28,9 @@ export const ListSubscriptionsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: ListSubscriptionsRequest) {
+      return Effect.fn(`AWS.SNS.ListSubscriptions`)(function* (
+        request?: ListSubscriptionsRequest,
+      ) {
         return yield* listSubscriptions(request ?? {});
       });
     });

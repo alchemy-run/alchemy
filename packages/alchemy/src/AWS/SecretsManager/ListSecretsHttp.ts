@@ -25,7 +25,7 @@ export const ListSecretsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (
+      return Effect.fn("AWS.SecretsManager.ListSecrets")(function* (
         request: secretsmanager.ListSecretsRequest = {},
       ) {
         return yield* listSecrets(request);

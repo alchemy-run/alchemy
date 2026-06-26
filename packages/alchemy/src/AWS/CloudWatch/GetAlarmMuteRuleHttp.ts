@@ -33,12 +33,14 @@ export const GetAlarmMuteRuleHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* (request: GetAlarmMuteRuleRequest = {}) {
-        return yield* getAlarmMuteRule({
-          ...request,
-          AlarmMuteRuleName: yield* AlarmMuteRuleName,
-        });
-      });
+      return Effect.fn(`AWS.CloudWatch.GetAlarmMuteRule(${rule.LogicalId})`)(
+        function* (request: GetAlarmMuteRuleRequest = {}) {
+          return yield* getAlarmMuteRule({
+            ...request,
+            AlarmMuteRuleName: yield* AlarmMuteRuleName,
+          });
+        },
+      );
     });
   }),
 );

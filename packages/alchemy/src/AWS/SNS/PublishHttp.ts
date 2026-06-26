@@ -27,7 +27,9 @@ export const PublishHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: PublishRequest) {
+      return Effect.fn(`AWS.SNS.Publish(${topic.LogicalId})`)(function* (
+        request: PublishRequest,
+      ) {
         return yield* publish({
           ...request,
           TopicArn: yield* TopicArn,

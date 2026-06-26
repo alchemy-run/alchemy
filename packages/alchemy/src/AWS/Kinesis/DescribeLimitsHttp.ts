@@ -28,7 +28,9 @@ export const DescribeLimitsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: DescribeLimitsRequest) {
+      return Effect.fn(`AWS.Kinesis.DescribeLimits`)(function* (
+        request?: DescribeLimitsRequest,
+      ) {
         return yield* describeLimits(request ?? {});
       });
     });

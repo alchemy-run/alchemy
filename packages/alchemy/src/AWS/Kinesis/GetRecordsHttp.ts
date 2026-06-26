@@ -26,9 +26,11 @@ export const GetRecordsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: GetRecordsRequest) {
-        return yield* getRecords(request);
-      });
+      return Effect.fn(`AWS.Kinesis.GetRecords(${stream.LogicalId})`)(
+        function* (request: GetRecordsRequest) {
+          return yield* getRecords(request);
+        },
+      );
     });
   }),
 );

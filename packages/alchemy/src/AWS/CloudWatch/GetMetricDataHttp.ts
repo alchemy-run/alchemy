@@ -25,7 +25,9 @@ export const GetMetricDataHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: GetMetricDataRequest) {
+      return Effect.fn(`AWS.CloudWatch.GetMetricData`)(function* (
+        request: GetMetricDataRequest,
+      ) {
         return yield* getMetricData(request);
       });
     });

@@ -27,12 +27,14 @@ export const ListShardsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: ListShardsRequest) {
-        return yield* listShards({
-          ...request,
-          StreamARN: yield* StreamARN,
-        });
-      });
+      return Effect.fn(`AWS.Kinesis.ListShards(${stream.LogicalId})`)(
+        function* (request?: ListShardsRequest) {
+          return yield* listShards({
+            ...request,
+            StreamARN: yield* StreamARN,
+          });
+        },
+      );
     });
   }),
 );

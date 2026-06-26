@@ -30,7 +30,7 @@ export const DescribeAnomalyDetectorsHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (
+      return Effect.fn(`AWS.CloudWatch.DescribeAnomalyDetectors`)(function* (
         request: DescribeAnomalyDetectorsRequest = {},
       ) {
         return yield* describeAnomalyDetectors(request);

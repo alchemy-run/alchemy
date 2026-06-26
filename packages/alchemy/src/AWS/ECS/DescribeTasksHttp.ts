@@ -28,12 +28,14 @@ export const DescribeTasksHttp = Layer.effect(
         }
       }
       const clusterArn = (yield* cluster.clusterArn) as unknown as string;
-      return Effect.fn(function* (request: DescribeTasksRequest) {
-        return yield* describeTasks({
-          ...request,
-          cluster: clusterArn,
-        });
-      });
+      return Effect.fn(`AWS.ECS.DescribeTasks(${cluster.LogicalId})`)(
+        function* (request: DescribeTasksRequest) {
+          return yield* describeTasks({
+            ...request,
+            cluster: clusterArn,
+          });
+        },
+      );
     });
   }),
 );

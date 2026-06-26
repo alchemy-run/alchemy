@@ -33,15 +33,17 @@ export const ListTargetsByRuleHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: ListTargetsByRuleRequest) {
-        const ruleName = yield* RuleName;
-        const eventBusName = yield* EventBusName;
-        return yield* listTargetsByRule({
-          ...request,
-          Rule: ruleName,
-          EventBusName: eventBusName !== "default" ? eventBusName : undefined,
-        });
-      });
+      return Effect.fn(`AWS.EventBridge.ListTargetsByRule(${rule.LogicalId})`)(
+        function* (request?: ListTargetsByRuleRequest) {
+          const ruleName = yield* RuleName;
+          const eventBusName = yield* EventBusName;
+          return yield* listTargetsByRule({
+            ...request,
+            Rule: ruleName,
+            EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+          });
+        },
+      );
     });
   }),
 );

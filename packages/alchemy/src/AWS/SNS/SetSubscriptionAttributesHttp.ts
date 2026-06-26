@@ -32,7 +32,9 @@ export const SetSubscriptionAttributesHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: SetSubscriptionAttributesRequest) {
+      return Effect.fn(
+        `AWS.SNS.SetSubscriptionAttributes(${subscription.LogicalId})`,
+      )(function* (request: SetSubscriptionAttributesRequest) {
         return yield* setSubscriptionAttributes({
           ...request,
           SubscriptionArn: yield* SubscriptionArn,

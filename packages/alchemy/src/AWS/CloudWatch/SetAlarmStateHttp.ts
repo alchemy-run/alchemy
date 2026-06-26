@@ -29,12 +29,14 @@ export const SetAlarmStateHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: SetAlarmStateRequest) {
-        return yield* setAlarmState({
-          ...request,
-          AlarmName: yield* AlarmName,
-        });
-      });
+      return Effect.fn(`AWS.CloudWatch.SetAlarmState(${alarm.LogicalId})`)(
+        function* (request: SetAlarmStateRequest) {
+          return yield* setAlarmState({
+            ...request,
+            AlarmName: yield* AlarmName,
+          });
+        },
+      );
     });
   }),
 );

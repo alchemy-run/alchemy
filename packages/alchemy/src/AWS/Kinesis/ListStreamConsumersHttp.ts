@@ -32,12 +32,14 @@ export const ListStreamConsumersHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: ListStreamConsumersRequest) {
-        return yield* listStreamConsumers({
-          ...request,
-          StreamARN: yield* StreamARN,
-        });
-      });
+      return Effect.fn(`AWS.Kinesis.ListStreamConsumers(${stream.LogicalId})`)(
+        function* (request?: ListStreamConsumersRequest) {
+          return yield* listStreamConsumers({
+            ...request,
+            StreamARN: yield* StreamARN,
+          });
+        },
+      );
     });
   }),
 );

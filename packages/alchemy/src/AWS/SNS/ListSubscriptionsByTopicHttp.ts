@@ -32,12 +32,14 @@ export const ListSubscriptionsByTopicHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: ListSubscriptionsByTopicRequest) {
-        return yield* listSubscriptionsByTopic({
-          ...request,
-          TopicArn: yield* TopicArn,
-        });
-      });
+      return Effect.fn(`AWS.SNS.ListSubscriptionsByTopic(${topic.LogicalId})`)(
+        function* (request?: ListSubscriptionsByTopicRequest) {
+          return yield* listSubscriptionsByTopic({
+            ...request,
+            TopicArn: yield* TopicArn,
+          });
+        },
+      );
     });
   }),
 );

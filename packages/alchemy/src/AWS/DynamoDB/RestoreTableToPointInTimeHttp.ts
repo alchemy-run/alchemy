@@ -49,7 +49,9 @@ export const RestoreTableToPointInTimeHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: RestoreTableToPointInTimeRequest) {
+      return Effect.fn(
+        `AWS.DynamoDB.RestoreTableToPointInTime(${from.LogicalId}, ${to.LogicalId})`,
+      )(function* (request: RestoreTableToPointInTimeRequest) {
         return yield* restoreTableToPointInTime({
           ...request,
           SourceTableName: yield* SourceTableName,

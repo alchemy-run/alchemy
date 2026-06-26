@@ -27,7 +27,9 @@ export const GetItemHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: GetItemRequest) {
+      return Effect.fn(`AWS.DynamoDB.GetItem(${table.LogicalId})`)(function* (
+        request: GetItemRequest,
+      ) {
         const tableName = yield* TableName;
         return yield* getItem({
           ...request,

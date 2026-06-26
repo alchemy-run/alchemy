@@ -27,7 +27,9 @@ export const TagResourceHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: TagResourceRequest) {
+      return Effect.fn(`AWS.SNS.TagResource(${topic.LogicalId})`)(function* (
+        request: TagResourceRequest,
+      ) {
         return yield* tagResource({
           ...request,
           ResourceArn: yield* TopicArn,

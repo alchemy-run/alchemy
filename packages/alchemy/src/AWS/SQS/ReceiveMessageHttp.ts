@@ -32,7 +32,9 @@ export const ReceiveMessageHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: ReceiveMessageRequest) {
+      return Effect.fn(`AWS.SQS.ReceiveMessage(${queue.LogicalId})`)(function* (
+        request: ReceiveMessageRequest,
+      ) {
         return yield* receiveMessage({
           ...request,
           QueueUrl: yield* QueueUrl,

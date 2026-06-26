@@ -32,12 +32,14 @@ export const DescribeTimeToLiveHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeTimeToLiveRequest) {
-        return yield* describeTimeToLive({
-          ...request,
-          TableName: yield* TableName,
-        });
-      });
+      return Effect.fn(`AWS.DynamoDB.DescribeTimeToLive(${table.LogicalId})`)(
+        function* (request?: DescribeTimeToLiveRequest) {
+          return yield* describeTimeToLive({
+            ...request,
+            TableName: yield* TableName,
+          });
+        },
+      );
     });
   }),
 );

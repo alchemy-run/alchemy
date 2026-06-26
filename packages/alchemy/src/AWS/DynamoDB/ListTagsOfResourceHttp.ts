@@ -32,12 +32,14 @@ export const ListTagsOfResourceHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: ListTagsOfResourceRequest) {
-        return yield* listTagsOfResource({
-          ...request,
-          ResourceArn: yield* ResourceArn,
-        });
-      });
+      return Effect.fn(`AWS.DynamoDB.ListTagsOfResource(${table.LogicalId})`)(
+        function* (request?: ListTagsOfResourceRequest) {
+          return yield* listTagsOfResource({
+            ...request,
+            ResourceArn: yield* ResourceArn,
+          });
+        },
+      );
     });
   }),
 );

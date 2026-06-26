@@ -30,7 +30,9 @@ export const DescribeAccountSettingsHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeAccountSettingsRequest) {
+      return Effect.fn(`AWS.Kinesis.DescribeAccountSettings`)(function* (
+        request?: DescribeAccountSettingsRequest,
+      ) {
         return yield* describeAccountSettings(request ?? {});
       });
     });

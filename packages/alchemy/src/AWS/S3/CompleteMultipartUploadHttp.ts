@@ -33,12 +33,14 @@ export const CompleteMultipartUploadHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: CompleteMultipartUploadRequest) {
-        return yield* completeMultipartUpload({
-          ...request,
-          Bucket: yield* BucketName,
-        });
-      });
+      return Effect.fn(`AWS.S3.CompleteMultipartUpload(${bucket.LogicalId})`)(
+        function* (request: CompleteMultipartUploadRequest) {
+          return yield* completeMultipartUpload({
+            ...request,
+            Bucket: yield* BucketName,
+          });
+        },
+      );
     });
   }),
 );

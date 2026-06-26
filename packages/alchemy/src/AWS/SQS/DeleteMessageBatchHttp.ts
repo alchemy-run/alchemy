@@ -34,12 +34,14 @@ export const DeleteMessageBatchHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: DeleteMessageBatchRequest) {
-        return yield* deleteMessageBatch({
-          ...request,
-          QueueUrl: yield* QueueUrl,
-        });
-      });
+      return Effect.fn(`AWS.SQS.DeleteMessageBatch(${queue.LogicalId})`)(
+        function* (request: DeleteMessageBatchRequest) {
+          return yield* deleteMessageBatch({
+            ...request,
+            QueueUrl: yield* QueueUrl,
+          });
+        },
+      );
     });
   }),
 );

@@ -32,7 +32,9 @@ export const DescribeStreamConsumerHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeStreamConsumerRequest) {
+      return Effect.fn(
+        `AWS.Kinesis.DescribeStreamConsumer(${consumer.LogicalId})`,
+      )(function* (request?: DescribeStreamConsumerRequest) {
         return yield* describeStreamConsumer({
           ...request,
           ConsumerARN: yield* ConsumerARN,

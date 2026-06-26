@@ -39,7 +39,9 @@ export const ExecuteTransactionHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: ExecuteTransactionRequest) {
+      return Effect.fn(`AWS.DynamoDB.ExecuteTransaction(${tables})`)(function* (
+        request: ExecuteTransactionRequest,
+      ) {
         return yield* executeTransaction(request);
       });
     });

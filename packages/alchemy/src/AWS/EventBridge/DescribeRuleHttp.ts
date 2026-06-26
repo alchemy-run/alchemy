@@ -30,15 +30,17 @@ export const DescribeRuleHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeRuleRequest) {
-        const name = yield* Name;
-        const eventBusName = yield* EventBusName;
-        return yield* describeRule({
-          ...request,
-          Name: name,
-          EventBusName: eventBusName !== "default" ? eventBusName : undefined,
-        });
-      });
+      return Effect.fn(`AWS.EventBridge.DescribeRule(${rule.LogicalId})`)(
+        function* (request?: DescribeRuleRequest) {
+          const name = yield* Name;
+          const eventBusName = yield* EventBusName;
+          return yield* describeRule({
+            ...request,
+            Name: name,
+            EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+          });
+        },
+      );
     });
   }),
 );

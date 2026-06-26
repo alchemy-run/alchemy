@@ -32,12 +32,14 @@ export const SubscribeToShardHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: SubscribeToShardRequest) {
-        return yield* subscribeToShard({
-          ...request,
-          ConsumerARN: yield* ConsumerARN,
-        });
-      });
+      return Effect.fn(`AWS.Kinesis.SubscribeToShard(${consumer.LogicalId})`)(
+        function* (request: SubscribeToShardRequest) {
+          return yield* subscribeToShard({
+            ...request,
+            ConsumerARN: yield* ConsumerARN,
+          });
+        },
+      );
     });
   }),
 );

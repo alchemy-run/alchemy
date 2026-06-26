@@ -67,56 +67,58 @@ export const TransactWriteItemsHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* (request: TransactWriteItemsRequest) {
-        const transactItems = yield* Effect.forEach(
-          request.TransactItems,
-          (item) =>
-            Effect.gen(function* () {
-              if (item.ConditionCheck) {
-                return {
-                  ConditionCheck: {
-                    ...item.ConditionCheck,
-                    TableName: yield* getTableName(item.ConditionCheck.Table),
-                  },
-                };
-              }
-              if (item.Delete) {
-                return {
-                  Delete: {
-                    ...item.Delete,
-                    TableName: yield* getTableName(item.Delete.Table),
-                  },
-                };
-              }
-              if (item.Put) {
-                return {
-                  Put: {
-                    ...item.Put,
-                    TableName: yield* getTableName(item.Put.Table),
-                  },
-                };
-              }
-              if (item.Update) {
-                return {
-                  Update: {
-                    ...item.Update,
-                    TableName: yield* getTableName(item.Update.Table),
-                  },
-                };
-              }
-              return yield* Effect.die(
-                new Error(
-                  "TransactWriteItems request item must include one DynamoDB operation",
-                ),
-              );
-            }),
-        );
+      return Effect.fn(`AWS.DynamoDB.TransactWriteItems(${sortedTables})`)(
+        function* (request: TransactWriteItemsRequest) {
+          const transactItems = yield* Effect.forEach(
+            request.TransactItems,
+            (item) =>
+              Effect.gen(function* () {
+                if (item.ConditionCheck) {
+                  return {
+                    ConditionCheck: {
+                      ...item.ConditionCheck,
+                      TableName: yield* getTableName(item.ConditionCheck.Table),
+                    },
+                  };
+                }
+                if (item.Delete) {
+                  return {
+                    Delete: {
+                      ...item.Delete,
+                      TableName: yield* getTableName(item.Delete.Table),
+                    },
+                  };
+                }
+                if (item.Put) {
+                  return {
+                    Put: {
+                      ...item.Put,
+                      TableName: yield* getTableName(item.Put.Table),
+                    },
+                  };
+                }
+                if (item.Update) {
+                  return {
+                    Update: {
+                      ...item.Update,
+                      TableName: yield* getTableName(item.Update.Table),
+                    },
+                  };
+                }
+                return yield* Effect.die(
+                  new Error(
+                    "TransactWriteItems request item must include one DynamoDB operation",
+                  ),
+                );
+              }),
+          );
 
-        return yield* transactWriteItems({
-          ...request,
-          TransactItems: transactItems,
-        });
-      });
+          return yield* transactWriteItems({
+            ...request,
+            TransactItems: transactItems,
+          });
+        },
+      );
     });
   }),
 );

@@ -28,7 +28,9 @@ export const HeadObjectHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: HeadObjectRequest) {
+      return Effect.fn(`AWS.S3.HeadObject(${bucket.LogicalId})`)(function* (
+        request: HeadObjectRequest,
+      ) {
         return yield* headObject({
           ...request,
           Bucket: yield* BucketName,

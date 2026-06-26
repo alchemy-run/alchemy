@@ -34,9 +34,9 @@ export const DescribeAlarmContributorsHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* (
-        request: DescribeAlarmContributorsRequest = {},
-      ) {
+      return Effect.fn(
+        `AWS.CloudWatch.DescribeAlarmContributors(${alarm.LogicalId})`,
+      )(function* (request: DescribeAlarmContributorsRequest = {}) {
         return yield* describeAlarmContributors({
           ...request,
           AlarmName: yield* AlarmName,

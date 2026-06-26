@@ -30,7 +30,7 @@ export const ListManagedInsightRulesHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (
+      return Effect.fn(`AWS.CloudWatch.ListManagedInsightRules`)(function* (
         request: ListManagedInsightRulesRequest = {},
       ) {
         return yield* listManagedInsightRules(request);

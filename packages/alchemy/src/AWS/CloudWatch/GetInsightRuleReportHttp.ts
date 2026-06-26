@@ -33,7 +33,9 @@ export const GetInsightRuleReportHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* (request: GetInsightRuleReportRequest) {
+      return Effect.fn(
+        `AWS.CloudWatch.GetInsightRuleReport(${rule.LogicalId})`,
+      )(function* (request: GetInsightRuleReportRequest) {
         return yield* getInsightRuleReport({
           ...request,
           RuleName: yield* RuleName,

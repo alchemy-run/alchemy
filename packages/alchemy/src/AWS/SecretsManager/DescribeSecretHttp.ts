@@ -29,7 +29,9 @@ export const DescribeSecretHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* () {
+      return Effect.fn(
+        `AWS.SecretsManager.DescribeSecret(${secret.LogicalId})`,
+      )(function* () {
         return yield* describeSecret({
           SecretId: yield* SecretId,
         });

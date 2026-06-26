@@ -35,7 +35,9 @@ export const GetSecretValueHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: GetSecretValueRequest = {}) {
+      return Effect.fn(
+        `AWS.SecretsManager.GetSecretValue(${secret.LogicalId})`,
+      )(function* (request: GetSecretValueRequest = {}) {
         const secretId = yield* SecretId;
         return yield* getSecretValue({
           ...request,

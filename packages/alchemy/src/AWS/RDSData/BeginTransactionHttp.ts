@@ -50,16 +50,18 @@ export const BeginTransactionHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* () {
-        const clusterArn = yield* resourceArn;
-        const resolvedSecretArn = yield* secretArn;
-        return yield* beginTransaction({
-          resourceArn: clusterArn,
-          secretArn: resolvedSecretArn,
-          database: options.database,
-          schema: options.schema,
-        });
-      });
+      return Effect.fn(`AWS.RDSData.BeginTransaction(${cluster.LogicalId})`)(
+        function* () {
+          const clusterArn = yield* resourceArn;
+          const resolvedSecretArn = yield* secretArn;
+          return yield* beginTransaction({
+            resourceArn: clusterArn,
+            secretArn: resolvedSecretArn,
+            database: options.database,
+            schema: options.schema,
+          });
+        },
+      );
     });
   }),
 );

@@ -30,7 +30,9 @@ export const DescribeInsightRulesHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: DescribeInsightRulesRequest = {}) {
+      return Effect.fn(`AWS.CloudWatch.DescribeInsightRules`)(function* (
+        request: DescribeInsightRulesRequest = {},
+      ) {
         return yield* describeInsightRules(request);
       });
     });

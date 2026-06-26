@@ -32,12 +32,14 @@ export const GetResourcePolicyHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: GetResourcePolicyRequest) {
-        return yield* getResourcePolicy({
-          ...request,
-          ResourceARN: yield* ResourceARN,
-        });
-      });
+      return Effect.fn(`AWS.Kinesis.GetResourcePolicy(${stream.LogicalId})`)(
+        function* (request?: GetResourcePolicyRequest) {
+          return yield* getResourcePolicy({
+            ...request,
+            ResourceARN: yield* ResourceARN,
+          });
+        },
+      );
     });
   }),
 );

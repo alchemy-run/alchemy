@@ -40,9 +40,11 @@ export const ExecuteStatementHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: ExecuteStatementRequest) {
-        return yield* executeStatement(request);
-      });
+      return Effect.fn(`AWS.DynamoDB.ExecuteStatement(${table.LogicalId})`)(
+        function* (request: ExecuteStatementRequest) {
+          return yield* executeStatement(request);
+        },
+      );
     });
   }),
 );

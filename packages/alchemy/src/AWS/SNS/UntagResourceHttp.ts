@@ -27,7 +27,9 @@ export const UntagResourceHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: UntagResourceRequest) {
+      return Effect.fn(`AWS.SNS.UntagResource(${topic.LogicalId})`)(function* (
+        request: UntagResourceRequest,
+      ) {
         return yield* untagResource({
           ...request,
           ResourceArn: yield* TopicArn,

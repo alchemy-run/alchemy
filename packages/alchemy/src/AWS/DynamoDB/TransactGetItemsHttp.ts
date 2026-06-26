@@ -63,25 +63,27 @@ export const TransactGetItemsHttp = Layer.effect(
         }
       }
 
-      return Effect.fn(function* (request: TransactGetItemsRequest) {
-        const transactItems = yield* Effect.forEach(
-          request.TransactItems,
-          ({ Get }) =>
-            Effect.gen(function* () {
-              return {
-                Get: {
-                  ...Get,
-                  TableName: yield* getTableName(Get.Table),
-                },
-              };
-            }),
-        );
+      return Effect.fn(`AWS.DynamoDB.TransactGetItems(${sortedTables})`)(
+        function* (request: TransactGetItemsRequest) {
+          const transactItems = yield* Effect.forEach(
+            request.TransactItems,
+            ({ Get }) =>
+              Effect.gen(function* () {
+                return {
+                  Get: {
+                    ...Get,
+                    TableName: yield* getTableName(Get.Table),
+                  },
+                };
+              }),
+          );
 
-        return yield* transactGetItems({
-          ...request,
-          TransactItems: transactItems,
-        });
-      });
+          return yield* transactGetItems({
+            ...request,
+            TransactItems: transactItems,
+          });
+        },
+      );
     });
   }),
 );

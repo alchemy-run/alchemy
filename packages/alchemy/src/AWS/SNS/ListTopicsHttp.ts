@@ -25,7 +25,9 @@ export const ListTopicsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: ListTopicsRequest) {
+      return Effect.fn(`AWS.SNS.ListTopics`)(function* (
+        request?: ListTopicsRequest,
+      ) {
         return yield* listTopics(request ?? {});
       });
     });

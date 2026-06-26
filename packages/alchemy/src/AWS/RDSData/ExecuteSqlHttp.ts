@@ -49,15 +49,17 @@ export const ExecuteSqlHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: ExecuteSqlRequest) {
-        return yield* executeSql({
-          ...request,
-          dbClusterOrInstanceArn: yield* clusterArn,
-          awsSecretStoreArn: yield* secretArn,
-          database: options.database,
-          schema: options.schema,
-        });
-      });
+      return Effect.fn(`AWS.RDSData.ExecuteSql(${cluster.LogicalId})`)(
+        function* (request: ExecuteSqlRequest) {
+          return yield* executeSql({
+            ...request,
+            dbClusterOrInstanceArn: yield* clusterArn,
+            awsSecretStoreArn: yield* secretArn,
+            database: options.database,
+            schema: options.schema,
+          });
+        },
+      );
     });
   }),
 );

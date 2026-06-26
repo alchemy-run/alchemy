@@ -27,7 +27,9 @@ export const AddPermissionHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: AddPermissionRequest) {
+      return Effect.fn(`AWS.SNS.AddPermission(${topic.LogicalId})`)(function* (
+        request: AddPermissionRequest,
+      ) {
         return yield* addPermission({
           ...request,
           TopicArn: yield* TopicArn,

@@ -28,7 +28,9 @@ export const StopTaskHttp = Layer.effect(
         }
       }
       const clusterArn = (yield* cluster.clusterArn) as unknown as string;
-      return Effect.fn(function* (request: StopTaskRequest) {
+      return Effect.fn(`AWS.ECS.StopTask(${cluster.LogicalId})`)(function* (
+        request: StopTaskRequest,
+      ) {
         return yield* stopTask({
           ...request,
           cluster: clusterArn,

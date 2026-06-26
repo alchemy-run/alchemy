@@ -31,7 +31,9 @@ export const ScanHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: ScanRequest) {
+      return Effect.fn(`AWS.DynamoDB.Scan(${table.LogicalId})`)(function* (
+        request: ScanRequest,
+      ) {
         const tableName = yield* TableName;
         return yield* scan({
           ...request,

@@ -27,13 +27,15 @@ export const DeleteItemHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: DeleteItemRequest) {
-        const tableName = yield* TableName;
-        return yield* deleteItem({
-          ...request,
-          TableName: tableName,
-        });
-      });
+      return Effect.fn(`AWS.DynamoDB.DeleteItem(${table.LogicalId})`)(
+        function* (request: DeleteItemRequest) {
+          const tableName = yield* TableName;
+          return yield* deleteItem({
+            ...request,
+            TableName: tableName,
+          });
+        },
+      );
     });
   }),
 );

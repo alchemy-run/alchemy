@@ -42,9 +42,11 @@ export const BatchExecuteStatementHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: BatchExecuteStatementRequest) {
-        return yield* batchExecuteStatement(request);
-      });
+      return Effect.fn(`AWS.DynamoDB.BatchExecuteStatement(${sortedTables})`)(
+        function* (request: BatchExecuteStatementRequest) {
+          return yield* batchExecuteStatement(request);
+        },
+      );
     });
   }),
 );

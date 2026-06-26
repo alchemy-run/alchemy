@@ -25,7 +25,9 @@ export const ListStreamsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: ListStreamsRequest) {
+      return Effect.fn(`AWS.Kinesis.ListStreams`)(function* (
+        request?: ListStreamsRequest,
+      ) {
         return yield* listStreams(request ?? {});
       });
     });

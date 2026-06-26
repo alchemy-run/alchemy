@@ -29,7 +29,9 @@ export const SendMessageHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: SendMessageRequest) {
+      return Effect.fn(`AWS.SQS.SendMessage(${queue.LogicalId})`)(function* (
+        request: SendMessageRequest,
+      ) {
         return yield* sendMessage({
           ...request,
           QueueUrl: yield* QueueUrl,

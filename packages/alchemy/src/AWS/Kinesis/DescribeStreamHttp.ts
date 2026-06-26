@@ -32,12 +32,14 @@ export const DescribeStreamHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeStreamRequest) {
-        return yield* describeStream({
-          ...request,
-          StreamARN: yield* StreamARN,
-        });
-      });
+      return Effect.fn(`AWS.Kinesis.DescribeStream(${stream.LogicalId})`)(
+        function* (request?: DescribeStreamRequest) {
+          return yield* describeStream({
+            ...request,
+            StreamARN: yield* StreamARN,
+          });
+        },
+      );
     });
   }),
 );

@@ -27,7 +27,9 @@ export const PublishBatchHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: PublishBatchRequest) {
+      return Effect.fn(`AWS.SNS.PublishBatch(${topic.LogicalId})`)(function* (
+        request: PublishBatchRequest,
+      ) {
         return yield* publishBatch({
           ...request,
           TopicArn: yield* TopicArn,

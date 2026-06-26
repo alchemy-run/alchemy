@@ -43,7 +43,9 @@ export const RunTaskHttp = Layer.effect(
       const taskDefinitionArn =
         (yield* task.taskDefinitionArn) as unknown as string;
 
-      return Effect.fn(function* (request: RunTaskRequest) {
+      return Effect.fn(
+        `AWS.ECS.RunTask(${cluster.LogicalId}, ${task.LogicalId})`,
+      )(function* (request: RunTaskRequest) {
         return yield* runTask({
           ...request,
           cluster: clusterArn,

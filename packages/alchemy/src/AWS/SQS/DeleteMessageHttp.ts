@@ -28,7 +28,9 @@ export const DeleteMessageHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: DeleteMessageRequest) {
+      return Effect.fn(`AWS.SQS.DeleteMessage(${queue.LogicalId})`)(function* (
+        request: DeleteMessageRequest,
+      ) {
         return yield* deleteMessage({
           ...request,
           QueueUrl: yield* QueueUrl,

@@ -32,12 +32,14 @@ export const GetDataProtectionPolicyHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: GetDataProtectionPolicyRequest) {
-        return yield* getDataProtectionPolicy({
-          ...request,
-          ResourceArn: yield* TopicArn,
-        });
-      });
+      return Effect.fn(`AWS.SNS.GetDataProtectionPolicy(${topic.LogicalId})`)(
+        function* (request?: GetDataProtectionPolicyRequest) {
+          return yield* getDataProtectionPolicy({
+            ...request,
+            ResourceArn: yield* TopicArn,
+          });
+        },
+      );
     });
   }),
 );

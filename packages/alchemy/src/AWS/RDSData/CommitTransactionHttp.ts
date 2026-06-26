@@ -51,15 +51,17 @@ export const CommitTransactionHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: CommitTransactionRequest) {
-        const clusterArn = yield* resourceArn;
-        const resolvedSecretArn = yield* secretArn;
-        return yield* commitTransaction({
-          ...request,
-          resourceArn: clusterArn,
-          secretArn: resolvedSecretArn,
-        });
-      });
+      return Effect.fn(`AWS.RDSData.CommitTransaction(${cluster.LogicalId})`)(
+        function* (request: CommitTransactionRequest) {
+          const clusterArn = yield* resourceArn;
+          const resolvedSecretArn = yield* secretArn;
+          return yield* commitTransaction({
+            ...request,
+            resourceArn: clusterArn,
+            secretArn: resolvedSecretArn,
+          });
+        },
+      );
     });
   }),
 );

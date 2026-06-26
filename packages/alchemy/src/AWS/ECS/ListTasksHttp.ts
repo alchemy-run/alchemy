@@ -28,7 +28,9 @@ export const ListTasksHttp = Layer.effect(
         }
       }
       const clusterArn = (yield* cluster.clusterArn) as unknown as string;
-      return Effect.fn(function* (request: ListTasksRequest) {
+      return Effect.fn(`AWS.ECS.ListTasks(${cluster.LogicalId})`)(function* (
+        request: ListTasksRequest,
+      ) {
         return yield* listTasks({
           ...request,
           cluster: clusterArn,

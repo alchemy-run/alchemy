@@ -28,7 +28,9 @@ export const ListEventBusesHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request?: ListEventBusesRequest) {
+      return Effect.fn(`AWS.EventBridge.ListEventBuses`)(function* (
+        request?: ListEventBusesRequest,
+      ) {
         return yield* listEventBuses(request ?? {});
       });
     });

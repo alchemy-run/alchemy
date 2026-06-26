@@ -27,7 +27,7 @@ export const GetRandomPasswordHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (
+      return Effect.fn("AWS.SecretsManager.GetRandomPassword")(function* (
         request: secretsmanager.GetRandomPasswordRequest = {},
       ) {
         return yield* getRandomPassword(request);

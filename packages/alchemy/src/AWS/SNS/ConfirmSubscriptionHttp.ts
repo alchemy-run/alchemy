@@ -32,7 +32,9 @@ export const ConfirmSubscriptionHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: ConfirmSubscriptionRequest) {
+      return Effect.fn(
+        `AWS.SNS.ConfirmSubscription(${subscription.LogicalId})`,
+      )(function* (request: ConfirmSubscriptionRequest) {
         return yield* confirmSubscription({
           ...request,
           TopicArn: yield* TopicArn,

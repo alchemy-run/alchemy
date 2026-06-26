@@ -32,7 +32,9 @@ export const GetMetricStreamHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: GetMetricStreamRequest = {}) {
+      return Effect.fn(
+        `AWS.CloudWatch.GetMetricStream(${metricStream.LogicalId})`,
+      )(function* (request: GetMetricStreamRequest = {}) {
         return yield* getMetricStream({
           ...request,
           Name: yield* Name,

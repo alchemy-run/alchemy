@@ -32,12 +32,14 @@ export const UpdateTimeToLiveHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: UpdateTimeToLiveRequest) {
-        return yield* updateTimeToLive({
-          ...request,
-          TableName: yield* TableName,
-        });
-      });
+      return Effect.fn(`AWS.DynamoDB.UpdateTimeToLive(${table.LogicalId})`)(
+        function* (request: UpdateTimeToLiveRequest) {
+          return yield* updateTimeToLive({
+            ...request,
+            TableName: yield* TableName,
+          });
+        },
+      );
     });
   }),
 );

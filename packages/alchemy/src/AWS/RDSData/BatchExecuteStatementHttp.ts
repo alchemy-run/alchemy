@@ -45,7 +45,9 @@ export const BatchExecuteStatementHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request: BatchExecuteStatementRequest) {
+      return Effect.fn(
+        `AWS.RDSData.BatchExecuteStatement(${cluster.LogicalId})`,
+      )(function* (request: BatchExecuteStatementRequest) {
         const clusterArn = yield* resourceArn;
         const resolvedSecretArn = yield* secretArn;
         return yield* batchExecuteStatement({

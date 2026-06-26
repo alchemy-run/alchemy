@@ -37,7 +37,9 @@ export const GetObjectHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: GetObjectRequest) {
+      return Effect.fn(`AWS.S3.GetObject(${bucket.LogicalId})`)(function* (
+        request: GetObjectRequest,
+      ) {
         return yield* getObject({
           ...request,
           Bucket: yield* BucketName,

@@ -32,7 +32,9 @@ export const DescribeStreamSummaryHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(function* (request?: DescribeStreamSummaryRequest) {
+      return Effect.fn(
+        `AWS.Kinesis.DescribeStreamSummary(${stream.LogicalId})`,
+      )(function* (request?: DescribeStreamSummaryRequest) {
         return yield* describeStreamSummary({
           ...request,
           StreamARN: yield* StreamARN,

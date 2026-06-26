@@ -29,7 +29,9 @@ export const DeleteObjectHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(function* (request: DeleteObjectRequest) {
+      return Effect.fn(`AWS.S3.DeleteObject(${bucket.LogicalId})`)(function* (
+        request: DeleteObjectRequest,
+      ) {
         return yield* deleteObject({
           ...request,
           Bucket: yield* BucketName,
