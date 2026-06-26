@@ -16,7 +16,7 @@ export class TableAndQueue extends Context.Service<
   }
 >()("TableAndQueue") {}
 
-const TableAndQueueLive = Layer.effect(
+export const TableAndQueueLive = Layer.effect(
   TableAndQueue,
   Effect.gen(function* () {
     const table = yield* AWS.DynamoDB.Table("StreamSourceTable", {
