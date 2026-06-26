@@ -2,6 +2,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import { identity } from "effect/Function";
+import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
@@ -160,6 +161,24 @@ export interface Container extends Resource<
  * ```
  */
 export const Container = Resource<Container>("Docker.Container");
+
+/**
+ * Inspect a Docker container by name and return normalized runtime details.
+ *
+ * This is a small public wrapper around Docker's raw inspect output. It returns
+ * the stable data Alchemy callers typically need, including bound host ports.
+ */
+export const inspectContainer = (
+  name: string,
+): Effect.Effect<
+  Exclude<Container["Attributes"], "imageRef">,
+  PlatformError,
+  Docker
+> =>
+  Docker.pipe(
+    Effect.flatMap((docker) => docker.container.inspect(name)),
+    Effect.map((container) => toContainerAttributes(container, undefined!)),
+  );
 
 export const ContainerProvider = () =>
   Provider.effect(
