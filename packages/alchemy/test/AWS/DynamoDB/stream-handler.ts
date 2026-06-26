@@ -43,7 +43,7 @@ export default DynamoDBStreamFunction.make(
     const { table, queue } = yield* TableAndQueue;
     const sink = yield* AWS.SQS.QueueSink(queue);
 
-    yield* AWS.DynamoDB.consumeStream(
+    yield* AWS.DynamoDB.consumeTableChanges(
       table,
       {
         streamViewType: "NEW_AND_OLD_IMAGES",

@@ -50,7 +50,7 @@ export const JobStorageDynamoDB = Layer.provideMerge(
       const putItem = yield* DynamoDB.PutItem(table);
       const sink = yield* SQS.QueueSink(queue);
 
-      yield* DynamoDB.consumeStream(table, {
+      yield* DynamoDB.consumeTableChanges(table, {
         streamViewType: "NEW_AND_OLD_IMAGES",
         startingPosition: "LATEST",
         batchSize: 10,
@@ -201,7 +201,7 @@ export const JobStorageS3 = Layer.provideMerge(
           ),
         );
 
-      yield* S3.consumeBucket(bucket, (stream) =>
+      yield* S3.consumeBucketEvents(bucket, (stream) =>
         stream.pipe(
           Stream.flatMap((item) =>
             Stream.fromEffect(getJob(item.key).pipe(Effect.orDie)),

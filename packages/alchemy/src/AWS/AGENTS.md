@@ -80,9 +80,9 @@ This always has two layers:
 
 Examples:
 
-- `consumeBucket(bucket, handler)`
-- `consumeQueue(queue, handler)`
-- `consumeStream(table, handler)` for DynamoDB-style change streams
+- `consumeBucketEvents(bucket, handler)`
+- `consumeQueueMessages(queue, handler)`
+- `consumeTableChanges(table, handler)` for DynamoDB-style change streams
 
 ### 4. Helper
 
@@ -90,8 +90,8 @@ Use a helper when multiple raw operations should collapse into a more ergonomic 
 
 Examples:
 
-- `consumeBucket(bucket, handler)`
-- `consumeQueue(queue, handler)`
+- `consumeBucketEvents(bucket, handler)`
+- `consumeQueueMessages(queue, handler)`
 - batch or transaction wrappers
 
 Helpers should not hide missing low-level primitives. Implement the primitives first.
@@ -213,7 +213,7 @@ For DynamoDB, for example:
 - folded table-owned surface: local/global secondary indexes live on `Table`, not a standalone `SecondaryIndex` resource
 - bindings: item/table/admin operations
 - event source: Kinesis streaming destination / change stream surface
-- helper: `streams(table)`
+- helper: `consumeTableChanges(table, props?, handler)`
 
 ### Step 3: Implement Missing Bindings
 
@@ -389,7 +389,7 @@ For DynamoDB-style changes this likely means:
 
 1. table-side stream/destination surface
 2. Lambda runtime integration
-3. `streams(table)` helper
+3. `consumeTableChanges(table, props?, handler)` helper
 4. E2E coverage
 
 ### Step 11: Implement Helpers
@@ -411,7 +411,7 @@ Required shape:
 - the canonical resource remains `Table`
 - `Table` keeps stream state in its attributes, but does not accept `streamSpecification` as a plain input prop
 - stream enablement is requested through the table binding contract
-- the public helper is `consumeStream(table, props?, handler)`
+- the public helper is `consumeTableChanges(table, props?, handler)`
 - the service-level abstraction lives in `alchemy/src/AWS/DynamoDB/Stream.ts`
 - the Lambda runtime implementation lives in `alchemy/src/AWS/Lambda/TableEventSource.ts`
 
@@ -433,7 +433,7 @@ Implementation rules:
 
 Lambda-first slice:
 
-- implement `consumeStream(table, props?, handler)` first for Lambda
+- implement `consumeTableChanges(table, props?, handler)` first for Lambda
 - the Lambda layer binds the table stream requirement, grants stream-read IAM, and creates `AWS.Lambda.EventSourceMapping`
 - Process or other runtimes can be added later without changing `Table` back to a prop-driven stream model
 

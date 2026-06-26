@@ -42,14 +42,14 @@ type TopicEventSourceHandler<Req, StreamReq> = (
  *
  * @example
  * ```typescript
- * yield* consumeTopic(topic, (stream) =>
+ * yield* consumeTopicNotifications(topic, (stream) =>
  *   stream.pipe(Stream.runForEach((message) => Effect.log(message.Message))),
  * );
  * ```
  *
  * @example With subscription attributes
  * ```typescript
- * yield* consumeTopic(
+ * yield* consumeTopicNotifications(
  *   topic,
  *   { attributes: { FilterPolicy: JSON.stringify({ type: ["order"] }) } },
  *   (stream) =>
@@ -57,16 +57,28 @@ type TopicEventSourceHandler<Req, StreamReq> = (
  * );
  * ```
  */
-export function consumeTopic<T extends Topic, Req = never, StreamReq = never>(
+export function consumeTopicNotifications<
+  T extends Topic,
+  Req = never,
+  StreamReq = never,
+>(
   topic: T,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopic<T extends Topic, Req = never, StreamReq = never>(
+export function consumeTopicNotifications<
+  T extends Topic,
+  Req = never,
+  StreamReq = never,
+>(
   topic: T,
   props: TopicEventSourceProps,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopic<T extends Topic, Req = never, StreamReq = never>(
+export function consumeTopicNotifications<
+  T extends Topic,
+  Req = never,
+  StreamReq = never,
+>(
   topic: T,
   propsOrProcess:
     | TopicEventSourceProps

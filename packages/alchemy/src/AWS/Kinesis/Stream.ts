@@ -229,7 +229,7 @@ export interface Stream extends Resource<
  * @example Process stream records
  * ```typescript
  * // init
- * yield* Kinesis.consumeStream(
+ * yield* Kinesis.consumeStreamRecords(
  *   stream,
  *   {},
  *   Effect.fn(function* (record) {

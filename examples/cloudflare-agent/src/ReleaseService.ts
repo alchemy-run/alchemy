@@ -10,7 +10,7 @@ export default Cloudflare.Worker(
   Effect.gen(function* () {
     const versions = yield* ReleaseVersion;
 
-    yield* Github.consumeRepository(
+    yield* Github.consumeRepositoryEvents(
       {
         owner: "alchemy-run",
         repository: "alchemy-effect",

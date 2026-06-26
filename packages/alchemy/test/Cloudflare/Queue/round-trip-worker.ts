@@ -42,7 +42,7 @@ export class Counter extends Cloudflare.DurableObject<Counter>()(
  * waits for the consumer to push them through to the Counter DO,
  * and polls `GET /count?name=K` until the count matches.
  *
- * `Cloudflare.Queues.consumeQueue(...)` (in QueueWorker below)
+ * `Cloudflare.Queues.consumeQueueMessages(...)` (in QueueWorker below)
  * auto-creates the matching `Cloudflare.Queues.Consumer` resource at
  * deploy time, so this fixture has no separate consumer wiring.
  */
@@ -70,11 +70,11 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     // Mixed `Duration.Input` forms are intentional: the e2e test
     // exercises that a `Duration` value (`maxWaitTime`) and a
     // string (`retryDelay: "1 second"`) both type-check at the
-    // `Cloudflare.Queues.consumeQueue(...)` call site and survive the convert-
+    // `Cloudflare.Queues.consumeQueueMessages(...)` call site and survive the convert-
     // and-forward path into Cloudflare's Consumer settings.
     // Values are kept small so the round-trip latency stays well
     // under the test's 240s timeout.
-    yield* Cloudflare.Queues.consumeQueue<QueueMessageBody>(
+    yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
       queueResource,
       {
         batchSize: 10,

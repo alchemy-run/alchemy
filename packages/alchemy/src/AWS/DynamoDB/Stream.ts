@@ -91,7 +91,7 @@ export interface StreamsProps extends TableEventSourceProps {
  *
  * @example Consume table changes
  * ```typescript
- * yield* DynamoDB.consumeStream(
+ * yield* DynamoDB.consumeTableChanges(
  *   table,
  *   { streamViewType: "NEW_AND_OLD_IMAGES" },
  *   Effect.fn(function* (record) {
@@ -100,7 +100,11 @@ export interface StreamsProps extends TableEventSourceProps {
  * );
  * ```
  */
-export const consumeStream = <Data = unknown, Req = never, StreamReq = never>(
+export const consumeTableChanges = <
+  Data = unknown,
+  Req = never,
+  StreamReq = never,
+>(
   table: Table,
   props: StreamsProps = {},
   handler: (

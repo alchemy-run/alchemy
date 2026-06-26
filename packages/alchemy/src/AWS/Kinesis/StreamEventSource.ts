@@ -97,7 +97,7 @@ export type StreamEventSourceService = <StreamReq = never, Req = never>(
  * The Lambda runtime implementation creates an event source mapping and forwards
  * matching `aws:kinesis` records into the supplied `Stream`.
  */
-export const consumeStream = <
+export const consumeStreamRecords = <
   S extends KinesisStream,
   Req = never,
   StreamReq = never,

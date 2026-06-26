@@ -122,7 +122,7 @@ export interface Topic extends Resource<
  * @example Process topic notifications
  * ```typescript
  * // init
- * yield* SNS.consumeTopic(topic, (stream) =>
+ * yield* SNS.consumeTopicNotifications(topic, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((message) =>
  *       Effect.log(`Received: ${message.Message}`),

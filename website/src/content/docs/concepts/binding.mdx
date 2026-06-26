@@ -133,7 +133,7 @@ Effect `Stream`, so the whole event loop becomes a value you can map,
 filter, batch, and pipe:
 
 ```typescript
-yield* SQS.consumeQueue(InboundQueue, (records) =>
+yield* SQS.consumeQueueMessages(InboundQueue, (records) =>
   records.pipe(
     Stream.map((r) => r.body),
     Stream.runForEach(Console.log),
@@ -146,9 +146,9 @@ and the `consume*` callable change:
 
 | Source                              | Stream element        |
 | ----------------------------------- | --------------------- |
-| `SQS.consumeQueue(queue, fn)`       | `SQSRecord`           |
-| `Kinesis.consumeStream(stream, fn)` | `KinesisStreamRecord` |
-| `DynamoDB.consumeStream(table, fn)` | `StreamRecord<T>`     |
+| `SQS.consumeQueueMessages(queue, fn)`       | `SQSRecord`           |
+| `Kinesis.consumeStreamRecords(stream, fn)` | `KinesisStreamRecord` |
+| `DynamoDB.consumeTableChanges(table, fn)` | `StreamRecord<T>`     |
 
 One call wires the event-source mapping, the IAM (or Cloudflare
 binding), and the typed `Stream`.
@@ -184,7 +184,7 @@ one expression:
 const outbound = yield* SQS.Queue("Outbound");
 const sink = yield* SQS.QueueSink.bind(outbound);
 
-yield* DynamoDB.consumeStream<Order>(OrdersTable, {
+yield* DynamoDB.consumeTableChanges<Order>(OrdersTable, {
   streamViewType: "NEW_AND_OLD_IMAGES",
   startingPosition: "LATEST",
 }, (records) =>

@@ -41,7 +41,7 @@ export default KinesisStreamFunction.make(
     const { stream, queue } = yield* StreamAndQueue;
     const sink = yield* AWS.SQS.QueueSink(queue);
 
-    yield* AWS.Kinesis.consumeStream(
+    yield* AWS.Kinesis.consumeStreamRecords(
       stream,
       {
         startingPosition: "LATEST",

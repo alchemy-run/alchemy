@@ -37,7 +37,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     const queueMessages = yield* QueueMessages;
     const workflow = yield* NotifyWorkflow;
 
-    yield* Cloudflare.Queues.consumeQueue<Message["body"]>(queue, (stream) =>
+    yield* Cloudflare.Queues.consumeQueueMessages<Message["body"]>(queue, (stream) =>
       Stream.runForEach(stream, (msg) =>
         queueMessages
           .getByName("global")

@@ -1,6 +1,6 @@
 ---
 title: Consume from a Queue
-description: Receive messages from a Cloudflare Queue with Cloudflare.Queues.consumeQueue(queue, handler) — Effect-style stream handler with automatic ack/retry.
+description: Receive messages from a Cloudflare Queue with Cloudflare.Queues.consumeQueueMessages(queue, handler) — Effect-style stream handler with automatic ack/retry.
 sidebar:
   order: 10
 ---
@@ -11,9 +11,9 @@ between Workers. The Worker that *sends* messages uses
 binding](/providers/cloudflare/queue) — covered in the resource
 docs. This tutorial focuses on the *consumer* side: receiving
 batches with the Effect-style
-`Cloudflare.Queues.consumeQueue(queue, handler)` API.
+`Cloudflare.Queues.consumeQueueMessages(queue, handler)` API.
 
-`consumeQueue(...)` does both halves in one call: it registers a
+`consumeQueueMessages(...)` does both halves in one call: it registers a
 runtime queue listener on the Worker, and it auto-creates the
 `Cloudflare.Queues.Consumer` resource that tells Cloudflare to
 dispatch messages from the queue to this Worker. No separate
@@ -74,11 +74,11 @@ export default Cloudflare.Worker(
 ```
 
 `queueResource` (the resolved `Queue` resource) is what you pass to
-`consumeQueue(...)` next — it's the same handle, not a new one.
+`consumeQueueMessages(...)` next — it's the same handle, not a new one.
 
 ## Subscribe to incoming messages
 
-`Cloudflare.Queues.consumeQueue(queue, handler)` registers a queue
+`Cloudflare.Queues.consumeQueueMessages(queue, handler)` registers a queue
 event listener on the Worker. The handler receives a
 `Stream.Stream<Message<Body>>` — one stream per batch — and is
 expected to return `Effect.Effect<void>`.
@@ -118,7 +118,7 @@ before dead-lettering. For finer control, call `msg.ack()` /
 
 ## Tune batching and backoff
 
-`consumeQueue(queue, props)` accepts a settings object. Time fields are
+`consumeQueueMessages(queue, props)` accepts a settings object. Time fields are
 `Duration.Input` — any of these are accepted:
 
 ```typescript
@@ -148,7 +148,7 @@ to whole seconds when forwarded to Cloudflare.
 
 ## Provide the runtime layer
 
-`consumeQueue(...)` is a `Context.Service` call —
+`consumeQueueMessages(...)` is a `Context.Service` call —
 `EventSourceLive` is the layer that registers the listener
 with the Worker's runtime context. Add it to the layer stack
 alongside the other binding lives.
@@ -161,7 +161,7 @@ alongside the other binding lives.
   ),
 ```
 
-Without the live layer, the `consumeQueue` call fails at deploy with
+Without the live layer, the `consumeQueueMessages` call fails at deploy with
 `Service not found: Cloudflare.Queues.EventSource`.
 
 ## Add the producer route
@@ -234,8 +234,8 @@ export default {
 };
 ```
 
-`Cloudflare.Queues.consumeQueue(queue, handler)` is the same primitive
+`Cloudflare.Queues.consumeQueueMessages(queue, handler)` is the same primitive
 on the Effect side — the Worker bundle's runtime context routes
 the dispatch to the registered listener — but you get
 `Effect.gen` composition, typed errors, automatic batch
-ack/retry, and the same surface as `AWS.SQS.consumeQueue(queue, handler)`.
+ack/retry, and the same surface as `AWS.SQS.consumeQueueMessages(queue, handler)`.

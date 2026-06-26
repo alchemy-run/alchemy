@@ -15,7 +15,7 @@ export default class QueueConsumerTask extends AWS.ECS.Task<QueueConsumerTask>()
   },
   Effect.gen(function* () {
     const queue = yield* JobsQueue;
-    yield* AWS.SQS.consumeQueue(
+    yield* AWS.SQS.consumeQueueMessages(
       queue,
       {
         batchSize: 10,

@@ -489,7 +489,7 @@ const matchesConfiguredExternal = (
  *
  * @example Process SQS messages
  * ```typescript
- * yield* SQS.consumeQueue(queue,
+ * yield* SQS.consumeQueueMessages(queue,
  *   Effect.fn(function* (message) {
  *     yield* Effect.log(`Received: ${message.body}`);
  *   }),
@@ -498,7 +498,7 @@ const matchesConfiguredExternal = (
  *
  * @example Process DynamoDB stream changes
  * ```typescript
- * yield* DynamoDB.consumeStream(table, {
+ * yield* DynamoDB.consumeTableChanges(table, {
  *   StreamViewType: "NEW_AND_OLD_IMAGES",
  * },
  *   Effect.fn(function* (record) {
@@ -509,7 +509,7 @@ const matchesConfiguredExternal = (
  *
  * @example Process S3 notifications
  * ```typescript
- * yield* S3.consumeBucket(bucket, {
+ * yield* S3.consumeBucketEvents(bucket, {
  *   events: ["s3:ObjectCreated:*"],
  * }, (stream) =>
  *   stream.pipe(

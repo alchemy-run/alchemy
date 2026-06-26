@@ -80,7 +80,7 @@ export type EventSourceService = <
  * yield* events(bus, { source: ["my.app"] }).toQueue(queue);
  * ```
  *
- * To consume events locally with a handler, use {@link consumeEventBus}.
+ * To consume events locally with a handler, use {@link consumeBusEvents}.
  */
 export const events = (...args: any[]) => {
   const descriptor = parseEventDescriptor(args);
@@ -102,7 +102,7 @@ export const events = (...args: any[]) => {
  *
  * @example Consume matching events with a handler
  * ```typescript
- * yield* consumeEventBus(bus, { source: ["my.app"] }, (events) =>
+ * yield* consumeBusEvents(bus, { source: ["my.app"] }, (events) =>
  *   events.pipe(Stream.runForEach((event) => Effect.log(event))),
  * );
  * ```
@@ -110,7 +110,7 @@ export const events = (...args: any[]) => {
  * To route events to another resource instead of consuming them locally, use
  * {@link events}.
  */
-export const consumeEventBus = (...args: any[]) => {
+export const consumeBusEvents = (...args: any[]) => {
   // The handler is the LAST positional argument. Peel it off and run the
   // subscribe body directly.
   const process = args[args.length - 1] as (

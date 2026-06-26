@@ -29,7 +29,7 @@ export default class Server extends AWS.EC2.Instance<Server>()(
       visibilityTimeout: 60,
     });
 
-    yield* AWS.SQS.consumeQueue(queue, (stream) =>
+    yield* AWS.SQS.consumeQueueMessages(queue, (stream) =>
       stream.pipe(Stream.mapEffect(Effect.logInfo), Stream.runDrain),
     );
 

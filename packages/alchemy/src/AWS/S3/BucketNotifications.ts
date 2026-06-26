@@ -47,7 +47,7 @@ export interface NotificationsProps<Events extends S3EventType[]> {
  * ```typescript
  * import * as S3 from "alchemy/AWS/S3";
  *
- * yield* S3.consumeBucket(
+ * yield* S3.consumeBucketEvents(
  *   bucket,
  *   { events: ["s3:ObjectCreated:*"] },
  *   (stream) =>
@@ -61,7 +61,7 @@ export interface NotificationsProps<Events extends S3EventType[]> {
  *
  * @example Process all events (no filter)
  * ```typescript
- * yield* S3.consumeBucket(bucket, (stream) =>
+ * yield* S3.consumeBucketEvents(bucket, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((event) =>
  *       Effect.log(`${event.type}: ${event.key}`),
@@ -70,7 +70,7 @@ export interface NotificationsProps<Events extends S3EventType[]> {
  * );
  * ```
  */
-export function consumeBucket<
+export function consumeBucketEvents<
   B extends Bucket,
   Req = never,
   StreamReq = never,
@@ -81,7 +81,7 @@ export function consumeBucket<
     stream: Stream.Stream<BucketNotification, never, StreamReq>,
   ) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<void, never, Req>;
-export function consumeBucket<
+export function consumeBucketEvents<
   B extends Bucket,
   Req = never,
   StreamReq = never,
@@ -93,7 +93,7 @@ export function consumeBucket<
     stream: Stream.Stream<BucketNotification, never, StreamReq>,
   ) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<void, never, Req>;
-export function consumeBucket<
+export function consumeBucketEvents<
   B extends Bucket,
   Req = never,
   StreamReq = never,

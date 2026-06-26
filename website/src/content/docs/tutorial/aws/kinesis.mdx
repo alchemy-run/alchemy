@@ -119,7 +119,7 @@ export default class Audit extends AWS.Lambda.Function<Audit>()(
 
 ## Subscribe to records
 
-`Kinesis.consumeStream(stream, ...)` mirrors the SQS
+`Kinesis.consumeStreamRecords(stream, ...)` mirrors the SQS
 `messages(...)` shape from the previous part.
 Add the smallest possible subscription — log each record's
 partition key:
@@ -139,7 +139,7 @@ export default class Audit extends AWS.Lambda.Function<Audit>()(
   Effect.gen(function* () {
     const events = yield* Events;
 +
-+    yield* Kinesis.consumeStream(events, {
++    yield* Kinesis.consumeStreamRecords(events, {
 +      startingPosition: "LATEST",
 +      batchSize: 100,
 +    }, (stream) =>
@@ -169,7 +169,7 @@ itself). Decode it back to bytes and on to a string, and run
 the work as an Effect per record:
 
 ```diff lang="typescript"
-yield* Kinesis.consumeStream(events, {
+yield* Kinesis.consumeStreamRecords(events, {
   startingPosition: "LATEST",
   batchSize: 100,
 }, (stream) =>

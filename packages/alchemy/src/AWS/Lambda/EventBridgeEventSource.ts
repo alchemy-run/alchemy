@@ -25,7 +25,7 @@ export const isEventBridgeEvent = (
   typeof event?.["detail-type"] === "string";
 
 /**
- * Lambda runtime implementation for `AWS.EventBridge.consumeEventBus(...)`.
+ * Lambda runtime implementation for `AWS.EventBridge.consumeBusEvents(...)`.
  *
  * This layer does two things:
  *
@@ -37,7 +37,7 @@ export const isEventBridgeEvent = (
  * @section Subscribing To The Default Bus
  * @example Match User Events On The Default Bus
  * ```typescript
- * yield* AWS.EventBridge.consumeEventBus(
+ * yield* AWS.EventBridge.consumeBusEvents(
  *   {
  *     source: ["app.user"],
  *     "detail-type": ["UserCreated"],
@@ -56,7 +56,7 @@ export const isEventBridgeEvent = (
  *   name: "orders",
  * });
  *
- * yield* AWS.EventBridge.consumeEventBus(
+ * yield* AWS.EventBridge.consumeBusEvents(
  *   bus,
  *   {
  *     source: ["app.orders"],
@@ -72,7 +72,7 @@ export const isEventBridgeEvent = (
  * @section Explicit Route Names
  * @example Name The Backing Rule Deterministically
  * ```typescript
- * yield* AWS.EventBridge.consumeEventBus(
+ * yield* AWS.EventBridge.consumeBusEvents(
  *   "InvoiceEvents",
  *   {
  *     source: ["app.billing"],
@@ -96,7 +96,7 @@ export const isEventBridgeEvent = (
  *   email: string;
  * };
  *
- * yield* AWS.EventBridge.consumeEventBus(
+ * yield* AWS.EventBridge.consumeBusEvents(
  *   {
  *     source: ["app.user"],
  *     "detail-type": ["UserCreated"],
@@ -152,7 +152,7 @@ export const EventSource = Layer.effect(
  * Deploy-time policy/service bridge for EventBridge subscriptions.
  *
  * Runtime-specific implementations use this to materialize the infrastructure
- * wiring required by `consumeEventBus(...)`.
+ * wiring required by `consumeBusEvents(...)`.
  */
 export class EventSourcePolicy extends Binding.Policy<
   EventSourcePolicy,

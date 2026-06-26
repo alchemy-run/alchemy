@@ -31,7 +31,7 @@ const table = yield* DynamoDB.Table("Items", { /* ... */ });
 const putItem = yield* DynamoDB.PutItem.bind(table);
 const getItem = yield* DynamoDB.GetItem.bind(table);
 
-+yield* DynamoDB.consumeStream(table, (stream) =>
++yield* DynamoDB.consumeTableChanges(table, (stream) =>
 +  stream.pipe(
 +    Stream.runForEach((record) =>
 +      Console.log(`${record.eventName}: ${record.dynamodb.Keys?.id?.S}`),
@@ -40,7 +40,7 @@ const getItem = yield* DynamoDB.GetItem.bind(table);
 +);
 ```
 
-That single `consumeStream(...)` call enables a stream on the table,
+That single `consumeTableChanges(...)` call enables a stream on the table,
 creates a Lambda `EventSourceMapping` that polls it, and adds
 the IAM grants for `dynamodb:GetRecords`, `GetShardIterator`,
 `DescribeStream`, and `ListStreams` — all from the call site.
@@ -52,8 +52,8 @@ full row before and after the change — set `streamViewType` to
 `NEW_AND_OLD_IMAGES`:
 
 ```diff lang="typescript"
--yield* DynamoDB.consumeStream(table, (stream) =>
-+yield* DynamoDB.consumeStream(table, {
+-yield* DynamoDB.consumeTableChanges(table, (stream) =>
++yield* DynamoDB.consumeTableChanges(table, {
 +  streamViewType: "NEW_AND_OLD_IMAGES",
 +}, (stream) =>
   stream.pipe(/* ... */),
@@ -73,7 +73,7 @@ replay everything currently in the stream's 24-hour retention
 window:
 
 ```diff lang="typescript"
-yield* DynamoDB.consumeStream(table, {
+yield* DynamoDB.consumeTableChanges(table, {
   streamViewType: "NEW_AND_OLD_IMAGES",
 +  startingPosition: "TRIM_HORIZON",
 +  batchSize: 10,
@@ -90,12 +90,12 @@ fail in smaller blast radii.
 
 DynamoDB stream records use the same attribute-value shape as
 `GetItem`/`PutItem`. Describe the row inline as a generic on
-`consumeStream` and TypeScript will help you destructure
+`consumeTableChanges` and TypeScript will help you destructure
 `NewImage`/`OldImage`:
 
 ```diff lang="typescript"
--yield* DynamoDB.consumeStream(table, {
-+yield* DynamoDB.consumeStream<{ id: { S: string }; content: { S: string } }>(table, {
+-yield* DynamoDB.consumeTableChanges(table, {
++yield* DynamoDB.consumeTableChanges<{ id: { S: string }; content: { S: string } }>(table, {
   streamViewType: "NEW_AND_OLD_IMAGES",
   startingPosition: "TRIM_HORIZON",
   batchSize: 10,
@@ -135,7 +135,7 @@ The Lambda-specific implementation of `TableEventSource` is in
 `TableEventSource` is the binding that mutates the table's stream
 configuration during deploy and creates the event source mapping.
 You don't have to think about either — they're both side effects
-of `consumeStream(...)`.
+of `consumeTableChanges(...)`.
 
 ## Deploy
 
@@ -171,8 +171,8 @@ the originating change.
 
 ## Why a Stream instead of a callback?
 
-The `process(handler)` signature mirrors the S3 events helper for
-a reason — once your event source is a typed `Stream<Record>`,
+The `consumeTableChanges(table, handler)` signature mirrors the S3
+events helper for a reason — once your event source is a typed `Stream<Record>`,
 back-pressure, batching, retries, parallel side effects, and
 in-order processing are all just composition:
 

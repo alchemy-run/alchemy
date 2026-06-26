@@ -30,16 +30,16 @@ type MessagesHandler<Req> = (
  * @param props Optional event-source configuration.
  * @param process The handler invoked with a stream of SQS records (last argument).
  */
-export function consumeQueue<Q extends Queue, Req = never>(
+export function consumeQueueMessages<Q extends Queue, Req = never>(
   queue: Q,
   process: MessagesHandler<Req>,
 ): Effect.Effect<void, never, QueueEventSource>;
-export function consumeQueue<Q extends Queue, Req = never>(
+export function consumeQueueMessages<Q extends Queue, Req = never>(
   queue: Q,
   props: MessagesProps,
   process: MessagesHandler<Req>,
 ): Effect.Effect<void, never, QueueEventSource>;
-export function consumeQueue<Q extends Queue, Req = never>(
+export function consumeQueueMessages<Q extends Queue, Req = never>(
   queue: Q,
   propsOrProcess: MessagesProps | MessagesHandler<Req>,
   maybeProcess?: MessagesHandler<Req>,
