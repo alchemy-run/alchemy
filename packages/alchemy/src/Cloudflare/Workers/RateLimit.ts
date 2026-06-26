@@ -2,7 +2,7 @@ import type * as Effect from "effect/Effect";
 import { SingleShotGen } from "effect/Utils";
 import * as Binding from "../../Binding.ts";
 import { taggedFunction } from "../../Util/effect.ts";
-import { type RateLimitClient } from "./RateLimitBinding.ts";
+import type { RateLimitClient } from "./RateLimitBinding.ts";
 
 type RateLimitTypeId = typeof RateLimitTypeId;
 const RateLimitTypeId = "Cloudflare.RateLimit" as const;
