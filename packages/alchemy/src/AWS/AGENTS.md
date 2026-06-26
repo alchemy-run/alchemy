@@ -80,9 +80,9 @@ This always has two layers:
 
 Examples:
 
-- `notifications(bucket)`
-- `messages(queue)`
-- `changes(table)` for DynamoDB-style change streams
+- `consumeBucket(bucket, handler)`
+- `consumeQueue(queue, handler)`
+- `consumeStream(table, handler)` for DynamoDB-style change streams
 
 ### 4. Helper
 
@@ -90,8 +90,8 @@ Use a helper when multiple raw operations should collapse into a more ergonomic 
 
 Examples:
 
-- `notifications(bucket)`
-- `messages(queue)`
+- `consumeBucket(bucket, handler)`
+- `consumeQueue(queue, handler)`
 - batch or transaction wrappers
 
 Helpers should not hide missing low-level primitives. Implement the primitives first.
@@ -411,7 +411,7 @@ Required shape:
 - the canonical resource remains `Table`
 - `Table` keeps stream state in its attributes, but does not accept `streamSpecification` as a plain input prop
 - stream enablement is requested through the table binding contract
-- the public helper is `streams(table).process(...)`
+- the public helper is `consumeStream(table, props?, handler)`
 - the service-level abstraction lives in `alchemy/src/AWS/DynamoDB/Stream.ts`
 - the Lambda runtime implementation lives in `alchemy/src/AWS/Lambda/TableEventSource.ts`
 
@@ -433,7 +433,7 @@ Implementation rules:
 
 Lambda-first slice:
 
-- implement `streams(table).process(...)` first for Lambda
+- implement `consumeStream(table, props?, handler)` first for Lambda
 - the Lambda layer binds the table stream requirement, grants stream-read IAM, and creates `AWS.Lambda.EventSourceMapping`
 - Process or other runtimes can be added later without changing `Table` back to a prop-driven stream model
 

@@ -84,13 +84,26 @@ export interface StreamsProps extends TableEventSourceProps {
   streamViewType?: DynamoDB.StreamViewType;
 }
 
-export const stream = <T extends Table>(
-  table: T,
+/**
+ * Consume change data capture events from a DynamoDB table via a Lambda
+ * event source mapping. The stream is enabled automatically through the
+ * binding contract.
+ *
+ * @example Consume table changes
+ * ```typescript
+ * yield* DynamoDB.consumeStream(
+ *   table,
+ *   { streamViewType: "NEW_AND_OLD_IMAGES" },
+ *   Effect.fn(function* (record) {
+ *     yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
+ *   }),
+ * );
+ * ```
+ */
+export const consumeStream = <Data = unknown, Req = never, StreamReq = never>(
+  table: Table,
   props: StreamsProps = {},
-) => ({
-  process: <Data = unknown, Req = never, StreamReq = never>(
-    process: (
-      stream: Stream.Stream<StreamRecord<Data>, never, StreamReq>,
-    ) => Effect.Effect<void, never, Req>,
-  ) => TableEventSource.use((source) => source(table, props, process)),
-});
+  handler: (
+    stream: Stream.Stream<StreamRecord<Data>, never, StreamReq>,
+  ) => Effect.Effect<void, never, Req>,
+) => TableEventSource.use((source) => source(table, props, handler));

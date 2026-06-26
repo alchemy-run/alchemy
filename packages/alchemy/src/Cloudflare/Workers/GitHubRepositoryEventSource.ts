@@ -44,7 +44,7 @@ export const GitHubRepositoryEventSourcePolicyLive =
       return Effect.fn(function* (host, props) {
         if (!isWorker(host)) {
           return yield* Effect.die(
-            `GitHub.events(..., handler) is only supported on ` +
+            `GitHub.consumeRepository(..., handler) is only supported on ` +
               `Cloudflare.Worker hosts (got '${host.Type}').`,
           );
         }

@@ -24,7 +24,7 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
 
 /**
  * End-to-end Cloudflare Queue round-trip via
- * `Cloudflare.Queues.messages(queue).subscribe(...)`.
+ * `Cloudflare.Queues.consumeQueue(queue, handler)`.
  *
  * Stack:
  *
@@ -35,10 +35,10 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
  *       `Cloudflare.Queues.WriteQueue` producer.
  *     - subscribe handler    →  increments the named Counter DO
  *       and stores the body, via
- *       `Cloudflare.Queues.messages(RoundTripQueue).subscribe(...)`.
+ *       `Cloudflare.Queues.consumeQueue(RoundTripQueue, handler)`.
  *     - `GET /count?name=K`  →  reads the DO snapshot.
  * - `Cloudflare.Queues.Consumer` is auto-created by the policy
- *   side of `messages().subscribe(...)` — there is no explicit
+ *   side of `consumeQueue(...)` — there is no explicit
  *   `Consumer(...)` yield in the stack.
  *
  * The test sends N messages, then polls `/count?name=K` with

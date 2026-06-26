@@ -32,7 +32,7 @@ export default BucketEventSourceFunction.make(
 
     // Subscribe to object-created events under `incoming/`. Each notification
     // writes a derived object under `processed/<name>` recording the event.
-    yield* S3.notifications(
+    yield* S3.consumeBucket(
       bucket,
       {
         events: ["s3:ObjectCreated:*"],

@@ -25,7 +25,7 @@ export const isEventBridgeEvent = (
   typeof event?.["detail-type"] === "string";
 
 /**
- * Lambda runtime implementation for `AWS.EventBridge.events(...).subscribe(...)`.
+ * Lambda runtime implementation for `AWS.EventBridge.consumeEventBus(...)`.
  *
  * This layer does two things:
  *
@@ -37,16 +37,16 @@ export const isEventBridgeEvent = (
  * @section Subscribing To The Default Bus
  * @example Match User Events On The Default Bus
  * ```typescript
- * yield* AWS.EventBridge
- *   .events({
+ * yield* AWS.EventBridge.consumeEventBus(
+ *   {
  *     source: ["app.user"],
  *     "detail-type": ["UserCreated"],
- *   })
- *   .subscribe((events) =>
+ *   },
+ *   (events) =>
  *     Stream.runForEach(events, (event) =>
  *       Effect.log(`new user: ${event.detail.userId}`),
  *     ),
- *   );
+ * );
  * ```
  *
  * @section Subscribing To A Custom Bus
@@ -56,37 +56,36 @@ export const isEventBridgeEvent = (
  *   name: "orders",
  * });
  *
- * yield* AWS.EventBridge
- *   .events(bus, {
+ * yield* AWS.EventBridge.consumeEventBus(
+ *   bus,
+ *   {
  *     source: ["app.orders"],
  *     "detail-type": ["OrderPaid"],
- *   })
- *   .subscribe((events) =>
+ *   },
+ *   (events) =>
  *     Stream.runForEach(events, (event) =>
  *       Effect.log(`paid order: ${event.detail.orderId}`),
  *     ),
- *   );
+ * );
  * ```
  *
  * @section Explicit Route Names
  * @example Name The Backing Rule Deterministically
  * ```typescript
- * yield* AWS.EventBridge
- *   .events(
- *     "InvoiceEvents",
- *     {
- *       source: ["app.billing"],
- *       "detail-type": ["InvoiceIssued"],
- *     },
- *     {
- *       description: "Deliver invoice events into this Lambda function",
- *     },
- *   )
- *   .subscribe((events) =>
+ * yield* AWS.EventBridge.consumeEventBus(
+ *   "InvoiceEvents",
+ *   {
+ *     source: ["app.billing"],
+ *     "detail-type": ["InvoiceIssued"],
+ *   },
+ *   {
+ *     description: "Deliver invoice events into this Lambda function",
+ *   },
+ *   (events) =>
  *     Stream.runForEach(events, (event) =>
  *       Effect.log(`invoice: ${event.detail.invoiceId}`),
  *     ),
- *   );
+ * );
  * ```
  *
  * @section Processing Typed Details
@@ -97,17 +96,17 @@ export const isEventBridgeEvent = (
  *   email: string;
  * };
  *
- * yield* AWS.EventBridge
- *   .events({
+ * yield* AWS.EventBridge.consumeEventBus(
+ *   {
  *     source: ["app.user"],
  *     "detail-type": ["UserCreated"],
- *   })
- *   .subscribe((events) =>
+ *   },
+ *   (events) =>
  *     Stream.runForEach(
  *       events as Stream.Stream<AWS.EventBridge.EventRecord<UserCreated>>,
  *       (event) => Effect.log(`welcome ${event.detail.email}`),
  *     ),
- *   );
+ * );
  * ```
  */
 export const EventSource = Layer.effect(
@@ -153,7 +152,7 @@ export const EventSource = Layer.effect(
  * Deploy-time policy/service bridge for EventBridge subscriptions.
  *
  * Runtime-specific implementations use this to materialize the infrastructure
- * wiring required by `events(...).subscribe(...)`.
+ * wiring required by `consumeEventBus(...)`.
  */
 export class EventSourcePolicy extends Binding.Policy<
   EventSourcePolicy,

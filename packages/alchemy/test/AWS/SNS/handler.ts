@@ -125,7 +125,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
 
     const queueSink = yield* AWS.SQS.QueueSink(queue);
 
-    yield* AWS.SNS.notifications(topic, (stream) =>
+    yield* AWS.SNS.consumeTopic(topic, (stream) =>
       stream.pipe(
         Stream.map((notification) =>
           JSON.stringify({

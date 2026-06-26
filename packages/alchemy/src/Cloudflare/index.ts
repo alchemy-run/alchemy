@@ -122,6 +122,7 @@ export {
   Browser,
   RateLimit,
   Request,
+  cron,
 } from "./Workers/index.ts";
 export type { InferEnv } from "./Workers/index.ts";
 export { Workflow } from "./Workflows/index.ts";

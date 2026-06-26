@@ -43,22 +43,25 @@ export default DynamoDBStreamFunction.make(
     const { table, queue } = yield* TableAndQueue;
     const sink = yield* AWS.SQS.QueueSink(queue);
 
-    yield* AWS.DynamoDB.stream(table, {
-      streamViewType: "NEW_AND_OLD_IMAGES",
-      startingPosition: "TRIM_HORIZON",
-      batchSize: 10,
-    }).process((stream) =>
-      stream.pipe(
-        Stream.map((record) =>
-          JSON.stringify({
-            eventName: record.eventName,
-            keys: record.dynamodb.Keys,
-            newImage: record.dynamodb.NewImage,
-            oldImage: record.dynamodb.OldImage,
-          }),
+    yield* AWS.DynamoDB.consumeStream(
+      table,
+      {
+        streamViewType: "NEW_AND_OLD_IMAGES",
+        startingPosition: "TRIM_HORIZON",
+        batchSize: 10,
+      },
+      (stream) =>
+        stream.pipe(
+          Stream.map((record) =>
+            JSON.stringify({
+              eventName: record.eventName,
+              keys: record.dynamodb.Keys,
+              newImage: record.dynamodb.NewImage,
+              oldImage: record.dynamodb.OldImage,
+            }),
+          ),
+          Stream.run(sink),
         ),
-        Stream.run(sink),
-      ),
     );
   }).pipe(
     Effect.provide(

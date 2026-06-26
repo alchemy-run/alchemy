@@ -133,7 +133,7 @@ Effect `Stream`, so the whole event loop becomes a value you can map,
 filter, batch, and pipe:
 
 ```typescript
-yield* SQS.messages(InboundQueue).subscribe((records) =>
+yield* SQS.consumeQueue(InboundQueue, (records) =>
   records.pipe(
     Stream.map((r) => r.body),
     Stream.runForEach(Console.log),
@@ -142,13 +142,13 @@ yield* SQS.messages(InboundQueue).subscribe((records) =>
 ```
 
 The other event sources have the same shape — only the record type
-and the entry-point name change:
+and the `consume*` callable change:
 
-| Source                    | Entry point                | Stream element        |
-| ------------------------- | -------------------------- | --------------------- |
-| `SQS.messages(queue)`     | `.subscribe(fn)`           | `SQSRecord`           |
-| `Kinesis.records(stream)` | `.process(fn)`             | `KinesisStreamRecord` |
-| `DynamoDB.stream(table)`  | `.process(fn)`             | `StreamRecord<T>`     |
+| Source                              | Stream element        |
+| ----------------------------------- | --------------------- |
+| `SQS.consumeQueue(queue, fn)`       | `SQSRecord`           |
+| `Kinesis.consumeStream(stream, fn)` | `KinesisStreamRecord` |
+| `DynamoDB.consumeStream(table, fn)` | `StreamRecord<T>`     |
 
 One call wires the event-source mapping, the IAM (or Cloudflare
 binding), and the typed `Stream`.
@@ -184,10 +184,10 @@ one expression:
 const outbound = yield* SQS.Queue("Outbound");
 const sink = yield* SQS.QueueSink.bind(outbound);
 
-yield* DynamoDB.stream(OrdersTable, {
+yield* DynamoDB.consumeStream<Order>(OrdersTable, {
   streamViewType: "NEW_AND_OLD_IMAGES",
   startingPosition: "LATEST",
-}).process<Order>((records) =>
+}, (records) =>
   records.pipe(
     Stream.filterMap((r) => Option.fromNullable(r.dynamodb.NewImage)),
     Stream.filter((order) => order.status === "PAID"),

@@ -36,16 +36,37 @@ type TopicEventSourceHandler<Req, StreamReq> = (
   stream: Stream.Stream<TopicNotification, never, StreamReq>,
 ) => Effect.Effect<void, never, Req>;
 
-export function notifications<T extends Topic, Req = never, StreamReq = never>(
+/**
+ * Subscribe a Lambda Function to an SNS {@link Topic}, processing published
+ * notifications as a stream.
+ *
+ * @example
+ * ```typescript
+ * yield* consumeTopic(topic, (stream) =>
+ *   stream.pipe(Stream.runForEach((message) => Effect.log(message.Message))),
+ * );
+ * ```
+ *
+ * @example With subscription attributes
+ * ```typescript
+ * yield* consumeTopic(
+ *   topic,
+ *   { attributes: { FilterPolicy: JSON.stringify({ type: ["order"] }) } },
+ *   (stream) =>
+ *     stream.pipe(Stream.runForEach((message) => Effect.log(message.Message))),
+ * );
+ * ```
+ */
+export function consumeTopic<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function notifications<T extends Topic, Req = never, StreamReq = never>(
+export function consumeTopic<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
   props: TopicEventSourceProps,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function notifications<T extends Topic, Req = never, StreamReq = never>(
+export function consumeTopic<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
   propsOrProcess:
     | TopicEventSourceProps

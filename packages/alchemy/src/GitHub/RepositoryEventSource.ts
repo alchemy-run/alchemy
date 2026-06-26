@@ -101,7 +101,7 @@ export interface RepositoryEventSourceProps<
  * @example
  * ```typescript
  * // `event.name` is narrowed to "push" | "pull_request"
- * yield* GitHub.events(
+ * yield* GitHub.consumeRepository(
  *   {
  *     owner: "my-org",
  *     repository: "my-repo",
@@ -115,17 +115,17 @@ export interface RepositoryEventSourceProps<
  * @example
  * ```typescript
  * // When you don't need to pass any options, the handler is the only argument.
- * yield* GitHub.events((event) =>
+ * yield* GitHub.consumeRepository((event) =>
  *   Effect.log(`received ${event.name} (${event.id})`),
  * );
  * ```
  */
-export function events<Req = never>(
+export function consumeRepository<Req = never>(
   process: (
     event: WebhookEvent<SelectedEvent<readonly WebhookEventName[]>>,
   ) => Effect.Effect<void, never, Req | Providers>,
 ): Effect.Effect<void, never, RepositoryEventSource>;
-export function events<
+export function consumeRepository<
   const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
   Req = never,
 >(
@@ -134,7 +134,7 @@ export function events<
     event: WebhookEvent<SelectedEvent<E>>,
   ) => Effect.Effect<void, never, Req | Providers>,
 ): Effect.Effect<void, never, RepositoryEventSource>;
-export function events<
+export function consumeRepository<
   const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
   Req = never,
 >(

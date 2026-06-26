@@ -41,20 +41,23 @@ export default KinesisStreamFunction.make(
     const { stream, queue } = yield* StreamAndQueue;
     const sink = yield* AWS.SQS.QueueSink(queue);
 
-    yield* AWS.Kinesis.records(stream, {
-      startingPosition: "LATEST",
-      batchSize: 10,
-    }).process((records) =>
-      records.pipe(
-        Stream.map((record) =>
-          JSON.stringify({
-            partitionKey: record.kinesis.partitionKey,
-            data: Buffer.from(record.kinesis.data, "base64").toString("utf8"),
-            eventID: record.eventID,
-          }),
+    yield* AWS.Kinesis.consumeStream(
+      stream,
+      {
+        startingPosition: "LATEST",
+        batchSize: 10,
+      },
+      (records) =>
+        records.pipe(
+          Stream.map((record) =>
+            JSON.stringify({
+              partitionKey: record.kinesis.partitionKey,
+              data: Buffer.from(record.kinesis.data, "base64").toString("utf8"),
+              eventID: record.eventID,
+            }),
+          ),
+          Stream.run(sink),
         ),
-        Stream.run(sink),
-      ),
     );
 
     const streamName = yield* stream.streamName;

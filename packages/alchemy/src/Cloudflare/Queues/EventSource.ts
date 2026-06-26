@@ -17,7 +17,7 @@ import type { Providers } from "../Providers.ts";
 
 /**
  * Subscriber settings — the same shape Cloudflare's `Consumer`
- * accepts. `messages(queue, props, handler)` passes these
+ * accepts. `consumeQueue(queue, props, handler)` passes these
  * through to the auto-created `Cloudflare.Queues.Consumer` so a single
  * call captures both runtime and deploy-time intent.
  */
@@ -69,7 +69,7 @@ export type Message<Body = unknown> = cf.Message<Body>;
 /**
  * Subscribe to a Cloudflare Queue with an Effect stream handler.
  *
- * Mirrors `AWS.SQS.messages(queue, handler)` on the
+ * Mirrors `AWS.SQS.consumeQueue(queue, handler)` on the
  * Cloudflare side. Wires both halves of the consumer in one call:
  *
  * - **Runtime**: registers a `queue` event listener on the Worker.
@@ -95,7 +95,7 @@ export type Message<Body = unknown> = cf.Message<Body>;
  * import * as Effect from "effect/Effect";
  * import * as Stream from "effect/Stream";
  *
- * yield* Cloudflare.Queues.messages<MyEvent>(
+ * yield* Cloudflare.Queues.consumeQueue<MyEvent>(
  *   queueResource,
  *   {
  *     batchSize: 25,
@@ -113,25 +113,25 @@ export type Message<Body = unknown> = cf.Message<Body>;
  * @example
  * ```typescript
  * // Without options — handler is the second argument.
- * yield* Cloudflare.Queues.messages<MyEvent>(queueResource, (stream) =>
+ * yield* Cloudflare.Queues.consumeQueue<MyEvent>(queueResource, (stream) =>
  *   Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
  * );
  * ```
  */
-export function messages<Body = unknown>(
+export function consumeQueue<Body = unknown>(
   queue: Queue,
   process: (
     stream: Stream.Stream<Message<Body>>,
   ) => Effect.Effect<void, unknown, any>,
 ): Effect.Effect<void, never, EventSource>;
-export function messages<Body = unknown>(
+export function consumeQueue<Body = unknown>(
   queue: Queue,
   props: MessagesProps,
   process: (
     stream: Stream.Stream<Message<Body>>,
   ) => Effect.Effect<void, unknown, any>,
 ): Effect.Effect<void, never, EventSource>;
-export function messages<Body = unknown>(
+export function consumeQueue<Body = unknown>(
   queue: Queue,
   propsOrProcess:
     | MessagesProps
@@ -197,7 +197,7 @@ export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
     Effect.gen(function* () {
       if (!isWorker(host)) {
         return yield* Effect.die(
-          `Cloudflare.Queues.messages(...) is only supported on ` +
+          `Cloudflare.Queues.consumeQueue(...) is only supported on ` +
             `Cloudflare.Worker hosts (got '${host.Type}').`,
         );
       }
@@ -221,8 +221,8 @@ export const EventSourcePolicyLive = EventSourcePolicy.layer.succeed(
 );
 
 /**
- * Runtime layer for {@link messages}. Wires each
- * `messages(queue, handler)` call in the Worker init phase to
+ * Runtime layer for {@link consumeQueue}. Wires each
+ * `consumeQueue(queue, handler)` call in the Worker init phase to
  * a `queue` event listener on the runtime context, and asks the
  * deploy-time policy ({@link EventSourcePolicy}, provided in
  * `Cloudflare.providers()`) to yield the matching

@@ -369,9 +369,9 @@ export interface Bucket extends Resource<
  * @example Process object creation events
  * ```typescript
  * // init
- * yield* S3.notifications(bucket, {
+ * yield* S3.consumeBucket(bucket, {
  *   events: ["s3:ObjectCreated:*"],
- * }).subscribe((stream) =>
+ * }, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((event) =>
  *       Effect.log(`New object: ${event.key}`),
@@ -699,7 +699,7 @@ export const BucketProvider = () =>
       });
 
       // Apply S3 event notification configuration declared via bindings
-      // (e.g. `S3.notifications(bucket).subscribe(...)`). Without this the
+      // (e.g. `S3.consumeBucket(bucket, handler)`). Without this the
       // binding is recorded in state but never reaches the bucket, so no
       // events are ever delivered.
       // Canonical form of the Lambda targets, ignoring S3-assigned `Id`s and

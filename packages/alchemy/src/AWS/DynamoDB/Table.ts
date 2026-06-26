@@ -199,9 +199,9 @@ export interface Table extends Resource<
  * @example Process table changes
  * ```typescript
  * // init
- * yield* DynamoDB.streams(table, {
- *   StreamViewType: "NEW_AND_OLD_IMAGES",
- * }).process(
+ * yield* DynamoDB.consumeStream(
+ *   table,
+ *   { streamViewType: "NEW_AND_OLD_IMAGES" },
  *   Effect.fn(function* (record) {
  *     yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
  *   }),

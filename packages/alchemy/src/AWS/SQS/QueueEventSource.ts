@@ -23,16 +23,23 @@ type MessagesHandler<Req> = (
   stream: Stream.Stream<SQSRecord>,
 ) => Effect.Effect<void, never, Req>;
 
-export function messages<Q extends Queue, Req = never>(
+/**
+ * Subscribe an Effect handler to messages produced by an SQS {@link Queue}.
+ *
+ * @param queue The SQS queue to consume messages from.
+ * @param props Optional event-source configuration.
+ * @param process The handler invoked with a stream of SQS records (last argument).
+ */
+export function consumeQueue<Q extends Queue, Req = never>(
   queue: Q,
   process: MessagesHandler<Req>,
 ): Effect.Effect<void, never, QueueEventSource>;
-export function messages<Q extends Queue, Req = never>(
+export function consumeQueue<Q extends Queue, Req = never>(
   queue: Q,
   props: MessagesProps,
   process: MessagesHandler<Req>,
 ): Effect.Effect<void, never, QueueEventSource>;
-export function messages<Q extends Queue, Req = never>(
+export function consumeQueue<Q extends Queue, Req = never>(
   queue: Q,
   propsOrProcess: MessagesProps | MessagesHandler<Req>,
   maybeProcess?: MessagesHandler<Req>,

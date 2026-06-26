@@ -46,7 +46,7 @@ test(
  * GET /<path> reads from R2, so we read /queue/<id> back.
  *
  * Pairs with the cloudflare-worker example, which exercises the
- * Effect-style `Cloudflare.Queues.messages(Queue).subscribe(...)` path
+ * Effect-style `Cloudflare.Queues.consumeQueue(Queue, handler)` path
  * against the same producer/consumer round-trip.
  */
 test(

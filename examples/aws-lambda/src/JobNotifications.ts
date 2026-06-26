@@ -35,7 +35,7 @@ export const JobNotificationsSNS = Layer.effect(
 
     const publish = yield* AWS.SNS.Publish(topic);
 
-    yield* AWS.SNS.notifications(topic, (stream) =>
+    yield* AWS.SNS.consumeTopic(topic, (stream) =>
       stream.pipe(
         Stream.mapEffect((notification) =>
           Effect.try({

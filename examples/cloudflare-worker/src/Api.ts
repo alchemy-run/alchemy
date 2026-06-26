@@ -50,7 +50,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     // handler; success ack()s every message in the batch, failure
     // retry()s. The persisted JSON at /queue/<id> on R2 lets the
     // integ test verify the producer→consumer round-trip.
-    yield* Cloudflare.Queues.messages<QueueMessageBody>(
+    yield* Cloudflare.Queues.consumeQueue<QueueMessageBody>(
       queueResource,
       (stream) =>
         Stream.runForEach(stream, (msg) =>
@@ -355,7 +355,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         //                        wrote when it processed that message.
         //
         // Producer side: `Cloudflare.Queues.WriteQueue`. Consumer side:
-        // `Cloudflare.Queues.messages(Queue).subscribe(...)` registered in
+        // `Cloudflare.Queues.consumeQueue(Queue, handler)` registered in
         // the init phase (above), with `EventSourceLive` on the
         // worker layer.
         // AI Gateway smoke test — POST /ai with { prompt }.

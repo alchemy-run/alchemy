@@ -250,7 +250,7 @@ export interface Queue extends Resource<
  * @example Process queue messages
  * ```typescript
  * // init
- * yield* SQS.messages(queue).process(
+ * yield* SQS.consumeQueue(queue,
  *   Effect.fn(function* (message) {
  *     yield* Effect.log(`Received: ${message.body}`);
  *   }),

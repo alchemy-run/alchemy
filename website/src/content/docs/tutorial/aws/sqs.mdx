@@ -158,8 +158,8 @@ export default class Worker extends AWS.Lambda.Function<Worker>()(
 
 ## Subscribe to messages
 
-`SQS.messages(queue, ...)` is the consumer-side mirror
-of `notifications` / `stream`: a typed `Stream<SQSRecord>` you
+`SQS.consumeQueue(queue, ...)` is the consumer-side mirror
+of `consumeBucket` / `stream`: a typed `Stream<SQSRecord>` you
 can compose with any operator. Add the smallest possible
 subscription — log each message body:
 
@@ -178,7 +178,7 @@ export default class Worker extends AWS.Lambda.Function<Worker>()(
   Effect.gen(function* () {
     const queue = yield* Jobs;
 +
-+    yield* SQS.messages(queue, { batchSize: 10 }, (stream) =>
++    yield* SQS.consumeQueue(queue, { batchSize: 10 }, (stream) =>
 +      stream.pipe(
 +        Stream.runForEach((record) =>
 +          Console.log(`received: ${record.body}`),
@@ -191,7 +191,7 @@ export default class Worker extends AWS.Lambda.Function<Worker>()(
 ) {}
 ```
 
-That single `messages(...)` call creates the Lambda event
+That single `consumeQueue(...)` call creates the Lambda event
 source mapping pointing at the queue and grants the function
 `sqs:ReceiveMessage`, `DeleteMessage`, and `GetQueueAttributes`
 on the queue ARN.
@@ -300,9 +300,9 @@ const putItem = yield* DynamoDB.PutItem.bind(table);
 -const sendMessage = yield* SQS.SendMessage.bind(queue);
 +const sink = yield* SQS.QueueSink.bind(queue);
 
-yield* DynamoDB.stream(table, {
+yield* DynamoDB.consumeStream(table, {
   streamViewType: "NEW_AND_OLD_IMAGES",
-}).process((stream) =>
+}, (stream) =>
   stream.pipe(
 +    Stream.map((record) =>
 +      JSON.stringify({
@@ -356,7 +356,7 @@ the underlying request layers + policy on the bottom:
 ```
 
 The consumer doesn't change — `JobsWorker` still subscribes via
-`SQS.messages(queue)` and now sees one record per DynamoDB
+`SQS.consumeQueue(queue)` and now sees one record per DynamoDB
 change, batched ten-at-a-time on the producer side.
 
 Next you'll [stream higher-volume records through Kinesis](/tutorial/aws/kinesis) —

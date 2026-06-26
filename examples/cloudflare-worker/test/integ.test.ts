@@ -142,7 +142,7 @@ test(
 
 /**
  * Queue producer→consumer round-trip via the Effect-style
- * `Cloudflare.Queues.messages(Queue).subscribe(...)` API.
+ * `Cloudflare.Queues.consumeQueue(Queue, handler)` API.
  *
  * Producer: `POST /queue/send` returns `{ sent: { id, text, sentAt } }`
  * after enqueuing a message.
@@ -153,7 +153,7 @@ test(
  * dispatch is async and best-effort, so we poll for up to 60s.
  */
 test(
-  "queue producer→consumer round-trip via messages().subscribe()",
+  "queue producer→consumer round-trip via consumeQueue()",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
