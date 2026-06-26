@@ -4,12 +4,8 @@ import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { spawnSync } from "node:child_process";
-import { createServer } from "node:net";
 import { describe } from "vitest";
-
-const dockerDaemonOk =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+import { findAvailablePort, isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -41,12 +37,12 @@ test.provider("diff replaces a container when its image changes", () =>
 );
 
 describe("Docker.Container", { concurrent: false }, () => {
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "publishes and inspects bound host ports",
     (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const hostPort = yield* freeHostPort;
+        const hostPort = yield* findAvailablePort();
         // No explicit name: rely on the engine-generated physical name.
         const container = yield* stack.deploy(
           Docker.Container("nginx-container", {
@@ -68,7 +64,7 @@ describe("Docker.Container", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "creates a stopped container when start is false",
     (stack) =>
       Effect.gen(function* () {
@@ -83,7 +79,7 @@ describe("Docker.Container", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "updates network aliases without replacing the container",
     (stack) =>
       Effect.gen(function* () {
@@ -114,12 +110,12 @@ describe("Docker.Container", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "replaces the container when published ports change",
     (stack) =>
       Effect.gen(function* () {
-        const firstPort = yield* freeHostPort;
-        const secondPort = yield* freeHostPort;
+        const firstPort = yield* findAvailablePort();
+        const secondPort = yield* findAvailablePort();
         const first = yield* stack.deploy(
           Docker.Container("ported-container", {
             image: "nginx:alpine",
@@ -137,26 +133,3 @@ describe("Docker.Container", { concurrent: false }, () => {
       }),
   );
 });
-
-const freeHostPort = Effect.promise(
-  () =>
-    new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.unref();
-      server.on("error", reject);
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        const port =
-          typeof address === "object" && address ? address.port : undefined;
-        server.close((error) => {
-          if (error) {
-            reject(error);
-          } else if (port) {
-            resolve(port);
-          } else {
-            reject(new Error("Failed to allocate a free host port"));
-          }
-        });
-      });
-    }),
-);

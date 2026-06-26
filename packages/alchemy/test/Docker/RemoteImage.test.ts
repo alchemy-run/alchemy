@@ -7,17 +7,12 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { spawnSync } from "node:child_process";
-import { createServer } from "node:net";
 import { describe } from "vitest";
-
-const dockerDaemonOk =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+import { findAvailablePort, isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
-  adopt: true,
 });
 
 test.provider("diff pulls again unless alwaysPull is disabled", () =>
@@ -56,7 +51,7 @@ test.provider("diff pulls again unless alwaysPull is disabled", () =>
 );
 
 describe("Docker.RemoteImage", { concurrent: false }, () => {
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "pulls a Docker image reference",
     (stack) =>
       Effect.gen(function* () {
@@ -72,7 +67,7 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "pulls then re-tags under a new repository",
     (stack) =>
       Effect.gen(function* () {
@@ -103,13 +98,13 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "pulls, re-tags, and pushes to a registry",
     (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
         const client = yield* HttpClient.HttpClient;
-        const port = yield* freeHostPort;
+        const port = yield* findAvailablePort();
         const registryName = "alchemy-test-registry";
         const host = `localhost:${port}`;
         const targetName = `${host}/alchemy-hello`;
@@ -117,10 +112,10 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
         const targetRef = `${targetName}:${targetTag}`;
 
         yield* Effect.addFinalizer(() =>
-          docker.run(["rm", "-f", registryName]).pipe(Effect.ignore),
-        );
-        yield* Effect.addFinalizer(() =>
-          docker.image.remove([targetRef], true).pipe(Effect.ignore),
+          Effect.all([
+            docker.run(["rm", "-f", registryName]),
+            docker.image.remove(targetRef, true),
+          ]).pipe(Effect.ignore),
         );
 
         yield* docker.run([
@@ -132,6 +127,7 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
           `${port}:5000`,
           "registry:2",
         ]);
+
         // Wait for the registry HTTP API to start serving before pushing.
         yield* client.get(`http://${host}/v2/`).pipe(
           Effect.retry({
@@ -160,22 +156,3 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
       }),
   );
 });
-
-const freeHostPort = Effect.promise(
-  () =>
-    new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.unref();
-      server.on("error", reject);
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        const port =
-          typeof address === "object" && address ? address.port : undefined;
-        server.close((error) => {
-          if (error) reject(error);
-          else if (port) resolve(port);
-          else reject(new Error("Failed to allocate a free host port"));
-        });
-      });
-    }),
-);

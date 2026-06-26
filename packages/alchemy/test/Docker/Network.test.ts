@@ -6,11 +6,8 @@ import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { spawnSync } from "node:child_process";
 import { describe } from "vitest";
-
-const dockerDaemonOk =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -41,7 +38,7 @@ test.provider("diff replaces a network when labels change", () =>
 );
 
 describe("Docker.Network", { concurrent: false }, () => {
-  test.provider.skipIf(!dockerDaemonOk)("creates a bridge network", (stack) =>
+  test.provider.skipIf(!isDockerReady)("creates a bridge network", (stack) =>
     Effect.gen(function* () {
       const network = yield* stack.deploy(
         Docker.Network("created-network", {
@@ -57,7 +54,7 @@ describe("Docker.Network", { concurrent: false }, () => {
     }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "refuses a pre-existing network unless explicitly adopted",
     (stack) =>
       Effect.gen(function* () {
@@ -91,7 +88,7 @@ describe("Docker.Network", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "adopts an existing same-name network with stack adoption",
     (stack) =>
       Effect.gen(function* () {
@@ -118,7 +115,7 @@ describe("Docker.Network", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "replaces a network when its labels change",
     (stack) =>
       Effect.gen(function* () {

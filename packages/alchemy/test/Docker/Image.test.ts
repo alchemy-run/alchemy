@@ -5,19 +5,15 @@ import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { spawnSync } from "node:child_process";
-
-const dockerDaemonOk =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
-  adopt: true,
 });
 
 describe("Docker.Image", { concurrent: false }, () => {
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "builds a tiny Dockerfile with an auto-generated name",
     (stack) =>
       Effect.gen(function* () {
@@ -75,7 +71,7 @@ describe("Docker.Image", { concurrent: false }, () => {
     }),
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "builds with an explicit repository name and tag",
     (stack) =>
       Effect.gen(function* () {
@@ -99,10 +95,9 @@ describe("Docker.Image", { concurrent: false }, () => {
         expect(image.imageRef).toBe("alchemy-test-named:v1");
         expect(image.tag).toBe("v1");
       }),
-    { timeout: 120000 },
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "rebuilds when the build context changes",
     (stack) =>
       Effect.gen(function* () {
@@ -131,6 +126,5 @@ describe("Docker.Image", { concurrent: false }, () => {
 
         expect(second.imageRef).toBe(first.imageRef);
       }),
-    { timeout: 120000 },
   );
 });

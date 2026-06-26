@@ -4,16 +4,13 @@ import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { spawnSync } from "node:child_process";
 import { describe } from "vitest";
-
-const dockerDaemonOk =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+import { adopt, OwnedBySomeoneElse } from "../../src/AdoptPolicy.ts";
+import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
-  adopt: true,
 });
 
 test.provider("diff replaces a volume when labels change", () =>
@@ -40,8 +37,8 @@ test.provider("diff replaces a volume when labels change", () =>
   }),
 );
 
-describe.sequential("Docker.Volume", () => {
-  test.provider.skipIf(!dockerDaemonOk)(
+describe("Docker.Volume", { concurrent: false }, () => {
+  test.provider.skipIf(!isDockerReady)(
     "creates a volume with labels",
     (stack) =>
       Effect.gen(function* () {
@@ -62,10 +59,9 @@ describe.sequential("Docker.Volume", () => {
         expect(volume.labels["com.alchemy.test"]).toBe("true");
         expect(volume.mountpoint?.length).toBeGreaterThan(0);
       }),
-    { timeout: 120000 },
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "adopts an existing Docker volume",
     (stack) =>
       Effect.gen(function* () {
@@ -81,17 +77,22 @@ describe.sequential("Docker.Volume", () => {
           );
         yield* docker.volume.create({ name: volumeName });
 
+        const error = yield* stack
+          .deploy(Docker.Volume("existing-volume", { name: volumeName }))
+          .pipe(Effect.flip);
+        expect(error).toBeInstanceOf(OwnedBySomeoneElse);
         const volume = yield* stack.deploy(
-          Docker.Volume("existing-volume", { name: volumeName }),
+          Docker.Volume("existing-volume", { name: volumeName }).pipe(
+            adopt(true),
+          ),
         );
         expect(volume.name).toBe(volumeName);
         expect(volume.id).toBe(volumeName);
         expect(volume.driver).toBe("local");
       }),
-    { timeout: 120000 },
   );
 
-  test.provider.skipIf(!dockerDaemonOk)(
+  test.provider.skipIf(!isDockerReady)(
     "replaces a volume when its labels change",
     (stack) =>
       Effect.gen(function* () {
@@ -115,6 +116,5 @@ describe.sequential("Docker.Volume", () => {
         expect(second.id).not.toBe(first.id);
         expect(second.labels.generation).toBe("2");
       }),
-    { timeout: 120000 },
   );
 });
