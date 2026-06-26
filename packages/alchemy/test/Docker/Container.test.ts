@@ -30,7 +30,7 @@ test.provider("diff replaces a container when its image changes", () =>
       output: {
         id: "web",
         name: "web",
-        state: "created",
+        status: "created",
         createdAt: 0,
         imageRef: "nginx:alpine",
         ports: {},
@@ -56,7 +56,7 @@ describe("Docker.Container", { concurrent: false }, () => {
           }),
         );
         expect(container.name.length).toBeGreaterThan(0);
-        expect(container.state).toBe("running");
+        expect(container.status).toBe("running");
 
         const runtime = yield* docker.container.inspect(container.name);
         expect(runtime.NetworkSettings.Ports).toMatchObject({
@@ -78,7 +78,7 @@ describe("Docker.Container", { concurrent: false }, () => {
             start: false,
           }),
         );
-        expect(container.state).toBe("created");
+        expect(container.status).toBe("created");
         expect(container.imageRef).toBe("nginx:alpine");
       }),
   );

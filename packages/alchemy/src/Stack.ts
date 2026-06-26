@@ -50,7 +50,8 @@ export type ProviderServices =
   | Provider<any>
   | PolicyLike
   | EnvironmentLike
-  | CredentialsLike;
+  | CredentialsLike
+  | DockerLike;
 
 // tagged type to allow types like AWSEnvironment/AWS Region to bubble through
 export interface EnvironmentLike {
@@ -60,6 +61,10 @@ export interface EnvironmentLike {
 // tagged type to allow types like AWS Credentials to bubble through
 export interface CredentialsLike {
   readonly kind: "Credentials";
+}
+
+export interface DockerLike {
+  readonly key: "@alchemy/Docker";
 }
 
 export type StackEffect<A, Err = never, Req = never> = Effect.Effect<

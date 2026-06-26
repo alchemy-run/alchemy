@@ -2,15 +2,18 @@ import * as Alchemy from "alchemy";
 import * as Docker from "alchemy/Docker";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 const POSTGRES_PORT = 15432;
 const POSTGRES_CONTAINER = "alchemy-example-postgres";
-const EMPTY_RUNTIME: Docker.ContainerRuntimeInfo = { ports: {} };
 
 export default Alchemy.Stack(
   "DockerPostgresExample",
-  { providers: Docker.providers(), state: Alchemy.localState() },
+  {
+    providers: Layer.merge(Docker.providers(), Alchemy.RandomProvider()),
+    state: Alchemy.localState(),
+  },
   Effect.gen(function* () {
     const configuredPassword = yield* Config.redacted("POSTGRES_PASSWORD").pipe(
       Config.option,
@@ -46,26 +49,18 @@ export default Alchemy.Stack(
       networks: [{ name: network.name, aliases: ["postgres"] }],
       healthcheck: {
         cmd: ["CMD-SHELL", "pg_isready -U alchemy -d app"],
-        interval: "5s",
-        timeout: "5s",
+        interval: "5 seconds",
+        timeout: "5 seconds",
         retries: 10,
       },
       start: true,
     });
-
-    const runtime = yield* Docker.inspectContainer(POSTGRES_CONTAINER).pipe(
-      Effect.catchTag("DockerCommandError", () =>
-        Effect.succeed(EMPTY_RUNTIME),
-      ),
-    );
-
     return {
       container: postgres.name,
       image: image.imageRef,
       network: network.name,
       volume: data.name,
-      hostPort: runtime.ports["5432/tcp"] ?? POSTGRES_PORT,
-      connectionString: `postgres://alchemy:***@localhost:${POSTGRES_PORT}/app`,
+      hostPort: postgres.ports,
     };
   }),
 );

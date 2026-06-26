@@ -10,6 +10,7 @@ import {
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface RemoteImageProps {
   /** Docker image name to pull, without tag. */
@@ -61,7 +62,9 @@ export interface RemoteImage extends Resource<
     tag: string;
     /** Registry digest after push when available. */
     repoDigest?: string;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**

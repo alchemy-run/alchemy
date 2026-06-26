@@ -112,6 +112,9 @@
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
     },
     {
+      "path": "./examples/docker-postgres/tsconfig.json"
+    },
+    {
       "path": "./examples/monorepo-single-stack/tsconfig.json"
     },
     {

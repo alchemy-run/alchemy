@@ -10,6 +10,7 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Docker } from "./Docker.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
@@ -37,11 +38,10 @@ export interface ContainerProps {
   /** Start the container after creation/reconciliation. @default false */
   start?: boolean;
   /** Docker healthcheck configuration. */
-  healthcheck?: Container.HealthcheckConfig;
+  healthcheck?: Container.Healthcheck;
 }
 
 export declare namespace Container {
-  type Image = string | { imageRef: string };
   type Status =
     | "created"
     | "running"
@@ -50,6 +50,7 @@ export declare namespace Container {
     | "removing"
     | "exited"
     | "dead";
+  type Image = string | { imageRef: string };
   interface PortMapping {
     /** External port on the host. */
     external: number | string;
@@ -72,7 +73,7 @@ export declare namespace Container {
     /** Network aliases for the container. */
     aliases?: string[];
   }
-  interface HealthcheckConfig {
+  interface Healthcheck {
     /** Command to run for health checks. */
     cmd: string[] | string;
     /** Time between checks. */
@@ -97,7 +98,7 @@ export interface Container extends Resource<
     /** Docker container name. */
     name: string;
     /** Docker container state. */
-    state: Container.Status;
+    status: Container.Status;
     /** Creation timestamp in milliseconds since epoch. */
     createdAt: number;
     /** Image reference used to create the container. */
@@ -107,7 +108,9 @@ export interface Container extends Resource<
      * Format: `"80/tcp" -> 8080`.
      */
     ports: Record<string, number>;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**
@@ -373,7 +376,7 @@ const toContainerAttributes = (
 ): Container["Attributes"] => ({
   id: info.Id,
   name: infoName(info),
-  state: info.State.Status,
+  status: info.State.Status,
   createdAt: Date.parse(info.Created) || Date.now(),
   imageRef,
   ports: Object.fromEntries(

@@ -14,6 +14,7 @@ import {
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface DockerBuildOptions {
   /**
@@ -75,7 +76,9 @@ export interface Image extends Resource<
     builtAt: number;
     /** Hash of the build-context files. */
     contextHash?: string;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**

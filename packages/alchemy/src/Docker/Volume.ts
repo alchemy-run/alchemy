@@ -7,6 +7,7 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Docker } from "./Docker.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface VolumeLabel {
   /** Label name. */
@@ -48,7 +49,9 @@ export interface Volume extends Resource<
     mountpoint?: string;
     /** Creation timestamp in milliseconds since epoch. */
     createdAt: number;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**

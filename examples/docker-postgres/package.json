@@ -11,8 +11,7 @@
   "type": "module",
   "scripts": {
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy",
-    "build": "tsgo --noEmit -p tsconfig.json"
+    "destroy": "alchemy destroy"
   },
   "dependencies": {
     "alchemy": "workspace:*",

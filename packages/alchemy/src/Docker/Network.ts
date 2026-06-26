@@ -7,6 +7,7 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Docker } from "./Docker.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface NetworkProps {
   /**
@@ -39,7 +40,9 @@ export interface Network extends Resource<
     labels: Record<string, string>;
     /** Creation timestamp in milliseconds since epoch. */
     createdAt: number;
-  }
+  },
+  never,
+  Providers
 > {}
 
 /**
