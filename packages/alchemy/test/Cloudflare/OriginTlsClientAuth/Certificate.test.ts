@@ -84,7 +84,7 @@ const waitForGone = (zoneId: string, certificateId: string) =>
       // was what blew the test budget. A fixed interval detects the tombstone
       // within one poll of it actually happening.
       schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
+        Schedule.both(Schedule.recurs(45)),
       ),
     }),
   );
@@ -170,7 +170,7 @@ describe.sequential("Certificate", () => {
 
         yield* waitForGone(zoneId, cert.certificateId);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    { timeout: 120_000 },
+    { timeout: 200_000 },
   );
 
   test.provider(
@@ -212,7 +212,7 @@ describe.sequential("Certificate", () => {
 
         yield* waitForGone(zoneId, replaced.certificateId);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    { timeout: 120_000 },
+    { timeout: 200_000 },
   );
 
   // Canonical `list()` test (zone-scoped collection): `list()` fans out over
