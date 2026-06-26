@@ -9,15 +9,6 @@ import {
   type BatchGetItemTables,
 } from "./BatchGetItem.ts";
 
-const sortTables = (tables: BatchGetItemTables) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
-    a.LogicalId.localeCompare(b.LogicalId),
-  ) as BatchGetItemTables;
-
 export const BatchGetItemHttp = Layer.effect(
   BatchGetItem,
   Effect.gen(function* () {
@@ -81,3 +72,12 @@ export const BatchGetItemHttp = Layer.effect(
     });
   }),
 );
+
+const sortTables = (tables: BatchGetItemTables) =>
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as BatchGetItemTables;

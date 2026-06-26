@@ -10,15 +10,6 @@ import {
   type TransactGetItemsTables,
 } from "./TransactGetItems.ts";
 
-const sortTables = (tables: TransactGetItemsTables) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
-    a.LogicalId.localeCompare(b.LogicalId),
-  ) as TransactGetItemsTables;
-
 export const TransactGetItemsHttp = Layer.effect(
   TransactGetItems,
   Effect.gen(function* () {
@@ -87,3 +78,12 @@ export const TransactGetItemsHttp = Layer.effect(
     });
   }),
 );
+
+const sortTables = (tables: TransactGetItemsTables) =>
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as TransactGetItemsTables;

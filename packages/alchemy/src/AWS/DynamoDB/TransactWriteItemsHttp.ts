@@ -9,15 +9,6 @@ import {
   type TransactWriteItemsTables,
 } from "./TransactWriteItems.ts";
 
-const sortTables = (tables: TransactWriteItemsTables) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
-    a.LogicalId.localeCompare(b.LogicalId),
-  ) as TransactWriteItemsTables;
-
 export const TransactWriteItemsHttp = Layer.effect(
   TransactWriteItems,
   Effect.gen(function* () {
@@ -122,3 +113,12 @@ export const TransactWriteItemsHttp = Layer.effect(
     });
   }),
 );
+
+const sortTables = (tables: TransactWriteItemsTables) =>
+  [
+    ...new Map(
+      tables.map((table) => [table.LogicalId, table] as const),
+    ).values(),
+  ].sort((a, b) =>
+    a.LogicalId.localeCompare(b.LogicalId),
+  ) as TransactWriteItemsTables;

@@ -8,9 +8,6 @@ import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { App } from "./App.ts";
 import { FlagshipError, ReadFlags, type ReadFlagsClient } from "./ReadFlags.ts";
 
-/** An Effect produced by a {@link ReadFlagsClient} operation. */
-type FlagshipEffect<A> = Effect.Effect<A, FlagshipError, RuntimeContext>;
-
 export const ReadFlagsBinding = Layer.effect(
   ReadFlags,
   Effect.gen(function* () {
@@ -35,6 +32,9 @@ export const ReadFlagsBinding = Layer.effect(
     });
   }),
 );
+
+/** An Effect produced by a {@link ReadFlagsClient} operation. */
+type FlagshipEffect<A> = Effect.Effect<A, FlagshipError, RuntimeContext>;
 
 const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, FlagshipError> =>
   Effect.tryPromise({

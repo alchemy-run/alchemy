@@ -7,23 +7,6 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Queue } from "./Queue.ts";
 import { SendError } from "./QueueTypes.ts";
 
-export interface HttpToken {
-  value: Effect.Effect<Redacted.Redacted<string>>;
-  accountId: Effect.Effect<string>;
-}
-
-export interface HttpScope {
-  accountId: string;
-  queueId: string;
-}
-
-const QUEUE_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
-  "Queues Read",
-  "Queues Write",
-];
-
-type PermissionGroup = (typeof QUEUE_HTTP_PERMISSION_GROUPS)[number];
-
 /**
  * Shared scaffolding for the HTTP-backed Queue services.
  *
@@ -84,3 +67,20 @@ export const toQueueSendError = (error: unknown): SendError =>
         : "Unknown queue error",
     cause: error,
   });
+
+export interface HttpToken {
+  value: Effect.Effect<Redacted.Redacted<string>>;
+  accountId: Effect.Effect<string>;
+}
+
+export interface HttpScope {
+  accountId: string;
+  queueId: string;
+}
+
+const QUEUE_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
+  "Queues Read",
+  "Queues Write",
+];
+
+type PermissionGroup = (typeof QUEUE_HTTP_PERMISSION_GROUPS)[number];

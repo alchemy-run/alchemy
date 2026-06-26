@@ -10,22 +10,6 @@ import {
   type RateLimitMarker as RateLimitLike,
 } from "./RateLimit.ts";
 
-export class RateLimitError extends Data.TaggedError("RateLimitError")<{
-  message: string;
-  cause: unknown;
-}> {}
-
-export interface RateLimitClient {
-  raw: Effect.Effect<cf.RateLimit, never, WorkerEnvironment>;
-  limit(
-    options: Parameters<cf.RateLimit["limit"]>[0],
-  ): Effect.Effect<
-    Awaited<ReturnType<cf.RateLimit["limit"]>>,
-    RateLimitError,
-    WorkerEnvironment
-  >;
-}
-
 /**
  * Native runtime layer for the Rate Limit binding.
  *
@@ -88,3 +72,19 @@ export const RateLimitBinding = Layer.effect(
     });
   }),
 );
+
+export class RateLimitError extends Data.TaggedError("RateLimitError")<{
+  message: string;
+  cause: unknown;
+}> {}
+
+export interface RateLimitClient {
+  raw: Effect.Effect<cf.RateLimit, never, WorkerEnvironment>;
+  limit(
+    options: Parameters<cf.RateLimit["limit"]>[0],
+  ): Effect.Effect<
+    Awaited<ReturnType<cf.RateLimit["limit"]>>,
+    RateLimitError,
+    WorkerEnvironment
+  >;
+}

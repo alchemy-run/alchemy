@@ -9,9 +9,6 @@ import {
   type TaggableResource,
 } from "./ListTagsForResource.ts";
 
-const getResourceArn = (resource: TaggableResource) =>
-  "consumerArn" in resource ? resource.consumerArn : resource.streamArn;
-
 export const ListTagsForResourceHttp = Layer.effect(
   ListTagsForResource,
   Effect.gen(function* () {
@@ -46,3 +43,6 @@ export const ListTagsForResourceHttp = Layer.effect(
     });
   }),
 );
+
+const getResourceArn = (resource: TaggableResource) =>
+  "consumerArn" in resource ? resource.consumerArn : resource.streamArn;

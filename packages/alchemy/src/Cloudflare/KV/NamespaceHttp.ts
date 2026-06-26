@@ -7,23 +7,6 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Namespace } from "./Namespace.ts";
 import { NamespaceError } from "./NamespaceTypes.ts";
 
-export interface HttpToken {
-  value: Effect.Effect<Redacted.Redacted<string>>;
-  accountId: Effect.Effect<string>;
-}
-
-export interface HttpScope {
-  accountId: string;
-  namespaceId: string;
-}
-
-const KV_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
-  "Workers KV Storage Read",
-  "Workers KV Storage Write",
-];
-
-type PermissionGroup = (typeof KV_HTTP_PERMISSION_GROUPS)[number];
-
 /**
  * Shared scaffolding for the HTTP-backed KV services.
  *
@@ -64,6 +47,23 @@ export const makeHttpKVNamespaceBinding = <Client>(options: {
       return options.makeClient(bound, namespaceId);
     });
   });
+
+export interface HttpToken {
+  value: Effect.Effect<Redacted.Redacted<string>>;
+  accountId: Effect.Effect<string>;
+}
+
+export interface HttpScope {
+  accountId: string;
+  namespaceId: string;
+}
+
+const KV_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
+  "Workers KV Storage Read",
+  "Workers KV Storage Write",
+];
+
+type PermissionGroup = (typeof KV_HTTP_PERMISSION_GROUPS)[number];
 
 /** Resolve the account and namespace id once per operation. */
 export const makeKVHttpScope = (

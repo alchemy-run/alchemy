@@ -6,8 +6,6 @@ import { isFunction } from "../Lambda/Function.ts";
 import { type AlarmResource, sortAlarmResources } from "./binding-common.ts";
 import { DisableAlarmActions } from "./DisableAlarmActions.ts";
 
-type AlarmResources = [AlarmResource, ...AlarmResource[]];
-
 export const DisableAlarmActionsHttp = Layer.effect(
   DisableAlarmActions,
   Effect.gen(function* () {
@@ -47,3 +45,5 @@ export const DisableAlarmActionsHttp = Layer.effect(
     });
   }),
 );
+
+type AlarmResources = [AlarmResource, ...AlarmResource[]];

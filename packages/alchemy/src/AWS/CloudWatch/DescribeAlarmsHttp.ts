@@ -9,19 +9,6 @@ import {
   type DescribeAlarmsRequest,
 } from "./DescribeAlarms.ts";
 
-type AlarmResources = [AlarmResource, ...AlarmResource[]];
-
-const getAlarmTypes = (alarms: AlarmResources) =>
-  [
-    ...new Set(
-      alarms.map((alarm) =>
-        alarm.Type === "AWS.CloudWatch.CompositeAlarm"
-          ? "CompositeAlarm"
-          : "MetricAlarm",
-      ),
-    ),
-  ] as cloudwatch.AlarmType[];
-
 export const DescribeAlarmsHttp = Layer.effect(
   DescribeAlarms,
   Effect.gen(function* () {
@@ -65,3 +52,16 @@ export const DescribeAlarmsHttp = Layer.effect(
     });
   }),
 );
+
+type AlarmResources = [AlarmResource, ...AlarmResource[]];
+
+const getAlarmTypes = (alarms: AlarmResources) =>
+  [
+    ...new Set(
+      alarms.map((alarm) =>
+        alarm.Type === "AWS.CloudWatch.CompositeAlarm"
+          ? "CompositeAlarm"
+          : "MetricAlarm",
+      ),
+    ),
+  ] as cloudwatch.AlarmType[];

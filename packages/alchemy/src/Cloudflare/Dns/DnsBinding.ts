@@ -7,18 +7,6 @@ import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import type { Zone } from "../Zone/Zone.ts";
 
 /**
- * Runtime accessor for a DNS binding's token, obtained by binding the
- * {@link AccountApiToken}'s `value` output in the Worker's Init phase. Reads the
- * value back from the Worker's environment at runtime. DNS record operations
- * are zone-scoped (the `zoneId` is passed per call), so the account id is not
- * needed at runtime.
- */
-export interface Token {
-  /** The token's plaintext value (injected as a `secret_text` binding). */
-  value: Effect.Effect<Redacted.Redacted<string>>;
-}
-
-/**
  * Shared scaffolding for the HTTP-backed DNS bindings.
  *
  * Creates a least-privilege {@link AccountApiToken} scoped to the requested
@@ -67,3 +55,15 @@ export const makeHttpDnsBinding = <Client>(options: {
       return options.makeClient(bound, zoneId);
     });
   });
+
+/**
+ * Runtime accessor for a DNS binding's token, obtained by binding the
+ * {@link AccountApiToken}'s `value` output in the Worker's Init phase. Reads the
+ * value back from the Worker's environment at runtime. DNS record operations
+ * are zone-scoped (the `zoneId` is passed per call), so the account id is not
+ * needed at runtime.
+ */
+export interface Token {
+  /** The token's plaintext value (injected as a `secret_text` binding). */
+  value: Effect.Effect<Redacted.Redacted<string>>;
+}

@@ -8,23 +8,6 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Bucket } from "./Bucket.ts";
 import { R2Error, type R2Object } from "./BucketTypes.ts";
 
-export interface HttpScope {
-  accountId: string;
-  bucketName: string;
-  cfR2Jurisdiction: string | undefined;
-}
-export interface HttpToken {
-  value: Effect.Effect<Redacted.Redacted<string>>;
-  accountId: Effect.Effect<string>;
-}
-
-const R2_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
-  "Workers R2 Storage Read",
-  "Workers R2 Storage Write",
-];
-
-type PermissionGroup = (typeof R2_HTTP_PERMISSION_GROUPS)[number];
-
 export const makeHttpBucketBinding = <Client>(options: {
   permissionGroups: PermissionGroup[];
   makeClient: (
@@ -63,6 +46,23 @@ export const makeHttpBucketBinding = <Client>(options: {
       return options.makeClient(bound, bucketName, jurisdiction);
     });
   });
+
+export interface HttpScope {
+  accountId: string;
+  bucketName: string;
+  cfR2Jurisdiction: string | undefined;
+}
+export interface HttpToken {
+  value: Effect.Effect<Redacted.Redacted<string>>;
+  accountId: Effect.Effect<string>;
+}
+
+const R2_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
+  "Workers R2 Storage Read",
+  "Workers R2 Storage Write",
+];
+
+type PermissionGroup = (typeof R2_HTTP_PERMISSION_GROUPS)[number];
 
 /** Resolve the account, bucket, and jurisdiction once per operation. */
 export const makeR2HttpScope = (

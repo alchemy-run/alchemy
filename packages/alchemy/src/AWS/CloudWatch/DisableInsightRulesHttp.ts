@@ -9,8 +9,6 @@ import {
 } from "./binding-common.ts";
 import { DisableInsightRules } from "./DisableInsightRules.ts";
 
-type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
-
 export const DisableInsightRulesHttp = Layer.effect(
   DisableInsightRules,
   Effect.gen(function* () {
@@ -48,3 +46,5 @@ export const DisableInsightRulesHttp = Layer.effect(
     });
   }),
 );
+
+type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
