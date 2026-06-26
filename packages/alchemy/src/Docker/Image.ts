@@ -1,12 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
+import * as Artifacts from "../Artifacts.ts";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./Docker.ts";
+import { Docker, dockerPhysicalName } from "./Docker.ts";
+import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
   parseCreatedAt,
@@ -14,7 +14,6 @@ import {
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
-import type { Providers } from "./Providers.ts";
 
 export interface DockerBuildOptions {
   /**
@@ -41,8 +40,6 @@ export interface DockerBuildOptions {
   cacheTo?: string[];
   /** Additional Docker build options. */
   options?: string[];
-  /** Files included in the build-context hash used for rebuild decisions. */
-  memo?: MemoOptions;
 }
 
 export interface ImageProps {
@@ -74,8 +71,6 @@ export interface Image extends Resource<
     tag: string;
     /** Build timestamp in milliseconds since epoch. */
     builtAt: number;
-    /** Hash of the build-context files. */
-    contextHash?: string;
   },
   never,
   Providers
@@ -132,17 +127,38 @@ export const ImageProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const docker = yield* Docker;
-      const context = yield* Effect.context<
-        FileSystem.FileSystem | Path.Path
-      >();
 
-      const contextHash = Effect.fn(function* (props: ImageProps) {
-        const cwd = yield* Effect.sync(() => process.cwd());
-        return yield* hashDirectory({
-          cwd: props.build.context ?? cwd,
-          memo: props.build.memo,
+      const buildAndInspectImage = Effect.fn(function* (
+        id: string,
+        props: ImageProps,
+        instanceId: string,
+      ) {
+        const name = yield* dockerPhysicalName(id, props, instanceId);
+        const tag = props.tag ?? "latest";
+        const ref = `${name}:${tag}`;
+
+        const paths = yield* resolveBuildPaths(props.build);
+        yield* docker.image.build({
+          tag: ref,
+          context: paths.context,
+          file: paths.dockerfile,
+          platform: props.build.platform,
+          target: props.build.target,
+          "build-arg": props.build.args,
+          "cache-from": props.build.cacheFrom,
+          "cache-to": props.build.cacheTo,
+          args: props.build.options,
         });
-      }, Effect.provide(context));
+
+        // Read the freshly built image's id and creation time straight from
+        // Docker rather than synthesizing a wall-clock timestamp.
+        return {
+          name,
+          tag,
+          image: yield* docker.image.inspect(ref),
+          ref,
+        };
+      }, Artifacts.cached("build"));
 
       const resolveBuildPaths = Effect.fn(function* (
         build: DockerBuildOptions,
@@ -168,8 +184,11 @@ export const ImageProvider = () =>
       return Image.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-          const props = yield* withResolvedName(id, olds, instanceId);
-          const ref = output?.imageRef ?? localImageRef(id, props);
+          const ref =
+            output?.imageRef ??
+            (yield* dockerPhysicalName(id, olds, instanceId).pipe(
+              Effect.map((name) => `${name}:${olds.tag ?? "latest"}`),
+            ));
           const image = yield* docker.image
             .inspect(ref)
             .pipe(
@@ -187,69 +206,43 @@ export const ImageProvider = () =>
             repoDigest: output?.repoDigest,
             tag: output?.tag ?? olds.tag ?? "latest",
             builtAt: output?.builtAt ?? parseCreatedAt(image.Created),
-            contextHash: output?.contextHash,
           };
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
-          if (!isResolved(news)) return undefined;
-          if (!output) return undefined;
-          const props = yield* withResolvedName(id, news, instanceId);
-          const nextHash = yield* contextHash(news);
-          if (
-            !deepEqual(comparableProps(olds), comparableProps(news)) ||
-            output.imageRef !== desiredImageRef(id, props) ||
-            output.contextHash !== nextHash
-          ) {
-            return { action: "update" as const };
+        diff: Effect.fn(function* ({ id, instanceId, news, output }) {
+          if (!isResolved(news) || !output) return undefined;
+          const { image } = yield* buildAndInspectImage(id, news, instanceId);
+          if (output?.imageId !== image.Id) {
+            return { action: "update" };
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
-          const props = yield* withResolvedName(id, news, instanceId);
-          const tag = props.tag ?? "latest";
-          const ref = localImageRef(id, props);
-
-          const paths = yield* resolveBuildPaths(props.build);
-          yield* session.note(`Building Docker image: ${ref}`);
-          yield* docker.image.build(
-            {
-              tag: ref,
-              context: paths.context,
-              file: paths.dockerfile,
-              platform: props.build.platform,
-              target: props.build.target,
-              "build-arg": props.build.args,
-              "cache-from": props.build.cacheFrom,
-              "cache-to": props.build.cacheTo,
-              args: props.build.options,
-            },
-            session,
+          const { name, tag, image, ref } = yield* buildAndInspectImage(
+            id,
+            news,
+            instanceId,
           );
-          const nextContextHash = yield* contextHash(props);
-
-          // Read the freshly built image's id and creation time straight from
-          // Docker rather than synthesizing a wall-clock timestamp.
-          const inspected = yield* docker.image.inspect(ref);
 
           let repoDigest: string | undefined;
-          if (props.registry && !props.skipPush) {
+          let targetImageRef: string = ref;
+          if (news.registry && !news.skipPush) {
             yield* session.note(
-              `Pushing image to registry "${props.registry.server}"`,
+              `Pushing image to registry "${news.registry.server}"`,
             );
+            targetImageRef = withRegistryHost(ref, news.registry);
             repoDigest = yield* docker.image
-              .push(ref, props.registry)
+              .push(ref, news.registry)
               .pipe(
                 Effect.map((result) => parseRepoDigest(ref, result.stdout)),
               );
           }
 
           return {
-            name: repositoryFromImageRef(ref),
-            imageRef: ref,
-            imageId: inspected.Id,
+            name,
+            imageRef: targetImageRef,
+            imageId: image.Id,
             repoDigest,
             tag,
-            builtAt: parseCreatedAt(inspected.Created),
-            contextHash: nextContextHash,
+            builtAt: parseCreatedAt(image.Created),
           };
         }),
         delete: Effect.fn(({ output }) =>
@@ -266,43 +259,3 @@ export const ImageProvider = () =>
       });
     }),
   );
-
-export const localImageRef = (id: string, props: ImageProps): string =>
-  `${props.name ?? id}:${props.tag ?? "latest"}`;
-
-export const desiredImageRef = (id: string, props: ImageProps): string => {
-  const ref = localImageRef(id, props);
-  return props.registry && !props.skipPush
-    ? withRegistryHost(ref, props.registry)
-    : ref;
-};
-
-/**
- * Resolves the built image's repository name. When a build has no explicit
- * `name`, an engine physical name is generated (stack + stage + logical id +
- * instance id) just like other resources, then carried back on `props.name` so
- * the synchronous ref helpers stay deterministic across reconcile/diff/read.
- */
-const withResolvedName = (id: string, props: ImageProps, instanceId: string) =>
-  props.name === undefined
-    ? createPhysicalName({
-        id,
-        instanceId,
-        maxLength: 128,
-        lowercase: true,
-      }).pipe(Effect.map((name): ImageProps => ({ ...props, name })))
-    : Effect.succeed(props);
-
-const comparableProps = (props: ImageProps | undefined) =>
-  props
-    ? {
-        ...props,
-        registry: props.registry
-          ? {
-              server: props.registry.server,
-              username: props.registry.username,
-              password: props.registry.password,
-            }
-          : undefined,
-      }
-    : undefined;

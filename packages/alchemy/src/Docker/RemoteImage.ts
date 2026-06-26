@@ -3,6 +3,7 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Docker } from "./Docker.ts";
+import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
   parseCreatedAt,
@@ -10,7 +11,6 @@ import {
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
-import type { Providers } from "./Providers.ts";
 
 export interface RemoteImageProps {
   /** Docker image name to pull, without tag. */
@@ -197,7 +197,7 @@ export const RemoteImageProvider = () =>
   );
 
 /** The reference the image is pulled from. */
-export const remoteImageRef = (props: RemoteImageProps): string =>
+const remoteImageRef = (props: RemoteImageProps): string =>
   `${props.name}:${props.tag ?? "latest"}`;
 
 const targetTag = (props: RemoteImageProps): string =>

@@ -6,10 +6,9 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./Docker.ts";
+import { Docker, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ContainerProps {
@@ -235,7 +234,7 @@ export const ContainerProvider = () =>
       return Container.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-          const name = yield* containerName(id, olds, instanceId);
+          const name = yield* dockerPhysicalName(id, olds, instanceId);
           return yield* docker.container.inspect(name).pipe(
             Effect.map((info) =>
               toContainerAttributes(info, normalizeImageRef(olds.image)),
@@ -313,21 +312,11 @@ export const ContainerProvider = () =>
     }),
   );
 
-const containerName = (id: string, props: ContainerProps, instanceId: string) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        instanceId,
-        maxLength: 128,
-        lowercase: true,
-      });
-
 const normalizeImageRef = (image: Container.Image): string =>
   typeof image === "string" ? image : image.imageRef;
 
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
-  containerName(id, news, instanceId).pipe(
+  dockerPhysicalName(id, news, instanceId).pipe(
     Effect.map(
       (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
         name,
@@ -375,7 +364,7 @@ const toContainerAttributes = (
   imageRef: string,
 ): Container["Attributes"] => ({
   id: info.Id,
-  name: infoName(info),
+  name: typeof info.Name === "string" ? info.Name.replace(/^\//, "") : info.Id,
   status: info.State.Status,
   createdAt: Date.parse(info.Created) || Date.now(),
   imageRef,
@@ -389,11 +378,6 @@ const toContainerAttributes = (
     }),
   ),
 });
-
-const infoName = (info: Docker.Container) => {
-  const name = info.Name;
-  return typeof name === "string" ? name.replace(/^\//, "") : info.Id;
-};
 
 const normalizeEnvironment = (
   environment: Record<string, string | Redacted.Redacted<string>> | undefined,

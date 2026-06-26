@@ -16,6 +16,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
 
 export class Docker extends Context.Service<
   Docker,
@@ -492,6 +493,20 @@ export const DockerLive = Layer.effect(
     });
   }),
 );
+
+export const dockerPhysicalName = (
+  id: string,
+  props: { name?: string } | undefined,
+  instanceId: string,
+) =>
+  props?.name
+    ? Effect.succeed(props.name)
+    : createPhysicalName({
+        id,
+        instanceId,
+        maxLength: 128,
+        lowercase: true,
+      });
 
 /** Constructs a PlatformError from a command execution result. */
 const systemError = (input: {

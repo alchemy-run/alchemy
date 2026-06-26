@@ -3,10 +3,9 @@ import * as Equal from "effect/Equal";
 import { identity } from "effect/Function";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./Docker.ts";
+import { Docker, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface NetworkProps {
@@ -80,7 +79,7 @@ export const NetworkProvider = () =>
       return Network.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(({ id, instanceId, olds, output }) =>
-          networkName(id, olds ?? {}, instanceId).pipe(
+          dockerPhysicalName(id, olds, instanceId).pipe(
             Effect.flatMap(docker.network.inspect),
             Effect.map(toNetworkAttributes),
             Effect.map(output ? identity : Unowned),
@@ -138,26 +137,12 @@ export const NetworkProvider = () =>
     }),
   );
 
-const networkName = (
-  id: string,
-  props: NetworkProps | undefined,
-  instanceId: string,
-) =>
-  props?.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        instanceId,
-        maxLength: 128,
-        lowercase: true,
-      });
-
 const makeNetworkArgs = (
   id: string,
   props: NetworkProps | undefined,
   instanceId: string,
 ) =>
-  networkName(id, props, instanceId).pipe(
+  dockerPhysicalName(id, props, instanceId).pipe(
     Effect.map(
       (name): Parameters<Docker["Service"]["network"]["create"]>[0] => ({
         name,
