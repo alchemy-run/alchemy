@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 
-type StoreTypeId = typeof StoreTypeId;
-const StoreTypeId = "Cloudflare.Artifacts.Store" as const;
+type NamespaceTypeId = typeof NamespaceTypeId;
+const NamespaceTypeId = "Cloudflare.Artifacts.Namespace" as const;
 
 /**
  * Cloudflare validation: 3–63 chars, lowercase alphanumeric and hyphens, must
@@ -11,8 +11,8 @@ const StoreTypeId = "Cloudflare.Artifacts.Store" as const;
  */
 const ARTIFACTS_NAMESPACE_REGEX = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
 
-export class InvalidStoreNamespaceError extends Error {
-  readonly _tag = "InvalidStoreNamespaceError" as const;
+export class InvalidNamespaceError extends Error {
+  readonly _tag = "InvalidNamespaceError" as const;
   constructor(public readonly namespace: string) {
     super(
       `Invalid artifacts namespace name '${namespace}'. Must be 3-63 characters, start and end with a lowercase alphanumeric character, and contain only lowercase alphanumeric characters and hyphens.`,
@@ -20,7 +20,7 @@ export class InvalidStoreNamespaceError extends Error {
   }
 }
 
-export type StoreProps = {
+export type NamespaceProps = {
   /**
    * Cloudflare namespace name. Namespaces are implicit on Cloudflare — the
    * first repo created against this name conjures the namespace.
@@ -41,17 +41,17 @@ export type StoreProps = {
  * and emits the corresponding `{ type: "artifacts", name, namespace }` binding
  * to the script.
  */
-export type Store = {
-  kind: StoreTypeId;
+export type Namespace = {
+  kind: NamespaceTypeId;
   name: string;
   namespace: string;
 };
 
-export const isStore = (value: unknown): value is Store =>
+export const isNamespace = (value: unknown): value is Namespace =>
   typeof value === "object" &&
   value !== null &&
   "kind" in value &&
-  (value as Store).kind === StoreTypeId;
+  (value as Namespace).kind === NamespaceTypeId;
 
 /**
  * A Cloudflare Artifacts namespace — the top-level container for Git-compatible
@@ -65,18 +65,23 @@ export const isStore = (value: unknown): value is Store =>
  * Alchemy "resource" is a thin binding marker — there is nothing to provision
  * at deploy time. Repos themselves are typically created at runtime through
  * the bound `Artifacts` API.
+ *
+ * Unlike the other Worker-only bindings, an Artifacts namespace does **not**
+ * auto-bind when yielded — it always requires an explicit access level via
+ * {@link ReadNamespace} / {@link WriteNamespace} / {@link ReadWriteNamespace}.
+ *
  * @binding
  * @product Artifacts
  * @category Developer Platform
  * @section Declaring a Namespace
  * @example Default namespace (a unique physical name is generated)
  * ```typescript
- * const Repos = Cloudflare.Artifacts.Store("Repos");
+ * const Repos = Cloudflare.Artifacts.Namespace("Repos");
  * ```
  *
  * @example Override the namespace name (must be lowercase, 3–63 chars)
  * ```typescript
- * const Repos = Cloudflare.Artifacts.Store("Repos", { namespace: "starter-repos" });
+ * const Repos = Cloudflare.Artifacts.Namespace("Repos", { namespace: "starter-repos" });
  * ```
  *
  * @section Binding to a Worker
@@ -101,30 +106,30 @@ export const isStore = (value: unknown): value is Store =>
  * };
  * ```
  *
- * @example Effect-style worker
+ * @example Effect-style worker (explicit access level)
  * ```typescript
- * const artifacts = yield* (Repos);
+ * const artifacts = yield* Cloudflare.Artifacts.ReadWriteNamespace(Repos);
  * const repo = yield* artifacts.create("starter-repo", {
  *   setDefaultBranch: "main",
  * });
  * ```
  */
-export const Store: (
+export const Namespace: (
   name: string,
-  props?: StoreProps,
-) => Effect.Effect<Store, never, Stack | Stage> = Effect.fn(function* (
+  props?: NamespaceProps,
+) => Effect.Effect<Namespace, never, Stack | Stage> = Effect.fn(function* (
   name: string,
-  props?: StoreProps,
+  props?: NamespaceProps,
 ) {
   const namespace = props?.namespace
     ? props.namespace
     : name.toLocaleLowerCase();
   if (!ARTIFACTS_NAMESPACE_REGEX.test(namespace)) {
-    return yield* Effect.die(new InvalidStoreNamespaceError(namespace));
+    return yield* Effect.die(new InvalidNamespaceError(namespace));
   }
   return {
-    kind: StoreTypeId,
+    kind: NamespaceTypeId,
     name,
     namespace,
-  } satisfies Store;
+  } satisfies Namespace;
 });

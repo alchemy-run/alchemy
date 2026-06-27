@@ -65,7 +65,7 @@ export type GetBindingType<T> =
                           ? SendEmail
                           : T extends AnalyticsEngine.Dataset
                             ? AnalyticsEngineDataset
-                            : T extends ArtifactsNs.Store
+                            : T extends ArtifactsNs.Namespace
                               ? Artifacts
                               : T extends RateLimitBinding
                                 ? RateLimit

@@ -1,3 +1,3 @@
-export * from "./Store.ts";
-export * from "./ReadWriteStore.ts";
-export * from "./ReadWriteStoreBinding.ts";
+export * from "./Namespace.ts";
+export * from "./ReadWriteNamespace.ts";
+export * from "./ReadWriteNamespaceBinding.ts";

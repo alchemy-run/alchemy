@@ -43,7 +43,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
     const queueResource = yield* Queue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
-    const repos = yield* Cloudflare.Artifacts.ReadWriteStore(Repos);
+    const repos = yield* Cloudflare.Artifacts.ReadWriteNamespace(Repos);
     const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
     // Effect-style queue consumer. Each batch is piped through the
@@ -451,7 +451,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Cloudflare.KV.ReadWriteNamespaceBinding,
         Cloudflare.Queues.WriteQueueBinding,
         Cloudflare.Queues.EventSourceLive,
-        Cloudflare.Artifacts.ReadWriteStoreBinding,
+        Cloudflare.Artifacts.ReadWriteNamespaceBinding,
         Cloudflare.AI.QueryGatewayBinding,
       ),
     ),

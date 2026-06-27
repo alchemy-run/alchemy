@@ -145,7 +145,7 @@ afterAll.skipIf(!ARTIFACTS_ENABLED || !!process.env.NO_DESTROY)(
   { timeout: HOOK_TIMEOUT },
 );
 
-// Effect-native worker: `Cloudflare.Artifacts.ReadWriteStore(Repos)` + `ReadWriteStoreBinding`.
+// Effect-native worker: `Cloudflare.Artifacts.ReadWriteNamespace(Repos)` + `ReadWriteNamespaceBinding`.
 test.skipIf(!ARTIFACTS_ENABLED)(
   "effect binding: create / list / get / delete round-trip",
   Effect.gen(function* () {

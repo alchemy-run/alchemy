@@ -20,7 +20,7 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 /**
  * Deploys both invocation styles — the Effect-native worker
- * (`Cloudflare.Artifacts.ReadWriteStore(Repos)` + `ReadWriteStoreBinding`) and the async
+ * (`Cloudflare.Artifacts.ReadWriteNamespace(Repos)` + `ReadWriteNamespaceBinding`) and the async
  * worker (`env: { REPOS }`) — against one shared Artifacts namespace, so the
  * driver test can exercise the client surface (`create`/`list`/`get`/`delete`)
  * over both.

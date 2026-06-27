@@ -1,11 +1,11 @@
-import type { ReadWriteStoreClient } from "@/Cloudflare/Artifacts/ReadWriteStore.ts";
+import type { ReadWriteNamespaceClient } from "@/Cloudflare/Artifacts/ReadWriteNamespace.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * Shared routes that exercise every method of {@link ReadWriteStoreClient} over
+ * Shared routes that exercise every method of {@link ReadWriteNamespaceClient} over
  * `fetch`. The same routes back both the Effect-native worker (which yields
- * `Cloudflare.Artifacts.ReadWriteStore(...)`) and — by mirroring the logic in plain
+ * `Cloudflare.Artifacts.ReadWriteNamespace(...)`) and — by mirroring the logic in plain
  * async/await — the async worker, so both invocation styles drive the exact
  * same behavior against one shared namespace.
  *
@@ -17,7 +17,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * Returns `undefined` for unknown paths so the worker shell can 404.
  */
-export const artifactsRoutes = (client: ReadWriteStoreClient, url: URL) =>
+export const artifactsRoutes = (client: ReadWriteNamespaceClient, url: URL) =>
   Effect.gen(function* () {
     const name = url.searchParams.get("name") ?? "";
 

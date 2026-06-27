@@ -9,7 +9,7 @@ import type { Gateway as AiGateway } from "../AI/Gateway.ts";
 import type { SearchInstance } from "../AI/SearchInstance.ts";
 import type { SearchNamespace } from "../AI/SearchNamespace.ts";
 import { Dataset } from "../AnalyticsEngine/Dataset.ts";
-import type { Store as ArtifactsStore } from "../Artifacts/Store.ts";
+import type { Namespace as ArtifactsNamespace } from "../Artifacts/Namespace.ts";
 import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
@@ -55,7 +55,7 @@ export type WorkerBindingResource =
   | SearchNamespace
   | Dataset
   | SendEmail
-  | ArtifactsStore
+  | ArtifactsNamespace
   | RateLimitBinding
   | BrowserBinding
   | FlagshipApp

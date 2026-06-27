@@ -9,7 +9,7 @@ import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
 import { isDataset } from "../AnalyticsEngine/Dataset.ts";
-import { isStore } from "../Artifacts/Store.ts";
+import { isNamespace } from "../Artifacts/Namespace.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -105,7 +105,7 @@ const toBinding = (
       type: "assets",
       name: bindingName,
     };
-  } else if (isStore(binding)) {
+  } else if (isNamespace(binding)) {
     return {
       type: "artifacts",
       name: bindingName,

@@ -2,7 +2,7 @@ import type { AsyncWorkerEnv } from "./stack.ts";
 
 /**
  * Async (non-Effect) Worker fixture for the Artifacts namespace binding
- * declared via `env: { REPOS: Cloudflare.Artifacts.Store(...) }`. `InferEnv` maps the
+ * declared via `env: { REPOS: Cloudflare.Artifacts.Namespace(...) }`. `InferEnv` maps the
  * marker to the native `cf.Artifacts` binding, so the handler calls
  * `env.REPOS.create/list/get/delete(...)` directly. Mirrors the exact same
  * routes the Effect-native worker drives (see `routes.ts`).

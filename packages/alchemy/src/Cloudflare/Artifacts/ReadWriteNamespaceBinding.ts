@@ -1,15 +1,15 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import { type Store as ArtifactsLike } from "./Store.ts";
+import { type Namespace as ArtifactsLike } from "./Namespace.ts";
 import {
   ArtifactsError,
-  ReadStore,
-  ReadWriteStore,
-  type ReadWriteStoreClient,
+  ReadNamespace,
+  ReadWriteNamespace,
+  type ReadWriteNamespaceClient,
   type RepoClient,
-  WriteStore,
-} from "./ReadWriteStore.ts";
+  WriteNamespace,
+} from "./ReadWriteNamespace.ts";
 
 const tryPromise = <T>(
   fn: () => Promise<T>,
@@ -38,9 +38,9 @@ const wrapRepo = (raw: ArtifactsRepo): RepoClient => ({
  */
 const makeArtifactsClient = (
   env: Record<string, Artifacts>,
-  artifacts: ArtifactsLike,
-): ReadWriteStoreClient => {
-  const raw = Effect.sync(() => env[artifacts.name]!);
+  namespace: ArtifactsLike,
+): ReadWriteNamespaceClient => {
+  const raw = Effect.sync(() => env[namespace.name]!);
   const use = <T>(
     fn: (raw: Artifacts) => Promise<T>,
   ): Effect.Effect<T, ArtifactsError> =>
@@ -73,26 +73,26 @@ const makeBinding = <Self>(tag: Self) =>
     Effect.gen(function* () {
       const env = yield* WorkerEnvironment;
       const host = yield* Worker;
-      return Effect.fn(function* (artifacts: ArtifactsLike) {
+      return Effect.fn(function* (namespace: ArtifactsLike) {
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* host.bind(artifacts.name, {
+          yield* host.bind(namespace.name, {
             bindings: [
               {
                 type: "artifacts",
-                name: artifacts.name,
-                namespace: artifacts.namespace,
+                name: namespace.name,
+                namespace: namespace.namespace,
               } as any,
             ],
           });
         }
-        return makeArtifactsClient(env as Record<string, Artifacts>, artifacts);
+        return makeArtifactsClient(env as Record<string, Artifacts>, namespace);
       });
     }),
   ) as Layer.Layer<Self, never, Worker | WorkerEnvironment>;
 
 /** Read-only Artifacts binding (`get`/`list`/`raw`). */
-export const ReadStoreBinding = makeBinding(ReadStore);
+export const ReadNamespaceBinding = makeBinding(ReadNamespace);
 /** Write Artifacts binding (`create`/`delete`/`import`). */
-export const WriteStoreBinding = makeBinding(WriteStore);
+export const WriteNamespaceBinding = makeBinding(WriteNamespace);
 /** Full read + write Artifacts binding. */
-export const ReadWriteStoreBinding = makeBinding(ReadWriteStore);
+export const ReadWriteNamespaceBinding = makeBinding(ReadWriteNamespace);
