@@ -105,24 +105,10 @@ export * as Zaraz from "./Zaraz/index.ts";
 export * as Zone from "./Zone/index.ts";
 
 // ── convenience root re-exports (common building blocks) ──
-export { Container } from "./Containers/index.ts";
-export {
-  Browser,
-  DurableObject,
-  DurableObjectState,
-  RateLimit,
-  Request,
-  RpcDurableObject,
-  RpcWorker,
-  Worker,
-  WorkerLoader,
-  cron,
-  isWorker,
-  upgrade,
-  type WebSocket,
-} from "./Workers/index.ts";
-export type { InferEnv } from "./Workers/index.ts";
-export { Workflow } from "./Workflows/index.ts";
+export * from "./Containers/index.ts";
+export * from "./Images/Images.ts";
+export * from "./Workers/index.ts";
+export * from "./Workflows/index.ts";
 
 // runtime bridge factories — the generated Worker entry imports these from
 // "alchemy/Cloudflare" (see Workers/WorkerBundle.ts), so they must stay top-level.

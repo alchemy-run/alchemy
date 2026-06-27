@@ -12,8 +12,8 @@ import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { Providers } from "../Providers.ts";
+import { applyMigrations } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
-import { applyMigrations } from "./D1Migrations.ts";
 import { importD1Database } from "./ImportDatabase.ts";
 
 export const isDatabase = (value: unknown): value is Database =>

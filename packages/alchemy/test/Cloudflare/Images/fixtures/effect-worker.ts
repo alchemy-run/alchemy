@@ -17,7 +17,7 @@ export default class ImagesEffectWorker extends Cloudflare.Worker<ImagesEffectWo
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const images = yield* Cloudflare.Images.Images({ name: "PIPELINE" });
+    const images = yield* Cloudflare.Images.Images("PIPELINE");
 
     return {
       fetch: Effect.gen(function* () {
@@ -26,5 +26,5 @@ export default class ImagesEffectWorker extends Cloudflare.Worker<ImagesEffectWo
         return yield* HttpServerResponse.json({ mode: "effect", ...info });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Images.BindingLayer)),
+  }).pipe(Effect.provide(Cloudflare.Images.ImagesBinding)),
 ) {}

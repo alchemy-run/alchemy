@@ -20,9 +20,7 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const browser = yield* Cloudflare.Browser({
-      name: "BROWSER",
-    });
+    const browser = yield* Cloudflare.Browser("BROWSER");
 
     return {
       fetch: Effect.gen(function* () {
@@ -123,5 +121,5 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
         }
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Workers.BrowserBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Workers.BrowserBinding)),
 ) {}

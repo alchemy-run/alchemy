@@ -21,8 +21,7 @@ export default class RateLimitEffectWorker extends Cloudflare.Worker<RateLimitEf
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const throttle = yield* Cloudflare.RateLimit({
-      name: "THROTTLE",
+    const throttle = yield* Cloudflare.RateLimit("THROTTLE", {
       namespaceId: 11_001,
       simple: { limit: 2, period: 10 },
     });

@@ -1,7 +1,7 @@
+import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import type { SqlFile } from "../../Sql/SqlFile.ts";
 
 export interface ApplyMigrationsOptions {
@@ -10,6 +10,38 @@ export interface ApplyMigrationsOptions {
   migrationsTable: string;
   migrationsFiles: ReadonlyArray<SqlFile>;
 }
+
+/**
+ * Apply pending D1 migrations in order. Uses the wrangler-compatible
+ * 3-column schema `(id TEXT PK, name TEXT, applied_at TEXT)`.
+ */
+export const applyMigrations = (options: ApplyMigrationsOptions) =>
+  Effect.gen(function* () {
+    const { accountId, databaseId, migrationsTable, migrationsFiles } = options;
+    yield* ensureMigrationsTable(accountId, databaseId, migrationsTable);
+    const applied = yield* getAppliedMigrations(
+      accountId,
+      databaseId,
+      migrationsTable,
+    );
+    let nextSeq = yield* getNextSeq(accountId, databaseId, migrationsTable);
+
+    for (const migration of migrationsFiles) {
+      if (applied.has(migration.id)) continue;
+      const migrationId = nextSeq.toString().padStart(5, "0");
+      nextSeq += 1;
+      // D1 over HTTP doesn't support transactions; run migration + record
+      // in a single batched query.
+      yield* executeSQL(
+        accountId,
+        databaseId,
+        [
+          migration.sql,
+          `INSERT INTO ${migrationsTable} (id, name, applied_at) VALUES ('${migrationId}', '${migration.id}', datetime('now'));`,
+        ].join("\n"),
+      );
+    }
+  });
 
 interface TableColumn {
   name: string;
@@ -194,36 +226,4 @@ const getNextSeq = (
       }
     }
     return max + 1;
-  });
-
-/**
- * Apply pending D1 migrations in order. Uses the wrangler-compatible
- * 3-column schema `(id TEXT PK, name TEXT, applied_at TEXT)`.
- */
-export const applyMigrations = (options: ApplyMigrationsOptions) =>
-  Effect.gen(function* () {
-    const { accountId, databaseId, migrationsTable, migrationsFiles } = options;
-    yield* ensureMigrationsTable(accountId, databaseId, migrationsTable);
-    const applied = yield* getAppliedMigrations(
-      accountId,
-      databaseId,
-      migrationsTable,
-    );
-    let nextSeq = yield* getNextSeq(accountId, databaseId, migrationsTable);
-
-    for (const migration of migrationsFiles) {
-      if (applied.has(migration.id)) continue;
-      const migrationId = nextSeq.toString().padStart(5, "0");
-      nextSeq += 1;
-      // D1 over HTTP doesn't support transactions; run migration + record
-      // in a single batched query.
-      yield* executeSQL(
-        accountId,
-        databaseId,
-        [
-          migration.sql,
-          `INSERT INTO ${migrationsTable} (id, name, applied_at) VALUES ('${migrationId}', '${migration.id}', datetime('now'));`,
-        ].join("\n"),
-      );
-    }
   });

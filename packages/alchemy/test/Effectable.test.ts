@@ -73,13 +73,16 @@ describe("Effectable: deliberate non-Effect binding markers", () => {
   // resolver both branch on `Effect.isEffect`). They remain yield*-able via
   // `[Symbol.iterator]`. See the marker JSDoc for the rationale.
   const markers: Array<[name: string, marker: any]> = [
-    ["Images", Images({})],
+    ["Images", Images("IMAGES")],
     [
       "RateLimit",
-      RateLimit({ namespaceId: 1, simple: { limit: 1, period: 60 } }),
+      RateLimit("THROTTLE", {
+        namespaceId: 1,
+        simple: { limit: 1, period: 60 },
+      }),
     ],
-    ["Browser", Browser({})],
-    ["VersionMetadata", VersionMetadata({})],
+    ["Browser", Browser("BROWSER")],
+    ["VersionMetadata", VersionMetadata("CF_VERSION_METADATA")],
   ];
 
   for (const [name, marker] of markers) {

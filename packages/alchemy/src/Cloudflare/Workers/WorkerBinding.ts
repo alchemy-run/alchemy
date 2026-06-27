@@ -14,18 +14,18 @@ import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
-import { Images } from "../Images/Images.ts";
+import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Namespace } from "../KV/Namespace.ts";
 import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
-import { Browser } from "./Browser.ts";
+import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
-import type { RateLimitMarker } from "./RateLimit.ts";
+import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import type { VersionMetadata } from "./VersionMetadata.ts";
+import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
 
@@ -56,16 +56,16 @@ export type WorkerBindingResource =
   | Dataset
   | SendEmail
   | ArtifactsStore
-  | RateLimitMarker
-  | Browser
+  | RateLimitBinding
+  | BrowserBinding
   | FlagshipApp
-  | Images
+  | ImagesBinding
   | Hyperdrive
   | VectorizeIndex
   | Secret
   | Worker
   | WorkerLoader
-  | VersionMetadata
+  | VersionMetadataBinding
   | DurableObjectLike<any>;
 
 export type WorkerBindings = {
