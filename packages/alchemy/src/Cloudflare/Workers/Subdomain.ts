@@ -7,8 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const WorkersSubdomainTypeId = "Cloudflare.Workers.Subdomain" as const;
-type WorkersSubdomainTypeId = typeof WorkersSubdomainTypeId;
+const TypeId = "Cloudflare.Workers.Subdomain" as const;
+type TypeId = typeof TypeId;
 
 export type SubdomainProps = {
   /**
@@ -38,7 +38,7 @@ export type SubdomainAttributes = {
 };
 
 export type Subdomain = Resource<
-  WorkersSubdomainTypeId,
+  TypeId,
   SubdomainProps,
   SubdomainAttributes,
   never,
@@ -78,13 +78,13 @@ export type Subdomain = Resource<
  *
  * @see https://developers.cloudflare.com/workers/configuration/routing/workers-dev/
  */
-export const Subdomain = Resource<Subdomain>(WorkersSubdomainTypeId);
+export const Subdomain = Resource<Subdomain>(TypeId);
 
 /**
  * Returns true if the given value is a Subdomain resource.
  */
 export const isSubdomain = (value: unknown): value is Subdomain =>
-  Predicate.hasProperty(value, "Type") && value.Type === WorkersSubdomainTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SubdomainProvider = () =>
   Provider.succeed(Subdomain, {

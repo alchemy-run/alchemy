@@ -7,9 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const WorkersAccountSettingTypeId =
-  "Cloudflare.Workers.AccountSetting" as const;
-type WorkersAccountSettingTypeId = typeof WorkersAccountSettingTypeId;
+const TypeId = "Cloudflare.Workers.AccountSetting" as const;
+type TypeId = typeof TypeId;
 
 export type AccountSettingProps = {
   /**
@@ -54,7 +53,7 @@ export type AccountSettingAttributes = {
 };
 
 export type AccountSetting = Resource<
-  WorkersAccountSettingTypeId,
+  TypeId,
   AccountSettingProps,
   AccountSettingAttributes,
   never,
@@ -93,16 +92,13 @@ export type AccountSetting = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/workers/subresources/account_settings/
  */
-export const AccountSetting = Resource<AccountSetting>(
-  WorkersAccountSettingTypeId,
-);
+export const AccountSetting = Resource<AccountSetting>(TypeId);
 
 /**
  * Returns true if the given value is a AccountSetting resource.
  */
 export const isAccountSetting = (value: unknown): value is AccountSetting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === WorkersAccountSettingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountSettingProvider = () =>
   Provider.succeed(AccountSetting, {

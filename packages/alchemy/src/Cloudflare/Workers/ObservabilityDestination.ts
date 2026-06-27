@@ -12,9 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ObservabilityDestinationTypeId =
-  "Cloudflare.Workers.ObservabilityDestination" as const;
-type ObservabilityDestinationTypeId = typeof ObservabilityDestinationTypeId;
+const TypeId = "Cloudflare.Workers.ObservabilityDestination" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The Workers Logs dataset exported by an observability destination.
@@ -108,7 +107,7 @@ export interface ObservabilityDestinationAttributes {
 }
 
 export type ObservabilityDestination = Resource<
-  ObservabilityDestinationTypeId,
+  TypeId,
   ObservabilityDestinationProps,
   ObservabilityDestinationAttributes,
   never,
@@ -169,9 +168,8 @@ export type ObservabilityDestination = Resource<
  * });
  * ```
  */
-export const ObservabilityDestination = Resource<ObservabilityDestination>(
-  ObservabilityDestinationTypeId,
-);
+export const ObservabilityDestination =
+  Resource<ObservabilityDestination>(TypeId);
 
 /**
  * Returns true if the given value is an ObservabilityDestination resource.
@@ -179,8 +177,7 @@ export const ObservabilityDestination = Resource<ObservabilityDestination>(
 export const isObservabilityDestination = (
   value: unknown,
 ): value is ObservabilityDestination =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ObservabilityDestinationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ObservabilityDestinationProvider = () =>
   Provider.succeed(ObservabilityDestination, {
