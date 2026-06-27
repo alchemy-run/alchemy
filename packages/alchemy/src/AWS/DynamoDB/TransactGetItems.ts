@@ -31,7 +31,7 @@ export interface TransactGetItemsRequest extends Omit<
  * @section Reading Data
  * @example Read Items Transactionally
  * ```typescript
- * const transactGetItems = yield* TransactGetItems.bind(
+ * const transactGetItems = yield* AWS.DynamoDB.TransactGetItems(
  *   sourceTable,
  *   archiveTable,
  * );

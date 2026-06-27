@@ -76,7 +76,7 @@ export default {
 The rest of this page walks through the Effect style; the same
 deploy-time mechanics apply to both.
 
-## What `.bind()` does at deploy time
+## What `Bind(resource)` does at deploy time
 
 Each call records three things on the platform's plan:
 
@@ -93,16 +93,16 @@ resource-level scoping.
 
 | Binding                        | IAM Actions        | Resource                     |
 | ------------------------------ | ------------------ | ---------------------------- |
-| `S3.GetObject.bind(bucket)`    | `s3:GetObject`     | `arn:aws:s3:::bucket-name/*` |
-| `S3.PutObject.bind(bucket)`    | `s3:PutObject`     | `arn:aws:s3:::bucket-name/*` |
-| `SQS.SendMessage.bind(queue)`  | `sqs:SendMessage`  | Queue ARN                    |
-| `DynamoDB.GetItem.bind(table)` | `dynamodb:GetItem` | Table ARN                    |
-| `DynamoDB.PutItem.bind(table)` | `dynamodb:PutItem` | Table ARN                    |
+| `S3.GetObject(bucket)`    | `s3:GetObject`     | `arn:aws:s3:::bucket-name/*` |
+| `S3.PutObject(bucket)`    | `s3:PutObject`     | `arn:aws:s3:::bucket-name/*` |
+| `SQS.SendMessage(queue)`  | `sqs:SendMessage`  | Queue ARN                    |
+| `DynamoDB.GetItem(table)` | `dynamodb:GetItem` | Table ARN                    |
+| `DynamoDB.PutItem(table)` | `dynamodb:PutItem` | Table ARN                    |
 
 Multi-resource bindings enumerate every ARN they touch:
 
 ```typescript
-const get = yield* DynamoDB.GetItem.bind(JobsTable, AuditTable);
+const get = yield* DynamoDB.GetItem(JobsTable, AuditTable);
 // → policy enumerates both table ARNs explicitly
 ```
 
@@ -162,7 +162,7 @@ It batches input chunks into the underlying batch API
 minimal IAM to go with it.
 
 ```typescript
-const sink = yield* SQS.QueueSink.bind(OutboundQueue);
+const sink = yield* SQS.QueueSink(OutboundQueue);
 // → Sink<void, string, readonly string[], never>
 // → policy: sqs:SendMessage + sqs:SendMessageBatch on OutboundQueue's ARN
 
@@ -182,7 +182,7 @@ one expression:
 
 ```typescript
 const outbound = yield* SQS.Queue("Outbound");
-const sink = yield* SQS.QueueSink.bind(outbound);
+const sink = yield* SQS.QueueSink(outbound);
 
 yield* DynamoDB.consumeTableChanges<Order>(OrdersTable, {
   streamViewType: "NEW_AND_OLD_IMAGES",
@@ -197,7 +197,7 @@ yield* DynamoDB.consumeTableChanges<Order>(OrdersTable, {
 );
 ```
 
-Two `bind()` calls, one pipeline. Alchemy generates **both** sides
+One binding call, one pipeline. Alchemy generates **both** sides
 of the policy automatically — `dynamodb:DescribeStream` /
 `GetRecords` / `GetShardIterator` on `OrdersTable`'s stream,
 `sqs:SendMessageBatch` on `Outbound` — plus the event-source

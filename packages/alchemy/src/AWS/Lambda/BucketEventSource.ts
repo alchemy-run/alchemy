@@ -27,7 +27,7 @@ import { Permission as LambdaPermission } from "./Permission.ts";
  * @section Wiring Events
  * @example Listen for Object Created Events
  * ```typescript
- * yield* BucketEventSource.bind(
+ * yield* AWS.Lambda.BucketEventSource(
  *   bucket,
  *   { events: ["s3:ObjectCreated:*"] },
  *   (events) => Stream.runForEach(events, (event) => Effect.log(event.key)),

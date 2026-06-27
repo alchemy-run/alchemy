@@ -133,7 +133,7 @@ export interface RpcWorkerClass extends Effect.Effect<
   /**
    * Bind a typed Effect rpc client to a worker resource, using the
    * worker's declared rpc {@link RpcGroup.RpcGroup} schema. Mirrors
-   * `Cloudflare.R2Bucket.bind(MyBucket)` and friends.
+   * `Cloudflare.R2.ReadWriteBucket(MyBucket)` and friends.
    *
    * Yield once at **init** — the result is a normal `RpcClient` you
    * can call directly from any per-request handler. Internally each

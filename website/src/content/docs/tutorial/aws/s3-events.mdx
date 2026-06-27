@@ -30,8 +30,8 @@ import * as Layer from "effect/Layer";
 
 Effect.gen(function* () {
   const bucket = yield* S3.Bucket("Blobs");
-  const putObject = yield* S3.PutObject.bind(bucket);
-  const getObject = yield* S3.GetObject.bind(bucket);
+  const putObject = yield* S3.PutObject(bucket);
+  const getObject = yield* S3.GetObject(bucket);
 
 +  yield* S3.consumeBucketEvents(bucket, (stream) =>
 +    stream.pipe(

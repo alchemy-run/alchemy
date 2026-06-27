@@ -58,7 +58,7 @@ export interface TransactWriteItemsRequest extends Omit<
  * @section Writing Data
  * @example Write Items Transactionally
  * ```typescript
- * const transactWriteItems = yield* TransactWriteItems.bind(
+ * const transactWriteItems = yield* AWS.DynamoDB.TransactWriteItems(
  *   sourceTable,
  *   archiveTable,
  * );

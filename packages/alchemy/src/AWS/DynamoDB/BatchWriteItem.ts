@@ -34,7 +34,7 @@ export interface BatchWriteItemRequest extends Omit<
  * @section Writing Data
  * @example Write Items Across Multiple Tables
  * ```typescript
- * const batchWriteItem = yield* BatchWriteItem.bind(sourceTable, archiveTable);
+ * const batchWriteItem = yield* AWS.DynamoDB.BatchWriteItem(sourceTable, archiveTable);
  *
  * const response = yield* batchWriteItem({
  *   RequestItems: {

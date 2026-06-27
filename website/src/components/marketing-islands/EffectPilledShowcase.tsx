@@ -11,7 +11,7 @@ import { highlightTS } from "../marketing/highlightTS";
  * what Alchemy wired up. Tabs auto-cycle while in view; tap to pin.
  *
  * Tabs:
- *   - IAM bindings   — `S3.GetObject.bind(...)` → permissions + env vars
+ *   - IAM bindings   — `S3.GetObject(...)` → permissions + env vars
  *   - Event sources  — `DynamoDB.stream(...).process(...)` → EventSourceMapping
  *   - Durable Objects — `Cloudflare.DurableObject`
  *   - Containers     — `Cloudflare.Container`
@@ -39,8 +39,8 @@ const LAYER_IMPL_SWAP_MS = 3500;
 const IAM_CODE = `export default AWS.Lambda.Function(
   "JobApi",
   Effect.gen(function* () {
-    const getPhoto = yield* S3.GetObject.bind(Photos);
-    const putJob   = yield* DynamoDB.PutItem.bind(Jobs);
+    const getPhoto = yield* S3.GetObject(Photos);
+    const putJob   = yield* DynamoDB.PutItem(Jobs);
 
     return {
       fetch: Effect.gen(function* () {
@@ -145,7 +145,7 @@ const LAYER_SEGMENTS: LayerSegment[] = [
     ddb: [
       "export const JobStorageDynamoDB = Layer.effect(JobStorage, Effect.gen(function* () {",
       '  const table   = yield* DynamoDB.Table("JobsTable", { partitionKey: "id" });',
-      "  const putItem = yield* DynamoDB.PutItem.bind(table);",
+      "  const putItem = yield* DynamoDB.PutItem(table);",
       "  const getItem = yield* DynamoDB.GetItem.bind(table);",
     ],
     d1: [

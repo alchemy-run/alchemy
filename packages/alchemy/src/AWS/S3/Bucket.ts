@@ -339,8 +339,8 @@ export interface Bucket extends Resource<
  * @example Read and write objects
  * ```typescript
  * // init
- * const getObject = yield* S3.GetObject.bind(bucket);
- * const putObject = yield* S3.PutObject.bind(bucket);
+ * const getObject = yield* S3.GetObject(bucket);
+ * const putObject = yield* S3.PutObject(bucket);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -359,7 +359,7 @@ export interface Bucket extends Resource<
  * @example Delete an object
  * ```typescript
  * // init
- * const deleteObject = yield* S3.DeleteObject.bind(bucket);
+ * const deleteObject = yield* S3.DeleteObject(bucket);
  * ```
  *
  * @section Event Notifications

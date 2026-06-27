@@ -24,7 +24,7 @@ import type { Zone } from "../Zone/Zone.ts";
  * @section Reading DNS records at runtime
  * @example Read records from inside a Worker
  * Bind the client in the Worker's Init phase and provide {@link ReadDnsBinding}.
- * The zone is fixed by `.bind(zone)` — the provisioned token only grants
+ * The zone is fixed by `ReadDnsBinding(zone)` — the provisioned token only grants
  * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
  * resource directly (it's an `Effect`), or `yield* Zone` for a resolved value.
  * ```typescript
@@ -60,7 +60,7 @@ export interface ReadDns extends Binding.Service<
 
 export const ReadDns = Binding.Service<ReadDns>("Cloudflare.DNS.ReadDns");
 
-/** List-records request, minus the zone id (bound at `.bind(zone)` time). */
+/** List-records request, minus the zone id (bound at `ReadDnsBinding(zone)` time). */
 export type ListRecordsRequestInput = Omit<ListRecordsRequest, "zoneId">;
 
 /**

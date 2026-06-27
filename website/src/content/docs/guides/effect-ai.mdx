@@ -161,9 +161,10 @@ backing layer does.
 ## Cloudflare AI Gateway
 
 For Workers AI on Cloudflare, `Cloudflare.AI.Gateway` declares an AI
-Gateway as a resource and `.bind(Gateway).model({...})` returns a
-`LanguageModel` Layer that proxies Workers AI through the gateway —
-with caching, rate limiting, retries, and a unified request log.
+Gateway as a resource and `Cloudflare.AI.QueryGateway(Gateway)` returns
+a typed client whose `.model({...})` builds a `LanguageModel` Layer
+that proxies Workers AI through the gateway — with caching, rate
+limiting, retries, and a unified request log.
 
 Bind the gateway in the Init phase and call `aiGateway.model({...})`
 with a Workers AI model id. It returns a `LanguageModel` Layer
@@ -171,7 +172,7 @@ directly — no API key, no `Layer.unwrap`, since the gateway binding
 handles auth and the URL:
 
 ```typescript
-const aiGateway = yield* Cloudflare.AIbind(Gateway);
+const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
 const languageModel = aiGateway.model({
   model: "@cf/meta/llama-3.1-8b-instruct",
@@ -181,12 +182,12 @@ const languageModel = aiGateway.model({
 
 That `languageModel` Layer slots into the same `Effect.provide(...)`
 spot as any other provider — the rest of your handler doesn't
-change. Provide `Cloudflare.AI.GatewayBindingLive` once at the
+change. Provide `Cloudflare.AI.QueryGatewayBinding` once at the
 bottom of the Init layer chain so the binding resolves at runtime:
 
 ```typescript
 Effect.gen(function* () {
-  const aiGateway = yield* Cloudflare.AIbind(Gateway);
+  const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
   const languageModel = aiGateway.model({
     model: "@cf/meta/llama-3.1-8b-instruct",
@@ -201,7 +202,7 @@ Effect.gen(function* () {
       return yield* HttpServerResponse.json({ text: response.text });
     }).pipe(Effect.provide(languageModel)),
   };
-}).pipe(Effect.provide(Cloudflare.AI.GatewayBindingLive));
+}).pipe(Effect.provide(Cloudflare.AI.QueryGatewayBinding));
 ```
 
 The [AI Gateway tutorial](/tutorial/cloudflare/ai-gateway) walks

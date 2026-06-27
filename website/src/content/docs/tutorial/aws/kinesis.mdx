@@ -46,11 +46,11 @@ import { Jobs } from "./queue.ts";
 
 const queue = yield* Jobs;
 +const events = yield* Events;
-const sendMessage = yield* SQS.SendMessage.bind(queue);
-+const putRecord = yield* Kinesis.PutRecord.bind(events);
+const sendMessage = yield* SQS.SendMessage(queue);
++const putRecord = yield* Kinesis.PutRecord(events);
 ```
 
-The shape mirrors every other binding you've seen: `bind(stream)`
+The shape mirrors every other binding you've seen: `PutRecord(stream)`
 returns a callable Effect, plus an IAM policy with
 `kinesis:PutRecord` scoped to this stream's ARN.
 

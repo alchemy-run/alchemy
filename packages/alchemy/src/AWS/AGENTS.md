@@ -128,13 +128,13 @@ Use `ExecuteTransaction` as the reference pattern for bindings that touch `1..*`
 
 The ambiguity we want to avoid is:
 
-- bad: `ExecuteTransaction.bind()` with IAM `Resource: ["*"]`
-- bad: `ExecuteTransaction.bind(tableNames: string[])`
+- bad: `ExecuteTransaction()` with IAM `Resource: ["*"]`
+- bad: `ExecuteTransaction(tableNames: string[])`
 - bad: a SID like `AWS.DynamoDB.ExecuteTransaction(2 table(s))` that hides which resources were bound
 
 The required pattern is:
 
-- good: `ExecuteTransaction.bind(tableA, tableB, ...)`
+- good: `ExecuteTransaction(tableA, tableB, ...)`
 - good: the binding type requires at least one table
 - good: the policy enumerates exactly those table ARNs
 - good: the SID is deterministic and names the participating resources

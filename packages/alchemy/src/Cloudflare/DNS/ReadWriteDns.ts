@@ -19,7 +19,7 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  * @section Managing DNS records at runtime
  * @example Full CRUD from inside a Worker
  * Bind the client in the Worker's Init phase and provide
- * {@link ReadWriteDnsBinding}. The zone is fixed by `.bind(zone)` — the
+ * {@link ReadWriteDnsBinding}. The zone is fixed by `ReadWriteDnsBinding(zone)` — the
  * provisioned token only grants access to that zone, so calls take no
  * `zoneId`. Pass the {@link Zone} resource directly (it's an `Effect`), or
  * `yield* Zone` for a resolved value.

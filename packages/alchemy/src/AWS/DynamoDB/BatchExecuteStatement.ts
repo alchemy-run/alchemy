@@ -28,7 +28,7 @@ export interface BatchExecuteStatementRequest
  * @section PartiQL
  * @example Execute a Batch of Statements
  * ```typescript
- * const batchExecuteStatement = yield* BatchExecuteStatement.bind(
+ * const batchExecuteStatement = yield* AWS.DynamoDB.BatchExecuteStatement(
  *   sourceTable,
  *   archiveTable,
  * );

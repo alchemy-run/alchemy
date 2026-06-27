@@ -118,7 +118,7 @@ The generator inside `Cloudflare.Worker` is the **Init phase**. It
 runs both at *plan time* (when Alchemy builds the deployment graph)
 and at *runtime* (when the Worker boots a fresh isolate). Anything
 you `yield*` here must be safe in both contexts — typically resource
-binding factories like `Bucket.bind(...)`, never per-request work.
+binding factories like `R2.ReadWriteBucket(...)`, never per-request work.
 
 ### 3a. Bind an R2 bucket for storage
 

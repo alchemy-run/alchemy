@@ -43,7 +43,7 @@ const IMPLS: Impl[] = [
     layer: "SessionsDynamoDB",
     resourceLabel: "Sessions",
     resourceSub: "AWS.DynamoDB.Table",
-    bindCall: "DynamoDB.PutItem.bind",
+    bindCall: "DynamoDB.PutItem",
     color: AWS_COLOR,
     kind: "ddb",
   },

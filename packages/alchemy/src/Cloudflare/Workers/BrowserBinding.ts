@@ -52,7 +52,7 @@ export type BrowserErrorResponse = cf.BrowserRunErrorResponse;
  * payload, and binary actions (`screenshot`, `pdf`) resolve to a `Stream` of
  * the response bytes. Non-success responses fail with {@link BrowserError}, so
  * callers never touch a `Promise` or `Response.json()` themselves. Use
- * `Cloudflare.Browser.bind(browser)` (or `yield* Cloudflare.Browser(...)`)
+ * `Cloudflare.Browser(browser)` (or `yield* Cloudflare.Browser(...)`)
  * inside a Worker's init phase to obtain it.
  *
  * The {@link raw} accessor and {@link fetch} are the only promise-shaped

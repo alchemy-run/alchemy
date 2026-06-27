@@ -274,7 +274,7 @@ export const JobServiceR2 = Layer.effect(
   JobService,
   Effect.gen(function* () {
     const Bucket = yield* Cloudflare.R2.Bucket("Jobs");
-    const r2 = yield* Cloudflare.R2BucketBinding.bind(Bucket);
+    const r2 = yield* Cloudflare.R2.ReadWrite(Bucket);
 
     return {
       getJob: Effect.fn(function* (id: string) {
@@ -316,7 +316,7 @@ to talk to it.
 ## Related
 
 - [Layers](/concepts/layers) — the concept behind this guide
-- [Binding](/concepts/binding) — what `.bind(...)` does under the hood
+- [Binding](/concepts/binding) — what `Binding(resource)` does under the hood
 - [Phases](/concepts/phases) — when init vs runtime code runs
 - [Circular Bindings](/guides/circular-bindings) — two Layers
   referencing each other

@@ -100,7 +100,7 @@ export interface Topic extends Resource<
  * @example Publish from a handler
  * ```typescript
  * // init
- * const publish = yield* SNS.Publish.bind(topic);
+ * const publish = yield* SNS.Publish(topic);
  *
  * return {
  *   fetch: Effect.gen(function* () {

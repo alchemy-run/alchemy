@@ -5,7 +5,7 @@ import { createSignal } from "solid-js";
 export const getServerGreeting = createServerFn({
   method: "GET",
 }).handler(() => ({
-  message: "Hello from TanStack Start Solid on Cloudflare.Vite.",
+  message: "Hello from TanStack Start Solid on Cloudflare.Website.Vite.",
 }));
 
 export const Route = createFileRoute("/")({

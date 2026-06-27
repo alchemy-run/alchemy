@@ -12,13 +12,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 
 const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)));
-afterAll(
-  Effect.gen(function* () {
-    if (!process.env.NO_DESTROY) {
-      yield* destroy(Stack);
-    }
-  }),
-);
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
   "serves the TanStack Start Solid app shell",

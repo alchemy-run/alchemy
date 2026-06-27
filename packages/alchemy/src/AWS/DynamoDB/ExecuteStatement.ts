@@ -15,7 +15,7 @@ export interface ExecuteStatementRequest
  * @section PartiQL
  * @example Execute a Statement Against One Table
  * ```typescript
- * const executeStatement = yield* ExecuteStatement.bind(table);
+ * const executeStatement = yield* AWS.DynamoDB.ExecuteStatement(table);
  *
  * const response = yield* executeStatement({
  *   Statement: `SELECT * FROM "${yield* table.tableName}" WHERE pk=?`,

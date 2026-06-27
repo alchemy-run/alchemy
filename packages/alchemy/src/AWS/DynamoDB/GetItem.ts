@@ -17,7 +17,7 @@ export interface GetItemRequest extends Omit<
  * @section Reading Data
  * @example Read a Single Item
  * ```typescript
- * const getItem = yield* GetItem.bind(table);
+ * const getItem = yield* AWS.DynamoDB.GetItem(table);
  *
  * const response = yield* getItem({
  *   Key: {

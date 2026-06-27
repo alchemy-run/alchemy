@@ -209,7 +209,7 @@ export default Alchemy.Stack(
 | Stack        | `await alchemy("name")`       | `Alchemy.Stack("name", ...)`  | `Alchemy.Stack("name", ...)`       |
 | Resources    | `await Bucket(...)`         | `Cloudflare.R2.Bucket(...)`    | `Cloudflare.R2.Bucket(...)`         |
 | Worker entry | `entrypoint`                  | `main`                        | `main: import.meta.filename`           |
-| Bindings     | `bindings: { KEY: resource }` | `env: { Key: resource }`      | `yield* Resource.bind(ref)`        |
+| Bindings     | `bindings: { KEY: resource }` | `env: { Key: resource }`      | `yield* Binding(ref)`        |
 | Runtime code | `async fetch(req, env)`       | `async fetch(req, env)`       | `Effect.gen(function* () { ... })` |
 | Lifecycle    | `await app.finalize()`        | automatic                     | automatic                          |
 | Type safety  | runtime errors                | typed `env` via `InferEnv`    | full Effect type system            |

@@ -56,7 +56,7 @@ export const isImages = (value: unknown): value is Images =>
  * A Cloudflare Images binding for image transformation and manipulation inside
  * Workers.
  *
- * The Effect-native interface (`Cloudflare.Images.bind(...)`) returns an
+ * The Effect-native interface (`Cloudflare.Images(...)`) returns an
  * `Client` whose methods take Effect `Stream.Stream<Uint8Array>`
  * inputs and return `Effect`s — `info`, `input(...).transform(...)
  * .draw(...).output(...)`. The runtime conversion to Cloudflare's

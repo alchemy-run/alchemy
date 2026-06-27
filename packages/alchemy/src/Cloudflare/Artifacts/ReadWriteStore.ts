@@ -11,14 +11,14 @@ import type * as Artifacts from "./Store.ts";
  *
  * `ReadWriteStore` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
- * `yield* Cloudflare.Artifacts.ReadWriteStore(Repos)`.
+ * `yield* (Repos)`.
  *
  * @binding
  * @product Artifacts
  * @category Developer Platform
  * @example Using Artifacts inside a Worker
  * ```typescript
- * const artifacts = yield* Cloudflare.Artifacts.ReadWriteStore(Repos);
+ * const artifacts = yield* (Repos);
  * const repo = yield* artifacts.create("starter-repo", {
  *   setDefaultBranch: "main",
  * });
@@ -26,13 +26,11 @@ import type * as Artifacts from "./Store.ts";
  */
 export interface ReadWriteStore extends Binding.Service<
   ReadWriteStore,
-  "Cloudflare.Artifacts.ReadWriteStore",
+  "",
   (artifacts: Artifacts.Store) => Effect.Effect<ReadWriteStoreClient>
 > {}
 
-export const ReadWriteStore = Binding.Service<ReadWriteStore>(
-  "Cloudflare.Artifacts.ReadWriteStore",
-);
+export const ReadWriteStore = Binding.Service<ReadWriteStore>("");
 
 export class ArtifactsError extends Data.TaggedError("ArtifactsError")<{
   message: string;

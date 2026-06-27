@@ -103,7 +103,7 @@ export const isStore = (value: unknown): value is Store =>
  *
  * @example Effect-style worker
  * ```typescript
- * const artifacts = yield* Cloudflare.Artifacts.ReadWriteStore(Repos);
+ * const artifacts = yield* (Repos);
  * const repo = yield* artifacts.create("starter-repo", {
  *   setDefaultBranch: "main",
  * });

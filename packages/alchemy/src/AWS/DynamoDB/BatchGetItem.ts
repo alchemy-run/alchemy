@@ -26,7 +26,7 @@ export interface BatchGetItemRequest extends Omit<
  * @section Reading Data
  * @example Read Items Across Multiple Tables
  * ```typescript
- * const batchGetItem = yield* BatchGetItem.bind(sourceTable, archiveTable);
+ * const batchGetItem = yield* BatchGetItem(sourceTable, archiveTable);
  *
  * const response = yield* batchGetItem({
  *   RequestItems: {

@@ -38,13 +38,13 @@ them.
 
 ## Bind SendMessage on the producer
 
-`SQS.SendMessage.bind(queue)` returns a callable Effect — same
+`SQS.SendMessage(queue)` returns a callable Effect — same
 shape as `S3.PutObject` or `DynamoDB.PutItem` — and quietly
 attaches `sqs:SendMessage` scoped to the queue ARN:
 
 ```diff lang="typescript"
-const putItem = yield* DynamoDB.PutItem.bind(table);
-+const sendMessage = yield* SQS.SendMessage.bind(queue);
+const putItem = yield* DynamoDB.PutItem(table);
++const sendMessage = yield* SQS.SendMessage(queue);
 ```
 
 Let's hook it into the existing `PUT /items/:id` route so every
@@ -278,7 +278,7 @@ controllable concurrency on top.
 
 ## Bonus: forward a stream to SQS with `QueueSink`
 
-`SendMessage.bind(queue)` is perfect for one-off sends from a
+`SendMessage(queue)` is perfect for one-off sends from a
 request handler, but if you've got a `Stream` of payloads —
 DynamoDB change records, S3 notifications, anything — you don't
 want to call `sendMessage` per item. **`SQS.QueueSink`** is the
@@ -296,9 +296,9 @@ import { Jobs } from "./queue.ts";
 // ...
 
 const queue = yield* Jobs;
-const putItem = yield* DynamoDB.PutItem.bind(table);
--const sendMessage = yield* SQS.SendMessage.bind(queue);
-+const sink = yield* SQS.QueueSink.bind(queue);
+const putItem = yield* DynamoDB.PutItem(table);
+-const sendMessage = yield* SQS.SendMessage(queue);
++const sink = yield* SQS.QueueSink(queue);
 
 yield* DynamoDB.consumeTableChanges(table, {
   streamViewType: "NEW_AND_OLD_IMAGES",
@@ -316,7 +316,7 @@ yield* DynamoDB.consumeTableChanges(table, {
 );
 ```
 
-`QueueSink.bind(queue)` grants `sqs:SendMessage` and
+`QueueSink(queue)` grants `sqs:SendMessage` and
 `sqs:SendMessageBatch` on the queue ARN, then returns a
 `Sink<void, string, readonly string[]>` you compose with
 `Stream.run`. `QueueSinkLive` is itself implemented on top of

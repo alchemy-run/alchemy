@@ -34,7 +34,7 @@ import type { Zone } from "../Zone/Zone.ts";
  * @section Mutating DNS records at runtime
  * @example Create, update, and delete records from inside a Worker
  * Bind the client in the Worker's Init phase and provide {@link WriteDnsBinding}.
- * The zone is fixed by `.bind(zone)` — the provisioned token only grants
+ * The zone is fixed by `WriteDnsBinding(zone)` — the provisioned token only grants
  * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
  * resource directly (it's an `Effect`), or `yield* Zone` for a resolved value.
  * ```typescript
@@ -90,7 +90,7 @@ export interface WriteDns extends Binding.Service<
 
 export const WriteDns = Binding.Service<WriteDns>("Cloudflare.DNS.WriteDns");
 
-/** Create-record request, minus the zone id (bound at `.bind(zone)` time). */
+/** Create-record request, minus the zone id (bound at `WriteDnsBinding(zone)` time). */
 export type CreateRecordRequestInput = Omit<CreateRecordRequest, "zoneId">;
 
 /** Update-record request, minus the zone id and record id. */
@@ -105,7 +105,7 @@ export type PatchRecordRequestInput = Omit<
   "zoneId" | "dnsRecordId"
 >;
 
-/** Batch-records request, minus the zone id (bound at `.bind(zone)` time). */
+/** Batch-records request, minus the zone id (bound at `WriteDnsBinding(zone)` time). */
 export type BatchRecordRequestInput = Omit<BatchRecordRequest, "zoneId">;
 
 /**

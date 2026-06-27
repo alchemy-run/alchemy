@@ -28,8 +28,8 @@ import * as Layer from "effect/Layer";
 // ...
 
 const table = yield* DynamoDB.Table("Items", { /* ... */ });
-const putItem = yield* DynamoDB.PutItem.bind(table);
-const getItem = yield* DynamoDB.GetItem.bind(table);
+const putItem = yield* DynamoDB.PutItem(table);
+const getItem = yield* DynamoDB.GetItem(table);
 
 +yield* DynamoDB.consumeTableChanges(table, (stream) =>
 +  stream.pipe(

@@ -700,28 +700,38 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section Containers
- * Containers run long-lived processes alongside Durable Objects. Bind
- * one with `Cloudflare.Container.bind` and start it with
- * `Cloudflare.start`. You can call typed methods on the running
- * container or make HTTP requests to its exposed ports.
+ * Containers run long-lived processes alongside Durable Objects.
+ * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's init to
+ * bind, start, and monitor the container; then `yield* Sandbox`
+ * resolves the **running** instance. Call its typed methods or use
+ * `getTcpPort` to make HTTP requests to its exposed ports.
  *
- * @example Binding and starting a Container
+ * @example Running a Container from a Durable Object
  * ```typescript
- * // init (inside a DurableObject)
- * const sandbox = yield* Cloudflare.Container.bind(Sandbox);
+ * export default class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
  *
- * return Effect.gen(function* () {
- *   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- *
- *   return {
- *     exec: (cmd: string) => container.exec(cmd),
- *     fetch: Effect.gen(function* () {
- *       const { fetch } = yield* container.getTcpPort(3000);
- *       const res = yield* fetch(HttpClientRequest.get("http://container/"));
- *       return HttpServerResponse.fromClientResponse(res);
- *     }),
- *   };
- * });
+ *     return Effect.gen(function* () {
+ *       return {
+ *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         health: () =>
+ *           Effect.gen(function* () {
+ *             const { fetch } = yield* sandbox.getTcpPort(3000);
+ *             const res = yield* fetch(
+ *               HttpClientRequest.get("http://container/health"),
+ *             );
+ *             return yield* res.text;
+ *           }),
+ *       };
+ *     });
+ *   }).pipe(
+ *     Effect.provide(
+ *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
+ *     ),
+ *   ),
+ * ) {}
  * ```
  *
  * @section Dynamic Workers

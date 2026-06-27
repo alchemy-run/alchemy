@@ -15,7 +15,7 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  * @section Writing Objects
  * @example Put an Object
  * ```typescript
- * const putObject = yield* PutObject.bind(bucket);
+ * const putObject = yield* PutObject(bucket);
  *
  * yield* putObject({
  *   Key: "hello.txt",
