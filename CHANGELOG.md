@@ -1,3 +1,24 @@
+## v2.0.0-beta.59
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **bindings**: Remove Binding.Policy and align all bindings to a single convention &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/690 [<samp>(35b04)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/35b04361)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**: Export ALCHEMY_DEV config and fix ALCHEMY_PHASE docs &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/684 [<samp>(5c606)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5c60600f)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - **worker**: Tolerate legacy custom-domain state in Worker diff &nbsp;-&nbsp; by **Nicolas Fléron** in https://github.com/alchemy-run/alchemy-effect/issues/546 and https://github.com/alchemy-run/alchemy-effect/issues/694 [<samp>(f17fa)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f17fab02)
+- **engine**:
+  - Honor deleteFirst on replace &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/692 [<samp>(ef6f8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ef6f8e4d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.58...HEAD)
+
+---
+
 ## v2.0.0-beta.58
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
