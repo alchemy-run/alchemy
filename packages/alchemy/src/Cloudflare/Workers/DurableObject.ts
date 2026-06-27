@@ -521,7 +521,7 @@ export class DurableObjectScope extends Context.Service<
  * @section WebSocket Hibernation
  * Durable Objects support WebSocket hibernation — the runtime can
  * evict the object from memory while keeping connections open. Use
- * `Cloudflare.WebSocket.upgradeConnection()` to accept a connection, and return
+ * `Cloudflare.upgrade()` to accept a connection, and return
  * `webSocketMessage` / `webSocketClose` handlers to process events
  * when the object wakes back up.
  *
@@ -529,7 +529,7 @@ export class DurableObjectScope extends Context.Service<
  * ```typescript
  * return {
  *   fetch: Effect.gen(function* () {
- *     const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+ *     const [response, socket] = yield* Cloudflare.upgrade();
  *     socket.serializeAttachment({ id: crypto.randomUUID() });
  *     return response;
  *   }),
@@ -540,7 +540,7 @@ export class DurableObjectScope extends Context.Service<
  * ```typescript
  * return {
  *   webSocketMessage: Effect.fn(function* (
- *     socket: Cloudflare.WebSocket.WebSocket,
+ *     socket: Cloudflare.WebSocket,
  *     message: string | Uint8Array,
  *   ) {
  *     const text = typeof message === "string"
@@ -549,7 +549,7 @@ export class DurableObjectScope extends Context.Service<
  *     // process the message
  *   }),
  *   webSocketClose: Effect.fn(function* (
- *     ws: Cloudflare.WebSocket.WebSocket,
+ *     ws: Cloudflare.WebSocket,
  *     code: number,
  *     reason: string,
  *   ) {
@@ -570,7 +570,7 @@ export class DurableObjectScope extends Context.Service<
  *   const state = yield* Cloudflare.DurableObjectState;
  *
  *   return Effect.gen(function* () {
- *     const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
+ *     const sessions = new Map<string, Cloudflare.WebSocket>();
  *
  *     // Rehydrate the in-memory session map after hibernation.
  *     for (const socket of yield* state.getWebSockets()) {
@@ -580,7 +580,7 @@ export class DurableObjectScope extends Context.Service<
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+ *         const [response, socket] = yield* Cloudflare.upgrade();
  *         const id = crypto.randomUUID();
  *         socket.serializeAttachment({ id });
  *         sessions.set(id, socket);

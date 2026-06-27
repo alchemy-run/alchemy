@@ -32,7 +32,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
     return Effect.gen(function* () {
       return {
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+          const [response, socket] = yield* Cloudflare.upgrade();
           return response;
         }),
       };
@@ -41,7 +41,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
 ) {}
 ```
 
-`Cloudflare.WebSocket.upgradeConnection()` does two things in one call: it builds a
+`Cloudflare.upgrade()` does two things in one call: it builds a
 `101 Switching Protocols` response with the right headers, and it
 hands you a `Socket` you can `send` / `close` /
 `serializeAttachment` on. Returning the response from `fetch` is
@@ -65,11 +65,11 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
   "Rooms",
   Effect.gen(function* () {
     return Effect.gen(function* () {
-+      const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
++      const sessions = new Map<string, Cloudflare.WebSocket>();
 
       return {
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+          const [response, socket] = yield* Cloudflare.upgrade();
 +          const id = crypto.randomUUID();
 +          socket.serializeAttachment({ id });
 +          sessions.set(id, socket);
@@ -97,14 +97,14 @@ to everyone in the room:
 ```diff lang="typescript"
 return {
   fetch: Effect.gen(function* () {
-    const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+    const [response, socket] = yield* Cloudflare.upgrade();
     const id = crypto.randomUUID();
     socket.serializeAttachment({ id });
     sessions.set(id, socket);
     return response;
   }),
 +  webSocketMessage: Effect.fn(function* (
-+    socket: Cloudflare.WebSocket.WebSocket,
++    socket: Cloudflare.WebSocket,
 +    message: string | ArrayBuffer,
 +  ) {
 +     const attachment = socket.deserializeAttachment<{ id: string }>();
@@ -136,7 +136,7 @@ return {
   fetch: /* ... */,
   webSocketMessage: /* ... */,
 +  webSocketClose: Effect.fn(function* (
-+    ws: Cloudflare.WebSocket.WebSocket,
++    ws: Cloudflare.WebSocket,
 +    code: number,
 +    reason: string,
 +  ) {
@@ -163,7 +163,7 @@ every attached socket back from the runtime:
 Effect.gen(function* () {
 +  const state = yield* Cloudflare.DurableObjectState;
   return Effect.gen(function* () {
-    const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
+    const sessions = new Map<string, Cloudflare.WebSocket>();
 
 +    for (const socket of yield* state.getWebSockets()) {
 +      const data = socket.deserializeAttachment<{ id: string }>();
@@ -203,7 +203,7 @@ reminders below:
 Effect.gen(function* () {
   const state = yield* Cloudflare.DurableObjectState;
   return Effect.gen(function* () {
-    const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
+    const sessions = new Map<string, Cloudflare.WebSocket>();
 
     for (const socket of yield* state.getWebSockets()) {
       const data = socket.deserializeAttachment<{ id: string }>();

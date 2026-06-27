@@ -26,7 +26,7 @@ export const fromWebSocket = (ws: RawWebSocket): WebSocket => ({
 //   const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];
 // }
 
-export const upgradeConnection = Effect.fn(function* () {
+export const upgrade = Effect.fn(function* () {
   const _Response = Response as any as typeof cf.Response;
   const ctx = yield* DurableObjectState;
   // @ts-expect-error

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
+import { useEffect, useRef, useState } from "react";
 import { highlightTS } from "../marketing/highlightTS";
 
 /**
@@ -69,11 +69,11 @@ const DO_CODE = `export default class Room extends Cloudflare.DurableObject<Room
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
+      const sessions = new Map<string, Cloudflare.WebSocket>();
 
       return {
         fetch: Effect.gen(function* () {
-          const [response, socket] = yield* Cloudflare.WebSocket.upgradeConnection();
+          const [response, socket] = yield* Cloudflare.upgrade();
           sessions.set(crypto.randomUUID(), socket);
           return response;
         }),

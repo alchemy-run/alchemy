@@ -972,7 +972,7 @@ Rules of thumb:
 - If you find yourself writing "Two/three things just happened", "A few things are happening here", or a numbered/bulleted list explaining separate parts of a single snippet — **split the snippet**.
 - One concept ⇒ one heading ⇒ one diff snippet ⇒ one explanation paragraph (no bullets).
 - Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
-- A single API call that internally does several things (e.g. `Cloudflare.upgradeConnection()`) doesn't need splitting — describe its behavior in prose.
+- A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
 - Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
 
 # Pull Request Conventions
