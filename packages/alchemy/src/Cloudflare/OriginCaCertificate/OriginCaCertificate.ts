@@ -11,9 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { findZoneByName, listAllZones } from "../Zone/lookup.ts";
 
-const OriginCaCertificateTypeId =
-  "Cloudflare.OriginCaCertificate.OriginCaCertificate" as const;
-type OriginCaCertificateTypeId = typeof OriginCaCertificateTypeId;
+const TypeId = "Cloudflare.OriginCaCertificate.OriginCaCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Signature type requested on the certificate: `origin-rsa` (RSA),
@@ -91,7 +90,7 @@ export interface Attributes {
 }
 
 export type OriginCaCertificate = Resource<
-  OriginCaCertificateTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -146,9 +145,7 @@ export type OriginCaCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/
  */
-export const OriginCaCertificate = Resource<OriginCaCertificate>(
-  OriginCaCertificateTypeId,
-);
+export const OriginCaCertificate = Resource<OriginCaCertificate>(TypeId);
 
 /**
  * Returns true if the given value is an OriginCaCertificate resource.
@@ -156,8 +153,7 @@ export const OriginCaCertificate = Resource<OriginCaCertificate>(
 export const isOriginCaCertificate = (
   value: unknown,
 ): value is OriginCaCertificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginCaCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OriginCaCertificateProvider = () =>
   Provider.succeed(OriginCaCertificate, {

@@ -53,7 +53,7 @@ test.provider(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
-        Cloudflare.Dns.ZoneTransferAcl("TestAcl", {
+        Cloudflare.DNS.ZoneTransferAcl("TestAcl", {
           name: "alchemy-dnszt-acl-test",
           // Cloudflare normalizes the range to its network address —
           // use one that is already normalized for stable diffs.
@@ -72,7 +72,7 @@ test.provider(
 
       // Update both mutable fields in place — same physical ACL.
       const updated = yield* stack.deploy(
-        Cloudflare.Dns.ZoneTransferAcl("TestAcl", {
+        Cloudflare.DNS.ZoneTransferAcl("TestAcl", {
           name: "alchemy-dnszt-acl-test-renamed",
           ipRange: "198.51.100.0/28",
         }),
@@ -103,7 +103,7 @@ test.provider(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
-        Cloudflare.Dns.ZoneTransferAcl("DefaultNameAcl", {
+        Cloudflare.DNS.ZoneTransferAcl("DefaultNameAcl", {
           ipRange: "203.0.113.0/28",
         }),
       );
@@ -124,14 +124,14 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.Dns.ZoneTransferAcl("ListAcl", {
+        Cloudflare.DNS.ZoneTransferAcl("ListAcl", {
           name: "alchemy-dnszt-acl-list",
           ipRange: "192.0.2.64/28",
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Dns.ZoneTransferAcl,
+        Cloudflare.DNS.ZoneTransferAcl,
       );
       const all = yield* provider.list();
 

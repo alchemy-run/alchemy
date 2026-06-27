@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const WaitingRoomTypeId = "Cloudflare.WaitingRoom.WaitingRoom" as const;
-type WaitingRoomTypeId = typeof WaitingRoomTypeId;
+const TypeId = "Cloudflare.WaitingRoom.WaitingRoom" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Queueing method used by a waiting room. Changing this from the default
@@ -228,13 +228,7 @@ export interface Attributes {
   modifiedOn: string | undefined;
 }
 
-export type WaitingRoom = Resource<
-  WaitingRoomTypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare Waiting Room — places visitors in a virtual queue when
@@ -296,13 +290,13 @@ export type WaitingRoom = Resource<
  *
  * @see https://developers.cloudflare.com/waiting-room/
  */
-export const WaitingRoom = Resource<WaitingRoom>(WaitingRoomTypeId);
+export const WaitingRoom = Resource<WaitingRoom>(TypeId);
 
 /**
  * Returns true if the given value is a WaitingRoom resource.
  */
 export const isWaitingRoom = (value: unknown): value is WaitingRoom =>
-  Predicate.hasProperty(value, "Type") && value.Type === WaitingRoomTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const WaitingRoomProvider = () =>
   Provider.succeed(WaitingRoom, {

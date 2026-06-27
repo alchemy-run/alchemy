@@ -8,9 +8,9 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LeakedCredentialCheckTypeId =
+const TypeId =
   "Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck" as const;
-type LeakedCredentialCheckTypeId = typeof LeakedCredentialCheckTypeId;
+type TypeId = typeof TypeId;
 
 export interface Props {
   /**
@@ -41,7 +41,7 @@ export interface Attributes {
 }
 
 export type LeakedCredentialCheck = Resource<
-  LeakedCredentialCheckTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -91,9 +91,7 @@ export type LeakedCredentialCheck = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/leaked-credentials/
  */
-export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(
-  LeakedCredentialCheckTypeId,
-);
+export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(TypeId);
 
 /**
  * Returns true if the given value is a LeakedCredentialCheck resource.
@@ -101,8 +99,7 @@ export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(
 export const isLeakedCredentialCheck = (
   value: unknown,
 ): value is LeakedCredentialCheck =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LeakedCredentialCheckTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const desiredEnabled = (props: Props): boolean => props.enabled ?? true;
 

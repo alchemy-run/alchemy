@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import type * as cf from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

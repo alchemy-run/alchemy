@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RealtimeKitWebhookTypeId = "Cloudflare.RealtimeKit.Webhook" as const;
-type RealtimeKitWebhookTypeId = typeof RealtimeKitWebhookTypeId;
+const TypeId = "Cloudflare.RealtimeKit.Webhook" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Event that can trigger a RealtimeKit webhook.
@@ -93,7 +93,7 @@ export type WebhookAttributes = {
 };
 
 export type Webhook = Resource<
-  RealtimeKitWebhookTypeId,
+  TypeId,
   WebhookProps,
   WebhookAttributes,
   never,
@@ -143,14 +143,13 @@ export type Webhook = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/realtimekit/
  */
-export const Webhook = Resource<Webhook>(RealtimeKitWebhookTypeId);
+export const Webhook = Resource<Webhook>(TypeId);
 
 /**
  * Returns true if the given value is a Webhook resource.
  */
 export const isWebhook = (value: unknown): value is Webhook =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RealtimeKitWebhookTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const WebhookProvider = () =>
   Provider.succeed(Webhook, {

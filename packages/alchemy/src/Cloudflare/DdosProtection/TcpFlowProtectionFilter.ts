@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TcpFlowProtectionFilterTypeId =
-  "Cloudflare.DdosProtection.TcpFlowProtectionFilter" as const;
-type TcpFlowProtectionFilterTypeId = typeof TcpFlowProtectionFilterTypeId;
+const TypeId = "Cloudflare.DdosProtection.TcpFlowProtectionFilter" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Operating mode of an Advanced TCP Protection filter: the filter applies
@@ -49,7 +48,7 @@ export interface TcpFlowProtectionFilterAttributes {
 }
 
 export type TcpFlowProtectionFilter = Resource<
-  TcpFlowProtectionFilterTypeId,
+  TypeId,
   TcpFlowProtectionFilterProps,
   TcpFlowProtectionFilterAttributes,
   never,
@@ -94,9 +93,8 @@ export type TcpFlowProtectionFilter = Resource<
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
  */
-export const TcpFlowProtectionFilter = Resource<TcpFlowProtectionFilter>(
-  TcpFlowProtectionFilterTypeId,
-);
+export const TcpFlowProtectionFilter =
+  Resource<TcpFlowProtectionFilter>(TypeId);
 
 /**
  * Returns true if the given value is a TcpFlowProtectionFilter resource.
@@ -104,8 +102,7 @@ export const TcpFlowProtectionFilter = Resource<TcpFlowProtectionFilter>(
 export const isTcpFlowProtectionFilter = (
   value: unknown,
 ): value is TcpFlowProtectionFilter =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TcpFlowProtectionFilterTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TcpFlowProtectionFilterProvider = () =>
   Provider.succeed(TcpFlowProtectionFilter, {

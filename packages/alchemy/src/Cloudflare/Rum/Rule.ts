@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RumRuleTypeId = "Cloudflare.Rum.Rule" as const;
-type RumRuleTypeId = typeof RumRuleTypeId;
+const TypeId = "Cloudflare.Rum.Rule" as const;
+type TypeId = typeof TypeId;
 
 export type RuleProps = {
   /**
@@ -85,7 +85,7 @@ export type RuleAttributes = {
 };
 
 export type Rule = Resource<
-  RumRuleTypeId,
+  TypeId,
   RuleProps,
   RuleAttributes,
   never,
@@ -137,13 +137,13 @@ export type Rule = Resource<
  *
  * @see https://developers.cloudflare.com/web-analytics/
  */
-export const Rule = Resource<Rule>(RumRuleTypeId);
+export const Rule = Resource<Rule>(TypeId);
 
 /**
  * Returns true if the given value is a Rule resource.
  */
 export const isRule = (value: unknown): value is Rule =>
-  Predicate.hasProperty(value, "Type") && value.Type === RumRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const RuleProvider = () =>
   Provider.succeed(Rule, {

@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DevicePostureRuleTypeId = "Cloudflare.Devices.PostureRule" as const;
-type DevicePostureRuleTypeId = typeof DevicePostureRuleTypeId;
+const TypeId = "Cloudflare.Devices.PostureRule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The type of device posture rule, e.g. `os_version`, `firewall`,
@@ -101,7 +101,7 @@ export type DevicePostureRuleAttributes = {
 };
 
 export type DevicePostureRule = Resource<
-  DevicePostureRuleTypeId,
+  TypeId,
   DevicePostureRuleProps,
   DevicePostureRuleAttributes,
   never,
@@ -156,9 +156,7 @@ export type DevicePostureRule = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/devices/
  */
-export const DevicePostureRule = Resource<DevicePostureRule>(
-  DevicePostureRuleTypeId,
-);
+export const DevicePostureRule = Resource<DevicePostureRule>(TypeId);
 
 /**
  * Returns true if the given value is a DevicePostureRule resource.
@@ -166,8 +164,7 @@ export const DevicePostureRule = Resource<DevicePostureRule>(
 export const isDevicePostureRule = (
   value: unknown,
 ): value is DevicePostureRule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DevicePostureRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DevicePostureRuleProvider = () =>
   Provider.succeed(DevicePostureRule, {

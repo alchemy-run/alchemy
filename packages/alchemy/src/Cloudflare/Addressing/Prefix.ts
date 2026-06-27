@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AddressingPrefixTypeId = "Cloudflare.Addressing.Prefix" as const;
-type AddressingPrefixTypeId = typeof AddressingPrefixTypeId;
+const TypeId = "Cloudflare.Addressing.Prefix" as const;
+type TypeId = typeof TypeId;
 
 export interface PrefixProps {
   /**
@@ -71,7 +71,7 @@ export interface PrefixAttributes {
 }
 
 export type Prefix = Resource<
-  AddressingPrefixTypeId,
+  TypeId,
   PrefixProps,
   PrefixAttributes,
   never,
@@ -123,13 +123,13 @@ export type Prefix = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/
  */
-export const Prefix = Resource<Prefix>(AddressingPrefixTypeId);
+export const Prefix = Resource<Prefix>(TypeId);
 
 /**
  * Returns true if the given value is an Prefix resource.
  */
 export const isPrefix = (value: unknown): value is Prefix =>
-  Predicate.hasProperty(value, "Type") && value.Type === AddressingPrefixTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const PrefixProvider = () =>
   Provider.succeed(Prefix, {

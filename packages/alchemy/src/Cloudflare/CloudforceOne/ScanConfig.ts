@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ScanConfigTypeId = "Cloudflare.CloudforceOne.ScanConfig" as const;
-type ScanConfigTypeId = typeof ScanConfigTypeId;
+const TypeId = "Cloudflare.CloudforceOne.ScanConfig" as const;
+type TypeId = typeof TypeId;
 
 export type ScanConfigProps = {
   /**
@@ -55,7 +55,7 @@ export type ScanConfigAttributes = {
 };
 
 export type ScanConfig = Resource<
-  ScanConfigTypeId,
+  TypeId,
   ScanConfigProps,
   ScanConfigAttributes,
   never,
@@ -107,13 +107,13 @@ export type ScanConfig = Resource<
  *
  * @see https://developers.cloudflare.com/security-center/intel-apis/attack-surface-scans/
  */
-export const ScanConfig = Resource<ScanConfig>(ScanConfigTypeId);
+export const ScanConfig = Resource<ScanConfig>(TypeId);
 
 /**
  * Returns true if the given value is a ScanConfig resource.
  */
 export const isScanConfig = (value: unknown): value is ScanConfig =>
-  Predicate.hasProperty(value, "Type") && value.Type === ScanConfigTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ScanConfigProvider = () =>
   Provider.succeed(ScanConfig, {

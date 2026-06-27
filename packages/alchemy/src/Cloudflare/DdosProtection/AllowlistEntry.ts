@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DdosAllowlistEntryTypeId =
-  "Cloudflare.DdosProtection.AllowlistEntry" as const;
-type DdosAllowlistEntryTypeId = typeof DdosAllowlistEntryTypeId;
+const TypeId = "Cloudflare.DdosProtection.AllowlistEntry" as const;
+type TypeId = typeof TypeId;
 
 export interface DdosAllowlistEntryProps {
   /**
@@ -56,7 +55,7 @@ export interface DdosAllowlistEntryAttributes {
 }
 
 export type DdosAllowlistEntry = Resource<
-  DdosAllowlistEntryTypeId,
+  TypeId,
   DdosAllowlistEntryProps,
   DdosAllowlistEntryAttributes,
   never,
@@ -103,9 +102,7 @@ export type DdosAllowlistEntry = Resource<
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
  */
-export const DdosAllowlistEntry = Resource<DdosAllowlistEntry>(
-  DdosAllowlistEntryTypeId,
-);
+export const DdosAllowlistEntry = Resource<DdosAllowlistEntry>(TypeId);
 
 /**
  * Returns true if the given value is a DdosAllowlistEntry resource.
@@ -113,8 +110,7 @@ export const DdosAllowlistEntry = Resource<DdosAllowlistEntry>(
 export const isDdosAllowlistEntry = (
   value: unknown,
 ): value is DdosAllowlistEntry =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DdosAllowlistEntryTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DdosAllowlistEntryProvider = () =>
   Provider.succeed(DdosAllowlistEntry, {

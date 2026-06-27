@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const OnRampTypeId = "Cloudflare.MagicCloudNetworking.OnRamp" as const;
-type OnRampTypeId = typeof OnRampTypeId;
+const TypeId = "Cloudflare.MagicCloudNetworking.OnRamp" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud provider an on-ramp connects to Magic WAN.
@@ -167,7 +167,7 @@ export interface OnRampAttributes {
 }
 
 export type OnRamp = Resource<
-  OnRampTypeId,
+  TypeId,
   OnRampProps,
   OnRampAttributes,
   never,
@@ -241,13 +241,13 @@ export type OnRamp = Resource<
  *
  * @see https://developers.cloudflare.com/magic-cloud-networking/
  */
-export const OnRamp = Resource<OnRamp>(OnRampTypeId);
+export const OnRamp = Resource<OnRamp>(TypeId);
 
 /**
  * Returns true if the given value is an OnRamp resource.
  */
 export const isOnRamp = (value: unknown): value is OnRamp =>
-  Predicate.hasProperty(value, "Type") && value.Type === OnRampTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OnRampProvider = () =>
   Provider.succeed(OnRamp, {

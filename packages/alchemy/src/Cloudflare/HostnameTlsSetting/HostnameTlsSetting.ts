@@ -11,9 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const HostnameTlsSettingTypeId =
-  "Cloudflare.HostnameTlsSetting.HostnameTlsSetting" as const;
-type HostnameTlsSettingTypeId = typeof HostnameTlsSettingTypeId;
+const TypeId = "Cloudflare.HostnameTlsSetting.HostnameTlsSetting" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Which per-hostname TLS setting to override:
@@ -88,7 +87,7 @@ export interface Attributes {
 }
 
 export type HostnameTlsSetting = Resource<
-  HostnameTlsSettingTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -151,9 +150,7 @@ export type HostnameTlsSetting = Resource<
  * @see https://developers.cloudflare.com/ssl/edge-certificates/additional-options/custom-metadata/
  * @see https://developers.cloudflare.com/api/resources/hostnames/subresources/settings/subresources/tls/
  */
-export const HostnameTlsSetting = Resource<HostnameTlsSetting>(
-  HostnameTlsSettingTypeId,
-);
+export const HostnameTlsSetting = Resource<HostnameTlsSetting>(TypeId);
 
 /**
  * Returns true if the given value is a HostnameTlsSetting resource.
@@ -161,8 +158,7 @@ export const HostnameTlsSetting = Resource<HostnameTlsSetting>(
 export const isHostnameTlsSetting = (
   value: unknown,
 ): value is HostnameTlsSetting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === HostnameTlsSettingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameTlsSettingProvider = () =>
   Provider.succeed(HostnameTlsSetting, {

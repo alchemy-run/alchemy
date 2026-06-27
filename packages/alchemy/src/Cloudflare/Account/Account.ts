@@ -9,15 +9,15 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccountTypeId = "Cloudflare.Account.Account" as const;
-type AccountTypeId = typeof AccountTypeId;
+const TypeId = "Cloudflare.Account.Account" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of Cloudflare account. Cannot be changed after creation.
  */
-export type Type = "standard" | "enterprise";
+export type AccountType = "standard" | "enterprise";
 
-export interface Props {
+export interface AccountProps {
   /**
    * Account name (display name). Mutable in place. If omitted, a unique
    * name is generated from the app, stage, and logical ID.
@@ -30,7 +30,7 @@ export interface Props {
    * updating this property triggers a replacement.
    * @default "standard"
    */
-  type?: Type;
+  type?: AccountType;
   /**
    * Tenant unit to create the account under. Only meaningful for tenant /
    * partner credentials; defaults to the tenant's root unit. Create-only —
@@ -59,7 +59,7 @@ export interface Props {
   enforceTwofactor?: boolean;
 }
 
-export interface Attributes {
+export interface AccountAttributes {
   /**
    * Account identifier tag assigned by Cloudflare.
    */
@@ -71,7 +71,7 @@ export interface Attributes {
   /**
    * The kind of account.
    */
-  type: Type;
+  type: AccountType;
   /**
    * Timestamp for the creation of the account.
    */
@@ -95,9 +95,9 @@ export interface Attributes {
 }
 
 export type Account = Resource<
-  AccountTypeId,
-  Props,
-  Attributes,
+  TypeId,
+  AccountProps,
+  AccountAttributes,
   never,
   Providers
 >;
@@ -145,13 +145,13 @@ export type Account = Resource<
  *
  * @see https://developers.cloudflare.com/tenant/how-to/manage-accounts/
  */
-export const Account = Resource<Account>(AccountTypeId);
+export const Account = Resource<Account>(TypeId);
 
 /**
  * Returns true if the given value is an Account resource.
  */
 export const isAccount = (value: unknown): value is Account =>
-  Predicate.hasProperty(value, "Type") && value.Type === AccountTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountProvider = () =>
   Provider.succeed(Account, {
@@ -258,10 +258,6 @@ export const AccountProvider = () =>
     }),
   });
 
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
-
 type ObservedAccount =
   | accounts.GetAccountResponse
   | accounts.CreateAccountResponse
@@ -279,11 +275,11 @@ const getAccount = (accountId: string) =>
     Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
   );
 
-const toAttributes = (account: ObservedAccount): Attributes => ({
+const toAttributes = (account: ObservedAccount): AccountAttributes => ({
   accountId: account.id,
   name: account.name,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  type: account.type as Type,
+  type: account.type as AccountType,
   createdOn: account.createdOn ?? undefined,
   parentOrgId: account.managedBy?.parentOrgId ?? undefined,
   parentOrgName: account.managedBy?.parentOrgName ?? undefined,

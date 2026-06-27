@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LoadBalancerPoolTypeId = "Cloudflare.LoadBalancer.Pool" as const;
-type LoadBalancerPoolTypeId = typeof LoadBalancerPoolTypeId;
+const TypeId = "Cloudflare.LoadBalancer.Pool" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A single origin server within a Load Balancing pool.
@@ -173,7 +173,7 @@ export interface PoolAttributes {
 }
 
 export type Pool = Resource<
-  LoadBalancerPoolTypeId,
+  TypeId,
   PoolProps,
   PoolAttributes,
   never,
@@ -229,19 +229,19 @@ export type Pool = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/pools/
  */
-export const Pool = Resource<Pool>(LoadBalancerPoolTypeId);
+export const Pool = Resource<Pool>(TypeId);
 
 /**
  * Returns true if the given value is a Pool resource.
  */
 export const isPool = (value: unknown): value is Pool =>
-  Predicate.hasProperty(value, "Type") && value.Type === LoadBalancerPoolTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const PoolProvider = () =>
   Provider.succeed(Pool, {
     stables: ["poolId", "accountId", "createdOn"],
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;

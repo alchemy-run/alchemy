@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DeviceDexTestTypeId = "Cloudflare.Devices.DexTest" as const;
-type DeviceDexTestTypeId = typeof DeviceDexTestTypeId;
+const TypeId = "Cloudflare.Devices.DexTest" as const;
+type TypeId = typeof TypeId;
 
 /**
  * What the WARP client probes when the test runs.
@@ -92,7 +92,7 @@ export type DeviceDexTestAttributes = {
 };
 
 export type DeviceDexTest = Resource<
-  DeviceDexTestTypeId,
+  TypeId,
   DeviceDexTestProps,
   DeviceDexTestAttributes,
   never,
@@ -132,13 +132,13 @@ export type DeviceDexTest = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/dex/tests/
  */
-export const DeviceDexTest = Resource<DeviceDexTest>(DeviceDexTestTypeId);
+export const DeviceDexTest = Resource<DeviceDexTest>(TypeId);
 
 /**
  * Returns true if the given value is a DeviceDexTest resource.
  */
 export const isDeviceDexTest = (value: unknown): value is DeviceDexTest =>
-  Predicate.hasProperty(value, "Type") && value.Type === DeviceDexTestTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DeviceDexTestProvider = () =>
   Provider.succeed(DeviceDexTest, {

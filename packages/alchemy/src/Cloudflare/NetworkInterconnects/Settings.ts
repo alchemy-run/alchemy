@@ -7,10 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const NetworkInterconnectSettingsTypeId =
-  "Cloudflare.NetworkInterconnects.Settings" as const;
-type NetworkInterconnectSettingsTypeId =
-  typeof NetworkInterconnectSettingsTypeId;
+const TypeId = "Cloudflare.NetworkInterconnects.Settings" as const;
+type TypeId = typeof TypeId;
 
 export interface NetworkInterconnectSettingsProps {
   /**
@@ -37,7 +35,7 @@ export interface NetworkInterconnectSettingsAttributes {
 }
 
 export type NetworkInterconnectSettings = Resource<
-  NetworkInterconnectSettingsTypeId,
+  TypeId,
   NetworkInterconnectSettingsProps,
   NetworkInterconnectSettingsAttributes,
   never,
@@ -78,7 +76,7 @@ export type NetworkInterconnectSettings = Resource<
  * @see https://developers.cloudflare.com/network-interconnect/
  */
 export const NetworkInterconnectSettings =
-  Resource<NetworkInterconnectSettings>(NetworkInterconnectSettingsTypeId);
+  Resource<NetworkInterconnectSettings>(TypeId);
 
 /**
  * Returns true if the given value is a NetworkInterconnectSettings resource.
@@ -86,8 +84,7 @@ export const NetworkInterconnectSettings =
 export const isNetworkInterconnectSettings = (
   value: unknown,
 ): value is NetworkInterconnectSettings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === NetworkInterconnectSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NetworkInterconnectSettingsProvider = () =>
   Provider.succeed(NetworkInterconnectSettings, {

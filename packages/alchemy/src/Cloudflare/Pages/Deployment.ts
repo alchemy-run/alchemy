@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const PagesDeploymentTypeId = "Cloudflare.Pages.Deployment" as const;
-type PagesDeploymentTypeId = typeof PagesDeploymentTypeId;
+const TypeId = "Cloudflare.Pages.Deployment" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Raised when a Pages deployment reaches a `failure`/`canceled` stage, or
@@ -88,7 +88,7 @@ export interface DeploymentAttributes {
 }
 
 export type Deployment = Resource<
-  PagesDeploymentTypeId,
+  TypeId,
   DeploymentProps,
   DeploymentAttributes,
   never,
@@ -142,13 +142,13 @@ export type Deployment = Resource<
  *
  * @see https://developers.cloudflare.com/pages/
  */
-export const Deployment = Resource<Deployment>(PagesDeploymentTypeId);
+export const Deployment = Resource<Deployment>(TypeId);
 
 /**
  * Returns true if the given value is a Deployment resource.
  */
 export const isDeployment = (value: unknown): value is Deployment =>
-  Predicate.hasProperty(value, "Type") && value.Type === PagesDeploymentTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DeploymentProvider = () =>
   Provider.succeed(Deployment, {

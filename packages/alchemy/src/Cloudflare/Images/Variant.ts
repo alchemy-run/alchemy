@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ImagesVariantTypeId = "Cloudflare.Images.Variant" as const;
-type ImagesVariantTypeId = typeof ImagesVariantTypeId;
+const TypeId = "Cloudflare.Images.Variant" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How an image is resized to fit a variant's `width`x`height` box.
@@ -84,7 +84,7 @@ export interface VariantAttributes {
 }
 
 export type Variant = Resource<
-  ImagesVariantTypeId,
+  TypeId,
   VariantProps,
   VariantAttributes,
   never,
@@ -144,13 +144,13 @@ export type Variant = Resource<
  *
  * @see https://developers.cloudflare.com/images/manage-images/create-variants/
  */
-export const Variant = Resource<Variant>(ImagesVariantTypeId);
+export const Variant = Resource<Variant>(TypeId);
 
 /**
  * Returns true if the given value is an Variant resource.
  */
 export const isVariant = (value: unknown): value is Variant =>
-  Predicate.hasProperty(value, "Type") && value.Type === ImagesVariantTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const VariantProvider = () =>
   Provider.succeed(Variant, {

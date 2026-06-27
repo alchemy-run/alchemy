@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamLiveInputOutputTypeId =
-  "Cloudflare.Stream.LiveInputOutput" as const;
-type StreamLiveInputOutputTypeId = typeof StreamLiveInputOutputTypeId;
+const TypeId = "Cloudflare.Stream.LiveInputOutput" as const;
+type TypeId = typeof TypeId;
 
 export type LiveInputOutputProps = {
   /**
@@ -77,7 +76,7 @@ export type LiveInputOutputAttributes = {
 };
 
 export type LiveInputOutput = Resource<
-  StreamLiveInputOutputTypeId,
+  TypeId,
   LiveInputOutputProps,
   LiveInputOutputAttributes,
   never,
@@ -122,16 +121,13 @@ export type LiveInputOutput = Resource<
  *
  * @see https://developers.cloudflare.com/stream/stream-live/simulcasting/
  */
-export const LiveInputOutput = Resource<LiveInputOutput>(
-  StreamLiveInputOutputTypeId,
-);
+export const LiveInputOutput = Resource<LiveInputOutput>(TypeId);
 
 /**
  * Returns true if the given value is a LiveInputOutput resource.
  */
 export const isLiveInputOutput = (value: unknown): value is LiveInputOutput =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === StreamLiveInputOutputTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LiveInputOutputProvider = () =>
   Provider.succeed(LiveInputOutput, {

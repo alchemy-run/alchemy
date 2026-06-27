@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayCertificateTypeId = "Cloudflare.Gateway.Certificate" as const;
-type GatewayCertificateTypeId = typeof GatewayCertificateTypeId;
+const TypeId = "Cloudflare.Gateway.Certificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Deployment status of the certificate on Cloudflare's edge. Gateway TLS
@@ -73,7 +73,7 @@ export interface CertificateAttributes {
 }
 
 export type Certificate = Resource<
-  GatewayCertificateTypeId,
+  TypeId,
   CertificateProps,
   CertificateAttributes,
   never,
@@ -122,14 +122,13 @@ export type Certificate = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/user-side-certificates/
  */
-export const Certificate = Resource<Certificate>(GatewayCertificateTypeId);
+export const Certificate = Resource<Certificate>(TypeId);
 
 /**
  * Returns true if the given value is a Certificate resource.
  */
 export const isCertificate = (value: unknown): value is Certificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === GatewayCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CertificateProvider = () =>
   Provider.succeed(Certificate, {

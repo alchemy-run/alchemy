@@ -8,10 +8,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
-const OriginTlsClientAuthHostnameAssociationTypeId =
-  "Cloudflare.OriginTlsClientAuth.HostnameAssociation" as const;
-type OriginTlsClientAuthHostnameAssociationTypeId =
-  typeof OriginTlsClientAuthHostnameAssociationTypeId;
+const TypeId = "Cloudflare.OriginTlsClientAuth.HostnameAssociation" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Deployment status of the association or its pinned certificate. Changes
@@ -74,7 +72,7 @@ export type HostnameAssociationAttributes = {
 };
 
 export type HostnameAssociation = Resource<
-  OriginTlsClientAuthHostnameAssociationTypeId,
+  TypeId,
   HostnameAssociationProps,
   HostnameAssociationAttributes,
   never,
@@ -124,9 +122,7 @@ export type HostnameAssociation = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/set-up/per-hostname/
  */
-export const HostnameAssociation = Resource<HostnameAssociation>(
-  OriginTlsClientAuthHostnameAssociationTypeId,
-);
+export const HostnameAssociation = Resource<HostnameAssociation>(TypeId);
 
 /**
  * Returns true if the given value is an HostnameAssociation
@@ -135,8 +131,7 @@ export const HostnameAssociation = Resource<HostnameAssociation>(
 export const isHostnameAssociation = (
   value: unknown,
 ): value is HostnameAssociation =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginTlsClientAuthHostnameAssociationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameAssociationProvider = () =>
   Provider.succeed(HostnameAssociation, {

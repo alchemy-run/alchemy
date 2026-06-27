@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CallsAppTypeId = "Cloudflare.Calls.App" as const;
-type CallsAppTypeId = typeof CallsAppTypeId;
+const TypeId = "Cloudflare.Calls.App" as const;
+type TypeId = typeof TypeId;
 
 export type AppProps = {
   /**
@@ -53,13 +53,7 @@ export type AppAttributes = {
   modified: string;
 };
 
-export type App = Resource<
-  CallsAppTypeId,
-  AppProps,
-  AppAttributes,
-  never,
-  Providers
->;
+export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
 
 /**
  * A Cloudflare Realtime (formerly "Calls") SFU application.
@@ -98,13 +92,13 @@ export type App = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/
  */
-export const App = Resource<App>(CallsAppTypeId);
+export const App = Resource<App>(TypeId);
 
 /**
  * Returns true if the given value is a App resource.
  */
 export const isApp = (value: unknown): value is App =>
-  Predicate.hasProperty(value, "Type") && value.Type === CallsAppTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AppProvider = () =>
   Provider.succeed(App, {

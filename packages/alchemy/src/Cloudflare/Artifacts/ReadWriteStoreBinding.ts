@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
+import { type Store as ArtifactsLike } from "./Store.ts";
 import {
   ArtifactsError,
   ReadStore,

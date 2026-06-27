@@ -12,10 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginTlsClientAuthHostnameCertificateTypeId =
-  "Cloudflare.OriginTlsClientAuth.HostnameCertificate" as const;
-type OriginTlsClientAuthHostnameCertificateTypeId =
-  typeof OriginTlsClientAuthHostnameCertificateTypeId;
+const TypeId = "Cloudflare.OriginTlsClientAuth.HostnameCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Deployment status of the certificate. Deploying and deleting are
@@ -73,7 +71,7 @@ export type HostnameCertificateAttributes = {
 };
 
 export type HostnameCertificate = Resource<
-  OriginTlsClientAuthHostnameCertificateTypeId,
+  TypeId,
   HostnameCertificateProps,
   HostnameCertificateAttributes,
   never,
@@ -125,9 +123,7 @@ export type HostnameCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/set-up/per-hostname/
  */
-export const HostnameCertificate = Resource<HostnameCertificate>(
-  OriginTlsClientAuthHostnameCertificateTypeId,
-);
+export const HostnameCertificate = Resource<HostnameCertificate>(TypeId);
 
 /**
  * Returns true if the given value is an HostnameCertificate
@@ -136,8 +132,7 @@ export const HostnameCertificate = Resource<HostnameCertificate>(
 export const isHostnameCertificate = (
   value: unknown,
 ): value is HostnameCertificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginTlsClientAuthHostnameCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameCertificateProvider = () =>
   Provider.succeed(HostnameCertificate, {

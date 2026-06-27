@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const VectorizeIndexTypeId = "Cloudflare.VectorizeIndex" as const;
-type VectorizeIndexTypeId = typeof VectorizeIndexTypeId;
+const TypeId = "Cloudflare.VectorizeIndex" as const;
+type TypeId = typeof TypeId;
 
 export type DistanceMetric = "cosine" | "euclidean" | "dot-product";
 
@@ -70,7 +70,7 @@ export type IndexAttributes = {
 };
 
 export type Index = Resource<
-  VectorizeIndexTypeId,
+  TypeId,
   IndexProps,
   IndexAttributes,
   never,
@@ -131,13 +131,13 @@ export type Index = Resource<
  *
  * @see https://developers.cloudflare.com/vectorize/
  */
-export const Index = Resource<Index>(VectorizeIndexTypeId);
+export const Index = Resource<Index>(TypeId);
 
 /**
  * Returns true if the given value is a Vectorize Index resource.
  */
 export const isIndex = (value: unknown): value is Index =>
-  Predicate.hasProperty(value, "Type") && value.Type === VectorizeIndexTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IndexProvider = () =>
   Provider.succeed(Index, {

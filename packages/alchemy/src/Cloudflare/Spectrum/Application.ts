@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SpectrumApplicationTypeId = "Cloudflare.Spectrum.Application" as const;
-type SpectrumApplicationTypeId = typeof SpectrumApplicationTypeId;
+const TypeId = "Cloudflare.Spectrum.Application" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How data travels from Cloudflare's edge to the origin. `direct` sends
@@ -193,7 +193,7 @@ export interface ApplicationAttributes {
 }
 
 export type Application = Resource<
-  SpectrumApplicationTypeId,
+  TypeId,
   ApplicationProps,
   ApplicationAttributes,
   never,
@@ -263,14 +263,13 @@ export type Application = Resource<
  *
  * @see https://developers.cloudflare.com/spectrum/
  */
-export const Application = Resource<Application>(SpectrumApplicationTypeId);
+export const Application = Resource<Application>(TypeId);
 
 /**
  * Returns true if the given value is a Application resource.
  */
 export const isApplication = (value: unknown): value is Application =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SpectrumApplicationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ApplicationProvider = () =>
   Provider.succeed(Application, {

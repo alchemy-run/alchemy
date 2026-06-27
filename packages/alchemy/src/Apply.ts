@@ -47,7 +47,7 @@ import {
   StateStoreError,
 } from "./State/index.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
-import { hashInput } from "./Util/hash.ts";
+import { hashInput } from "./Util/sha256.ts";
 
 export type ApplyEffect<
   P extends Plan,

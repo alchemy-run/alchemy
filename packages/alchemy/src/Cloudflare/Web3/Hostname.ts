@@ -10,8 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const Web3HostnameTypeId = "Cloudflare.Web3.Hostname" as const;
-type Web3HostnameTypeId = typeof Web3HostnameTypeId;
+const TypeId = "Cloudflare.Web3.Hostname" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The gateway a Web3 hostname resolves through: an Ethereum gateway, an
@@ -82,7 +82,7 @@ export interface HostnameAttributes {
 }
 
 export type Hostname = Resource<
-  Web3HostnameTypeId,
+  TypeId,
   HostnameProps,
   HostnameAttributes,
   never,
@@ -143,13 +143,13 @@ export type Hostname = Resource<
  *
  * @see https://developers.cloudflare.com/web3/
  */
-export const Hostname = Resource<Hostname>(Web3HostnameTypeId);
+export const Hostname = Resource<Hostname>(TypeId);
 
 /**
  * Returns true if the given value is a Hostname resource.
  */
 export const isHostname = (value: unknown): value is Hostname =>
-  Predicate.hasProperty(value, "Type") && value.Type === Web3HostnameTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameProvider = () =>
   Provider.succeed(Hostname, {

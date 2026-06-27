@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const NotificationPolicyTypeId =
-  "Cloudflare.Alerting.NotificationPolicy" as const;
-type NotificationPolicyTypeId = typeof NotificationPolicyTypeId;
+const TypeId = "Cloudflare.Alerting.NotificationPolicy" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The event that triggers a notification dispatch. The full catalog (and
@@ -100,7 +99,7 @@ export interface NotificationPolicyAttributes {
 }
 
 export type NotificationPolicy = Resource<
-  NotificationPolicyTypeId,
+  TypeId,
   NotificationPolicyProps,
   NotificationPolicyAttributes,
   never,
@@ -163,9 +162,7 @@ export type NotificationPolicy = Resource<
  *
  * @see https://developers.cloudflare.com/notifications/
  */
-export const NotificationPolicy = Resource<NotificationPolicy>(
-  NotificationPolicyTypeId,
-);
+export const NotificationPolicy = Resource<NotificationPolicy>(TypeId);
 
 /**
  * Returns true if the given value is a NotificationPolicy resource.
@@ -173,8 +170,7 @@ export const NotificationPolicy = Resource<NotificationPolicy>(
 export const isNotificationPolicy = (
   value: unknown,
 ): value is NotificationPolicy =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === NotificationPolicyTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NotificationPolicyProvider = () =>
   Provider.succeed(NotificationPolicy, {

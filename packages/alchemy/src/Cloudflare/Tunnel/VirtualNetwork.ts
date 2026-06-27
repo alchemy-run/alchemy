@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TunnelVirtualNetworkTypeId = "Cloudflare.Tunnel.VirtualNetwork" as const;
-type TunnelVirtualNetworkTypeId = typeof TunnelVirtualNetworkTypeId;
+const TypeId = "Cloudflare.Tunnel.VirtualNetwork" as const;
+type TypeId = typeof TypeId;
 
 export interface VirtualNetworkProps {
   /**
@@ -57,7 +57,7 @@ export interface VirtualNetworkAttributes {
 }
 
 export type VirtualNetwork = Resource<
-  TunnelVirtualNetworkTypeId,
+  TypeId,
   VirtualNetworkProps,
   VirtualNetworkAttributes,
   never,
@@ -109,16 +109,13 @@ export type VirtualNetwork = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/cloudflared/tunnel-virtual-networks/
  */
-export const VirtualNetwork = Resource<VirtualNetwork>(
-  TunnelVirtualNetworkTypeId,
-);
+export const VirtualNetwork = Resource<VirtualNetwork>(TypeId);
 
 /**
  * Returns true if the given value is a VirtualNetwork resource.
  */
 export const isVirtualNetwork = (value: unknown): value is VirtualNetwork =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TunnelVirtualNetworkTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const VirtualNetworkProvider = () =>
   Provider.succeed(VirtualNetwork, {

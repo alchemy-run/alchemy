@@ -18,8 +18,8 @@ import {
   type WorkerServices,
 } from "../Workers/Worker.ts";
 
-type WorkflowTypeId = "Cloudflare.Workflow";
-const WorkflowTypeId: WorkflowTypeId = "Cloudflare.Workflow";
+type TypeId = "Cloudflare.Workflow";
+const TypeId = "Cloudflare.Workflow" as const;
 
 // ---------------------------------------------------------------------------
 // Runtime services -- provided by the bridge when the workflow executes
@@ -167,7 +167,7 @@ export const isWorkflowBinding = (binding: {
  * workflow instances and checking their status from the Api layer.
  */
 export interface WorkflowHandle<Input = unknown, Result = unknown> {
-  Type: WorkflowTypeId;
+  Type: TypeId;
   name: string;
   create(input: Input): Effect.Effect<WorkflowInstance<Result>>;
   get(instanceId: string): Effect.Effect<WorkflowInstance<Result>>;
@@ -431,7 +431,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           );
 
           const self: WorkflowHandle<any, any> = {
-            Type: WorkflowTypeId,
+            Type: TypeId,
             name,
             create: (input: unknown) =>
               Effect.tryPromise(() => binding.create({ params: input })).pipe(

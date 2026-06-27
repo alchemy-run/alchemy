@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RiskScoringIntegrationTypeId =
-  "Cloudflare.RiskScoring.Integration" as const;
-type RiskScoringIntegrationTypeId = typeof RiskScoringIntegrationTypeId;
+const TypeId = "Cloudflare.RiskScoring.Integration" as const;
+type TypeId = typeof TypeId;
 
 export interface IntegrationProps {
   /**
@@ -60,7 +59,7 @@ export type IntegrationAttributes = {
 };
 
 export type Integration = Resource<
-  RiskScoringIntegrationTypeId,
+  TypeId,
   IntegrationProps,
   IntegrationAttributes,
   never,
@@ -98,14 +97,13 @@ export type Integration = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/risk-score/
  */
-export const Integration = Resource<Integration>(RiskScoringIntegrationTypeId);
+export const Integration = Resource<Integration>(TypeId);
 
 /**
  * Returns true if the given value is a Integration resource.
  */
 export const isIntegration = (value: unknown): value is Integration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RiskScoringIntegrationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IntegrationProvider = () =>
   Provider.succeed(Integration, {

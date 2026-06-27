@@ -14,9 +14,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CustomCertificateTypeId =
-  "Cloudflare.CustomCertificate.CustomCertificate" as const;
-type CustomCertificateTypeId = typeof CustomCertificateTypeId;
+const TypeId = "Cloudflare.CustomCertificate.CustomCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How Cloudflare builds the certificate chain served to clients.
@@ -172,7 +171,7 @@ export interface Attributes {
 }
 
 export type CustomCertificate = Resource<
-  CustomCertificateTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -245,9 +244,7 @@ export type CustomCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/edge-certificates/custom-certificates/
  */
-export const CustomCertificate = Resource<CustomCertificate>(
-  CustomCertificateTypeId,
-);
+export const CustomCertificate = Resource<CustomCertificate>(TypeId);
 
 /**
  * Returns true if the given value is a CustomCertificate resource.
@@ -255,8 +252,7 @@ export const CustomCertificate = Resource<CustomCertificate>(
 export const isCustomCertificate = (
   value: unknown,
 ): value is CustomCertificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === CustomCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomCertificateProvider = () =>
   Provider.succeed(CustomCertificate, {

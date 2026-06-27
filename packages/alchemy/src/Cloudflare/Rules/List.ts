@@ -13,8 +13,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RulesListTypeId = "Cloudflare.Rules.List" as const;
-type RulesListTypeId = typeof RulesListTypeId;
+const TypeId = "Cloudflare.Rules.List" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The type of a list. Each kind supports specific list items: IP addresses,
@@ -208,7 +208,7 @@ export type ListAttributes = {
 };
 
 export type List = Resource<
-  RulesListTypeId,
+  TypeId,
   ListProps,
   ListAttributes,
   never,
@@ -277,13 +277,13 @@ export type List = Resource<
  *
  * @see https://developers.cloudflare.com/waf/tools/lists/
  */
-export const List = Resource<List>(RulesListTypeId);
+export const List = Resource<List>(TypeId);
 
 /**
  * Returns true if the given value is a List resource.
  */
 export const isList = (value: unknown): value is List =>
-  Predicate.hasProperty(value, "Type") && value.Type === RulesListTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * The asynchronous bulk items operation finished in a non-`completed`

@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamWebhookTypeId = "Cloudflare.Stream.Webhook" as const;
-type StreamWebhookTypeId = typeof StreamWebhookTypeId;
+const TypeId = "Cloudflare.Stream.Webhook" as const;
+type TypeId = typeof TypeId;
 
 export type WebhookProps = {
   /**
@@ -42,7 +42,7 @@ export type WebhookAttributes = {
 };
 
 export type Webhook = Resource<
-  StreamWebhookTypeId,
+  TypeId,
   WebhookProps,
   WebhookAttributes,
   never,
@@ -76,13 +76,13 @@ export type Webhook = Resource<
  *
  * @see https://developers.cloudflare.com/stream/manage-video-library/using-webhooks/
  */
-export const Webhook = Resource<Webhook>(StreamWebhookTypeId);
+export const Webhook = Resource<Webhook>(TypeId);
 
 /**
  * Returns true if the given value is a Webhook resource.
  */
 export const isWebhook = (value: unknown): value is Webhook =>
-  Predicate.hasProperty(value, "Type") && value.Type === StreamWebhookTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const WebhookProvider = () =>
   Provider.succeed(Webhook, {

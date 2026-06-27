@@ -10,9 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LeakedCredentialDetectionTypeId =
-  "Cloudflare.LeakedCredentialCheck.Detection" as const;
-type LeakedCredentialDetectionTypeId = typeof LeakedCredentialDetectionTypeId;
+const TypeId = "Cloudflare.LeakedCredentialCheck.Detection" as const;
+type TypeId = typeof TypeId;
 
 export interface LeakedCredentialDetectionProps {
   /**
@@ -48,7 +47,7 @@ export interface LeakedCredentialDetectionAttributes {
 }
 
 export type LeakedCredentialDetection = Resource<
-  LeakedCredentialDetectionTypeId,
+  TypeId,
   LeakedCredentialDetectionProps,
   LeakedCredentialDetectionAttributes,
   never,
@@ -100,9 +99,8 @@ export type LeakedCredentialDetection = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/leaked-credentials/#custom-detection-locations
  */
-export const LeakedCredentialDetection = Resource<LeakedCredentialDetection>(
-  LeakedCredentialDetectionTypeId,
-);
+export const LeakedCredentialDetection =
+  Resource<LeakedCredentialDetection>(TypeId);
 
 /**
  * Returns true if the given value is a LeakedCredentialDetection resource.
@@ -110,8 +108,7 @@ export const LeakedCredentialDetection = Resource<LeakedCredentialDetection>(
 export const isLeakedCredentialDetection = (
   value: unknown,
 ): value is LeakedCredentialDetection =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LeakedCredentialDetectionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LeakedCredentialDetectionProvider = () =>
   Provider.succeed(LeakedCredentialDetection, {

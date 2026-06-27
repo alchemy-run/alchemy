@@ -58,8 +58,8 @@ const etl = (creds: {
 }) =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
-    const stream = yield* Cloudflare.Pipelines.PipelineStream("Stream", {});
-    const sink = yield* Cloudflare.Pipelines.PipelineSink("Sink", {
+    const stream = yield* Cloudflare.Pipelines.Stream("Stream", {});
+    const sink = yield* Cloudflare.Pipelines.Sink("Sink", {
       type: "r2",
       config: {
         bucket: bucket.bucketName,

@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const WaitingRoomSettingsTypeId = "Cloudflare.WaitingRoom.Settings" as const;
-type WaitingRoomSettingsTypeId = typeof WaitingRoomSettingsTypeId;
+const TypeId = "Cloudflare.WaitingRoom.Settings" as const;
+type TypeId = typeof TypeId;
 
 export type SettingsProps = {
   /**
@@ -42,7 +42,7 @@ export type SettingsAttributes = {
 };
 
 export type Settings = Resource<
-  WaitingRoomSettingsTypeId,
+  TypeId,
   SettingsProps,
   SettingsAttributes,
   never,
@@ -85,14 +85,13 @@ export type Settings = Resource<
  *
  * @see https://developers.cloudflare.com/waiting-room/
  */
-export const Settings = Resource<Settings>(WaitingRoomSettingsTypeId);
+export const Settings = Resource<Settings>(TypeId);
 
 /**
  * Returns true if the given value is a Settings resource.
  */
 export const isSettings = (value: unknown): value is Settings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === WaitingRoomSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SettingsProvider = () =>
   Provider.succeed(Settings, {

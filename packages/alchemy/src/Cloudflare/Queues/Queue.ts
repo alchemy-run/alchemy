@@ -23,7 +23,7 @@ export const isQueue = (value: unknown): value is Queue =>
   typeof value === "object" &&
   (value as any)?.Type === "Cloudflare.Queues.Queue";
 
-export type Props = {
+export type QueueProps = {
   /**
    * Name of the queue. If omitted, a unique name will be generated.
    * @default ${app}-${stage}-${id}
@@ -33,7 +33,7 @@ export type Props = {
 
 export type Queue = Resource<
   "Cloudflare.Queues.Queue",
-  Props,
+  QueueProps,
   {
     queueId: string;
     queueName: string;

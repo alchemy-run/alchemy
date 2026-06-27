@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TurnstileWidgetTypeId = "Cloudflare.Turnstile.Widget" as const;
-type TurnstileWidgetTypeId = typeof TurnstileWidgetTypeId;
+const TypeId = "Cloudflare.Turnstile.Widget" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Rendering / interaction mode of a Turnstile widget.
@@ -139,7 +139,7 @@ export type WidgetAttributes = {
 };
 
 export type Widget = Resource<
-  TurnstileWidgetTypeId,
+  TypeId,
   WidgetProps,
   WidgetAttributes,
   never,
@@ -186,13 +186,13 @@ export type Widget = Resource<
  *
  * @see https://developers.cloudflare.com/turnstile/
  */
-export const Widget = Resource<Widget>(TurnstileWidgetTypeId);
+export const Widget = Resource<Widget>(TypeId);
 
 /**
  * Returns true if the given value is a Widget resource.
  */
 export const isWidget = (value: unknown): value is Widget =>
-  Predicate.hasProperty(value, "Type") && value.Type === TurnstileWidgetTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const WidgetProvider = () =>
   Provider.succeed(Widget, {

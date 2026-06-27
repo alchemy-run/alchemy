@@ -5,25 +5,25 @@ import * as Redacted from "effect/Redacted";
 import type { Json } from "effect/Schema";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import type { Gateway as AiGateway } from "../AiGateway/AiGateway.ts";
-import type { Instance as AiSearchInstance } from "../AiSearch/Instance.ts";
-import type { Namespace as AiSearchNamespace } from "../AiSearch/Namespace.ts";
+import type { Gateway as AiGateway } from "../AI/Gateway.ts";
+import type { SearchInstance } from "../AI/SearchInstance.ts";
+import type { SearchNamespace } from "../AI/SearchNamespace.ts";
 import { Dataset } from "../AnalyticsEngine/Dataset.ts";
-import type { Artifacts } from "../Artifacts/Artifacts.ts";
-import { Browser } from "./Browser.ts";
-import type { Database as D1Database } from "../D1/D1Database.ts";
+import type { Store as ArtifactsStore } from "../Artifacts/Store.ts";
+import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
-import type { Connection as Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
+import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
 import { Images } from "../Images/Images.ts";
 import type { Namespace } from "../KV/Namespace.ts";
 import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
-import type { RateLimitMarker } from "./RateLimit.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
+import { Browser } from "./Browser.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
+import type { RateLimitMarker } from "./RateLimit.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import type { VersionMetadata } from "./VersionMetadata.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
@@ -51,11 +51,11 @@ export type WorkerBindingResource =
   | Namespace
   | Queue
   | AiGateway
-  | AiSearchInstance
-  | AiSearchNamespace
+  | SearchInstance
+  | SearchNamespace
   | Dataset
   | SendEmail
-  | Artifacts
+  | ArtifactsStore
   | RateLimitMarker
   | Browser
   | FlagshipApp

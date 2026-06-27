@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AddressingBgpPrefixTypeId = "Cloudflare.Addressing.BgpPrefix" as const;
-type AddressingBgpPrefixTypeId = typeof AddressingBgpPrefixTypeId;
+const TypeId = "Cloudflare.Addressing.BgpPrefix" as const;
+type TypeId = typeof TypeId;
 
 export interface BgpPrefixProps {
   /**
@@ -77,7 +77,7 @@ export interface BgpPrefixAttributes {
 }
 
 export type BgpPrefix = Resource<
-  AddressingBgpPrefixTypeId,
+  TypeId,
   BgpPrefixProps,
   BgpPrefixAttributes,
   never,
@@ -117,14 +117,13 @@ export type BgpPrefix = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/concepts/bgp-prefixes/
  */
-export const BgpPrefix = Resource<BgpPrefix>(AddressingBgpPrefixTypeId);
+export const BgpPrefix = Resource<BgpPrefix>(TypeId);
 
 /**
  * Returns true if the given value is an BgpPrefix resource.
  */
 export const isBgpPrefix = (value: unknown): value is BgpPrefix =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AddressingBgpPrefixTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const BgpPrefixProvider = () =>
   Provider.succeed(BgpPrefix, {

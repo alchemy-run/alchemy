@@ -7,8 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayLoggingTypeId = "Cloudflare.Gateway.Logging" as const;
-type GatewayLoggingTypeId = typeof GatewayLoggingTypeId;
+const TypeId = "Cloudflare.Gateway.Logging" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Per-rule-type logging toggles.
@@ -69,7 +69,7 @@ export type LoggingAttributes = LoggingSnapshot & {
 };
 
 export type Logging = Resource<
-  GatewayLoggingTypeId,
+  TypeId,
   LoggingProps,
   LoggingAttributes,
   never,
@@ -113,13 +113,13 @@ export type Logging = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/logs/gateway-logs/
  */
-export const Logging = Resource<Logging>(GatewayLoggingTypeId);
+export const Logging = Resource<Logging>(TypeId);
 
 /**
  * Returns true if the given value is a Logging resource.
  */
 export const isLogging = (value: unknown): value is Logging =>
-  Predicate.hasProperty(value, "Type") && value.Type === GatewayLoggingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LoggingProvider = () =>
   Provider.succeed(Logging, {

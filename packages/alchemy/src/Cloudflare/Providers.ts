@@ -28,18 +28,13 @@ import * as Tag from "./Access/Tag.ts";
 import * as Account from "./Account/index.ts";
 import * as Acm from "./Acm/index.ts";
 import * as Addressing from "./Addressing/index.ts";
-import * as AiGateway from "./AiGateway/index.ts";
-import * as AiSearch from "./AiSearch/index.ts";
-import * as AiSecurity from "./AiSecurity/index.ts";
+import * as AI from "./AI/index.ts";
 import * as Alerting from "./Alerting/index.ts";
-import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiShield from "./ApiShield/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Argo from "./Argo/index.ts";
-import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as BotManagement from "./BotManagement/index.ts";
-import * as Browser from "./Workers/index.ts";
 import * as Cache from "./Cache/index.ts";
 import * as Calls from "./Calls/index.ts";
 import * as CertificateAuthorities from "./CertificateAuthorities/index.ts";
@@ -59,10 +54,8 @@ import * as DdosProtection from "./DdosProtection/index.ts";
 import * as Devices from "./Devices/index.ts";
 import * as Diagnostics from "./Diagnostics/index.ts";
 import * as Dlp from "./Dlp/index.ts";
-import * as Dns from "./Dns/index.ts";
-import * as DnsFirewall from "./DnsFirewall/index.ts";
+import * as Dns from "./DNS/index.ts";
 import * as Email from "./Email/index.ts";
-import * as EmailSecurity from "./EmailSecurity/index.ts";
 import * as Firewall from "./Firewall/index.ts";
 import * as Flagship from "./Flagship/index.ts";
 import * as Fraud from "./Fraud/index.ts";
@@ -103,8 +96,6 @@ import * as PageShield from "./PageShield/index.ts";
 import * as Pipelines from "./Pipelines/index.ts";
 import * as Queue from "./Queues/index.ts";
 import * as R2 from "./R2/index.ts";
-import * as R2DataCatalog from "./R2DataCatalog/index.ts";
-import * as RateLimit from "./Workers/index.ts";
 import * as RealtimeKit from "./RealtimeKit/index.ts";
 import * as RegionalHostname from "./RegionalHostname/index.ts";
 import * as Registrar from "./Registrar/index.ts";
@@ -132,8 +123,8 @@ import * as VulnScanner from "./VulnerabilityScanner/index.ts";
 import * as WaitingRoom from "./WaitingRoom/index.ts";
 import * as Web3 from "./Web3/index.ts";
 import * as Workers from "./Workers/index.ts";
-import * as Workflows from "./Workflows/Workflow.ts";
 import * as WorkersForPlatforms from "./WorkersForPlatforms/index.ts";
+import * as Workflows from "./Workflows/Workflow.ts";
 import * as Zaraz from "./Zaraz/index.ts";
 import * as Zone from "./Zone/index.ts";
 
@@ -174,16 +165,16 @@ export const providers = () =>
       Addressing.PrefixDelegation,
       Addressing.ServiceBinding,
       Addressing.AddressMap,
-      AiGateway.Gateway,
-      AiGateway.Dataset,
-      AiGateway.DynamicRouting,
-      AiGateway.Evaluation,
-      AiGateway.ProviderConfig,
-      AiSearch.Instance,
-      AiSearch.Namespace,
-      AiSearch.Token,
-      AiSecurity.CustomTopics,
-      AiSecurity.Settings,
+      AI.Gateway,
+      AI.Dataset,
+      AI.GatewayDynamicRouting,
+      AI.Evaluation,
+      AI.GatewayProvider,
+      AI.SearchInstance,
+      AI.SearchNamespace,
+      AI.SearchToken,
+      AI.CustomTopics,
+      AI.SecuritySettings,
       Alerting.NotificationPolicy,
       Alerting.NotificationWebhook,
       Alerting.Silence,
@@ -241,17 +232,17 @@ export const providers = () =>
       Dns.ZoneTransferOutgoing,
       Dns.ZoneTransferPeer,
       Dns.ZoneTransferTsig,
-      DnsFirewall.DnsFirewall,
+      Dns.Firewall,
       Email.Address,
+      Email.AllowPolicy,
+      Email.BlockSender,
       Email.CatchAll,
+      Email.Domain,
+      Email.ImpersonationRegistryEntry,
       Email.Routing,
       Email.Rule,
       Email.SendingSubdomain,
-      EmailSecurity.AllowPolicy,
-      EmailSecurity.BlockSender,
-      EmailSecurity.Domain,
-      EmailSecurity.ImpersonationRegistryEntry,
-      EmailSecurity.TrustedDomain,
+      Email.TrustedDomain,
       Firewall.AccessRule,
       Firewall.Lockdown,
       Firewall.UaRule,
@@ -286,7 +277,7 @@ export const providers = () =>
       LoadBalancer.MonitorGroup,
       LoadBalancer.Pool,
       Logpush.Job,
-      LogsControl.LogsCmbConfig,
+      LogsControl.CmbConfig,
       LogsControl.LogsRetentionFlag,
       MagicCloudNetworking.CatalogSync,
       MagicCloudNetworking.CloudIntegration,
@@ -319,15 +310,15 @@ export const providers = () =>
       PageShield.Settings,
       Pipelines.LegacyPipeline,
       Pipelines.Pipeline,
-      Pipelines.PipelineSink,
-      Pipelines.PipelineStream,
+      Pipelines.Sink,
+      Pipelines.Stream,
       Queue.Queue,
       Queue.Consumer,
       Queue.Subscription,
       R2.Bucket,
       R2.BucketEventNotification,
       R2.BucketSippy,
-      R2DataCatalog.R2DataCatalog,
+      R2.DataCatalog,
       Random,
       RealtimeKit.App,
       RealtimeKit.Preset,
@@ -402,7 +393,7 @@ export const providers = () =>
         AccessApp.ApplicationProvider(),
         AccessOrg.OrganizationProvider(),
         AccessPol.PolicyProvider(),
-        AiGateway.GatewayProvider(),
+        AI.GatewayResourceProvider(),
         ApiToken.AccountApiTokenProvider(),
         ApiToken.UserApiTokenProvider(),
         Containers.ContainerProvider(),
@@ -457,16 +448,15 @@ export const providers = () =>
           Addressing.PrefixProvider(),
           Addressing.ServiceBindingProvider(),
           Addressing.AddressMapProvider(),
-          AiGateway.DatasetProvider(),
-          AiGateway.DynamicRoutingProvider(),
-          AiGateway.EvaluationProvider(),
-          AiGateway.GatewayProvider(),
-          AiGateway.ProviderConfigProvider(),
-          AiSearch.InstanceProvider(),
-          AiSearch.NamespaceProvider(),
-          AiSearch.TokenProvider(),
-          AiSecurity.CustomTopicsProvider(),
-          AiSecurity.SettingsProvider(),
+          AI.DatasetProvider(),
+          AI.DynamicRoutingProvider(),
+          AI.EvaluationProvider(),
+          AI.GatewayResourceProvider(),
+          AI.SearchInstanceProvider(),
+          AI.SearchNamespaceProvider(),
+          AI.SearchTokenProvider(),
+          AI.CustomTopicsProvider(),
+          AI.SecuritySettingsProvider(),
           Alerting.NotificationPolicyProvider(),
           Alerting.NotificationWebhookProvider(),
           Alerting.SilenceProvider(),
@@ -517,17 +507,17 @@ export const providers = () =>
           Dns.RecordProvider(),
           Dns.DnssecProvider(),
           Dns.ZoneDnsSettingsProvider(),
-          DnsFirewall.DnsFirewallProvider(),
+          Dns.FirewallProvider(),
           Email.AddressProvider(),
+          Email.AllowPolicyProvider(),
+          Email.BlockSenderProvider(),
           Email.CatchAllProvider(),
+          Email.DomainProvider(),
+          Email.ImpersonationRegistryEntryProvider(),
           Email.RoutingProvider(),
           Email.RuleProvider(),
           Email.SendingSubdomainProvider(),
-          EmailSecurity.AllowPolicyProvider(),
-          EmailSecurity.BlockSenderProvider(),
-          EmailSecurity.DomainProvider(),
-          EmailSecurity.ImpersonationRegistryEntryProvider(),
-          EmailSecurity.TrustedDomainProvider(),
+          Email.TrustedDomainProvider(),
           Firewall.AccessRuleProvider(),
           Firewall.LockdownProvider(),
           Firewall.UaRuleProvider(),
@@ -561,7 +551,7 @@ export const providers = () =>
           LeakedCredentialCheck.LeakedCredentialCheckProvider(),
           LeakedCredentialCheck.LeakedCredentialDetectionProvider(),
           Logpush.JobProvider(),
-          LogsControl.LogsCmbConfigProvider(),
+          LogsControl.CmbConfigProvider(),
           LogsControl.LogsRetentionFlagProvider(),
           MagicCloudNetworking.CatalogSyncProvider(),
           MagicCloudNetworking.CloudIntegrationProvider(),
@@ -594,15 +584,15 @@ export const providers = () =>
           PageShield.SettingsProvider(),
           Pipelines.LegacyPipelineProvider(),
           Pipelines.PipelineProvider(),
-          Pipelines.PipelineSinkProvider(),
-          Pipelines.PipelineStreamProvider(),
+          Pipelines.SinkProvider(),
+          Pipelines.StreamProvider(),
           Queue.ConsumerProvider(),
           Queue.QueueProvider(),
           Queue.SubscriptionProvider(),
           R2.BucketEventNotificationProvider(),
           R2.BucketProvider(),
           R2.BucketSippyProvider(),
-          R2DataCatalog.R2DataCatalogProvider(),
+          R2.DataCatalogProvider(),
           RealtimeKit.AppProvider(),
           RealtimeKit.PresetProvider(),
           RealtimeKit.WebhookProvider(),

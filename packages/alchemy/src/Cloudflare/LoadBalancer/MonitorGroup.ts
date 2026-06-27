@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LoadBalancerMonitorGroupTypeId =
-  "Cloudflare.LoadBalancer.MonitorGroup" as const;
-type LoadBalancerMonitorGroupTypeId = typeof LoadBalancerMonitorGroupTypeId;
+const TypeId = "Cloudflare.LoadBalancer.MonitorGroup" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A monitor membership within a monitor group.
@@ -70,7 +69,7 @@ export interface MonitorGroupAttributes {
 }
 
 export type MonitorGroup = Resource<
-  LoadBalancerMonitorGroupTypeId,
+  TypeId,
   MonitorGroupProps,
   MonitorGroupAttributes,
   never,
@@ -110,22 +109,19 @@ export type MonitorGroup = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/monitors/
  */
-export const MonitorGroup = Resource<MonitorGroup>(
-  LoadBalancerMonitorGroupTypeId,
-);
+export const MonitorGroup = Resource<MonitorGroup>(TypeId);
 
 /**
  * Returns true if the given value is a MonitorGroup resource.
  */
 export const isMonitorGroup = (value: unknown): value is MonitorGroup =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LoadBalancerMonitorGroupTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MonitorGroupProvider = () =>
   Provider.succeed(MonitorGroup, {
     stables: ["monitorGroupId", "accountId", "createdOn"],
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;

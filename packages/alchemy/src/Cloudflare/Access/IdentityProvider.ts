@@ -13,9 +13,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccessIdentityProviderTypeId =
-  "Cloudflare.Access.IdentityProvider" as const;
-type AccessIdentityProviderTypeId = typeof AccessIdentityProviderTypeId;
+const TypeId = "Cloudflare.Access.IdentityProvider" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The type of identity provider. Determines which `config` fields are
@@ -123,7 +122,7 @@ export interface IdentityProviderAttributes {
 }
 
 export type IdentityProvider = Resource<
-  AccessIdentityProviderTypeId,
+  TypeId,
   IdentityProviderProps,
   IdentityProviderAttributes,
   never,
@@ -179,16 +178,13 @@ export type IdentityProvider = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/idp-integration/
  */
-export const IdentityProvider = Resource<IdentityProvider>(
-  AccessIdentityProviderTypeId,
-);
+export const IdentityProvider = Resource<IdentityProvider>(TypeId);
 
 /**
  * Returns true if the given value is an IdentityProvider resource.
  */
 export const isIdentityProvider = (value: unknown): value is IdentityProvider =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AccessIdentityProviderTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IdentityProviderProvider = () =>
   Provider.succeed(IdentityProvider, {

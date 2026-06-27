@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
 
-type AnalyticsEngineDatasetTypeId = typeof AnalyticsEngineDatasetTypeId;
-const AnalyticsEngineDatasetTypeId =
-  "Cloudflare.AnalyticsEngine.Dataset" as const;
+type TypeId = typeof TypeId;
+const TypeId = "Cloudflare.AnalyticsEngine.Dataset" as const;
 
 export type DatasetProps = {
   /**
@@ -35,12 +34,12 @@ export type DatasetProps = {
  *
  * @example Effect-style worker
  * ```typescript
- * const analytics = yield* Cloudflare.AnalyticsEngineDataset.WriteDataset(Analytics);
+ * const analytics = yield* Cloudflare.AnalyticsEngine.WriteDataset(Analytics);
  * yield* analytics.writeDataPoint({ blobs: ["signup"] });
  * ```
  */
 export type Dataset = {
-  kind: AnalyticsEngineDatasetTypeId;
+  kind: TypeId;
   name: string;
   dataset: string;
 };
@@ -49,13 +48,13 @@ export const isDataset = (value: unknown): value is Dataset =>
   typeof value === "object" &&
   value !== null &&
   "kind" in value &&
-  (value as Dataset).kind === AnalyticsEngineDatasetTypeId;
+  (value as Dataset).kind === TypeId;
 
 export const Dataset: {
   (name: string, props?: DatasetProps): Effect.Effect<Dataset>;
 } = Effect.fn(function* (name: string, props?: DatasetProps) {
   return {
-    kind: AnalyticsEngineDatasetTypeId,
+    kind: TypeId,
     name,
     dataset: props?.dataset ?? name,
   } satisfies Dataset;

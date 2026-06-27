@@ -13,8 +13,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const HealthcheckTypeId = "Cloudflare.Healthcheck.Healthcheck" as const;
-type HealthcheckTypeId = typeof HealthcheckTypeId;
+const TypeId = "Cloudflare.Healthcheck.Healthcheck" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Protocol used by a standalone health check probe.
@@ -223,13 +223,7 @@ export interface Attributes {
   modifiedOn: string | undefined;
 }
 
-export type Healthcheck = Resource<
-  HealthcheckTypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type Healthcheck = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare standalone Health Check — monitors an origin server from
@@ -299,13 +293,13 @@ export type Healthcheck = Resource<
  *
  * @see https://developers.cloudflare.com/health-checks/
  */
-export const Healthcheck = Resource<Healthcheck>(HealthcheckTypeId);
+export const Healthcheck = Resource<Healthcheck>(TypeId);
 
 /**
  * Returns true if the given value is a Healthcheck resource.
  */
 export const isHealthcheck = (value: unknown): value is Healthcheck =>
-  Predicate.hasProperty(value, "Type") && value.Type === HealthcheckTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HealthcheckProvider = () =>
   Provider.succeed(Healthcheck, {

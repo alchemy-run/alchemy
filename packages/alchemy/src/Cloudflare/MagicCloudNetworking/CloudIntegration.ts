@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CloudIntegrationTypeId =
-  "Cloudflare.MagicCloudNetworking.CloudIntegration" as const;
-type CloudIntegrationTypeId = typeof CloudIntegrationTypeId;
+const TypeId = "Cloudflare.MagicCloudNetworking.CloudIntegration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud provider an integration discovers resources from.
@@ -117,7 +116,7 @@ export interface CloudIntegrationAttributes {
 }
 
 export type CloudIntegration = Resource<
-  CloudIntegrationTypeId,
+  TypeId,
   CloudIntegrationProps,
   CloudIntegrationAttributes,
   never,
@@ -170,15 +169,13 @@ export type CloudIntegration = Resource<
  *
  * @see https://developers.cloudflare.com/magic-cloud-networking/
  */
-export const CloudIntegration = Resource<CloudIntegration>(
-  CloudIntegrationTypeId,
-);
+export const CloudIntegration = Resource<CloudIntegration>(TypeId);
 
 /**
  * Returns true if the given value is a CloudIntegration resource.
  */
 export const isCloudIntegration = (value: unknown): value is CloudIntegration =>
-  Predicate.hasProperty(value, "Type") && value.Type === CloudIntegrationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CloudIntegrationProvider = () =>
   Provider.succeed(CloudIntegration, {

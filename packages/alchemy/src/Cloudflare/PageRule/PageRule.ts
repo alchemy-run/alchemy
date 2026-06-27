@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const PageRuleTypeId = "Cloudflare.PageRule.PageRule" as const;
-type PageRuleTypeId = typeof PageRuleTypeId;
+const TypeId = "Cloudflare.PageRule.PageRule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A single Page Rule action — a discriminated union over every setting a
@@ -90,13 +90,7 @@ export interface Attributes {
   modifiedOn: string;
 }
 
-export type PageRule = Resource<
-  PageRuleTypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type PageRule = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare **Page Rule** — a legacy zone-level rule that matches a URL
@@ -176,13 +170,13 @@ export type PageRule = Resource<
  *
  * @see https://developers.cloudflare.com/rules/page-rules/
  */
-export const PageRule = Resource<PageRule>(PageRuleTypeId);
+export const PageRule = Resource<PageRule>(TypeId);
 
 /**
  * Returns true if the given value is a PageRule resource.
  */
 export const isPageRule = (value: unknown): value is PageRule =>
-  Predicate.hasProperty(value, "Type") && value.Type === PageRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const PageRuleProvider = () =>
   Provider.succeed(PageRule, {

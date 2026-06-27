@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { Bucket } from "./Bucket.ts";
 
-const R2BucketSippyTypeId = "Cloudflare.R2.BucketSippy" as const;
-type R2BucketSippyTypeId = typeof R2BucketSippyTypeId;
+const TypeId = "Cloudflare.R2.BucketSippy" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Source bucket configuration for an AWS S3 origin.
@@ -128,7 +128,7 @@ export interface BucketSippyAttributes {
 }
 
 export type BucketSippy = Resource<
-  R2BucketSippyTypeId,
+  TypeId,
   BucketSippyProps,
   BucketSippyAttributes,
   never,
@@ -191,7 +191,7 @@ export type BucketSippy = Resource<
  *
  * @see https://developers.cloudflare.com/r2/data-migration/sippy/
  */
-export const BucketSippy = Resource<BucketSippy>(R2BucketSippyTypeId);
+export const BucketSippy = Resource<BucketSippy>(TypeId);
 
 export declare namespace BucketSippy {
   /**
@@ -220,7 +220,7 @@ export declare namespace BucketSippy {
  * Returns true if the given value is an BucketSippy resource.
  */
 export const isBucketSippy = (value: unknown): value is BucketSippy =>
-  Predicate.hasProperty(value, "Type") && value.Type === R2BucketSippyTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const BucketSippyProvider = () =>
   Provider.succeed(BucketSippy, {

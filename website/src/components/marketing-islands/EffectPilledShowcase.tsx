@@ -69,7 +69,7 @@ const DO_CODE = `export default class Room extends Cloudflare.DurableObject<Room
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const sessions = new Map<string, Cloudflare.WebSocket.Socket>();
+      const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
 
       return {
         fetch: Effect.gen(function* () {

@@ -10,7 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type Props = {
+export type VpcServiceProps = {
   /**
    * Display name for the VPC service. If omitted, a unique name is generated.
    *
@@ -88,7 +88,7 @@ export type Attributes = {
 
 export type VpcService = Resource<
   "Cloudflare.VpcService.VpcService",
-  Props,
+  VpcServiceProps,
   Attributes,
   never,
   Providers

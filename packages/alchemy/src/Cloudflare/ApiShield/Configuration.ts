@@ -8,9 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ApiShieldConfigurationTypeId =
-  "Cloudflare.ApiShield.Configuration" as const;
-type ApiShieldConfigurationTypeId = typeof ApiShieldConfigurationTypeId;
+const TypeId = "Cloudflare.ApiShield.Configuration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A session identifier ("auth ID characteristic") used by API Shield to
@@ -65,7 +64,7 @@ export interface ConfigurationAttributes {
 }
 
 export type Configuration = Resource<
-  ApiShieldConfigurationTypeId,
+  TypeId,
   ConfigurationProps,
   ConfigurationAttributes,
   never,
@@ -110,16 +109,13 @@ export type Configuration = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/get-started/#session-identifiers
  */
-export const Configuration = Resource<Configuration>(
-  ApiShieldConfigurationTypeId,
-);
+export const Configuration = Resource<Configuration>(TypeId);
 
 /**
  * Returns true if the given value is an Configuration resource.
  */
 export const isConfiguration = (value: unknown): value is Configuration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ApiShieldConfigurationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ConfigurationProvider = () =>
   Provider.succeed(Configuration, {

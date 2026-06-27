@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicSiteTypeId = "Cloudflare.MagicTransit.Site" as const;
-type MagicSiteTypeId = typeof MagicSiteTypeId;
+const TypeId = "Cloudflare.MagicTransit.Site" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Geographic location of a Magic WAN site.
@@ -77,7 +77,7 @@ export interface MagicSiteAttributes {
 }
 
 export type MagicSite = Resource<
-  MagicSiteTypeId,
+  TypeId,
   MagicSiteProps,
   MagicSiteAttributes,
   never,
@@ -124,13 +124,13 @@ export type MagicSite = Resource<
  *
  * @see https://developers.cloudflare.com/magic-wan/configuration/connector/
  */
-export const MagicSite = Resource<MagicSite>(MagicSiteTypeId);
+export const MagicSite = Resource<MagicSite>(TypeId);
 
 /**
  * Returns true if the given value is a MagicSite resource.
  */
 export const isMagicSite = (value: unknown): value is MagicSite =>
-  Predicate.hasProperty(value, "Type") && value.Type === MagicSiteTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MagicSiteProvider = () =>
   Provider.succeed(MagicSite, {

@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DeviceManagedNetworkTypeId = "Cloudflare.Devices.ManagedNetwork" as const;
-type DeviceManagedNetworkTypeId = typeof DeviceManagedNetworkTypeId;
+const TypeId = "Cloudflare.Devices.ManagedNetwork" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Detection configuration for a managed network: the WARP client opens a
@@ -61,7 +61,7 @@ export type DeviceManagedNetworkAttributes = {
 };
 
 export type DeviceManagedNetwork = Resource<
-  DeviceManagedNetworkTypeId,
+  TypeId,
   DeviceManagedNetworkProps,
   DeviceManagedNetworkAttributes,
   never,
@@ -102,9 +102,7 @@ export type DeviceManagedNetwork = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/warp/configure-warp/managed-networks/
  */
-export const DeviceManagedNetwork = Resource<DeviceManagedNetwork>(
-  DeviceManagedNetworkTypeId,
-);
+export const DeviceManagedNetwork = Resource<DeviceManagedNetwork>(TypeId);
 
 /**
  * Returns true if the given value is a DeviceManagedNetwork resource.
@@ -112,8 +110,7 @@ export const DeviceManagedNetwork = Resource<DeviceManagedNetwork>(
 export const isDeviceManagedNetwork = (
   value: unknown,
 ): value is DeviceManagedNetwork =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DeviceManagedNetworkTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DeviceManagedNetworkProvider = () =>
   Provider.succeed(DeviceManagedNetwork, {

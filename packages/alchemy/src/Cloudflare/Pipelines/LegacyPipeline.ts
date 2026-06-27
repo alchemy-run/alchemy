@@ -13,8 +13,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LegacyPipelineTypeId = "Cloudflare.Pipelines.LegacyPipeline" as const;
-type LegacyPipelineTypeId = typeof LegacyPipelineTypeId;
+const TypeId = "Cloudflare.Pipelines.LegacyPipeline" as const;
+type TypeId = typeof TypeId;
 
 /**
  * HTTP ingest source — events are POSTed as JSON to the pipeline's
@@ -144,7 +144,7 @@ export interface LegacyPipelineAttributes {
 }
 
 export type LegacyPipeline = Resource<
-  LegacyPipelineTypeId,
+  TypeId,
   LegacyPipelineProps,
   LegacyPipelineAttributes,
   never,
@@ -158,7 +158,7 @@ export type LegacyPipeline = Resource<
  * :::caution
  * This is the **deprecated, legacy** Pipelines API. Cloudflare has
  * superseded it with the SQL-based product — prefer
- * {@link PipelineStream}, {@link PipelineSink}, and {@link Pipeline}
+ * {@link Stream}, {@link Sink}, and {@link Pipeline}
  * for new infrastructure. This resource exists only to manage
  * pre-existing legacy pipelines.
  * :::
@@ -207,13 +207,13 @@ export type LegacyPipeline = Resource<
  *
  * @see https://developers.cloudflare.com/pipelines/
  */
-export const LegacyPipeline = Resource<LegacyPipeline>(LegacyPipelineTypeId);
+export const LegacyPipeline = Resource<LegacyPipeline>(TypeId);
 
 /**
  * Returns true if the given value is a LegacyPipeline resource.
  */
 export const isLegacyPipeline = (value: unknown): value is LegacyPipeline =>
-  Predicate.hasProperty(value, "Type") && value.Type === LegacyPipelineTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LegacyPipelineProvider = () =>
   Provider.succeed(LegacyPipeline, {

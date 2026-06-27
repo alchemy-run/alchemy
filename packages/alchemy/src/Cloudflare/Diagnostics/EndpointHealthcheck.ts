@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const EndpointHealthcheckTypeId =
-  "Cloudflare.Diagnostics.EndpointHealthcheck" as const;
-type EndpointHealthcheckTypeId = typeof EndpointHealthcheckTypeId;
+const TypeId = "Cloudflare.Diagnostics.EndpointHealthcheck" as const;
+type TypeId = typeof TypeId;
 
 export interface EndpointHealthcheckProps {
   /**
@@ -56,7 +55,7 @@ export interface EndpointHealthcheckAttributes {
 }
 
 export type EndpointHealthcheck = Resource<
-  EndpointHealthcheckTypeId,
+  TypeId,
   EndpointHealthcheckProps,
   EndpointHealthcheckAttributes,
   never,
@@ -102,9 +101,7 @@ export type EndpointHealthcheck = Resource<
  *
  * @see https://developers.cloudflare.com/magic-wan/
  */
-export const EndpointHealthcheck = Resource<EndpointHealthcheck>(
-  EndpointHealthcheckTypeId,
-);
+export const EndpointHealthcheck = Resource<EndpointHealthcheck>(TypeId);
 
 /**
  * Returns true if the given value is an EndpointHealthcheck resource.
@@ -112,8 +109,7 @@ export const EndpointHealthcheck = Resource<EndpointHealthcheck>(
 export const isEndpointHealthcheck = (
   value: unknown,
 ): value is EndpointHealthcheck =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === EndpointHealthcheckTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const EndpointHealthcheckProvider = () =>
   Provider.succeed(EndpointHealthcheck, {

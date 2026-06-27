@@ -8,8 +8,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamLiveInputTypeId = "Cloudflare.Stream.LiveInput" as const;
-type StreamLiveInputTypeId = typeof StreamLiveInputTypeId;
+const TypeId = "Cloudflare.Stream.LiveInput" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Recording behavior of a live input.
@@ -112,7 +112,7 @@ export type LiveInputAttributes = {
 };
 
 export type LiveInput = Resource<
-  StreamLiveInputTypeId,
+  TypeId,
   LiveInputProps,
   LiveInputAttributes,
   never,
@@ -160,13 +160,13 @@ export type LiveInput = Resource<
  *
  * @see https://developers.cloudflare.com/stream/stream-live/
  */
-export const LiveInput = Resource<LiveInput>(StreamLiveInputTypeId);
+export const LiveInput = Resource<LiveInput>(TypeId);
 
 /**
  * Returns true if the given value is a LiveInput resource.
  */
 export const isLiveInput = (value: unknown): value is LiveInput =>
-  Predicate.hasProperty(value, "Type") && value.Type === StreamLiveInputTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LiveInputProvider = () =>
   Provider.succeed(LiveInput, {

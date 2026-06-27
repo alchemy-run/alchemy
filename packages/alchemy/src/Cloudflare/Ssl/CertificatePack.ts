@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CertificatePackTypeId = "Cloudflare.Ssl.CertificatePack" as const;
-type CertificatePackTypeId = typeof CertificatePackTypeId;
+const TypeId = "Cloudflare.Ssl.CertificatePack" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Certificate Authorities available for Advanced Certificate Manager orders.
@@ -163,7 +163,7 @@ export interface CertificatePackAttributes {
 }
 
 export type CertificatePack = Resource<
-  CertificatePackTypeId,
+  TypeId,
   CertificatePackProps,
   CertificatePackAttributes,
   never,
@@ -229,13 +229,13 @@ export type CertificatePack = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/edge-certificates/advanced-certificate-manager/
  */
-export const CertificatePack = Resource<CertificatePack>(CertificatePackTypeId);
+export const CertificatePack = Resource<CertificatePack>(TypeId);
 
 /**
  * Returns true if the given value is a CertificatePack resource.
  */
 export const isCertificatePack = (value: unknown): value is CertificatePack =>
-  Predicate.hasProperty(value, "Type") && value.Type === CertificatePackTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CertificatePackProvider = () =>
   Provider.succeed(CertificatePack, {

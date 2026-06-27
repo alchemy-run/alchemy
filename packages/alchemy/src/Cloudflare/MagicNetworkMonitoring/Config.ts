@@ -8,10 +8,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicNetworkMonitoringConfigTypeId =
-  "Cloudflare.MagicNetworkMonitoring.Config" as const;
-type MagicNetworkMonitoringConfigTypeId =
-  typeof MagicNetworkMonitoringConfigTypeId;
+const TypeId = "Cloudflare.MagicNetworkMonitoring.Config" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A WARP device registered as a flow-data source on the MNM config.
@@ -73,7 +71,7 @@ export interface ConfigAttributes {
 }
 
 export type Config = Resource<
-  MagicNetworkMonitoringConfigTypeId,
+  TypeId,
   ConfigProps,
   ConfigAttributes,
   never,
@@ -130,14 +128,13 @@ export type Config = Resource<
  *
  * @see https://developers.cloudflare.com/magic-network-monitoring/
  */
-export const Config = Resource<Config>(MagicNetworkMonitoringConfigTypeId);
+export const Config = Resource<Config>(TypeId);
 
 /**
  * Returns true if the given value is a Config resource.
  */
 export const isConfig = (value: unknown): value is Config =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === MagicNetworkMonitoringConfigTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ConfigProvider = () =>
   Provider.succeed(Config, {

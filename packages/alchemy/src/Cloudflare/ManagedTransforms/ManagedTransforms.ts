@@ -8,9 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ManagedTransformsTypeId =
-  "Cloudflare.ManagedTransforms.ManagedTransforms" as const;
-type ManagedTransformsTypeId = typeof ManagedTransformsTypeId;
+const TypeId = "Cloudflare.ManagedTransforms.ManagedTransforms" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Identifier of a Cloudflare managed request transform — the built-in
@@ -103,7 +102,7 @@ export interface Attributes {
 }
 
 export type ManagedTransforms = Resource<
-  ManagedTransformsTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -173,9 +172,7 @@ export type ManagedTransforms = Resource<
  *
  * @see https://developers.cloudflare.com/rules/transform/managed-transforms/
  */
-export const ManagedTransforms = Resource<ManagedTransforms>(
-  ManagedTransformsTypeId,
-);
+export const ManagedTransforms = Resource<ManagedTransforms>(TypeId);
 
 /**
  * Returns true if the given value is a ManagedTransforms resource.
@@ -183,8 +180,7 @@ export const ManagedTransforms = Resource<ManagedTransforms>(
 export const isManagedTransforms = (
   value: unknown,
 ): value is ManagedTransforms =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ManagedTransformsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ManagedTransformsProvider = () =>
   Provider.succeed(ManagedTransforms, {

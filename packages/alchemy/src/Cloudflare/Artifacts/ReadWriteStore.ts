@@ -2,7 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
+import type * as Artifacts from "./Store.ts";
 
 /**
  * Bind a Cloudflare Artifacts namespace ({@link Store}) to a Worker and obtain
@@ -27,7 +27,7 @@ import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
 export interface ReadWriteStore extends Binding.Service<
   ReadWriteStore,
   "Cloudflare.Artifacts.ReadWriteStore",
-  (artifacts: ArtifactsLike) => Effect.Effect<ReadWriteStoreClient>
+  (artifacts: Artifacts.Store) => Effect.Effect<ReadWriteStoreClient>
 > {}
 
 export const ReadWriteStore = Binding.Service<ReadWriteStore>(
@@ -130,7 +130,7 @@ export interface ReadWriteStoreClient
 export interface ReadStore extends Binding.Service<
   ReadStore,
   "Cloudflare.Artifacts.ReadStore",
-  (artifacts: ArtifactsLike) => Effect.Effect<ReadStoreClient>
+  (artifacts: Artifacts.Store) => Effect.Effect<ReadStoreClient>
 > {}
 export const ReadStore = Binding.Service<ReadStore>(
   "Cloudflare.Artifacts.ReadStore",
@@ -146,7 +146,7 @@ export const ReadStore = Binding.Service<ReadStore>(
 export interface WriteStore extends Binding.Service<
   WriteStore,
   "Cloudflare.Artifacts.WriteStore",
-  (artifacts: ArtifactsLike) => Effect.Effect<WriteStoreClient>
+  (artifacts: Artifacts.Store) => Effect.Effect<WriteStoreClient>
 > {}
 export const WriteStore = Binding.Service<WriteStore>(
   "Cloudflare.Artifacts.WriteStore",

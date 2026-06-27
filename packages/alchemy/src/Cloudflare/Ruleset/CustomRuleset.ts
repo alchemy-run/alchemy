@@ -12,8 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { OutputRule, Phase } from "./Ruleset.ts";
 
-const CustomRulesetTypeId = "Cloudflare.Rulesets.CustomRuleset" as const;
-type CustomRulesetTypeId = typeof CustomRulesetTypeId;
+const TypeId = "Cloudflare.Rulesets.CustomRuleset" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Kind of a standalone account-level ruleset. `custom` rulesets are deployed
@@ -83,7 +83,7 @@ export type CustomRulesetAttributes = {
 };
 
 export type CustomRuleset = Resource<
-  CustomRulesetTypeId,
+  TypeId,
   CustomRulesetProps,
   CustomRulesetAttributes,
   never,
@@ -138,13 +138,13 @@ export type CustomRuleset = Resource<
  *
  * @see https://developers.cloudflare.com/waf/account/custom-rulesets/
  */
-export const CustomRuleset = Resource<CustomRuleset>(CustomRulesetTypeId);
+export const CustomRuleset = Resource<CustomRuleset>(TypeId);
 
 /**
  * Returns true if the given value is a CustomRuleset resource.
  */
 export const isCustomRuleset = (value: unknown): value is CustomRuleset =>
-  Predicate.hasProperty(value, "Type") && value.Type === CustomRulesetTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomRulesetProvider = () =>
   Provider.succeed(CustomRuleset, {

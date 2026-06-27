@@ -10,9 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IamUserGroupMembershipTypeId =
-  "Cloudflare.Iam.UserGroupMembership" as const;
-type IamUserGroupMembershipTypeId = typeof IamUserGroupMembershipTypeId;
+const TypeId = "Cloudflare.Iam.UserGroupMembership" as const;
+type TypeId = typeof TypeId;
 
 export interface UserGroupMembershipProps {
   /**
@@ -43,7 +42,7 @@ export interface UserGroupMembershipAttributes {
 }
 
 export type UserGroupMembership = Resource<
-  IamUserGroupMembershipTypeId,
+  TypeId,
   UserGroupMembershipProps,
   UserGroupMembershipAttributes,
   never,
@@ -77,9 +76,7 @@ export type UserGroupMembership = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/user-groups/
  */
-export const UserGroupMembership = Resource<UserGroupMembership>(
-  IamUserGroupMembershipTypeId,
-);
+export const UserGroupMembership = Resource<UserGroupMembership>(TypeId);
 
 /**
  * Returns true if the given value is an UserGroupMembership resource.
@@ -87,8 +84,7 @@ export const UserGroupMembership = Resource<UserGroupMembership>(
 export const isUserGroupMembership = (
   value: unknown,
 ): value is UserGroupMembership =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === IamUserGroupMembershipTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const UserGroupMembershipProvider = () =>
   Provider.succeed(UserGroupMembership, {
@@ -180,7 +176,7 @@ export const UserGroupMembershipProvider = () =>
       return observed ? toAttributes(observed, userGroupId, acct) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const userGroupId = news.userGroup as string;

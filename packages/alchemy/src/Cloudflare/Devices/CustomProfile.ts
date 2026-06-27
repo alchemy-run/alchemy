@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { DeviceDefaultProfile } from "./DefaultProfile.ts";
 
-const DeviceCustomProfileTypeId = "Cloudflare.Devices.CustomProfile" as const;
-type DeviceCustomProfileTypeId = typeof DeviceCustomProfileTypeId;
+const TypeId = "Cloudflare.Devices.CustomProfile" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Configuration for a WARP custom device profile.
@@ -190,7 +190,7 @@ export type DeviceCustomProfileAttributes = {
 };
 
 export type DeviceCustomProfile = Resource<
-  DeviceCustomProfileTypeId,
+  TypeId,
   DeviceCustomProfileProps,
   DeviceCustomProfileAttributes,
   never,
@@ -247,9 +247,7 @@ export type DeviceCustomProfile = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/warp/configure-warp/device-profiles/
  */
-export const DeviceCustomProfile = Resource<DeviceCustomProfile>(
-  DeviceCustomProfileTypeId,
-);
+export const DeviceCustomProfile = Resource<DeviceCustomProfile>(TypeId);
 
 /**
  * Returns true if the given value is a DeviceCustomProfile resource.
@@ -257,8 +255,7 @@ export const DeviceCustomProfile = Resource<DeviceCustomProfile>(
 export const isDeviceCustomProfile = (
   value: unknown,
 ): value is DeviceCustomProfile =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DeviceCustomProfileTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DeviceCustomProfileProvider = () =>
   Provider.succeed(DeviceCustomProfile, {

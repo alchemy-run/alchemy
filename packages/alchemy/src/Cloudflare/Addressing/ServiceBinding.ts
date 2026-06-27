@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AddressingServiceBindingTypeId =
-  "Cloudflare.Addressing.ServiceBinding" as const;
-type AddressingServiceBindingTypeId = typeof AddressingServiceBindingTypeId;
+const TypeId = "Cloudflare.Addressing.ServiceBinding" as const;
+type TypeId = typeof TypeId;
 
 export interface ServiceBindingProps {
   /**
@@ -54,7 +53,7 @@ export interface ServiceBindingAttributes {
 }
 
 export type ServiceBinding = Resource<
-  AddressingServiceBindingTypeId,
+  TypeId,
   ServiceBindingProps,
   ServiceBindingAttributes,
   never,
@@ -84,16 +83,13 @@ export type ServiceBinding = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/concepts/service-bindings/
  */
-export const ServiceBinding = Resource<ServiceBinding>(
-  AddressingServiceBindingTypeId,
-);
+export const ServiceBinding = Resource<ServiceBinding>(TypeId);
 
 /**
  * Returns true if the given value is an ServiceBinding resource.
  */
 export const isServiceBinding = (value: unknown): value is ServiceBinding =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AddressingServiceBindingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ServiceBindingProvider = () =>
   Provider.succeed(ServiceBinding, {

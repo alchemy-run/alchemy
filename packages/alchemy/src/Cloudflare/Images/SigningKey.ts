@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ImagesSigningKeyTypeId = "Cloudflare.Images.SigningKey" as const;
-type ImagesSigningKeyTypeId = typeof ImagesSigningKeyTypeId;
+const TypeId = "Cloudflare.Images.SigningKey" as const;
+type TypeId = typeof TypeId;
 
 export interface SigningKeyProps {
   /**
@@ -40,7 +40,7 @@ export interface SigningKeyAttributes {
 }
 
 export type SigningKey = Resource<
-  ImagesSigningKeyTypeId,
+  TypeId,
   SigningKeyProps,
   SigningKeyAttributes,
   never,
@@ -84,13 +84,13 @@ export type SigningKey = Resource<
  *
  * @see https://developers.cloudflare.com/images/manage-images/serve-images/serve-private-images/
  */
-export const SigningKey = Resource<SigningKey>(ImagesSigningKeyTypeId);
+export const SigningKey = Resource<SigningKey>(TypeId);
 
 /**
  * Returns true if the given value is an SigningKey resource.
  */
 export const isSigningKey = (value: unknown): value is SigningKey =>
-  Predicate.hasProperty(value, "Type") && value.Type === ImagesSigningKeyTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SigningKeyProvider = () =>
   Provider.succeed(SigningKey, {
@@ -162,7 +162,7 @@ export const SigningKeyProvider = () =>
       );
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const acct = (news.accountId as string | undefined) ?? accountId;

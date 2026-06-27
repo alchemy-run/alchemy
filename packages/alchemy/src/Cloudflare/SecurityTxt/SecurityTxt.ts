@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SecurityTxtTypeId = "Cloudflare.SecurityTxt.SecurityTxt" as const;
-type SecurityTxtTypeId = typeof SecurityTxtTypeId;
+const TypeId = "Cloudflare.SecurityTxt.SecurityTxt" as const;
+type TypeId = typeof TypeId;
 
 export type Props = {
   /**
@@ -94,13 +94,7 @@ export type Attributes = {
   preferredLanguages: string | undefined;
 };
 
-export type SecurityTxt = Resource<
-  SecurityTxtTypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type SecurityTxt = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A zone's `security.txt` file
@@ -156,13 +150,13 @@ export type SecurityTxt = Resource<
  *
  * @see https://developers.cloudflare.com/security-center/infrastructure/security-file/
  */
-export const SecurityTxt = Resource<SecurityTxt>(SecurityTxtTypeId);
+export const SecurityTxt = Resource<SecurityTxt>(TypeId);
 
 /**
  * Returns true if the given value is a SecurityTxt resource.
  */
 export const isSecurityTxt = (value: unknown): value is SecurityTxt =>
-  Predicate.hasProperty(value, "Type") && value.Type === SecurityTxtTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SecurityTxtProvider = () =>
   Provider.succeed(SecurityTxt, {

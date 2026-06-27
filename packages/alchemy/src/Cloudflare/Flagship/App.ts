@@ -8,8 +8,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const FlagshipAppTypeId = "Cloudflare.Flagship.App" as const;
-type FlagshipAppTypeId = typeof FlagshipAppTypeId;
+const TypeId = "Cloudflare.Flagship.App" as const;
+type TypeId = typeof TypeId;
 
 export type AppProps = {
   /**
@@ -49,13 +49,7 @@ export type AppAttributes = {
   updatedBy: string;
 };
 
-export type App = Resource<
-  FlagshipAppTypeId,
-  AppProps,
-  AppAttributes,
-  never,
-  Providers
->;
+export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
 
 /**
  * A Cloudflare Flagship app — a container for feature flags.
@@ -150,13 +144,13 @@ export type App = Resource<
  * @see https://developers.cloudflare.com/flagship/
  * @see https://developers.cloudflare.com/api/resources/flagship/
  */
-export const App = Resource<App>(FlagshipAppTypeId);
+export const App = Resource<App>(TypeId);
 
 /**
  * Returns true if the given value is a Flagship App resource.
  */
 export const isApp = (value: unknown): value is App =>
-  Predicate.hasProperty(value, "Type") && value.Type === FlagshipAppTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AppProvider = () =>
   Provider.succeed(App, {

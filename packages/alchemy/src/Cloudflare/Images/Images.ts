@@ -2,10 +2,10 @@ import type * as Effect from "effect/Effect";
 import { SingleShotGen } from "effect/Utils";
 import { ImagesBinding, type Client } from "./ImagesBinding.ts";
 
-type ImagesTypeId = typeof ImagesTypeId;
-const ImagesTypeId = "Cloudflare.Images.Images" as const;
+type TypeId = typeof TypeId;
+const TypeId = "Cloudflare.Images.Images" as const;
 
-export type Props = {
+export type ImagesProps = {
   /**
    * Binding name used when `Images` is bound from inside a Worker init phase
    * (`yield* Cloudflare.Images.Images(...)`). When passed through
@@ -40,7 +40,7 @@ const bindImages = (self: Images): BindEffect => ImagesBinding(self);
  * is iterable as one when `yield*`-ed.
  */
 export interface Images {
-  kind: ImagesTypeId;
+  kind: TypeId;
   name: string;
   asEffect(): BindEffect;
   [Symbol.iterator](): SingleShotGen<BindEffect, Client>;
@@ -50,7 +50,7 @@ export const isImages = (value: unknown): value is Images =>
   typeof value === "object" &&
   value !== null &&
   "kind" in value &&
-  (value as Images).kind === ImagesTypeId;
+  (value as Images).kind === TypeId;
 
 /**
  * A Cloudflare Images binding for image transformation and manipulation inside
@@ -115,7 +115,7 @@ export const isImages = (value: unknown): value is Images =>
  * @see https://developers.cloudflare.com/images/transform-images/bindings/
  */
 export const Images: {
-  (props?: Props): Images;
+  (props?: ImagesProps): Images;
   /**
    * Bind an existing `Images` marker to the surrounding Worker, returning the
    * Effect-native client. Equivalent to `yield* images` — prefer yielding the
@@ -123,9 +123,9 @@ export const Images: {
    */
   bind: (images: Images) => BindEffect;
 } = Object.assign(
-  (props?: Props): Images => {
+  (props?: ImagesProps): Images => {
     const self: Images = {
-      kind: ImagesTypeId,
+      kind: TypeId,
       name: props?.name ?? "IMAGES",
       asEffect: () => bindImages(self),
       [Symbol.iterator]: () => new SingleShotGen(bindImages(self)),

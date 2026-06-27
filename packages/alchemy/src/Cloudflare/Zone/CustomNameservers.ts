@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ZoneCustomNameserversTypeId =
-  "Cloudflare.Zone.CustomNameservers" as const;
-type ZoneCustomNameserversTypeId = typeof ZoneCustomNameserversTypeId;
+const TypeId = "Cloudflare.Zone.CustomNameservers" as const;
+type TypeId = typeof TypeId;
 
 export type CustomNameserversProps = {
   /**
@@ -60,7 +59,7 @@ export type CustomNameserversAttributes = {
 };
 
 export type CustomNameservers = Resource<
-  ZoneCustomNameserversTypeId,
+  TypeId,
   CustomNameserversProps,
   CustomNameserversAttributes,
   never,
@@ -112,9 +111,7 @@ export type CustomNameservers = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/zones/subresources/custom_nameservers/
  */
-export const CustomNameservers = Resource<CustomNameservers>(
-  ZoneCustomNameserversTypeId,
-);
+export const CustomNameservers = Resource<CustomNameservers>(TypeId);
 
 /**
  * Returns true if the given value is a CustomNameservers resource.
@@ -122,8 +119,7 @@ export const CustomNameservers = Resource<CustomNameservers>(
 export const isCustomNameservers = (
   value: unknown,
 ): value is CustomNameservers =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ZoneCustomNameserversTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomNameserversProvider = () =>
   Provider.succeed(CustomNameservers, {

@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LogpushJobTypeId = "Cloudflare.Logpush.Job" as const;
-type LogpushJobTypeId = typeof LogpushJobTypeId;
+const TypeId = "Cloudflare.Logpush.Job" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Name of the dataset a Logpush job pushes. The available datasets depend
@@ -205,13 +205,7 @@ export interface JobAttributes {
   lastError: string | undefined;
 }
 
-export type Job = Resource<
-  LogpushJobTypeId,
-  JobProps,
-  JobAttributes,
-  never,
-  Providers
->;
+export type Job = Resource<TypeId, JobProps, JobAttributes, never, Providers>;
 
 /**
  * A Cloudflare Logpush job that pushes batches of logs (HTTP requests,
@@ -266,13 +260,13 @@ export type Job = Resource<
  *
  * @see https://developers.cloudflare.com/logs/logpush/
  */
-export const Job = Resource<Job>(LogpushJobTypeId);
+export const Job = Resource<Job>(TypeId);
 
 /**
  * Returns true if the given value is a Job resource.
  */
 export const isJob = (value: unknown): value is Job =>
-  Predicate.hasProperty(value, "Type") && value.Type === LogpushJobTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const JobProvider = () =>
   Provider.succeed(Job, {

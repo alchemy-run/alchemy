@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccessMcpPortalTypeId = "Cloudflare.Access.McpPortal" as const;
-type AccessMcpPortalTypeId = typeof AccessMcpPortalTypeId;
+const TypeId = "Cloudflare.Access.McpPortal" as const;
+type TypeId = typeof TypeId;
 
 export interface McpPortalProps {
   /**
@@ -68,7 +68,7 @@ export type McpPortalAttributes = {
 };
 
 export type McpPortal = Resource<
-  AccessMcpPortalTypeId,
+  TypeId,
   McpPortalProps,
   McpPortalAttributes,
   never,
@@ -107,13 +107,13 @@ export type McpPortal = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/
  */
-export const McpPortal = Resource<McpPortal>(AccessMcpPortalTypeId);
+export const McpPortal = Resource<McpPortal>(TypeId);
 
 /**
  * Returns true if the given value is an McpPortal resource.
  */
 export const isMcpPortal = (value: unknown): value is McpPortal =>
-  Predicate.hasProperty(value, "Type") && value.Type === AccessMcpPortalTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const McpPortalProvider = () =>
   Provider.succeed(McpPortal, {

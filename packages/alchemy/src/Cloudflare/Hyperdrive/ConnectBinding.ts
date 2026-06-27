@@ -5,8 +5,8 @@ import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { Connect, type ConnectClient } from "./Connect.ts";
-import type { Connection } from "./Hyperdrive.ts";
-import { defaultPort, type DevOrigin } from "./Hyperdrive.ts";
+import type { Connection } from "./Connection.ts";
+import { defaultPort, type DevOrigin } from "./Connection.ts";
 
 export const ConnectBinding = Layer.effect(
   Connect,

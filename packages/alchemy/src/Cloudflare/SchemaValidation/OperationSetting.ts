@@ -11,10 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SchemaValidationOperationSettingTypeId =
-  "Cloudflare.SchemaValidation.OperationSetting" as const;
-type SchemaValidationOperationSettingTypeId =
-  typeof SchemaValidationOperationSettingTypeId;
+const TypeId = "Cloudflare.SchemaValidation.OperationSetting" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Per-operation mitigation action for schema validation: `log` records
@@ -57,7 +55,7 @@ export interface OperationSettingAttributes {
 }
 
 export type OperationSetting = Resource<
-  SchemaValidationOperationSettingTypeId,
+  TypeId,
   OperationSettingProps,
   OperationSettingAttributes,
   never,
@@ -104,17 +102,14 @@ export type OperationSetting = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const OperationSetting = Resource<OperationSetting>(
-  SchemaValidationOperationSettingTypeId,
-);
+export const OperationSetting = Resource<OperationSetting>(TypeId);
 
 /**
  * Returns true if the given value is a OperationSetting
  * resource.
  */
 export const isOperationSetting = (value: unknown): value is OperationSetting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SchemaValidationOperationSettingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OperationSettingProvider = () =>
   Provider.succeed(OperationSetting, {

@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IamUserGroupTypeId = "Cloudflare.Iam.UserGroup" as const;
-type IamUserGroupTypeId = typeof IamUserGroupTypeId;
+const TypeId = "Cloudflare.Iam.UserGroup" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A fine-grained policy attached to a user group: an allow/deny decision
@@ -85,7 +85,7 @@ export interface UserGroupAttributes {
 }
 
 export type UserGroup = Resource<
-  IamUserGroupTypeId,
+  TypeId,
   UserGroupProps,
   UserGroupAttributes,
   never,
@@ -136,13 +136,13 @@ export type UserGroup = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/user-groups/
  */
-export const UserGroup = Resource<UserGroup>(IamUserGroupTypeId);
+export const UserGroup = Resource<UserGroup>(TypeId);
 
 /**
  * Returns true if the given value is an UserGroup resource.
  */
 export const isUserGroup = (value: unknown): value is UserGroup =>
-  Predicate.hasProperty(value, "Type") && value.Type === IamUserGroupTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const UserGroupProvider = () =>
   Provider.succeed(UserGroup, {

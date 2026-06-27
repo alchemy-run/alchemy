@@ -741,7 +741,7 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+    const aiGateway = yield* Cloudflare.AIbind(Gateway);
 
     return {
       fetch: Effect.gen(function* () {
@@ -753,7 +753,7 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.AI.GatewayBindingLive)),
 ) {}
 ```
 
@@ -838,7 +838,7 @@ Notes:
 
 ## Reference implementations
 
-- Cloudflare AiGateway — [worker fixture](./packages/alchemy/test/Cloudflare/AiGateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare/AiGateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
+- Cloudflare.AI.Gateway — [worker fixture](./packages/alchemy/test/Cloudflare.AI.Gateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare.AI.Gateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
 - Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
 - Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
 - Cloudflare Cron Trigger — [worker + DO fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/cron-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) (cron handler writes to a DO; test polls a fetch route with `Effect.repeat` until the scheduled handler fires)
@@ -972,7 +972,7 @@ Rules of thumb:
 - If you find yourself writing "Two/three things just happened", "A few things are happening here", or a numbered/bulleted list explaining separate parts of a single snippet — **split the snippet**.
 - One concept ⇒ one heading ⇒ one diff snippet ⇒ one explanation paragraph (no bullets).
 - Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
-- A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
+- A single API call that internally does several things (e.g. `Cloudflare.upgradeConnection()`) doesn't need splitting — describe its behavior in prose.
 - Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
 
 # Pull Request Conventions

@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const BotManagementTypeId = "Cloudflare.BotManagement.BotManagement" as const;
-type BotManagementTypeId = typeof BotManagementTypeId;
+const TypeId = "Cloudflare.BotManagement.BotManagement" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Action for AI scrapers and crawlers.
@@ -155,7 +155,7 @@ export interface Attributes extends Settings {
 }
 
 export type BotManagement = Resource<
-  BotManagementTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -222,13 +222,13 @@ export type BotManagement = Resource<
  *
  * @see https://developers.cloudflare.com/bots/
  */
-export const BotManagement = Resource<BotManagement>(BotManagementTypeId);
+export const BotManagement = Resource<BotManagement>(TypeId);
 
 /**
  * Returns true if the given value is a BotManagement resource.
  */
 export const isBotManagement = (value: unknown): value is BotManagement =>
-  Predicate.hasProperty(value, "Type") && value.Type === BotManagementTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Every writable settings key, used to project observed cloud state and

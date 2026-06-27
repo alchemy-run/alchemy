@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LoadBalancerMonitorTypeId = "Cloudflare.LoadBalancer.Monitor" as const;
-type LoadBalancerMonitorTypeId = typeof LoadBalancerMonitorTypeId;
+const TypeId = "Cloudflare.LoadBalancer.Monitor" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Protocol a Load Balancing monitor probes origins with.
@@ -134,7 +134,7 @@ export interface MonitorAttributes {
 }
 
 export type Monitor = Resource<
-  LoadBalancerMonitorTypeId,
+  TypeId,
   MonitorProps,
   MonitorAttributes,
   never,
@@ -184,14 +184,13 @@ export type Monitor = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/monitors/
  */
-export const Monitor = Resource<Monitor>(LoadBalancerMonitorTypeId);
+export const Monitor = Resource<Monitor>(TypeId);
 
 /**
  * Returns true if the given value is a Monitor resource.
  */
 export const isMonitor = (value: unknown): value is Monitor =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LoadBalancerMonitorTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MonitorProvider = () =>
   Provider.succeed(Monitor, {
@@ -214,7 +213,7 @@ export const MonitorProvider = () =>
       );
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;

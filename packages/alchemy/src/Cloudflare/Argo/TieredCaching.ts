@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TieredCachingTypeId = "Cloudflare.Argo.TieredCaching" as const;
-type TieredCachingTypeId = typeof TieredCachingTypeId;
+const TypeId = "Cloudflare.Argo.TieredCaching" as const;
+type TypeId = typeof TypeId;
 
 export type TieredCachingProps = {
   /**
@@ -47,7 +47,7 @@ export type TieredCachingAttributes = {
 };
 
 export type TieredCaching = Resource<
-  TieredCachingTypeId,
+  TypeId,
   TieredCachingProps,
   TieredCachingAttributes,
   never,
@@ -96,13 +96,13 @@ export type TieredCaching = Resource<
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/
  */
-export const TieredCaching = Resource<TieredCaching>(TieredCachingTypeId);
+export const TieredCaching = Resource<TieredCaching>(TypeId);
 
 /**
  * Returns true if the given value is a TieredCaching resource.
  */
 export const isTieredCaching = (value: unknown): value is TieredCaching =>
-  Predicate.hasProperty(value, "Type") && value.Type === TieredCachingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TieredCachingProvider = () =>
   Provider.succeed(TieredCaching, {

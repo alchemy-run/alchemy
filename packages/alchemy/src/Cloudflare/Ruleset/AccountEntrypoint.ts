@@ -11,9 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { OutputRule, Phase } from "./Ruleset.ts";
 
-const RulesetAccountEntrypointTypeId =
-  "Cloudflare.Rulesets.AccountEntrypoint" as const;
-type RulesetAccountEntrypointTypeId = typeof RulesetAccountEntrypointTypeId;
+const TypeId = "Cloudflare.Rulesets.AccountEntrypoint" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A rule inside an account phase entrypoint — same shape Cloudflare accepts
@@ -74,7 +73,7 @@ export type AccountEntrypointAttributes = {
 };
 
 export type AccountEntrypoint = Resource<
-  RulesetAccountEntrypointTypeId,
+  TypeId,
   AccountEntrypointProps,
   AccountEntrypointAttributes,
   never,
@@ -124,9 +123,7 @@ export type AccountEntrypoint = Resource<
  *
  * @see https://developers.cloudflare.com/waf/account/
  */
-export const AccountEntrypoint = Resource<AccountEntrypoint>(
-  RulesetAccountEntrypointTypeId,
-);
+export const AccountEntrypoint = Resource<AccountEntrypoint>(TypeId);
 
 /**
  * Returns true if the given value is a AccountEntrypoint resource.
@@ -134,8 +131,7 @@ export const AccountEntrypoint = Resource<AccountEntrypoint>(
 export const isAccountEntrypoint = (
   value: unknown,
 ): value is AccountEntrypoint =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RulesetAccountEntrypointTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountEntrypointProvider = () =>
   Provider.succeed(AccountEntrypoint, {

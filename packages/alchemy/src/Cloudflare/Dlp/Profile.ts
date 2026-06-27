@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DlpProfileTypeId = "Cloudflare.Dlp.Profile" as const;
-type DlpProfileTypeId = typeof DlpProfileTypeId;
+const TypeId = "Cloudflare.Dlp.Profile" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A detection entry defined inline on the profile — a regular expression
@@ -84,7 +84,7 @@ export type ProfileAttributes = {
 };
 
 export type Profile = Resource<
-  DlpProfileTypeId,
+  TypeId,
   ProfileProps,
   ProfileAttributes,
   never,
@@ -132,13 +132,13 @@ export type Profile = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/data-loss-prevention/dlp-profiles/
  */
-export const Profile = Resource<Profile>(DlpProfileTypeId);
+export const Profile = Resource<Profile>(TypeId);
 
 /**
  * Returns true if the given value is a Profile resource.
  */
 export const isProfile = (value: unknown): value is Profile =>
-  Predicate.hasProperty(value, "Type") && value.Type === DlpProfileTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ProfileProvider = () =>
   Provider.succeed(Profile, {

@@ -34,12 +34,12 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* retryAuthBlip(
-        stack.deploy(Cloudflare.Pipelines.PipelineStream("ListStream", {})),
+        stack.deploy(Cloudflare.Pipelines.Stream("ListStream", {})),
       );
       expect(deployed.streamId).toBeTruthy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Pipelines.PipelineStream,
+        Cloudflare.Pipelines.Stream,
       );
       const all = yield* provider.list();
 

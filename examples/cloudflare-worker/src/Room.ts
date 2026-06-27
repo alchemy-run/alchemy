@@ -13,7 +13,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const sessions = new Map<string, Cloudflare.WebSocket.Socket>();
+      const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
         const attachment = socket.deserializeAttachment<{ id: string }>();
@@ -48,7 +48,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
             }
           }),
         webSocketMessage: Effect.fn(function* (
-          socket: Cloudflare.WebSocket.Socket,
+          socket: Cloudflare.WebSocket.WebSocket,
           message: string | ArrayBuffer,
         ) {
           const attachment = socket.deserializeAttachment<{ id: string }>();
@@ -79,7 +79,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
           }
         }),
         webSocketClose: Effect.fn(function* (
-          ws: Cloudflare.WebSocket.Socket,
+          ws: Cloudflare.WebSocket.WebSocket,
           code: number,
           reason: string,
           _wasClean: boolean,

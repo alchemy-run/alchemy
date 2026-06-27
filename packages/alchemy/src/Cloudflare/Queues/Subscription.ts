@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const QueueSubscriptionTypeId = "Cloudflare.Queues.Subscription" as const;
-type QueueSubscriptionTypeId = typeof QueueSubscriptionTypeId;
+const TypeId = "Cloudflare.Queues.Subscription" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The Cloudflare product whose events the subscription delivers into the
@@ -130,7 +130,7 @@ export type SubscriptionAttributes = {
 };
 
 export type Subscription = Resource<
-  QueueSubscriptionTypeId,
+  TypeId,
   SubscriptionProps,
   SubscriptionAttributes,
   never,
@@ -193,14 +193,13 @@ export type Subscription = Resource<
  *
  * @see https://developers.cloudflare.com/queues/event-subscriptions/
  */
-export const Subscription = Resource<Subscription>(QueueSubscriptionTypeId);
+export const Subscription = Resource<Subscription>(TypeId);
 
 /**
  * Returns true if the given value is a Subscription resource.
  */
 export const isSubscription = (value: unknown): value is Subscription =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === QueueSubscriptionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SubscriptionProvider = () =>
   Provider.succeed(Subscription, {

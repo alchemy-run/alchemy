@@ -6,7 +6,7 @@ import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { formatVpcService, type Attributes } from "./VpcService.ts";
 
-export type RefProps =
+export type VpcServiceRefProps =
   | {
       /**
        * The Cloudflare-assigned ID for the VPC service.
@@ -44,7 +44,7 @@ export type VpcServiceRef = Attributes;
  * });
  * ```
  */
-export const VpcServiceRef = (props: RefProps) =>
+export const VpcServiceRef = (props: VpcServiceRefProps) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     if ("name" in props) {

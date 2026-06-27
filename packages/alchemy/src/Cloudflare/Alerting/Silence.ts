@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const SilenceTypeId = "Cloudflare.Alerting.Silence" as const;
-type SilenceTypeId = typeof SilenceTypeId;
+const TypeId = "Cloudflare.Alerting.Silence" as const;
+type TypeId = typeof TypeId;
 
 export interface SilenceProps {
   /**
@@ -56,7 +56,7 @@ export interface SilenceAttributes {
 }
 
 export type Silence = Resource<
-  SilenceTypeId,
+  TypeId,
   SilenceProps,
   SilenceAttributes,
   never,
@@ -106,13 +106,13 @@ export type Silence = Resource<
  *
  * @see https://developers.cloudflare.com/notifications/
  */
-export const Silence = Resource<Silence>(SilenceTypeId);
+export const Silence = Resource<Silence>(TypeId);
 
 /**
  * Returns true if the given value is a Silence resource.
  */
 export const isSilence = (value: unknown): value is Silence =>
-  Predicate.hasProperty(value, "Type") && value.Type === SilenceTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SilenceProvider = () =>
   Provider.succeed(Silence, {

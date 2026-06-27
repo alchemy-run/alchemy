@@ -2,7 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { Database } from "./D1Database.ts";
+import type { Database } from "./Database.ts";
 import {
   type QueryDatabaseClient,
   PreparedStatement,

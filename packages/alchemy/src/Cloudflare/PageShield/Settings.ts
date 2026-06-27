@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const PageShieldSettingsTypeId = "Cloudflare.PageShield.Settings" as const;
-type PageShieldSettingsTypeId = typeof PageShieldSettingsTypeId;
+const TypeId = "Cloudflare.PageShield.Settings" as const;
+type TypeId = typeof TypeId;
 
 export interface SettingsProps {
   /**
@@ -78,7 +78,7 @@ export interface SettingsAttributes {
 }
 
 export type Settings = Resource<
-  PageShieldSettingsTypeId,
+  TypeId,
   SettingsProps,
   SettingsAttributes,
   never,
@@ -136,14 +136,13 @@ export type Settings = Resource<
  *
  * @see https://developers.cloudflare.com/page-shield/
  */
-export const Settings = Resource<Settings>(PageShieldSettingsTypeId);
+export const Settings = Resource<Settings>(TypeId);
 
 /**
  * Returns true if the given value is a Settings resource.
  */
 export const isSettings = (value: unknown): value is Settings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === PageShieldSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 interface DesiredSettings {
   enabled: boolean;

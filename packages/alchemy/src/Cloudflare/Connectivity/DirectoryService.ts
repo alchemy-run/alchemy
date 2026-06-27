@@ -12,9 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DirectoryServiceTypeId =
-  "Cloudflare.Connectivity.DirectoryService" as const;
-type DirectoryServiceTypeId = typeof DirectoryServiceTypeId;
+const TypeId = "Cloudflare.Connectivity.DirectoryService" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Protocol of a Connectivity Directory service.
@@ -215,7 +214,7 @@ export type DirectoryServiceAttributes = {
 };
 
 export type DirectoryService = Resource<
-  DirectoryServiceTypeId,
+  TypeId,
   DirectoryServiceProps,
   DirectoryServiceAttributes,
   never,
@@ -282,15 +281,13 @@ export type DirectoryService = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/
  */
-export const DirectoryService = Resource<DirectoryService>(
-  DirectoryServiceTypeId,
-);
+export const DirectoryService = Resource<DirectoryService>(TypeId);
 
 /**
  * Returns true if the given value is a DirectoryService resource.
  */
 export const isDirectoryService = (value: unknown): value is DirectoryService =>
-  Predicate.hasProperty(value, "Type") && value.Type === DirectoryServiceTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DirectoryServiceProvider = () =>
   Provider.succeed(DirectoryService, {

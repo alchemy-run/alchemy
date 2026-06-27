@@ -12,9 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicNetworkMonitoringRuleTypeId =
-  "Cloudflare.MagicNetworkMonitoring.Rule" as const;
-type MagicNetworkMonitoringRuleTypeId = typeof MagicNetworkMonitoringRuleTypeId;
+const TypeId = "Cloudflare.MagicNetworkMonitoring.Rule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * MNM rule type: `threshold` (static bits/packets-per-second limits),
@@ -127,7 +126,7 @@ export interface RuleAttributes {
 }
 
 export type Rule = Resource<
-  MagicNetworkMonitoringRuleTypeId,
+  TypeId,
   RuleProps,
   RuleAttributes,
   never,
@@ -187,14 +186,13 @@ export type Rule = Resource<
  *
  * @see https://developers.cloudflare.com/magic-network-monitoring/rules/
  */
-export const Rule = Resource<Rule>(MagicNetworkMonitoringRuleTypeId);
+export const Rule = Resource<Rule>(TypeId);
 
 /**
  * Returns true if the given value is a Rule resource.
  */
 export const isRule = (value: unknown): value is Rule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === MagicNetworkMonitoringRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const RuleProvider = () =>
   Provider.succeed(Rule, {

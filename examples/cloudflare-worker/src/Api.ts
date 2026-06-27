@@ -44,7 +44,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const queueResource = yield* Queue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
     const repos = yield* Cloudflare.Artifacts.ReadWriteStore(Repos);
-    const aiGateway = yield* Cloudflare.AiGateway.Inference(Gateway);
+    const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
     // Effect-style queue consumer. Each batch is piped through the
     // handler; success ack()s every message in the batch, failure
@@ -361,7 +361,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         // AI Gateway smoke test — POST /ai with { prompt }.
         //
         // Routes a Workers AI inference call through the gateway resource so
-        // every request is observable in the Cloudflare AI Gateway UI and
+        // every request is observable in the Cloudflare.AI. Gateway UI and
         // benefits from caching/rate limiting configured on the resource.
         if (request.url.startsWith("/ai") && request.method === "POST") {
           const text = yield* request.text;
@@ -452,7 +452,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Cloudflare.Queues.WriteQueueBinding,
         Cloudflare.Queues.EventSourceLive,
         Cloudflare.Artifacts.ReadWriteStoreBinding,
-        Cloudflare.AiGateway.InferenceBinding,
+        Cloudflare.AI.QueryGatewayBinding,
       ),
     ),
   ),

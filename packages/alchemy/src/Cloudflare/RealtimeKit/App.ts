@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RealtimeKitAppTypeId = "Cloudflare.RealtimeKit.App" as const;
-type RealtimeKitAppTypeId = typeof RealtimeKitAppTypeId;
+const TypeId = "Cloudflare.RealtimeKit.App" as const;
+type TypeId = typeof TypeId;
 
 export type AppProps = {
   /**
@@ -47,13 +47,7 @@ export type AppAttributes = {
   createdAt: string;
 };
 
-export type App = Resource<
-  RealtimeKitAppTypeId,
-  AppProps,
-  AppAttributes,
-  never,
-  Providers
->;
+export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
 
 /**
  * A Cloudflare RealtimeKit app — the organizational container for RealtimeKit
@@ -89,13 +83,13 @@ export type App = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/realtimekit/
  */
-export const App = Resource<App>(RealtimeKitAppTypeId);
+export const App = Resource<App>(TypeId);
 
 /**
  * Returns true if the given value is a App resource.
  */
 export const isApp = (value: unknown): value is App =>
-  Predicate.hasProperty(value, "Type") && value.Type === RealtimeKitAppTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AppProvider = () =>
   Provider.succeed(App, {

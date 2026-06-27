@@ -10,9 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const SynProtectionRuleTypeId =
-  "Cloudflare.DdosProtection.SynProtectionRule" as const;
-type SynProtectionRuleTypeId = typeof SynProtectionRuleTypeId;
+const TypeId = "Cloudflare.DdosProtection.SynProtectionRule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Operating mode of an Advanced TCP Protection rule: actively mitigate
@@ -97,7 +96,7 @@ export interface SynProtectionRuleAttributes {
 }
 
 export type SynProtectionRule = Resource<
-  SynProtectionRuleTypeId,
+  TypeId,
   SynProtectionRuleProps,
   SynProtectionRuleAttributes,
   never,
@@ -148,9 +147,7 @@ export type SynProtectionRule = Resource<
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
  */
-export const SynProtectionRule = Resource<SynProtectionRule>(
-  SynProtectionRuleTypeId,
-);
+export const SynProtectionRule = Resource<SynProtectionRule>(TypeId);
 
 /**
  * Returns true if the given value is a SynProtectionRule resource.
@@ -158,8 +155,7 @@ export const SynProtectionRule = Resource<SynProtectionRule>(
 export const isSynProtectionRule = (
   value: unknown,
 ): value is SynProtectionRule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SynProtectionRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SynProtectionRuleProvider = () =>
   Provider.succeed(SynProtectionRule, {

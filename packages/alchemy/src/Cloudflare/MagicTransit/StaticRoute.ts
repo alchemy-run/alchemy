@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicStaticRouteTypeId = "Cloudflare.MagicTransit.StaticRoute" as const;
-type MagicStaticRouteTypeId = typeof MagicStaticRouteTypeId;
+const TypeId = "Cloudflare.MagicTransit.StaticRoute" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Scope of an ECMP static route — restricts the route to specific
@@ -76,7 +76,7 @@ export interface MagicStaticRouteAttributes {
 }
 
 export type MagicStaticRoute = Resource<
-  MagicStaticRouteTypeId,
+  TypeId,
   MagicStaticRouteProps,
   MagicStaticRouteAttributes,
   never,
@@ -128,15 +128,13 @@ export type MagicStaticRoute = Resource<
  *
  * @see https://developers.cloudflare.com/magic-transit/how-to/configure-static-routes/
  */
-export const MagicStaticRoute = Resource<MagicStaticRoute>(
-  MagicStaticRouteTypeId,
-);
+export const MagicStaticRoute = Resource<MagicStaticRoute>(TypeId);
 
 /**
  * Returns true if the given value is a MagicStaticRoute resource.
  */
 export const isMagicStaticRoute = (value: unknown): value is MagicStaticRoute =>
-  Predicate.hasProperty(value, "Type") && value.Type === MagicStaticRouteTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const DEFAULT_PRIORITY = 100;
 

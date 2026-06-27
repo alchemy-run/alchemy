@@ -17,8 +17,8 @@ const logLevel = Effect.provideService(
 );
 
 interface CatalogOpts {
-  compaction?: Cloudflare.R2DataCatalog.Compaction;
-  snapshotExpiration?: Cloudflare.R2DataCatalog.SnapshotExpiration;
+  compaction?: Cloudflare.R2.Compaction;
+  snapshotExpiration?: Cloudflare.R2.SnapshotExpiration;
   token?: Redacted.Redacted<string>;
 }
 
@@ -28,7 +28,7 @@ interface CatalogOpts {
 const program = (opts: CatalogOpts = {}) =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", {});
-    const catalog = yield* Cloudflare.R2DataCatalog.R2DataCatalog("Catalog", {
+    const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
       bucketName: bucket.bucketName,
       ...opts,
     });
@@ -176,9 +176,7 @@ test.provider(
       const deployed = yield* stack.deploy(program());
       expect(deployed.catalog.status).toEqual("active");
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.R2DataCatalog.R2DataCatalog,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.R2.DataCatalog);
       const all = yield* provider.list();
 
       // The freshly-enabled catalog is present in the account-wide listing,

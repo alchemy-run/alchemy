@@ -21,7 +21,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import { type Socket } from "../WebSocket/WebSocket.ts";
+import { type WebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 export interface DurableObjectExport {
@@ -90,11 +90,11 @@ export interface DurableObjectShape {
     alarmInfo?: AlarmInvocationInfo,
   ) => Effect.Effect<void, never, never>;
   webSocketMessage?: (
-    socket: Socket,
+    socket: WebSocket,
     message: string | ArrayBuffer,
   ) => Effect.Effect<void>;
   webSocketClose?: (
-    socket: Socket,
+    socket: WebSocket,
     code: number,
     reason: string,
     wasClean: boolean,
@@ -540,7 +540,7 @@ export class DurableObjectScope extends Context.Service<
  * ```typescript
  * return {
  *   webSocketMessage: Effect.fn(function* (
- *     socket: Cloudflare.WebSocket.Socket,
+ *     socket: Cloudflare.WebSocket.WebSocket,
  *     message: string | Uint8Array,
  *   ) {
  *     const text = typeof message === "string"
@@ -549,7 +549,7 @@ export class DurableObjectScope extends Context.Service<
  *     // process the message
  *   }),
  *   webSocketClose: Effect.fn(function* (
- *     ws: Cloudflare.WebSocket.Socket,
+ *     ws: Cloudflare.WebSocket.WebSocket,
  *     code: number,
  *     reason: string,
  *   ) {
@@ -570,7 +570,7 @@ export class DurableObjectScope extends Context.Service<
  *   const state = yield* Cloudflare.DurableObjectState;
  *
  *   return Effect.gen(function* () {
- *     const sessions = new Map<string, Cloudflare.WebSocket.Socket>();
+ *     const sessions = new Map<string, Cloudflare.WebSocket.WebSocket>();
  *
  *     // Rehydrate the in-memory session map after hibernation.
  *     for (const socket of yield* state.getWebSockets()) {

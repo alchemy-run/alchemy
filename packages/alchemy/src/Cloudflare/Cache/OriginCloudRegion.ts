@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginCloudRegionTypeId = "Cloudflare.Cache.OriginCloudRegion" as const;
-type OriginCloudRegionTypeId = typeof OriginCloudRegionTypeId;
+const TypeId = "Cloudflare.Cache.OriginCloudRegion" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud vendor hosting an origin. Region identifiers are
@@ -64,7 +64,7 @@ export interface OriginCloudRegionAttributes {
 }
 
 export type OriginCloudRegion = Resource<
-  OriginCloudRegionTypeId,
+  TypeId,
   OriginCloudRegionProps,
   OriginCloudRegionAttributes,
   never,
@@ -120,9 +120,7 @@ export type OriginCloudRegion = Resource<
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/
  */
-export const OriginCloudRegion = Resource<OriginCloudRegion>(
-  OriginCloudRegionTypeId,
-);
+export const OriginCloudRegion = Resource<OriginCloudRegion>(TypeId);
 
 /**
  * Returns true if the given value is an OriginCloudRegion resource.
@@ -130,8 +128,7 @@ export const OriginCloudRegion = Resource<OriginCloudRegion>(
 export const isOriginCloudRegion = (
   value: unknown,
 ): value is OriginCloudRegion =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginCloudRegionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Compare two origin IPs for identity. Cloudflare canonicalizes stored IPs

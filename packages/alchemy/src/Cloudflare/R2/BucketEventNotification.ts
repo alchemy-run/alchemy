@@ -11,9 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { Bucket } from "./Bucket.ts";
 
-const R2BucketEventNotificationTypeId =
-  "Cloudflare.R2.BucketEventNotification" as const;
-type R2BucketEventNotificationTypeId = typeof R2BucketEventNotificationTypeId;
+const TypeId = "Cloudflare.R2.BucketEventNotification" as const;
+type TypeId = typeof TypeId;
 
 /**
  * An R2 object action that can trigger an event notification.
@@ -109,7 +108,7 @@ export interface BucketEventNotificationAttributes {
 }
 
 export type BucketEventNotification = Resource<
-  R2BucketEventNotificationTypeId,
+  TypeId,
   BucketEventNotificationProps,
   BucketEventNotificationAttributes,
   never,
@@ -181,9 +180,8 @@ export type BucketEventNotification = Resource<
  *
  * @see https://developers.cloudflare.com/r2/buckets/event-notifications/
  */
-export const BucketEventNotification = Resource<BucketEventNotification>(
-  R2BucketEventNotificationTypeId,
-);
+export const BucketEventNotification =
+  Resource<BucketEventNotification>(TypeId);
 
 export declare namespace BucketEventNotification {
   export type Rule = {
@@ -202,8 +200,7 @@ export declare namespace BucketEventNotification {
 export const isBucketEventNotification = (
   value: unknown,
 ): value is BucketEventNotification =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === R2BucketEventNotificationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const BucketEventNotificationProvider = () =>
   Provider.succeed(BucketEventNotification, {

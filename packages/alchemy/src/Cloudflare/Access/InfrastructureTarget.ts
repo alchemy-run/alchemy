@@ -10,9 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccessInfrastructureTargetTypeId =
-  "Cloudflare.Access.InfrastructureTarget" as const;
-type AccessInfrastructureTargetTypeId = typeof AccessInfrastructureTargetTypeId;
+const TypeId = "Cloudflare.Access.InfrastructureTarget" as const;
+type TypeId = typeof TypeId;
 
 /**
  * IPv4/IPv6 address details for an infrastructure target. At least one
@@ -75,7 +74,7 @@ export interface InfrastructureTargetAttributes {
 }
 
 export type InfrastructureTarget = Resource<
-  AccessInfrastructureTargetTypeId,
+  TypeId,
   InfrastructureTargetProps,
   InfrastructureTargetAttributes,
   never,
@@ -127,9 +126,7 @@ export type InfrastructureTarget = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/applications/non-http/infrastructure-apps/
  */
-export const InfrastructureTarget = Resource<InfrastructureTarget>(
-  AccessInfrastructureTargetTypeId,
-);
+export const InfrastructureTarget = Resource<InfrastructureTarget>(TypeId);
 
 /**
  * Returns true if the given value is an InfrastructureTarget resource.
@@ -137,8 +134,7 @@ export const InfrastructureTarget = Resource<InfrastructureTarget>(
 export const isInfrastructureTarget = (
   value: unknown,
 ): value is InfrastructureTarget =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AccessInfrastructureTargetTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const InfrastructureTargetProvider = () =>
   Provider.succeed(InfrastructureTarget, {

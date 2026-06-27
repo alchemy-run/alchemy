@@ -11,9 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const KeylessCertificateTypeId =
-  "Cloudflare.KeylessCertificate.KeylessCertificate" as const;
-type KeylessCertificateTypeId = typeof KeylessCertificateTypeId;
+const TypeId = "Cloudflare.KeylessCertificate.KeylessCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How the certificate chain is bundled when the certificate is served.
@@ -135,7 +134,7 @@ export interface Attributes {
 }
 
 export type KeylessCertificate = Resource<
-  KeylessCertificateTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -215,9 +214,7 @@ export type KeylessCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/keyless-ssl/
  */
-export const KeylessCertificate = Resource<KeylessCertificate>(
-  KeylessCertificateTypeId,
-);
+export const KeylessCertificate = Resource<KeylessCertificate>(TypeId);
 
 /**
  * Returns true if the given value is a KeylessCertificate resource.
@@ -225,8 +222,7 @@ export const KeylessCertificate = Resource<KeylessCertificate>(
 export const isKeylessCertificate = (
   value: unknown,
 ): value is KeylessCertificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === KeylessCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const KeylessCertificateProvider = () =>
   Provider.succeed(KeylessCertificate, {

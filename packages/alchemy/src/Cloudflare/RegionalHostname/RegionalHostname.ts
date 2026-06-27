@@ -10,9 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const RegionalHostnameTypeId =
-  "Cloudflare.RegionalHostname.RegionalHostname" as const;
-type RegionalHostnameTypeId = typeof RegionalHostnameTypeId;
+const TypeId = "Cloudflare.RegionalHostname.RegionalHostname" as const;
+type TypeId = typeof TypeId;
 
 export interface Props {
   /**
@@ -53,7 +52,7 @@ export interface Attributes {
 }
 
 export type RegionalHostname = Resource<
-  RegionalHostnameTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -66,7 +65,7 @@ export type RegionalHostname = Resource<
  * Services).
  *
  * A DNS record for the hostname must exist in the zone for regionalization
- * to take effect (soft dependency on `Cloudflare.Dns.Record`). Only
+ * to take effect (soft dependency on `Cloudflare.DNS.Record`). Only
  * `regionKey` is mutable; `hostname` is the path identifier and `routing`
  * is create-only, so both force a replacement.
  *
@@ -96,15 +95,13 @@ export type RegionalHostname = Resource<
  *
  * @see https://developers.cloudflare.com/data-localization/regional-services/
  */
-export const RegionalHostname = Resource<RegionalHostname>(
-  RegionalHostnameTypeId,
-);
+export const RegionalHostname = Resource<RegionalHostname>(TypeId);
 
 /**
  * Returns true if the given value is a RegionalHostname resource.
  */
 export const isRegionalHostname = (value: unknown): value is RegionalHostname =>
-  Predicate.hasProperty(value, "Type") && value.Type === RegionalHostnameTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const RegionalHostnameProvider = () =>
   Provider.succeed(RegionalHostname, {
@@ -185,7 +182,7 @@ export const RegionalHostnameProvider = () =>
       return observed ? toAttributes(observed, zoneId) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 

@@ -12,8 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const PageShieldPolicyTypeId = "Cloudflare.PageShield.Policy" as const;
-type PageShieldPolicyTypeId = typeof PageShieldPolicyTypeId;
+const TypeId = "Cloudflare.PageShield.Policy" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Action a Page Shield policy takes when its expression matches:
@@ -78,7 +78,7 @@ export interface PolicyAttributes {
 }
 
 export type Policy = Resource<
-  PageShieldPolicyTypeId,
+  TypeId,
   PolicyProps,
   PolicyAttributes,
   never,
@@ -132,13 +132,13 @@ export type Policy = Resource<
  *
  * @see https://developers.cloudflare.com/page-shield/policies/
  */
-export const Policy = Resource<Policy>(PageShieldPolicyTypeId);
+export const Policy = Resource<Policy>(TypeId);
 
 /**
  * Returns true if the given value is a Policy resource.
  */
 export const isPolicy = (value: unknown): value is Policy =>
-  Predicate.hasProperty(value, "Type") && value.Type === PageShieldPolicyTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const PolicyProvider = () =>
   Provider.succeed(Policy, {

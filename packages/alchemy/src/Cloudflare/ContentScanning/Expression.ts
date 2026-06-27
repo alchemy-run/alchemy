@@ -12,9 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ContentScanningExpressionTypeId =
-  "Cloudflare.ContentScanning.Expression" as const;
-type ContentScanningExpressionTypeId = typeof ContentScanningExpressionTypeId;
+const TypeId = "Cloudflare.ContentScanning.Expression" as const;
+type TypeId = typeof TypeId;
 
 export interface ExpressionProps {
   /**
@@ -43,7 +42,7 @@ export interface ExpressionAttributes {
 }
 
 export type Expression = Resource<
-  ContentScanningExpressionTypeId,
+  TypeId,
   ExpressionProps,
   ExpressionAttributes,
   never,
@@ -91,14 +90,13 @@ export type Expression = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/#add-custom-scan-expressions
  */
-export const Expression = Resource<Expression>(ContentScanningExpressionTypeId);
+export const Expression = Resource<Expression>(TypeId);
 
 /**
  * Returns true if the given value is a Expression resource.
  */
 export const isExpression = (value: unknown): value is Expression =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ContentScanningExpressionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Cloudflare accepted the create call but the expression did not appear in

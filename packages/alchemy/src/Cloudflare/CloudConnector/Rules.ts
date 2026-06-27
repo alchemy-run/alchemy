@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CloudConnectorRulesTypeId = "Cloudflare.CloudConnector.Rules" as const;
-type CloudConnectorRulesTypeId = typeof CloudConnectorRulesTypeId;
+const TypeId = "Cloudflare.CloudConnector.Rules" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud-provider object storage a Cloud Connector rule routes matching
@@ -93,7 +93,7 @@ export interface RulesAttributes {
 }
 
 export type Rules = Resource<
-  CloudConnectorRulesTypeId,
+  TypeId,
   RulesProps,
   RulesAttributes,
   never,
@@ -158,14 +158,13 @@ export type Rules = Resource<
  *
  * @see https://developers.cloudflare.com/rules/cloud-connector/
  */
-export const Rules = Resource<Rules>(CloudConnectorRulesTypeId);
+export const Rules = Resource<Rules>(TypeId);
 
 /**
  * Returns true if the given value is a Rules resource.
  */
 export const isRules = (value: unknown): value is Rules =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === CloudConnectorRulesTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const RulesProvider = () =>
   Provider.succeed(Rules, {

@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicAppTypeId = "Cloudflare.MagicTransit.App" as const;
-type MagicAppTypeId = typeof MagicAppTypeId;
+const TypeId = "Cloudflare.MagicTransit.App" as const;
+type TypeId = typeof TypeId;
 
 export interface MagicAppProps {
   /**
@@ -48,7 +48,7 @@ export interface MagicAppAttributes {
 }
 
 export type MagicApp = Resource<
-  MagicAppTypeId,
+  TypeId,
   MagicAppProps,
   MagicAppAttributes,
   never,
@@ -88,13 +88,13 @@ export type MagicApp = Resource<
  *
  * @see https://developers.cloudflare.com/magic-wan/configuration/apps/
  */
-export const MagicApp = Resource<MagicApp>(MagicAppTypeId);
+export const MagicApp = Resource<MagicApp>(TypeId);
 
 /**
  * Returns true if the given value is a MagicApp resource.
  */
 export const isMagicApp = (value: unknown): value is MagicApp =>
-  Predicate.hasProperty(value, "Type") && value.Type === MagicAppTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MagicAppProvider = () =>
   Provider.succeed(MagicApp, {

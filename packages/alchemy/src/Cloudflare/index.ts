@@ -3,17 +3,15 @@ export * from "./CloudflareEnvironment.ts";
 export * from "./EdgeSession.ts";
 export * from "./Fetcher.ts";
 export * from "./Providers.ts";
-export * from "./Workers/RpcAsync.ts";
 export * from "./StateStore/index.ts";
+export * from "./Workers/RpcAsync.ts";
 
 // ── services (namespaced) ──
 export * as Access from "./Access/index.ts";
 export * as Account from "./Account/index.ts";
 export * as Acm from "./Acm/index.ts";
 export * as Addressing from "./Addressing/index.ts";
-export * as AiGateway from "./AiGateway/index.ts";
-export * as AiSearch from "./AiSearch/index.ts";
-export * as AiSecurity from "./AiSecurity/index.ts";
+export * as AI from "./AI/index.ts";
 export * as Alerting from "./Alerting/index.ts";
 export * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 export * as ApiShield from "./ApiShield/index.ts";
@@ -38,10 +36,8 @@ export * as DdosProtection from "./DdosProtection/index.ts";
 export * as Devices from "./Devices/index.ts";
 export * as Diagnostics from "./Diagnostics/index.ts";
 export * as Dlp from "./Dlp/index.ts";
-export * as Dns from "./Dns/index.ts";
-export * as DnsFirewall from "./DnsFirewall/index.ts";
+export * as DNS from "./DNS/index.ts";
 export * as Email from "./Email/index.ts";
-export * as EmailSecurity from "./EmailSecurity/index.ts";
 export * as Firewall from "./Firewall/index.ts";
 export * as Flagship from "./Flagship/index.ts";
 export * as Fraud from "./Fraud/index.ts";
@@ -75,7 +71,6 @@ export * as PageShield from "./PageShield/index.ts";
 export * as Pipelines from "./Pipelines/index.ts";
 export * as Queues from "./Queues/index.ts";
 export * as R2 from "./R2/index.ts";
-export * as R2DataCatalog from "./R2DataCatalog/index.ts";
 export * as RealtimeKit from "./RealtimeKit/index.ts";
 export * as RegionalHostname from "./RegionalHostname/index.ts";
 export * as Registrar from "./Registrar/index.ts";
@@ -102,33 +97,33 @@ export * as VpcService from "./VpcService/index.ts";
 export * as VulnerabilityScanner from "./VulnerabilityScanner/index.ts";
 export * as WaitingRoom from "./WaitingRoom/index.ts";
 export * as Web3 from "./Web3/index.ts";
-export * as WebSocket from "./WebSocket/index.ts";
 export * as Website from "./Website/index.ts";
 export * as Workers from "./Workers/index.ts";
-export * as Workflows from "./Workflows/index.ts";
+export * as WebSocket from "./Workers/WebSocket.ts";
 export * as WorkersForPlatforms from "./WorkersForPlatforms/index.ts";
+export * as Workflows from "./Workflows/index.ts";
 export * as Zaraz from "./Zaraz/index.ts";
 export * as Zone from "./Zone/index.ts";
 
 // ── convenience root re-exports (common building blocks) ──
+export { Container } from "./Containers/index.ts";
 export {
-  Worker,
-  isWorker,
+  Browser,
   DurableObject,
   DurableObjectState,
-  RpcWorker,
-  RpcDurableObject,
-  WorkerLoader,
-  Browser,
   RateLimit,
   Request,
+  RpcDurableObject,
+  RpcWorker,
+  Worker,
+  WorkerLoader,
   cron,
+  isWorker,
 } from "./Workers/index.ts";
 export type { InferEnv } from "./Workers/index.ts";
 export { Workflow } from "./Workflows/index.ts";
-export { Container } from "./Containers/index.ts";
 
 // runtime bridge factories — the generated Worker entry imports these from
 // "alchemy/Cloudflare" (see Workers/WorkerBundle.ts), so they must stay top-level.
-export { makeWorkerBridge, makeDurableObjectBridge } from "./Workers/index.ts";
+export { makeDurableObjectBridge, makeWorkerBridge } from "./Workers/index.ts";
 export { makeWorkflowBridge } from "./Workflows/index.ts";

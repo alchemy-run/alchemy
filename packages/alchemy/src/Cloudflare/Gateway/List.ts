@@ -12,8 +12,8 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayListTypeId = "Cloudflare.Gateway.List" as const;
-type GatewayListTypeId = typeof GatewayListTypeId;
+const TypeId = "Cloudflare.Gateway.List" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of values a Gateway list holds. Immutable — changing the type
@@ -97,7 +97,7 @@ export interface ListAttributes {
 }
 
 export type List = Resource<
-  GatewayListTypeId,
+  TypeId,
   ListProps,
   ListAttributes,
   never,
@@ -149,13 +149,13 @@ export type List = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/gateway/lists/
  */
-export const List = Resource<List>(GatewayListTypeId);
+export const List = Resource<List>(TypeId);
 
 /**
  * Returns true if the given value is a List resource.
  */
 export const isList = (value: unknown): value is List =>
-  Predicate.hasProperty(value, "Type") && value.Type === GatewayListTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ListProvider = () =>
   Provider.succeed(List, {

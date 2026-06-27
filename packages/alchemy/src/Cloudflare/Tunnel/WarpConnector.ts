@@ -12,8 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TunnelWarpConnectorTypeId = "Cloudflare.Tunnel.WarpConnector" as const;
-type TunnelWarpConnectorTypeId = typeof TunnelWarpConnectorTypeId;
+const TypeId = "Cloudflare.Tunnel.WarpConnector" as const;
+type TypeId = typeof TypeId;
 
 export interface WarpConnectorProps {
   /**
@@ -48,7 +48,7 @@ export interface WarpConnectorAttributes {
 }
 
 export type WarpConnector = Resource<
-  TunnelWarpConnectorTypeId,
+  TypeId,
   WarpConnectorProps,
   WarpConnectorAttributes,
   never,
@@ -95,14 +95,13 @@ export type WarpConnector = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/warp-connector/
  */
-export const WarpConnector = Resource<WarpConnector>(TunnelWarpConnectorTypeId);
+export const WarpConnector = Resource<WarpConnector>(TypeId);
 
 /**
  * Returns true if the given value is a WarpConnector resource.
  */
 export const isWarpConnector = (value: unknown): value is WarpConnector =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TunnelWarpConnectorTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const WarpConnectorProvider = () =>
   Provider.succeed(WarpConnector, {

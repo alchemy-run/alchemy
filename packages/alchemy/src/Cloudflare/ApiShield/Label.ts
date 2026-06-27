@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ApiShieldLabelTypeId = "Cloudflare.ApiShield.Label" as const;
-type ApiShieldLabelTypeId = typeof ApiShieldLabelTypeId;
+const TypeId = "Cloudflare.ApiShield.Label" as const;
+type TypeId = typeof TypeId;
 
 export interface LabelProps {
   /**
@@ -55,8 +55,14 @@ export interface LabelAttributes {
   lastUpdated: string;
 }
 
+/**
+ * Returns true if the given value is an Label resource.
+ */
+export const isLabel = (value: unknown): value is Label =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+
 export type Label = Resource<
-  ApiShieldLabelTypeId,
+  TypeId,
   LabelProps,
   LabelAttributes,
   never,
@@ -95,13 +101,7 @@ export type Label = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/management-and-monitoring/endpoint-labels/
  */
-export const Label = Resource<Label>(ApiShieldLabelTypeId);
-
-/**
- * Returns true if the given value is an Label resource.
- */
-export const isLabel = (value: unknown): value is Label =>
-  Predicate.hasProperty(value, "Type") && value.Type === ApiShieldLabelTypeId;
+export const Label = Resource<Label>(TypeId);
 
 export const LabelProvider = () =>
   Provider.succeed(Label, {

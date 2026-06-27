@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const UrlNormalizationTypeId =
-  "Cloudflare.UrlNormalization.UrlNormalization" as const;
-type UrlNormalizationTypeId = typeof UrlNormalizationTypeId;
+const TypeId = "Cloudflare.UrlNormalization.UrlNormalization" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Which URLs Cloudflare normalizes.
@@ -71,7 +70,7 @@ export interface Attributes {
 }
 
 export type UrlNormalization = Resource<
-  UrlNormalizationTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -120,15 +119,13 @@ export type UrlNormalization = Resource<
  *
  * @see https://developers.cloudflare.com/rules/normalization/
  */
-export const UrlNormalization = Resource<UrlNormalization>(
-  UrlNormalizationTypeId,
-);
+export const UrlNormalization = Resource<UrlNormalization>(TypeId);
 
 /**
  * Returns true if the given value is a UrlNormalization resource.
  */
 export const isUrlNormalization = (value: unknown): value is UrlNormalization =>
-  Predicate.hasProperty(value, "Type") && value.Type === UrlNormalizationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /** Cloudflare's zone default scope. */
 const DEFAULT_SCOPE: UrlNormalizationScope = "incoming";

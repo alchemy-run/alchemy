@@ -6,7 +6,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type Props = {
+export type OrganizationProps = {
   /**
    * The unique subdomain assigned to your Zero Trust organization, e.g.
    * `acme.cloudflareaccess.com`. Per-account this is functionally immutable —
@@ -120,7 +120,7 @@ export declare namespace Organization {
 
 export type Organization = Resource<
   "Cloudflare.Access.Organization",
-  Props,
+  OrganizationProps,
   {
     /** Cloudflare account that owns the Zero Trust organization. */
     accountId: string;

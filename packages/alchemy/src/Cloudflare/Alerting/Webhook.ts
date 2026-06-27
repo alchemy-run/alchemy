@@ -12,8 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const NotificationWebhookTypeId = "Cloudflare.Alerting.Webhook" as const;
-type NotificationWebhookTypeId = typeof NotificationWebhookTypeId;
+const TypeId = "Cloudflare.Alerting.Webhook" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Webhook destination endpoint type, inferred by Cloudflare from the URL.
@@ -71,7 +71,7 @@ export interface NotificationWebhookAttributes {
 }
 
 export type NotificationWebhook = Resource<
-  NotificationWebhookTypeId,
+  TypeId,
   NotificationWebhookProps,
   NotificationWebhookAttributes,
   never,
@@ -117,9 +117,7 @@ export type NotificationWebhook = Resource<
  *
  * @see https://developers.cloudflare.com/notifications/get-started/configure-webhooks/
  */
-export const NotificationWebhook = Resource<NotificationWebhook>(
-  NotificationWebhookTypeId,
-);
+export const NotificationWebhook = Resource<NotificationWebhook>(TypeId);
 
 /**
  * Returns true if the given value is a NotificationWebhook resource.
@@ -127,8 +125,7 @@ export const NotificationWebhook = Resource<NotificationWebhook>(
 export const isNotificationWebhook = (
   value: unknown,
 ): value is NotificationWebhook =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === NotificationWebhookTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NotificationWebhookProvider = () =>
   Provider.succeed(NotificationWebhook, {

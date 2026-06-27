@@ -5,26 +5,26 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import { isAiGateway } from "../AiGateway/AiGateway.ts";
-import { isInstance } from "../AiSearch/Instance.ts";
-import { isNamespace as isAiSearchNamespace } from "../AiSearch/Namespace.ts";
+import { isAiGateway } from "../AI/Gateway.ts";
+import { isSearchInstance } from "../AI/SearchInstance.ts";
+import { isSearchNamespace } from "../AI/SearchNamespace.ts";
 import { isDataset } from "../AnalyticsEngine/Dataset.ts";
-import { isArtifacts } from "../Artifacts/Artifacts.ts";
-import { isBrowser } from "./Browser.ts";
-import { isDatabase } from "../D1/D1Database.ts";
+import { isStore } from "../Artifacts/Store.ts";
+import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
-import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
+import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
 import { isQueue } from "../Queues/Queue.ts";
 import { isBucket } from "../R2/Bucket.ts";
-import { isRateLimit } from "./RateLimit.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
+import { isBrowser } from "./Browser.ts";
 import { isDurableObjectLike } from "./DurableObject.ts";
+import { isRateLimit } from "./RateLimit.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
@@ -60,7 +60,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       if (bindingMeta) {
         yield* resource.bind`${bindingName}`({
           bindings: [bindingMeta],
-          hyperdrives: isHyperdrive(binding)
+          hyperdrives: isHyperdriveConnection(binding)
             ? getHyperdriveDevOrigin(binding)
             : undefined,
         });
@@ -105,7 +105,7 @@ const toBinding = (
       type: "assets",
       name: bindingName,
     };
-  } else if (isArtifacts(binding)) {
+  } else if (isStore(binding)) {
     return {
       type: "artifacts",
       name: bindingName,
@@ -189,7 +189,7 @@ const toBinding = (
       type: "ai",
       name: bindingName,
     };
-  } else if (isInstance(binding)) {
+  } else if (isSearchInstance(binding)) {
     // Single-instance binding: `env.NAME` is the instance itself. The
     // `namespace` qualifies which namespace the instance lives in (the
     // account-provided `default` when unspecified).
@@ -199,7 +199,7 @@ const toBinding = (
       instanceName: binding.instanceId,
       namespace: binding.namespace,
     };
-  } else if (isAiSearchNamespace(binding)) {
+  } else if (isSearchNamespace(binding)) {
     // Namespace binding: `env.NAME.get(instanceName)` selects an instance
     // within the namespace at runtime.
     return {
@@ -207,7 +207,7 @@ const toBinding = (
       name: bindingName,
       namespace: binding.name,
     };
-  } else if (isHyperdrive(binding)) {
+  } else if (isHyperdriveConnection(binding)) {
     return {
       type: "hyperdrive",
       name: bindingName,

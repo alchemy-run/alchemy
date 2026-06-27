@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Connection } from "./Hyperdrive.ts";
+import type { Connection } from "./Connection.ts";
 
 /**
  * A typed accessor for a Cloudflare Hyperdrive runtime binding inside a

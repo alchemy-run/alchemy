@@ -12,8 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TokenValidationRuleTypeId = "Cloudflare.TokenValidation.Rule" as const;
-type TokenValidationRuleTypeId = typeof TokenValidationRuleTypeId;
+const TypeId = "Cloudflare.TokenValidation.Rule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Action applied to requests that match the selector and fail the rule's
@@ -123,7 +123,7 @@ export interface RuleAttributes {
 }
 
 export type Rule = Resource<
-  TokenValidationRuleTypeId,
+  TypeId,
   RuleProps,
   RuleAttributes,
   never,
@@ -186,14 +186,13 @@ export type Rule = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/jwt-validation/
  */
-export const Rule = Resource<Rule>(TokenValidationRuleTypeId);
+export const Rule = Resource<Rule>(TypeId);
 
 /**
  * Returns true if the given value is a Rule resource.
  */
 export const isRule = (value: unknown): value is Rule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TokenValidationRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const RuleProvider = () =>
   Provider.succeed(Rule, {

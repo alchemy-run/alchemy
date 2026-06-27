@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const Web3HostnameContentListTypeId =
-  "Cloudflare.Web3.HostnameContentList" as const;
-type Web3HostnameContentListTypeId = typeof Web3HostnameContentListTypeId;
+const TypeId = "Cloudflare.Web3.HostnameContentList" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of content a content-list entry blocks: a CID (`cid`) or a
@@ -81,7 +80,7 @@ export interface HostnameContentListAttributes {
 }
 
 export type HostnameContentList = Resource<
-  Web3HostnameContentListTypeId,
+  TypeId,
   HostnameContentListProps,
   HostnameContentListAttributes,
   never,
@@ -137,9 +136,7 @@ export type HostnameContentList = Resource<
  *
  * @see https://developers.cloudflare.com/web3/
  */
-export const HostnameContentList = Resource<HostnameContentList>(
-  Web3HostnameContentListTypeId,
-);
+export const HostnameContentList = Resource<HostnameContentList>(TypeId);
 
 /**
  * Returns true if the given value is a HostnameContentList resource.
@@ -147,8 +144,7 @@ export const HostnameContentList = Resource<HostnameContentList>(
 export const isHostnameContentList = (
   value: unknown,
 ): value is HostnameContentList =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === Web3HostnameContentListTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameContentListProvider = () =>
   Provider.succeed(HostnameContentList, {

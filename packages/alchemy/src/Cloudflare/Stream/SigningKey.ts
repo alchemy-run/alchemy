@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamSigningKeyTypeId = "Cloudflare.Stream.SigningKey" as const;
-type StreamSigningKeyTypeId = typeof StreamSigningKeyTypeId;
+const TypeId = "Cloudflare.Stream.SigningKey" as const;
+type TypeId = typeof TypeId;
 
 export type SigningKeyProps = {};
 
@@ -40,7 +40,7 @@ export type SigningKeyAttributes = {
 };
 
 export type SigningKey = Resource<
-  StreamSigningKeyTypeId,
+  TypeId,
   SigningKeyProps,
   SigningKeyAttributes,
   never,
@@ -74,13 +74,13 @@ export type SigningKey = Resource<
  *
  * @see https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/
  */
-export const SigningKey = Resource<SigningKey>(StreamSigningKeyTypeId);
+export const SigningKey = Resource<SigningKey>(TypeId);
 
 /**
  * Returns true if the given value is a SigningKey resource.
  */
 export const isSigningKey = (value: unknown): value is SigningKey =>
-  Predicate.hasProperty(value, "Type") && value.Type === StreamSigningKeyTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SigningKeyProvider = () =>
   Provider.succeed(SigningKey, {

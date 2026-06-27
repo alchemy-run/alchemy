@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ApiShieldUserSchemaTypeId = "Cloudflare.ApiShield.UserSchema" as const;
-type ApiShieldUserSchemaTypeId = typeof ApiShieldUserSchemaTypeId;
+const TypeId = "Cloudflare.ApiShield.UserSchema" as const;
+type TypeId = typeof TypeId;
 
 export interface UserSchemaProps {
   /**
@@ -65,7 +65,7 @@ export interface UserSchemaAttributes {
 }
 
 export type UserSchema = Resource<
-  ApiShieldUserSchemaTypeId,
+  TypeId,
   UserSchemaProps,
   UserSchemaAttributes,
   never,
@@ -111,14 +111,13 @@ export type UserSchema = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const UserSchema = Resource<UserSchema>(ApiShieldUserSchemaTypeId);
+export const UserSchema = Resource<UserSchema>(TypeId);
 
 /**
  * Returns true if the given value is an UserSchema resource.
  */
 export const isUserSchema = (value: unknown): value is UserSchema =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ApiShieldUserSchemaTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const UserSchemaProvider = () =>
   Provider.succeed(UserSchema, {

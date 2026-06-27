@@ -10,9 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CustomNameserverTypeId =
-  "Cloudflare.CustomNameserver.CustomNameserver" as const;
-type CustomNameserverTypeId = typeof CustomNameserverTypeId;
+const TypeId = "Cloudflare.CustomNameserver.CustomNameserver" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Verification status of an account custom nameserver. Deprecated by
@@ -83,7 +82,7 @@ export interface Attributes {
 }
 
 export type CustomNameserver = Resource<
-  CustomNameserverTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -133,15 +132,13 @@ export type CustomNameserver = Resource<
  *
  * @see https://developers.cloudflare.com/dns/nameservers/custom-nameservers/account-custom-nameservers/
  */
-export const CustomNameserver = Resource<CustomNameserver>(
-  CustomNameserverTypeId,
-);
+export const CustomNameserver = Resource<CustomNameserver>(TypeId);
 
 /**
  * Returns true if the given value is a CustomNameserver resource.
  */
 export const isCustomNameserver = (value: unknown): value is CustomNameserver =>
-  Predicate.hasProperty(value, "Type") && value.Type === CustomNameserverTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomNameserverProvider = () =>
   Provider.succeed(CustomNameserver, {

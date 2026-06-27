@@ -145,7 +145,7 @@ testSaas(
 
       yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.Dns.Record("OriginA", {
+          const record = yield* Cloudflare.DNS.Record("OriginA", {
             zoneId,
             name: ORIGIN_A,
             type: "A",
@@ -184,7 +184,7 @@ testSaas(
       // Create: an origin DNS record plus the fallback origin pointing at it.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.Dns.Record("OriginA", {
+          const record = yield* Cloudflare.DNS.Record("OriginA", {
             zoneId,
             name: ORIGIN_A,
             type: "A",
@@ -212,7 +212,7 @@ testSaas(
       // Re-deploying the same desired state is a no-op.
       const again = yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.Dns.Record("OriginA", {
+          const record = yield* Cloudflare.DNS.Record("OriginA", {
             zoneId,
             name: ORIGIN_A,
             type: "A",
@@ -235,7 +235,7 @@ testSaas(
       // singleton is updated in place).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.Dns.Record("OriginB", {
+          const record = yield* Cloudflare.DNS.Record("OriginB", {
             zoneId,
             name: ORIGIN_B,
             type: "A",

@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ContentScanningTypeId =
-  "Cloudflare.ContentScanning.ContentScanning" as const;
-type ContentScanningTypeId = typeof ContentScanningTypeId;
+const TypeId = "Cloudflare.ContentScanning.ContentScanning" as const;
+type TypeId = typeof TypeId;
 
 /** The wire status values Cloudflare uses for Content Scanning. */
 type ContentScanningStatus = "enabled" | "disabled";
@@ -52,7 +51,7 @@ export interface Attributes {
 }
 
 export type ContentScanning = Resource<
-  ContentScanningTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -108,13 +107,13 @@ export type ContentScanning = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/
  */
-export const ContentScanning = Resource<ContentScanning>(ContentScanningTypeId);
+export const ContentScanning = Resource<ContentScanning>(TypeId);
 
 /**
  * Returns true if the given value is a ContentScanning resource.
  */
 export const isContentScanning = (value: unknown): value is ContentScanning =>
-  Predicate.hasProperty(value, "Type") && value.Type === ContentScanningTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ContentScanningProvider = () =>
   Provider.succeed(ContentScanning, {

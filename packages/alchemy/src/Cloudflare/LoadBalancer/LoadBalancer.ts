@@ -12,8 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LoadBalancerTypeId = "Cloudflare.LoadBalancer.LoadBalancer" as const;
-type LoadBalancerTypeId = typeof LoadBalancerTypeId;
+const TypeId = "Cloudflare.LoadBalancer.LoadBalancer" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Steering policy for a Load Balancer.
@@ -177,7 +177,7 @@ export interface Attributes {
 }
 
 export type LoadBalancer = Resource<
-  LoadBalancerTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -239,13 +239,13 @@ export type LoadBalancer = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/
  */
-export const LoadBalancer = Resource<LoadBalancer>(LoadBalancerTypeId);
+export const LoadBalancer = Resource<LoadBalancer>(TypeId);
 
 /**
  * Returns true if the given value is a LoadBalancer resource.
  */
 export const isLoadBalancer = (value: unknown): value is LoadBalancer =>
-  Predicate.hasProperty(value, "Type") && value.Type === LoadBalancerTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LoadBalancerProvider = () =>
   Provider.succeed(LoadBalancer, {

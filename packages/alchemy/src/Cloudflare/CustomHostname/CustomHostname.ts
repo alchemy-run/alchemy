@@ -261,7 +261,7 @@ export type CustomHostname = Resource<
  * @section Pairing with a Fallback Origin
  * @example Route custom hostname traffic to your origin
  * ```typescript
- * const record = yield* Cloudflare.Dns.Record("Origin", {
+ * const record = yield* Cloudflare.DNS.Record("Origin", {
  *   zoneId: zone.zoneId,
  *   name: "origin.my-saas.com",
  *   type: "A",

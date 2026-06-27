@@ -2,7 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Database } from "./D1Database.ts";
+import type { Database } from "./Database.ts";
 
 /**
  * Bind a {@link Database} to a Worker and obtain the Effect-native D1

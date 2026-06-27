@@ -7,9 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccessKeyConfigurationTypeId =
-  "Cloudflare.Access.KeyConfiguration" as const;
-type AccessKeyConfigurationTypeId = typeof AccessKeyConfigurationTypeId;
+const TypeId = "Cloudflare.Access.KeyConfiguration" as const;
+type TypeId = typeof TypeId;
 
 export type KeyConfigurationProps = {
   /**
@@ -40,7 +39,7 @@ export type KeyConfigurationAttributes = {
 };
 
 export type KeyConfiguration = Resource<
-  AccessKeyConfigurationTypeId,
+  TypeId,
   KeyConfigurationProps,
   KeyConfigurationAttributes,
   never,
@@ -77,16 +76,13 @@ export type KeyConfiguration = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/keys/
  */
-export const KeyConfiguration = Resource<KeyConfiguration>(
-  AccessKeyConfigurationTypeId,
-);
+export const KeyConfiguration = Resource<KeyConfiguration>(TypeId);
 
 /**
  * Returns true if the given value is an KeyConfiguration resource.
  */
 export const isKeyConfiguration = (value: unknown): value is KeyConfiguration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AccessKeyConfigurationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const KeyConfigurationProvider = () =>
   Provider.succeed(KeyConfiguration, {

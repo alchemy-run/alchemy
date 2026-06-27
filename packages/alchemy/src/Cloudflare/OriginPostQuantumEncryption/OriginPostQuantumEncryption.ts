@@ -8,10 +8,9 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginPostQuantumEncryptionTypeId =
+const TypeId =
   "Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption" as const;
-type OriginPostQuantumEncryptionTypeId =
-  typeof OriginPostQuantumEncryptionTypeId;
+type TypeId = typeof TypeId;
 
 /**
  * Value of the Origin Post-Quantum Encryption setting.
@@ -59,7 +58,7 @@ export type Attributes = {
 };
 
 export type OriginPostQuantumEncryption = Resource<
-  OriginPostQuantumEncryptionTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -114,7 +113,7 @@ export type OriginPostQuantumEncryption = Resource<
  * @see https://developers.cloudflare.com/ssl/origin-configuration/pqc-to-origin/
  */
 export const OriginPostQuantumEncryption =
-  Resource<OriginPostQuantumEncryption>(OriginPostQuantumEncryptionTypeId);
+  Resource<OriginPostQuantumEncryption>(TypeId);
 
 /**
  * Returns true if the given value is an OriginPostQuantumEncryption resource.
@@ -122,8 +121,7 @@ export const OriginPostQuantumEncryption =
 export const isOriginPostQuantumEncryption = (
   value: unknown,
 ): value is OriginPostQuantumEncryption =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginPostQuantumEncryptionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OriginPostQuantumEncryptionProvider = () =>
   Provider.succeed(OriginPostQuantumEncryption, {

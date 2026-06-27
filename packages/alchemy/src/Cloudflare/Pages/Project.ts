@@ -13,8 +13,8 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const PagesProjectTypeId = "Cloudflare.Pages.Project" as const;
-type PagesProjectTypeId = typeof PagesProjectTypeId;
+const TypeId = "Cloudflare.Pages.Project" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Build configuration for a Pages project. All fields are mutable in place.
@@ -175,7 +175,7 @@ export interface ProjectAttributes {
 }
 
 export type Project = Resource<
-  PagesProjectTypeId,
+  TypeId,
   ProjectProps,
   ProjectAttributes,
   never,
@@ -245,13 +245,13 @@ export type Project = Resource<
  *
  * @see https://developers.cloudflare.com/pages/
  */
-export const Project = Resource<Project>(PagesProjectTypeId);
+export const Project = Resource<Project>(TypeId);
 
 /**
  * Returns true if the given value is a Project resource.
  */
 export const isProject = (value: unknown): value is Project =>
-  Predicate.hasProperty(value, "Type") && value.Type === PagesProjectTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {

@@ -7,7 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { Zone, Attributes } from "../Zone/index.ts";
+import type { Attributes, Zone } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
 export type Phase = rulesets.CreateRulesetForZoneRequest["phase"];
@@ -17,7 +17,7 @@ export type OutputRule = Omit<
   "lastUpdated" | "version"
 >;
 
-export type Props = {
+export type RulesetProps = {
   /**
    * Zone to apply the ruleset to. Pass a `Cloudflare.Zone.Zone`.
    */
@@ -45,7 +45,7 @@ export type Kind = "managed" | "custom" | "root" | "zone" | (string & {});
 
 export type Ruleset = Resource<
   "Cloudflare.Ruleset.Ruleset",
-  Props,
+  RulesetProps,
   {
     /** The unique ID of the ruleset (Cloudflare `id`). */
     rulesetId: string;

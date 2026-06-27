@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CallsTurnKeyTypeId = "Cloudflare.Calls.TurnKey" as const;
-type CallsTurnKeyTypeId = typeof CallsTurnKeyTypeId;
+const TypeId = "Cloudflare.Calls.TurnKey" as const;
+type TypeId = typeof TypeId;
 
 export type TurnKeyProps = {
   /**
@@ -55,7 +55,7 @@ export type TurnKeyAttributes = {
 };
 
 export type TurnKey = Resource<
-  CallsTurnKeyTypeId,
+  TypeId,
   TurnKeyProps,
   TurnKeyAttributes,
   never,
@@ -99,13 +99,13 @@ export type TurnKey = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/turn/
  */
-export const TurnKey = Resource<TurnKey>(CallsTurnKeyTypeId);
+export const TurnKey = Resource<TurnKey>(TypeId);
 
 /**
  * Returns true if the given value is a TurnKey resource.
  */
 export const isTurnKey = (value: unknown): value is TurnKey =>
-  Predicate.hasProperty(value, "Type") && value.Type === CallsTurnKeyTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TurnKeyProvider = () =>
   Provider.succeed(TurnKey, {

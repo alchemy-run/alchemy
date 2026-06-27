@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamWatermarkTypeId = "Cloudflare.Stream.Watermark" as const;
-type StreamWatermarkTypeId = typeof StreamWatermarkTypeId;
+const TypeId = "Cloudflare.Stream.Watermark" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Location of the watermark image on the video.
@@ -119,7 +119,7 @@ export type WatermarkAttributes = {
 };
 
 export type Watermark = Resource<
-  StreamWatermarkTypeId,
+  TypeId,
   WatermarkProps,
   WatermarkAttributes,
   never,
@@ -159,13 +159,13 @@ export type Watermark = Resource<
  *
  * @see https://developers.cloudflare.com/stream/edit-videos/applying-watermarks/
  */
-export const Watermark = Resource<Watermark>(StreamWatermarkTypeId);
+export const Watermark = Resource<Watermark>(TypeId);
 
 /**
  * Returns true if the given value is a Watermark resource.
  */
 export const isWatermark = (value: unknown): value is Watermark =>
-  Predicate.hasProperty(value, "Type") && value.Type === StreamWatermarkTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const WatermarkProvider = () =>
   Provider.succeed(Watermark, {

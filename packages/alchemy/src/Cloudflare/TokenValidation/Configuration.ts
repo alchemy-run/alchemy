@@ -12,9 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TokenConfigurationTypeId =
-  "Cloudflare.TokenValidation.Configuration" as const;
-type TokenConfigurationTypeId = typeof TokenConfigurationTypeId;
+const TypeId = "Cloudflare.TokenValidation.Configuration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A JSON Web Key (JWK) in a token configuration's key set. These are public
@@ -120,7 +119,7 @@ export interface TokenConfigurationAttributes {
 }
 
 export type TokenConfiguration = Resource<
-  TokenConfigurationTypeId,
+  TypeId,
   TokenConfigurationProps,
   TokenConfigurationAttributes,
   never,
@@ -190,9 +189,7 @@ export type TokenConfiguration = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/jwt-validation/
  */
-export const TokenConfiguration = Resource<TokenConfiguration>(
-  TokenConfigurationTypeId,
-);
+export const TokenConfiguration = Resource<TokenConfiguration>(TypeId);
 
 /**
  * Returns true if the given value is a TokenConfiguration resource.
@@ -200,8 +197,7 @@ export const TokenConfiguration = Resource<TokenConfiguration>(
 export const isTokenConfiguration = (
   value: unknown,
 ): value is TokenConfiguration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TokenConfigurationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TokenConfigurationProvider = () =>
   Provider.succeed(TokenConfiguration, {

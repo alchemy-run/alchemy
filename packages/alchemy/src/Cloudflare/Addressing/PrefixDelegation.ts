@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AddressingPrefixDelegationTypeId =
-  "Cloudflare.Addressing.PrefixDelegation" as const;
-type AddressingPrefixDelegationTypeId = typeof AddressingPrefixDelegationTypeId;
+const TypeId = "Cloudflare.Addressing.PrefixDelegation" as const;
+type TypeId = typeof TypeId;
 
 export interface PrefixDelegationProps {
   /**
@@ -47,7 +46,7 @@ export interface PrefixDelegationAttributes {
 }
 
 export type PrefixDelegation = Resource<
-  AddressingPrefixDelegationTypeId,
+  TypeId,
   PrefixDelegationProps,
   PrefixDelegationAttributes,
   never,
@@ -76,16 +75,13 @@ export type PrefixDelegation = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/
  */
-export const PrefixDelegation = Resource<PrefixDelegation>(
-  AddressingPrefixDelegationTypeId,
-);
+export const PrefixDelegation = Resource<PrefixDelegation>(TypeId);
 
 /**
  * Returns true if the given value is an PrefixDelegation resource.
  */
 export const isPrefixDelegation = (value: unknown): value is PrefixDelegation =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AddressingPrefixDelegationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const PrefixDelegationProvider = () =>
   Provider.succeed(PrefixDelegation, {

@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ShareRecipientTypeId =
-  "Cloudflare.ResourceSharing.ShareRecipient" as const;
-type ShareRecipientTypeId = typeof ShareRecipientTypeId;
+const TypeId = "Cloudflare.ResourceSharing.ShareRecipient" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Association status of a share recipient. Association is eventually
@@ -74,7 +73,7 @@ export type ShareRecipientAttributes = {
 };
 
 export type ShareRecipient = Resource<
-  ShareRecipientTypeId,
+  TypeId,
   ShareRecipientProps,
   ShareRecipientAttributes,
   never,
@@ -111,13 +110,13 @@ export type ShareRecipient = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-account-resources/
  */
-export const ShareRecipient = Resource<ShareRecipient>(ShareRecipientTypeId);
+export const ShareRecipient = Resource<ShareRecipient>(TypeId);
 
 /**
  * Returns true if the given value is a ShareRecipient resource.
  */
 export const isShareRecipient = (value: unknown): value is ShareRecipient =>
-  Predicate.hasProperty(value, "Type") && value.Type === ShareRecipientTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ShareRecipientProvider = () =>
   Provider.succeed(ShareRecipient, {

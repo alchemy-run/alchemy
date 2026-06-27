@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RegistrarDomainTypeId = "Cloudflare.Registrar.Domain" as const;
-type RegistrarDomainTypeId = typeof RegistrarDomainTypeId;
+const TypeId = "Cloudflare.Registrar.Domain" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The mutable Cloudflare Registrar settings on a registered domain. These
@@ -99,7 +99,7 @@ export interface DomainAttributes {
 }
 
 export type Domain = Resource<
-  RegistrarDomainTypeId,
+  TypeId,
   DomainProps,
   DomainAttributes,
   never,
@@ -159,13 +159,13 @@ export type Domain = Resource<
  *
  * @see https://developers.cloudflare.com/registrar/
  */
-export const Domain = Resource<Domain>(RegistrarDomainTypeId);
+export const Domain = Resource<Domain>(TypeId);
 
 /**
  * Returns true if the given value is a Domain resource.
  */
 export const isDomain = (value: unknown): value is Domain =>
-  Predicate.hasProperty(value, "Type") && value.Type === RegistrarDomainTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {

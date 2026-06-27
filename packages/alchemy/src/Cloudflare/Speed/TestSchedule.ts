@@ -10,8 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SpeedTestScheduleTypeId = "Cloudflare.Speed.TestSchedule" as const;
-type SpeedTestScheduleTypeId = typeof SpeedTestScheduleTypeId;
+const TypeId = "Cloudflare.Speed.TestSchedule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Region a scheduled Observatory (speed) test runs from. GCP-style region
@@ -91,7 +91,7 @@ export interface TestScheduleAttributes {
 }
 
 export type TestSchedule = Resource<
-  SpeedTestScheduleTypeId,
+  TypeId,
   TestScheduleProps,
   TestScheduleAttributes,
   never,
@@ -143,14 +143,13 @@ export type TestSchedule = Resource<
  *
  * @see https://developers.cloudflare.com/speed/speed-test/
  */
-export const TestSchedule = Resource<TestSchedule>(SpeedTestScheduleTypeId);
+export const TestSchedule = Resource<TestSchedule>(TypeId);
 
 /**
  * Returns true if the given value is a TestSchedule resource.
  */
 export const isTestSchedule = (value: unknown): value is TestSchedule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SpeedTestScheduleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const DEFAULT_REGION: TestRegion = "us-central1";
 
@@ -273,7 +272,7 @@ export const TestScheduleProvider = () =>
       return Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
       const region = news.region ?? DEFAULT_REGION;

@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccountMemberTypeId = "Cloudflare.Account.Member" as const;
-type AccountMemberTypeId = typeof AccountMemberTypeId;
+const TypeId = "Cloudflare.Account.Member" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A member's invitation status in the account. New invites start as
@@ -107,7 +107,7 @@ export interface MemberAttributes {
 }
 
 export type Member = Resource<
-  AccountMemberTypeId,
+  TypeId,
   MemberProps,
   MemberAttributes,
   never,
@@ -170,13 +170,13 @@ export type Member = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/
  */
-export const Member = Resource<Member>(AccountMemberTypeId);
+export const Member = Resource<Member>(TypeId);
 
 /**
  * Returns true if the given value is an Member resource.
  */
 export const isMember = (value: unknown): value is Member =>
-  Predicate.hasProperty(value, "Type") && value.Type === AccountMemberTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MemberProvider = () =>
   Provider.succeed(Member, {

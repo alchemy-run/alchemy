@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MtlsCertificateTypeId =
-  "Cloudflare.MtlsCertificate.MtlsCertificate" as const;
-type MtlsCertificateTypeId = typeof MtlsCertificateTypeId;
+const TypeId = "Cloudflare.MtlsCertificate.MtlsCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How the certificate was created and who manages it. Certificates uploaded
@@ -100,7 +99,7 @@ export type Attributes = {
 };
 
 export type MtlsCertificate = Resource<
-  MtlsCertificateTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -168,13 +167,13 @@ export type MtlsCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  */
-export const MtlsCertificate = Resource<MtlsCertificate>(MtlsCertificateTypeId);
+export const MtlsCertificate = Resource<MtlsCertificate>(TypeId);
 
 /**
  * Returns true if the given value is a MtlsCertificate resource.
  */
 export const isMtlsCertificate = (value: unknown): value is MtlsCertificate =>
-  Predicate.hasProperty(value, "Type") && value.Type === MtlsCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MtlsCertificateProvider = () =>
   Provider.succeed(MtlsCertificate, {

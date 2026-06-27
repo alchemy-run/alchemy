@@ -12,8 +12,8 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayLocationTypeId = "Cloudflare.Gateway.Location" as const;
-type GatewayLocationTypeId = typeof GatewayLocationTypeId;
+const TypeId = "Cloudflare.Gateway.Location" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A source network range (CIDR) requests at a Gateway location may
@@ -112,7 +112,7 @@ export interface LocationAttributes {
 }
 
 export type Location = Resource<
-  GatewayLocationTypeId,
+  TypeId,
   LocationProps,
   LocationAttributes,
   never,
@@ -157,13 +157,13 @@ export type Location = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/agentless/dns/locations/
  */
-export const Location = Resource<Location>(GatewayLocationTypeId);
+export const Location = Resource<Location>(TypeId);
 
 /**
  * Returns true if the given value is a Location resource.
  */
 export const isLocation = (value: unknown): value is Location =>
-  Predicate.hasProperty(value, "Type") && value.Type === GatewayLocationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Right after a location create/update, Cloudflare's edge intermittently

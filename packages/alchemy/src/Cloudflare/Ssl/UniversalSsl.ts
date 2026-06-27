@@ -10,8 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const UniversalSslTypeId = "Cloudflare.Ssl.UniversalSsl" as const;
-type UniversalSslTypeId = typeof UniversalSslTypeId;
+const TypeId = "Cloudflare.Ssl.UniversalSsl" as const;
+type TypeId = typeof TypeId;
 
 export type UniversalSslProps = {
   /**
@@ -48,7 +48,7 @@ export type UniversalSslAttributes = {
 };
 
 export type UniversalSsl = Resource<
-  UniversalSslTypeId,
+  TypeId,
   UniversalSslProps,
   UniversalSslAttributes,
   never,
@@ -90,13 +90,13 @@ export type UniversalSsl = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/ssl/subresources/universal/subresources/settings/
  */
-export const UniversalSsl = Resource<UniversalSsl>(UniversalSslTypeId);
+export const UniversalSsl = Resource<UniversalSsl>(TypeId);
 
 /**
  * Returns true if the given value is a UniversalSsl resource.
  */
 export const isUniversalSsl = (value: unknown): value is UniversalSsl =>
-  Predicate.hasProperty(value, "Type") && value.Type === UniversalSslTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * The Universal SSL "edit setting" endpoint enforces its OWN per-zone,

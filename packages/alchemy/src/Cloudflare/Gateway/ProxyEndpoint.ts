@@ -12,8 +12,8 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayProxyEndpointTypeId = "Cloudflare.Gateway.ProxyEndpoint" as const;
-type GatewayProxyEndpointTypeId = typeof GatewayProxyEndpointTypeId;
+const TypeId = "Cloudflare.Gateway.ProxyEndpoint" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of proxy endpoint. `ip` endpoints admit traffic from a source
@@ -71,7 +71,7 @@ export interface ProxyEndpointAttributes {
 }
 
 export type ProxyEndpoint = Resource<
-  GatewayProxyEndpointTypeId,
+  TypeId,
   ProxyEndpointProps,
   ProxyEndpointAttributes,
   never,
@@ -113,16 +113,13 @@ export type ProxyEndpoint = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/agentless/pac-files/
  */
-export const ProxyEndpoint = Resource<ProxyEndpoint>(
-  GatewayProxyEndpointTypeId,
-);
+export const ProxyEndpoint = Resource<ProxyEndpoint>(TypeId);
 
 /**
  * Returns true if the given value is a ProxyEndpoint resource.
  */
 export const isProxyEndpoint = (value: unknown): value is ProxyEndpoint =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === GatewayProxyEndpointTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ProxyEndpointProvider = () =>
   Provider.succeed(ProxyEndpoint, {

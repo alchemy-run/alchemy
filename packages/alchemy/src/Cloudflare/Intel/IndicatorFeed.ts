@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IndicatorFeedTypeId = "Cloudflare.Intel.IndicatorFeed" as const;
-type IndicatorFeedTypeId = typeof IndicatorFeedTypeId;
+const TypeId = "Cloudflare.Intel.IndicatorFeed" as const;
+type TypeId = typeof TypeId;
 
 export interface IndicatorFeedProps {
   /**
@@ -84,7 +84,7 @@ export interface IndicatorFeedAttributes {
 }
 
 export type IndicatorFeed = Resource<
-  IndicatorFeedTypeId,
+  TypeId,
   IndicatorFeedProps,
   IndicatorFeedAttributes,
   never,
@@ -153,13 +153,13 @@ export type IndicatorFeed = Resource<
  *
  * @see https://developers.cloudflare.com/security-center/indicator-feeds/
  */
-export const IndicatorFeed = Resource<IndicatorFeed>(IndicatorFeedTypeId);
+export const IndicatorFeed = Resource<IndicatorFeed>(TypeId);
 
 /**
  * Returns true if the given value is an IndicatorFeed resource.
  */
 export const isIndicatorFeed = (value: unknown): value is IndicatorFeed =>
-  Predicate.hasProperty(value, "Type") && value.Type === IndicatorFeedTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IndicatorFeedProvider = () =>
   Provider.succeed(IndicatorFeed, {

@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DlpEntryTypeId = "Cloudflare.Dlp.Entry" as const;
-type DlpEntryTypeId = typeof DlpEntryTypeId;
+const TypeId = "Cloudflare.Dlp.Entry" as const;
+type TypeId = typeof TypeId;
 
 export interface EntryProps {
   /**
@@ -61,7 +61,7 @@ export type EntryAttributes = {
 };
 
 export type Entry = Resource<
-  DlpEntryTypeId,
+  TypeId,
   EntryProps,
   EntryAttributes,
   never,
@@ -98,13 +98,13 @@ export type Entry = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/data-loss-prevention/dlp-profiles/
  */
-export const Entry = Resource<Entry>(DlpEntryTypeId);
+export const Entry = Resource<Entry>(TypeId);
 
 /**
  * Returns true if the given value is a Entry resource.
  */
 export const isEntry = (value: unknown): value is Entry =>
-  Predicate.hasProperty(value, "Type") && value.Type === DlpEntryTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const EntryProvider = () =>
   Provider.succeed(Entry, {

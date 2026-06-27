@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IamResourceGroupTypeId = "Cloudflare.Iam.ResourceGroup" as const;
-type IamResourceGroupTypeId = typeof IamResourceGroupTypeId;
+const TypeId = "Cloudflare.Iam.ResourceGroup" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The scope of a resource group — a scope key (e.g.
@@ -67,7 +67,7 @@ export interface ResourceGroupAttributes {
 }
 
 export type ResourceGroup = Resource<
-  IamResourceGroupTypeId,
+  TypeId,
   ResourceGroupProps,
   ResourceGroupAttributes,
   never,
@@ -129,13 +129,13 @@ export type ResourceGroup = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/scoped-roles/
  */
-export const ResourceGroup = Resource<ResourceGroup>(IamResourceGroupTypeId);
+export const ResourceGroup = Resource<ResourceGroup>(TypeId);
 
 /**
  * Returns true if the given value is an ResourceGroup resource.
  */
 export const isResourceGroup = (value: unknown): value is ResourceGroup =>
-  Predicate.hasProperty(value, "Type") && value.Type === IamResourceGroupTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ResourceGroupProvider = () =>
   Provider.succeed(ResourceGroup, {

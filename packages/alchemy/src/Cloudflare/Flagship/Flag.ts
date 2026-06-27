@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const FlagshipFlagTypeId = "Cloudflare.Flagship.Flag" as const;
-type FlagshipFlagTypeId = typeof FlagshipFlagTypeId;
+const TypeId = "Cloudflare.Flagship.Flag" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Comparison operator applied to a targeting condition.
@@ -198,7 +198,7 @@ export type FlagAttributes = {
 };
 
 export type Flag = Resource<
-  FlagshipFlagTypeId,
+  TypeId,
   FlagProps,
   FlagAttributes,
   never,
@@ -292,13 +292,13 @@ export type Flag = Resource<
  * @see https://developers.cloudflare.com/flagship/
  * @see https://developers.cloudflare.com/api/resources/flagship/
  */
-export const Flag = Resource<Flag>(FlagshipFlagTypeId);
+export const Flag = Resource<Flag>(TypeId);
 
 /**
  * Returns true if the given value is a Flagship Flag resource.
  */
 export const isFlag = (value: unknown): value is Flag =>
-  Predicate.hasProperty(value, "Type") && value.Type === FlagshipFlagTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const FlagProvider = () =>
   Provider.succeed(Flag, {

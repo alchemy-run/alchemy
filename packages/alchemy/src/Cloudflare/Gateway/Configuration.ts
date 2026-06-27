@@ -7,8 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayConfigurationTypeId = "Cloudflare.Gateway.Configuration" as const;
-type GatewayConfigurationTypeId = typeof GatewayConfigurationTypeId;
+const TypeId = "Cloudflare.Gateway.Configuration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The Gateway account settings blocks this resource can manage. Only the
@@ -127,7 +127,7 @@ export interface ConfigurationAttributes {
 }
 
 export type Configuration = Resource<
-  GatewayConfigurationTypeId,
+  TypeId,
   ConfigurationProps,
   ConfigurationAttributes,
   never,
@@ -189,16 +189,13 @@ export type Configuration = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/gateway/
  */
-export const Configuration = Resource<Configuration>(
-  GatewayConfigurationTypeId,
-);
+export const Configuration = Resource<Configuration>(TypeId);
 
 /**
  * Returns true if the given value is a Configuration resource.
  */
 export const isConfiguration = (value: unknown): value is Configuration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === GatewayConfigurationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ConfigurationProvider = () =>
   Provider.succeed(Configuration, {

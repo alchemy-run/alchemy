@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RealtimeKitPresetTypeId = "Cloudflare.RealtimeKit.Preset" as const;
-type RealtimeKitPresetTypeId = typeof RealtimeKitPresetTypeId;
+const TypeId = "Cloudflare.RealtimeKit.Preset" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Media quality tier for video / screenshare streams.
@@ -232,7 +232,7 @@ export type PresetAttributes = {
 };
 
 export type Preset = Resource<
-  RealtimeKitPresetTypeId,
+  TypeId,
   PresetProps,
   PresetAttributes,
   never,
@@ -292,14 +292,13 @@ export type Preset = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/realtimekit/
  */
-export const Preset = Resource<Preset>(RealtimeKitPresetTypeId);
+export const Preset = Resource<Preset>(TypeId);
 
 /**
  * Returns true if the given value is a Preset resource.
  */
 export const isPreset = (value: unknown): value is Preset =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RealtimeKitPresetTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * The default media configuration used when `config` is omitted: a group

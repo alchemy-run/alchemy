@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CustomTrustStoreTypeId = "Cloudflare.Acm.CustomTrustStore" as const;
-type CustomTrustStoreTypeId = typeof CustomTrustStoreTypeId;
+const TypeId = "Cloudflare.Acm.CustomTrustStore" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Lifecycle status of an uploaded custom trust store certificate.
@@ -69,7 +69,7 @@ export interface CustomTrustStoreAttributes {
 }
 
 export type CustomTrustStore = Resource<
-  CustomTrustStoreTypeId,
+  TypeId,
   CustomTrustStoreProps,
   CustomTrustStoreAttributes,
   never,
@@ -115,15 +115,13 @@ export type CustomTrustStore = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/acm/
  */
-export const CustomTrustStore = Resource<CustomTrustStore>(
-  CustomTrustStoreTypeId,
-);
+export const CustomTrustStore = Resource<CustomTrustStore>(TypeId);
 
 /**
  * Returns true if the given value is a CustomTrustStore resource.
  */
 export const isCustomTrustStore = (value: unknown): value is CustomTrustStore =>
-  Predicate.hasProperty(value, "Type") && value.Type === CustomTrustStoreTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomTrustStoreProvider = () =>
   Provider.succeed(CustomTrustStore, {

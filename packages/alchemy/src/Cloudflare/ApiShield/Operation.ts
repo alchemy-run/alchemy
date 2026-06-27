@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ApiShieldOperationTypeId = "Cloudflare.ApiShield.Operation" as const;
-type ApiShieldOperationTypeId = typeof ApiShieldOperationTypeId;
+const TypeId = "Cloudflare.ApiShield.Operation" as const;
+type TypeId = typeof TypeId;
 
 /**
  * HTTP method of an API Shield operation.
@@ -78,7 +78,7 @@ export interface OperationAttributes {
 }
 
 export type Operation = Resource<
-  ApiShieldOperationTypeId,
+  TypeId,
   OperationProps,
   OperationAttributes,
   never,
@@ -126,14 +126,13 @@ export type Operation = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/management-and-monitoring/endpoint-management/
  */
-export const Operation = Resource<Operation>(ApiShieldOperationTypeId);
+export const Operation = Resource<Operation>(TypeId);
 
 /**
  * Returns true if the given value is an Operation resource.
  */
 export const isOperation = (value: unknown): value is Operation =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ApiShieldOperationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OperationProvider = () =>
   Provider.succeed(Operation, {

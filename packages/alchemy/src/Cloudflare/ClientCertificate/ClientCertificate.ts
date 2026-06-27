@@ -11,9 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ClientCertificateTypeId =
-  "Cloudflare.ClientCertificate.ClientCertificate" as const;
-type ClientCertificateTypeId = typeof ClientCertificateTypeId;
+const TypeId = "Cloudflare.ClientCertificate.ClientCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Lifecycle status of a client certificate. `pending_reactivation` and
@@ -99,7 +98,7 @@ export interface Attributes {
 }
 
 export type ClientCertificate = Resource<
-  ClientCertificateTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -163,9 +162,7 @@ export type ClientCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  */
-export const ClientCertificate = Resource<ClientCertificate>(
-  ClientCertificateTypeId,
-);
+export const ClientCertificate = Resource<ClientCertificate>(TypeId);
 
 /**
  * Returns true if the given value is a ClientCertificate resource.
@@ -173,8 +170,7 @@ export const ClientCertificate = Resource<ClientCertificate>(
 export const isClientCertificate = (
   value: unknown,
 ): value is ClientCertificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ClientCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ClientCertificateProvider = () =>
   Provider.succeed(ClientCertificate, {

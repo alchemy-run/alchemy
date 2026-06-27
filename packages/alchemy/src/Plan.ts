@@ -55,7 +55,7 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
-import { hashInput } from "./Util/hash.ts";
+import { hashInput } from "./Util/sha256.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 
 export type PlanError = never;

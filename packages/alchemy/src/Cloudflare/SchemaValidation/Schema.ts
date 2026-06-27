@@ -12,9 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SchemaValidationSchemaTypeId =
-  "Cloudflare.SchemaValidation.Schema" as const;
-type SchemaValidationSchemaTypeId = typeof SchemaValidationSchemaTypeId;
+const TypeId = "Cloudflare.SchemaValidation.Schema" as const;
+type TypeId = typeof TypeId;
 
 export interface SchemaProps {
   /**
@@ -79,7 +78,7 @@ export interface SchemaAttributes {
 }
 
 export type SchemaValidationSchema = Resource<
-  SchemaValidationSchemaTypeId,
+  TypeId,
   SchemaProps,
   SchemaAttributes,
   never,
@@ -143,16 +142,13 @@ export type SchemaValidationSchema = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const SchemaValidationSchema = Resource<SchemaValidationSchema>(
-  SchemaValidationSchemaTypeId,
-);
+export const SchemaValidationSchema = Resource<SchemaValidationSchema>(TypeId);
 
 /**
  * Returns true if the given value is a SchemaValidationSchema resource.
  */
 export const isSchema = (value: unknown): value is SchemaValidationSchema =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SchemaValidationSchemaTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SchemaProvider = () =>
   Provider.succeed(SchemaValidationSchema, {

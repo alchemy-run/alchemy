@@ -10,8 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "./lookup.ts";
 
-const ZoneHoldTypeId = "Cloudflare.Zone.Hold" as const;
-type ZoneHoldTypeId = typeof ZoneHoldTypeId;
+const TypeId = "Cloudflare.Zone.Hold" as const;
+type TypeId = typeof TypeId;
 
 export type HoldProps = {
   /**
@@ -47,7 +47,7 @@ export type HoldAttributes = {
 };
 
 export type Hold = Resource<
-  ZoneHoldTypeId,
+  TypeId,
   HoldProps,
   HoldAttributes,
   never,
@@ -98,13 +98,13 @@ export type Hold = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/account/account-security/zone-holds/
  */
-export const Hold = Resource<Hold>(ZoneHoldTypeId);
+export const Hold = Resource<Hold>(TypeId);
 
 /**
  * Returns true if the given value is a Hold resource.
  */
 export const isHold = (value: unknown): value is Hold =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneHoldTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 // Cloudflare can transiently fail to authenticate a valid token, surfacing as
 // `Forbidden`. Retry with exponential backoff capped at 5s, bounded to ~8

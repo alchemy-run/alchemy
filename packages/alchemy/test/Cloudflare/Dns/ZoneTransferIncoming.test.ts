@@ -61,7 +61,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const provider = yield* Provider.findProvider(
-        Cloudflare.Dns.ZoneTransferIncoming,
+        Cloudflare.DNS.ZoneTransferIncoming,
       );
       const all = yield* provider.list();
 
@@ -108,12 +108,12 @@ test.provider.skipIf(!secondaryZoneId)(
 
       const { incoming, peer } = yield* stack.deploy(
         Effect.gen(function* () {
-          const peer = yield* Cloudflare.Dns.ZoneTransferPeer("IncomingPeer", {
+          const peer = yield* Cloudflare.DNS.ZoneTransferPeer("IncomingPeer", {
             name: "alchemy-dnszt-incoming-peer",
             ip: "192.0.2.53",
             port: 53,
           });
-          const incoming = yield* Cloudflare.Dns.ZoneTransferIncoming(
+          const incoming = yield* Cloudflare.DNS.ZoneTransferIncoming(
             "Incoming",
             {
               zoneId,
@@ -134,12 +134,12 @@ test.provider.skipIf(!secondaryZoneId)(
       // in the same deploy that changes its dependent).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const peer = yield* Cloudflare.Dns.ZoneTransferPeer("IncomingPeer", {
+          const peer = yield* Cloudflare.DNS.ZoneTransferPeer("IncomingPeer", {
             name: "alchemy-dnszt-incoming-peer",
             ip: "192.0.2.53",
             port: 53,
           });
-          const incoming = yield* Cloudflare.Dns.ZoneTransferIncoming(
+          const incoming = yield* Cloudflare.DNS.ZoneTransferIncoming(
             "Incoming",
             {
               zoneId,

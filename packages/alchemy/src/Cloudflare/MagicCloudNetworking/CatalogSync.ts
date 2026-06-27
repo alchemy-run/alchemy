@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CatalogSyncTypeId =
-  "Cloudflare.MagicCloudNetworking.CatalogSync" as const;
-type CatalogSyncTypeId = typeof CatalogSyncTypeId;
+const TypeId = "Cloudflare.MagicCloudNetworking.CatalogSync" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Where a catalog sync writes the discovered resources.
@@ -90,7 +89,7 @@ export interface CatalogSyncAttributes {
 }
 
 export type CatalogSync = Resource<
-  CatalogSyncTypeId,
+  TypeId,
   CatalogSyncProps,
   CatalogSyncAttributes,
   never,
@@ -143,13 +142,13 @@ export type CatalogSync = Resource<
  *
  * @see https://developers.cloudflare.com/magic-cloud-networking/
  */
-export const CatalogSync = Resource<CatalogSync>(CatalogSyncTypeId);
+export const CatalogSync = Resource<CatalogSync>(TypeId);
 
 /**
  * Returns true if the given value is a CatalogSync resource.
  */
 export const isCatalogSync = (value: unknown): value is CatalogSync =>
-  Predicate.hasProperty(value, "Type") && value.Type === CatalogSyncTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CatalogSyncProvider = () =>
   Provider.succeed(CatalogSync, {

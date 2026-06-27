@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RumSiteTypeId = "Cloudflare.Rum.Site" as const;
-type RumSiteTypeId = typeof RumSiteTypeId;
+const TypeId = "Cloudflare.Rum.Site" as const;
+type TypeId = typeof TypeId;
 
 export type SiteProps = {
   /**
@@ -93,7 +93,7 @@ export type SiteAttributes = {
 };
 
 export type Site = Resource<
-  RumSiteTypeId,
+  TypeId,
   SiteProps,
   SiteAttributes,
   never,
@@ -147,13 +147,13 @@ export type Site = Resource<
  *
  * @see https://developers.cloudflare.com/web-analytics/
  */
-export const Site = Resource<Site>(RumSiteTypeId);
+export const Site = Resource<Site>(TypeId);
 
 /**
  * Returns true if the given value is a Site resource.
  */
 export const isSite = (value: unknown): value is Site =>
-  Predicate.hasProperty(value, "Type") && value.Type === RumSiteTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SiteProvider = () =>
   Provider.succeed(Site, {

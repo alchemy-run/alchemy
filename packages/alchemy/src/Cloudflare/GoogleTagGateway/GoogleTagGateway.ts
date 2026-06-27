@@ -10,9 +10,8 @@ import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const GoogleTagGatewayTypeId =
-  "Cloudflare.GoogleTagGateway.GoogleTagGateway" as const;
-type GoogleTagGatewayTypeId = typeof GoogleTagGatewayTypeId;
+const TypeId = "Cloudflare.GoogleTagGateway.GoogleTagGateway" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The plain Google Tag Gateway configuration shape — the value PUT to and
@@ -83,7 +82,7 @@ export type Attributes = Config & {
 };
 
 export type GoogleTagGateway = Resource<
-  GoogleTagGatewayTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -130,15 +129,13 @@ export type GoogleTagGateway = Resource<
  *
  * @see https://developers.cloudflare.com/google-tag-gateway/
  */
-export const GoogleTagGateway = Resource<GoogleTagGateway>(
-  GoogleTagGatewayTypeId,
-);
+export const GoogleTagGateway = Resource<GoogleTagGateway>(TypeId);
 
 /**
  * Returns true if the given value is a GoogleTagGateway resource.
  */
 export const isGoogleTagGateway = (value: unknown): value is GoogleTagGateway =>
-  Predicate.hasProperty(value, "Type") && value.Type === GoogleTagGatewayTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const GoogleTagGatewayProvider = () =>
   Provider.succeed(GoogleTagGateway, {

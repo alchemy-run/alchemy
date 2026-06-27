@@ -8,9 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SchemaValidationSettingsTypeId =
-  "Cloudflare.SchemaValidation.Settings" as const;
-type SchemaValidationSettingsTypeId = typeof SchemaValidationSettingsTypeId;
+const TypeId = "Cloudflare.SchemaValidation.Settings" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Mitigation action applied when a request does not conform to a schema:
@@ -60,7 +59,7 @@ export interface SettingsAttributes {
 }
 
 export type Settings = Resource<
-  SchemaValidationSettingsTypeId,
+  TypeId,
   SettingsProps,
   SettingsAttributes,
   never,
@@ -105,14 +104,13 @@ export type Settings = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const Settings = Resource<Settings>(SchemaValidationSettingsTypeId);
+export const Settings = Resource<Settings>(TypeId);
 
 /**
  * Returns true if the given value is a Settings resource.
  */
 export const isSettings = (value: unknown): value is Settings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SchemaValidationSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SettingsProvider = () =>
   Provider.succeed(Settings, {

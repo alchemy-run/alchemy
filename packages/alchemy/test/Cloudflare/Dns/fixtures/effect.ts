@@ -5,7 +5,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Zone } from "./zone.ts";
 /**
- * Effect-native Worker fixture that exercises the {@link Cloudflare.Dns.ReadWriteDns}
+ * Effect-native Worker fixture that exercises the {@link Cloudflare.DNS.ReadWriteDns}
  * binding (full DNS record CRUD).
  *
  * Binding `DnsReadWrite` in the Init phase provisions a scoped
@@ -20,7 +20,7 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const dns = yield* Cloudflare.Dns.ReadWriteDns(Zone);
+    const dns = yield* Cloudflare.DNS.ReadWriteDns(Zone);
 
     return {
       fetch: Effect.gen(function* () {
@@ -69,5 +69,5 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Dns.ReadWriteDnsBinding)),
+  }).pipe(Effect.provide(Cloudflare.DNS.ReadWriteDnsHttp)),
 ) {}

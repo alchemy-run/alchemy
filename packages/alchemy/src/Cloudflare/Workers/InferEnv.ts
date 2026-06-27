@@ -34,17 +34,17 @@ export type GetBindingType<T> =
                 ? KVNamespace
                 : T extends Cloudflare.Queues.Queue
                   ? Queue<unknown>
-                  : T extends Cloudflare.AiGateway.Gateway
+                  : T extends Cloudflare.AI.Gateway
                     ? Ai
-                    : T extends Cloudflare.AiSearch.Instance
+                    : T extends Cloudflare.AI.Search
                       ? AiSearchInstance
-                      : T extends Cloudflare.AiSearch.Namespace
+                      : T extends Cloudflare.AI.SearchNamespace
                         ? AiSearchNamespace
                         : T extends Cloudflare.Email.SendEmail
                           ? SendEmail
                           : T extends Cloudflare.AnalyticsEngine.Dataset
                             ? AnalyticsEngineDataset
-                            : T extends Cloudflare.Artifacts.Artifacts
+                            : T extends Cloudflare.Artifacts.Store
                               ? Artifacts
                               : T extends Cloudflare.Workers.RateLimitMarker
                                 ? RateLimit

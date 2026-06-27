@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const PagesDomainTypeId = "Cloudflare.Pages.Domain" as const;
-type PagesDomainTypeId = typeof PagesDomainTypeId;
+const TypeId = "Cloudflare.Pages.Domain" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Lifecycle status of a Pages custom domain. Newly attached domains start
@@ -95,7 +95,7 @@ export interface DomainAttributes {
 }
 
 export type Domain = Resource<
-  PagesDomainTypeId,
+  TypeId,
   DomainProps,
   DomainAttributes,
   never,
@@ -109,7 +109,7 @@ export type Domain = Resource<
  * resolve to the project (typically via a CNAME record pointing at the
  * project's `*.pages.dev` subdomain) before its status becomes `active`.
  * The resource does not wait for activation — compose it with
- * `Cloudflare.Dns.Record` to create the CNAME, and certificate issuance
+ * `Cloudflare.DNS.Record` to create the CNAME, and certificate issuance
  * completes asynchronously.
  *
  * Both properties are the attachment's identity, so every change triggers a
@@ -127,7 +127,7 @@ export type Domain = Resource<
  *   name: "www.example.com",
  * });
  *
- * yield* Cloudflare.Dns.Record("site-cname", {
+ * yield* Cloudflare.DNS.Record("site-cname", {
  *   zoneId: zone.zoneId,
  *   name: "www.example.com",
  *   type: "CNAME",
@@ -138,13 +138,13 @@ export type Domain = Resource<
  *
  * @see https://developers.cloudflare.com/pages/configuration/custom-domains/
  */
-export const Domain = Resource<Domain>(PagesDomainTypeId);
+export const Domain = Resource<Domain>(TypeId);
 
 /**
  * Returns true if the given value is a Domain resource.
  */
 export const isDomain = (value: unknown): value is Domain =>
-  Predicate.hasProperty(value, "Type") && value.Type === PagesDomainTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
@@ -238,7 +238,7 @@ export const DomainProvider = () =>
       // gate takeover behind the adopt policy.
       return output?.domainId ? attrs : Unowned(attrs);
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const projectName = news.projectName as string;

@@ -90,7 +90,7 @@ describe.sequential("ZoneSettings", () => {
 
         const settings = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
+            return yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
               zoneId,
               flattenAllCnames: true,
             });
@@ -134,7 +134,7 @@ describe.sequential("ZoneSettings", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
+            return yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
               zoneId,
               multiProvider: true,
             });
@@ -150,7 +150,7 @@ describe.sequential("ZoneSettings", () => {
         // field; the original snapshot survives the update.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
+            return yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
               zoneId,
               multiProvider: true,
               flattenAllCnames: true,
@@ -177,7 +177,7 @@ describe.sequential("ZoneSettings", () => {
         // across all reconciles) so destroy still restores it.
         const dropped = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dns.ZoneDnsSettings("DnsSettings", {
+            return yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
               zoneId,
               flattenAllCnames: true,
             });
@@ -205,7 +205,7 @@ describe.sequential("ZoneSettings", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Dns.ZoneDnsSettings,
+        Cloudflare.DNS.ZoneDnsSettings,
       );
       const all = yield* provider.list();
 

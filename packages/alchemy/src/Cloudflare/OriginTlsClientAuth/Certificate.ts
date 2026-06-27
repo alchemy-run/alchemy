@@ -12,10 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginTlsClientAuthCertificateTypeId =
-  "Cloudflare.OriginTlsClientAuth.Certificate" as const;
-type OriginTlsClientAuthCertificateTypeId =
-  typeof OriginTlsClientAuthCertificateTypeId;
+const TypeId = "Cloudflare.OriginTlsClientAuth.Certificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Deployment status of the certificate. Deploying and deleting are
@@ -71,7 +69,7 @@ export type CertificateAttributes = {
 };
 
 export type Certificate = Resource<
-  OriginTlsClientAuthCertificateTypeId,
+  TypeId,
   CertificateProps,
   CertificateAttributes,
   never,
@@ -121,17 +119,14 @@ export type Certificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/
  */
-export const Certificate = Resource<Certificate>(
-  OriginTlsClientAuthCertificateTypeId,
-);
+export const Certificate = Resource<Certificate>(TypeId);
 
 /**
  * Returns true if the given value is an Certificate
  * resource.
  */
 export const isCertificate = (value: unknown): value is Certificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginTlsClientAuthCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CertificateProvider = () =>
   Provider.succeed(Certificate, {

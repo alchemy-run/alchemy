@@ -10,8 +10,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
-const OrganizationTypeId = "Cloudflare.Organization.Organization" as const;
-type OrganizationTypeId = typeof OrganizationTypeId;
+const TypeId = "Cloudflare.Organization.Organization" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Business profile attached to an organization. All fields are required
@@ -119,7 +119,7 @@ export interface Attributes {
 }
 
 export type Organization = Resource<
-  OrganizationTypeId,
+  TypeId,
   Props,
   Attributes,
   never,
@@ -183,13 +183,13 @@ export type Organization = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/setup/manage-organizations/
  */
-export const Organization = Resource<Organization>(OrganizationTypeId);
+export const Organization = Resource<Organization>(TypeId);
 
 /**
  * Returns true if the given value is an Organization resource.
  */
 export const isOrganization = (value: unknown): value is Organization =>
-  Predicate.hasProperty(value, "Type") && value.Type === OrganizationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {

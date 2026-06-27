@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "./lookup.ts";
 
-const ZoneSettingTypeId = "Cloudflare.Zone.Setting" as const;
-type ZoneSettingTypeId = typeof ZoneSettingTypeId;
+const TypeId = "Cloudflare.Zone.Setting" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Identifier of a Cloudflare zone setting — every value Cloudflare
@@ -204,7 +204,7 @@ export type SettingAttributes = {
 };
 
 export type Setting = Resource<
-  ZoneSettingTypeId,
+  TypeId,
   SettingProps,
   SettingAttributes,
   never,
@@ -269,13 +269,13 @@ export type Setting = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/zones/subresources/settings/
  */
-export const Setting = Resource<Setting>(ZoneSettingTypeId);
+export const Setting = Resource<Setting>(TypeId);
 
 /**
  * Returns true if the given value is a Setting resource.
  */
 export const isSetting = (value: unknown): value is Setting =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneSettingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SettingProvider = () =>
   Provider.succeed(Setting, {

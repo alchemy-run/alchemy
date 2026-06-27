@@ -12,9 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DevicePostureIntegrationTypeId =
-  "Cloudflare.Devices.PostureIntegration" as const;
-type DevicePostureIntegrationTypeId = typeof DevicePostureIntegrationTypeId;
+const TypeId = "Cloudflare.Devices.PostureIntegration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The third-party provider behind the posture integration. Determines
@@ -113,7 +112,7 @@ export type DevicePostureIntegrationAttributes = {
 };
 
 export type DevicePostureIntegration = Resource<
-  DevicePostureIntegrationTypeId,
+  TypeId,
   DevicePostureIntegrationProps,
   DevicePostureIntegrationAttributes,
   never,
@@ -171,9 +170,8 @@ export type DevicePostureIntegration = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/devices/service-providers/
  */
-export const DevicePostureIntegration = Resource<DevicePostureIntegration>(
-  DevicePostureIntegrationTypeId,
-);
+export const DevicePostureIntegration =
+  Resource<DevicePostureIntegration>(TypeId);
 
 /**
  * Returns true if the given value is a DevicePostureIntegration resource.
@@ -181,8 +179,7 @@ export const DevicePostureIntegration = Resource<DevicePostureIntegration>(
 export const isDevicePostureIntegration = (
   value: unknown,
 ): value is DevicePostureIntegration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DevicePostureIntegrationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DevicePostureIntegrationProvider = () =>
   Provider.succeed(DevicePostureIntegration, {

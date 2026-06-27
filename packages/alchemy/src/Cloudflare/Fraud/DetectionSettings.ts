@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const FraudDetectionSettingsTypeId =
-  "Cloudflare.Fraud.DetectionSettings" as const;
-type FraudDetectionSettingsTypeId = typeof FraudDetectionSettingsTypeId;
+const TypeId = "Cloudflare.Fraud.DetectionSettings" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Criterion for classifying a login authentication outcome from the origin
@@ -94,7 +93,7 @@ export interface DetectionSettingsAttributes extends DetectionSettingsValues {
 }
 
 export type DetectionSettings = Resource<
-  FraudDetectionSettingsTypeId,
+  TypeId,
   DetectionSettingsProps,
   DetectionSettingsAttributes,
   never,
@@ -158,9 +157,7 @@ export type DetectionSettings = Resource<
  *
  * @see https://developers.cloudflare.com/bots/additional-configurations/fraud-detection/
  */
-export const DetectionSettings = Resource<DetectionSettings>(
-  FraudDetectionSettingsTypeId,
-);
+export const DetectionSettings = Resource<DetectionSettings>(TypeId);
 
 /**
  * Returns true if the given value is a DetectionSettings resource.
@@ -168,8 +165,7 @@ export const DetectionSettings = Resource<DetectionSettings>(
 export const isDetectionSettings = (
   value: unknown,
 ): value is DetectionSettings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === FraudDetectionSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Every writable settings key, used to project observed cloud state and

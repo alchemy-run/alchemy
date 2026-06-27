@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TunnelHostnameRouteTypeId = "Cloudflare.Tunnel.HostnameRoute" as const;
-type TunnelHostnameRouteTypeId = typeof TunnelHostnameRouteTypeId;
+const TypeId = "Cloudflare.Tunnel.HostnameRoute" as const;
+type TypeId = typeof TypeId;
 
 export interface HostnameRouteProps {
   /**
@@ -47,7 +47,7 @@ export type HostnameRouteAttributes = {
 };
 
 export type HostnameRoute = Resource<
-  TunnelHostnameRouteTypeId,
+  TypeId,
   HostnameRouteProps,
   HostnameRouteAttributes,
   never,
@@ -84,14 +84,13 @@ export type HostnameRoute = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/cloudflared/
  */
-export const HostnameRoute = Resource<HostnameRoute>(TunnelHostnameRouteTypeId);
+export const HostnameRoute = Resource<HostnameRoute>(TypeId);
 
 /**
  * Returns true if the given value is a HostnameRoute resource.
  */
 export const isHostnameRoute = (value: unknown): value is HostnameRoute =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TunnelHostnameRouteTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameRouteProvider = () =>
   Provider.succeed(HostnameRoute, {

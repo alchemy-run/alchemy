@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CacheReserveTypeId = "Cloudflare.Cache.Reserve" as const;
-type CacheReserveTypeId = typeof CacheReserveTypeId;
+const TypeId = "Cloudflare.Cache.Reserve" as const;
+type TypeId = typeof TypeId;
 
 export interface ReserveProps {
   /**
@@ -57,7 +57,7 @@ export interface ReserveAttributes {
 }
 
 export type Reserve = Resource<
-  CacheReserveTypeId,
+  TypeId,
   ReserveProps,
   ReserveAttributes,
   never,
@@ -111,13 +111,13 @@ export type Reserve = Resource<
  *
  * @see https://developers.cloudflare.com/cache/advanced-configuration/cache-reserve/
  */
-export const Reserve = Resource<Reserve>(CacheReserveTypeId);
+export const Reserve = Resource<Reserve>(TypeId);
 
 /**
  * Returns true if the given value is a Reserve resource.
  */
 export const isReserve = (value: unknown): value is Reserve =>
-  Predicate.hasProperty(value, "Type") && value.Type === CacheReserveTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const desiredValue = (props: ReserveProps): "on" | "off" =>
   (props.enabled ?? true) ? "on" : "off";

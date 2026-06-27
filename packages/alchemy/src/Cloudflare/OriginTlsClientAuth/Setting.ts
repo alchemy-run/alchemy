@@ -8,9 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginTlsClientAuthSettingTypeId =
-  "Cloudflare.OriginTlsClientAuth.Setting" as const;
-type OriginTlsClientAuthSettingTypeId = typeof OriginTlsClientAuthSettingTypeId;
+const TypeId = "Cloudflare.OriginTlsClientAuth.Setting" as const;
+type TypeId = typeof TypeId;
 
 export type SettingProps = {
   /**
@@ -44,7 +43,7 @@ export type SettingAttributes = {
 };
 
 export type Setting = Resource<
-  OriginTlsClientAuthSettingTypeId,
+  TypeId,
   SettingProps,
   SettingAttributes,
   never,
@@ -93,14 +92,13 @@ export type Setting = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/
  */
-export const Setting = Resource<Setting>(OriginTlsClientAuthSettingTypeId);
+export const Setting = Resource<Setting>(TypeId);
 
 /**
  * Returns true if the given value is an Setting resource.
  */
 export const isSetting = (value: unknown): value is Setting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginTlsClientAuthSettingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SettingProvider = () =>
   Provider.succeed(Setting, {

@@ -19,12 +19,12 @@ import type { NamespaceError } from "./NamespaceTypes.ts";
  */
 export interface ReadNamespace extends Binding.Service<
   ReadNamespace,
-  "Cloudflare.KVNamespace.Read",
+  "Cloudflare.KV.ReadNamespace",
   (namespace: Namespace) => Effect.Effect<ReadNamespaceClient>
 > {}
 
 export const ReadNamespace = Binding.Service<ReadNamespace>(
-  "Cloudflare.KVNamespace.Read",
+  "Cloudflare.KV.ReadNamespace",
 );
 
 export interface ReadNamespaceClient<Key extends string = string> {
