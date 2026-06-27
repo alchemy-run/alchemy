@@ -38,6 +38,7 @@ import {
   type PersistedState,
   type RanActionState,
   type ReplacedResourceState,
+  type ReplacementOldResourceState,
   type ReplacingResourceState,
   type ResourceState,
   type RunningActionState,
@@ -47,7 +48,7 @@ import {
   StateStoreError,
 } from "./State/index.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
-import { hashInput } from "./Util/hash.ts";
+import { hashInput } from "./Util/sha256.ts";
 
 export type ApplyEffect<
   P extends Plan,
@@ -854,6 +855,58 @@ const executeNode = (
           replState = node.state;
         }
 
+        // ── delete-first replacements ──
+        //
+        // By default a replacement is create-first: the new generation is
+        // created here and the old generation(s) are reclaimed afterwards by
+        // `collectGarbage` (Phase 2). That ordering keeps the old resource
+        // alive if the create fails, but it is wrong for resources whose
+        // replacement cannot coexist with the original — a fixed physical
+        // name, a singleton, etc. Those providers return
+        // `{ action: "replace", deleteFirst: true }`.
+        //
+        // When `deleteFirst` is set we tear the previous generation(s) down
+        // BEFORE creating the new one, and commit the result as a terminal
+        // `created` state (rather than `replaced`) so Phase 2 has no old chain
+        // left to drain. `delete` is required to be idempotent, so a re-run
+        // after an interrupted apply simply re-converges.
+        const deleteOldGenerations = (
+          old: ReplacementOldResourceState,
+        ): Effect.Effect<void, any, any> =>
+          Effect.gen(function* () {
+            const retain = node.resource.RemovalPolicy === "retain";
+            if (old.attr !== undefined && !retain) {
+              yield* node.provider
+                .delete({
+                  id: logicalId,
+                  instanceId: old.instanceId,
+                  olds: old.props as never,
+                  output: old.attr,
+                  session: scopedSession,
+                  bindings: [],
+                })
+                .pipe(
+                  instrumentLifecycle(
+                    "delete",
+                    fqn,
+                    node.resource.Type,
+                    logicalId,
+                    old.instanceId,
+                  ),
+                );
+            }
+            if (old.status === "replacing" || old.status === "replaced") {
+              yield* deleteOldGenerations(old.old);
+            }
+          });
+
+        if (node.deleteFirst) {
+          yield* scopedSession.note(
+            "Deleting previous resource before creating its replacement (deleteFirst)...",
+          );
+          yield* deleteOldGenerations(replState.old);
+        }
+
         let attr: any = replState.attr;
 
         if (attr !== undefined) {
@@ -949,25 +1002,44 @@ const executeNode = (
             ),
           );
 
-        yield* commit<ReplacedResourceState>({
-          // Creation of the new generation succeeded; from here on the only remaining
-          // work is draining the old chain via garbage collection.
-          status: "replaced",
-          fqn,
-          logicalId,
-          instanceId,
-          resourceType: node.resource.Type,
-          props: news,
-          attr,
-          providerVersion: node.provider.version ?? 0,
-          bindings: excludeDeletedBindings(node.bindings),
-          downstream: node.downstream,
-          // Preserve the remaining backlog exactly as-is. GC is responsible for
-          // popping one generation at a time until the chain is exhausted.
-          old: replState.old,
-          deleteFirst: node.deleteFirst,
-          removalPolicy: node.resource.RemovalPolicy,
-        });
+        if (node.deleteFirst) {
+          // The old generation(s) were already torn down above, so there is
+          // nothing left for `collectGarbage` to drain — collapse straight to
+          // the terminal `created` state.
+          yield* commit<CreatedResourceState>({
+            status: "created",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        } else {
+          yield* commit<ReplacedResourceState>({
+            // Creation of the new generation succeeded; from here on the only remaining
+            // work is draining the old chain via garbage collection.
+            status: "replaced",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            // Preserve the remaining backlog exactly as-is. GC is responsible for
+            // popping one generation at a time until the chain is exhausted.
+            old: replState.old,
+            deleteFirst: node.deleteFirst,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        }
 
         tracker[fqn] = {
           output: attr,

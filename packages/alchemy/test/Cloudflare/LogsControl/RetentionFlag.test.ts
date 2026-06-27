@@ -95,7 +95,7 @@ test.provider.skipIf(!entitled)(
       yield* setBaseline(zoneId, false);
 
       const created = yield* stack.deploy(
-        Cloudflare.LogsRetentionFlag("Retention", {
+        Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
           zoneId,
           flag: true,
         }),
@@ -111,7 +111,7 @@ test.provider.skipIf(!entitled)(
       // In-place update back to false — the captured initial value
       // survives the update.
       const updated = yield* stack.deploy(
-        Cloudflare.LogsRetentionFlag("Retention", {
+        Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
           zoneId,
           flag: false,
         }),
@@ -124,7 +124,7 @@ test.provider.skipIf(!entitled)(
 
       // Flip it on again so destroy has something to restore.
       yield* stack.deploy(
-        Cloudflare.LogsRetentionFlag("Retention", {
+        Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
           zoneId,
           flag: true,
         }),
@@ -149,7 +149,9 @@ test.provider.skipIf(!entitled)(
 // the standing test zone is actually enumerated.
 test.provider("list enumerates the retention flag across all zones", (stack) =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Cloudflare.LogsRetentionFlag);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.LogsControl.LogsRetentionFlag,
+    );
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
@@ -167,7 +169,7 @@ test.provider.skipIf(!entitled)(
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.LogsRetentionFlag,
+        Cloudflare.LogsControl.LogsRetentionFlag,
       );
       const all = yield* provider.list();
 

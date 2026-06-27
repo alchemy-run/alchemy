@@ -113,7 +113,7 @@ test.provider(
 
       const op = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldOperation("DefaultOp", {
+          return yield* Cloudflare.ApiShield.Operation("DefaultOp", {
             zoneId,
             method: "GET",
             host: zoneName,
@@ -137,7 +137,7 @@ test.provider(
       // physical operation — the normalized forms match.
       const redeployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldOperation("DefaultOp", {
+          return yield* Cloudflare.ApiShield.Operation("DefaultOp", {
             zoneId,
             method: "GET",
             host: zoneName,
@@ -170,7 +170,7 @@ test.provider("changing the method triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldOperation("ReplaceOp", {
+        return yield* Cloudflare.ApiShield.Operation("ReplaceOp", {
           zoneId,
           method: "GET",
           host: zoneName,
@@ -182,7 +182,7 @@ test.provider("changing the method triggers replacement", (stack) =>
 
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldOperation("ReplaceOp", {
+        return yield* Cloudflare.ApiShield.Operation("ReplaceOp", {
           zoneId,
           method: "POST",
           host: zoneName,
@@ -220,7 +220,7 @@ test.provider("list enumerates the deployed API Shield operation", (stack) =>
 
     const op = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ApiShieldOperation("ListOp", {
+        return yield* Cloudflare.ApiShield.Operation("ListOp", {
           zoneId,
           method: "GET",
           host: zoneName,
@@ -230,7 +230,7 @@ test.provider("list enumerates the deployed API Shield operation", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.ApiShieldOperation,
+      Cloudflare.ApiShield.Operation,
     );
     const all = yield* provider.list();
 

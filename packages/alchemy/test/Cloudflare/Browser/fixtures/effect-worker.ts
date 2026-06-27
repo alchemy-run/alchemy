@@ -20,9 +20,7 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const browser = yield* Cloudflare.Browser({
-      name: "BROWSER",
-    });
+    const browser = yield* Cloudflare.Browser("BROWSER");
 
     return {
       fetch: Effect.gen(function* () {
@@ -113,7 +111,8 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
               binding.quickAction("content", { url: TARGET_URL }),
             ).pipe(Effect.orDie);
             const body = yield* Effect.promise(
-              () => res.json() as Promise<Cloudflare.BrowserContentResult>,
+              () =>
+                res.json() as Promise<Cloudflare.Workers.BrowserContentResult>,
             );
             return yield* HttpServerResponse.json({ title: body.meta.title });
           }
@@ -122,5 +121,5 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
         }
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.BrowserBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Workers.BrowserBinding)),
 ) {}

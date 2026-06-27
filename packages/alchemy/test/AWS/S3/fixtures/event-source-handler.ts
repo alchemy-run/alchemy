@@ -27,31 +27,34 @@ export default BucketEventSourceFunction.make(
       forceDestroy: true,
     });
 
-    const putObject = yield* S3.PutObject.bind(bucket);
-    const getObject = yield* S3.GetObject.bind(bucket);
+    const putObject = yield* S3.PutObject(bucket);
+    const getObject = yield* S3.GetObject(bucket);
 
     // Subscribe to object-created events under `incoming/`. Each notification
     // writes a derived object under `processed/<name>` recording the event.
-    yield* S3.notifications(bucket, {
-      events: ["s3:ObjectCreated:*"],
-      prefix: INCOMING_PREFIX,
-    }).subscribe((stream) =>
-      stream.pipe(
-        Stream.runForEach((event) =>
-          Effect.gen(function* () {
-            const name = event.key.slice(INCOMING_PREFIX.length);
-            yield* putObject({
-              Key: `${PROCESSED_PREFIX}${name}`,
-              Body: JSON.stringify({
-                key: event.key,
-                size: event.size,
-                eTag: event.eTag,
-              }),
-              ContentType: "application/json",
-            });
-          }).pipe(Effect.orDie),
+    yield* S3.consumeBucketEvents(
+      bucket,
+      {
+        events: ["s3:ObjectCreated:*"],
+        prefix: INCOMING_PREFIX,
+      },
+      (stream) =>
+        stream.pipe(
+          Stream.runForEach((event) =>
+            Effect.gen(function* () {
+              const name = event.key.slice(INCOMING_PREFIX.length);
+              yield* putObject({
+                Key: `${PROCESSED_PREFIX}${name}`,
+                Body: JSON.stringify({
+                  key: event.key,
+                  size: event.size,
+                  eTag: event.eTag,
+                }),
+                ContentType: "application/json",
+              });
+            }).pipe(Effect.orDie),
+          ),
         ),
-      ),
     );
 
     return {
@@ -99,8 +102,8 @@ export default BucketEventSourceFunction.make(
     Effect.provide(
       Layer.mergeAll(
         Lambda.BucketEventSource,
-        S3.PutObjectLive,
-        S3.GetObjectLive,
+        S3.PutObjectHttp,
+        S3.GetObjectHttp,
       ),
     ),
   ),

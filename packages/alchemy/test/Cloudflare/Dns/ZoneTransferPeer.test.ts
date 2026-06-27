@@ -59,7 +59,7 @@ test.provider(
       // Create applies name-only POST followed by a PUT with the
       // connection settings.
       const created = yield* stack.deploy(
-        Cloudflare.ZoneTransferPeer("TestPeer", {
+        Cloudflare.DNS.ZoneTransferPeer("TestPeer", {
           name: "alchemy-dnszt-peer-test",
           ip: "192.0.2.53",
           port: 53,
@@ -79,7 +79,7 @@ test.provider(
 
       // Update the connection settings in place — same physical peer.
       const updated = yield* stack.deploy(
-        Cloudflare.ZoneTransferPeer("TestPeer", {
+        Cloudflare.DNS.ZoneTransferPeer("TestPeer", {
           name: "alchemy-dnszt-peer-test-renamed",
           ip: "198.51.100.53",
           port: 5353,
@@ -113,12 +113,12 @@ test.provider(
 
       const { peer, tsig } = yield* stack.deploy(
         Effect.gen(function* () {
-          const tsig = yield* Cloudflare.ZoneTransferTsig("PeerTsig", {
+          const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("PeerTsig", {
             name: "alchemy-dnszt-peer-tsig-test.",
             algo: "hmac-sha512.",
             secret: Redacted.make(TSIG_SECRET),
           });
-          const peer = yield* Cloudflare.ZoneTransferPeer("TsigPeer", {
+          const peer = yield* Cloudflare.DNS.ZoneTransferPeer("TsigPeer", {
             name: "alchemy-dnszt-peer-tsig-peer",
             ip: "192.0.2.54",
             tsigId: tsig.tsigId,
@@ -144,7 +144,7 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.ZoneTransferPeer("ListPeer", {
+        Cloudflare.DNS.ZoneTransferPeer("ListPeer", {
           name: "alchemy-dnszt-peer-list",
           ip: "192.0.2.55",
           port: 53,
@@ -152,7 +152,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ZoneTransferPeer,
+        Cloudflare.DNS.ZoneTransferPeer,
       );
       const all = yield* provider.list();
 

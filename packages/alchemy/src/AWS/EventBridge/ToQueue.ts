@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
-import type { Providers } from "../Providers.ts";
 
 interface EventDescriptor {
   id?: string;
@@ -24,34 +22,6 @@ export interface QueueRouteTargetProps extends Pick<
 > {
   sqsParameters?: RuleTarget["SqsParameters"];
 }
-
-export class ToQueuePolicy extends Binding.Policy<
-  ToQueuePolicy,
-  (rule: { ruleArn: unknown }, queue: Queue) => Effect.Effect<void>,
-  Providers
->()("AWS.EventBridge.ToQueue") {}
-
-export const ToQueuePolicyLive = ToQueuePolicy.layer.succeed(
-  Effect.fn(function* (_host, rule, queue) {
-    yield* queue.bind`Allow(${rule}, AWS.EventBridge.toQueue(${queue}))`({
-      policyStatements: [
-        {
-          Effect: "Allow",
-          Principal: {
-            Service: "events.amazonaws.com",
-          },
-          Action: ["sqs:SendMessage"],
-          Resource: [queue.queueArn as any],
-          Condition: {
-            ArnEquals: {
-              "aws:SourceArn": [rule.ruleArn as any],
-            },
-          },
-        } satisfies PolicyStatement,
-      ],
-    });
-  }),
-);
 
 /** @binding */
 export const toQueue = (
@@ -82,7 +52,25 @@ export const toQueue = (
       ],
     });
 
-    yield* ToQueuePolicy.bind(rule, queue);
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* queue.bind`Allow(${rule}, AWS.EventBridge.toQueue(${queue}))`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Principal: {
+              Service: "events.amazonaws.com",
+            },
+            Action: ["sqs:SendMessage"],
+            Resource: [queue.queueArn as any],
+            Condition: {
+              ArnEquals: {
+                "aws:SourceArn": [rule.ruleArn as any],
+              },
+            },
+          } satisfies PolicyStatement,
+        ],
+      });
+    }
 
     return rule;
   });

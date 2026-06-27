@@ -43,7 +43,7 @@ test(
  * The stack now includes two Workers (`Api` and `SecondaryApi`) that both
  * bind the same `Agent` Durable Object, which in turn binds the `Sandbox`
  * Container. Each `yield* Agent` runs the DO's outer init, calling
- * `Cloudflare.Container.bind(Sandbox)` once per Worker, so the Sandbox
+ * `Cloudflare.Container(Sandbox)` once per Worker, so the Sandbox
  * ContainerApplication receives two bindings sharing one `namespaceId`.
  *
  * Before the dedupe fix, `getDurableObjects` counted those as two distinct
@@ -68,11 +68,11 @@ test(
 /**
  * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
  *
- * `NotifyWorkflow` accesses `Cloudflare.WorkerEnvironment` inside its body and
+ * `NotifyWorkflow` accesses `Cloudflare.Workers.WorkerEnvironment` inside its body and
  * performs a KV roundtrip via `env.KV.put` / `env.KV.get`. If the fix from #71
  * is ever reverted, the body Effect loses the `WorkerEnvironment` service and
  * dies with `Service not found: Cloudflare.Workers.WorkerEnvironment` on the
- * first `yield* Cloudflare.WorkerEnvironment` — the workflow instance never
+ * first `yield* Cloudflare.Workers.WorkerEnvironment` — the workflow instance never
  * reaches `complete`, and this test times out or surfaces the `errored` status.
  */
 test(
@@ -142,7 +142,7 @@ test(
 
 /**
  * Queue producer→consumer round-trip via the Effect-style
- * `Cloudflare.messages(Queue).subscribe(...)` API.
+ * `Cloudflare.Queues.consumeQueueMessages(Queue, handler)` API.
  *
  * Producer: `POST /queue/send` returns `{ sent: { id, text, sentAt } }`
  * after enqueuing a message.
@@ -153,7 +153,7 @@ test(
  * dispatch is async and best-effort, so we poll for up to 60s.
  */
 test(
-  "queue producer→consumer round-trip via messages().subscribe()",
+  "queue producer→consumer round-trip via consumeQueueMessages()",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const text = `hello-${Date.now()}`;

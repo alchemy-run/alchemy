@@ -21,8 +21,8 @@ import {
   installResolvedPackages,
   matchesPackageRoot,
   normalizeInstallTargets,
-  type PackageInstall,
   resolvePackageInstallIdentity,
+  type PackageInstall,
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -336,7 +336,7 @@ const matchesConfiguredExternal = (
  *   { main: import.meta.filename, url: true },
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const getItem = yield* DynamoDB.GetItem.bind(table);
+ *     const getItem = yield* AWS.DynamoDB.GetItem(table);
  *
  *     return {
  *       // runtime: use them
@@ -389,8 +389,8 @@ const matchesConfiguredExternal = (
  * @example Read and write S3 objects
  * ```typescript
  * // init
- * const getObject = yield* S3.GetObject.bind(bucket);
- * const putObject = yield* S3.PutObject.bind(bucket);
+ * const getObject = yield* S3.GetObject(bucket);
+ * const putObject = yield* S3.PutObject(bucket);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -409,8 +409,8 @@ const matchesConfiguredExternal = (
  * @example Get and put items
  * ```typescript
  * // init
- * const getItem = yield* DynamoDB.GetItem.bind(table);
- * const putItem = yield* DynamoDB.PutItem.bind(table);
+ * const getItem = yield* AWS.DynamoDB.GetItem(table);
+ * const putItem = yield* AWS.DynamoDB.PutItem(table);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -428,7 +428,7 @@ const matchesConfiguredExternal = (
  * @example Send a message
  * ```typescript
  * // init
- * const sendMessage = yield* SQS.SendMessage.bind(queue);
+ * const sendMessage = yield* SQS.SendMessage(queue);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -448,7 +448,7 @@ const matchesConfiguredExternal = (
  * @example Publish a notification
  * ```typescript
  * // init
- * const publish = yield* SNS.Publish.bind(topic);
+ * const publish = yield* AWS.SNS.Publish(topic);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -469,7 +469,7 @@ const matchesConfiguredExternal = (
  * @example Put a record
  * ```typescript
  * // init
- * const putRecord = yield* Kinesis.PutRecord.bind(stream);
+ * const putRecord = yield* AWS.Kinesis.PutRecord(stream);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -489,7 +489,7 @@ const matchesConfiguredExternal = (
  *
  * @example Process SQS messages
  * ```typescript
- * yield* SQS.messages(queue).process(
+ * yield* SQS.consumeQueueMessages(queue,
  *   Effect.fn(function* (message) {
  *     yield* Effect.log(`Received: ${message.body}`);
  *   }),
@@ -498,9 +498,9 @@ const matchesConfiguredExternal = (
  *
  * @example Process DynamoDB stream changes
  * ```typescript
- * yield* DynamoDB.streams(table, {
+ * yield* AWS.DynamoDB.consumeTableChanges(table, {
  *   StreamViewType: "NEW_AND_OLD_IMAGES",
- * }).process(
+ * },
  *   Effect.fn(function* (record) {
  *     yield* Effect.log(`Change: ${record.eventName}`);
  *   }),
@@ -509,9 +509,9 @@ const matchesConfiguredExternal = (
  *
  * @example Process S3 notifications
  * ```typescript
- * yield* S3.notifications(bucket, {
+ * yield* AWS.S3.consumeBucketEvents(bucket, {
  *   events: ["s3:ObjectCreated:*"],
- * }).subscribe((stream) =>
+ * }, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((event) =>
  *       Effect.log(`New object: ${event.key}`),

@@ -82,7 +82,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomRuleset("WafRules", {
+          return yield* Cloudflare.Ruleset.CustomRuleset("WafRules", {
             phase,
             description: "alchemy custom ruleset v1",
             rules: [
@@ -111,7 +111,7 @@ test.provider(
       // Update rules + description in place — same physical ruleset.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomRuleset("WafRules", {
+          return yield* Cloudflare.Ruleset.CustomRuleset("WafRules", {
             phase,
             description: "alchemy custom ruleset v2",
             rules: [
@@ -175,7 +175,9 @@ test.provider(
         // Unentitled — assert the typed entitlement tag, then verify the
         // provider's `list()` still enumerates without error (returns []).
         expect(probe.failure._tag).toEqual("PhaseNotEntitled");
-        const provider = yield* Provider.findProvider(Cloudflare.CustomRuleset);
+        const provider = yield* Provider.findProvider(
+          Cloudflare.Ruleset.CustomRuleset,
+        );
         const all = yield* provider.list();
         expect(Array.isArray(all)).toBe(true);
         yield* stack.destroy();
@@ -189,7 +191,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomRuleset("ListWafRules", {
+          return yield* Cloudflare.Ruleset.CustomRuleset("ListWafRules", {
             phase,
             description: "alchemy custom ruleset list",
             rules: [
@@ -203,7 +205,9 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.CustomRuleset);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Ruleset.CustomRuleset,
+      );
       const all = yield* provider.list();
 
       expect(all.some((r) => r.rulesetId === deployed.rulesetId)).toBe(true);

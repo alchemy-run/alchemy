@@ -27,7 +27,7 @@ import type { RuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export class Counter extends Cloudflare.DurableObjectNamespace<
+export class Counter extends Cloudflare.DurableObject<
   Counter,
   {
     increment: () => Effect.Effect<number, never, RuntimeContext>;
@@ -49,7 +49,7 @@ when imported by name.
 
 ```diff lang="typescript"
 // src/object.ts
- export class Counter extends Cloudflare.DurableObjectNamespace<
+ export class Counter extends Cloudflare.DurableObject<
    Counter,
    {
      increment: () => Effect.Effect<number, never, RuntimeContext>;

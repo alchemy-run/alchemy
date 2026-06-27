@@ -26,7 +26,7 @@ the WebSocket handshake. Create `src/room.ts`:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+export default class Room extends Cloudflare.DurableObject<Room>()(
   "Rooms",
   Effect.gen(function* () {
     return Effect.gen(function* () {
@@ -43,7 +43,7 @@ export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
 
 `Cloudflare.upgrade()` does two things in one call: it builds a
 `101 Switching Protocols` response with the right headers, and it
-hands you a `DurableWebSocket` you can `send` / `close` /
+hands you a `Socket` you can `send` / `close` /
 `serializeAttachment` on. Returning the response from `fetch` is
 what tells Cloudflare to hijack the TCP connection and complete the
 handshake.
@@ -61,11 +61,11 @@ what later:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export default class Room extends Cloudflare.DurableObjectNamespace<Room>()(
+export default class Room extends Cloudflare.DurableObject<Room>()(
   "Rooms",
   Effect.gen(function* () {
     return Effect.gen(function* () {
-+      const sessions = new Map<string, Cloudflare.DurableWebSocket>();
++      const sessions = new Map<string, Cloudflare.WebSocket>();
 
       return {
         fetch: Effect.gen(function* () {
@@ -104,7 +104,7 @@ return {
     return response;
   }),
 +  webSocketMessage: Effect.fn(function* (
-+    socket: Cloudflare.DurableWebSocket,
++    socket: Cloudflare.WebSocket,
 +    message: string | ArrayBuffer,
 +  ) {
 +     const attachment = socket.deserializeAttachment<{ id: string }>();
@@ -136,7 +136,7 @@ return {
   fetch: /* ... */,
   webSocketMessage: /* ... */,
 +  webSocketClose: Effect.fn(function* (
-+    ws: Cloudflare.DurableWebSocket,
++    ws: Cloudflare.WebSocket,
 +    code: number,
 +    reason: string,
 +  ) {
@@ -163,7 +163,7 @@ every attached socket back from the runtime:
 Effect.gen(function* () {
 +  const state = yield* Cloudflare.DurableObjectState;
   return Effect.gen(function* () {
-    const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+    const sessions = new Map<string, Cloudflare.WebSocket>();
 
 +    for (const socket of yield* state.getWebSockets()) {
 +      const data = socket.deserializeAttachment<{ id: string }>();
@@ -203,7 +203,7 @@ reminders below:
 Effect.gen(function* () {
   const state = yield* Cloudflare.DurableObjectState;
   return Effect.gen(function* () {
-    const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+    const sessions = new Map<string, Cloudflare.WebSocket>();
 
     for (const socket of yield* state.getWebSockets()) {
       const data = socket.deserializeAttachment<{ id: string }>();
@@ -500,7 +500,7 @@ webSocketMessage: Effect.fn(function* (socket, message) {
 +    const reminder = remindMatch[2];
 +    const id = crypto.randomUUID();
 +    const runAt = new Date(Date.now() + delaySec * 1000);
-+    yield* Cloudflare.scheduleEvent(id, runAt, { message: reminder });
++    yield* Cloudflare.Workers.scheduleEvent(id, runAt, { message: reminder });
 +    yield* socket.send(`[system] Reminder scheduled in ${delaySec}s`);
 +    return;
 +  }
@@ -522,7 +522,7 @@ return {
   webSocketClose: /* ... */,
 +  alarm: () =>
 +    Effect.gen(function* () {
-+      const fired = yield* Cloudflare.processScheduledEvents;
++      const fired = yield* Cloudflare.Workers.processScheduledEvents;
 +      for (const event of fired) {
 +        const payload = event.payload as { message: string };
 +        yield* broadcast(`[reminder] ${payload.message}`);

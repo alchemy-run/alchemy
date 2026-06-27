@@ -66,10 +66,10 @@ test.provider(
         enabled?: boolean;
       }) =>
         Effect.gen(function* () {
-          const input = yield* Cloudflare.StreamLiveInput("RestreamInput", {
+          const input = yield* Cloudflare.Stream.LiveInput("RestreamInput", {
             meta: { name: "alchemy-stream-output-input" },
           });
-          const output = yield* Cloudflare.StreamLiveInputOutput("Restream", {
+          const output = yield* Cloudflare.Stream.LiveInputOutput("Restream", {
             liveInputId: input.liveInputId,
             ...props,
           });
@@ -174,15 +174,18 @@ test.provider(
 
       const deployOutput = (enabled?: boolean) =>
         Effect.gen(function* () {
-          const input = yield* Cloudflare.StreamLiveInput("HealOutputInput", {
+          const input = yield* Cloudflare.Stream.LiveInput("HealOutputInput", {
             meta: { name: "alchemy-stream-output-heal-input" },
           });
-          const output = yield* Cloudflare.StreamLiveInputOutput("HealOutput", {
-            liveInputId: input.liveInputId,
-            url: "rtmps://a.rtmps.youtube.com/live2",
-            streamKey: "alchemy-heal-stream-key",
-            enabled,
-          });
+          const output = yield* Cloudflare.Stream.LiveInputOutput(
+            "HealOutput",
+            {
+              liveInputId: input.liveInputId,
+              url: "rtmps://a.rtmps.youtube.com/live2",
+              streamKey: "alchemy-heal-stream-key",
+              enabled,
+            },
+          );
           return { input, output };
         });
 
@@ -242,20 +245,23 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const input = yield* Cloudflare.StreamLiveInput("ListOutputInput", {
+          const input = yield* Cloudflare.Stream.LiveInput("ListOutputInput", {
             meta: { name: "alchemy-stream-output-list-input" },
           });
-          const output = yield* Cloudflare.StreamLiveInputOutput("ListOutput", {
-            liveInputId: input.liveInputId,
-            url: "rtmps://a.rtmps.youtube.com/live2",
-            streamKey: "alchemy-list-stream-key",
-          });
+          const output = yield* Cloudflare.Stream.LiveInputOutput(
+            "ListOutput",
+            {
+              liveInputId: input.liveInputId,
+              url: "rtmps://a.rtmps.youtube.com/live2",
+              streamKey: "alchemy-list-stream-key",
+            },
+          );
           return { input, output };
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.StreamLiveInputOutput,
+        Cloudflare.Stream.LiveInputOutput,
       );
 
       // Edge propagation: the freshly-created output (and its parent live

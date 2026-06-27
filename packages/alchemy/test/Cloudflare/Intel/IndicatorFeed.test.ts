@@ -99,7 +99,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.IndicatorFeed);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Intel.IndicatorFeed,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -126,13 +128,15 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const feed = yield* stack.deploy(
-        Cloudflare.IndicatorFeed("ListFeed", {
+        Cloudflare.Intel.IndicatorFeed("ListFeed", {
           name: FEED_NAME,
           description: "alchemy intel list feed",
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.IndicatorFeed);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Intel.IndicatorFeed,
+      );
       const all = yield* provider.list();
 
       const found = all.find((f) => f.feedId === feed.feedId);
@@ -156,7 +160,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const feed = yield* stack.deploy(
-        Cloudflare.IndicatorFeed("TestFeed", {
+        Cloudflare.Intel.IndicatorFeed("TestFeed", {
           name: FEED_NAME,
           description: "alchemy intel lifecycle feed",
         }),
@@ -175,7 +179,7 @@ test.provider.skipIf(!entitled)(
 
       // In-place update: description + visibility flags, same id.
       const updated = yield* stack.deploy(
-        Cloudflare.IndicatorFeed("TestFeed", {
+        Cloudflare.Intel.IndicatorFeed("TestFeed", {
           name: FEED_NAME,
           description: "alchemy intel lifecycle feed v2",
           isAttributable: true,
@@ -195,7 +199,7 @@ test.provider.skipIf(!entitled)(
 
       // No-op redeploy keeps the same feed.
       const noop = yield* stack.deploy(
-        Cloudflare.IndicatorFeed("TestFeed", {
+        Cloudflare.Intel.IndicatorFeed("TestFeed", {
           name: FEED_NAME,
           description: "alchemy intel lifecycle feed v2",
           isAttributable: true,
@@ -212,7 +216,7 @@ test.provider.skipIf(!entitled)(
       expect(orphan.id).toEqual(feed.feedId);
 
       const adopted = yield* stack.deploy(
-        Cloudflare.IndicatorFeed("TestFeed", {
+        Cloudflare.Intel.IndicatorFeed("TestFeed", {
           name: FEED_NAME,
           description: "alchemy intel lifecycle feed v2",
           isAttributable: true,
@@ -254,7 +258,7 @@ test.provider.skipIf(!entitled)(
       });
 
       const feed = yield* stack.deploy(
-        Cloudflare.IndicatorFeed("SnapshotFeed", {
+        Cloudflare.Intel.IndicatorFeed("SnapshotFeed", {
           name: FEED_NAME,
           description: "alchemy intel snapshot feed",
           snapshot,
@@ -264,7 +268,7 @@ test.provider.skipIf(!entitled)(
 
       // Re-deploying the identical snapshot is a no-op (same hash).
       const noop = yield* stack.deploy(
-        Cloudflare.IndicatorFeed("SnapshotFeed", {
+        Cloudflare.Intel.IndicatorFeed("SnapshotFeed", {
           name: FEED_NAME,
           description: "alchemy intel snapshot feed",
           snapshot,
@@ -275,7 +279,7 @@ test.provider.skipIf(!entitled)(
 
       if (consumer) {
         const grant = yield* stack.deploy(
-          Cloudflare.IndicatorFeedPermission("ConsumerGrant", {
+          Cloudflare.Intel.IndicatorFeedPermission("ConsumerGrant", {
             feedId: feed.feedId,
             accountTag: consumer,
           }),

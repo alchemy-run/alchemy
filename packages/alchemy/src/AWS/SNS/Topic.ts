@@ -100,7 +100,7 @@ export interface Topic extends Resource<
  * @example Publish from a handler
  * ```typescript
  * // init
- * const publish = yield* SNS.Publish.bind(topic);
+ * const publish = yield* SNS.Publish(topic);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -122,7 +122,7 @@ export interface Topic extends Resource<
  * @example Process topic notifications
  * ```typescript
  * // init
- * yield* SNS.notifications(topic).subscribe((stream) =>
+ * yield* SNS.consumeTopicNotifications(topic, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((message) =>
  *       Effect.log(`Received: ${message.Message}`),

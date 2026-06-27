@@ -8,9 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ApiShieldConfigurationTypeId =
-  "Cloudflare.ApiShield.Configuration" as const;
-type ApiShieldConfigurationTypeId = typeof ApiShieldConfigurationTypeId;
+const TypeId = "Cloudflare.ApiShield.Configuration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A session identifier ("auth ID characteristic") used by API Shield to
@@ -18,7 +17,7 @@ type ApiShieldConfigurationTypeId = typeof ApiShieldConfigurationTypeId;
  * characteristics name the header/cookie carrying the session token; `jwt`
  * characteristics take a claim path expression in `name`.
  */
-export type ApiShieldAuthIdCharacteristic =
+export type AuthIdCharacteristic =
   | {
       /** Name of the header or cookie carrying the session identifier. */
       name: string;
@@ -32,7 +31,7 @@ export type ApiShieldAuthIdCharacteristic =
       type: "jwt";
     };
 
-export interface ApiShieldConfigurationProps {
+export interface ConfigurationProps {
   /**
    * Zone whose API Shield configuration is managed.
    *
@@ -48,26 +47,26 @@ export interface ApiShieldConfigurationProps {
    *
    * Mutable — written in place via PUT.
    */
-  authIdCharacteristics: ApiShieldAuthIdCharacteristic[];
+  authIdCharacteristics: AuthIdCharacteristic[];
 }
 
-export interface ApiShieldConfigurationAttributes {
+export interface ConfigurationAttributes {
   /** Zone whose API Shield configuration is managed. */
   zoneId: string;
   /** The session identifiers currently configured on the zone. */
-  authIdCharacteristics: ApiShieldAuthIdCharacteristic[];
+  authIdCharacteristics: AuthIdCharacteristic[];
   /**
    * The session identifiers the zone had before Alchemy first managed the
    * configuration. Restored on destroy, so deleting the resource puts the
    * zone back the way it was found.
    */
-  initialAuthIdCharacteristics: ApiShieldAuthIdCharacteristic[];
+  initialAuthIdCharacteristics: AuthIdCharacteristic[];
 }
 
-export type ApiShieldConfiguration = Resource<
-  ApiShieldConfigurationTypeId,
-  ApiShieldConfigurationProps,
-  ApiShieldConfigurationAttributes,
+export type Configuration = Resource<
+  TypeId,
+  ConfigurationProps,
+  ConfigurationAttributes,
   never,
   Providers
 >;
@@ -91,7 +90,7 @@ export type ApiShieldConfiguration = Resource<
  * @section Configuring session identifiers
  * @example Identify sessions by an Authorization header
  * ```typescript
- * yield* Cloudflare.ApiShieldConfiguration("SessionIds", {
+ * yield* Cloudflare.ApiShield.Configuration("SessionIds", {
  *   zoneId: zone.zoneId,
  *   authIdCharacteristics: [{ name: "authorization", type: "header" }],
  * });
@@ -99,7 +98,7 @@ export type ApiShieldConfiguration = Resource<
  *
  * @example Identify sessions by a cookie and a JWT claim
  * ```typescript
- * yield* Cloudflare.ApiShieldConfiguration("SessionIds", {
+ * yield* Cloudflare.ApiShield.Configuration("SessionIds", {
  *   zoneId: zone.zoneId,
  *   authIdCharacteristics: [
  *     { name: "session_id", type: "cookie" },
@@ -110,21 +109,16 @@ export type ApiShieldConfiguration = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/get-started/#session-identifiers
  */
-export const ApiShieldConfiguration = Resource<ApiShieldConfiguration>(
-  ApiShieldConfigurationTypeId,
-);
+export const Configuration = Resource<Configuration>(TypeId);
 
 /**
- * Returns true if the given value is an ApiShieldConfiguration resource.
+ * Returns true if the given value is an Configuration resource.
  */
-export const isApiShieldConfiguration = (
-  value: unknown,
-): value is ApiShieldConfiguration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ApiShieldConfigurationTypeId;
+export const isConfiguration = (value: unknown): value is Configuration =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const ApiShieldConfigurationProvider = () =>
-  Provider.succeed(ApiShieldConfiguration, {
+export const ConfigurationProvider = () =>
+  Provider.succeed(Configuration, {
     stables: ["zoneId", "initialAuthIdCharacteristics"],
 
     list: Effect.fn(function* () {
@@ -159,13 +153,13 @@ export const ApiShieldConfigurationProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is ApiShieldConfigurationAttributes => row !== undefined,
+        (row): row is ConfigurationAttributes => row !== undefined,
       );
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      const o = olds as ApiShieldConfigurationProps | undefined;
-      const n = news as ApiShieldConfigurationProps;
+      const o = olds as ConfigurationProps | undefined;
+      const n = news as ConfigurationProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ??
@@ -269,13 +263,13 @@ export const ApiShieldConfigurationProvider = () =>
  */
 const toCharacteristics = (
   characteristics: readonly { name: string; type: string }[],
-): ApiShieldAuthIdCharacteristic[] =>
+): AuthIdCharacteristic[] =>
   characteristics.map(
     (c) =>
       ({
         name: c.name,
         type: c.type,
-      }) as ApiShieldAuthIdCharacteristic,
+      }) as AuthIdCharacteristic,
   );
 
 /**
@@ -283,11 +277,11 @@ const toCharacteristics = (
  * treats the configuration as a set.
  */
 const characteristicsEqual = (
-  a: ApiShieldAuthIdCharacteristic[],
-  b: ApiShieldAuthIdCharacteristic[],
+  a: AuthIdCharacteristic[],
+  b: AuthIdCharacteristic[],
 ): boolean => {
   if (a.length !== b.length) return false;
-  const key = (c: ApiShieldAuthIdCharacteristic) => `${c.type} ${c.name}`;
+  const key = (c: AuthIdCharacteristic) => `${c.type} ${c.name}`;
   const as = a.map(key).sort();
   const bs = b.map(key).sort();
   return as.every((k, i) => k === bs[i]);
@@ -296,8 +290,8 @@ const characteristicsEqual = (
 const toAttributes = (
   zoneId: string,
   observed: readonly { name: string; type: string }[],
-  initial: ApiShieldAuthIdCharacteristic[],
-): ApiShieldConfigurationAttributes => ({
+  initial: AuthIdCharacteristic[],
+): ConfigurationAttributes => ({
   zoneId,
   authIdCharacteristics: toCharacteristics(observed),
   initialAuthIdCharacteristics: initial,

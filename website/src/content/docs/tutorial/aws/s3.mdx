@@ -63,8 +63,8 @@ Bind them in the outer init, alongside the bucket:
 ```diff lang="typescript"
 Effect.gen(function* () {
   const bucket = yield* S3.Bucket("Blobs");
-+  const putObject = yield* S3.PutObject.bind(bucket);
-+  const getObject = yield* S3.GetObject.bind(bucket);
++  const putObject = yield* S3.PutObject(bucket);
++  const getObject = yield* S3.GetObject(bucket);
 
   return {
     fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
@@ -79,16 +79,16 @@ field Alchemy fills in for you) and `getObject` takes a
 
 ### One binding, one IAM statement
 
-Each `.bind(...)` call is **1:1 with an IAM policy statement**
+Each `Binding(resource)` call is **1:1 with an IAM policy statement**
 attached to your function's execution role. The mapping is
 deterministic:
 
 | Code                              | IAM `Action`     | IAM `Resource`           |
 | --------------------------------- | ---------------- | ------------------------ |
-| `S3.PutObject.bind(bucket)`       | `s3:PutObject`   | `bucket.bucketArn`       |
-| `S3.GetObject.bind(bucket)`       | `s3:GetObject`   | `bucket.bucketArn/*`     |
-| `DynamoDB.PutItem.bind(table)`    | `dynamodb:PutItem` | `table.tableArn`       |
-| `SQS.SendMessage.bind(queue)`     | `sqs:SendMessage` | `queue.queueArn`        |
+| `S3.PutObject(bucket)`       | `s3:PutObject`   | `bucket.bucketArn`       |
+| `S3.GetObject(bucket)`       | `s3:GetObject`   | `bucket.bucketArn/*`     |
+| `DynamoDB.PutItem(table)`    | `dynamodb:PutItem` | `table.tableArn`       |
+| `SQS.SendMessage(queue)`     | `sqs:SendMessage` | `queue.queueArn`        |
 
 So the two `bind` calls above produce exactly two statements on
 the role:

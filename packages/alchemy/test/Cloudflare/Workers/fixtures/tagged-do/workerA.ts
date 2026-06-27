@@ -56,7 +56,7 @@ export default WorkerA.make(
   }).pipe(
     Effect.provide(
       // WorkerA needs to provide it
-      CounterLive.pipe(Layer.provide(Cloudflare.D1ConnectionLive)),
+      CounterLive.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding)),
     ),
   ),
 );

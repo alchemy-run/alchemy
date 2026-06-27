@@ -22,7 +22,7 @@ const corsLayer = HttpRouter.cors({
   allowedHeaders: ["Content-Type"],
 });
 
-const Bucket = Cloudflare.R2Bucket("Tasks");
+const Bucket = Cloudflare.R2.Bucket("Tasks");
 
 export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWorker>()(
   "HttpApiTestWorker",

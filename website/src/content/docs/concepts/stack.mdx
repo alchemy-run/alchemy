@@ -25,7 +25,7 @@ export default Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers() },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+    const bucket = yield* Cloudflare.R2.Bucket("Bucket");
     return { bucketName: bucket.bucketName };
   }),
 );
@@ -59,7 +59,7 @@ programmatically in tests.
 
 ```typescript
 Effect.gen(function* () {
-  const bucket = yield* Cloudflare.R2Bucket("Bucket");
+  const bucket = yield* Cloudflare.R2.Bucket("Bucket");
   const worker = yield* Worker;
 
   return {
@@ -150,7 +150,7 @@ export class Backend extends Alchemy.Stack<
 // frontend/alchemy.run.ts — reads the matching stage of Backend
 const backend = yield* Backend;             // current stage
 const pinned = yield* Backend.stage.prod;   // pinned stage
-yield* Cloudflare.Vite("Website", {
+yield* Cloudflare.Website.Vite("Website", {
   env: { VITE_API_URL: backend.url },
 });
 ```

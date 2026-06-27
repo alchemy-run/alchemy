@@ -97,7 +97,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const sync = yield* stack.deploy(
-        Cloudflare.CatalogSync("Sync", {
+        Cloudflare.MagicCloudNetworking.CatalogSync("Sync", {
           name: "alchemy-mcn-catalog-sync",
           destinationType: "NONE",
           updateMode: "MANUAL",
@@ -119,7 +119,7 @@ test.provider.skipIf(!entitled)(
 
       // Update mutable props in place — same syncId.
       const updated = yield* stack.deploy(
-        Cloudflare.CatalogSync("Sync", {
+        Cloudflare.MagicCloudNetworking.CatalogSync("Sync", {
           name: "alchemy-mcn-catalog-sync-v2",
           destinationType: "NONE",
           updateMode: "AUTO",
@@ -153,7 +153,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.CatalogSync);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicCloudNetworking.CatalogSync,
+      );
 
       const before = yield* provider.list();
       expect(Array.isArray(before)).toBe(true);
@@ -166,7 +168,7 @@ test.provider(
       }
 
       const deployed = yield* stack.deploy(
-        Cloudflare.CatalogSync("ListSync", {
+        Cloudflare.MagicCloudNetworking.CatalogSync("ListSync", {
           name: "alchemy-mcn-catalog-sync-list",
           destinationType: "NONE",
           updateMode: "MANUAL",
@@ -192,7 +194,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.CatalogSync("ReplaceSync", {
+        Cloudflare.MagicCloudNetworking.CatalogSync("ReplaceSync", {
           name: "alchemy-mcn-catalog-sync-replace",
           destinationType: "NONE",
           updateMode: "MANUAL",
@@ -202,7 +204,7 @@ test.provider.skipIf(!entitled)(
       // destinationType is provisioned at create time — changing it must
       // produce a brand-new sync (new syncId).
       const replaced = yield* stack.deploy(
-        Cloudflare.CatalogSync("ReplaceSync", {
+        Cloudflare.MagicCloudNetworking.CatalogSync("ReplaceSync", {
           name: "alchemy-mcn-catalog-sync-replace",
           destinationType: "ZERO_TRUST_LIST",
           updateMode: "MANUAL",

@@ -24,11 +24,11 @@ test.provider("create, update, delete vpc service", (stack) =>
 
     const { tunnel, service } = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("VpcTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("VpcTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        const service = yield* Cloudflare.VpcService("VpcSvc", {
+        const service = yield* Cloudflare.VpcService.VpcService("VpcSvc", {
           httpPort: 8080,
           host: {
             hostname: "localhost",
@@ -57,11 +57,11 @@ test.provider("create, update, delete vpc service", (stack) =>
 
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("VpcTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("VpcTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.VpcService("VpcSvc", {
+        return yield* Cloudflare.VpcService.VpcService("VpcSvc", {
           httpPort: 3000,
           httpsPort: 3001,
           host: {
@@ -98,11 +98,11 @@ test.provider("create vpc service with ipv4 host", (stack) =>
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("Ipv4Tunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("Ipv4Tunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.VpcService("Ipv4Svc", {
+        return yield* Cloudflare.VpcService.VpcService("Ipv4Svc", {
           httpPort: 8080,
           host: {
             ipv4: "192.168.1.100",
@@ -141,11 +141,11 @@ test.provider.skip("create vpc service with dual-stack host", (stack) =>
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DualStackTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DualStackTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.VpcService("DualStackSvc", {
+        return yield* Cloudflare.VpcService.VpcService("DualStackSvc", {
           httpPort: 8080,
           host: {
             ipv4: "192.168.1.101",
@@ -175,11 +175,11 @@ test.provider("list enumerates the deployed vpc service", (stack) =>
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("ListTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("ListTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.VpcService("ListSvc", {
+        return yield* Cloudflare.VpcService.VpcService("ListSvc", {
           httpPort: 8080,
           host: {
             hostname: "localhost",
@@ -190,7 +190,9 @@ test.provider("list enumerates the deployed vpc service", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.VpcService);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.VpcService.VpcService,
+    );
     const all = yield* provider.list();
 
     const found = all.find((s) => s.serviceId === service.serviceId);

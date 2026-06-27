@@ -25,7 +25,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-      const stored = yield* Cloudflare.task(
+      const stored = yield* Cloudflare.Workflows.task(
         "kv-roundtrip",
         Effect.gen(function* () {
           const key = `workflow:smoke:${roomId}`;
@@ -48,7 +48,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       // so the integ test can assert end-to-end propagation).
       const secretValue = Redacted.value(secret);
 
-      const processed = yield* Cloudflare.task(
+      const processed = yield* Cloudflare.Workflows.task(
         "process",
         Effect.succeed({
           text: `Processed: ${stored}`,
@@ -58,14 +58,14 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       );
 
       const room = rooms.getByName(roomId);
-      yield* Cloudflare.task(
+      yield* Cloudflare.Workflows.task(
         "broadcast",
         room.broadcast(`[workflow] ${processed.text} secret=${secretValue}`),
       );
 
-      yield* Cloudflare.sleep("cooldown", "2 seconds");
+      yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
 
-      yield* Cloudflare.task(
+      yield* Cloudflare.Workflows.task(
         "finalize",
         room.broadcast(`[workflow] complete for ${roomId}`),
       );

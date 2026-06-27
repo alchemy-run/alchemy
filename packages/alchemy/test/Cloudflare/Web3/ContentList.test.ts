@@ -45,7 +45,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const provider = yield* Provider.findProvider(
-        Cloudflare.Web3HostnameContentList,
+        Cloudflare.Web3.HostnameContentList,
       );
       const all = yield* provider.list();
 
@@ -77,12 +77,12 @@ test.provider.skipIf(!web3Entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.Web3Hostname("ListGateway", {
+          const gateway = yield* Cloudflare.Web3.Hostname("ListGateway", {
             zoneId: zone.id,
             name,
             target: "ipfs_universal_path",
           }).pipe(adopt(true));
-          const contentList = yield* Cloudflare.Web3HostnameContentList(
+          const contentList = yield* Cloudflare.Web3.HostnameContentList(
             "ListBlocklist",
             {
               zoneId: zone.id,
@@ -101,7 +101,7 @@ test.provider.skipIf(!web3Entitled)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.Web3HostnameContentList,
+        Cloudflare.Web3.HostnameContentList,
       );
       const all = yield* provider.list();
 

@@ -1,11 +1,9 @@
 import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
-import * as Binding from "../../Binding.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
-import type { Providers } from "../Providers.ts";
 
 interface EventDescriptor {
   id?: string;
@@ -22,27 +20,6 @@ export interface LambdaRouteTargetProps extends Pick<
   | "RetryPolicy"
   | "DeadLetterConfig"
 > {}
-
-export class ToLambdaPolicy extends Binding.Policy<
-  ToLambdaPolicy,
-  (
-    routeId: string,
-    rule: { ruleArn: unknown },
-    fn: LambdaFunction,
-  ) => Effect.Effect<void>,
-  Providers
->()("AWS.EventBridge.ToLambda") {}
-
-export const ToLambdaPolicyLive = ToLambdaPolicy.layer.succeed(
-  Effect.fn(function* (_host, routeId, rule, fn) {
-    yield* LambdaPermission(`${routeId}${fn.LogicalId}InvokePermission`, {
-      action: "lambda:InvokeFunction",
-      functionName: fn.functionName,
-      principal: "events.amazonaws.com",
-      sourceArn: rule.ruleArn as any,
-    }).pipe(Effect.asVoid);
-  }) as any,
-);
 
 /** @binding */
 export const toLambda = (
@@ -72,7 +49,17 @@ export const toLambda = (
       ],
     });
 
-    yield* ToLambdaPolicy.bind(routeId, rule, fn);
+    // Deploy-time: grant EventBridge permission to invoke the Lambda. Skipped
+    // once running inside the deployed Function by the global guard. The
+    // permission is explicitly named, so no Namespace.push is required.
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* LambdaPermission(`${routeId}${fn.LogicalId}InvokePermission`, {
+        action: "lambda:InvokeFunction",
+        functionName: fn.functionName,
+        principal: "events.amazonaws.com",
+        sourceArn: rule.ruleArn as any,
+      }).pipe(Effect.asVoid);
+    }
 
     return rule;
   });

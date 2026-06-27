@@ -12,8 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const NotificationWebhookTypeId = "Cloudflare.Alerting.Webhook" as const;
-type NotificationWebhookTypeId = typeof NotificationWebhookTypeId;
+const TypeId = "Cloudflare.Alerting.Webhook" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Webhook destination endpoint type, inferred by Cloudflare from the URL.
@@ -71,7 +71,7 @@ export interface NotificationWebhookAttributes {
 }
 
 export type NotificationWebhook = Resource<
-  NotificationWebhookTypeId,
+  TypeId,
   NotificationWebhookProps,
   NotificationWebhookAttributes,
   never,
@@ -91,7 +91,7 @@ export type NotificationWebhook = Resource<
  * @section Creating a Webhook destination
  * @example Generic webhook with a generated name
  * ```typescript
- * const webhook = yield* Cloudflare.NotificationWebhook("AlertsHook", {
+ * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   url: "https://alerts.example.com/cf",
  * });
  * ```
@@ -99,7 +99,7 @@ export type NotificationWebhook = Resource<
  * @example Webhook with an auth secret
  * The secret is sent in the `cf-webhook-auth` header on every dispatch.
  * ```typescript
- * const webhook = yield* Cloudflare.NotificationWebhook("AlertsHook", {
+ * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   name: "production-alerts",
  *   url: "https://alerts.example.com/cf",
  *   secret: alchemy.secret.env.WEBHOOK_SECRET,
@@ -109,7 +109,7 @@ export type NotificationWebhook = Resource<
  * @section Using with a Notification policy
  * @example Dispatch policy notifications to the webhook
  * ```typescript
- * yield* Cloudflare.NotificationPolicy("SslAlerts", {
+ * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   mechanisms: { webhooks: [{ id: webhook.webhookId }] },
  * });
@@ -117,9 +117,7 @@ export type NotificationWebhook = Resource<
  *
  * @see https://developers.cloudflare.com/notifications/get-started/configure-webhooks/
  */
-export const NotificationWebhook = Resource<NotificationWebhook>(
-  NotificationWebhookTypeId,
-);
+export const NotificationWebhook = Resource<NotificationWebhook>(TypeId);
 
 /**
  * Returns true if the given value is a NotificationWebhook resource.
@@ -127,8 +125,7 @@ export const NotificationWebhook = Resource<NotificationWebhook>(
 export const isNotificationWebhook = (
   value: unknown,
 ): value is NotificationWebhook =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === NotificationWebhookTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NotificationWebhookProvider = () =>
   Provider.succeed(NotificationWebhook, {

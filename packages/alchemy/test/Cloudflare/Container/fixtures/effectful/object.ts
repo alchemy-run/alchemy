@@ -5,7 +5,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { MyContainer } from "./container.ts";
 import { Storage } from "./storage.ts";
 
-export class Object extends Cloudflare.DurableObjectNamespace<Object>()(
+export class Object extends Cloudflare.DurableObject<Object>()(
   "Object",
   Effect.gen(function* () {
     // plan time
@@ -53,7 +53,7 @@ export class Object extends Cloudflare.DurableObjectNamespace<Object>()(
     Effect.provide(
       Layer.mergeAll(
         Cloudflare.R2.ReadWriteBucketBinding,
-        Cloudflare.layerContainer(MyContainer, {
+        Cloudflare.Containers.layer(MyContainer, {
           enableInternet: true,
         }),
       ),

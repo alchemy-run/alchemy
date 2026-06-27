@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ZoneTransferOutgoingTypeId =
-  "Cloudflare.Dns.ZoneTransferOutgoing" as const;
-type ZoneTransferOutgoingTypeId = typeof ZoneTransferOutgoingTypeId;
+const TypeId = "Cloudflare.DNS.ZoneTransferOutgoing" as const;
+type TypeId = typeof TypeId;
 
 export interface ZoneTransferOutgoingProps {
   /**
@@ -67,7 +66,7 @@ export interface ZoneTransferOutgoingAttributes {
 }
 
 export type ZoneTransferOutgoing = Resource<
-  ZoneTransferOutgoingTypeId,
+  TypeId,
   ZoneTransferOutgoingProps,
   ZoneTransferOutgoingAttributes,
   never,
@@ -90,11 +89,11 @@ export type ZoneTransferOutgoing = Resource<
  * @section Configuring outgoing transfers
  * @example Serve a primary zone to an external secondary
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Secondary", {
+ * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Secondary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  * });
- * yield* Cloudflare.ZoneTransferOutgoing("Outgoing", {
+ * yield* Cloudflare.DNS.ZoneTransferOutgoing("Outgoing", {
  *   zoneId: zone.zoneId,
  *   name: "example.com.",
  *   peers: [peer.peerId],
@@ -103,7 +102,7 @@ export type ZoneTransferOutgoing = Resource<
  *
  * @example Configure transfers but keep them disabled
  * ```typescript
- * yield* Cloudflare.ZoneTransferOutgoing("Outgoing", {
+ * yield* Cloudflare.DNS.ZoneTransferOutgoing("Outgoing", {
  *   zoneId: zone.zoneId,
  *   name: "example.com.",
  *   peers: [peer.peerId],
@@ -113,9 +112,7 @@ export type ZoneTransferOutgoing = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/setup/
  */
-export const ZoneTransferOutgoing = Resource<ZoneTransferOutgoing>(
-  ZoneTransferOutgoingTypeId,
-);
+export const ZoneTransferOutgoing = Resource<ZoneTransferOutgoing>(TypeId);
 
 /**
  * Returns true if the given value is a ZoneTransferOutgoing resource.
@@ -123,8 +120,7 @@ export const ZoneTransferOutgoing = Resource<ZoneTransferOutgoing>(
 export const isZoneTransferOutgoing = (
   value: unknown,
 ): value is ZoneTransferOutgoing =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ZoneTransferOutgoingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneTransferOutgoingProvider = () =>
   Provider.succeed(ZoneTransferOutgoing, {
@@ -194,7 +190,7 @@ export const ZoneTransferOutgoingProvider = () =>
       return output === undefined ? Unowned(attrs) : attrs;
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       // Inputs are resolved to concrete values by Plan.
       const zoneId = news.zoneId as string;
       const peers = news.peers as string[];

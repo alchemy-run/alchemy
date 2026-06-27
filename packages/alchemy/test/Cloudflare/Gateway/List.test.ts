@@ -48,7 +48,7 @@ test.provider("create, verify, and destroy a DOMAIN list", (stack) =>
     yield* stack.destroy();
 
     const list = yield* stack.deploy(
-      Cloudflare.GatewayList("BasicList", {
+      Cloudflare.Gateway.List("BasicList", {
         name: "alchemy-zt-list-basic",
         type: "DOMAIN",
         description: "alchemy test list",
@@ -87,7 +87,7 @@ test.provider("update items, description, and name in place", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.GatewayList("UpdateList", {
+      Cloudflare.Gateway.List("UpdateList", {
         name: "alchemy-zt-list-update",
         type: "DOMAIN",
         items: [
@@ -98,7 +98,7 @@ test.provider("update items, description, and name in place", (stack) =>
     );
 
     const updated = yield* stack.deploy(
-      Cloudflare.GatewayList("UpdateList", {
+      Cloudflare.Gateway.List("UpdateList", {
         name: "alchemy-zt-list-update-v2",
         type: "DOMAIN",
         description: "now with a description",
@@ -127,7 +127,7 @@ test.provider("update items, description, and name in place", (stack) =>
 
     // Redeploying identical props is a no-op (still the same list).
     const noop = yield* stack.deploy(
-      Cloudflare.GatewayList("UpdateList", {
+      Cloudflare.Gateway.List("UpdateList", {
         name: "alchemy-zt-list-update-v2",
         type: "DOMAIN",
         description: "now with a description",
@@ -151,7 +151,7 @@ test.provider("changing the type replaces the list", (stack) =>
     yield* stack.destroy();
 
     const domainList = yield* stack.deploy(
-      Cloudflare.GatewayList("ReplaceList", {
+      Cloudflare.Gateway.List("ReplaceList", {
         name: "alchemy-zt-list-replace",
         type: "DOMAIN",
         items: [{ value: "x.alchemy-test.example" }],
@@ -162,7 +162,7 @@ test.provider("changing the type replaces the list", (stack) =>
     // (type change) pairs with a rename — keeping the old name would make
     // the engine find the doomed sibling and refuse to adopt it.
     const ipList = yield* stack.deploy(
-      Cloudflare.GatewayList("ReplaceList", {
+      Cloudflare.Gateway.List("ReplaceList", {
         name: "alchemy-zt-list-replace-ip",
         type: "IP",
         items: [{ value: "203.0.113.1" }],

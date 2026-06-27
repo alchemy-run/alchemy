@@ -96,7 +96,7 @@ describe.sequential("SmartRouting", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SmartRouting("SmartRouting", {
+            return yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
               zoneId,
             });
           }),
@@ -114,7 +114,7 @@ describe.sequential("SmartRouting", () => {
         // Update in place — same singleton, initialValue survives.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SmartRouting("SmartRouting", {
+            return yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
               zoneId,
               enabled: false,
             });
@@ -140,7 +140,9 @@ describe.sequential("SmartRouting", () => {
   // entry must be present.
   test.provider("list enumerates Argo-entitled zones", (stack) =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(Cloudflare.SmartRouting);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Argo.SmartRouting,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);

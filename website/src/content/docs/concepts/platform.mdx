@@ -30,7 +30,7 @@ export default Cloudflare.Worker(
   { main: import.meta.filename },
   Effect.gen(function* () {
     // Init: bind a resource. The binding is the typed SDK.
-    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
       // Runtime: per-request handler.
@@ -53,14 +53,14 @@ injection, typed wrappers) see [Binding](/concepts/binding).
 ## Bindings in action
 
 A binding is what connects a resource to the platform's runtime. The
-syntax `yield* SomeResource.bind(target)` does three things at once:
+syntax `yield* ReadSomeResource(target)` does three things at once:
 
 1. Records the binding on the platform's deploy plan
 2. Generates any needed permissions/configuration
 3. Returns a typed handle you call at runtime
 
 ```typescript
-const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
 
 // Inside fetch:
@@ -84,8 +84,8 @@ export default AWS.Lambda.Function(
   "Api",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const getJob = yield* DynamoDB.GetItem.bind(JobsTable);
-    const enqueue = yield* SQS.SendMessage.bind(JobQueue);
+    const getJob = yield* DynamoDB.GetItem(JobsTable);
+    const enqueue = yield* SQS.SendMessage(JobQueue);
 
     return {
       fetch: Effect.gen(function* () {
@@ -142,7 +142,7 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     return {
       fetch: Effect.gen(function* () {
         /* ... */

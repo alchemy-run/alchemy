@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const HostnameTlsSettingTypeId = "Cloudflare.HostnameTlsSetting" as const;
-type HostnameTlsSettingTypeId = typeof HostnameTlsSettingTypeId;
+const TypeId = "Cloudflare.HostnameTlsSetting.HostnameTlsSetting" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Which per-hostname TLS setting to override:
@@ -21,26 +21,19 @@ type HostnameTlsSettingTypeId = typeof HostnameTlsSettingTypeId;
  * - `min_tls_version` — minimum TLS protocol version for the hostname
  * - `http2` — whether HTTP/2 is offered to clients connecting to the hostname
  */
-export type HostnameTlsSettingId = "ciphers" | "min_tls_version" | "http2";
+export type Id = "ciphers" | "min_tls_version" | "http2";
 
 /**
  * The value of a per-hostname TLS setting. The shape depends on
- * {@link HostnameTlsSettingId}:
+ * {@link Id}:
  *
  * - `ciphers` → `string[]` of BoringSSL cipher suite names
  * - `min_tls_version` → `"1.0" | "1.1" | "1.2" | "1.3"`
  * - `http2` → `"on" | "off"`
  */
-export type HostnameTlsSettingValue =
-  | "1.0"
-  | "1.1"
-  | "1.2"
-  | "1.3"
-  | "on"
-  | "off"
-  | string[];
+export type Value = "1.0" | "1.1" | "1.2" | "1.3" | "on" | "off" | string[];
 
-export interface HostnameTlsSettingProps {
+export interface Props {
   /**
    * Zone the hostname belongs to. Stable — moving the override to another
    * zone triggers a replacement.
@@ -51,7 +44,7 @@ export interface HostnameTlsSettingProps {
    * `http2`). Part of the override's identity — changing it triggers a
    * replacement.
    */
-  settingId: HostnameTlsSettingId;
+  settingId: Id;
   /**
    * The hostname the override applies to. Part of the override's identity —
    * changing it triggers a replacement.
@@ -70,10 +63,10 @@ export interface HostnameTlsSettingProps {
    *
    * Mutable — upserted in place via PUT.
    */
-  value: HostnameTlsSettingValue;
+  value: Value;
 }
 
-export interface HostnameTlsSettingAttributes {
+export interface Attributes {
   /** Zone the hostname belongs to. */
   zoneId: string;
   /** The overridden TLS setting's identifier. */
@@ -81,7 +74,7 @@ export interface HostnameTlsSettingAttributes {
   /** The hostname the override applies to. */
   hostname: string;
   /** Current value of the override. */
-  value: HostnameTlsSettingValue;
+  value: Value;
   /**
    * Deployment status of the override (e.g. `pending_deployment`,
    * `active`). Propagation to the edge is asynchronous.
@@ -94,9 +87,9 @@ export interface HostnameTlsSettingAttributes {
 }
 
 export type HostnameTlsSetting = Resource<
-  HostnameTlsSettingTypeId,
-  HostnameTlsSettingProps,
-  HostnameTlsSettingAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -124,7 +117,7 @@ export type HostnameTlsSetting = Resource<
  * @section Minimum TLS version
  * @example Require TLS 1.2 for a single hostname
  * ```typescript
- * yield* Cloudflare.HostnameTlsSetting("ApiMinTls", {
+ * yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("ApiMinTls", {
  *   zoneId: zone.zoneId,
  *   settingId: "min_tls_version",
  *   hostname: "api.example.com",
@@ -135,7 +128,7 @@ export type HostnameTlsSetting = Resource<
  * @section HTTP/2
  * @example Disable HTTP/2 for a legacy hostname
  * ```typescript
- * yield* Cloudflare.HostnameTlsSetting("LegacyHttp2", {
+ * yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("LegacyHttp2", {
  *   zoneId: zone.zoneId,
  *   settingId: "http2",
  *   hostname: "legacy.example.com",
@@ -146,7 +139,7 @@ export type HostnameTlsSetting = Resource<
  * @section Cipher suites
  * @example Restrict a hostname to modern ciphers
  * ```typescript
- * yield* Cloudflare.HostnameTlsSetting("StrictCiphers", {
+ * yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("StrictCiphers", {
  *   zoneId: zone.zoneId,
  *   settingId: "ciphers",
  *   hostname: "secure.example.com",
@@ -157,9 +150,7 @@ export type HostnameTlsSetting = Resource<
  * @see https://developers.cloudflare.com/ssl/edge-certificates/additional-options/custom-metadata/
  * @see https://developers.cloudflare.com/api/resources/hostnames/subresources/settings/subresources/tls/
  */
-export const HostnameTlsSetting = Resource<HostnameTlsSetting>(
-  HostnameTlsSettingTypeId,
-);
+export const HostnameTlsSetting = Resource<HostnameTlsSetting>(TypeId);
 
 /**
  * Returns true if the given value is a HostnameTlsSetting resource.
@@ -167,8 +158,7 @@ export const HostnameTlsSetting = Resource<HostnameTlsSetting>(
 export const isHostnameTlsSetting = (
   value: unknown,
 ): value is HostnameTlsSetting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === HostnameTlsSettingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameTlsSettingProvider = () =>
   Provider.succeed(HostnameTlsSetting, {
@@ -182,11 +172,7 @@ export const HostnameTlsSettingProvider = () =>
       // row per (settingId, hostname) override.
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
-      const settingIds: HostnameTlsSettingId[] = [
-        "ciphers",
-        "min_tls_version",
-        "http2",
-      ];
+      const settingIds: Id[] = ["ciphers", "min_tls_version", "http2"];
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
@@ -219,7 +205,7 @@ export const HostnameTlsSettingProvider = () =>
                   // enumeration.
                   Effect.catchTag(
                     ["AdvancedCertificateManagerRequired", "Forbidden"],
-                    () => Effect.succeed([] as HostnameTlsSettingAttributes[]),
+                    () => Effect.succeed([] as Attributes[]),
                   ),
                 ),
             { concurrency: "unbounded" },
@@ -336,10 +322,7 @@ const findSetting = (zoneId: string, settingId: string, hostname: string) =>
  * by identity, cipher lists element-wise (order matters: the list is the
  * client-facing preference order).
  */
-const valueEquals = (
-  a: ObservedSetting["value"],
-  b: HostnameTlsSettingValue,
-): boolean => {
+const valueEquals = (a: ObservedSetting["value"], b: Value): boolean => {
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b)) return false;
     return a.length === b.length && a.every((v, i) => v === b[i]);
@@ -352,7 +335,7 @@ const toAttributes = (
   settingId: string,
   hostname: string,
   setting: ObservedSetting | hostnames.PutSettingTlsResponse,
-): HostnameTlsSettingAttributes => ({
+): Attributes => ({
   zoneId,
   settingId,
   hostname,
@@ -368,9 +351,7 @@ const toAttributes = (
  * override always carries a value; fall back to `"off"` purely to satisfy
  * the type.
  */
-const normalizeValue = (
-  value: ObservedSetting["value"],
-): HostnameTlsSettingValue =>
+const normalizeValue = (value: ObservedSetting["value"]): Value =>
   value === null || value === undefined
     ? "off"
     : Array.isArray(value)

@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DevicePostureRuleTypeId = "Cloudflare.Devices.PostureRule" as const;
-type DevicePostureRuleTypeId = typeof DevicePostureRuleTypeId;
+const TypeId = "Cloudflare.Devices.PostureRule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The type of device posture rule, e.g. `os_version`, `firewall`,
@@ -101,7 +101,7 @@ export type DevicePostureRuleAttributes = {
 };
 
 export type DevicePostureRule = Resource<
-  DevicePostureRuleTypeId,
+  TypeId,
   DevicePostureRuleProps,
   DevicePostureRuleAttributes,
   never,
@@ -123,7 +123,7 @@ export type DevicePostureRule = Resource<
  * @section Infrastructure-free checks
  * @example Require a minimum Windows version
  * ```typescript
- * const rule = yield* Cloudflare.DevicePostureRule("WindowsOsVersion", {
+ * const rule = yield* Cloudflare.Devices.DevicePostureRule("WindowsOsVersion", {
  *   type: "os_version",
  *   description: "Require Windows 10.0.19045+",
  *   match: [{ platform: "windows" }],
@@ -138,7 +138,7 @@ export type DevicePostureRule = Resource<
  *
  * @example Require the OS firewall to be enabled
  * ```typescript
- * yield* Cloudflare.DevicePostureRule("Firewall", {
+ * yield* Cloudflare.Devices.DevicePostureRule("Firewall", {
  *   type: "firewall",
  *   match: [{ platform: "windows" }, { platform: "mac" }],
  *   input: { enabled: true, operatingSystem: "windows" },
@@ -147,7 +147,7 @@ export type DevicePostureRule = Resource<
  *
  * @example Require disk encryption on all drives
  * ```typescript
- * yield* Cloudflare.DevicePostureRule("DiskEncryption", {
+ * yield* Cloudflare.Devices.DevicePostureRule("DiskEncryption", {
  *   type: "disk_encryption",
  *   match: [{ platform: "mac" }],
  *   input: { requireAll: true },
@@ -156,9 +156,7 @@ export type DevicePostureRule = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/devices/
  */
-export const DevicePostureRule = Resource<DevicePostureRule>(
-  DevicePostureRuleTypeId,
-);
+export const DevicePostureRule = Resource<DevicePostureRule>(TypeId);
 
 /**
  * Returns true if the given value is a DevicePostureRule resource.
@@ -166,8 +164,7 @@ export const DevicePostureRule = Resource<DevicePostureRule>(
 export const isDevicePostureRule = (
   value: unknown,
 ): value is DevicePostureRule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DevicePostureRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DevicePostureRuleProvider = () =>
   Provider.succeed(DevicePostureRule, {

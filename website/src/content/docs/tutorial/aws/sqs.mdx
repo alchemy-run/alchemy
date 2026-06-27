@@ -38,13 +38,13 @@ them.
 
 ## Bind SendMessage on the producer
 
-`SQS.SendMessage.bind(queue)` returns a callable Effect — same
+`SQS.SendMessage(queue)` returns a callable Effect — same
 shape as `S3.PutObject` or `DynamoDB.PutItem` — and quietly
 attaches `sqs:SendMessage` scoped to the queue ARN:
 
 ```diff lang="typescript"
-const putItem = yield* DynamoDB.PutItem.bind(table);
-+const sendMessage = yield* SQS.SendMessage.bind(queue);
+const putItem = yield* DynamoDB.PutItem(table);
++const sendMessage = yield* SQS.SendMessage(queue);
 ```
 
 Let's hook it into the existing `PUT /items/:id` route so every
@@ -158,8 +158,8 @@ export default class Worker extends AWS.Lambda.Function<Worker>()(
 
 ## Subscribe to messages
 
-`SQS.messages(queue).subscribe(...)` is the consumer-side mirror
-of `notifications` / `stream`: a typed `Stream<SQSRecord>` you
+`SQS.consumeQueueMessages(queue, ...)` is the consumer-side mirror
+of `consumeBucketEvents` / `stream`: a typed `Stream<SQSRecord>` you
 can compose with any operator. Add the smallest possible
 subscription — log each message body:
 
@@ -178,7 +178,7 @@ export default class Worker extends AWS.Lambda.Function<Worker>()(
   Effect.gen(function* () {
     const queue = yield* Jobs;
 +
-+    yield* SQS.messages(queue, { batchSize: 10 }).subscribe((stream) =>
++    yield* SQS.consumeQueueMessages(queue, { batchSize: 10 }, (stream) =>
 +      stream.pipe(
 +        Stream.runForEach((record) =>
 +          Console.log(`received: ${record.body}`),
@@ -191,7 +191,7 @@ export default class Worker extends AWS.Lambda.Function<Worker>()(
 ) {}
 ```
 
-That single `.subscribe(...)` call creates the Lambda event
+That single `consumeQueueMessages(...)` call creates the Lambda event
 source mapping pointing at the queue and grants the function
 `sqs:ReceiveMessage`, `DeleteMessage`, and `GetQueueAttributes`
 on the queue ARN.
@@ -199,7 +199,7 @@ on the queue ARN.
 ## Provide the runtime layer
 
 The consumer-side machinery for queue subscriptions ships in
-`Lambda.QueueEventSource`. Provide it at the bottom of the
+`Lambda.EventSource`. Provide it at the bottom of the
 function:
 
 ```diff lang="typescript"
@@ -207,7 +207,7 @@ function:
 // ...
     return {};
 -  }),
-+  }).pipe(Effect.provide(AWS.Lambda.QueueEventSource)),
++  }).pipe(Effect.provide(AWS.Lambda.EventSource)),
 ) {}
 ```
 
@@ -278,7 +278,7 @@ controllable concurrency on top.
 
 ## Bonus: forward a stream to SQS with `QueueSink`
 
-`SendMessage.bind(queue)` is perfect for one-off sends from a
+`SendMessage(queue)` is perfect for one-off sends from a
 request handler, but if you've got a `Stream` of payloads —
 DynamoDB change records, S3 notifications, anything — you don't
 want to call `sendMessage` per item. **`SQS.QueueSink`** is the
@@ -296,13 +296,13 @@ import { Jobs } from "./queue.ts";
 // ...
 
 const queue = yield* Jobs;
-const putItem = yield* DynamoDB.PutItem.bind(table);
--const sendMessage = yield* SQS.SendMessage.bind(queue);
-+const sink = yield* SQS.QueueSink.bind(queue);
+const putItem = yield* DynamoDB.PutItem(table);
+-const sendMessage = yield* SQS.SendMessage(queue);
++const sink = yield* SQS.QueueSink(queue);
 
-yield* DynamoDB.stream(table, {
+yield* DynamoDB.consumeTableChanges(table, {
   streamViewType: "NEW_AND_OLD_IMAGES",
-}).process((stream) =>
+}, (stream) =>
   stream.pipe(
 +    Stream.map((record) =>
 +      JSON.stringify({
@@ -316,7 +316,7 @@ yield* DynamoDB.stream(table, {
 );
 ```
 
-`QueueSink.bind(queue)` grants `sqs:SendMessage` and
+`QueueSink(queue)` grants `sqs:SendMessage` and
 `sqs:SendMessageBatch` on the queue ARN, then returns a
 `Sink<void, string, readonly string[]>` you compose with
 `Stream.run`. `QueueSinkLive` is itself implemented on top of
@@ -356,7 +356,7 @@ the underlying request layers + policy on the bottom:
 ```
 
 The consumer doesn't change — `JobsWorker` still subscribes via
-`SQS.messages(queue)` and now sees one record per DynamoDB
+`SQS.consumeQueueMessages(queue)` and now sees one record per DynamoDB
 change, batched ten-at-a-time on the producer side.
 
 Next you'll [stream higher-volume records through Kinesis](/tutorial/aws/kinesis) —

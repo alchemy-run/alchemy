@@ -230,7 +230,7 @@ export interface Queue extends Resource<
  * @example Send a message from a handler
  * ```typescript
  * // init
- * const sendMessage = yield* SQS.SendMessage.bind(queue);
+ * const sendMessage = yield* SQS.SendMessage(queue);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -250,7 +250,7 @@ export interface Queue extends Resource<
  * @example Process queue messages
  * ```typescript
  * // init
- * yield* SQS.messages(queue).process(
+ * yield* SQS.consumeQueueMessages(queue,
  *   Effect.fn(function* (message) {
  *     yield* Effect.log(`Received: ${message.body}`);
  *   }),

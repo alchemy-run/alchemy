@@ -12,7 +12,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type AccessServiceTokenProps = {
+export type ServiceTokenProps = {
   /**
    * Display name for the service token. Used as a stable identifier so the
    * provider can locate the token by name during adoption / state recovery.
@@ -44,9 +44,9 @@ export type AccessServiceTokenProps = {
   previousClientSecretExpiresAt?: string;
 };
 
-export type AccessServiceToken = Resource<
+export type ServiceToken = Resource<
   "Cloudflare.Access.ServiceToken",
-  AccessServiceTokenProps,
+  ServiceTokenProps,
   {
     /** UUID of the service token assigned by Cloudflare. */
     serviceTokenId: string;
@@ -86,13 +86,13 @@ export type AccessServiceToken = Resource<
  * @section Creating a Service Token
  * @example Basic token with a generated name
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Ci", {});
+ * const token = yield* Cloudflare.Access.ServiceToken("Ci", {});
  * // token.clientId / token.clientSecret authenticate requests
  * ```
  *
  * @example Token with an explicit name and validity
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Deploys", {
+ * const token = yield* Cloudflare.Access.ServiceToken("Deploys", {
  *   name: "deploy-bot",
  *   duration: "17520h", // 2 years
  * });
@@ -101,7 +101,7 @@ export type AccessServiceToken = Resource<
  * @section Rotating the Secret
  * @example Increment clientSecretVersion to rotate
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Ci", {
+ * const token = yield* Cloudflare.Access.ServiceToken("Ci", {
  *   clientSecretVersion: 2, // was 1 — bumping rotates the secret
  * });
  * ```
@@ -109,26 +109,24 @@ export type AccessServiceToken = Resource<
  * @section Authorizing a Token
  * @example Reference from an Access policy
  * ```typescript
- * const token = yield* Cloudflare.AccessServiceToken("Ci", {});
+ * const token = yield* Cloudflare.Access.ServiceToken("Ci", {});
  *
- * const policy = yield* Cloudflare.AccessPolicy("AllowCi", {
+ * const policy = yield* Cloudflare.Access.Policy("AllowCi", {
  *   decision: "non_identity",
  *   include: [{ serviceToken: { tokenId: token.serviceTokenId } }],
  * });
  * ```
  */
-export const AccessServiceToken = Resource<AccessServiceToken>(
+export const ServiceToken = Resource<ServiceToken>(
   "Cloudflare.Access.ServiceToken",
 );
 
-export const isAccessServiceToken = (
-  value: unknown,
-): value is AccessServiceToken =>
+export const isServiceToken = (value: unknown): value is ServiceToken =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === "Cloudflare.Access.ServiceToken";
 
-export const AccessServiceTokenProvider = () =>
-  Provider.succeed(AccessServiceToken, {
+export const ServiceTokenProvider = () =>
+  Provider.succeed(ServiceToken, {
     stables: ["serviceTokenId", "accountId", "clientId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -215,7 +213,7 @@ export const AccessServiceTokenProvider = () =>
     }),
     reconcile: Effect.fn(function* ({
       id,
-      news = {} as AccessServiceTokenProps,
+      news = {} as ServiceTokenProps,
       olds,
       output,
     }) {
@@ -266,7 +264,7 @@ export const AccessServiceTokenProvider = () =>
           );
         if (!created.id || !created.clientId) {
           return yield* Effect.fail(
-            new Error("AccessServiceToken: created token missing id"),
+            new Error("ServiceToken: created token missing id"),
           );
         }
         const fresh = yield* zeroTrust.getAccessServiceTokenForAccount({
@@ -336,7 +334,7 @@ export const AccessServiceTokenProvider = () =>
 
       if (!synced.id || !synced.clientId) {
         return yield* Effect.fail(
-          new Error("AccessServiceToken: ensured token missing id"),
+          new Error("ServiceToken: ensured token missing id"),
         );
       }
       return {

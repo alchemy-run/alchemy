@@ -12,17 +12,17 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayProxyEndpointTypeId = "Cloudflare.Gateway.ProxyEndpoint" as const;
-type GatewayProxyEndpointTypeId = typeof GatewayProxyEndpointTypeId;
+const TypeId = "Cloudflare.Gateway.ProxyEndpoint" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of proxy endpoint. `ip` endpoints admit traffic from a source
  * CIDR allowlist (Enterprise only); `identity` endpoints authenticate
  * per-user. Immutable — changing the kind triggers a replacement.
  */
-export type GatewayProxyEndpointKind = "ip" | "identity";
+export type ProxyEndpointKind = "ip" | "identity";
 
-export interface GatewayProxyEndpointProps {
+export interface ProxyEndpointProps {
   /**
    * Display name for the proxy endpoint. Used as a stable identifier so
    * the provider can locate it by name during adoption / state recovery.
@@ -39,7 +39,7 @@ export interface GatewayProxyEndpointProps {
    *
    * @default "ip"
    */
-  kind?: GatewayProxyEndpointKind;
+  kind?: ProxyEndpointKind;
   /**
    * Source CIDRs allowed to connect through the endpoint (e.g.
    * `203.0.113.1/32`). Required for (and only meaningful on) `ip`-kind
@@ -48,7 +48,7 @@ export interface GatewayProxyEndpointProps {
   ips?: string[];
 }
 
-export interface GatewayProxyEndpointAttributes {
+export interface ProxyEndpointAttributes {
   /** UUID of the proxy endpoint, assigned by Cloudflare. */
   proxyEndpointId: string;
   /** Cloudflare account that owns the proxy endpoint. */
@@ -56,7 +56,7 @@ export interface GatewayProxyEndpointAttributes {
   /** Display name of the proxy endpoint. */
   name: string;
   /** The proxy endpoint kind. */
-  kind: GatewayProxyEndpointKind;
+  kind: ProxyEndpointKind;
   /** Source CIDR allowlist (empty for identity-kind endpoints). */
   ips: string[];
   /**
@@ -70,10 +70,10 @@ export interface GatewayProxyEndpointAttributes {
   updatedAt: string | undefined;
 }
 
-export type GatewayProxyEndpoint = Resource<
-  GatewayProxyEndpointTypeId,
-  GatewayProxyEndpointProps,
-  GatewayProxyEndpointAttributes,
+export type ProxyEndpoint = Resource<
+  TypeId,
+  ProxyEndpointProps,
+  ProxyEndpointAttributes,
   never,
   Providers
 >;
@@ -96,7 +96,7 @@ export type GatewayProxyEndpoint = Resource<
  * @section Creating a Proxy Endpoint
  * @example Identity-based endpoint (all plans)
  * ```typescript
- * const proxy = yield* Cloudflare.GatewayProxyEndpoint("UserProxy", {
+ * const proxy = yield* Cloudflare.Gateway.ProxyEndpoint("UserProxy", {
  *   kind: "identity",
  * });
  * // PAC file target:
@@ -105,7 +105,7 @@ export type GatewayProxyEndpoint = Resource<
  *
  * @example IP allowlist endpoint (Enterprise)
  * ```typescript
- * const proxy = yield* Cloudflare.GatewayProxyEndpoint("OfficeProxy", {
+ * const proxy = yield* Cloudflare.Gateway.ProxyEndpoint("OfficeProxy", {
  *   kind: "ip",
  *   ips: ["203.0.113.1/32"],
  * });
@@ -113,21 +113,16 @@ export type GatewayProxyEndpoint = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/agentless/pac-files/
  */
-export const GatewayProxyEndpoint = Resource<GatewayProxyEndpoint>(
-  GatewayProxyEndpointTypeId,
-);
+export const ProxyEndpoint = Resource<ProxyEndpoint>(TypeId);
 
 /**
- * Returns true if the given value is a GatewayProxyEndpoint resource.
+ * Returns true if the given value is a ProxyEndpoint resource.
  */
-export const isGatewayProxyEndpoint = (
-  value: unknown,
-): value is GatewayProxyEndpoint =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === GatewayProxyEndpointTypeId;
+export const isProxyEndpoint = (value: unknown): value is ProxyEndpoint =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const GatewayProxyEndpointProvider = () =>
-  Provider.succeed(GatewayProxyEndpoint, {
+export const ProxyEndpointProvider = () =>
+  Provider.succeed(ProxyEndpoint, {
     stables: ["proxyEndpointId", "accountId", "kind", "subdomain", "createdAt"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
@@ -138,7 +133,7 @@ export const GatewayProxyEndpointProvider = () =>
       }
       // The endpoint kind is immutable on Cloudflare's side.
       const oldKind =
-        output?.kind ?? (olds as GatewayProxyEndpointProps).kind ?? undefined;
+        output?.kind ?? (olds as ProxyEndpointProps).kind ?? undefined;
       if (oldKind !== undefined && oldKind !== (news.kind ?? "ip")) {
         return { action: "replace" } as const;
       }
@@ -276,11 +271,11 @@ const resolveName = (id: string, name: string | undefined) =>
 const toAttributes = (
   endpoint: ObservedEndpoint,
   accountId: string,
-): GatewayProxyEndpointAttributes => ({
+): ProxyEndpointAttributes => ({
   proxyEndpointId: endpoint.id ?? "",
   accountId,
   name: endpoint.name,
-  kind: (endpoint.kind ?? "ip") as GatewayProxyEndpointKind,
+  kind: (endpoint.kind ?? "ip") as ProxyEndpointKind,
   ips: "ips" in endpoint ? [...endpoint.ips] : [],
   subdomain: endpoint.subdomain ?? undefined,
   createdAt: endpoint.createdAt ?? undefined,

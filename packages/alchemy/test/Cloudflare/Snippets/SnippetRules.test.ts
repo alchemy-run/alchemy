@@ -131,12 +131,12 @@ test.provider(
       // Create a snippet plus one rule activating it.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const snippet = yield* Cloudflare.Snippet("RulesSnippetA", {
+          const snippet = yield* Cloudflare.Snippets.Snippet("RulesSnippetA", {
             zoneId,
             name: NAME_RULES_A,
             code,
           }).pipe(adopt(true));
-          const rules = yield* Cloudflare.SnippetRules("Rules", {
+          const rules = yield* Cloudflare.Snippets.SnippetRules("Rules", {
             zoneId,
             rules: [
               {
@@ -164,7 +164,9 @@ test.provider(
       // `list()` enumerates every zone (no account-wide rule-list API) and
       // reads the rule list in each, skipping zones with no rules / no
       // access. Our deployed rule list must surface for the test zone.
-      const provider = yield* Provider.findProvider(Cloudflare.SnippetRules);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Snippets.SnippetRules,
+      );
       const all = yield* provider.list();
       expect(all.length).toBeGreaterThan(0);
       const entry = all.find((r) => r.zoneId === zoneId);
@@ -176,17 +178,17 @@ test.provider(
       // Update: change the expression and add a second snippet + rule.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const snippetA = yield* Cloudflare.Snippet("RulesSnippetA", {
+          const snippetA = yield* Cloudflare.Snippets.Snippet("RulesSnippetA", {
             zoneId,
             name: NAME_RULES_A,
             code,
           }).pipe(adopt(true));
-          const snippetB = yield* Cloudflare.Snippet("RulesSnippetB", {
+          const snippetB = yield* Cloudflare.Snippets.Snippet("RulesSnippetB", {
             zoneId,
             name: NAME_RULES_B,
             code,
           }).pipe(adopt(true));
-          const rules = yield* Cloudflare.SnippetRules("Rules", {
+          const rules = yield* Cloudflare.Snippets.SnippetRules("Rules", {
             zoneId,
             rules: [
               {

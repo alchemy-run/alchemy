@@ -28,8 +28,8 @@ Effect.gen(function* () {
 
   return Effect.fn(function* (input: { orderId: string }) {
     // Phase 2: workflow body — runs as durable steps.
-    const result = yield* Cloudflare.task("process", doWork(input.orderId));
-    yield* Cloudflare.sleep("cooldown", "10 seconds");
+    const result = yield* Cloudflare.Workflows.task("process", doWork(input.orderId));
+    yield* Cloudflare.Workflows.sleep("cooldown", "10 seconds");
     return result;
   });
 });
@@ -79,10 +79,10 @@ a KV namespace by declaring it in its own file:
 // src/KV.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const KV = Cloudflare.KVNamespace("KV");
+export const KV = Cloudflare.KV.Namespace("KV");
 ```
 
-`Cloudflare.KVNamespace("KV")` is just a description — Alchemy
+`Cloudflare.KV.Namespace("KV")` is just a description — Alchemy
 provisions the real namespace on the next deploy as soon as
 something binds to it.
 
@@ -119,7 +119,7 @@ inner workflow body closes over `kv` and uses it on every run.
 
 ## Add a task
 
-`Cloudflare.task("name", effect)` runs the inner Effect inside a
+`Cloudflare.Workflows.task("name", effect)` runs the inner Effect inside a
 Cloudflare workflow step — the result is checkpointed so a crash +
 replay returns the persisted value instead of re-running the side
 effect. Wrap **anything** that touches the outside world — HTTP
@@ -141,7 +141,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-+     const stored = yield* Cloudflare.task(
++     const stored = yield* Cloudflare.Workflows.task(
 +       "kv-roundtrip",
 +       Effect.gen(function* () {
 +         const key = `workflow:${roomId}`;
@@ -189,7 +189,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-      const stored = yield* Cloudflare.task(
+      const stored = yield* Cloudflare.Workflows.task(
         "kv-roundtrip",
         Effect.gen(function* () {
           const key = `workflow:${roomId}`;
@@ -199,7 +199,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       );
 
 +     const room = rooms.getByName(roomId);
-+     yield* Cloudflare.task(
++     yield* Cloudflare.Workflows.task(
 +       "broadcast",
 +       room.broadcast(`[workflow] ${stored}`),
 +     );
@@ -215,7 +215,7 @@ the message-send durable too — replays don't double-broadcast.
 
 ## Sleep between tasks
 
-`Cloudflare.sleep("name", "2 seconds")` parks the workflow without
+`Cloudflare.Workflows.sleep("name", "2 seconds")` parks the workflow without
 billing for compute, then resumes at the requested time. Names are
 required because Cloudflare uses them as replay keys:
 
@@ -235,7 +235,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-      const stored = yield* Cloudflare.task(
+      const stored = yield* Cloudflare.Workflows.task(
         "kv-roundtrip",
         Effect.gen(function* () {
           const key = `workflow:${roomId}`;
@@ -245,14 +245,14 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       );
 
       const room = rooms.getByName(roomId);
-      yield* Cloudflare.task(
+      yield* Cloudflare.Workflows.task(
         "broadcast",
         room.broadcast(`[workflow] ${stored}`),
       );
 
-+     yield* Cloudflare.sleep("cooldown", "2 seconds");
++     yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
 +
-+     yield* Cloudflare.task(
++     yield* Cloudflare.Workflows.task(
 +       "finalize",
 +       room.broadcast(`[workflow] complete for ${roomId}`),
 +     );
@@ -317,23 +317,23 @@ site that needs it (here, an `Authorization` header):
      const apiKey = yield* Alchemy.Secret("API_KEY");
 
      return Effect.gen(function* () {
-       const env = yield* Cloudflare.WorkerEnvironment;
-       const event = yield* Cloudflare.WorkflowEvent;
+       const env = yield* Cloudflare.Workers.WorkerEnvironment;
+       const event = yield* Cloudflare.Workflows.WorkflowEvent;
        const { roomId, message } = event.payload as {
          roomId: string;
          message: string;
        };
 
-       const stored = yield* Cloudflare.task("kv-roundtrip", /* ... */);
+       const stored = yield* Cloudflare.Workflows.task("kv-roundtrip", /* ... */);
 
        const room = rooms.getByName(roomId);
-       yield* Cloudflare.task(
+       yield* Cloudflare.Workflows.task(
          "broadcast",
          room.broadcast(`[workflow] ${stored}`),
        );
 
 +      const key = yield* apiKey;
-+      yield* Cloudflare.task(
++      yield* Cloudflare.Workflows.task(
 +        "fetch-with-auth",
 +        HttpClientRequest.get("https://example.com/data").pipe(
 +          HttpClientRequest.bearerToken(Redacted.value(key)),
@@ -350,7 +350,7 @@ site that needs it (here, an `Authorization` header):
 
 `yield* apiKey` lives inside the body Effect — the Runtime phase —
 not at module scope. `HttpClient.execute` runs inside
-`Cloudflare.task`, so the response is checkpointed and the
+`Cloudflare.Workflows.task`, so the response is checkpointed and the
 request only fires once across replays. `Redacted.value` is
 called at the single header site that needs the cleartext;
 elsewhere the value stays redacted.

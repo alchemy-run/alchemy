@@ -42,7 +42,7 @@ test.provider("create, update, delete a Flagship app", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("App", {
+        const app = yield* Cloudflare.Flagship.App("App", {
           name: "alchemy-test-flagship-app",
         });
         return { app };
@@ -63,7 +63,7 @@ test.provider("create, update, delete a Flagship app", (stack) =>
     // Rename in place — same app id.
     const renamed = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("App", {
+        const app = yield* Cloudflare.Flagship.App("App", {
           name: "alchemy-test-flagship-app-v2",
         });
         return { app };
@@ -81,7 +81,7 @@ test.provider("create, update, delete a Flagship app", (stack) =>
     // Redeploying identical props is a no-op (still the same app).
     const noop = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("App", {
+        const app = yield* Cloudflare.Flagship.App("App", {
           name: "alchemy-test-flagship-app-v2",
         });
         return { app };
@@ -103,7 +103,7 @@ test.provider("recreates an app after out-of-band delete", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("HealApp", {
+        const app = yield* Cloudflare.Flagship.App("HealApp", {
           name: "alchemy-test-flagship-heal",
         });
         return { app };
@@ -117,7 +117,7 @@ test.provider("recreates an app after out-of-band delete", (stack) =>
 
     const healed = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("HealApp", {
+        const app = yield* Cloudflare.Flagship.App("HealApp", {
           name: "alchemy-test-flagship-heal-v2",
         });
         return { app };
@@ -145,14 +145,14 @@ test.provider("list enumerates the deployed Flagship app", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("ListApp", {
+        const app = yield* Cloudflare.Flagship.App("ListApp", {
           name: "alchemy-test-flagship-list",
         });
         return { app };
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.FlagshipApp);
+    const provider = yield* Provider.findProvider(Cloudflare.Flagship.App);
 
     // The flagship apps list endpoint is eventually consistent: a freshly
     // created app is strongly readable by id via getApp but takes a few

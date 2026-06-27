@@ -27,25 +27,28 @@ describe("Tunnel Configuration", () => {
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const tunnel = yield* Cloudflare.Tunnel("ListTunnel", {
+            const tunnel = yield* Cloudflare.Tunnel.Tunnel("ListTunnel", {
               name: "alchemy-tunnel-config-list-test",
               configSrc: "cloudflare",
             });
-            const config = yield* Cloudflare.TunnelConfiguration("ListConfig", {
-              tunnelId: tunnel.tunnelId,
-              ingress: [
-                {
-                  hostname: "config-list-test.internal",
-                  service: "http://localhost:8080",
-                },
-              ],
-            });
+            const config = yield* Cloudflare.Tunnel.Configuration(
+              "ListConfig",
+              {
+                tunnelId: tunnel.tunnelId,
+                ingress: [
+                  {
+                    hostname: "config-list-test.internal",
+                    service: "http://localhost:8080",
+                  },
+                ],
+              },
+            );
             return { tunnelId: tunnel.tunnelId, config };
           }),
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.TunnelConfiguration,
+          Cloudflare.Tunnel.Configuration,
         );
         const all = yield* provider.list();
 

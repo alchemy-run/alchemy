@@ -55,7 +55,7 @@ test.provider(
       yield* stack.destroy();
 
       const key = yield* stack.deploy(
-        Cloudflare.StreamSigningKey("PlaybackKey", {}),
+        Cloudflare.Stream.SigningKey("PlaybackKey", {}),
       );
 
       expect(key.keyId).toBeTruthy();
@@ -69,7 +69,7 @@ test.provider(
 
       // Redeploying is a no-op — same key, same material preserved.
       const noop = yield* stack.deploy(
-        Cloudflare.StreamSigningKey("PlaybackKey", {}),
+        Cloudflare.Stream.SigningKey("PlaybackKey", {}),
       );
       expect(noop.keyId).toEqual(key.keyId);
       expect(Redacted.value(noop.pem)).toEqual(Redacted.value(key.pem));
@@ -88,11 +88,11 @@ test.provider(
       yield* stack.destroy();
 
       const key = yield* stack.deploy(
-        Cloudflare.StreamSigningKey("ListKey", {}),
+        Cloudflare.Stream.SigningKey("ListKey", {}),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.StreamSigningKey,
+        Cloudflare.Stream.SigningKey,
       );
       const all = yield* provider.list();
 

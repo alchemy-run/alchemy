@@ -10,7 +10,7 @@ export default class SendEmailWorker extends Cloudflare.Worker<SendEmailWorker>(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const email = yield* Cloudflare.SendEmail.bind(Email);
+    const email = yield* Cloudflare.Email.Send(Email);
 
     return {
       fetch: Effect.gen(function* () {
@@ -43,5 +43,5 @@ export default class SendEmailWorker extends Cloudflare.Worker<SendEmailWorker>(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.SendEmailBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Email.SendBinding)),
 ) {}

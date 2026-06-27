@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ManagedTransformsTypeId = "Cloudflare.ManagedTransforms" as const;
-type ManagedTransformsTypeId = typeof ManagedTransformsTypeId;
+const TypeId = "Cloudflare.ManagedTransforms.ManagedTransforms" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Identifier of a Cloudflare managed request transform — the built-in
@@ -37,7 +37,7 @@ export type ManagedResponseTransformId =
   | "remove_x-powered-by_header"
   | (string & {});
 
-export interface ManagedTransformsProps {
+export interface Props {
   /**
    * Zone whose managed transforms are managed. Stable — changing the zone
    * triggers a replacement (the old zone's managed transforms are restored
@@ -80,7 +80,7 @@ export interface ManagedTransformState {
   conflictsWith: string[] | undefined;
 }
 
-export interface ManagedTransformsAttributes {
+export interface Attributes {
   /** Zone that owns these managed transforms. */
   zoneId: string;
   /** Observed state of every managed request transform on the zone. */
@@ -102,9 +102,9 @@ export interface ManagedTransformsAttributes {
 }
 
 export type ManagedTransforms = Resource<
-  ManagedTransformsTypeId,
-  ManagedTransformsProps,
-  ManagedTransformsAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -134,7 +134,7 @@ export type ManagedTransforms = Resource<
  * @section Request transforms
  * @example Add visitor location headers
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   requestHeaders: { add_visitor_location_headers: true },
  * });
@@ -142,7 +142,7 @@ export type ManagedTransforms = Resource<
  *
  * @example Remove visitor IP headers
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   requestHeaders: { remove_visitor_ip_headers: true },
  * });
@@ -151,7 +151,7 @@ export type ManagedTransforms = Resource<
  * @section Response transforms
  * @example Harden responses
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   responseHeaders: {
  *     add_security_headers: true,
@@ -163,7 +163,7 @@ export type ManagedTransforms = Resource<
  * @section Mixed
  * @example Manage request and response transforms together
  * ```typescript
- * yield* Cloudflare.ManagedTransforms("Transforms", {
+ * yield* Cloudflare.ManagedTransforms.ManagedTransforms("Transforms", {
  *   zoneId: zone.zoneId,
  *   requestHeaders: { add_true_client_ip_headers: true },
  *   responseHeaders: { "remove_x-powered-by_header": false },
@@ -172,9 +172,7 @@ export type ManagedTransforms = Resource<
  *
  * @see https://developers.cloudflare.com/rules/transform/managed-transforms/
  */
-export const ManagedTransforms = Resource<ManagedTransforms>(
-  ManagedTransformsTypeId,
-);
+export const ManagedTransforms = Resource<ManagedTransforms>(TypeId);
 
 /**
  * Returns true if the given value is a ManagedTransforms resource.
@@ -182,8 +180,7 @@ export const ManagedTransforms = Resource<ManagedTransforms>(
 export const isManagedTransforms = (
   value: unknown,
 ): value is ManagedTransforms =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ManagedTransformsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ManagedTransformsProvider = () =>
   Provider.succeed(ManagedTransforms, {
@@ -215,14 +212,12 @@ export const ManagedTransformsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ManagedTransformsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as ManagedTransformsProps;
-      const n = news as ManagedTransformsProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only when both sides are concrete.
       const oldZone = output?.zoneId ?? o.zoneId;
       if (
@@ -309,7 +304,7 @@ export const ManagedTransformsProvider = () =>
       // the snapshot (added by Cloudflare after adoption) are left as-is.
       const observed = yield* observe(output.zoneId);
       if (!observed) return; // zone is gone — nothing to restore
-      const o = (olds ?? {}) as ManagedTransformsProps;
+      const o = (olds ?? {}) as Props;
       const requestRestore = restoreDelta(
         o.requestHeaders ?? {},
         output.initialRequestHeaders ?? {},
@@ -433,7 +428,7 @@ const toAttributes = (
   observed: ObservedTransforms,
   initialRequestHeaders: Record<string, boolean>,
   initialResponseHeaders: Record<string, boolean>,
-): ManagedTransformsAttributes => ({
+): Attributes => ({
   zoneId,
   requestHeaders: observed.managedRequestHeaders.map(toState),
   responseHeaders: observed.managedResponseHeaders.map(toState),

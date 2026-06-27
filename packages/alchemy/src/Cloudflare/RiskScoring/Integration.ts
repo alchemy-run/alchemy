@@ -9,11 +9,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RiskScoringIntegrationTypeId =
-  "Cloudflare.RiskScoring.Integration" as const;
-type RiskScoringIntegrationTypeId = typeof RiskScoringIntegrationTypeId;
+const TypeId = "Cloudflare.RiskScoring.Integration" as const;
+type TypeId = typeof TypeId;
 
-export interface RiskScoringIntegrationProps {
+export interface IntegrationProps {
   /**
    * The third-party SOAR/SSF consumer of risk-score changes. Only
    * `Okta` is supported by the API today.
@@ -40,7 +39,7 @@ export interface RiskScoringIntegrationProps {
   active?: boolean;
 }
 
-export type RiskScoringIntegrationAttributes = {
+export type IntegrationAttributes = {
   /** API UUID of the integration. */
   integrationId: string;
   /** Account that owns the integration. */
@@ -59,10 +58,10 @@ export type RiskScoringIntegrationAttributes = {
   createdAt: string;
 };
 
-export type RiskScoringIntegration = Resource<
-  RiskScoringIntegrationTypeId,
-  RiskScoringIntegrationProps,
-  RiskScoringIntegrationAttributes,
+export type Integration = Resource<
+  TypeId,
+  IntegrationProps,
+  IntegrationAttributes,
   never,
   Providers
 >;
@@ -82,7 +81,7 @@ export type RiskScoringIntegration = Resource<
  * @section Creating a risk scoring integration
  * @example Push risk scores to an Okta tenant
  * ```typescript
- * const okta = yield* Cloudflare.RiskScoringIntegration("OktaSsf", {
+ * const okta = yield* Cloudflare.RiskScoring.Integration("OktaSsf", {
  *   tenantUrl: "https://tenant.okta.com",
  *   referenceId: oktaIdp.identityProviderId,
  * });
@@ -90,7 +89,7 @@ export type RiskScoringIntegration = Resource<
  *
  * @example Pause exporting without deleting
  * ```typescript
- * const okta = yield* Cloudflare.RiskScoringIntegration("OktaSsf", {
+ * const okta = yield* Cloudflare.RiskScoring.Integration("OktaSsf", {
  *   tenantUrl: "https://tenant.okta.com",
  *   active: false,
  * });
@@ -98,21 +97,16 @@ export type RiskScoringIntegration = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/risk-score/
  */
-export const RiskScoringIntegration = Resource<RiskScoringIntegration>(
-  RiskScoringIntegrationTypeId,
-);
+export const Integration = Resource<Integration>(TypeId);
 
 /**
- * Returns true if the given value is a RiskScoringIntegration resource.
+ * Returns true if the given value is a Integration resource.
  */
-export const isRiskScoringIntegration = (
-  value: unknown,
-): value is RiskScoringIntegration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RiskScoringIntegrationTypeId;
+export const isIntegration = (value: unknown): value is Integration =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const RiskScoringIntegrationProvider = () =>
-  Provider.succeed(RiskScoringIntegration, {
+export const IntegrationProvider = () =>
+  Provider.succeed(Integration, {
     stables: ["integrationId", "accountId", "integrationType", "createdAt"],
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -253,7 +247,7 @@ const findByTenantUrl = (accountId: string, tenantUrl: string) =>
 const toAttributes = (
   integration: ObservedIntegration,
   accountId: string,
-): RiskScoringIntegrationAttributes => ({
+): IntegrationAttributes => ({
   integrationId: integration.id,
   accountId,
   integrationType: integration.integrationType,

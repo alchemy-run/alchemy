@@ -88,7 +88,7 @@ import * as Layer from "effect/Layer";
 export const JobServiceKV = Layer.effect(
   JobService,
   Effect.gen(function* () {
-    const MyKV = yield* Cloudflare.KVNamespace("MyKV");
+    const MyKV = yield* Cloudflare.KV.Namespace("MyKV");
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
 
     return {

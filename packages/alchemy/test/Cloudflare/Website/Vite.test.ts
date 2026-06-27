@@ -59,7 +59,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "FixVite",
             viteProps(rootDir, memoInclude),
           );
@@ -80,7 +80,7 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "FixVite",
             viteProps(rootDir, memoInclude),
           );
@@ -123,7 +123,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* class FixVite extends Cloudflare.Vite<FixVite>()(
+          return yield* class FixVite extends Cloudflare.Website.Vite<FixVite>()(
             "FixVite",
             viteProps(rootDir, memoInclude),
           ) {};
@@ -147,7 +147,7 @@ test.provider(
 // ─────────────────────────────────────────────────────────────────────
 // Path-relocation behavior for the vite path
 //
-// `Cloudflare.Vite` hashes its memo'd input tree (`hash.input`)
+// `Cloudflare.Website.Vite` hashes its memo'd input tree (`hash.input`)
 // instead of carrying an `AssetsWithHash`. The diff is:
 //
 //   `input !== output.hash?.input`
@@ -182,7 +182,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "ViteReloc",
             viteProps(rootA, memoInclude),
           );
@@ -209,7 +209,7 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "ViteReloc",
             viteProps(rootB, memoInclude),
           );
@@ -248,7 +248,7 @@ test.provider(
 
       const site = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("FixViteEnv", {
+          return yield* Cloudflare.Website.Vite("FixViteEnv", {
             ...viteProps(rootDir, memoInclude),
             env: { VITE_TEST_MARKER: marker },
           });
@@ -259,7 +259,7 @@ test.provider(
       // Resolve the hashed bundle URL by reading the deployed HTML, then
       // assert the marker that `main.ts` references via
       // `import.meta.env.VITE_TEST_MARKER` was actually inlined into the
-      // served JS asset by `Cloudflare.Vite`'s `env`-→-`define` plumbing.
+      // served JS asset by `Cloudflare.Website.Vite`'s `env`-→-`define` plumbing.
       const bundleUrl = yield* discoverBundleUrl(site.url!);
       yield* expectUrlContains(bundleUrl, marker, {
         timeout: "60 seconds",

@@ -32,7 +32,7 @@ test.provider(
 
       const zone = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Zone("CreatedZone", {
+          return yield* Cloudflare.Zone.Zone("CreatedZone", {
             name: TEST_ZONE,
           }).pipe(destroy());
         }),
@@ -85,7 +85,7 @@ test.provider(
 
       const zone = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Zone("RetainedZone", {
+          return yield* Cloudflare.Zone.Zone("RetainedZone", {
             name: TEST_ZONE,
           });
         }),
@@ -140,7 +140,9 @@ test.provider(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Zone("AdoptedZone", { name: TEST_ZONE });
+            return yield* Cloudflare.Zone.Zone("AdoptedZone", {
+              name: TEST_ZONE,
+            });
           }),
         )
         .pipe(
@@ -155,7 +157,7 @@ test.provider(
       const adopted = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Zone("AdoptedZone", {
+            return yield* Cloudflare.Zone.Zone("AdoptedZone", {
               name: TEST_ZONE,
             }).pipe(destroy());
           }),
@@ -183,7 +185,7 @@ test.provider("list enumerates every zone in the account", (stack) =>
     });
     expect(testZone).toBeDefined();
 
-    const provider = yield* Provider.findProvider(Cloudflare.Zone);
+    const provider = yield* Provider.findProvider(Cloudflare.Zone.Zone);
     const all = yield* provider.list();
 
     // Exhaustive enumeration must include the standing test zone, returned in

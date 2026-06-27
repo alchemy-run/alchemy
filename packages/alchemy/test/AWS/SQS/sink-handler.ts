@@ -34,7 +34,7 @@ export const QueueSinkFunctionLive = QueueSinkFunction.make(
   },
   Effect.gen(function* () {
     const { queue } = yield* TestQueue;
-    const sink = yield* AWS.SQS.QueueSink.bind(queue);
+    const sink = yield* AWS.SQS.QueueSink(queue);
     const queueUrl = yield* queue.queueUrl;
 
     return {
@@ -78,8 +78,8 @@ export const QueueSinkFunctionLive = QueueSinkFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(TestQueueLive, AWS.SQS.QueueSinkLive),
-        Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
+        Layer.mergeAll(TestQueueLive, AWS.SQS.QueueSinkHttp),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchHttp),
       ),
     ),
   ),

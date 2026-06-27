@@ -29,8 +29,8 @@ export const STACK_SRC = `export default Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers() },
   Effect.gen(function* () {
-    const Photos = yield* Cloudflare.R2Bucket("Photos");
-    const Sessions = yield* Cloudflare.KVNamespace("Sessions");
+    const Photos = yield* Cloudflare.R2.Bucket("Photos");
+    const Sessions = yield* Cloudflare.KV.Namespace("Sessions");
     const api = yield* Cloudflare.Worker("Api", {
       main: "./src/worker.ts",
       env: { Photos, Sessions },
@@ -40,7 +40,7 @@ export const STACK_SRC = `export default Alchemy.Stack(
 );`;
 
 export const ASYNC_RUN_SRC = `// alchemy.run.ts — declare resources, attach via env.
-export const Bucket = Cloudflare.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",

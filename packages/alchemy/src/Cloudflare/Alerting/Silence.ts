@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const SilenceTypeId = "Cloudflare.Alerting.Silence" as const;
-type SilenceTypeId = typeof SilenceTypeId;
+const TypeId = "Cloudflare.Alerting.Silence" as const;
+type TypeId = typeof TypeId;
 
 export interface SilenceProps {
   /**
@@ -56,7 +56,7 @@ export interface SilenceAttributes {
 }
 
 export type Silence = Resource<
-  SilenceTypeId,
+  TypeId,
   SilenceProps,
   SilenceAttributes,
   never,
@@ -81,12 +81,12 @@ export type Silence = Resource<
  * @section Creating a silence
  * @example Silence a policy during a maintenance window
  * ```typescript
- * const policy = yield* Cloudflare.NotificationPolicy("SslAlerts", {
+ * const policy = yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   mechanisms: { email: [{ id: "ops@example.com" }] },
  * });
  *
- * yield* Cloudflare.Silence("MaintenanceWindow", {
+ * yield* Cloudflare.Alerting.Silence("MaintenanceWindow", {
  *   policyId: policy.policyId,
  *   startTime: "2026-07-01T00:00:00Z",
  *   endTime: "2026-07-01T04:00:00Z",
@@ -97,7 +97,7 @@ export type Silence = Resource<
  * @example Extend the silence end time in place
  * Window times are mutable — changing them updates the existing silence.
  * ```typescript
- * yield* Cloudflare.Silence("MaintenanceWindow", {
+ * yield* Cloudflare.Alerting.Silence("MaintenanceWindow", {
  *   policyId: policy.policyId,
  *   startTime: "2026-07-01T00:00:00Z",
  *   endTime: "2026-07-01T08:00:00Z",
@@ -106,13 +106,13 @@ export type Silence = Resource<
  *
  * @see https://developers.cloudflare.com/notifications/
  */
-export const Silence = Resource<Silence>(SilenceTypeId);
+export const Silence = Resource<Silence>(TypeId);
 
 /**
  * Returns true if the given value is a Silence resource.
  */
 export const isSilence = (value: unknown): value is Silence =>
-  Predicate.hasProperty(value, "Type") && value.Type === SilenceTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SilenceProvider = () =>
   Provider.succeed(Silence, {

@@ -93,7 +93,7 @@ test.provider(
       yield* stack.destroy();
 
       const namespace = yield* stack.deploy(
-        Cloudflare.DispatchNamespace("Namespace", {
+        Cloudflare.WorkersForPlatforms.DispatchNamespace("Namespace", {
           name: "alchemy-wfp-test-ns",
         }),
       );
@@ -117,7 +117,7 @@ test.provider(
 
       // The name is the namespace's identity — changing it must replace.
       const replaced = yield* stack.deploy(
-        Cloudflare.DispatchNamespace("Namespace", {
+        Cloudflare.WorkersForPlatforms.DispatchNamespace("Namespace", {
           name: "alchemy-wfp-test-ns-v2",
         }),
       );
@@ -140,9 +140,12 @@ const scriptName = "alchemy-wfp-customer-a";
 // orders script-last on deploy (and first on destroy).
 const program = () =>
   Effect.gen(function* () {
-    const namespace = yield* Cloudflare.DispatchNamespace("ScriptNs", {
-      name: namespaceName,
-    });
+    const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace(
+      "ScriptNs",
+      {
+        name: namespaceName,
+      },
+    );
 
     return { namespace };
   });
@@ -182,13 +185,13 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.DispatchNamespace("ListNs", {
+        Cloudflare.WorkersForPlatforms.DispatchNamespace("ListNs", {
           name: "alchemy-wfp-test-list-ns",
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.DispatchNamespace,
+        Cloudflare.WorkersForPlatforms.DispatchNamespace,
       );
 
       // A just-created namespace can lag the account-wide list under load —

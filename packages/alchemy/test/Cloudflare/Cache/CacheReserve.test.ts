@@ -59,7 +59,7 @@ const setBaseline = (zoneId: string, value: "on" | "off") =>
   );
 
 // Both cases mutate the same zone-level Cache Reserve singleton; run them serially so they don't corrupt each other's captured `initialValue` under the global concurrent test config.
-describe.sequential("CacheReserve", () => {
+describe.sequential("Reserve", () => {
   test.provider(
     "surfaces the typed SettingUnavailableForPlan error on unentitled zones",
     (stack) =>
@@ -96,7 +96,7 @@ describe.sequential("CacheReserve", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CacheReserve("Reserve", {
+            return yield* Cloudflare.Cache.Reserve("Reserve", {
               zoneId,
             });
           }),
@@ -114,7 +114,7 @@ describe.sequential("CacheReserve", () => {
         // Update in place — same singleton, initialValue survives.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CacheReserve("Reserve", {
+            return yield* Cloudflare.Cache.Reserve("Reserve", {
               zoneId,
               enabled: false,
             });
@@ -141,7 +141,7 @@ describe.sequential("CacheReserve", () => {
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.CacheReserve);
+      const provider = yield* Provider.findProvider(Cloudflare.Cache.Reserve);
       const all = yield* provider.list();
 
       // Enumeration + typed entitlement skip succeed: a plain array, every
@@ -164,7 +164,7 @@ describe.sequential("CacheReserve", () => {
       Effect.gen(function* () {
         const zoneId = entitledZoneId!;
 
-        const provider = yield* Provider.findProvider(Cloudflare.CacheReserve);
+        const provider = yield* Provider.findProvider(Cloudflare.Cache.Reserve);
         const all = yield* provider.list();
 
         expect(all.some((s) => s.zoneId === zoneId)).toBe(true);

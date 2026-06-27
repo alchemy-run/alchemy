@@ -102,7 +102,7 @@ test.provider(
 
       const route = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.WorkerRoute("DefaultRoute", {
+          return yield* Cloudflare.Workers.WorkerRoute("DefaultRoute", {
             zoneId,
             pattern: PATTERN_DEFAULT,
           }).pipe(adopt(true));
@@ -143,7 +143,7 @@ test.provider(
             main,
             compatibility: { date: "2024-01-01" },
           });
-          const route = yield* Cloudflare.WorkerRoute("Route", {
+          const route = yield* Cloudflare.Workers.WorkerRoute("Route", {
             zoneId,
             pattern: PATTERN_UPDATE_V1,
             script: worker.workerName,
@@ -167,7 +167,7 @@ test.provider(
             main,
             compatibility: { date: "2024-01-01" },
           });
-          const route = yield* Cloudflare.WorkerRoute("Route", {
+          const route = yield* Cloudflare.Workers.WorkerRoute("Route", {
             zoneId,
             pattern: PATTERN_UPDATE_V2,
             // Drop the script — the route becomes an opt-out route.
@@ -218,7 +218,7 @@ test.provider(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.WorkerRoute("AdoptedRoute", {
+            return yield* Cloudflare.Workers.WorkerRoute("AdoptedRoute", {
               zoneId,
               pattern: PATTERN_ADOPT,
             });
@@ -234,7 +234,7 @@ test.provider(
       // (same physical id).
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.WorkerRoute("AdoptedRoute", {
+          return yield* Cloudflare.Workers.WorkerRoute("AdoptedRoute", {
             zoneId,
             pattern: PATTERN_ADOPT,
           }).pipe(adopt(true));
@@ -274,7 +274,7 @@ test.provider(
             main,
             compatibility: { date: "2024-01-01" },
           });
-          const route = yield* Cloudflare.WorkerRoute("ListRoute", {
+          const route = yield* Cloudflare.Workers.WorkerRoute("ListRoute", {
             zoneId,
             pattern: PATTERN_LIST,
             script: worker.workerName,
@@ -283,7 +283,9 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.WorkerRoute);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Workers.WorkerRoute,
+      );
       const all = yield* provider.list();
 
       expect(

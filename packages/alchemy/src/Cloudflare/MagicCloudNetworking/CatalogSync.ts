@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CatalogSyncTypeId =
-  "Cloudflare.MagicCloudNetworking.CatalogSync" as const;
-type CatalogSyncTypeId = typeof CatalogSyncTypeId;
+const TypeId = "Cloudflare.MagicCloudNetworking.CatalogSync" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Where a catalog sync writes the discovered resources.
@@ -90,7 +89,7 @@ export interface CatalogSyncAttributes {
 }
 
 export type CatalogSync = Resource<
-  CatalogSyncTypeId,
+  TypeId,
   CatalogSyncProps,
   CatalogSyncAttributes,
   never,
@@ -115,7 +114,7 @@ export type CatalogSync = Resource<
  * @section Creating a sync
  * @example Sync discovered VPC CIDRs into a Zero Trust list
  * ```typescript
- * const sync = yield* Cloudflare.CatalogSync("VpcCidrs", {
+ * const sync = yield* Cloudflare.MagicCloudNetworking.CatalogSync("VpcCidrs", {
  *   destinationType: "ZERO_TRUST_LIST",
  *   updateMode: "AUTO",
  *   policy: "kind in ('aws_vpc','azurerm_virtual_network','google_compute_network')",
@@ -125,7 +124,7 @@ export type CatalogSync = Resource<
  *
  * @example Manual sync without a destination
  * ```typescript
- * yield* Cloudflare.CatalogSync("DryRun", {
+ * yield* Cloudflare.MagicCloudNetworking.CatalogSync("DryRun", {
  *   destinationType: "NONE",
  *   updateMode: "MANUAL",
  * });
@@ -134,7 +133,7 @@ export type CatalogSync = Resource<
  * @section Destroy behavior
  * @example Keep the destination list on destroy
  * ```typescript
- * yield* Cloudflare.CatalogSync("VpcCidrs", {
+ * yield* Cloudflare.MagicCloudNetworking.CatalogSync("VpcCidrs", {
  *   destinationType: "ZERO_TRUST_LIST",
  *   updateMode: "AUTO",
  *   deleteDestination: false,
@@ -143,13 +142,13 @@ export type CatalogSync = Resource<
  *
  * @see https://developers.cloudflare.com/magic-cloud-networking/
  */
-export const CatalogSync = Resource<CatalogSync>(CatalogSyncTypeId);
+export const CatalogSync = Resource<CatalogSync>(TypeId);
 
 /**
  * Returns true if the given value is a CatalogSync resource.
  */
 export const isCatalogSync = (value: unknown): value is CatalogSync =>
-  Predicate.hasProperty(value, "Type") && value.Type === CatalogSyncTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CatalogSyncProvider = () =>
   Provider.succeed(CatalogSync, {

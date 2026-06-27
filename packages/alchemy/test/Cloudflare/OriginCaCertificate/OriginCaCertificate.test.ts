@@ -63,7 +63,7 @@ test.provider("issue, verify, and revoke a certificate", (stack) =>
     yield* stack.destroy();
 
     const cert = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate("Cert", {
+      Cloudflare.OriginCaCertificate.OriginCaCertificate("Cert", {
         csr: TEST_CSR,
         hostnames: [hostname],
         requestType: "origin-rsa",
@@ -88,7 +88,7 @@ test.provider("issue, verify, and revoke a certificate", (stack) =>
 
     // Redeploying identical props is a no-op (same certificate).
     const noop = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate("Cert", {
+      Cloudflare.OriginCaCertificate.OriginCaCertificate("Cert", {
         csr: TEST_CSR,
         hostnames: [hostname],
         requestType: "origin-rsa",
@@ -110,7 +110,7 @@ test.provider("list enumerates issued certificates", (stack) =>
     yield* stack.destroy();
 
     const cert = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate("ListCert", {
+      Cloudflare.OriginCaCertificate.OriginCaCertificate("ListCert", {
         csr: TEST_CSR,
         hostnames: [hostname],
         requestType: "origin-rsa",
@@ -119,7 +119,7 @@ test.provider("list enumerates issued certificates", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.OriginCaCertificate,
+      Cloudflare.OriginCaCertificate.OriginCaCertificate,
     );
     const all = yield* provider.list();
 
@@ -147,7 +147,7 @@ test.provider("replacement on requestedValidity change", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate("ValidityCert", {
+      Cloudflare.OriginCaCertificate.OriginCaCertificate("ValidityCert", {
         csr: TEST_CSR,
         hostnames: [hostname],
         requestType: "origin-rsa",
@@ -159,7 +159,7 @@ test.provider("replacement on requestedValidity change", (stack) =>
     // There is no update API — changing the validity issues a new
     // certificate and revokes the old one.
     const replaced = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate("ValidityCert", {
+      Cloudflare.OriginCaCertificate.OriginCaCertificate("ValidityCert", {
         csr: TEST_CSR,
         hostnames: [hostname],
         requestType: "origin-rsa",
@@ -186,7 +186,7 @@ test.provider("replacement on hostnames change", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate("HostnamesCert", {
+      Cloudflare.OriginCaCertificate.OriginCaCertificate("HostnamesCert", {
         csr: TEST_CSR,
         hostnames: [hostname],
         requestType: "origin-rsa",
@@ -198,7 +198,7 @@ test.provider("replacement on hostnames change", (stack) =>
     // Hostnames are immutable — changing the set issues a new certificate
     // and revokes the old one.
     const replaced = yield* stack.deploy(
-      Cloudflare.OriginCaCertificate("HostnamesCert", {
+      Cloudflare.OriginCaCertificate.OriginCaCertificate("HostnamesCert", {
         csr: TEST_CSR,
         hostnames: [hostname, altHostname],
         requestType: "origin-rsa",

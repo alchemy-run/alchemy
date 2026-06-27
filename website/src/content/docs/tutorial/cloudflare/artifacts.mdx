@@ -20,7 +20,7 @@ binding marker. Repos are created at runtime through the binding.
 // src/Repos.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Repos = Cloudflare.Artifacts("Repos");
+export const Repos = Cloudflare.Artifacts.Namespace("Repos");
 ```
 
 ## Create a repo from the Worker
@@ -45,7 +45,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
     compatibility: { flags: ["nodejs_compat"], date: "2026-03-17" },
   },
   Effect.gen(function* () {
-    const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
+    const artifacts = yield* Cloudflare.Artifacts.ReadWriteNamespace(Repos);
 
     return {
       fetch: Effect.gen(function* () {
@@ -60,11 +60,11 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         });
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Cloudflare.ArtifactsBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Artifacts.ReadWriteNamespaceBinding)),
 ) {}
 ```
 
-`Cloudflare.Artifacts.bind(Repos)` resolves an Effect-native client
+`Cloudflare.Artifacts.ReadWriteNamespace(Repos)` resolves an Effect-native client
 whose methods (`create`, `get`, `list`, `delete`) each return an
 Effect. `Effect.orDie` turns any `ArtifactsError` into a 500 — fine
 for this demo.

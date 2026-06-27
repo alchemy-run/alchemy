@@ -4,9 +4,30 @@ import type * as Effect from "effect/Effect";
 import type { Redacted } from "effect/Redacted";
 import type * as Stream from "effect/Stream";
 import type { Rpc } from "../../Rpc.ts";
-import type * as Cloudflare from "../index.ts";
+// NOTE: import the service modules directly rather than `import * as Cloudflare
+// from "../index.ts"`. Importing the whole Cloudflare barrel here creates a
+// circular re-export when the barrel does `export * from "./Workers/index.ts"`
+// (the barrel must enumerate this module, which imports the barrel back), which
+// collapses inference of the large `providers()` collection to `unknown`.
+import type * as AI from "../AI/index.ts";
+import type * as AnalyticsEngine from "../AnalyticsEngine/index.ts";
+import type * as ArtifactsNs from "../Artifacts/index.ts";
+import type * as D1 from "../D1/index.ts";
+import type * as Email from "../Email/index.ts";
+import type * as FlagshipNs from "../Flagship/index.ts";
+import type * as HyperdriveNs from "../Hyperdrive/index.ts";
+import type * as ImagesNs from "../Images/index.ts";
+import type * as KV from "../KV/index.ts";
+import type * as Queues from "../Queues/index.ts";
+import type * as R2 from "../R2/index.ts";
+import type { Assets } from "./Assets.ts";
+import type { BrowserBinding } from "./BrowserBinding.ts";
+import type { DurableObjectLike } from "./DurableObject.ts";
+import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
+import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import type { Worker } from "./Worker.ts";
+import type { WorkerLoader as WorkerLoaderResource } from "./WorkerLoader.ts";
 
 export type InferEnv<W> =
   W extends Effect.Effect<infer A, infer _E, infer _R>
@@ -20,45 +41,45 @@ export type InferEnv<W> =
 export type GetBindingType<T> =
   T extends Effect.Effect<infer A, infer _E, infer _R>
     ? GetBindingType<A>
-    : T extends Cloudflare.FlagshipApp
+    : T extends FlagshipNs.App
       ? Flagship
-      : T extends Cloudflare.Assets
+      : T extends Assets
         ? Service
         : T extends Rpc<infer Shape extends object>
           ? RpcWireShape<Shape> & Service
-          : T extends Cloudflare.D1Database
+          : T extends D1.Database
             ? D1Database
-            : T extends Cloudflare.R2Bucket
+            : T extends R2.Bucket
               ? R2Bucket
-              : T extends Cloudflare.KVNamespace
+              : T extends KV.Namespace
                 ? KVNamespace
-                : T extends Cloudflare.Queue
+                : T extends Queues.Queue
                   ? Queue<unknown>
-                  : T extends Cloudflare.AiGateway
+                  : T extends AI.Gateway
                     ? Ai
-                    : T extends Cloudflare.AiSearchInstance
+                    : T extends AI.Search
                       ? AiSearchInstance
-                      : T extends Cloudflare.AiSearchNamespace
+                      : T extends AI.SearchNamespace
                         ? AiSearchNamespace
-                        : T extends Cloudflare.SendEmail
+                        : T extends Email.SendEmail
                           ? SendEmail
-                          : T extends Cloudflare.AnalyticsEngineDataset
+                          : T extends AnalyticsEngine.Dataset
                             ? AnalyticsEngineDataset
-                            : T extends Cloudflare.Artifacts
+                            : T extends ArtifactsNs.Namespace
                               ? Artifacts
-                              : T extends Cloudflare.RateLimit
+                              : T extends RateLimitBinding
                                 ? RateLimit
-                                : T extends Cloudflare.Images
+                                : T extends ImagesNs.ImagesBinding
                                   ? ImagesBinding
-                                  : T extends Cloudflare.Browser
+                                  : T extends BrowserBinding
                                     ? BrowserRun
-                                    : T extends Cloudflare.Hyperdrive
+                                    : T extends HyperdriveNs.Connection
                                       ? Hyperdrive
-                                      : T extends Cloudflare.VersionMetadata
+                                      : T extends VersionMetadataBinding
                                         ? WorkerVersionMetadata
-                                        : T extends Cloudflare.WorkerLoader
+                                        : T extends WorkerLoaderResource
                                           ? WorkerLoader
-                                          : T extends Cloudflare.DurableObjectNamespaceLike
+                                          : T extends DurableObjectLike
                                             ? DurableObjectNamespace<
                                                 Exclude<T["Shape"], undefined>
                                               >

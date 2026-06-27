@@ -12,14 +12,14 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayListTypeId = "Cloudflare.Gateway.List" as const;
-type GatewayListTypeId = typeof GatewayListTypeId;
+const TypeId = "Cloudflare.Gateway.List" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of values a Gateway list holds. Immutable — changing the type
  * triggers a replacement.
  */
-export type GatewayListType =
+export type ListType =
   | "SERIAL"
   | "URL"
   | "DOMAIN"
@@ -33,7 +33,7 @@ export type GatewayListType =
 /**
  * A single entry in a Gateway list.
  */
-export interface GatewayListItem {
+export interface ListItem {
   /**
    * The item's value — a domain, URL, IP, email, serial number, etc.
    * depending on the list's `type`.
@@ -45,7 +45,7 @@ export interface GatewayListItem {
   description?: string;
 }
 
-export interface GatewayListProps {
+export interface ListProps {
   /**
    * Display name for the list. Used as a stable identifier so the provider
    * can locate the list by name during adoption / state recovery. If
@@ -59,7 +59,7 @@ export interface GatewayListProps {
    * CATEGORY, LOCATION, DEVICE, AAGUID). Immutable — changing the type
    * triggers a replacement.
    */
-  type: GatewayListType;
+  type: ListType;
   /**
    * Free-form description of the list. Mutable.
    *
@@ -72,10 +72,10 @@ export interface GatewayListProps {
    *
    * @default []
    */
-  items?: GatewayListItem[];
+  items?: ListItem[];
 }
 
-export interface GatewayListAttributes {
+export interface ListAttributes {
   /** UUID of the list, assigned by Cloudflare. */
   listId: string;
   /** Cloudflare account that owns the list. */
@@ -83,11 +83,11 @@ export interface GatewayListAttributes {
   /** Display name of the list. */
   name: string;
   /** The kind of values the list holds. */
-  type: GatewayListType;
+  type: ListType;
   /** Description of the list. */
   description: string;
   /** Current entries in the list. */
-  items: GatewayListItem[];
+  items: ListItem[];
   /** Number of entries in the list. */
   count: number;
   /** ISO8601 creation timestamp. */
@@ -96,10 +96,10 @@ export interface GatewayListAttributes {
   updatedAt: string | undefined;
 }
 
-export type GatewayList = Resource<
-  GatewayListTypeId,
-  GatewayListProps,
-  GatewayListAttributes,
+export type List = Resource<
+  TypeId,
+  ListProps,
+  ListAttributes,
   never,
   Providers
 >;
@@ -119,7 +119,7 @@ export type GatewayList = Resource<
  * @section Creating a List
  * @example Domain list
  * ```typescript
- * const blocked = yield* Cloudflare.GatewayList("BlockedDomains", {
+ * const blocked = yield* Cloudflare.Gateway.List("BlockedDomains", {
  *   type: "DOMAIN",
  *   description: "domains blocked org-wide",
  *   items: [
@@ -131,7 +131,7 @@ export type GatewayList = Resource<
  *
  * @example IP list
  * ```typescript
- * const egress = yield* Cloudflare.GatewayList("OfficeEgress", {
+ * const egress = yield* Cloudflare.Gateway.List("OfficeEgress", {
  *   type: "IP",
  *   items: [{ value: "203.0.113.0/24" }],
  * });
@@ -140,7 +140,7 @@ export type GatewayList = Resource<
  * @section Referencing from a Gateway Rule
  * @example Block DNS lookups for every domain in the list
  * ```typescript
- * yield* Cloudflare.GatewayRule("BlockListedDomains", {
+ * yield* Cloudflare.Gateway.Rule("BlockListedDomains", {
  *   action: "block",
  *   filters: ["dns"],
  *   traffic: `any(dns.domains[*] in $${blocked.listId})`,
@@ -149,16 +149,16 @@ export type GatewayList = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/gateway/lists/
  */
-export const GatewayList = Resource<GatewayList>(GatewayListTypeId);
+export const List = Resource<List>(TypeId);
 
 /**
- * Returns true if the given value is a GatewayList resource.
+ * Returns true if the given value is a List resource.
  */
-export const isGatewayList = (value: unknown): value is GatewayList =>
-  Predicate.hasProperty(value, "Type") && value.Type === GatewayListTypeId;
+export const isList = (value: unknown): value is List =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const GatewayListProvider = () =>
-  Provider.succeed(GatewayList, {
+export const ListProvider = () =>
+  Provider.succeed(List, {
     stables: ["listId", "accountId", "type", "createdAt"],
 
     list: Effect.fn(function* () {
@@ -177,7 +177,7 @@ export const GatewayListProvider = () =>
         return { action: "replace" } as const;
       }
       // The list type is immutable on Cloudflare's side.
-      const oldType = output?.type ?? (olds as GatewayListProps).type;
+      const oldType = output?.type ?? (olds as ListProps).type;
       if (oldType !== undefined && oldType !== news.type) {
         return { action: "replace" } as const;
       }
@@ -321,8 +321,8 @@ const resolveName = (id: string, name: string | undefined) =>
   });
 
 const sameItems = (
-  observed: ReadonlyArray<GatewayListItem>,
-  desired: ReadonlyArray<GatewayListItem>,
+  observed: ReadonlyArray<ListItem>,
+  desired: ReadonlyArray<ListItem>,
 ): boolean =>
   arrayEqualsUnordered(
     observed.map((i) => `${i.value} ${i.description ?? ""}`),
@@ -332,11 +332,11 @@ const sameItems = (
 const toAttributes = (
   list: ObservedList & { count?: number | null },
   accountId: string,
-): GatewayListAttributes => ({
+): ListAttributes => ({
   listId: list.id ?? "",
   accountId,
   name: list.name ?? "",
-  type: (list.type ?? "DOMAIN") as GatewayListType,
+  type: (list.type ?? "DOMAIN") as ListType,
   description: list.description ?? "",
   items: (list.items ?? []).map((i) => ({
     value: i.value ?? "",

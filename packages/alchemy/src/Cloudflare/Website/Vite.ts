@@ -56,7 +56,7 @@ export interface ViteProps<
  *
  * @example Static Vite site
  * ```typescript
- * const site = yield* Cloudflare.Vite("Website");
+ * const site = yield* Cloudflare.Website.Vite("Website");
  * ```
  *
  * @section SSR Frameworks
@@ -65,7 +65,7 @@ export interface ViteProps<
  *
  * @example TanStack Start
  * ```typescript
- * const app = yield* Cloudflare.Vite("TanStackStart", {
+ * const app = yield* Cloudflare.Website.Vite("TanStackStart", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
@@ -74,7 +74,7 @@ export interface ViteProps<
  *
  * @example SolidStart with worker-first routing
  * ```typescript
- * const app = yield* Cloudflare.Vite("SolidStart", {
+ * const app = yield* Cloudflare.Website.Vite("SolidStart", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
@@ -90,7 +90,7 @@ export interface ViteProps<
  *
  * @example Vue SPA
  * ```typescript
- * const app = yield* Cloudflare.Vite("Vue", {
+ * const app = yield* Cloudflare.Website.Vite("Vue", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
@@ -110,7 +110,7 @@ export interface ViteProps<
  *
  * @example Narrowing the memo scope
  * ```typescript
- * const site = yield* Cloudflare.Vite("Docs", {
+ * const site = yield* Cloudflare.Website.Vite("Docs", {
  *   memo: {
  *     include: ["src/**", "content/**", "package.json"],
  *   },
@@ -125,7 +125,7 @@ export interface ViteProps<
  *
  * @example Declaring a Worker class
  * ```typescript
- * class Website extends Cloudflare.Vite<Website>()("Website", {
+ * class Website extends Cloudflare.Website.Vite<Website>()("Website", {
  *   compatibility: { flags: ["nodejs_compat"] },
  * }) {}
  *

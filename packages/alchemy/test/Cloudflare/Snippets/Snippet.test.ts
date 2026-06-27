@@ -75,7 +75,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Snippet("GeneratedSnippet", {
+          return yield* Cloudflare.Snippets.Snippet("GeneratedSnippet", {
             zoneId,
             code: codeV1,
           }).pipe(adopt(true));
@@ -94,7 +94,7 @@ test.provider(
       // Update the code — same identity, upserted in place.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Snippet("GeneratedSnippet", {
+          return yield* Cloudflare.Snippets.Snippet("GeneratedSnippet", {
             zoneId,
             code: codeV2,
           }).pipe(adopt(true));
@@ -118,7 +118,7 @@ test.provider("renaming an explicit snippet triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Snippet("RenamedSnippet", {
+        return yield* Cloudflare.Snippets.Snippet("RenamedSnippet", {
           zoneId,
           name: NAME_EXPLICIT,
           code: codeV1,
@@ -133,7 +133,7 @@ test.provider("renaming an explicit snippet triggers replacement", (stack) =>
     // The name is the snippet's identity — a rename is a replacement.
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Snippet("RenamedSnippet", {
+        return yield* Cloudflare.Snippets.Snippet("RenamedSnippet", {
           zoneId,
           name: NAME_REPLACED,
           code: codeV1,
@@ -181,7 +181,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SNIPPETS_LIST)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Snippet("ListSnippet", {
+          return yield* Cloudflare.Snippets.Snippet("ListSnippet", {
             zoneId,
             name: NAME_LIST,
             code: codeV1,
@@ -189,7 +189,9 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SNIPPETS_LIST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Snippet);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Snippets.Snippet,
+      );
       const all = yield* provider.list();
 
       const found = all.find(

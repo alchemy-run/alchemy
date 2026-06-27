@@ -37,7 +37,7 @@ export class Sandbox extends Cloudflare.Container<
 ```
 
 The `Cloudflare.Container<Sandbox, { ... }>()(...)` shape is the same
-ceremony as `DurableObjectNamespace` — the empty `()` lets TypeScript
+ceremony as `DurableObject` — the empty `()` lets TypeScript
 capture the class identity for the typed RPC stub. Anything that
 binds `Sandbox` now sees `exec(command)` as a typed RPC method
 returning `Effect<{ exitCode, stdout, stderr }, PlatformError>`.
@@ -221,7 +221,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     return Effect.gen(function* () {
@@ -242,7 +242,7 @@ helper. Resolve it in the **outer** init phase and expose `exec`
 from the inner phase as an RPC method:
 
 ```diff lang="typescript"
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
 +   const sandbox = yield* Sandbox;
@@ -264,13 +264,13 @@ captured stdout/stderr/exitCode flow back through the typed shape.
 ## Configure the container with a Layer
 
 `yield* Sandbox` only resolves once you tell the DO **how** to run
-the container. Provide `Cloudflare.layerContainer(Sandbox, …)` on
+the container. Provide `Cloudflare.Containers.layer(Sandbox, …)` on
 the DO's init — that layer binds, starts, and monitors the
 container, then satisfies the `Sandbox` tag with the running
 instance:
 
 ```diff lang="typescript"
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     const sandbox = yield* Sandbox;
@@ -283,7 +283,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
 - }),
 + }).pipe(
 +   Effect.provide(
-+     Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
++     Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
 +   ),
 + ),
 ) {}
@@ -292,7 +292,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
 :::note
 This is the same pattern as any other binding: `yield*` the class to
 get a typed handle, then `Effect.provide` the layer that configures
-it. Because `layerContainer` resolves the `Sandbox` tag, **any**
+it. Because `layer` resolves the `Sandbox` tag, **any**
 Effect or Layer can `yield* Sandbox` and get a running container —
 no separate bind / start / use dance.
 :::
@@ -428,7 +428,7 @@ import * as Effect from "effect/Effect";
 +import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Sandbox } from "./Sandbox.ts";
 
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     const sandbox = yield* Sandbox;
@@ -448,7 +448,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(Sandbox, { enableInternet: true }),
+      Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
     ),
   ),
 ) {}

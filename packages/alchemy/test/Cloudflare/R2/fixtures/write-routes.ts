@@ -1,4 +1,4 @@
-import type { WriteBucketClient } from "@/Cloudflare/R2/BucketWrite.ts";
+import type { WriteBucketClient } from "@/Cloudflare/R2/WriteBucket.ts";
 import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";

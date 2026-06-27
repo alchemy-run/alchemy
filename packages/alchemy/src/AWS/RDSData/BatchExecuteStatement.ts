@@ -1,11 +1,8 @@
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
-import type { Providers } from "../Providers.ts";
 
 export interface BatchExecuteStatementOptions {
   secret: Secret;
@@ -22,8 +19,9 @@ export interface BatchExecuteStatementRequest extends Omit<
  * Runtime binding for `rds-data:BatchExecuteStatement`.
  * @binding
  */
-export class BatchExecuteStatement extends Binding.Service<
+export interface BatchExecuteStatement extends Binding.Service<
   BatchExecuteStatement,
+  "AWS.RDSData.BatchExecuteStatement",
   (
     cluster: DBCluster,
     options: BatchExecuteStatementOptions,
@@ -35,72 +33,8 @@ export class BatchExecuteStatement extends Binding.Service<
       rdsdata.BatchExecuteStatementError
     >
   >
->()("AWS.RDSData.BatchExecuteStatement") {}
+> {}
 
-export const BatchExecuteStatementLive = Layer.effect(
-  BatchExecuteStatement,
-  Effect.gen(function* () {
-    const Policy = yield* BatchExecuteStatementPolicy;
-    const batchExecuteStatement = yield* rdsdata.batchExecuteStatement;
-
-    return Effect.fn(function* (
-      cluster: DBCluster,
-      options: BatchExecuteStatementOptions,
-    ) {
-      const resourceArn = yield* cluster.dbClusterArn;
-      const secretArn = yield* options.secret.secretArn;
-      yield* Policy(cluster, options);
-      return Effect.fn(function* (request: BatchExecuteStatementRequest) {
-        const clusterArn = yield* resourceArn;
-        const resolvedSecretArn = yield* secretArn;
-        return yield* batchExecuteStatement({
-          ...request,
-          resourceArn: clusterArn,
-          secretArn: resolvedSecretArn,
-          database: options.database,
-          schema: options.schema,
-        });
-      });
-    });
-  }),
+export const BatchExecuteStatement = Binding.Service<BatchExecuteStatement>(
+  "AWS.RDSData.BatchExecuteStatement",
 );
-
-export class BatchExecuteStatementPolicy extends Binding.Policy<
-  BatchExecuteStatementPolicy,
-  (
-    cluster: DBCluster,
-    options: BatchExecuteStatementOptions,
-  ) => Effect.Effect<void>,
-  Providers
->()("AWS.RDSData.BatchExecuteStatement") {}
-
-export const BatchExecuteStatementPolicyLive =
-  BatchExecuteStatementPolicy.layer.succeed(
-    Effect.fn(function* (host, cluster, options) {
-      if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.RDSData.BatchExecuteStatement(${cluster}, ${options.secret}))`(
-          {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["rds-data:BatchExecuteStatement"],
-                Resource: [cluster.dbClusterArn, options.secret.secretArn],
-              },
-              {
-                Effect: "Allow",
-                Action: [
-                  "secretsmanager:GetSecretValue",
-                  "secretsmanager:DescribeSecret",
-                ],
-                Resource: [options.secret.secretArn],
-              },
-            ],
-          },
-        );
-      } else {
-        return yield* Effect.die(
-          `BatchExecuteStatementPolicy does not support runtime '${host.Type}'`,
-        );
-      }
-    }),
-  );

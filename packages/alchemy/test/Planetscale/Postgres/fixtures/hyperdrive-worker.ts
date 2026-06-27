@@ -21,7 +21,7 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.postgres(conn.connectionString, { relations });
 
     return {
@@ -67,5 +67,5 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
         ),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.HyperdriveBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.Hyperdrive.ConnectBinding))),
 ) {}

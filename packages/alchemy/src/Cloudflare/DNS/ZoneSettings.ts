@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ZoneDnsSettingsTypeId = "Cloudflare.Dns.ZoneSettings" as const;
-type ZoneDnsSettingsTypeId = typeof ZoneDnsSettingsTypeId;
+const TypeId = "Cloudflare.DNS.ZoneSettings" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Nameserver assignment for the zone. `custom.*` types require
@@ -192,7 +192,7 @@ export interface ZoneDnsSettingsAttributes extends ZoneDnsSettingsSnapshot {
 }
 
 export type ZoneDnsSettings = Resource<
-  ZoneDnsSettingsTypeId,
+  TypeId,
   ZoneDnsSettingsProps,
   ZoneDnsSettingsAttributes,
   never,
@@ -220,7 +220,7 @@ export type ZoneDnsSettings = Resource<
  * @section Basic settings
  * @example Lower the NS record TTL
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   nsTtl: 3600,
  * });
@@ -228,7 +228,7 @@ export type ZoneDnsSettings = Resource<
  *
  * @example Flatten every CNAME in the zone
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   flattenAllCnames: true,
  * });
@@ -237,7 +237,7 @@ export type ZoneDnsSettings = Resource<
  * @section SOA tuning
  * @example Shorten the negative-caching TTL
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   soa: { minTtl: 300 },
  * });
@@ -246,19 +246,19 @@ export type ZoneDnsSettings = Resource<
  * @section Multi-provider DNS
  * @example Serve the zone alongside another DNS provider
  * ```typescript
- * yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+ * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   multiProvider: true,
  * });
  * ```
  */
-export const ZoneDnsSettings = Resource<ZoneDnsSettings>(ZoneDnsSettingsTypeId);
+export const ZoneDnsSettings = Resource<ZoneDnsSettings>(TypeId);
 
 /**
  * Returns true if the given value is a ZoneDnsSettings resource.
  */
 export const isZoneDnsSettings = (value: unknown): value is ZoneDnsSettings =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneDnsSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneDnsSettingsProvider = () =>
   Provider.succeed(ZoneDnsSettings, {

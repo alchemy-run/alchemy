@@ -14,7 +14,7 @@ let counter = 0;
  * fixture. Local handlers (`Ping`, `Count`) live on the worker; `*DO`
  * handlers forward through the typed
  * {@link RpcWorkerRpcHttpObject} client returned by yielding the
- * {@link Cloudflare.RpcDurableObjectNamespace} class. The piped
+ * {@link Cloudflare.RpcDurableObject} class. The piped
  * `RpcServer.toHttpEffect(WorkerRpcs)` is returned directly — no
  * `{ fetch }` wrapper.
  */

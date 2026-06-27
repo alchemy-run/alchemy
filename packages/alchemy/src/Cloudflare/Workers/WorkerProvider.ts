@@ -22,7 +22,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
+import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Worker, type WorkerProps } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
@@ -30,12 +30,31 @@ import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
-class MissingDurableObjectNamespaces extends Data.TaggedError(
-  "MissingDurableObjectNamespaces",
-)<{
+class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
 }> {}
+
+/**
+ * Normalize a Worker's persisted `domains` state to `https://<hostname>`
+ * strings. Alchemy <= beta.44 stored each custom domain as a
+ * `{ id, hostname, zoneId }` object; beta.45+ stores `https://<hostname>`
+ * strings and the diff path calls string methods on each entry. Older state is
+ * coerced back to strings so `.endsWith` does not throw `u.endsWith is not a
+ * function` (#546). Entries that are neither a string nor an object with a
+ * string `hostname` are dropped rather than turned into a bogus `https://`
+ * value that would skew the diff.
+ *
+ * @internal exported for unit testing.
+ */
+export const normalizeStateDomains = (
+  domains: readonly unknown[] | undefined,
+): string[] =>
+  (domains ?? []).flatMap((u) => {
+    if (typeof u === "string") return [u];
+    const hostname = (u as { hostname?: unknown } | null)?.hostname;
+    return typeof hostname === "string" ? [`https://${hostname}`] : [];
+  });
 
 export const WorkerProvider = () =>
   ProviderLayer.select({
@@ -350,7 +369,7 @@ export const LiveWorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
-      const getDurableObjectNamespaces = (
+      const getDurableObjects = (
         bindings: readonly WorkerSettingsBinding[] | null | undefined,
       ) => {
         const namespaces = Object.fromEntries(
@@ -394,13 +413,13 @@ export const LiveWorkerProvider = () =>
           })
           .pipe(
             Effect.map((settings) => {
-              const namespaces = getDurableObjectNamespaces(settings.bindings);
+              const namespaces = getDurableObjects(settings.bindings);
               const missing = expectedClassNames.filter(
                 (className) => !namespaces[className],
               );
               if (missing.length > 0) {
                 return Effect.fail(
-                  new MissingDurableObjectNamespaces({
+                  new MissingDurableObjects({
                     scriptName,
                     expected: missing,
                   }),
@@ -413,7 +432,7 @@ export const LiveWorkerProvider = () =>
             }),
             Effect.flatten,
             Effect.retry({
-              // `MissingDurableObjectNamespaces`: the DO bindings haven't
+              // `MissingDurableObjects`: the DO bindings haven't
               // surfaced in the version settings yet. `WorkerHasNoVersions` /
               // `WorkerNotFound`: right after the first `putScript`, the
               // version-settings read can race the script registry — under a
@@ -421,7 +440,7 @@ export const LiveWorkerProvider = () =>
               // (or the worker itself as not-yet-found) before the upload
               // propagates. All three are eventual-consistency blips.
               while: (error) =>
-                error._tag === "MissingDurableObjectNamespaces" ||
+                error._tag === "MissingDurableObjects" ||
                 error._tag === "WorkerHasNoVersions" ||
                 error._tag === "WorkerNotFound",
               schedule: Schedule.exponential(100).pipe(
@@ -1205,7 +1224,7 @@ export const LiveWorkerProvider = () =>
           const newDomains = normalizeDomains(news.domain)
             .map((h) => `https://${h}`)
             .sort();
-          const oldDomains = (output?.domains ?? [])
+          const oldDomains = normalizeStateDomains(output?.domains)
             .filter((u) => !u.endsWith(".workers.dev"))
             .sort();
           const domainsChanged =
@@ -1240,7 +1259,9 @@ export const LiveWorkerProvider = () =>
             newCustomDomains.length > 0
               ? `https://${newCustomDomains[0]}`
               : news.url !== false
-                ? (output.domains ?? []).find((u) => u.endsWith(".workers.dev"))
+                ? normalizeStateDomains(output.domains).find((u) =>
+                    u.endsWith(".workers.dev"),
+                  )
                 : undefined;
           const urlStable = newUrl !== undefined && newUrl === output.url;
           // `durableObjectNamespaces` maps each hosted DO class name to the
@@ -1343,7 +1364,7 @@ export const LiveWorkerProvider = () =>
                 Effect.succeed(undefined),
               ),
             );
-          let durableObjectNamespaces = getDurableObjectNamespaces(
+          let durableObjectNamespaces = getDurableObjects(
             existingSettings?.bindings,
           );
 
@@ -1513,9 +1534,7 @@ export const LiveWorkerProvider = () =>
               logpush: settings.logpush ?? undefined,
               url: domains[0],
               tags: settings.tags ?? undefined,
-              durableObjectNamespaces: getDurableObjectNamespaces(
-                settings.bindings,
-              ),
+              durableObjectNamespaces: getDurableObjects(settings.bindings),
               domains,
               crons,
             } satisfies Worker["Attributes"];

@@ -110,7 +110,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.GreTunnel);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.GreTunnel,
+      );
 
       if (!entitled) {
         // Unentitled: list() swallows the typed entitlement tag and yields [].
@@ -120,7 +122,7 @@ test.provider(
       }
 
       const tunnel = yield* stack.deploy(
-        Cloudflare.GreTunnel("ListGre", {
+        Cloudflare.MagicTransit.GreTunnel("ListGre", {
           name: "alch-gre-list",
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.20",
@@ -147,7 +149,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const tunnel = yield* stack.deploy(
-        Cloudflare.GreTunnel("Gre", {
+        Cloudflare.MagicTransit.GreTunnel("Gre", {
           name: "alch-gre-test1",
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.10",
@@ -172,7 +174,7 @@ test.provider.skipIf(!entitled)(
 
       // Update mutable props in place — same tunnelId.
       const updated = yield* stack.deploy(
-        Cloudflare.GreTunnel("Gre", {
+        Cloudflare.MagicTransit.GreTunnel("Gre", {
           name: "alch-gre-test1",
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.10",
@@ -190,7 +192,7 @@ test.provider.skipIf(!entitled)(
 
       // The tunnel name is its routing identity — changing it replaces.
       const replaced = yield* stack.deploy(
-        Cloudflare.GreTunnel("Gre", {
+        Cloudflare.MagicTransit.GreTunnel("Gre", {
           name: "alch-gre-test2",
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.10",

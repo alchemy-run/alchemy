@@ -25,7 +25,7 @@ test.provider("list enumerates the deployed Gateway rule", (stack) =>
     yield* stack.destroy();
 
     const rule = yield* stack.deploy(
-      Cloudflare.GatewayRule("ListRule", {
+      Cloudflare.Gateway.Rule("ListRule", {
         name: "alchemy-zt-rule-list",
         action: "block",
         filters: ["dns"],
@@ -37,7 +37,7 @@ test.provider("list enumerates the deployed Gateway rule", (stack) =>
     expect(rule.ruleId).toBeTruthy();
     expect(rule.accountId).toEqual(accountId);
 
-    const provider = yield* Provider.findProvider(Cloudflare.GatewayRule);
+    const provider = yield* Provider.findProvider(Cloudflare.Gateway.Rule);
     const all = yield* provider.list();
 
     // The deployed rule appears in the exhaustively-paginated result, and the

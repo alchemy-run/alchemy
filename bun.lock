@@ -31,7 +31,7 @@
     },
     "distilled/packages/aws": {
       "name": "@distilled.cloud/aws",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@aws-crypto/crc32": "catalog:",
         "@aws-crypto/util": "catalog:",
@@ -62,7 +62,7 @@
     },
     "distilled/packages/axiom": {
       "name": "@distilled.cloud/axiom",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -78,7 +78,7 @@
     },
     "distilled/packages/azure": {
       "name": "@distilled.cloud/azure",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -94,7 +94,7 @@
     },
     "distilled/packages/cloudflare": {
       "name": "@distilled.cloud/cloudflare",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -113,7 +113,7 @@
     },
     "distilled/packages/coinbase": {
       "name": "@distilled.cloud/coinbase",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -130,7 +130,7 @@
     },
     "distilled/packages/core": {
       "name": "@distilled.cloud/core",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
@@ -143,7 +143,7 @@
     },
     "distilled/packages/expo-eas": {
       "name": "@distilled.cloud/expo-eas",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -159,7 +159,7 @@
     },
     "distilled/packages/fly-io": {
       "name": "@distilled.cloud/fly-io",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -175,7 +175,7 @@
     },
     "distilled/packages/gcp": {
       "name": "@distilled.cloud/gcp",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -191,7 +191,7 @@
     },
     "distilled/packages/kubernetes": {
       "name": "@distilled.cloud/kubernetes",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -207,7 +207,7 @@
     },
     "distilled/packages/mongodb-atlas": {
       "name": "@distilled.cloud/mongodb-atlas",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -223,7 +223,7 @@
     },
     "distilled/packages/neon": {
       "name": "@distilled.cloud/neon",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -239,7 +239,7 @@
     },
     "distilled/packages/planetscale": {
       "name": "@distilled.cloud/planetscale",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -255,7 +255,7 @@
     },
     "distilled/packages/posthog": {
       "name": "@distilled.cloud/posthog",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -273,7 +273,7 @@
     },
     "distilled/packages/prisma-postgres": {
       "name": "@distilled.cloud/prisma-postgres",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -289,7 +289,7 @@
     },
     "distilled/packages/stripe": {
       "name": "@distilled.cloud/stripe",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -305,7 +305,7 @@
     },
     "distilled/packages/supabase": {
       "name": "@distilled.cloud/supabase",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -321,7 +321,7 @@
     },
     "distilled/packages/turso": {
       "name": "@distilled.cloud/turso",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -337,7 +337,7 @@
     },
     "distilled/packages/typesense": {
       "name": "@distilled.cloud/typesense",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -354,7 +354,7 @@
     },
     "distilled/packages/workos": {
       "name": "@distilled.cloud/workos",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },

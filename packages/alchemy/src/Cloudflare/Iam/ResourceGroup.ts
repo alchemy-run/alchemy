@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IamResourceGroupTypeId = "Cloudflare.Iam.ResourceGroup" as const;
-type IamResourceGroupTypeId = typeof IamResourceGroupTypeId;
+const TypeId = "Cloudflare.Iam.ResourceGroup" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The scope of a resource group — a scope key (e.g.
@@ -18,7 +18,7 @@ type IamResourceGroupTypeId = typeof IamResourceGroupTypeId;
  * (e.g. `com.cloudflare.api.account.zone.{zoneId}` or `*` for everything
  * in the scope).
  */
-export interface IamResourceGroupScopeInput {
+export interface ResourceGroupScopeInput {
   /**
    * The scope key, e.g. `com.cloudflare.api.account.{accountId}`.
    */
@@ -33,14 +33,14 @@ export interface IamResourceGroupScopeInput {
 /**
  * A fully-resolved resource group scope as observed on Cloudflare.
  */
-export interface IamResourceGroupScope {
+export interface ResourceGroupScope {
   /** The scope key, e.g. `com.cloudflare.api.account.{accountId}`. */
   key: string;
   /** The objects within the scope this resource group spans. */
   objects: { key: string }[];
 }
 
-export interface IamResourceGroupProps {
+export interface ResourceGroupProps {
   /**
    * Name of the resource group. If omitted, a unique name is generated
    * from the app, stage, and logical ID.
@@ -52,10 +52,10 @@ export interface IamResourceGroupProps {
    * `com.cloudflare.api.account.{accountId}`) and the objects it
    * contains (zones, or `*` for the whole account). Mutable in place.
    */
-  scope: IamResourceGroupScopeInput;
+  scope: ResourceGroupScopeInput;
 }
 
-export interface IamResourceGroupAttributes {
+export interface ResourceGroupAttributes {
   /** Cloudflare-assigned identifier of the resource group. */
   resourceGroupId: string;
   /** The Cloudflare account the resource group belongs to. */
@@ -63,13 +63,13 @@ export interface IamResourceGroupAttributes {
   /** Name of the resource group. */
   name: string;
   /** The scope of the resource group as observed on Cloudflare. */
-  scope: IamResourceGroupScope;
+  scope: ResourceGroupScope;
 }
 
-export type IamResourceGroup = Resource<
-  IamResourceGroupTypeId,
-  IamResourceGroupProps,
-  IamResourceGroupAttributes,
+export type ResourceGroup = Resource<
+  TypeId,
+  ResourceGroupProps,
+  ResourceGroupAttributes,
   never,
   Providers
 >;
@@ -92,7 +92,7 @@ export type IamResourceGroup = Resource<
  * @example Scope a group to the whole account
  * ```typescript
  * const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
- * const group = yield* Cloudflare.IamResourceGroup("AllResources", {
+ * const group = yield* Cloudflare.Iam.ResourceGroup("AllResources", {
  *   scope: {
  *     key: `com.cloudflare.api.account.${accountId}`,
  *     objects: [{ key: "*" }],
@@ -102,7 +102,7 @@ export type IamResourceGroup = Resource<
  *
  * @example Scope a group to a single zone
  * ```typescript
- * const group = yield* Cloudflare.IamResourceGroup("ZoneOnly", {
+ * const group = yield* Cloudflare.Iam.ResourceGroup("ZoneOnly", {
  *   name: "my-zone-resources",
  *   scope: {
  *     key: `com.cloudflare.api.account.${accountId}`,
@@ -116,7 +116,7 @@ export type IamResourceGroup = Resource<
  * @section Using with User Groups
  * @example Attach to a user group policy
  * ```typescript
- * yield* Cloudflare.IamUserGroup("Readers", {
+ * yield* Cloudflare.Iam.UserGroup("Readers", {
  *   policies: [
  *     {
  *       access: "allow",
@@ -129,18 +129,16 @@ export type IamResourceGroup = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/scoped-roles/
  */
-export const IamResourceGroup = Resource<IamResourceGroup>(
-  IamResourceGroupTypeId,
-);
+export const ResourceGroup = Resource<ResourceGroup>(TypeId);
 
 /**
- * Returns true if the given value is an IamResourceGroup resource.
+ * Returns true if the given value is an ResourceGroup resource.
  */
-export const isIamResourceGroup = (value: unknown): value is IamResourceGroup =>
-  Predicate.hasProperty(value, "Type") && value.Type === IamResourceGroupTypeId;
+export const isResourceGroup = (value: unknown): value is ResourceGroup =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const IamResourceGroupProvider = () =>
-  Provider.succeed(IamResourceGroup, {
+export const ResourceGroupProvider = () =>
+  Provider.succeed(ResourceGroup, {
     stables: ["resourceGroupId", "accountId"],
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -286,9 +284,7 @@ const createGroupName = (id: string, name: string | undefined) =>
   });
 
 /** Resolve `Input<string>` scope fields to concrete strings (post-Plan). */
-const resolveScope = (
-  scope: IamResourceGroupScopeInput,
-): IamResourceGroupScope => ({
+const resolveScope = (scope: ResourceGroupScopeInput): ResourceGroupScope => ({
   key: scope.key as string,
   objects: scope.objects.map((o) => ({ key: o.key as string })),
 });
@@ -298,7 +294,7 @@ const resolveScope = (
  * Cloudflare always returns `{ key, objects: [{ key }] }` for a persisted
  * resource group.
  */
-const parseScope = (scope: unknown): IamResourceGroupScope => {
+const parseScope = (scope: unknown): ResourceGroupScope => {
   const key =
     Predicate.hasProperty(scope, "key") && typeof scope.key === "string"
       ? scope.key
@@ -314,7 +310,7 @@ const parseScope = (scope: unknown): IamResourceGroupScope => {
   return { key, objects };
 };
 
-const sameScope = (a: IamResourceGroupScope, b: IamResourceGroupScope) =>
+const sameScope = (a: ResourceGroupScope, b: ResourceGroupScope) =>
   a.key === b.key &&
   a.objects.length === b.objects.length &&
   a.objects
@@ -329,7 +325,7 @@ const sameScope = (a: IamResourceGroupScope, b: IamResourceGroupScope) =>
 const toAttributes = (
   group: ObservedResourceGroup,
   accountId: string,
-): IamResourceGroupAttributes => ({
+): ResourceGroupAttributes => ({
   resourceGroupId: group.id,
   accountId,
   name: group.name ?? "",

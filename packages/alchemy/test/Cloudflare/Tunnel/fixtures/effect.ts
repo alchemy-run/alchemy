@@ -8,11 +8,11 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * Effect-native Worker fixture that exercises all three Cloudflare tunnel
  * runtime bindings from a single Worker:
  *
- * - {@link Cloudflare.TunnelRead} — read-only (`/read`)
- * - {@link Cloudflare.TunnelWrite} — mutating (`/write`)
- * - {@link Cloudflare.TunnelReadWrite} — full CRUD (`/readwrite`)
+ * - {@link Cloudflare.Tunnel.ReadTunnel} — read-only (`/read`)
+ * - {@link Cloudflare.Tunnel.WriteTunnel} — mutating (`/write`)
+ * - {@link Cloudflare.Tunnel.ReadWriteTunnel} — full CRUD (`/readwrite`)
  *
- * Each binding provisions its own least-privilege {@link Cloudflare.AccountApiToken}
+ * Each binding provisions its own least-privilege {@link Cloudflare.ApiToken.AccountApiToken}
  * (binding the token's outputs into the Worker) and the routes below run a
  * self-contained scenario per binding so the test can assert one behavior each.
  */
@@ -22,9 +22,9 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const read = yield* Cloudflare.TunnelRead.bind();
-    const write = yield* Cloudflare.TunnelWrite.bind();
-    const tunnels = yield* Cloudflare.TunnelReadWrite.bind();
+    const read = yield* Cloudflare.Tunnel.ReadTunnel();
+    const write = yield* Cloudflare.Tunnel.WriteTunnel();
+    const tunnels = yield* Cloudflare.Tunnel.ReadWriteTunnel();
 
     return {
       fetch: Effect.gen(function* () {
@@ -81,9 +81,9 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.TunnelReadLive,
-        Cloudflare.TunnelWriteLive,
-        Cloudflare.TunnelReadWriteLive,
+        Cloudflare.Tunnel.ReadTunnelBinding,
+        Cloudflare.Tunnel.WriteTunnelBinding,
+        Cloudflare.Tunnel.ReadWriteTunnelBinding,
       ),
     ),
   ),

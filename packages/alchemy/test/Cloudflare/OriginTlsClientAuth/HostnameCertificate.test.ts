@@ -147,7 +147,7 @@ test.provider(
       yield* purgeCertificates(zoneId, [CERT_9]);
 
       const cert = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("AopHostCert", {
           zoneId,
           certificate: CERT_9,
           privateKey: Redacted.make(KEY_9),
@@ -181,7 +181,7 @@ test.provider(
       yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
 
       const original = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("ReplaceHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("ReplaceHostCert", {
           zoneId,
           certificate: CERT_3,
           privateKey: Redacted.make(KEY_3),
@@ -189,7 +189,7 @@ test.provider(
       );
 
       const replaced = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("ReplaceHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("ReplaceHostCert", {
           zoneId,
           certificate: CERT_4,
           privateKey: Redacted.make(KEY_4),
@@ -223,7 +223,7 @@ test.provider(
       yield* purgeCertificates(zoneId, [CERT_8]);
 
       const cert = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("ListHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("ListHostCert", {
           zoneId,
           // Dedicated PEM (see fixtures/certs.ts): keeps this certificate out
           // of the upload/delete churn the sibling tests put CERT_3 through,
@@ -234,7 +234,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate,
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate,
       );
       // A freshly uploaded certificate can lag the zone list endpoint by
       // tens of seconds — especially when the same PEM was recently deleted

@@ -69,7 +69,7 @@ it preserves the inferred argument types.
 
 ## Declare the KV namespace
 
-`Cloudflare.KVNamespace("Jobs")` describes a real resource. Yielding
+`Cloudflare.KV.Namespace("Jobs")` describes a real resource. Yielding
 it inside the Layer attaches it to whichever Stack consumes the
 Layer.
 
@@ -82,7 +82,7 @@ Layer.
  export const JobServiceKV = Layer.effect(
    JobService,
    Effect.gen(function* () {
-+    const Namespace = yield* Cloudflare.KVNamespace("Jobs");
++    const Namespace = yield* Cloudflare.KV.Namespace("Jobs");
 +
      return {
        // ...
@@ -101,7 +101,7 @@ a typed client.
  export const JobServiceKV = Layer.effect(
    JobService,
    Effect.gen(function* () {
-     const Namespace = yield* Cloudflare.KVNamespace("Jobs");
+     const Namespace = yield* Cloudflare.KV.Namespace("Jobs");
 +    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Namespace);
 
      return {
@@ -234,7 +234,7 @@ Cloudflare Worker runtime satisfies automatically at cold start.
 ## Reuse a Layer across Workers
 
 A Layer is just a value. Any Worker that provides `JobServiceKV`
-shares the same KV namespace, because `Cloudflare.KVNamespace("Jobs")`
+shares the same KV namespace, because `Cloudflare.KV.Namespace("Jobs")`
 has a stable logical id:
 
 ```diff lang="typescript"
@@ -273,8 +273,8 @@ import { JobService, type Job } from "./JobService.ts";
 export const JobServiceR2 = Layer.effect(
   JobService,
   Effect.gen(function* () {
-    const Bucket = yield* Cloudflare.R2Bucket("Jobs");
-    const r2 = yield* Cloudflare.R2BucketBinding.bind(Bucket);
+    const Bucket = yield* Cloudflare.R2.Bucket("Jobs");
+    const r2 = yield* Cloudflare.R2.ReadWrite(Bucket);
 
     return {
       getJob: Effect.fn(function* (id: string) {
@@ -291,7 +291,7 @@ export const JobServiceR2 = Layer.effect(
 ```
 
 Same `Layer.effect(JobService, …)` shape, same `getJob`/`putJob`
-contract — internally it yields an `R2Bucket` resource and binds
+contract — internally it yields an `Bucket` resource and binds
 it instead of a KV namespace.
 
 ## Swap the Layer on the Worker
@@ -316,7 +316,7 @@ to talk to it.
 ## Related
 
 - [Layers](/concepts/layers) — the concept behind this guide
-- [Binding](/concepts/binding) — what `.bind(...)` does under the hood
+- [Binding](/concepts/binding) — what `Binding(resource)` does under the hood
 - [Phases](/concepts/phases) — when init vs runtime code runs
 - [Circular Bindings](/guides/circular-bindings) — two Layers
   referencing each other

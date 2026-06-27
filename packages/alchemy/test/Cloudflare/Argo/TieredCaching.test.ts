@@ -75,7 +75,7 @@ describe.sequential("TieredCaching", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.TieredCaching("TieredCaching", {
+            return yield* Cloudflare.Argo.TieredCaching("TieredCaching", {
               zoneId,
             });
           }),
@@ -109,7 +109,7 @@ describe.sequential("TieredCaching", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.TieredCaching("TieredCaching", {
+            return yield* Cloudflare.Argo.TieredCaching("TieredCaching", {
               zoneId,
               enabled: false,
             });
@@ -124,7 +124,7 @@ describe.sequential("TieredCaching", () => {
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.TieredCaching("TieredCaching", {
+            return yield* Cloudflare.Argo.TieredCaching("TieredCaching", {
               zoneId,
               enabled: true,
             });
@@ -154,7 +154,9 @@ describe.sequential("TieredCaching", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.TieredCaching);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Argo.TieredCaching,
+      );
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

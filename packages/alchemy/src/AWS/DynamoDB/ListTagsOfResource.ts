@@ -1,10 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
-import type { Providers } from "../Providers.ts";
 
 export interface ListTagsOfResourceRequest extends Omit<
   DynamoDB.ListTagsOfResourceInput,
@@ -12,8 +9,9 @@ export interface ListTagsOfResourceRequest extends Omit<
 > {}
 
 /** @binding */
-export class ListTagsOfResource extends Binding.Service<
+export interface ListTagsOfResource extends Binding.Service<
   ListTagsOfResource,
+  "AWS.DynamoDB.ListTagsOfResource",
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
@@ -24,52 +22,8 @@ export class ListTagsOfResource extends Binding.Service<
       DynamoDB.ListTagsOfResourceError
     >
   >
->()("AWS.DynamoDB.ListTagsOfResource") {}
+> {}
 
-export const ListTagsOfResourceLive = Layer.effect(
-  ListTagsOfResource,
-  Effect.gen(function* () {
-    const Policy = yield* ListTagsOfResourcePolicy;
-    const listTagsOfResource = yield* DynamoDB.listTagsOfResource;
-
-    return Effect.fn(function* <T extends Table>(table: T) {
-      const ResourceArn = yield* table.tableArn;
-      yield* Policy(table);
-      return Effect.fn(function* (request?: ListTagsOfResourceRequest) {
-        return yield* listTagsOfResource({
-          ...request,
-          ResourceArn: yield* ResourceArn,
-        });
-      });
-    });
-  }),
+export const ListTagsOfResource = Binding.Service<ListTagsOfResource>(
+  "AWS.DynamoDB.ListTagsOfResource",
 );
-
-export class ListTagsOfResourcePolicy extends Binding.Policy<
-  ListTagsOfResourcePolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>,
-  Providers
->()("AWS.DynamoDB.ListTagsOfResource") {}
-
-export const ListTagsOfResourcePolicyLive =
-  ListTagsOfResourcePolicy.layer.succeed(
-    Effect.fn(function* (host, table) {
-      if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.DynamoDB.ListTagsOfResource(${table}))`(
-          {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["dynamodb:ListTagsOfResource"],
-                Resource: [table.tableArn],
-              },
-            ],
-          },
-        );
-      } else {
-        return yield* Effect.die(
-          `ListTagsOfResourcePolicy does not support runtime '${host.Type}'`,
-        );
-      }
-    }),
-  );

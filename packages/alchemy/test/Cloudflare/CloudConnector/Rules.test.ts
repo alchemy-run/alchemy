@@ -81,7 +81,7 @@ describe.sequential("Rules", () => {
         // Create the singleton with a single S3 rule.
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
+            return yield* Cloudflare.CloudConnector.Rules("Rules", {
               zoneId,
               rules: [
                 {
@@ -114,7 +114,7 @@ describe.sequential("Rules", () => {
         // atomically, not the resource.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
+            return yield* Cloudflare.CloudConnector.Rules("Rules", {
               zoneId,
               rules: [
                 {
@@ -167,7 +167,7 @@ describe.sequential("Rules", () => {
 
         const deployOnce = stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
+            return yield* Cloudflare.CloudConnector.Rules("Rules", {
               zoneId,
               rules: [
                 {
@@ -216,7 +216,7 @@ describe.sequential("Rules", () => {
 
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CloudConnectorRules("Rules", {
+            return yield* Cloudflare.CloudConnector.Rules("Rules", {
               zoneId,
               rules: [
                 {
@@ -231,7 +231,7 @@ describe.sequential("Rules", () => {
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.CloudConnectorRules,
+          Cloudflare.CloudConnector.Rules,
         );
         const all = yield* provider.list();
 

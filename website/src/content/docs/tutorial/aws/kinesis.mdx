@@ -46,11 +46,11 @@ import { Jobs } from "./queue.ts";
 
 const queue = yield* Jobs;
 +const events = yield* Events;
-const sendMessage = yield* SQS.SendMessage.bind(queue);
-+const putRecord = yield* Kinesis.PutRecord.bind(events);
+const sendMessage = yield* SQS.SendMessage(queue);
++const putRecord = yield* Kinesis.PutRecord(events);
 ```
 
-The shape mirrors every other binding you've seen: `bind(stream)`
+The shape mirrors every other binding you've seen: `PutRecord(stream)`
 returns a callable Effect, plus an IAM policy with
 `kinesis:PutRecord` scoped to this stream's ARN.
 
@@ -119,8 +119,8 @@ export default class Audit extends AWS.Lambda.Function<Audit>()(
 
 ## Subscribe to records
 
-`Kinesis.records(stream).process(...)` mirrors the SQS
-`messages(...).subscribe(...)` shape from the previous part.
+`Kinesis.consumeStreamRecords(stream, ...)` mirrors the SQS
+`messages(...)` shape from the previous part.
 Add the smallest possible subscription — log each record's
 partition key:
 
@@ -139,10 +139,10 @@ export default class Audit extends AWS.Lambda.Function<Audit>()(
   Effect.gen(function* () {
     const events = yield* Events;
 +
-+    yield* Kinesis.records(events, {
++    yield* Kinesis.consumeStreamRecords(events, {
 +      startingPosition: "LATEST",
 +      batchSize: 100,
-+    }).process((stream) =>
++    }, (stream) =>
 +      stream.pipe(
 +        Stream.runForEach((record) =>
 +          Console.log(`[${record.kinesis.partitionKey}]`),
@@ -169,10 +169,10 @@ itself). Decode it back to bytes and on to a string, and run
 the work as an Effect per record:
 
 ```diff lang="typescript"
-yield* Kinesis.records(events, {
+yield* Kinesis.consumeStreamRecords(events, {
   startingPosition: "LATEST",
   batchSize: 100,
-}).process((stream) =>
+}, (stream) =>
   stream.pipe(
 -    Stream.runForEach((record) =>
 -      Console.log(`[${record.kinesis.partitionKey}]`),
@@ -229,7 +229,7 @@ bun alchemy deploy
 Three functions now coexist: `Api` produces records, `Worker`
 consumes the SQS queue, and `Audit` consumes the Kinesis stream.
 Each one gets a least-privilege policy that names exactly the
-resources its `bind`/`subscribe`/`process` calls touched — no
+resources its `bind`/`messages`/`process` calls touched — no
 `"*"`, no IAM JSON to maintain.
 
 ## Verify
@@ -279,5 +279,5 @@ the same binding pattern, with IAM policies that match exactly
 the operations you call. The same `Stream`-shaped consumer
 surface drives every event source you've added, so adding more
 (SNS topics, EventBridge buses, Step Functions invocations) is
-a matter of declaring the resource and pointing `.subscribe` /
+a matter of declaring the resource and pointing `messages` /
 `.process` at it.

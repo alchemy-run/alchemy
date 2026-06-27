@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ShareTypeId = "Cloudflare.ResourceSharing.Share" as const;
-type ShareTypeId = typeof ShareTypeId;
+const TypeId = "Cloudflare.ResourceSharing.Share" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Type of resource that can be shared across accounts/organizations.
@@ -134,7 +134,7 @@ export type ShareAttributes = {
 };
 
 export type Share = Resource<
-  ShareTypeId,
+  TypeId,
   ShareProps,
   ShareAttributes,
   never,
@@ -156,13 +156,13 @@ export type Share = Resource<
  * @section Creating a Share
  * @example Share a gateway policy with another account
  * ```typescript
- * const policy = yield* Cloudflare.GatewayRule("BlockPhishing", {
+ * const policy = yield* Cloudflare.Gateway.Rule("BlockPhishing", {
  *   action: "block",
  *   traffic: 'dns.fqdn == "phishing.example"',
  *   filters: ["dns"],
  * });
  *
- * const share = yield* Cloudflare.Share("PolicyShare", {
+ * const share = yield* Cloudflare.ResourceSharing.Share("PolicyShare", {
  *   recipients: [{ accountId: "<recipient-account-id>" }],
  *   resources: [
  *     { resourceType: "gateway-policy", resourceId: policy.ruleId },
@@ -173,7 +173,7 @@ export type Share = Resource<
  * @section Updating a Share
  * @example Rename in place
  * ```typescript
- * const share = yield* Cloudflare.Share("PolicyShare", {
+ * const share = yield* Cloudflare.ResourceSharing.Share("PolicyShare", {
  *   name: "security-baseline-v2",
  *   recipients: [{ accountId: "<recipient-account-id>" }],
  *   resources: [
@@ -184,13 +184,13 @@ export type Share = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-account-resources/
  */
-export const Share = Resource<Share>(ShareTypeId);
+export const Share = Resource<Share>(TypeId);
 
 /**
  * Returns true if the given value is a Share resource.
  */
 export const isShare = (value: unknown): value is Share =>
-  Predicate.hasProperty(value, "Type") && value.Type === ShareTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ShareProvider = () =>
   Provider.succeed(Share, {

@@ -72,7 +72,7 @@ test.provider.skipIf(!entitled)(
 
       const page = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccessCustomPage("BlockPage", {
+          return yield* Cloudflare.Access.CustomPage("BlockPage", {
             type: "forbidden",
             customHtml: HTML_A,
           });
@@ -93,7 +93,7 @@ test.provider.skipIf(!entitled)(
       // Update — html converges in place (same uid).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccessCustomPage("BlockPage", {
+          return yield* Cloudflare.Access.CustomPage("BlockPage", {
             type: "forbidden",
             customHtml: HTML_B,
           });
@@ -110,7 +110,7 @@ test.provider.skipIf(!entitled)(
       // Replace — the type cannot change in place.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccessCustomPage("BlockPage", {
+          return yield* Cloudflare.Access.CustomPage("BlockPage", {
             type: "identity_denied",
             customHtml: HTML_B,
           });
@@ -147,7 +147,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AccessCustomPage,
+        Cloudflare.Access.CustomPage,
       );
 
       if (!entitled) {
@@ -163,7 +163,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccessCustomPage("ListPage", {
+          return yield* Cloudflare.Access.CustomPage("ListPage", {
             type: "forbidden",
             customHtml: HTML_A,
           });
