@@ -492,7 +492,7 @@ concurrency), factor it into its own Worker:
 +  "Backend",
 +  { main: import.meta.filename },
 +  Effect.gen(function* () {
-+    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
++    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 +
 +    return {
 +      hello: Effect.fn("Backend.hello")(function* (key: string) {
