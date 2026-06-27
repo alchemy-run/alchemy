@@ -7,13 +7,21 @@ import {
   type CodingAgentInput,
   type CodingAgentPrompt,
   CodingAgentRuntime,
+  type CodingAgentService,
+  type CodingAgentSessionControl,
   type CodingAgentUsage,
   makeCodingAgentService,
 } from "alchemy/AI";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { makeLocalSandbox, type LocalSandboxServices } from "./LocalSandbox.ts";
+
+/** The live harness session handle returned by `agent.createSession`. */
+type HarnessSession = Awaited<ReturnType<HarnessAgent["createSession"]>>;
 
 /**
  * Build a {@link CodingAgentRuntime} `Layer` from any Vercel AI SDK harness
@@ -38,41 +46,134 @@ export const makeCodingAgentRuntime = (
   Layer.effect(
     CodingAgentRuntime,
     Effect.gen(function* () {
-      const context = yield* Effect.context<LocalSandboxServices>();
+      // Build the sandbox + harness agent ONCE, for the container's lifetime.
+      // The harness is configured with a single model + workspace for that
+      // lifetime, so synthesize a base input from `config`. Per-turn `model` /
+      // `system` overrides aren't honored — switching models would require a new
+      // bridge, which defeats the persistent session.
+      const baseInput: CodingAgentInput = {
+        session:
+          config.session ?? (yield* Effect.sync(() => crypto.randomUUID())),
+        prompt: "",
+        model: config.model,
+        workspace: config.workspace,
+        system: config.instructions,
+      };
 
-      // The private per-prompt primitive: run one prompt through the harness and
-      // stream its parts as normalized events. The persistent actor below feeds
+      const sandbox = yield* makeLocalSandbox(dirname(config.workspace));
+      const agent = new HarnessAgent({
+        harness: harnessFor(baseInput),
+        sandbox,
+        sandboxConfig: { workDir: basename(config.workspace) },
+        instructions: config.instructions,
+      });
+
+      // The active conversation. `desiredId` is the id we *want* to run (set by
+      // the durable owner via `switchSession`); `live` holds the running harness
+      // session once created. Booting the OpenCode bridge (`node bridge.mjs`,
+      // which must "become ready" before the model runs) is the expensive step,
+      // so it happens once per session and the bridge then stays up for the
+      // container's lifetime — a `send` only pays for the model call.
+      const desiredId = yield* Ref.make(baseInput.session);
+      const live = yield* Ref.make<HarnessSession | undefined>(undefined);
+      // Serialize session create/switch/teardown against each other.
+      const lock = Semaphore.makeUnsafe(1);
+
+      const open = (sessionId: string) =>
+        Effect.tryPromise({
+          try: () => agent.createSession({ sessionId }),
+          catch: (error) =>
+            new CodingAgentError({
+              message: `createSession failed: ${errorText(error)}`,
+              cause: error,
+            }),
+        });
+
+      const close = (session: HarnessSession | undefined) =>
+        session === undefined
+          ? Effect.void
+          : Effect.promise(() => session.destroy());
+
+      // Destroy whatever session is live when the container scope closes.
+      yield* Effect.addFinalizer(() =>
+        Ref.get(live).pipe(Effect.flatMap(close)),
+      );
+
+      // Get the live session, creating it (with the desired id) on first use.
+      const ensureSession = Semaphore.withPermits(
+        lock,
+        1,
+      )(
+        Effect.gen(function* () {
+          const existing = yield* Ref.get(live);
+          if (existing !== undefined) return existing;
+          const id = yield* Ref.get(desiredId);
+          yield* Effect.log(`[CodingAgent] opening session ${id}...`);
+          const session = yield* open(id);
+          yield* Ref.set(live, session);
+          yield* Effect.log(`[CodingAgent] session ${id} ready`);
+          return session;
+        }),
+      );
+
+      const switchSession = (sessionId: string) =>
+        Semaphore.withPermits(
+          lock,
+          1,
+        )(
+          Effect.gen(function* () {
+            const current = yield* Ref.get(desiredId);
+            const existing = yield* Ref.get(live);
+            if (sessionId === current && existing !== undefined) {
+              return sessionId;
+            }
+            // Tear down the old session (aborts any in-flight turn on it) and
+            // open the new one eagerly so the bridge is warm for the next send.
+            yield* close(existing);
+            yield* Ref.set(live, undefined);
+            yield* Ref.set(desiredId, sessionId);
+            yield* Effect.log(
+              `[CodingAgent] switching to session ${sessionId}...`,
+            );
+            const session = yield* open(sessionId);
+            yield* Ref.set(live, session);
+            yield* Effect.log(`[CodingAgent] session ${sessionId} ready`);
+            return sessionId;
+          }),
+        );
+
+      // The private per-prompt primitive: run one prompt on the current session
+      // and stream its parts as normalized events. The persistent actor feeds
       // queued inputs through this one turn at a time.
+      //
+      // An `AbortController` is scoped to the stream's lifetime: when the
+      // consuming fiber is interrupted (CodingAgent.interrupt → Fiber.interrupt),
+      // the stream scope closes and aborts the turn — WITHOUT destroying the
+      // session, so the next `send` reuses the same running bridge.
       const runPrompt: CodingAgentPrompt = (input) =>
         Stream.unwrap(
           Effect.gen(function* () {
-            yield* Effect.log(
-              `[CodingAgent] prompt: workspace=${input.workspace} model=${input.model}`,
+            const session = yield* ensureSession;
+            // Abort the turn ONLY when the consuming fiber is interrupted
+            // (CodingAgent.interrupt). On normal completion we must NOT abort:
+            // since the session/bridge is reused across turns, a stray abort
+            // after a turn finishes tears the bridge down and the next turn
+            // fails with "bridge closed before the turn finished".
+            const controller = yield* Effect.acquireRelease(
+              Effect.sync(() => new AbortController()),
+              (c, exit) =>
+                Exit.hasInterrupts(exit)
+                  ? Effect.sync(() => c.abort())
+                  : Effect.void,
             );
-            const sandbox = yield* makeLocalSandbox(dirname(input.workspace));
-            const agent = new HarnessAgent({
-              harness: harnessFor(input),
-              sandbox,
-              sandboxConfig: { workDir: basename(input.workspace) },
-              instructions: input.system ?? config.instructions,
-            });
-            yield* Effect.log("[CodingAgent] creating session...");
-            const session = yield* Effect.acquireRelease(
-              Effect.tryPromise({
-                try: () => agent.createSession({ sessionId: input.session }),
-                catch: (error) =>
-                  new CodingAgentError({
-                    message: `createSession failed: ${errorText(error)}`,
-                    cause: error,
-                  }),
-              }),
-              (s) => Effect.promise(() => s.destroy()),
-            );
-            yield* Effect.log(
-              "[CodingAgent] session ready, starting stream...",
-            );
+            yield* Effect.log(`[CodingAgent] prompt: model=${config.model}`);
             const result = yield* Effect.tryPromise({
-              try: () => agent.stream({ session, prompt: input.prompt }),
+              try: () =>
+                agent.stream({
+                  session,
+                  prompt: input.prompt,
+                  abortSignal: controller.signal,
+                }),
               catch: (error) =>
                 new CodingAgentError({
                   message: `stream failed: ${errorText(error)}`,
@@ -93,10 +194,16 @@ export const makeCodingAgentRuntime = (
                 return event === null ? Stream.empty : Stream.make(event);
               }),
             );
-          }).pipe(Effect.provide(context)),
+          }),
         );
 
-      return yield* makeCodingAgentService(config, runPrompt);
+      const service = yield* makeCodingAgentService(config, runPrompt);
+
+      return {
+        ...service,
+        switchSession,
+        currentSession: () => Ref.get(desiredId),
+      } satisfies CodingAgentService & CodingAgentSessionControl;
     }),
   );
 

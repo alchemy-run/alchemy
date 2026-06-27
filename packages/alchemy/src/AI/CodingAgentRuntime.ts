@@ -1,5 +1,8 @@
 import * as Context from "effect/Context";
-import type { CodingAgentService } from "./CodingAgent.ts";
+import type {
+  CodingAgentService,
+  CodingAgentSessionControl,
+} from "./CodingAgent.ts";
 
 /**
  * A `CodingAgentRuntime` is the **concrete coding-agent implementation** — the
@@ -18,5 +21,5 @@ import type { CodingAgentService } from "./CodingAgent.ts";
  */
 export class CodingAgentRuntime extends Context.Service<
   CodingAgentRuntime,
-  CodingAgentService
+  CodingAgentService & CodingAgentSessionControl
 >()("@alchemy.run/AI/CodingAgentRuntime") {}

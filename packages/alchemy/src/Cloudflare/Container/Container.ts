@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -15,6 +16,7 @@ import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Props } from "../../State/ResourceState.ts";
 import { effectClass } from "../../Util/effect.ts";
+import { provideLayerScoped } from "../../Util/layer-scoped.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
 import { type WorkerShape } from "../Workers/Worker.ts";
@@ -392,7 +394,25 @@ export const Container: ResourceClassLike<ContainerApplication> & {
           return Object.assign(effectClass(ContainerTag(id)), {
             "~alchemy/Id": id,
             "~alchemy/Container/Binding": ContainerPlatform.bind(tag),
-            make: (props: any, impl: any) => tag.make(props, impl),
+            // `layer` (optional) is the runtime dependency layer the impl needs
+            // (e.g. a coding-agent runtime). The framework builds it *here* —
+            // inside the container-lifetime scope AND the platform's
+            // ConfigProvider — so the caller provides only a Layer and never
+            // touches a scope. Providing a `Scope` alone cannot satisfy the
+            // impl's *service* requirement; only the layer can, and it must be
+            // built in both of those contexts (which exist only inside `make`):
+            // `provideLayerScoped` ties the layer (and anything it `forkScoped`s)
+            // to the container's lifetime instead of tearing it down the instant
+            // the impl returns its shape, and building it inside the impl keeps
+            // bound config (e.g. secrets) resolving through the container's
+            // unwrapping ConfigProvider. See `withContainerLifetimeScope`.
+            make: (props: any, impl: any, layer?: any) =>
+              tag.make(
+                props,
+                withContainerLifetimeScope(
+                  layer === undefined ? impl : provideLayerScoped(layer)(impl),
+                ),
+              ),
             // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
             Application: tag,
             of: (shape: any) => shape,
@@ -427,13 +447,21 @@ export declare namespace Container {
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
-    make: <InitReq = never, WorkerReq = never>(
+    make: <InitReq = never, WorkerReq = never, LayerIn = never>(
       props: Props,
       impl: Effect.Effect<
         Shape & WorkerShape<WorkerReq>,
         Config.ConfigError,
         InitReq
       >,
+      /**
+       * Optional runtime dependency layer the framework builds into the
+       * container-lifetime scope (and inside the platform's ConfigProvider) to
+       * satisfy the impl's `InitReq` — so callers provide only a Layer and never
+       * manage a scope. Anything the layer `forkScoped`s lives as long as the
+       * container instance.
+       */
+      layer?: Layer.Layer<NoInfer<InitReq>, Config.ConfigError, LayerIn>,
     ) => Layer.Layer<Application<Self>, never, Providers>;
     of(shape: Shape & WorkerShape): Shape;
   }
@@ -460,3 +488,26 @@ export declare namespace Container {
       }>;
     };
 }
+
+/**
+ * Run a container's `impl` effect with a **container-lifetime scope**.
+ *
+ * A container `impl` returns its `{ fetch, ...rpc }` shape and then completes,
+ * but the long-lived machinery it sets up (an agent's mailbox processor, a
+ * background poller, a connection pool) must keep running for as long as the
+ * container instance is alive — not be torn down the instant the closure
+ * returns. We fork a child scope off the ambient build scope and provide it to
+ * `impl`, so anything `impl` forks with `Effect.forkScoped` (or builds with
+ * `provideLayerScoped`) outlives the closure and is only finalized when the
+ * container itself is interrupted (the parent scope closes the child).
+ *
+ * This is the container analogue of a server process scope; without it,
+ * providing a fiber-spawning runtime `Layer` to a container would silently
+ * interrupt that fiber as soon as the shape was constructed.
+ */
+const withContainerLifetimeScope = (impl: any): any =>
+  Effect.flatMap(Effect.scope, (parent) =>
+    Effect.flatMap(Scope.fork(parent), (scope) =>
+      impl.pipe(Scope.provide(scope)),
+    ),
+  );

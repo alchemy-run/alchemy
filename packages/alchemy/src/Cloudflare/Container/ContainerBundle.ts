@@ -219,11 +219,13 @@ ${
     ? `
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
+import { runMain } from "@effect/platform-bun/BunRuntime";
 const HttpServer = BunHttpServer;
 `
     : `
 import { NodeServices } from "@effect/platform-node";
 import { NodeHttpServer } from "alchemy/Http";
+import { runMain } from "@effect/platform-node/NodeRuntime";
 const HttpServer = NodeHttpServer;
 `
 }
@@ -231,6 +233,7 @@ import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 import { CloudflareEnvironment } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -278,6 +281,21 @@ const serverEffect = tag.pipe(
         )
       ),
       Layer.provideMerge(platform),
+      // Mark the process as the container *runtime* so alchemy's ConfigProvider
+      // (see \`Platform.ts\`) resolves bound config by *unwrapping* the injected
+      // env var via \`RuntimeContext.get\` instead of returning the raw, still
+      // JSON-wrapped \`{_tag:"Redacted",value:...}\` marker. Without this the
+      // phase defaults to "plan" and e.g. \`Config.redacted("ANTHROPIC_API_KEY")\`
+      // yields the literal marker string. Mirrors the Worker bridge.
+      Layer.provideMerge(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.orElse(
+            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+            ConfigProvider.fromEnv(),
+          ),
+        )
+      ),
       Layer.provideMerge(
         Layer.succeed(
           MinimumLogLevel,
@@ -290,10 +308,11 @@ const serverEffect = tag.pipe(
 );
 
 console.log("Container bootstrap starting...");
-await Effect.runPromise(serverEffect).catch((err) => {
-  console.error("Container bootstrap failed:", err);
-  process.exit(1);
-})`,
+// \`runMain\` (not \`Effect.runPromise\`) installs SIGINT/SIGTERM handlers that
+// interrupt the server fiber on shutdown, closing its scope so every
+// container-lifetime finalizer runs (e.g. killing an agent's child process).
+// It also reports failures and sets the process exit code.
+runMain(serverEffect);`,
         ),
       );
 

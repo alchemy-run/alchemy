@@ -17,8 +17,8 @@ export const SqlLive = Layer.effect(
   Sql,
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
-    return Effect.fn("sql")(function* (params) {
-      const { sql } = params as { sql: string };
+
+    return Effect.fn("sql")(function* ({ sql }) {
       const result = yield* state.storage.sql.exec(sql);
       return yield* result.toArray();
     });

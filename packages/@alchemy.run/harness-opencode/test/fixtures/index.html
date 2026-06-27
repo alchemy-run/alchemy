@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenCode Agent Playground</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --border: #30363d;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #2f81f7;
+        --green: #3fb950;
+        --red: #f85149;
+        --yellow: #d29922;
+        --purple: #bc8cff;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 10px 14px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 {
+        font-size: 15px;
+        margin: 0 12px 0 0;
+        font-weight: 600;
+      }
+      input,
+      textarea,
+      button,
+      select {
+        font: inherit;
+        color: var(--text);
+        background: #0d1117;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+      input {
+        width: 120px;
+      }
+      input.wide {
+        width: 260px;
+      }
+      button {
+        cursor: pointer;
+        background: #21262d;
+        white-space: nowrap;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.danger {
+        background: #2d1416;
+        border-color: var(--red);
+        color: var(--red);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .dot.on {
+        background: var(--green);
+      }
+      .dot.off {
+        background: var(--red);
+      }
+      main {
+        flex: 1;
+        overflow-y: auto;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .ev {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        background: var(--panel);
+        max-width: 900px;
+      }
+      .ev .tag {
+        font: 11px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .ev.text {
+        border-color: #1f6feb55;
+      }
+      .ev.text .body {
+        white-space: pre-wrap;
+      }
+      .ev.reasoning {
+        border-color: var(--purple);
+        opacity: 0.85;
+      }
+      .ev.reasoning .body {
+        white-space: pre-wrap;
+        font-style: italic;
+        color: var(--purple);
+      }
+      .ev.tool {
+        border-color: var(--yellow);
+      }
+      .ev.tool .tag {
+        color: var(--yellow);
+      }
+      .ev.result {
+        border-color: var(--green);
+      }
+      .ev.result .tag {
+        color: var(--green);
+      }
+      .ev.error {
+        border-color: var(--red);
+      }
+      .ev.error .tag,
+      .ev.error .body {
+        color: var(--red);
+      }
+      .ev.meta {
+        border-style: dashed;
+        color: var(--muted);
+      }
+      .ev .name {
+        font-family: var(--mono);
+        font-weight: 600;
+      }
+      pre {
+        margin: 6px 0 0;
+        background: #0d1117;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px;
+        overflow-x: auto;
+        font: 12px/1.4 var(--mono);
+        max-height: 280px;
+      }
+      footer {
+        display: flex;
+        gap: 8px;
+        padding: 10px 14px;
+        background: var(--panel);
+        border-top: 1px solid var(--border);
+      }
+      footer textarea {
+        flex: 1;
+        resize: vertical;
+        min-height: 44px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+        padding: 0 14px 8px;
+      }
+      .work {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        color: var(--muted);
+      }
+      .work .spinner {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        display: none;
+        animation: spin 0.7s linear infinite;
+      }
+      .work.busy {
+        color: var(--accent);
+      }
+      .work.busy .spinner {
+        display: inline-block;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .queue {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 14px 0;
+      }
+      .queue:empty {
+        display: none;
+      }
+      .queue .label {
+        font: 11px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+      .qitem {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--panel);
+        border: 1px dashed var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        color: var(--muted);
+      }
+      .qitem .qtext {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .qitem button {
+        padding: 2px 8px;
+      }
+      .pill {
+        max-width: 900px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--panel);
+      }
+      .pill.open {
+        border-radius: 8px;
+      }
+      .pill-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .pill-head .chev {
+        color: var(--muted);
+        transition: transform 0.15s;
+        font-size: 10px;
+      }
+      .pill.open .pill-head .chev {
+        transform: rotate(90deg);
+      }
+      .pill .pname {
+        font-family: var(--mono);
+        font-weight: 600;
+      }
+      .pill .pstatus {
+        color: var(--muted);
+        font-size: 12px;
+        margin-left: auto;
+      }
+      .pill.pending {
+        border-color: var(--yellow);
+      }
+      .pill.ok {
+        border-color: var(--green);
+      }
+      .pill.err {
+        border-color: var(--red);
+      }
+      .pill.err .pstatus {
+        color: var(--red);
+      }
+      .pill .pspin {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        border-top-color: var(--yellow);
+        animation: spin 0.7s linear infinite;
+      }
+      .pill .picon {
+        font-size: 12px;
+      }
+      .pill.ok .picon {
+        color: var(--green);
+      }
+      .pill.err .picon {
+        color: var(--red);
+      }
+      .pill-body {
+        padding: 0 12px 10px;
+      }
+      .pill-body[hidden] {
+        display: none;
+      }
+      .pill-body .seclabel {
+        font: 11px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>OpenCode Agent</h1>
+      <label>id <input id="agentId" value="playground" /></label>
+      <label
+        >model
+        <input id="model" class="wide" value="anthropic/claude-sonnet-4-5"
+      /></label>
+      <label
+        >session
+        <select id="session"></select
+      ></label>
+      <button id="newSession">New session</button>
+      <button id="connect" class="primary">Connect</button>
+      <button id="clear">Clear</button>
+      <div id="work" class="work">
+        <span class="spinner"></span>
+        <span id="workText">idle</span>
+      </div>
+      <div class="status">
+        <span id="dot" class="dot off"></span>
+        <span id="statusText">disconnected</span>
+      </div>
+    </header>
+    <main id="log"></main>
+    <div class="queue" id="queue"></div>
+    <footer>
+      <textarea
+        id="prompt"
+        placeholder="Type a prompt and press Enter to send (Shift+Enter for newline)…"
+      ></textarea>
+      <button id="send" class="primary">Send</button>
+      <button id="interrupt" class="danger">Interrupt</button>
+    </footer>
+    <div class="hint" id="hint"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const log = $("log");
+      const dot = $("dot");
+      const statusText = $("statusText");
+
+      let ws = null;
+      let reconnectTimer = null;
+      let pingTimer = null;
+      let reconnectDelay = 1000;
+      let textBubble = null; // current streaming assistant text element
+      let reasoningBubble = null;
+      const toolPills = new Map(); // tool-call id -> { setResult, setError }
+
+      const base = () =>
+        `/agent/${encodeURIComponent($("agentId").value.trim() || "playground")}`;
+
+      function scroll() {
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function addEv(cls, tag, render) {
+        const el = document.createElement("div");
+        el.className = `ev ${cls}`;
+        const t = document.createElement("div");
+        t.className = "tag";
+        t.textContent = tag;
+        el.appendChild(t);
+        const body = document.createElement("div");
+        body.className = "body";
+        el.appendChild(body);
+        if (render) render(body);
+        log.appendChild(el);
+        scroll();
+        return body;
+      }
+
+      function pre(obj) {
+        const p = document.createElement("pre");
+        p.textContent =
+          typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        return p;
+      }
+
+      // A single collapsible tool pill that merges a ToolCall with its eventual
+      // ToolResult / ToolError. Starts pending (spinner); click to expand the
+      // input, and the output/error once it arrives.
+      function makeToolPill(name, input) {
+        const pill = document.createElement("div");
+        pill.className = "pill pending";
+
+        const head = document.createElement("div");
+        head.className = "pill-head";
+        const chev = document.createElement("span");
+        chev.className = "chev";
+        chev.textContent = "▶";
+        const icon = document.createElement("span");
+        icon.className = "pspin";
+        const pname = document.createElement("span");
+        pname.className = "pname";
+        pname.textContent = name;
+        const pstatus = document.createElement("span");
+        pstatus.className = "pstatus";
+        pstatus.textContent = "running…";
+        head.append(chev, icon, pname, pstatus);
+
+        const body = document.createElement("div");
+        body.className = "pill-body";
+        body.hidden = true;
+        const inLabel = document.createElement("div");
+        inLabel.className = "seclabel";
+        inLabel.textContent = "input";
+        body.append(inLabel, pre(input));
+
+        head.onclick = () => {
+          body.hidden = !body.hidden;
+          pill.classList.toggle("open", !body.hidden);
+        };
+
+        pill.append(head, body);
+        log.appendChild(pill);
+        scroll();
+
+        const setIcon = (text) => {
+          const span = document.createElement("span");
+          span.className = "picon";
+          span.textContent = text;
+          icon.replaceWith(span);
+        };
+        const addSection = (label, content) => {
+          const l = document.createElement("div");
+          l.className = "seclabel";
+          l.textContent = label;
+          body.append(l, pre(content));
+        };
+
+        return {
+          setResult(output) {
+            pill.className = "pill ok" + (body.hidden ? "" : " open");
+            setIcon("✓");
+            pstatus.textContent = "done";
+            addSection("output", output);
+            scroll();
+          },
+          setError(error) {
+            pill.className = "pill err" + (body.hidden ? "" : " open");
+            setIcon("✕");
+            pstatus.textContent = "error";
+            addSection("error", error);
+            scroll();
+          },
+        };
+      }
+
+      function handle(ev) {
+        switch (ev._tag) {
+          case "StreamStart":
+            textBubble = null;
+            reasoningBubble = null;
+            addEv("meta", "stream start", (b) => {
+              b.textContent = ev.modelId ? `model: ${ev.modelId}` : "";
+            });
+            break;
+          case "StepStart":
+            break;
+          case "TextDelta":
+            // Switching out of reasoning ends the current thinking bubble so
+            // the next reasoning burst starts fresh, below this text.
+            reasoningBubble = null;
+            if (!textBubble) textBubble = addEv("text", "assistant");
+            textBubble.textContent += ev.text;
+            scroll();
+            break;
+          case "ReasoningDelta":
+            textBubble = null;
+            if (!reasoningBubble)
+              reasoningBubble = addEv("reasoning", "thinking");
+            reasoningBubble.textContent += ev.text;
+            scroll();
+            break;
+          case "ToolCall":
+            // A tool call ends the current assistant/thinking bubble so text
+            // before and after the call stays in chronological order.
+            textBubble = null;
+            reasoningBubble = null;
+            toolPills.set(ev.id, makeToolPill(ev.name, ev.input));
+            break;
+          case "ToolResult": {
+            const pill = toolPills.get(ev.id);
+            if (pill) pill.setResult(ev.output);
+            else makeToolPill(ev.name, undefined).setResult(ev.output);
+            break;
+          }
+          case "ToolError": {
+            const pill = toolPills.get(ev.id);
+            if (pill) pill.setError(ev.error);
+            else makeToolPill(ev.name, undefined).setError(ev.error);
+            break;
+          }
+          case "FileChange":
+            addEv("meta", "file change", (b) => {
+              b.textContent = `${ev.event} ${ev.path}`;
+            });
+            break;
+          case "Error":
+            textBubble = null;
+            addEv("error", "error", (b) => {
+              b.textContent = ev.error;
+            });
+            break;
+          case "StepFinish":
+            addEv("meta", "step finish", (b) => {
+              b.textContent = `reason: ${ev.reason}`;
+            });
+            break;
+          case "Finish":
+            textBubble = null;
+            reasoningBubble = null;
+            addEv("meta", "finish", (b) => {
+              const u = ev.usage || {};
+              const usage = [
+                u.inputTokens != null && `in ${u.inputTokens}`,
+                u.outputTokens != null && `out ${u.outputTokens}`,
+                u.totalTokens != null && `total ${u.totalTokens}`,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              b.textContent = `reason: ${ev.reason}${usage ? ` — ${usage}` : ""}`;
+            });
+            break;
+          case "Status": {
+            // Server-driven lifecycle phase (container boot / session open).
+            const detail = ev.detail || ev.phase;
+            if (ev.phase === "starting") {
+              setIndicator(true, detail);
+            } else if (ev.phase === "ready") {
+              if (!working) setIndicator(false, "ready");
+              addEv("meta", "agent", (b) => (b.textContent = detail));
+            } else if (ev.phase === "error") {
+              setIndicator(false, "error");
+              addEv("error", "agent", (b) => (b.textContent = detail));
+            }
+            break;
+          }
+          default:
+            addEv("meta", ev._tag || "event", (b) => b.appendChild(pre(ev)));
+        }
+      }
+
+      // Only the live event stream depends on the WebSocket. Send/Interrupt are
+      // independent HTTP calls, so they stay enabled regardless of the socket
+      // state — you can always interrupt a running turn.
+      function setConnected(on) {
+        dot.className = `dot ${on ? "on" : "off"}`;
+        statusText.textContent = on ? "connected" : "disconnected";
+      }
+
+      function stopPing() {
+        if (pingTimer) clearInterval(pingTimer);
+        pingTimer = null;
+      }
+
+      // Heartbeat: a quiet WebSocket gets dropped by idle timeouts. We send a
+      // "ping" the DO auto-answers with "pong" (without waking), keeping the
+      // connection's bytes flowing both ways.
+      function startPing() {
+        stopPing();
+        pingTimer = setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) ws.send("ping");
+        }, 25000);
+      }
+
+      function scheduleReconnect() {
+        clearTimeout(reconnectTimer);
+        statusText.textContent = "reconnecting…";
+        reconnectTimer = setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 10000); // backoff, cap 10s
+      }
+
+      function connect() {
+        clearTimeout(reconnectTimer);
+        if (ws) {
+          // Detach handlers so the deliberate close doesn't trigger a reconnect.
+          ws.onclose = null;
+          ws.onerror = null;
+          try {
+            ws.close();
+          } catch (e) {
+            /* ignore */
+          }
+          ws = null;
+        }
+        stopPing();
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        const url = `${proto}://${location.host}${base()}/connect`;
+        statusText.textContent = "connecting…";
+        ws = new WebSocket(url);
+        ws.onopen = () => {
+          reconnectDelay = 1000;
+          setConnected(true);
+          startPing();
+        };
+        ws.onclose = () => {
+          setConnected(false);
+          stopPing();
+          scheduleReconnect();
+        };
+        ws.onerror = () => setConnected(false);
+        ws.onmessage = (m) => {
+          if (m.data === "pong") return; // heartbeat reply
+          try {
+            handle(JSON.parse(m.data));
+          } catch (e) {
+            addEv("error", "parse error", (b) => (b.textContent = String(e)));
+          }
+        };
+      }
+
+      // ── Working state + client-side prompt queue ──────────────────────────
+      // The agent processes one turn at a time. While a turn is in flight we
+      // hold new prompts in a local queue (shown in the UI) and auto-submit the
+      // next one as soon as the turn ends (Finish / Error / interrupt).
+      let working = false;
+      const queue = [];
+      let qid = 0;
+
+      function setIndicator(busy, text) {
+        $("work").className = `work${busy ? " busy" : ""}`;
+        $("workText").textContent = text;
+      }
+
+      function setWorking(on) {
+        working = on;
+        setIndicator(on, on ? "working…" : "ready");
+      }
+
+      function renderQueue() {
+        const q = $("queue");
+        q.innerHTML = "";
+        if (queue.length === 0) return;
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = `queued (${queue.length})`;
+        q.appendChild(label);
+        for (const item of queue) {
+          const row = document.createElement("div");
+          row.className = "qitem";
+          const text = document.createElement("span");
+          text.className = "qtext";
+          text.textContent = item.prompt;
+          const rm = document.createElement("button");
+          rm.textContent = "remove";
+          rm.onclick = () => {
+            const i = queue.indexOf(item);
+            if (i >= 0) queue.splice(i, 1);
+            renderQueue();
+          };
+          row.appendChild(text);
+          row.appendChild(rm);
+          q.appendChild(row);
+        }
+      }
+
+      async function submit(prompt) {
+        setWorking(true);
+        const model = $("model").value.trim();
+        addEv("meta", "you", (b) => (b.textContent = prompt));
+        const qs = new URLSearchParams({ prompt });
+        if (model) qs.set("model", model);
+        try {
+          const res = await fetch(`${base()}/send?${qs}`, { method: "POST" });
+          if (!res.ok) {
+            addEv(
+              "error",
+              "send failed",
+              (b) => (b.textContent = `HTTP ${res.status}`),
+            );
+            turnEnded();
+          }
+        } catch (e) {
+          addEv("error", "send failed", (b) => (b.textContent = String(e)));
+          turnEnded();
+        }
+      }
+
+      // Submit the next queued prompt if the agent is idle.
+      function pump() {
+        if (working || queue.length === 0) return;
+        const next = queue.shift();
+        renderQueue();
+        submit(next.prompt);
+      }
+
+      // A turn finished (Finish / Error / interrupt): go idle, then start the
+      // next queued prompt.
+      function turnEnded() {
+        setWorking(false);
+        pump();
+      }
+
+      // Send button / Enter: submit immediately if idle, otherwise queue it.
+      function onSend() {
+        const prompt = $("prompt").value.trim();
+        if (!prompt) return;
+        $("prompt").value = "";
+        if (working || queue.length > 0) {
+          queue.push({ id: ++qid, prompt });
+          renderQueue();
+        } else {
+          submit(prompt);
+        }
+      }
+
+      async function interrupt() {
+        try {
+          await fetch(`${base()}/interrupt`, { method: "POST" });
+          addEv("meta", "interrupt", (b) => (b.textContent = "requested"));
+        } catch (e) {
+          addEv(
+            "error",
+            "interrupt failed",
+            (b) => (b.textContent = String(e)),
+          );
+        }
+        turnEnded();
+      }
+
+      function clearLog() {
+        log.innerHTML = "";
+        textBubble = null;
+        reasoningBubble = null;
+        toolPills.clear();
+      }
+
+      // Load the DO's session store and reflect it in the dropdown.
+      async function refreshSessions() {
+        try {
+          const res = await fetch(`${base()}/sessions`);
+          if (!res.ok) return;
+          const { sessions, current } = await res.json();
+          const sel = $("session");
+          sel.innerHTML = "";
+          for (const id of sessions) {
+            const opt = document.createElement("option");
+            opt.value = id;
+            opt.textContent = id;
+            if (id === current) opt.selected = true;
+            sel.appendChild(opt);
+          }
+        } catch (e) {
+          /* ignore — agent may still be warming up */
+        }
+      }
+
+      // Switch the active session (server-side), then reset the view and
+      // reconnect the stream so we tail the newly-active session.
+      async function selectSession(id) {
+        const qs = id ? `?id=${encodeURIComponent(id)}` : "";
+        try {
+          const res = await fetch(`${base()}/switch${qs}`, { method: "POST" });
+          const body = res.ok ? await res.json() : null;
+          clearLog();
+          addEv("meta", "session", (b) => {
+            b.textContent = body ? `active: ${body.current}` : "switch failed";
+          });
+          await refreshSessions();
+          connect();
+        } catch (e) {
+          addEv("error", "switch failed", (b) => (b.textContent = String(e)));
+        }
+      }
+
+      $("connect").onclick = () => {
+        connect();
+        refreshSessions();
+      };
+      $("send").onclick = onSend;
+      $("interrupt").onclick = interrupt;
+      $("session").onchange = (e) => selectSession(e.target.value);
+      $("newSession").onclick = () => selectSession();
+      $("clear").onclick = clearLog;
+      $("prompt").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          onSend();
+        }
+      });
+
+      $("hint").textContent =
+        "Connect streams events live over a WebSocket. Send/Interrupt drive the turn. Session persists in the Durable Object — switch or start a new one anytime.";
+
+      connect();
+      refreshSessions();
+    </script>
+  </body>
+</html>

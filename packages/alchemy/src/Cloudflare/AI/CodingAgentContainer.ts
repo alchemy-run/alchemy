@@ -2,7 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { CodingAgentService } from "../../AI/CodingAgent.ts";
+import type {
+  CodingAgentService,
+  CodingAgentSessionControl,
+} from "../../AI/CodingAgent.ts";
 import { CodingAgentRuntime } from "../../AI/CodingAgentRuntime.ts";
 import { Container } from "../Container/Container.ts";
 
@@ -52,7 +55,7 @@ export const DEFAULT_DOCKERFILE = `
  */
 export class CodingAgentContainer extends Container<
   CodingAgentContainer,
-  CodingAgentService
+  CodingAgentService & CodingAgentSessionControl
 >()("CodingAgentContainer") {}
 
 /** Options for {@link makeCodingAgentContainer}. */
@@ -84,6 +87,29 @@ export interface CodingAgentContainerOptions<RIn> {
   readonly workspace?: string;
   /** Override the container image. @default {@link DEFAULT_DOCKERFILE} */
   readonly dockerfile?: string;
+  /**
+   * Compute size of the container instance. Coding-agent runtimes are heavy —
+   * a harness typically bootstraps a language toolchain at runtime (e.g.
+   * OpenCode shells out to `bun install` and unpacks a ~119 MB binary on the
+   * first turn), which OOM-kills the default `dev` instance (256 MiB). Default
+   * to `standard` (4 GiB) so the bootstrap and the agent's work have headroom;
+   * override down to `basic`/`dev` for lightweight runtimes or up to a
+   * `standard-N` for memory-hungry ones.
+   * @default "standard"
+   */
+  readonly instanceType?:
+    | "lite"
+    | "dev"
+    | "basic"
+    | "standard"
+    | "standard-1"
+    | "standard-2"
+    | "standard-3"
+    | "standard-4"
+    // Keep the union open so callers can pass a newer instance type Cloudflare
+    // ships before this list is updated, without losing autocomplete on the
+    // known values.
+    | (string & {});
   /**
    * Module specifiers to keep out of the bundle and install into the image
    * instead (via `bun add`). Required for harness packages that read on-disk
@@ -118,6 +144,7 @@ export const makeCodingAgentContainer = <RIn>(
     {
       main: options.main,
       dockerfile: options.dockerfile ?? DEFAULT_DOCKERFILE,
+      instanceType: options.instanceType ?? "standard",
       external: options.external,
       observability: { logs: { enabled: true } },
     },
@@ -131,6 +158,8 @@ export const makeCodingAgentContainer = <RIn>(
         poll: (cursor) => agent.poll(cursor),
         readFile: (path) => agent.readFile(path),
         listFiles: (path) => agent.listFiles(path),
+        switchSession: (sessionId) => agent.switchSession(sessionId),
+        currentSession: () => agent.currentSession(),
 
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;
@@ -141,12 +170,13 @@ export const makeCodingAgentContainer = <RIn>(
           return HttpServerResponse.text("coding agent");
         }),
       });
-    }).pipe(
-      Effect.provide(
-        options.runtime({
-          workspace: options.workspace ?? WORKSPACE,
-          model: options.model ?? DEFAULT_MODEL,
-        }),
-      ),
-    ),
+    }),
+    // The framework builds this runtime layer into the container-lifetime scope
+    // (and inside the platform's ConfigProvider) so it outlives the impl closure
+    // and resolves bound config — neither this code nor the caller manages a
+    // scope; we just hand over the Layer.
+    options.runtime({
+      workspace: options.workspace ?? WORKSPACE,
+      model: options.model ?? DEFAULT_MODEL,
+    }),
   );

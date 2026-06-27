@@ -15,7 +15,11 @@
   "scripts": {
     "build": "tsc -b",
     "test": "doppler run -- bun test",
-    "test:integ": "doppler run -- bun test test/integ.test.ts"
+    "deploy": "doppler run -- bun alchemy deploy ./test/stack.ts",
+    "dev": "doppler run -- bun alchemy dev ./test/stack.ts",
+    "tail": "doppler run -- bun alchemy tail ./test/stack.ts",
+    "test:integ": "doppler run -- bun test test/integ.test.ts",
+    "test:integ:local": "doppler run -- bun test test/integ.local.test.ts"
   },
   "exports": {
     ".": {

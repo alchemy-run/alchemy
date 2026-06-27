@@ -6,4 +6,8 @@ export default OpenCodeContainer({
   anthropic: {
     apiKey: Config.redacted("ANTHROPIC_API_KEY"),
   },
+  // Enable the model's extended-thinking budget so the harness emits
+  // `reasoning-delta` parts — surfaced as `ReasoningDelta` events and streamed
+  // chunk-by-chunk to the UI.
+  reasoningVariant: "high",
 });

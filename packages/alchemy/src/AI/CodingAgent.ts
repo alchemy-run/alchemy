@@ -76,6 +76,31 @@ export type CodingAgentService = {
 };
 
 /**
+ * Session lifecycle control, exposed by the **runtime** and the
+ * `CodingAgentContainer` (NOT by the app-facing {@link CodingAgent} handle).
+ *
+ * A coding agent hosts exactly one live conversation session at a time, bound to
+ * a long-lived runtime process (e.g. the OpenCode bridge inside the container).
+ * These methods let a durable owner (a Durable Object) pick which session that
+ * process runs, so the session identity can be persisted durably and survive the
+ * ephemeral container — the DO stores the id and re-asserts it whenever the
+ * container (re)starts.
+ */
+export type CodingAgentSessionControl = {
+  /**
+   * Make `sessionId` the agent's active conversation, tearing down the previous
+   * one (and interrupting any in-flight turn). Idempotent: switching to the id
+   * that is already active is a no-op. Returns the now-active id.
+   */
+  readonly switchSession: (
+    sessionId: string,
+  ) => Effect.Effect<string, CodingAgentError>;
+
+  /** The id of the currently active session. */
+  readonly currentSession: () => Effect.Effect<string, CodingAgentError>;
+};
+
+/**
  * The in-process / app-facing coding agent handle. Its interface is
  * {@link CodingAgentService} — the same surface as {@link CodingAgentRuntime}
  * and `CodingAgentContainer`.

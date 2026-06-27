@@ -136,6 +136,12 @@ export const LiveContainerProvider = () =>
           checks: props.checks,
         }) as ContainerApplication.Configuration;
 
+      // Stable hash of the desired configuration, persisted in `hash.config` so
+      // `diff` can detect config-only changes (which don't move the image hash).
+      const hashConfiguration = (
+        configuration: ContainerApplication.Configuration,
+      ) => sha256Object(configuration).pipe(Effect.map((h) => h.slice(0, 16)));
+
       const computeImage = Effect.fn(function* (
         id: string,
         props: ContainerApplicationProps,
@@ -519,6 +525,7 @@ export const LiveContainerProvider = () =>
         );
         const { build, imageRef, imageHash } = yield* computeImage(id, news);
         const configuration = desiredConfiguration(news, imageRef, accountId);
+        const configHash = yield* hashConfiguration(configuration);
 
         if (imageHash !== existing.hash?.image) {
           yield* buildAndPushImage(id, news, build, imageRef, session);
@@ -581,7 +588,11 @@ export const LiveContainerProvider = () =>
             rollout: news.rollout,
           });
         }
-        return { ...updated, configuration, hash: { image: imageHash } };
+        return {
+          ...updated,
+          configuration,
+          hash: { image: imageHash, config: configHash },
+        };
       });
 
       const getDurableObjects = (
@@ -656,8 +667,19 @@ export const LiveContainerProvider = () =>
             return { action: "update", stables: ["accountId"] } as const;
           }
 
-          const { imageHash } = yield* computeImage(id, news);
+          const { imageHash, imageRef } = yield* computeImage(id, news);
           if (imageHash !== output.hash?.image) {
+            return { action: "update" } as const;
+          }
+          // Config-only changes (instanceType, vcpu, memory, env, observability,
+          // network, …) leave the image hash untouched. Compare a hash of the
+          // desired configuration so they still trigger an update; without this
+          // the reconcile is skipped and e.g. a bumped `instanceType` is never
+          // sent to Cloudflare.
+          const configHash = yield* hashConfiguration(
+            desiredConfiguration(news, imageRef, accountId),
+          );
+          if (configHash !== output.hash?.config) {
             return { action: "update" } as const;
           }
         }),
@@ -670,6 +692,7 @@ export const LiveContainerProvider = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const { build, imageRef, imageHash } = yield* computeImage(id, news);
           const configuration = desiredConfiguration(news, imageRef, accountId);
+          const configHash = yield* hashConfiguration(configuration);
           yield* buildAndPushImage(id, news, build, imageRef, session);
 
           // Precreate intentionally omits the Durable Object attachment so the
@@ -690,7 +713,7 @@ export const LiveContainerProvider = () =>
           });
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
-            hash: { image: imageHash },
+            hash: { image: imageHash, config: configHash },
           };
         }),
         reconcile: Effect.fn(function* ({
@@ -708,6 +731,7 @@ export const LiveContainerProvider = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const { build, imageRef, imageHash } = yield* computeImage(id, news);
           const configuration = desiredConfiguration(news, imageRef, accountId);
+          const configHash = yield* hashConfiguration(configuration);
 
           // Observe — re-fetch the cached application to confirm it still
           // exists. Cloudflare reports a deleted container application as
@@ -806,7 +830,7 @@ export const LiveContainerProvider = () =>
             });
             return {
               ...("applicationId" in result ? result : toAttributes(result)),
-              hash: { image: imageHash },
+              hash: { image: imageHash, config: configHash },
             };
           }
 
@@ -840,7 +864,7 @@ export const LiveContainerProvider = () =>
           });
           return {
             ...("applicationId" in result ? result : toAttributes(result)),
-            hash: { image: imageHash },
+            hash: { image: imageHash, config: configHash },
           };
         }),
         delete: Effect.fn(function* ({ output }) {

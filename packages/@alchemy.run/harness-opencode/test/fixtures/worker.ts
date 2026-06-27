@@ -3,14 +3,16 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./agent.ts";
+import playground from "./index.html?raw";
 
 /**
- * HTTP/WebSocket front for the {@link Agent} Durable Object. Routes
- * `/agent/:id/:action` to the matching DO instance: `/connect` (with
- * `Upgrade: websocket`) is forwarded to the DO's `fetch` so it can complete the
- * WebSocket handshake and stream events; the rest invoke the DO's typed RPC
- * methods (`send`, `interrupt`, `poll`, `file`, `files`), serializing the result
- * as JSON. The worker is the only place that speaks HTTP.
+ * HTTP/WebSocket front for the {@link Agent} Durable Object.
+ *
+ * The root path serves a self-contained SPA ({@link playground}) for poking at
+ * the agent by hand. `/agent/:id/connect` performs a WebSocket upgrade
+ * forwarded to the DO's `fetch` (which streams the agent's event log over the
+ * socket). The control routes — `send`, `interrupt`, `events`, `file`,
+ * `files` — invoke the DO's typed RPC methods.
  */
 export default Cloudflare.Worker(
   "Worker",
@@ -25,13 +27,13 @@ export default Cloudflare.Worker(
         const [prefix, id, action] = url.pathname.split("/").filter(Boolean);
 
         if (prefix !== "agent" || !id) {
-          return HttpServerResponse.text("ok");
+          return HttpServerResponse.html(playground);
         }
 
         const agent = agents.getByName(id);
 
         // WebSocket upgrade: hand the raw request to the DO, which completes the
-        // handshake and starts streaming agent events back over the socket.
+        // handshake and starts streaming the agent's event log over the socket.
         if (request.headers.upgrade === "websocket") {
           return yield* agent.fetch(request);
         }
@@ -46,6 +48,16 @@ export default Cloudflare.Worker(
           case "interrupt": {
             yield* agent.interrupt();
             return yield* HttpServerResponse.json({ ok: true });
+          }
+          case "sessions": {
+            const sessions = yield* agent.listSessions();
+            const current = yield* agent.currentSession();
+            return yield* HttpServerResponse.json({ sessions, current });
+          }
+          case "switch": {
+            const requested = url.searchParams.get("id") ?? undefined;
+            const current = yield* agent.switchSession(requested);
+            return yield* HttpServerResponse.json({ current });
           }
           case "events": {
             const cursor = Number(url.searchParams.get("cursor") ?? "0") || 0;

@@ -1,4 +1,3 @@
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -91,37 +90,35 @@ export const ContainerPlatform: Platform<
             return key;
           }),
         get: <T>(key: string) =>
-          Config.string(key).pipe(
-            Effect.flatMap((value) =>
-              Effect.try({
-                try: () => {
-                  const parsed = JSON.parse(value) as T;
-                  // The `set` path serializes Redacted values as
-                  // `{_tag: "Redacted", value: ...}`. After JSON.parse the
-                  // result is a plain object — detect the marker shape and
-                  // rebuild the Redacted wrapper. Plain values pass through.
-                  if (
-                    typeof parsed === "object" &&
-                    parsed !== null &&
-                    (parsed as { _tag?: unknown })._tag === "Redacted" &&
-                    "value" in parsed
-                  ) {
-                    return Redacted.make(
-                      (parsed as { value: unknown }).value,
-                    ) as T;
-                  }
-                  return parsed;
-                },
-                catch: (error) => error as Error,
-              }),
-            ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
+          // Read the injected env var **directly** from `process.env`, not via
+          // `Config.string(key)`. `get` is called from inside alchemy's custom
+          // ConfigProvider (see `Platform.ts`), so reading through `Config`
+          // would re-enter that same provider and recurse infinitely. Mirrors
+          // `makeWorkerRuntimeContext.get`, which reads the env record directly.
+          Effect.sync(() => process.env[key]).pipe(
+            Effect.map((value) => {
+              if (value === undefined) return undefined as T | undefined;
+              try {
+                const parsed = JSON.parse(value) as T;
+                // The `set` path serializes Redacted values as
+                // `{_tag: "Redacted", value: ...}`. After JSON.parse the
+                // result is a plain object — detect the marker shape and
+                // rebuild the Redacted wrapper. Plain values pass through.
+                if (
+                  typeof parsed === "object" &&
+                  parsed !== null &&
+                  (parsed as { _tag?: unknown })._tag === "Redacted" &&
+                  "value" in parsed
+                ) {
+                  return Redacted.make(
+                    (parsed as { value: unknown }).value,
+                  ) as T;
+                }
+                return parsed;
+              } catch {
+                return value as T;
+              }
+            }),
           ),
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {

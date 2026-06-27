@@ -16,9 +16,14 @@ import { LocalContainerProvider } from "./LocalContainerProvider.ts";
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
 export namespace ContainerApplication {
-  export type InstanceType = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
-  >;
+  export type InstanceType =
+    | NonNullable<
+        Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+      >
+    // Keep the union open so callers can pass a newer instance type Cloudflare
+    // ships before this list is updated, while keeping autocomplete on the
+    // known values.
+    | (string & {});
   export type SchedulingPolicy = NonNullable<
     Containers.CreateContainerApplicationRequest["schedulingPolicy"]
   >;
@@ -579,6 +584,15 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     hash?: {
       image: string;
+      /**
+       * Hash of the desired deployment `configuration` (instance type, vcpu,
+       * memory, env, observability, network, …) the last reconcile applied.
+       * `diff` compares it against the freshly-computed desired-config hash so
+       * config-only changes — which don't move the image hash — still trigger an
+       * update. Hashing our own desired shape on both sides avoids false drift
+       * from server-side normalization of the observed configuration.
+       */
+      config?: string;
     };
     dev: DevContainerImage | undefined;
   },

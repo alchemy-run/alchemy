@@ -5,6 +5,8 @@ import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import fg from "fast-glob";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "pathe";
 import type * as rolldown from "rolldown";
@@ -36,6 +38,114 @@ export interface WorkerBundleOptions {
   extraOptions: Bundle.BundleExtraOptions | undefined;
 }
 
+/** Package roots whose imports resolve to TypeScript `src` (see below). */
+const SRC_EXACT = new Set(["alchemy"]);
+const SRC_PREFIXES = ["@alchemy.run/", "@distilled.cloud/"];
+
+/**
+ * Resolve workspace + distilled packages (`alchemy`, `@alchemy.run/*`,
+ * `@distilled.cloud/*`) to their `worker`/`bun` export target — their
+ * TypeScript `src` — so a Worker bundle always reflects current source instead
+ * of a possibly-stale `lib/` build (the `default`/`import` condition). Mirrors
+ * the `@distilled.cloud/*` src resolver in `packages/alchemy/vitest.config.ts`.
+ * Everything else falls through to rolldown's default resolution.
+ */
+function workspaceSrcResolver(): rolldown.Plugin {
+  const cache = new Map<
+    string,
+    { dir: string; exports: Record<string, any> } | null
+  >();
+
+  const pkgNameOf = (source: string): string | null => {
+    if (SRC_EXACT.has(source) || source.startsWith("alchemy/"))
+      return "alchemy";
+    const prefix = SRC_PREFIXES.find((p) => source.startsWith(p));
+    if (!prefix) return null;
+    const name = source.slice(prefix.length).split("/")[0];
+    return name ? `${prefix}${name}` : null;
+  };
+
+  const readPkg = (dir: string) => {
+    const pj = path.join(dir, "package.json");
+    if (!existsSync(pj)) return undefined;
+    try {
+      return JSON.parse(readFileSync(pj, "utf8")) as {
+        name?: string;
+        exports?: Record<string, any>;
+      };
+    } catch {
+      return undefined;
+    }
+  };
+
+  const load = (pkg: string, importer: string | undefined) => {
+    const cached = cache.get(pkg);
+    if (cached) return cached;
+    let result: { dir: string; exports: Record<string, any> } | null = null;
+    // Strategy 1: node_modules search paths relative to the IMPORTER (handles
+    // real dependencies). We read `exports` straight from package.json — not
+    // `require.resolve(pkg)` — so it works even when `lib/` is missing/stale.
+    try {
+      const req = createRequire(importer ?? import.meta.url);
+      for (const base of req.resolve.paths(pkg) ?? []) {
+        const dir = path.join(base, ...pkg.split("/"));
+        const json = readPkg(dir);
+        if (json) {
+          if (json.exports) result = { dir, exports: json.exports };
+          break;
+        }
+      }
+    } catch {
+      result = null;
+    }
+    // Strategy 2: walk up from the importer for a workspace/self import (bun
+    // resolves these by name with no node_modules symlink).
+    if (!result && importer) {
+      let dir = path.dirname(importer);
+      for (;;) {
+        const json = readPkg(dir);
+        if (json?.name === pkg) {
+          if (json.exports) result = { dir, exports: json.exports };
+          break;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+    }
+    // Only cache hits — a miss may just mean this importer can't see the
+    // package; a later importer in the graph might.
+    if (result) cache.set(pkg, result);
+    return result;
+  };
+
+  return {
+    name: "alchemy-workspace-src-resolver",
+    resolveId(source, importer) {
+      const pkg = pkgNameOf(source);
+      if (!pkg) return null;
+      const loaded = load(pkg, importer);
+      if (!loaded) return null;
+      const subpath =
+        source === pkg ? "." : `./${source.slice(pkg.length + 1)}`;
+      let target = loaded.exports[subpath] as
+        | Record<string, string>
+        | string
+        | undefined;
+      let star = "";
+      if (target === undefined && loaded.exports["./*"]) {
+        target = loaded.exports["./*"];
+        star = subpath === "." ? "" : subpath.slice(2);
+      }
+      if (target === undefined || typeof target === "string") return null;
+      const file = target.worker ?? target.bun;
+      if (!file) return null;
+      const abs = path.resolve(loaded.dir, file.replace("*", star));
+      return existsSync(abs) ? abs : null;
+    },
+  };
+}
+
 export const WorkerBundle = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
@@ -62,6 +172,7 @@ export const WorkerBundle = Effect.gen(function* () {
         Effect.provide(context),
       ),
       plugins: [
+        workspaceSrcResolver(),
         cloudflareRolldown({
           compatibilityDate: options.compatibility.date,
           compatibilityFlags: options.compatibility.flags,
