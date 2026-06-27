@@ -12,8 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const PipelineTypeId = "Cloudflare.Pipelines.Pipeline" as const;
-type PipelineTypeId = typeof PipelineTypeId;
+const TypeId = "Cloudflare.Pipelines.Pipeline" as const;
+type TypeId = typeof TypeId;
 
 export interface PipelineProps {
   /**
@@ -56,7 +56,7 @@ export interface PipelineAttributes {
 }
 
 export type Pipeline = Resource<
-  PipelineTypeId,
+  TypeId,
   PipelineProps,
   PipelineAttributes,
   never,
@@ -66,7 +66,7 @@ export type Pipeline = Resource<
 /**
  * A Cloudflare SQL Pipeline — the transform of the Pipelines product. A
  * pipeline is a single SQL statement that reads events from a
- * {@link PipelineStream} and writes them to a {@link PipelineSink}, both
+ * {@link Stream} and writes them to a {@link Sink}, both
  * referenced by name.
  *
  * The SQL is fixed at creation: changing it (or the name) triggers a
@@ -78,33 +78,33 @@ export type Pipeline = Resource<
  * @section Creating a Pipeline
  * @example Stream → Sink passthrough
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("events", {});
- * const sink = yield* Cloudflare.PipelineSink("events-sink", {
+ * const stream = yield* Cloudflare.Pipelines.Stream("events", {});
+ * const sink = yield* Cloudflare.Pipelines.Sink("events-sink", {
  *   type: "r2",
  *   config: { bucket: bucket.bucketName, credentials },
  * });
  *
- * const pipeline = yield* Cloudflare.Pipeline("etl", {
+ * const pipeline = yield* Cloudflare.Pipelines.Pipeline("etl", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
  * });
  * ```
  *
  * @example Filtering transform
  * ```typescript
- * const pipeline = yield* Cloudflare.Pipeline("errors-only", {
+ * const pipeline = yield* Cloudflare.Pipelines.Pipeline("errors-only", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name} WHERE level = 'error'`,
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/pipelines/
  */
-export const Pipeline = Resource<Pipeline>(PipelineTypeId);
+export const Pipeline = Resource<Pipeline>(TypeId);
 
 /**
  * Returns true if the given value is a Pipeline resource.
  */
 export const isPipeline = (value: unknown): value is Pipeline =>
-  Predicate.hasProperty(value, "Type") && value.Type === PipelineTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const PipelineProvider = () =>
   Provider.succeed(Pipeline, {

@@ -24,7 +24,7 @@ test.provider("create and delete bucket with default props", (stack) =>
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("DefaultBucket");
+        return yield* Cloudflare.R2.Bucket("DefaultBucket");
       }),
     );
 
@@ -52,7 +52,7 @@ test.provider("create, update, delete bucket", (stack) =>
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("TestBucket", {
+        return yield* Cloudflare.R2.Bucket("TestBucket", {
           name: "test-bucket-initial",
           storageClass: "Standard",
         });
@@ -68,7 +68,7 @@ test.provider("create, update, delete bucket", (stack) =>
 
     const updatedBucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("TestBucket", {
+        return yield* Cloudflare.R2.Bucket("TestBucket", {
           name: "test-bucket-initial",
           storageClass: "InfrequentAccess",
         });
@@ -106,7 +106,7 @@ test.provider(
       // Phase 1: deploy normally so a real R2 bucket exists.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("AdoptableBucket", {
+          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
             name: bucketName,
           });
         }),
@@ -128,7 +128,7 @@ test.provider(
       // plain attrs — silent adoption.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("AdoptableBucket", {
+          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
             name: bucketName,
           });
         }),
@@ -160,7 +160,7 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("BucketWithObjects");
+        return yield* Cloudflare.R2.Bucket("BucketWithObjects");
       }),
     );
 
@@ -214,7 +214,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     // Create with one rule.
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+        return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
           lifecycleRules: [
             {
               id: "expire-after-30d",
@@ -241,7 +241,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     // Update: change the prefix and add a storage class transition.
     yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+        return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
           lifecycleRules: [
             {
               id: "expire-after-30d",
@@ -277,7 +277,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     // Clear all rules.
     yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+        return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
           lifecycleRules: [],
         });
       }),

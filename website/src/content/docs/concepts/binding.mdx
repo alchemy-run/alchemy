@@ -76,7 +76,7 @@ export default {
 The rest of this page walks through the Effect style; the same
 deploy-time mechanics apply to both.
 
-## What `.bind()` does at deploy time
+## What `Bind(resource)` does at deploy time
 
 Each call records three things on the platform's plan:
 
@@ -93,16 +93,16 @@ resource-level scoping.
 
 | Binding                        | IAM Actions        | Resource                     |
 | ------------------------------ | ------------------ | ---------------------------- |
-| `S3.GetObject.bind(bucket)`    | `s3:GetObject`     | `arn:aws:s3:::bucket-name/*` |
-| `S3.PutObject.bind(bucket)`    | `s3:PutObject`     | `arn:aws:s3:::bucket-name/*` |
-| `SQS.SendMessage.bind(queue)`  | `sqs:SendMessage`  | Queue ARN                    |
-| `DynamoDB.GetItem.bind(table)` | `dynamodb:GetItem` | Table ARN                    |
-| `DynamoDB.PutItem.bind(table)` | `dynamodb:PutItem` | Table ARN                    |
+| `S3.GetObject(bucket)`    | `s3:GetObject`     | `arn:aws:s3:::bucket-name/*` |
+| `S3.PutObject(bucket)`    | `s3:PutObject`     | `arn:aws:s3:::bucket-name/*` |
+| `SQS.SendMessage(queue)`  | `sqs:SendMessage`  | Queue ARN                    |
+| `DynamoDB.GetItem(table)` | `dynamodb:GetItem` | Table ARN                    |
+| `DynamoDB.PutItem(table)` | `dynamodb:PutItem` | Table ARN                    |
 
 Multi-resource bindings enumerate every ARN they touch:
 
 ```typescript
-const get = yield* DynamoDB.GetItem.bind(JobsTable, AuditTable);
+const get = yield* DynamoDB.GetItem(JobsTable, AuditTable);
 // → policy enumerates both table ARNs explicitly
 ```
 
@@ -133,7 +133,7 @@ Effect `Stream`, so the whole event loop becomes a value you can map,
 filter, batch, and pipe:
 
 ```typescript
-yield* SQS.messages(InboundQueue).subscribe((records) =>
+yield* SQS.consumeQueueMessages(InboundQueue, (records) =>
   records.pipe(
     Stream.map((r) => r.body),
     Stream.runForEach(Console.log),
@@ -142,13 +142,13 @@ yield* SQS.messages(InboundQueue).subscribe((records) =>
 ```
 
 The other event sources have the same shape — only the record type
-and the entry-point name change:
+and the `consume*` callable change:
 
-| Source                    | Entry point                | Stream element        |
-| ------------------------- | -------------------------- | --------------------- |
-| `SQS.messages(queue)`     | `.subscribe(fn)`           | `SQSRecord`           |
-| `Kinesis.records(stream)` | `.process(fn)`             | `KinesisStreamRecord` |
-| `DynamoDB.stream(table)`  | `.process(fn)`             | `StreamRecord<T>`     |
+| Source                              | Stream element        |
+| ----------------------------------- | --------------------- |
+| `SQS.consumeQueueMessages(queue, fn)`       | `SQSRecord`           |
+| `Kinesis.consumeStreamRecords(stream, fn)` | `KinesisStreamRecord` |
+| `DynamoDB.consumeTableChanges(table, fn)` | `StreamRecord<T>`     |
 
 One call wires the event-source mapping, the IAM (or Cloudflare
 binding), and the typed `Stream`.
@@ -162,7 +162,7 @@ It batches input chunks into the underlying batch API
 minimal IAM to go with it.
 
 ```typescript
-const sink = yield* SQS.QueueSink.bind(OutboundQueue);
+const sink = yield* SQS.QueueSink(OutboundQueue);
 // → Sink<void, string, readonly string[], never>
 // → policy: sqs:SendMessage + sqs:SendMessageBatch on OutboundQueue's ARN
 
@@ -182,12 +182,12 @@ one expression:
 
 ```typescript
 const outbound = yield* SQS.Queue("Outbound");
-const sink = yield* SQS.QueueSink.bind(outbound);
+const sink = yield* SQS.QueueSink(outbound);
 
-yield* DynamoDB.stream(OrdersTable, {
+yield* DynamoDB.consumeTableChanges<Order>(OrdersTable, {
   streamViewType: "NEW_AND_OLD_IMAGES",
   startingPosition: "LATEST",
-}).process<Order>((records) =>
+}, (records) =>
   records.pipe(
     Stream.filterMap((r) => Option.fromNullable(r.dynamodb.NewImage)),
     Stream.filter((order) => order.status === "PAID"),
@@ -197,7 +197,7 @@ yield* DynamoDB.stream(OrdersTable, {
 );
 ```
 
-Two `bind()` calls, one pipeline. Alchemy generates **both** sides
+One binding call, one pipeline. Alchemy generates **both** sides
 of the policy automatically — `dynamodb:DescribeStream` /
 `GetRecords` / `GetShardIterator` on `OrdersTable`'s stream,
 `sqs:SendMessageBatch` on `Outbound` — plus the event-source
@@ -211,23 +211,27 @@ same `Stream` you'd write in a plain Effect program.
 
 ## How it works under the hood
 
-Internally each binding splits into two layers — and which one runs
-depends on the [phase](/concepts/phases):
+Each binding is a single `Binding.Service` — the typed SDK wrapper
+that gets bundled into your function (this is what `bucket.get(...)`
+actually calls). Its setup Effect also performs the deploy-time wiring
+(IAM, Worker bindings, env vars), guarded so it only runs at plan time:
 
-- **`Binding.Service`** — the runtime SDK wrapper that gets bundled
-  into your function. This is what `bucket.get(...)` actually calls.
-- **`Binding.Policy`** — the deploy-time logic that emits IAM,
-  Worker bindings, and env vars. This is **not** included in the
-  runtime bundle.
+```typescript
+if (!globalThis.__ALCHEMY_RUNTIME__) {
+  // deploy-time only: register IAM / native bindings / env on the host
+  yield* host.bind`${resource}`(/* … */);
+}
+// always: return the typed runtime client
+```
 
-At plantime the Policy layer is provided, so `bind()` records what
-the function needs. At runtime the Policy layer is absent, so the
-same call resolves to just the lightweight Service wrapper. The
-runtime bundle stays small because none of the planning code ships.
+At plantime the guard is open, so `bind()` records what the function
+needs. At runtime (`globalThis.__ALCHEMY_RUNTIME__` is set) the guard
+is skipped, so the same call resolves to just the lightweight client.
+The runtime bundle stays small because the planning branch never runs.
 
-See [Plantime and Runtime › `Binding.Service` vs
-`Binding.Policy`](/concepts/phases#bindingservice-vs-bindingpolicy)
-for a deeper look.
+See [Plantime and Runtime › The `__ALCHEMY_RUNTIME__`
+guard](/concepts/phases#the-__alchemy_runtime__-guard) for a deeper
+look.
 
 ## All of Effect, on every binding
 

@@ -7,13 +7,13 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayLoggingTypeId = "Cloudflare.Gateway.Logging" as const;
-type GatewayLoggingTypeId = typeof GatewayLoggingTypeId;
+const TypeId = "Cloudflare.Gateway.Logging" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Per-rule-type logging toggles.
  */
-export interface GatewayLoggingRuleSettings {
+export interface LoggingRuleSettings {
   /** Log all requests of this type, regardless of rule matches. */
   logAll?: boolean;
   /** Log only requests blocked by a rule. */
@@ -25,18 +25,18 @@ export interface GatewayLoggingRuleSettings {
  * Cloudflare. Captured before Alchemy first writes the singleton and
  * restored on destroy.
  */
-export interface GatewayLoggingSnapshot {
+export interface LoggingSnapshot {
   /** Whether PII is redacted from activity logs. */
   redactPii?: boolean;
   /** Logging settings for DNS queries. */
-  dns?: GatewayLoggingRuleSettings;
+  dns?: LoggingRuleSettings;
   /** Logging settings for HTTP requests. */
-  http?: GatewayLoggingRuleSettings;
+  http?: LoggingRuleSettings;
   /** Logging settings for layer-4 (network) sessions. */
-  l4?: GatewayLoggingRuleSettings;
+  l4?: LoggingRuleSettings;
 }
 
-export interface GatewayLoggingProps {
+export interface LoggingProps {
   /**
    * Redact personally identifiable information from activity logging
    * (PII fields include source IP, user email, user ID, device ID, URL,
@@ -49,15 +49,15 @@ export interface GatewayLoggingProps {
    */
   settingsByRuleType?: {
     /** Logging settings for DNS queries. */
-    dns?: GatewayLoggingRuleSettings;
+    dns?: LoggingRuleSettings;
     /** Logging settings for HTTP requests. */
-    http?: GatewayLoggingRuleSettings;
+    http?: LoggingRuleSettings;
     /** Logging settings for layer-4 (network) sessions. */
-    l4?: GatewayLoggingRuleSettings;
+    l4?: LoggingRuleSettings;
   };
 }
 
-export type GatewayLoggingAttributes = GatewayLoggingSnapshot & {
+export type LoggingAttributes = LoggingSnapshot & {
   /** Account that owns the Gateway logging singleton. */
   accountId: string;
   /**
@@ -65,13 +65,13 @@ export type GatewayLoggingAttributes = GatewayLoggingSnapshot & {
    * them. Restored (via PUT) on destroy, so deleting the resource puts
    * the account back the way it was found.
    */
-  initialSettings: GatewayLoggingSnapshot;
+  initialSettings: LoggingSnapshot;
 };
 
-export type GatewayLogging = Resource<
-  GatewayLoggingTypeId,
-  GatewayLoggingProps,
-  GatewayLoggingAttributes,
+export type Logging = Resource<
+  TypeId,
+  LoggingProps,
+  LoggingAttributes,
   never,
   Providers
 >;
@@ -91,7 +91,7 @@ export type GatewayLogging = Resource<
  * @section Managing logging settings
  * @example Log everything, keep PII
  * ```typescript
- * yield* Cloudflare.GatewayLogging("Logging", {
+ * yield* Cloudflare.Gateway.Logging("Logging", {
  *   redactPii: false,
  *   settingsByRuleType: {
  *     dns: { logAll: true, logBlocks: true },
@@ -103,7 +103,7 @@ export type GatewayLogging = Resource<
  *
  * @example Only log blocked DNS queries, redacting PII
  * ```typescript
- * yield* Cloudflare.GatewayLogging("Logging", {
+ * yield* Cloudflare.Gateway.Logging("Logging", {
  *   redactPii: true,
  *   settingsByRuleType: {
  *     dns: { logAll: false, logBlocks: true },
@@ -113,16 +113,16 @@ export type GatewayLogging = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/logs/gateway-logs/
  */
-export const GatewayLogging = Resource<GatewayLogging>(GatewayLoggingTypeId);
+export const Logging = Resource<Logging>(TypeId);
 
 /**
- * Returns true if the given value is a GatewayLogging resource.
+ * Returns true if the given value is a Logging resource.
  */
-export const isGatewayLogging = (value: unknown): value is GatewayLogging =>
-  Predicate.hasProperty(value, "Type") && value.Type === GatewayLoggingTypeId;
+export const isLogging = (value: unknown): value is Logging =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const GatewayLoggingProvider = () =>
-  Provider.succeed(GatewayLogging, {
+export const LoggingProvider = () =>
+  Provider.succeed(Logging, {
     nuke: { singleton: true },
     stables: ["accountId", "initialSettings"],
 
@@ -192,14 +192,14 @@ export const GatewayLoggingProvider = () =>
  */
 const observeLogging = (accountId: string) =>
   zeroTrust.getGatewayLogging({ accountId }).pipe(
-    Effect.map((s): GatewayLoggingSnapshot => {
-      const snapshot: GatewayLoggingSnapshot = {};
+    Effect.map((s): LoggingSnapshot => {
+      const snapshot: LoggingSnapshot = {};
       if (s.redactPii != null) snapshot.redactPii = s.redactPii;
       const byType = s.settingsByRuleType ?? undefined;
       for (const key of RULE_TYPES) {
         const block = byType?.[key];
         if (block == null) continue;
-        const rule: GatewayLoggingRuleSettings = {};
+        const rule: LoggingRuleSettings = {};
         if (block.logAll != null) rule.logAll = block.logAll;
         if (block.logBlocks != null) rule.logBlocks = block.logBlocks;
         snapshot[key] = rule;
@@ -208,7 +208,7 @@ const observeLogging = (accountId: string) =>
     }),
   );
 
-const putLogging = (accountId: string, snapshot: GatewayLoggingSnapshot) =>
+const putLogging = (accountId: string, snapshot: LoggingSnapshot) =>
   zeroTrust.putGatewayLogging({
     accountId,
     ...(snapshot.redactPii !== undefined
@@ -228,17 +228,17 @@ const RULE_TYPES = ["dns", "http", "l4"] as const;
  * merging per-rule-type blocks field-by-field.
  */
 const mergeSnapshot = (
-  observed: GatewayLoggingSnapshot,
-  declared: GatewayLoggingSnapshot,
-): GatewayLoggingSnapshot => {
-  const merged: GatewayLoggingSnapshot =
+  observed: LoggingSnapshot,
+  declared: LoggingSnapshot,
+): LoggingSnapshot => {
+  const merged: LoggingSnapshot =
     observed.redactPii !== undefined ? { redactPii: observed.redactPii } : {};
   if (declared.redactPii !== undefined) merged.redactPii = declared.redactPii;
   for (const key of RULE_TYPES) {
     const base = observed[key];
     const over = declared[key];
     if (base === undefined && over === undefined) continue;
-    const rule: GatewayLoggingRuleSettings = { ...base };
+    const rule: LoggingRuleSettings = { ...base };
     if (over?.logAll !== undefined) rule.logAll = over.logAll;
     if (over?.logBlocks !== undefined) rule.logBlocks = over.logBlocks;
     merged[key] = rule;
@@ -246,10 +246,7 @@ const mergeSnapshot = (
   return merged;
 };
 
-const sameSnapshot = (
-  a: GatewayLoggingSnapshot,
-  b: GatewayLoggingSnapshot,
-): boolean =>
+const sameSnapshot = (a: LoggingSnapshot, b: LoggingSnapshot): boolean =>
   a.redactPii === b.redactPii &&
   RULE_TYPES.every(
     (key) =>
@@ -259,9 +256,9 @@ const sameSnapshot = (
 
 const toAttributes = (
   accountId: string,
-  observed: GatewayLoggingSnapshot,
-  initialSettings: GatewayLoggingSnapshot,
-): GatewayLoggingAttributes => ({
+  observed: LoggingSnapshot,
+  initialSettings: LoggingSnapshot,
+): LoggingAttributes => ({
   ...observed,
   accountId,
   initialSettings,

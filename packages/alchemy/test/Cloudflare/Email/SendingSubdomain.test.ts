@@ -101,7 +101,7 @@ test.provider("create and destroy a sending subdomain", (stack) =>
 
     const sending = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.EmailSendingSubdomain("Sending", {
+        return yield* Cloudflare.Email.SendingSubdomain("Sending", {
           zoneId,
           name: NAME_DEFAULT,
         });
@@ -148,7 +148,7 @@ test.provider("changing the name triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.EmailSendingSubdomain("ReplaceSending", {
+        return yield* Cloudflare.Email.SendingSubdomain("ReplaceSending", {
           zoneId,
           name: NAME_REPLACE_A,
         });
@@ -159,7 +159,7 @@ test.provider("changing the name triggers replacement", (stack) =>
 
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.EmailSendingSubdomain("ReplaceSending", {
+        return yield* Cloudflare.Email.SendingSubdomain("ReplaceSending", {
           zoneId,
           name: NAME_REPLACE_B,
         });
@@ -211,7 +211,7 @@ test.provider(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.EmailSendingSubdomain("AdoptSending", {
+            return yield* Cloudflare.Email.SendingSubdomain("AdoptSending", {
               zoneId,
               name: NAME_ADOPT,
             });
@@ -227,7 +227,7 @@ test.provider(
       // instead of failing.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSendingSubdomain("AdoptSending", {
+          return yield* Cloudflare.Email.SendingSubdomain("AdoptSending", {
             zoneId,
             name: NAME_ADOPT,
           }).pipe(adopt(true));
@@ -255,7 +255,7 @@ test.provider(
 
       const sending = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.EmailSendingSubdomain("ListSending", {
+          return yield* Cloudflare.Email.SendingSubdomain("ListSending", {
             zoneId,
             name: NAME_LIST,
           });
@@ -263,7 +263,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EmailSendingSubdomain,
+        Cloudflare.Email.SendingSubdomain,
       );
       // The scoped token may still be propagating across the edge; ride out
       // the typed Forbidden blips on the enumeration itself.

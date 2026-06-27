@@ -123,7 +123,7 @@ export const listEvents: Effect.Effect<
  *
  * ```ts
  * alarm: () => Effect.gen(function* () {
- *   const fired = yield* Cloudflare.processScheduledEvents;
+ *   const fired = yield* Cloudflare.Workers.processScheduledEvents;
  *   for (const event of fired) {
  *     // handle each event
  *   }

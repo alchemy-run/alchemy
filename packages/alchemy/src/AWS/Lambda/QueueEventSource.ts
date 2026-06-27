@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
-import * as Binding from "../../Binding.ts";
+import * as Namespace from "../../Namespace.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import {
   QueueEventSource as SQSQueueEventSource,
@@ -12,7 +12,6 @@ import {
 } from "../SQS/QueueEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
-import type { Providers } from "../Providers.ts";
 
 export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
   Array.isArray(event?.Records) &&
@@ -22,10 +21,11 @@ export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
 /** @binding */
 export const QueueEventSource = Layer.effect(
   SQSQueueEventSource,
-  // @ts-expect-error
+  // @ts-expect-error - the impl resolves plan-time services (EventSourceMapping)
+  // whereas QueueEventSourceService erases the requirement channel to `never`.
   Effect.gen(function* () {
     const host = yield* Lambda.Function;
-    const Policy = yield* QueueEventSourcePolicy;
+    const Mapping = yield* EventSourceMapping;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(
       queue: Queue,
@@ -34,66 +34,53 @@ export const QueueEventSource = Layer.effect(
         stream: Stream.Stream<SQSRecord, never, StreamReq>,
       ) => Effect.Effect<void, never, Req | StreamReq>,
     ) {
-      yield* Policy(queue, props);
+      // Deploy-time: grant IAM and create the event-source mapping. Skipped once
+      // running inside the deployed Function (the global guard), where the only
+      // work is registering the runtime handler below. Namespaced under the host
+      // so the mapping's logical identity matches the previous Binding.Policy.
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* Namespace.push(
+          host.LogicalId,
+          Effect.gen(function* () {
+            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`(
+              {
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "sqs:ReceiveMessage",
+                      "sqs:DeleteMessage",
+                      "sqs:GetQueueAttributes",
+                    ],
+                    Resource: [queue.queueArn],
+                  },
+                ],
+              },
+            );
+
+            yield* Mapping(`${queue.LogicalId}-EventSource`, {
+              functionName: host.functionName,
+              eventSourceArn: queue.queueArn,
+              batchSize: props.batchSize,
+              maximumBatchingWindowInSeconds:
+                props.maximumBatchingWindowInSeconds,
+              enabled: true,
+            });
+          }),
+        );
+      }
 
       yield* host.listen(
         Effect.gen(function* () {
           return (event: any) => {
             if (isSQSEvent(event)) {
-              const eff = process(Stream.fromArray(event.Records)).pipe(
+              return process(Stream.fromArray(event.Records)).pipe(
                 Effect.orDie,
               );
-              return eff;
             }
           };
         }),
       );
-    });
-  }),
-);
-
-export class QueueEventSourcePolicy extends Binding.Policy<
-  QueueEventSourcePolicy,
-  (queue: Queue, props: QueueEventSourceProps) => Effect.Effect<void>,
-  Providers
->()("AWS.SQS.QueueEventSourcePolicy") {}
-
-export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.effect(
-  Effect.gen(function* () {
-    const Mapping = yield* EventSourceMapping;
-
-    return Effect.fn(function* (host, queue, props) {
-      if (Lambda.isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`(
-          {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  "sqs:ReceiveMessage",
-                  "sqs:DeleteMessage",
-                  "sqs:GetQueueAttributes",
-                ],
-                Resource: [queue.queueArn],
-              },
-            ],
-          },
-        );
-
-        yield* Mapping(`${queue.LogicalId}-EventSource`, {
-          functionName: host.functionName,
-          eventSourceArn: queue.queueArn,
-          batchSize: props.batchSize,
-          maximumBatchingWindowInSeconds: props.maximumBatchingWindowInSeconds,
-          enabled: true,
-        });
-      } else {
-        return yield* Effect.die(
-          new Error(
-            `QueueEventSourcePolicy does not support runtime '${host.Type}'`,
-          ),
-        );
-      }
     });
   }),
 );

@@ -8,17 +8,17 @@ import type {
 } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
 import * as Secret from "../SecretsStore/index.ts";
-import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
+import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { EncryptionKey } from "./Token.ts";
 
-export default class Store extends DurableObjectNamespace<Store>()(
+export default class Store extends DurableObject<Store>()(
   "Store",
   Effect.gen(function* () {
     // Outer (class-level) phase — resolve the binding factory once.
     // The actual secret read happens inside each DO instance below,
     // since `SecretClient.get()` needs the per-instance worker env.
-    const encryptionSecret = yield* Secret.Secret.bind(EncryptionKey);
+    const encryptionSecret = yield* Secret.ReadSecret(EncryptionKey);
     const state = yield* DurableObjectState;
     const storage = state.storage;
 
@@ -253,7 +253,7 @@ export default class Store extends DurableObjectNamespace<Store>()(
           ),
       };
     });
-  }).pipe(Effect.provide(Secret.SecretBindingLive)),
+  }).pipe(Effect.provide(Secret.ReadSecretBinding)),
 ) {
   /**
    * Well-known DO name whose sole job is to track the set of stacks

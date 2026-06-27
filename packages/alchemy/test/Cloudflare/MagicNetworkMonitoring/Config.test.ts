@@ -53,14 +53,14 @@ describe.sequential("MagicNetworkMonitoring.Config list", () => {
         // leftover from an interrupted run surfaces as `Unowned`. Adopt it
         // rather than failing with `OwnedBySomeoneElse` or racing an
         // out-of-band delete against the singleton's eventual consistency.
-        Cloudflare.MagicNetworkMonitoringConfig("Config", {
+        Cloudflare.MagicNetworkMonitoring.Config("Config", {
           name: "alchemy-mnm-list-test",
           defaultSampling: 1,
         }).pipe(adopt(true)),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.MagicNetworkMonitoringConfig,
+        Cloudflare.MagicNetworkMonitoring.Config,
       );
       // Account singleton: when present, exactly one element with the full
       // Attributes shape (the same object `read` returns). Poll through the

@@ -12,7 +12,7 @@ import { HttpServerResponse } from "effect/unstable/http";
 import type {
   DurableObjectExport,
   DurableObjectShape,
-} from "./DurableObjectNamespace.ts";
+} from "./DurableObject.ts";
 import {
   DurableObjectState,
   fromDurableObjectState,

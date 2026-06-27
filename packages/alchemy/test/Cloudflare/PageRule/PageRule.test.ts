@@ -101,7 +101,7 @@ test.provider("create, verify out-of-band, and destroy a page rule", (stack) =>
 
     const rule = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PageRule("DefaultRule", {
+        return yield* Cloudflare.PageRule.PageRule("DefaultRule", {
           zoneId,
           target: TARGET_DEFAULT,
           actions: [
@@ -144,7 +144,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.PageRule("UpdateRule", {
+          return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
             zoneId,
             target: TARGET_UPDATE,
             actions: [{ id: "cache_level", value: "bypass" }],
@@ -158,7 +158,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.PageRule("UpdateRule", {
+          return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
             zoneId,
             // Targets are mutable via PUT — same rule, new URL pattern.
             target: TARGET_UPDATE_MOVED,
@@ -189,7 +189,7 @@ test.provider(
       // the PUT entirely) and keeps the same physical rule.
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.PageRule("UpdateRule", {
+          return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
             zoneId,
             target: TARGET_UPDATE_MOVED,
             actions: [
@@ -240,7 +240,7 @@ test.provider(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.PageRule("AdoptedRule", {
+            return yield* Cloudflare.PageRule.PageRule("AdoptedRule", {
               zoneId,
               target: TARGET_ADOPT,
               actions: [{ id: "cache_level", value: "cache_everything" }],
@@ -257,7 +257,7 @@ test.provider(
       // (same physical id) and converges it to the desired actions.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.PageRule("AdoptedRule", {
+          return yield* Cloudflare.PageRule.PageRule("AdoptedRule", {
             zoneId,
             target: TARGET_ADOPT,
             actions: [{ id: "cache_level", value: "cache_everything" }],
@@ -293,7 +293,7 @@ test.provider("list enumerates the deployed page rule", (stack) =>
 
     const rule = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PageRule("ListRule", {
+        return yield* Cloudflare.PageRule.PageRule("ListRule", {
           zoneId,
           target: TARGET_LIST,
           actions: [{ id: "cache_level", value: "cache_everything" }],
@@ -301,7 +301,7 @@ test.provider("list enumerates the deployed page rule", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.PageRule);
+    const provider = yield* Provider.findProvider(Cloudflare.PageRule.PageRule);
     const all = yield* provider.list();
 
     expect(all.some((r) => r.pageRuleId === rule.pageRuleId)).toBe(true);

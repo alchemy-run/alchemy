@@ -9,7 +9,7 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import Stack from "../alchemy.run.ts";
-import type { QueueMessage } from "../src/AsyncWorker.ts";
+import type { Message } from "../src/AsyncWorker.ts";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -103,7 +103,7 @@ test(
     const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
-      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map(cast<Schema.Json, Array<Message>>),
       Effect.map((messages) =>
         messages.find((m) => m.body.sentAt === body.sentAt),
       ),
@@ -161,7 +161,7 @@ test(
     const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
-      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map(cast<Schema.Json, Array<Message>>),
       Effect.map((messages) =>
         messages.find((m) => m.body.sentAt === body.sentAt),
       ),

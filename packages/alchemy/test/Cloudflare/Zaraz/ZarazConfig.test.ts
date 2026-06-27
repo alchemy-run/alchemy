@@ -27,7 +27,7 @@ const zoneName =
 // All cases mutate the same zone-wide Zaraz config singleton; run them
 // serially so they don't corrupt each other under the global concurrent
 // test config.
-describe.sequential("ZarazConfig", () => {
+describe.sequential("Config", () => {
   test.provider.skipIf(!zoneId)(
     "updates and retains a zone-level Zaraz config",
     (stack) =>
@@ -40,7 +40,7 @@ describe.sequential("ZarazConfig", () => {
         yield* Effect.gen(function* () {
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ZarazConfig("Config", {
+              return yield* Cloudflare.Zaraz.Config("Config", {
                 zone: { zoneId: zoneId!, name: zoneName },
                 dataLayer: toggledDataLayer,
               });
@@ -55,7 +55,7 @@ describe.sequential("ZarazConfig", () => {
 
           const restored = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ZarazConfig("Config", {
+              return yield* Cloudflare.Zaraz.Config("Config", {
                 zone: { zoneId: zoneId!, name: zoneName },
                 dataLayer: original.dataLayer,
               });
@@ -92,7 +92,7 @@ describe.sequential("ZarazConfig", () => {
         yield* Effect.gen(function* () {
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ZarazConfig("Config", {
+              return yield* Cloudflare.Zaraz.Config("Config", {
                 zone: { zoneId: zoneId!, name: zoneName },
                 dataLayer: !defaults.dataLayer,
                 workflow: "preview",
@@ -142,7 +142,7 @@ describe.sequential("ZarazConfig", () => {
         yield* Effect.gen(function* () {
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ZarazConfig("Config", {
+              return yield* Cloudflare.Zaraz.Config("Config", {
                 zone: { zoneId: zoneId!, name: zoneName },
                 workflow,
               });
@@ -187,7 +187,7 @@ describe.sequential("ZarazConfig", () => {
 
         yield* stack.destroy();
 
-        const provider = yield* Provider.findProvider(Cloudflare.ZarazConfig);
+        const provider = yield* Provider.findProvider(Cloudflare.Zaraz.Config);
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

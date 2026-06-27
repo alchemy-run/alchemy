@@ -78,7 +78,7 @@ describe.sequential("Variants", () => {
 
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Variants("ImageVariants", {
+            return yield* Cloudflare.Cache.Variants("ImageVariants", {
               zoneId,
               jpeg: ["image/webp"],
             });
@@ -97,7 +97,7 @@ describe.sequential("Variants", () => {
         // Update in place — PATCH replaces the full value object.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Variants("ImageVariants", {
+            return yield* Cloudflare.Cache.Variants("ImageVariants", {
               zoneId,
               jpeg: ["image/webp", "image/avif"],
               png: ["image/webp"],
@@ -117,7 +117,7 @@ describe.sequential("Variants", () => {
         // Removing an extension from props unsets it (full replace).
         const narrowed = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Variants("ImageVariants", {
+            return yield* Cloudflare.Cache.Variants("ImageVariants", {
               zoneId,
               png: ["image/avif"],
             });
@@ -149,7 +149,7 @@ describe.sequential("Variants", () => {
 
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Variants("ImageVariants", {
+            return yield* Cloudflare.Cache.Variants("ImageVariants", {
               zoneId,
               webp: ["image/avif"],
             });
@@ -172,7 +172,7 @@ describe.sequential("Variants", () => {
 
         const converged = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Variants("ImageVariants", {
+            return yield* Cloudflare.Cache.Variants("ImageVariants", {
               zoneId,
               webp: ["image/avif"],
               tiff: ["image/webp"],
@@ -210,14 +210,14 @@ describe.sequential("Variants", () => {
 
       yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Variants("ImageVariants", {
+          return yield* Cloudflare.Cache.Variants("ImageVariants", {
             zoneId,
             jpeg: ["image/webp"],
           });
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Variants);
+      const provider = yield* Provider.findProvider(Cloudflare.Cache.Variants);
       // `list()` enumerates every zone with the freshly-minted scoped token,
       // which propagates eventually-consistently and intermittently returns
       // `401 Unauthorized` / `403 Forbidden` — ride those blips out too.

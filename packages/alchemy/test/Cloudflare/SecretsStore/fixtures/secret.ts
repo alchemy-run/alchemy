@@ -9,7 +9,7 @@ import * as Redacted from "effect/Redacted";
  */
 export const SECRET_VALUE = "sk-async-binding-secret-value";
 
-export const Store = Cloudflare.SecretsStore("AsyncSecretBindingStore");
+export const Store = Cloudflare.SecretsStore.Store("AsyncSecretBindingStore");
 
 /**
  * A Secret in the store. Resolving it inside an Effect lets us declare it
@@ -18,7 +18,7 @@ export const Store = Cloudflare.SecretsStore("AsyncSecretBindingStore");
  */
 export const ApiKey = Effect.gen(function* () {
   const store = yield* Store;
-  return yield* Cloudflare.Secret("AsyncBindingApiKey", {
+  return yield* Cloudflare.SecretsStore.Secret("AsyncBindingApiKey", {
     store,
     value: Redacted.make(SECRET_VALUE),
   });

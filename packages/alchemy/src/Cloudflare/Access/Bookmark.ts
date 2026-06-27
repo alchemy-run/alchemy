@@ -13,7 +13,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type AccessBookmarkProps = {
+export type BookmarkProps = {
   /**
    * The name of the bookmark application shown in the App Launcher. Used as
    * a stable identifier so the provider can locate the bookmark during
@@ -40,9 +40,9 @@ export type AccessBookmarkProps = {
   appLauncherVisible?: boolean;
 };
 
-export type AccessBookmark = Resource<
+export type Bookmark = Resource<
   "Cloudflare.Access.Bookmark",
-  AccessBookmarkProps,
+  BookmarkProps,
   {
     /** UUID of the bookmark application. */
     bookmarkId: string;
@@ -69,20 +69,20 @@ export type AccessBookmark = Resource<
  * @category Cloudflare One (Zero Trust)
  * @deprecated **Legacy resource.** Cloudflare has deprecated the dedicated
  * bookmarks API in favor of Access applications with `type: "bookmark"` —
- * prefer {@link AccessApplication} for new configurations. This resource is
+ * prefer {@link Application} for new configurations. This resource is
  * provided for managing pre-existing bookmark records.
  *
  * @section Creating a Bookmark
  * @example Basic bookmark
  * ```typescript
- * const bookmark = yield* Cloudflare.AccessBookmark("Wiki", {
+ * const bookmark = yield* Cloudflare.Access.Bookmark("Wiki", {
  *   domain: "wiki.example.com",
  * });
  * ```
  *
  * @example Bookmark with a logo, hidden from the App Launcher
  * ```typescript
- * const bookmark = yield* Cloudflare.AccessBookmark("Wiki", {
+ * const bookmark = yield* Cloudflare.Access.Bookmark("Wiki", {
  *   name: "internal-wiki",
  *   domain: "wiki.example.com",
  *   logoUrl: "https://example.com/logo.png",
@@ -93,22 +93,20 @@ export type AccessBookmark = Resource<
  * @section Preferred Alternative
  * @example Bookmark-type Access application (non-legacy)
  * ```typescript
- * const app = yield* Cloudflare.AccessApplication("Wiki", {
+ * const app = yield* Cloudflare.Access.Application("Wiki", {
  *   type: "bookmark",
  *   domain: "wiki.example.com",
  * });
  * ```
  */
-export const AccessBookmark = Resource<AccessBookmark>(
-  "Cloudflare.Access.Bookmark",
-);
+export const Bookmark = Resource<Bookmark>("Cloudflare.Access.Bookmark");
 
-export const isAccessBookmark = (value: unknown): value is AccessBookmark =>
+export const isBookmark = (value: unknown): value is Bookmark =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === "Cloudflare.Access.Bookmark";
 
-export const AccessBookmarkProvider = () =>
-  Provider.succeed(AccessBookmark, {
+export const BookmarkProvider = () =>
+  Provider.succeed(Bookmark, {
     stables: ["bookmarkId", "accountId"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -173,7 +171,7 @@ export const AccessBookmarkProvider = () =>
           );
         if (!created.id) {
           return yield* Effect.fail(
-            new Error("AccessBookmark: created bookmark missing id"),
+            new Error("Bookmark: created bookmark missing id"),
           );
         }
         return toAttrs(created, acct);

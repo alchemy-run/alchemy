@@ -5,7 +5,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Effect-native Worker fixture for the Cloudflare Images binding. Yielding
- * `Cloudflare.Images(...)` during Init attaches the binding to this Worker and
+ * `Cloudflare.Images.Images(...)` during Init attaches the binding to this Worker and
  * returns the runtime client in one step — no separate `.bind(...)`. The
  * worker forwards the request body (typed as `Stream.Stream<Uint8Array>`)
  * straight into `images.info(...)`, proving the Effect-native client converts
@@ -17,7 +17,7 @@ export default class ImagesEffectWorker extends Cloudflare.Worker<ImagesEffectWo
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const images = yield* Cloudflare.Images({ name: "PIPELINE" });
+    const images = yield* Cloudflare.Images.Images("PIPELINE");
 
     return {
       fetch: Effect.gen(function* () {
@@ -26,5 +26,5 @@ export default class ImagesEffectWorker extends Cloudflare.Worker<ImagesEffectWo
         return yield* HttpServerResponse.json({ mode: "effect", ...info });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.ImagesBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Images.ImagesBinding)),
 ) {}

@@ -51,7 +51,7 @@ test.provider(
       yield* stack.destroy();
 
       const input = yield* stack.deploy(
-        Cloudflare.StreamLiveInput("BroadcastInput", {
+        Cloudflare.Stream.LiveInput("BroadcastInput", {
           meta: { name: "alchemy-stream-live-input" },
           recording: { mode: "automatic", timeoutSeconds: 10 },
         }),
@@ -68,7 +68,7 @@ test.provider(
 
       // Update mutable props in place — same uid, no replacement.
       const updated = yield* stack.deploy(
-        Cloudflare.StreamLiveInput("BroadcastInput", {
+        Cloudflare.Stream.LiveInput("BroadcastInput", {
           enabled: false,
           meta: { name: "alchemy-stream-live-input-v2" },
           recording: { mode: "automatic", timeoutSeconds: 10 },
@@ -86,7 +86,7 @@ test.provider(
 
       // Redeploying identical props is a no-op (still the same input).
       const noop = yield* stack.deploy(
-        Cloudflare.StreamLiveInput("BroadcastInput", {
+        Cloudflare.Stream.LiveInput("BroadcastInput", {
           enabled: false,
           meta: { name: "alchemy-stream-live-input-v2" },
           recording: { mode: "automatic", timeoutSeconds: 10 },
@@ -110,7 +110,7 @@ test.provider(
       yield* stack.destroy();
 
       const input = yield* stack.deploy(
-        Cloudflare.StreamLiveInput("HealInput", {
+        Cloudflare.Stream.LiveInput("HealInput", {
           meta: { name: "alchemy-stream-heal-input" },
         }),
       );
@@ -129,7 +129,7 @@ test.provider(
         );
 
       const healed = yield* stack.deploy(
-        Cloudflare.StreamLiveInput("HealInput", {
+        Cloudflare.Stream.LiveInput("HealInput", {
           enabled: false,
           meta: { name: "alchemy-stream-heal-input" },
         }),
@@ -175,12 +175,14 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
       yield* stack.destroy();
 
       const input = yield* stack.deploy(
-        Cloudflare.StreamLiveInput("ListInput", {
+        Cloudflare.Stream.LiveInput("ListInput", {
           meta: { name: "alchemy-stream-list-input" },
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.StreamLiveInput);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Stream.LiveInput,
+      );
       const all = yield* provider.list();
 
       expect(all.some((x) => x.liveInputId === input.liveInputId)).toBe(true);

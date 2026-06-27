@@ -31,7 +31,9 @@ test.provider(
       // Parent fan-out: list() enumerates the account's sent shares and then
       // every recipient within each share. On a write-blocked account there
       // may be zero shares — the result is still a well-typed array.
-      const provider = yield* Provider.findProvider(Cloudflare.ShareRecipient);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ResourceSharing.ShareRecipient,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -57,7 +59,7 @@ test.provider.skipIf(!recipientAccountId)(
       yield* stack.destroy();
 
       const policy = yield* stack.deploy(
-        Cloudflare.GatewayRule("RecipientListPolicy", {
+        Cloudflare.Gateway.Rule("RecipientListPolicy", {
           action: "block",
           traffic: 'dns.fqdn == "recipient-list.alchemy-test.example"',
           filters: ["dns"],
@@ -66,7 +68,7 @@ test.provider.skipIf(!recipientAccountId)(
       );
 
       const share = yield* stack.deploy(
-        Cloudflare.Share("RecipientListShare", {
+        Cloudflare.ResourceSharing.Share("RecipientListShare", {
           name: "alchemy-recipient-list-share",
           recipients: [],
           resources: [
@@ -76,7 +78,7 @@ test.provider.skipIf(!recipientAccountId)(
       );
 
       const deployed = yield* stack.deploy(
-        Cloudflare.ShareRecipient("RecipientListEntry", {
+        Cloudflare.ResourceSharing.ShareRecipient("RecipientListEntry", {
           shareId: share.shareId,
           accountId: recipient,
         }),
@@ -84,7 +86,9 @@ test.provider.skipIf(!recipientAccountId)(
       expect(deployed.recipientId).toBeTruthy();
       expect(deployed.accountId).toEqual(accountId);
 
-      const provider = yield* Provider.findProvider(Cloudflare.ShareRecipient);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ResourceSharing.ShareRecipient,
+      );
       const all = yield* provider.list();
 
       expect(all.some((r) => r.recipientId === deployed.recipientId)).toBe(

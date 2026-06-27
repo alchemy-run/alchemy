@@ -9,10 +9,15 @@ import type {
 import type { S3EventType } from "./S3Event.ts";
 
 /** @binding */
-export class BucketEventSource extends Binding.Service<
+export interface BucketEventSource extends Binding.Service<
   BucketEventSource,
+  "BucketNotificationStream",
   BucketEventSourceService
->()("BucketNotificationStream") {}
+> {}
+
+export const BucketEventSource = Binding.Service<BucketEventSource>(
+  "BucketNotificationStream",
+);
 
 export type BucketEventSourceService = <
   Events extends S3EventType[],

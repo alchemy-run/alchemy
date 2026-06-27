@@ -109,7 +109,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Lockdown("LifecycleLockdown", {
+          return yield* Cloudflare.Firewall.Lockdown("LifecycleLockdown", {
             zoneId,
             urls: [URL_LIFECYCLE_V1],
             configurations: [{ target: "ip", value: IP_V1 }],
@@ -134,7 +134,7 @@ test.provider(
       // ip_range allow entry, change the description, and pause the rule.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Lockdown("LifecycleLockdown", {
+          return yield* Cloudflare.Firewall.Lockdown("LifecycleLockdown", {
             zoneId,
             urls: [URL_LIFECYCLE_V1, URL_LIFECYCLE_V2],
             configurations: [
@@ -167,7 +167,7 @@ test.provider(
       // Redeploying identical props is a no-op (still the same rule).
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Lockdown("LifecycleLockdown", {
+          return yield* Cloudflare.Firewall.Lockdown("LifecycleLockdown", {
             zoneId,
             urls: [URL_LIFECYCLE_V1, URL_LIFECYCLE_V2],
             configurations: [
@@ -200,7 +200,7 @@ test.provider("list enumerates the deployed lockdown rule", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Lockdown("ListLockdown", {
+        return yield* Cloudflare.Firewall.Lockdown("ListLockdown", {
           zoneId,
           urls: [URL_LIST],
           configurations: [{ target: "ip", value: IP_LIST }],
@@ -209,7 +209,7 @@ test.provider("list enumerates the deployed lockdown rule", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.Lockdown);
+    const provider = yield* Provider.findProvider(Cloudflare.Firewall.Lockdown);
     const all = yield* provider.list();
 
     expect(all.some((r) => r.lockdownId === deployed.lockdownId)).toBe(true);

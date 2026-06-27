@@ -96,7 +96,7 @@ test.provider.skipIf(!lbEnabled)(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.LoadBalancerMonitor("Monitor", {
+        Cloudflare.LoadBalancer.Monitor("Monitor", {
           description: NAME_LIFECYCLE,
           type: "https",
           path: "/health",
@@ -117,7 +117,7 @@ test.provider.skipIf(!lbEnabled)(
 
       // Mutable props update in place — same monitorId.
       const updated = yield* stack.deploy(
-        Cloudflare.LoadBalancerMonitor("Monitor", {
+        Cloudflare.LoadBalancer.Monitor("Monitor", {
           description: NAME_LIFECYCLE,
           type: "https",
           path: "/healthz",
@@ -135,7 +135,7 @@ test.provider.skipIf(!lbEnabled)(
 
       // Redeploying identical props is a no-op (still the same monitor).
       const noop = yield* stack.deploy(
-        Cloudflare.LoadBalancerMonitor("Monitor", {
+        Cloudflare.LoadBalancer.Monitor("Monitor", {
           description: NAME_LIFECYCLE,
           type: "https",
           path: "/healthz",
@@ -163,7 +163,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancerMonitor,
+        Cloudflare.LoadBalancer.Monitor,
       );
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
@@ -188,7 +188,7 @@ test.provider.skipIf(!lbEnabled)(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.LoadBalancerMonitor("ListMonitor", {
+        Cloudflare.LoadBalancer.Monitor("ListMonitor", {
           description: NAME_LIFECYCLE,
           type: "https",
           path: "/health",
@@ -198,7 +198,7 @@ test.provider.skipIf(!lbEnabled)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancerMonitor,
+        Cloudflare.LoadBalancer.Monitor,
       );
       const all = yield* provider.list();
 

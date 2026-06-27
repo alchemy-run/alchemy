@@ -339,8 +339,8 @@ export interface Bucket extends Resource<
  * @example Read and write objects
  * ```typescript
  * // init
- * const getObject = yield* S3.GetObject.bind(bucket);
- * const putObject = yield* S3.PutObject.bind(bucket);
+ * const getObject = yield* S3.GetObject(bucket);
+ * const putObject = yield* S3.PutObject(bucket);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -359,7 +359,7 @@ export interface Bucket extends Resource<
  * @example Delete an object
  * ```typescript
  * // init
- * const deleteObject = yield* S3.DeleteObject.bind(bucket);
+ * const deleteObject = yield* S3.DeleteObject(bucket);
  * ```
  *
  * @section Event Notifications
@@ -369,9 +369,9 @@ export interface Bucket extends Resource<
  * @example Process object creation events
  * ```typescript
  * // init
- * yield* S3.notifications(bucket, {
+ * yield* S3.consumeBucketEvents(bucket, {
  *   events: ["s3:ObjectCreated:*"],
- * }).subscribe((stream) =>
+ * }, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((event) =>
  *       Effect.log(`New object: ${event.key}`),
@@ -699,7 +699,7 @@ export const BucketProvider = () =>
       });
 
       // Apply S3 event notification configuration declared via bindings
-      // (e.g. `S3.notifications(bucket).subscribe(...)`). Without this the
+      // (e.g. `S3.consumeBucketEvents(bucket, handler)`). Without this the
       // binding is recorded in state but never reaches the bucket, so no
       // events are ever delivered.
       // Canonical form of the Lambda targets, ignoring S3-assigned `Id`s and
@@ -752,7 +752,7 @@ export const BucketProvider = () =>
         );
         yield* s3.putBucketNotificationConfiguration({
           Bucket: bucketName,
-          // Preserve any Topic/Queue/EventBridge config already on the bucket;
+          // Preserve any Topic/Queues/EventBridge config already on the bucket;
           // only manage the Lambda targets declared through bindings.
           NotificationConfiguration: {
             ...existing,

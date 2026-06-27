@@ -23,7 +23,7 @@ of how the graph deploys, see
 ## What an Output is
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 
 bucket.bucketName;
 // ^? Output<string>
@@ -48,7 +48,7 @@ Reading a property off a resource (or any `Output`) returns another
 `Output`:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 
 bucket.bucketName;        // Output<string>
 bucket.bucketArn;         // Output<string>

@@ -1,6 +1,6 @@
 ---
 title: Add AI Search (AutoRAG)
-description: Stand up a Cloudflare AI Search (AutoRAG) pipeline over an R2 bucket with one AiSearch call, bind it into your Worker as a typed Effect client, and answer questions over your own documents.
+description: Stand up a Cloudflare AI Search (AutoRAG) pipeline over an R2 bucket with one Search call, bind it into your Worker as a typed Effect client, and answer questions over your own documents.
 sidebar:
   order: 6.5
 ---
@@ -12,7 +12,7 @@ generation, all managed by Cloudflare.
 
 A working pipeline needs more than one resource: the instance itself,
 plus a scoped API token so the indexer can read your R2 bucket. The
-`Cloudflare.AiSearch` helper wires all of that up in a single call.
+`Cloudflare.AI.Search` helper wires all of that up in a single call.
 We'll use it here and unpack exactly what it creates.
 
 ## Create the R2 bucket
@@ -24,7 +24,7 @@ Create `src/Docs.ts` with a bucket definition.
 // src/Docs.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Docs = Cloudflare.R2Bucket("Docs", {});
+export const Docs = Cloudflare.R2.Bucket("Docs", {});
 ```
 
 This is the bucket you'll drop Markdown, PDFs, or text files into —
@@ -32,7 +32,7 @@ AI Search picks them up on its next sync.
 
 ## Declare the AI Search pipeline
 
-Add an `AiSearch` construct and pass the `Docs` bucket as `bucket`. That
+Add a `Search` construct and pass the `Docs` bucket as `source`. That
 field selects R2 as the data source.
 
 ```typescript
@@ -40,19 +40,19 @@ field selects R2 as the data source.
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Docs } from "./Docs.ts";
 
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AI.Search("Search", {
   source: Docs,
 });
 ```
 
-`AiSearch` is a **construct**, not a single resource. Calling it expands
+`Search` is a **construct**, not a single resource. Calling it expands
 into several resources so you don't have to wire them up by hand.
 
 :::note[Crawling a website instead]
 Passing a URL as `source` (instead of a bucket) indexes a website by
 crawling it, with optional `parse` / `crawl` / `store` options and no
 service token. This tutorial focuses on the R2 source — see the
-[`AiSearch` reference](/providers/cloudflare/aisearch/aisearch) for the
+[`Search` reference](/providers/cloudflare/ai/search) for the
 web-crawler options.
 :::
 
@@ -60,21 +60,21 @@ web-crawler options.
 
 For an R2 source, the indexer needs a service token to read your bucket.
 Cloudflare only creates that token for you through the dashboard or
-Wrangler — never on a programmatic API create — so `AiSearch` provisions
+Wrangler — never on a programmatic API create — so `Search` provisions
 it as stable children of the construct:
 
-- a least-privilege `Cloudflare.AccountApiToken` scoped to the
+- a least-privilege `Cloudflare.ApiToken.AccountApiToken` scoped to the
   **AI Search Index Engine** permission group,
-- a `Cloudflare.AiSearchToken` that wraps that API token into the
+- a `Cloudflare.AI.SearchToken` that wraps that API token into the
   service-token shape AI Search expects,
-- the `Cloudflare.AiSearchInstance` itself, with the service token's
+- the `Cloudflare.AI.SearchInstance` itself, with the service token's
   id wired into its `tokenId`.
 
-So the single `AiSearch("Search", …)` call above is shorthand for
+So the single `Search("Search", …)` call above is shorthand for
 roughly this:
 
 ```typescript
-const apiToken = yield* Cloudflare.AccountApiToken("Token", {
+const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("Token", {
   policies: [
     {
       effect: "allow",
@@ -83,20 +83,20 @@ const apiToken = yield* Cloudflare.AccountApiToken("Token", {
     },
   ],
 });
-const serviceToken = yield* Cloudflare.AiSearchToken("Token", {
+const serviceToken = yield* Cloudflare.AI.SearchToken("Token", {
   cfApiId: apiToken.tokenId,
   cfApiKey: apiToken.value,
 });
-const instance = yield* Cloudflare.AiSearchInstance("Instance", {
+const instance = yield* Cloudflare.AI.SearchInstance("Instance", {
   source: Docs.bucketName,
   tokenId: serviceToken.id,
 });
 ```
 
-`AiSearch` translates the `source` bucket into the instance's `type: "r2"` +
+`Search` translates the `source` bucket into the instance's `type: "r2"` +
 `source: bucket.bucketName` for you. The value it returns **is** the
-`AiSearchInstance` (with the managed `serviceToken` attached), so you can pass
-it straight to anything that expects an `AiSearchInstance` — no destructuring
+`SearchInstance` (with the managed `serviceToken` attached), so you can pass
+it straight to anything that expects a `SearchInstance` — no destructuring
 needed.
 
 ## Index only part of the bucket
@@ -106,7 +106,7 @@ scope indexing to one key prefix, and `include` / `exclude` glob patterns
 for finer control.
 
 ```diff lang="typescript"
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AI.Search("Search", {
   source: Docs,
 +  prefix: "docs/",
 +  include: ["/docs/**"],
@@ -123,11 +123,11 @@ objects matching an `include` pattern are indexed, and `exclude` wins over
 ## Reuse an existing token
 
 If your account already has a registered AI Search service token, pass
-its `tokenId` and `AiSearch` skips minting the `AccountApiToken` +
-`AiSearchToken` children, wiring your token into the instance instead.
+its `tokenId` and `Search` skips minting the `AccountApiToken` +
+`SearchToken` children, wiring your token into the instance instead.
 
 ```typescript
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AI.Search("Search", {
   source: Docs,
   tokenId: existingToken.id,
 });
@@ -139,13 +139,13 @@ the simplest path.
 
 ## Group pipelines under a namespace
 
-Pass an `AiSearchNamespace` resource as `namespace` to group related
+Pass a `SearchNamespace` resource as `namespace` to group related
 pipelines under it instead of the account-provided `default` namespace.
 
 ```typescript
-const Knowledge = Cloudflare.AiSearchNamespace("Knowledge", {});
+const Knowledge = Cloudflare.AI.SearchNamespace("Knowledge", {});
 
-export const Search = Cloudflare.AiSearch("Search", {
+export const Search = Cloudflare.AI.Search("Search", {
   source: Docs,
   namespace: Knowledge,
 });
@@ -183,14 +183,14 @@ the pipeline.
 
 `yield* Search` registers the construct — the bucket, both tokens, and
 the instance all get created on the next deploy, in dependency order.
-The value is the `AiSearchInstance` itself, so `search.instanceId` reads
+The value is the `SearchInstance` itself, so `search.instanceId` reads
 straight off it.
 
 ## Bind the instance into the Worker
 
-`Cloudflare.AiSearchInstance.bind(search)` attaches the
+`Cloudflare.AI.QuerySearch(search)` attaches the
 single-instance `ai_search` binding and returns a typed Effect client.
-Bind it during the Worker's init phase.
+Call it during the Worker's init phase.
 
 ```diff lang="typescript"
 // src/Api.ts
@@ -203,7 +203,7 @@ Bind it during the Worker's init phase.
    { main: import.meta.filename },
    Effect.gen(function* () {
 +    const aiSearch = yield* Search;
-+    const search = yield* Cloudflare.AiSearchInstance.bind(aiSearch);
++    const search = yield* Cloudflare.AI.QuerySearch(aiSearch);
 
      return {
        fetch: Effect.gen(function* () {
@@ -211,13 +211,13 @@ Bind it during the Worker's init phase.
        }),
      };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.AiSearchInstanceBindingLive)),
++  }).pipe(Effect.provide(Cloudflare.AI.QuerySearchBinding)),
  ) {}
 ```
 
-`Cloudflare.AiSearchInstanceBindingLive` is the runtime side of the
+`Cloudflare.AI.QuerySearchBinding` is the runtime side of the
 binding. Provide it once at the bottom of the Init layer chain and the
-`bind(...)` above resolves to a live `AiSearchInstance` handle at runtime.
+`QuerySearch(...)` above resolves to a live `SearchInstance` handle at runtime.
 
 ## Answer questions on `/ask`
 
@@ -297,12 +297,12 @@ document was indexed before querying.
 
 ## Drop down to the low-level resources
 
-The `AiSearch` helper is the fast path for the common R2 case. Reach
+The `Search` helper is the fast path for the common R2 case. Reach
 for the underlying resources directly when you need to:
 
 - **share one token across many instances** — create the
-  `AiSearchToken` once and pass its `id` as `tokenId` to each
-  `AiSearchInstance`,
+  `SearchToken` once and pass its `id` as `tokenId` to each
+  `SearchInstance`,
 - **adopt an existing instance or token** rather than create one.
 
 Everything the helper does is just these resources composed — there's
@@ -313,10 +313,10 @@ no behavior you lose by dropping down.
 - An R2 bucket whose contents are indexed for retrieval.
 - A managed, least-privilege API token + AI Search service token, both
   owned by your stack and torn down on `destroy`.
-- An `AiSearchInstance` bound into your Worker as a typed Effect client.
+- A `SearchInstance` bound into your Worker as a typed Effect client.
 - `/ask` (full RAG) and `/search` (retrieval only) routes over your own
   documents.
 
 For the full prop surface — embedding/generation models, R2 prefix and
 include/exclude filters, reranking, query rewriting, and similarity
-caching — see the [AI Search resource reference](/providers/cloudflare/aisearch/aisearch).
+caching — see the [AI Search resource reference](/providers/cloudflare/ai/search).

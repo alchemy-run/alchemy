@@ -30,7 +30,7 @@ test.provider("list enumerates the deployed email address", (stack) =>
 
     const address = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.EmailAddress("ListAddress", {
+        return yield* Cloudflare.Email.Address("ListAddress", {
           email: testEmail,
         });
       }),
@@ -38,7 +38,7 @@ test.provider("list enumerates the deployed email address", (stack) =>
 
     expect(address.email).toEqual(testEmail);
 
-    const provider = yield* Provider.findProvider(Cloudflare.EmailAddress);
+    const provider = yield* Provider.findProvider(Cloudflare.Email.Address);
 
     // A freshly-deployed address is eventually consistent in the account-wide
     // list(); poll until it appears before asserting.

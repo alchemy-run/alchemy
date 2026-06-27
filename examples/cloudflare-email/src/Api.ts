@@ -19,7 +19,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const email = yield* Cloudflare.SendEmail.bind(SendEmail);
+    const email = yield* Cloudflare.Email.Send(SendEmail);
 
     return {
       fetch: Effect.gen(function* () {
@@ -61,5 +61,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return HttpServerResponse.text("not found", { status: 404 });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.SendEmailBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Email.SendBinding)),
 ) {}

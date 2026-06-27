@@ -94,38 +94,38 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
     const { topic, queue, subscription, queueSubscription } =
       yield* TopicAndQueue;
 
-    const publish = yield* AWS.SNS.Publish.bind(topic);
-    const publishBatch = yield* AWS.SNS.PublishBatch.bind(topic);
-    const getTopicAttributes = yield* AWS.SNS.GetTopicAttributes.bind(topic);
-    const setTopicAttributes = yield* AWS.SNS.SetTopicAttributes.bind(topic);
-    const addPermission = yield* AWS.SNS.AddPermission.bind(topic);
-    const removePermission = yield* AWS.SNS.RemovePermission.bind(topic);
+    const publish = yield* AWS.SNS.Publish(topic);
+    const publishBatch = yield* AWS.SNS.PublishBatch(topic);
+    const getTopicAttributes = yield* AWS.SNS.GetTopicAttributes(topic);
+    const setTopicAttributes = yield* AWS.SNS.SetTopicAttributes(topic);
+    const addPermission = yield* AWS.SNS.AddPermission(topic);
+    const removePermission = yield* AWS.SNS.RemovePermission(topic);
     const getDataProtectionPolicy =
-      yield* AWS.SNS.GetDataProtectionPolicy.bind(topic);
+      yield* AWS.SNS.GetDataProtectionPolicy(topic);
     const putDataProtectionPolicy =
-      yield* AWS.SNS.PutDataProtectionPolicy.bind(topic);
-    const listTopics = yield* AWS.SNS.ListTopics.bind();
-    const listSubscriptions = yield* AWS.SNS.ListSubscriptions.bind();
+      yield* AWS.SNS.PutDataProtectionPolicy(topic);
+    const listTopics = yield* AWS.SNS.ListTopics();
+    const listSubscriptions = yield* AWS.SNS.ListSubscriptions();
     const listSubscriptionsByTopic =
-      yield* AWS.SNS.ListSubscriptionsByTopic.bind(topic);
-    const listTagsForResource = yield* AWS.SNS.ListTagsForResource.bind(topic);
-    const tagResource = yield* AWS.SNS.TagResource.bind(topic);
-    const untagResource = yield* AWS.SNS.UntagResource.bind(topic);
+      yield* AWS.SNS.ListSubscriptionsByTopic(topic);
+    const listTagsForResource = yield* AWS.SNS.ListTagsForResource(topic);
+    const tagResource = yield* AWS.SNS.TagResource(topic);
+    const untagResource = yield* AWS.SNS.UntagResource(topic);
     const getSubscriptionAttributes =
-      yield* AWS.SNS.GetSubscriptionAttributes.bind(queueSubscription);
+      yield* AWS.SNS.GetSubscriptionAttributes(queueSubscription);
     const setSubscriptionAttributes =
-      yield* AWS.SNS.SetSubscriptionAttributes.bind(queueSubscription);
+      yield* AWS.SNS.SetSubscriptionAttributes(queueSubscription);
     const confirmSubscription =
-      yield* AWS.SNS.ConfirmSubscription.bind(subscription);
-    const sink = yield* AWS.SNS.TopicSink.bind(topic);
+      yield* AWS.SNS.ConfirmSubscription(subscription);
+    const sink = yield* AWS.SNS.TopicSink(topic);
     const TopicArn = yield* topic.topicArn;
     const accountId = TopicArn.pipe(
       Effect.map((topicArn) => topicArn.split(":")[4] ?? ""),
     );
 
-    const queueSink = yield* AWS.SQS.QueueSink.bind(queue);
+    const queueSink = yield* AWS.SQS.QueueSink(queue);
 
-    yield* AWS.SNS.notifications(topic).subscribe((stream) =>
+    yield* AWS.SNS.consumeTopicNotifications(topic, (stream) =>
       stream.pipe(
         Stream.map((notification) =>
           JSON.stringify({
@@ -321,28 +321,28 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
         Layer.mergeAll(
           TopicAndQueueLive,
           AWS.Lambda.TopicEventSource,
-          AWS.SNS.TopicSinkLive,
-          AWS.SQS.QueueSinkLive,
+          AWS.SNS.TopicSinkHttp,
+          AWS.SQS.QueueSinkHttp,
         ),
         Layer.mergeAll(
-          AWS.SNS.AddPermissionLive,
-          AWS.SNS.ConfirmSubscriptionLive,
-          AWS.SNS.GetDataProtectionPolicyLive,
-          AWS.SNS.GetSubscriptionAttributesLive,
-          AWS.SNS.GetTopicAttributesLive,
-          AWS.SNS.ListSubscriptionsByTopicLive,
-          AWS.SNS.ListSubscriptionsLive,
-          AWS.SNS.ListTagsForResourceLive,
-          AWS.SNS.ListTopicsLive,
-          AWS.SNS.PublishBatchLive,
-          AWS.SNS.PublishLive,
-          AWS.SNS.PutDataProtectionPolicyLive,
-          AWS.SNS.RemovePermissionLive,
-          AWS.SNS.SetSubscriptionAttributesLive,
-          AWS.SNS.SetTopicAttributesLive,
-          AWS.SNS.TagResourceLive,
-          AWS.SNS.UntagResourceLive,
-          AWS.SQS.SendMessageBatchLive,
+          AWS.SNS.AddPermissionHttp,
+          AWS.SNS.ConfirmSubscriptionHttp,
+          AWS.SNS.GetDataProtectionPolicyHttp,
+          AWS.SNS.GetSubscriptionAttributesHttp,
+          AWS.SNS.GetTopicAttributesHttp,
+          AWS.SNS.ListSubscriptionsByTopicHttp,
+          AWS.SNS.ListSubscriptionsHttp,
+          AWS.SNS.ListTagsForResourceHttp,
+          AWS.SNS.ListTopicsHttp,
+          AWS.SNS.PublishBatchHttp,
+          AWS.SNS.PublishHttp,
+          AWS.SNS.PutDataProtectionPolicyHttp,
+          AWS.SNS.RemovePermissionHttp,
+          AWS.SNS.SetSubscriptionAttributesHttp,
+          AWS.SNS.SetTopicAttributesHttp,
+          AWS.SNS.TagResourceHttp,
+          AWS.SNS.UntagResourceHttp,
+          AWS.SQS.SendMessageBatchHttp,
         ),
       ),
     ),

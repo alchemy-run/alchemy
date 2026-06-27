@@ -46,12 +46,12 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
 
     // Yieldable binding form — attaches the `version_metadata` binding to
     // this Worker and returns a deferred accessor resolved at runtime.
-    const versionMetadata = yield* Cloudflare.VersionMetadata();
+    const versionMetadata = yield* Cloudflare.Workers.VersionMetadata();
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const env = yield* Cloudflare.WorkerEnvironment;
+        const env = yield* Cloudflare.Workers.WorkerEnvironment;
         const pathname = new URL(request.originalUrl).pathname;
 
         if (pathname === "/env") {
@@ -90,5 +90,5 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.VersionMetadataBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Workers.VersionMetadataBinding)),
 ) {}

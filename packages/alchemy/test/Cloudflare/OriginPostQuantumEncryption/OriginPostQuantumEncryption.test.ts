@@ -52,7 +52,7 @@ const getSetting = (zoneId: string) =>
 // run left behind. Cloudflare's documented default is "supported".
 const setBaseline = (
   zoneId: string,
-  value: Cloudflare.OriginPostQuantumEncryptionValue,
+  value: Cloudflare.OriginPostQuantumEncryption.Value,
 ) =>
   pqe.putOriginPostQuantumEncryption({ zoneId, value }).pipe(
     Effect.retry({
@@ -75,10 +75,13 @@ describe.sequential("OriginPostQuantumEncryption", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-              zoneId,
-              value: "preferred",
-            });
+            return yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption(
+              "OriginPqe",
+              {
+                zoneId,
+                value: "preferred",
+              },
+            );
           }),
         );
 
@@ -112,10 +115,13 @@ describe.sequential("OriginPostQuantumEncryption", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-              zoneId,
-              value: "preferred",
-            });
+            return yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption(
+              "OriginPqe",
+              {
+                zoneId,
+                value: "preferred",
+              },
+            );
           }),
         );
 
@@ -124,10 +130,13 @@ describe.sequential("OriginPostQuantumEncryption", () => {
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-              zoneId,
-              value: "supported",
-            });
+            return yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption(
+              "OriginPqe",
+              {
+                zoneId,
+                value: "supported",
+              },
+            );
           }),
         );
 
@@ -161,10 +170,13 @@ describe.sequential("OriginPostQuantumEncryption", () => {
 
         const deploy = stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-              zoneId,
-              value: "off",
-            });
+            return yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption(
+              "OriginPqe",
+              {
+                zoneId,
+                value: "off",
+              },
+            );
           }),
         );
 
@@ -197,7 +209,7 @@ describe.sequential("OriginPostQuantumEncryption", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.OriginPostQuantumEncryption,
+        Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption,
       );
       // The freshly-minted scoped token propagates eventually-consistently, so
       // the account-wide enumeration intermittently 403s (`Forbidden`) or 401s

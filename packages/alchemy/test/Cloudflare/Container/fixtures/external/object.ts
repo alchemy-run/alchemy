@@ -21,7 +21,7 @@ class ExternalContainer extends Cloudflare.Container<ExternalContainer>()(
  * Durable Object that binds and starts the {@link ExternalContainer} and
  * proxies an HTTP request to the nginx server running on port 8080 inside it.
  */
-export class ExternalContainerObject extends Cloudflare.DurableObjectNamespace<ExternalContainerObject>()(
+export class ExternalContainerObject extends Cloudflare.DurableObject<ExternalContainerObject>()(
   "ExternalContainerObject",
   Effect.gen(function* () {
     const container = yield* ExternalContainer;
@@ -41,7 +41,7 @@ export class ExternalContainerObject extends Cloudflare.DurableObjectNamespace<E
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.layerContainer(ExternalContainer, {
+        Cloudflare.Containers.layer(ExternalContainer, {
           enableInternet: true,
         }),
       ),

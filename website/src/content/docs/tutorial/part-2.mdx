@@ -59,7 +59,7 @@ Create `src/bucket.ts`:
 // src/bucket.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Bucket = Cloudflare.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 ```
 
 Update `alchemy.run.ts` to import it instead of declaring it inline:
@@ -80,7 +80,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
--   const bucket = yield* Cloudflare.R2Bucket("Bucket");
+-   const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 +   const bucket = yield* Bucket;
 
     return {
@@ -91,7 +91,7 @@ export default Alchemy.Stack(
 ```
 
 :::tip
-Resource declarations like `Cloudflare.R2Bucket("Bucket")` are just
+Resource declarations like `Cloudflare.R2.Bucket("Bucket")` are just
 descriptions — they don't execute until you `yield*` them inside a
 Stack. You can safely import them from multiple files.
 :::
@@ -105,7 +105,7 @@ Now the Worker can import `Bucket` and bind it in the Init phase:
 // @allowImportingTsExtensions: true
 // @filename: bucket.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-export const Bucket = Cloudflare.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 // @filename: index.ts
 // ---cut---
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -132,7 +132,7 @@ export default Cloudflare.Worker(
 
 ## Provide the binding layer
 
-The previous step showed a type error — `R2Bucket.bind` requires the
+The previous step showed a type error — `Bucket.bind` requires the
 `R2BucketBinding` service. Fix it by piping the outer Effect through
 `R2BucketBindingLive`:
 
@@ -385,11 +385,11 @@ Deploy again. Alchemy detects the new Worker and the unchanged Bucket:
 
 [g]+[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [c](1 bindings)[/c]
 [s2][g]+[/g] [c]Bucket[/c]
-[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d]
 
 Proceed?
 ◉ Yes ○ No
-[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [d]no change[/d]
+[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d] [d]no change[/d]
 [g]✓[/g] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [g]created[/g]
 [s2][d]• Uploading worker (14.20 KB) ...[/d]
 [s2][d]• Enabling workers.dev subdomain...[/d]

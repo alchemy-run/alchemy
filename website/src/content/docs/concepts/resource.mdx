@@ -17,7 +17,7 @@ Resources are declared with a **logical ID** and optional **input
 properties**:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 const queue = yield* AWS.SQS.Queue("Jobs", {
   fifoQueue: true,
 });
@@ -40,7 +40,7 @@ expressions on the resource — lazy, typed references that resolve
 once the upstream resource has been created:
 
 ```typescript
-const bucket = yield* Cloudflare.R2Bucket("Bucket");
+const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 bucket.bucketName; // Output<string>
 ```
 
@@ -53,7 +53,7 @@ dependencies.
 
 ## Resources are Effects
 
-A resource declaration like `Cloudflare.R2Bucket("Bucket")` is just
+A resource declaration like `Cloudflare.R2.Bucket("Bucket")` is just
 an `Effect` — calling it doesn't talk to the cloud. `yield*`-ing it
 inside a [Stack](/concepts/stack) doesn't either; it just **registers
 the resource on the stack** and hands you back a typed
@@ -61,7 +61,7 @@ the resource on the stack** and hands you back a typed
 
 ```typescript
 // 1. Build the Effect. No API calls. No state mutation.
-const Bucket = Cloudflare.R2Bucket("Bucket");
+const Bucket = Cloudflare.R2.Bucket("Bucket");
 
 // 2. Register it on the stack. Still no API calls — alchemy is
 //    just collecting the desired-state graph.
@@ -87,7 +87,7 @@ import it from anywhere — handlers, layers, other resources:
 
 ```typescript
 // src/bucket.ts
-export const Bucket = Cloudflare.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 ```
 
 ```typescript
@@ -148,7 +148,7 @@ The first argument you pass to a resource constructor is its
 within its stack:
 
 ```typescript
-const Bucket = Cloudflare.R2Bucket("Bucket"); // logical ID: "Bucket"
+const Bucket = Cloudflare.R2.Bucket("Bucket"); // logical ID: "Bucket"
 const Jobs = AWS.SQS.Queue("Jobs");           // logical ID: "Jobs"
 ```
 
@@ -285,8 +285,8 @@ Passing an `Output` from one resource as input to another draws an
 edge in the dependency graph. Take this stack:
 
 ```typescript
-const Bucket = yield* Cloudflare.R2Bucket("Bucket");
-const Sessions = yield* Cloudflare.KVNamespace("Sessions");
+const Bucket = yield* Cloudflare.R2.Bucket("Bucket");
+const Sessions = yield* Cloudflare.KV.Namespace("Sessions");
 
 const Queue = yield* AWS.SQS.Queue("Queue", {
   name: Output.interpolate`${Bucket.bucketName}-events`,
@@ -302,8 +302,8 @@ Alchemy reads the Outputs in each resource's props and builds:
 
 <DAG
   nodes={[
-    { id: "Bucket", type: "Cloudflare.R2Bucket" },
-    { id: "Sessions", type: "Cloudflare.KVNamespace" },
+    { id: "Bucket", type: "Cloudflare.R2.Bucket" },
+    { id: "Sessions", type: "Cloudflare.KV.Namespace" },
     { id: "Queue", type: "AWS.SQS.Queue" },
     { id: "Worker", type: "Cloudflare.Worker", tone: "accent" },
   ]}

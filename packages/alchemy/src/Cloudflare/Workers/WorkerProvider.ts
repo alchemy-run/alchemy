@@ -22,7 +22,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
+import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Worker, type WorkerProps } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
@@ -30,9 +30,7 @@ import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
 import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
-class MissingDurableObjectNamespaces extends Data.TaggedError(
-  "MissingDurableObjectNamespaces",
-)<{
+class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
 }> {}
@@ -371,7 +369,7 @@ export const LiveWorkerProvider = () =>
         return createAlchemyWorkerTags(id).every((tag) => actualTags.has(tag));
       };
 
-      const getDurableObjectNamespaces = (
+      const getDurableObjects = (
         bindings: readonly WorkerSettingsBinding[] | null | undefined,
       ) => {
         const namespaces = Object.fromEntries(
@@ -415,13 +413,13 @@ export const LiveWorkerProvider = () =>
           })
           .pipe(
             Effect.map((settings) => {
-              const namespaces = getDurableObjectNamespaces(settings.bindings);
+              const namespaces = getDurableObjects(settings.bindings);
               const missing = expectedClassNames.filter(
                 (className) => !namespaces[className],
               );
               if (missing.length > 0) {
                 return Effect.fail(
-                  new MissingDurableObjectNamespaces({
+                  new MissingDurableObjects({
                     scriptName,
                     expected: missing,
                   }),
@@ -434,7 +432,7 @@ export const LiveWorkerProvider = () =>
             }),
             Effect.flatten,
             Effect.retry({
-              // `MissingDurableObjectNamespaces`: the DO bindings haven't
+              // `MissingDurableObjects`: the DO bindings haven't
               // surfaced in the version settings yet. `WorkerHasNoVersions` /
               // `WorkerNotFound`: right after the first `putScript`, the
               // version-settings read can race the script registry — under a
@@ -442,7 +440,7 @@ export const LiveWorkerProvider = () =>
               // (or the worker itself as not-yet-found) before the upload
               // propagates. All three are eventual-consistency blips.
               while: (error) =>
-                error._tag === "MissingDurableObjectNamespaces" ||
+                error._tag === "MissingDurableObjects" ||
                 error._tag === "WorkerHasNoVersions" ||
                 error._tag === "WorkerNotFound",
               schedule: Schedule.exponential(100).pipe(
@@ -1366,7 +1364,7 @@ export const LiveWorkerProvider = () =>
                 Effect.succeed(undefined),
               ),
             );
-          let durableObjectNamespaces = getDurableObjectNamespaces(
+          let durableObjectNamespaces = getDurableObjects(
             existingSettings?.bindings,
           );
 
@@ -1536,9 +1534,7 @@ export const LiveWorkerProvider = () =>
               logpush: settings.logpush ?? undefined,
               url: domains[0],
               tags: settings.tags ?? undefined,
-              durableObjectNamespaces: getDurableObjectNamespaces(
-                settings.bindings,
-              ),
+              durableObjectNamespaces: getDurableObjects(settings.bindings),
               domains,
               crons,
             } satisfies Worker["Attributes"];

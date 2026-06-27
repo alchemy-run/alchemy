@@ -14,7 +14,7 @@ to bucket notifications and process them as an Effect `Stream`.
 ## Subscribe to bucket notifications
 
 Bucket notifications live behind an Alchemy helper:
-`S3.notifications(bucket).subscribe(process)`. Add the smallest
+`S3.consumeBucketEvents(bucket, process)`. Add the smallest
 possible subscription — log every new object's key — alongside
 the existing bindings:
 
@@ -30,10 +30,10 @@ import * as Layer from "effect/Layer";
 
 Effect.gen(function* () {
   const bucket = yield* S3.Bucket("Blobs");
-  const putObject = yield* S3.PutObject.bind(bucket);
-  const getObject = yield* S3.GetObject.bind(bucket);
+  const putObject = yield* S3.PutObject(bucket);
+  const getObject = yield* S3.GetObject(bucket);
 
-+  yield* S3.notifications(bucket).subscribe((stream) =>
++  yield* S3.consumeBucketEvents(bucket, (stream) =>
 +    stream.pipe(
 +      Stream.runForEach((event) =>
 +        Console.log(`new object: ${event.key}`),
@@ -60,10 +60,11 @@ created, deleted, restored, replicated, the lot. Constrain the
 subscription to a specific subset with `events`:
 
 ```diff lang="typescript"
--yield* S3.notifications(bucket).subscribe((stream) =>
-+yield* S3.notifications(bucket, {
-+  events: ["s3:ObjectCreated:*"],
-+}).subscribe((stream) =>
+-yield* S3.consumeBucketEvents(bucket, (stream) =>
++yield* S3.consumeBucketEvents(
++  bucket,
++  { events: ["s3:ObjectCreated:*"] },
++  (stream) =>
   stream.pipe(
     Stream.runForEach((event) =>
       Console.log(`new object: ${event.key}`),
@@ -117,9 +118,10 @@ to do something async per event. Swap `runForEach` for
 `mapEffect` so each event runs through a generator block:
 
 ```diff lang="typescript"
-yield* S3.notifications(bucket, {
-  events: ["s3:ObjectCreated:*"],
-}).subscribe((stream) =>
+yield* S3.consumeBucketEvents(
+  bucket,
+  { events: ["s3:ObjectCreated:*"] },
+  (stream) =>
   stream.pipe(
 -    Stream.runForEach((event) =>
 -      Console.log(`new object: ${event.key}`),

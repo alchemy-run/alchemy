@@ -7,11 +7,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const WorkersAccountSettingTypeId =
-  "Cloudflare.Workers.AccountSetting" as const;
-type WorkersAccountSettingTypeId = typeof WorkersAccountSettingTypeId;
+const TypeId = "Cloudflare.Workers.AccountSetting" as const;
+type TypeId = typeof TypeId;
 
-export type WorkersAccountSettingProps = {
+export type AccountSettingProps = {
   /**
    * Default usage model applied to new Workers in this account (e.g.
    * `"standard"`). Mostly legacy since Workers Standard pricing — new
@@ -34,7 +33,7 @@ export type WorkersAccountSettingProps = {
   greenCompute?: boolean;
 };
 
-export type WorkersAccountSettingAttributes = {
+export type AccountSettingAttributes = {
   /** The Cloudflare account these settings belong to. */
   accountId: string;
   /** Resolved default usage model for the account. */
@@ -53,10 +52,10 @@ export type WorkersAccountSettingAttributes = {
   initialGreenCompute: boolean | undefined;
 };
 
-export type WorkersAccountSetting = Resource<
-  WorkersAccountSettingTypeId,
-  WorkersAccountSettingProps,
-  WorkersAccountSettingAttributes,
+export type AccountSetting = Resource<
+  TypeId,
+  AccountSettingProps,
+  AccountSettingAttributes,
   never,
   Providers
 >;
@@ -78,14 +77,14 @@ export type WorkersAccountSetting = Resource<
  * @section Managing account settings
  * @example Enable Green Compute for scheduled Workers
  * ```typescript
- * yield* Cloudflare.WorkersAccountSetting("GreenCompute", {
+ * yield* Cloudflare.Workers.AccountSetting("GreenCompute", {
  *   greenCompute: true,
  * });
  * ```
  *
  * @example Pin the default usage model
  * ```typescript
- * yield* Cloudflare.WorkersAccountSetting("UsageModel", {
+ * yield* Cloudflare.Workers.AccountSetting("UsageModel", {
  *   defaultUsageModel: "standard",
  *   greenCompute: false,
  * });
@@ -93,21 +92,16 @@ export type WorkersAccountSetting = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/workers/subresources/account_settings/
  */
-export const WorkersAccountSetting = Resource<WorkersAccountSetting>(
-  WorkersAccountSettingTypeId,
-);
+export const AccountSetting = Resource<AccountSetting>(TypeId);
 
 /**
- * Returns true if the given value is a WorkersAccountSetting resource.
+ * Returns true if the given value is a AccountSetting resource.
  */
-export const isWorkersAccountSetting = (
-  value: unknown,
-): value is WorkersAccountSetting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === WorkersAccountSettingTypeId;
+export const isAccountSetting = (value: unknown): value is AccountSetting =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const WorkersAccountSettingProvider = () =>
-  Provider.succeed(WorkersAccountSetting, {
+export const AccountSettingProvider = () =>
+  Provider.succeed(AccountSetting, {
     nuke: { singleton: true },
     stables: ["accountId", "initialDefaultUsageModel", "initialGreenCompute"],
 
@@ -241,7 +235,7 @@ const toAttributes = (
   observed: workers.GetAccountSettingResponse,
   initialDefaultUsageModel: string | undefined,
   initialGreenCompute: boolean | undefined,
-): WorkersAccountSettingAttributes => ({
+): AccountSettingAttributes => ({
   accountId,
   defaultUsageModel: observed.defaultUsageModel ?? undefined,
   greenCompute: observed.greenCompute ?? undefined,

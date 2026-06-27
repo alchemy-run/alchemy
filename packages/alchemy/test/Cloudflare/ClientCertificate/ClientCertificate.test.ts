@@ -85,11 +85,14 @@ test.provider(
       // run can leave a live certificate this deploy should converge onto.
       const cert = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ClientCertificate("CreateCert", {
-            zoneId,
-            csr: CSR_A,
-            validityDays: 90,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ClientCertificate.ClientCertificate(
+            "CreateCert",
+            {
+              zoneId,
+              csr: CSR_A,
+              validityDays: 90,
+            },
+          ).pipe(adopt(true));
         }),
       );
 
@@ -117,11 +120,14 @@ test.provider(
       // Re-deploying the same props is a no-op — same physical certificate.
       const again = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ClientCertificate("CreateCert", {
-            zoneId,
-            csr: CSR_A,
-            validityDays: 90,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ClientCertificate.ClientCertificate(
+            "CreateCert",
+            {
+              zoneId,
+              csr: CSR_A,
+              validityDays: 90,
+            },
+          ).pipe(adopt(true));
         }),
       );
       expect(again.clientCertificateId).toEqual(cert.clientCertificateId);
@@ -150,11 +156,14 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ClientCertificate("ReplaceCert", {
-            zoneId,
-            csr: CSR_B,
-            validityDays: 30,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ClientCertificate.ClientCertificate(
+            "ReplaceCert",
+            {
+              zoneId,
+              csr: CSR_B,
+              validityDays: 30,
+            },
+          ).pipe(adopt(true));
         }),
       );
       expect(initial.status).toEqual("active");
@@ -164,11 +173,14 @@ test.provider(
       // replaces: a new certificate is issued and the old one is revoked.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ClientCertificate("ReplaceCert", {
-            zoneId,
-            csr: CSR_B,
-            validityDays: 60,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ClientCertificate.ClientCertificate(
+            "ReplaceCert",
+            {
+              zoneId,
+              csr: CSR_B,
+              validityDays: 60,
+            },
+          ).pipe(adopt(true));
         }),
       );
 
@@ -216,16 +228,19 @@ test.provider(
 
       const cert = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ClientCertificate("ListCert", {
-            zoneId,
-            csr: CSR_A,
-            validityDays: 90,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ClientCertificate.ClientCertificate(
+            "ListCert",
+            {
+              zoneId,
+              csr: CSR_A,
+              validityDays: 90,
+            },
+          ).pipe(adopt(true));
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ClientCertificate,
+        Cloudflare.ClientCertificate.ClientCertificate,
       );
 
       // A freshly-issued client certificate is eventually consistent in the

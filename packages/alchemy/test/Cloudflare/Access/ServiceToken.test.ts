@@ -26,7 +26,7 @@ test.provider("create, update duration, and delete service token", (stack) =>
 
     const token = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessServiceToken("BasicToken", {});
+        return yield* Cloudflare.Access.ServiceToken("BasicToken", {});
       }),
     );
 
@@ -49,7 +49,7 @@ test.provider("create, update duration, and delete service token", (stack) =>
     // the previously captured secret.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessServiceToken("BasicToken", {
+        return yield* Cloudflare.Access.ServiceToken("BasicToken", {
           duration: "17520h",
         });
       }),
@@ -89,12 +89,12 @@ test.provider("list enumerates the deployed service token", (stack) =>
 
     const token = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessServiceToken("ListToken", {});
+        return yield* Cloudflare.Access.ServiceToken("ListToken", {});
       }),
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AccessServiceToken,
+      Cloudflare.Access.ServiceToken,
     );
     const all = yield* provider.list();
 
@@ -118,7 +118,7 @@ test.provider("incrementing clientSecretVersion rotates the secret", (stack) =>
 
     const token = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessServiceToken("RotateToken", {});
+        return yield* Cloudflare.Access.ServiceToken("RotateToken", {});
       }),
     );
     expect(token.clientSecret).toBeDefined();
@@ -126,7 +126,7 @@ test.provider("incrementing clientSecretVersion rotates the secret", (stack) =>
 
     const rotated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessServiceToken("RotateToken", {
+        return yield* Cloudflare.Access.ServiceToken("RotateToken", {
           clientSecretVersion: 2,
         });
       }),
@@ -142,7 +142,7 @@ test.provider("incrementing clientSecretVersion rotates the secret", (stack) =>
     // Re-deploying the same version must NOT rotate again.
     const stable = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessServiceToken("RotateToken", {
+        return yield* Cloudflare.Access.ServiceToken("RotateToken", {
           clientSecretVersion: 2,
         });
       }),

@@ -131,7 +131,7 @@ const program = (opts: {
   enabled: boolean;
 }) =>
   Effect.gen(function* () {
-    const cert5 = yield* Cloudflare.OriginTlsClientAuthHostnameCertificate(
+    const cert5 = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate(
       "AssocCert5",
       {
         zoneId: opts.zoneId,
@@ -139,7 +139,7 @@ const program = (opts: {
         privateKey: Redacted.make(KEY_5),
       },
     );
-    const cert6 = yield* Cloudflare.OriginTlsClientAuthHostnameCertificate(
+    const cert6 = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate(
       "AssocCert6",
       {
         zoneId: opts.zoneId,
@@ -149,7 +149,7 @@ const program = (opts: {
     );
     const pinned = opts.cert === "6" ? cert6 : cert5;
     const association =
-      yield* Cloudflare.OriginTlsClientAuthHostnameAssociation("AopHost", {
+      yield* Cloudflare.OriginTlsClientAuth.HostnameAssociation("AopHost", {
         zoneId: opts.zoneId,
         hostname: opts.hostname,
         certId: pinned.certificateId,
@@ -168,7 +168,7 @@ describe.skipIf(!!process.env.FAST)("HostnameAssociation", () => {
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.OriginTlsClientAuthHostnameAssociation,
+        Cloudflare.OriginTlsClientAuth.HostnameAssociation,
       );
       const all = yield* provider.list();
       expect(all).toEqual([]);

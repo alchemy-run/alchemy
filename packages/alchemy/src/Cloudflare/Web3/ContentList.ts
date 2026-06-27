@@ -9,20 +9,19 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const Web3HostnameContentListTypeId =
-  "Cloudflare.Web3HostnameContentList" as const;
-type Web3HostnameContentListTypeId = typeof Web3HostnameContentListTypeId;
+const TypeId = "Cloudflare.Web3.HostnameContentList" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of content a content-list entry blocks: a CID (`cid`) or a
  * content path (`content_path`).
  */
-export type Web3ContentListEntryType = "cid" | "content_path";
+export type ContentListEntryType = "cid" | "content_path";
 
 /**
  * A single entry of an IPFS universal-path content list.
  */
-export interface Web3ContentListEntry {
+export interface ContentListEntry {
   /**
    * The CID or content path of content to block, e.g.
    * `QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco` (`cid`) or
@@ -32,14 +31,14 @@ export interface Web3ContentListEntry {
   /**
    * The type of content list entry to block.
    */
-  type: Web3ContentListEntryType;
+  type: ContentListEntryType;
   /**
    * An optional description of the content list entry.
    */
   description?: string;
 }
 
-export interface Web3HostnameContentListProps {
+export interface HostnameContentListProps {
   /**
    * The zone the hostname belongs to.
    *
@@ -66,10 +65,10 @@ export interface Web3HostnameContentListProps {
    * are removed.
    * @default []
    */
-  entries?: Web3ContentListEntry[];
+  entries?: ContentListEntry[];
 }
 
-export interface Web3HostnameContentListAttributes {
+export interface HostnameContentListAttributes {
   /** The zone the hostname belongs to. */
   zoneId: string;
   /** The Web3 hostname the content list belongs to. */
@@ -77,13 +76,13 @@ export interface Web3HostnameContentListAttributes {
   /** Behavior of the content list. */
   action: "block";
   /** The current content list entries. */
-  entries: Web3ContentListEntry[];
+  entries: ContentListEntry[];
 }
 
-export type Web3HostnameContentList = Resource<
-  Web3HostnameContentListTypeId,
-  Web3HostnameContentListProps,
-  Web3HostnameContentListAttributes,
+export type HostnameContentList = Resource<
+  TypeId,
+  HostnameContentListProps,
+  HostnameContentListAttributes,
   never,
   Providers
 >;
@@ -102,13 +101,13 @@ export type Web3HostnameContentList = Resource<
  * @section Blocking content
  * @example Block a CID and a content path
  * ```typescript
- * const gateway = yield* Cloudflare.Web3Hostname("UniversalGateway", {
+ * const gateway = yield* Cloudflare.Web3.Hostname("UniversalGateway", {
  *   zoneId: zone.zoneId,
  *   name: "gateway.example.com",
  *   target: "ipfs_universal_path",
  * });
  *
- * yield* Cloudflare.Web3HostnameContentList("Blocklist", {
+ * yield* Cloudflare.Web3.HostnameContentList("Blocklist", {
  *   zoneId: zone.zoneId,
  *   hostnameId: gateway.hostnameId,
  *   entries: [
@@ -128,7 +127,7 @@ export type Web3HostnameContentList = Resource<
  * @example Clear the blocklist
  * ```typescript
  * // An empty entries array removes every block (also what destroy does).
- * yield* Cloudflare.Web3HostnameContentList("Blocklist", {
+ * yield* Cloudflare.Web3.HostnameContentList("Blocklist", {
  *   zoneId: zone.zoneId,
  *   hostnameId: gateway.hostnameId,
  *   entries: [],
@@ -137,21 +136,18 @@ export type Web3HostnameContentList = Resource<
  *
  * @see https://developers.cloudflare.com/web3/
  */
-export const Web3HostnameContentList = Resource<Web3HostnameContentList>(
-  Web3HostnameContentListTypeId,
-);
+export const HostnameContentList = Resource<HostnameContentList>(TypeId);
 
 /**
- * Returns true if the given value is a Web3HostnameContentList resource.
+ * Returns true if the given value is a HostnameContentList resource.
  */
-export const isWeb3HostnameContentList = (
+export const isHostnameContentList = (
   value: unknown,
-): value is Web3HostnameContentList =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === Web3HostnameContentListTypeId;
+): value is HostnameContentList =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const Web3HostnameContentListProvider = () =>
-  Provider.succeed(Web3HostnameContentList, {
+export const HostnameContentListProvider = () =>
+  Provider.succeed(HostnameContentList, {
     stables: ["zoneId", "hostnameId"],
 
     list: Effect.fn(function* () {
@@ -193,13 +189,13 @@ export const Web3HostnameContentListProvider = () =>
       return rows
         .flat()
         .filter(
-          (row): row is Web3HostnameContentListAttributes => row !== undefined,
+          (row): row is HostnameContentListAttributes => row !== undefined,
         );
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as Partial<Web3HostnameContentListProps>;
-      const n = news as Web3HostnameContentListProps;
+      const o = olds as Partial<HostnameContentListProps>;
+      const n = news as HostnameContentListProps;
       // zoneId/hostnameId are Input<string>; compare only once both
       // sides are concrete. The content list is a sub-singleton of the
       // hostname — pointing elsewhere replaces it.
@@ -240,7 +236,7 @@ export const Web3HostnameContentListProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
       const hostnameId = news.hostnameId as string;
-      const desired: Web3HostnameContentListAttributes = {
+      const desired: HostnameContentListAttributes = {
         zoneId,
         hostnameId,
         action: news.action ?? "block",
@@ -307,15 +303,15 @@ const observeContentList = (zoneId: string, hostnameId: string) =>
       hostnameId,
       action: (list.action ?? "block") as "block",
       entries: (entries.entries ?? []).map(
-        (entry): Web3ContentListEntry => ({
+        (entry): ContentListEntry => ({
           content: entry.content ?? "",
-          type: (entry.type ?? "cid") as Web3ContentListEntryType,
+          type: (entry.type ?? "cid") as ContentListEntryType,
           ...(entry.description != null
             ? { description: entry.description }
             : {}),
         }),
       ),
-    } satisfies Web3HostnameContentListAttributes;
+    } satisfies HostnameContentListAttributes;
   }).pipe(
     Effect.catchTag(["Web3HostnameNotFound", "InvalidWeb3HostnameTarget"], () =>
       Effect.succeed(undefined),
@@ -327,14 +323,14 @@ const observeContentList = (zoneId: string, hostnameId: string) =>
  * description).
  */
 const sameContentList = (
-  observed: Web3HostnameContentListAttributes,
-  desired: Web3HostnameContentListAttributes,
+  observed: HostnameContentListAttributes,
+  desired: HostnameContentListAttributes,
 ) =>
   observed.action === desired.action &&
   observed.entries.length === desired.entries.length &&
   serializeEntries(observed.entries) === serializeEntries(desired.entries);
 
-const serializeEntries = (entries: Web3ContentListEntry[]) =>
+const serializeEntries = (entries: ContentListEntry[]) =>
   entries
     .map((entry) => `${entry.type} ${entry.content} ${entry.description ?? ""}`)
     .sort()

@@ -40,10 +40,10 @@ describe.sequential("Ruleset", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            const zone = yield* Cloudflare.Zone("TestZone", {
+            const zone = yield* Cloudflare.Zone.Zone("TestZone", {
               name: zoneName,
             }).pipe(AdoptPolicy.adopt(true));
-            return yield* Cloudflare.Ruleset("TestRuleset", {
+            return yield* Cloudflare.Ruleset.Ruleset("TestRuleset", {
               zone,
               phase,
               rules: [
@@ -73,10 +73,10 @@ describe.sequential("Ruleset", () => {
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            const zone = yield* Cloudflare.Zone("TestZone", {
+            const zone = yield* Cloudflare.Zone.Zone("TestZone", {
               name: zoneName,
             }).pipe(AdoptPolicy.adopt(true));
-            return yield* Cloudflare.Ruleset("TestRuleset", {
+            return yield* Cloudflare.Ruleset.Ruleset("TestRuleset", {
               zone,
               phase,
               rules: [
@@ -127,10 +127,10 @@ describe.sequential("Ruleset", () => {
         // zone's default `retain` so it is actually deleted on teardown.
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            const zone = yield* Cloudflare.Zone("TestZone", {
+            const zone = yield* Cloudflare.Zone.Zone("TestZone", {
               name: unresolvedZoneName,
             }).pipe(AdoptPolicy.adopt(true), RemovalPolicy.destroy());
-            return yield* Cloudflare.Ruleset("TestRuleset", {
+            return yield* Cloudflare.Ruleset.Ruleset("TestRuleset", {
               zone,
               phase,
               rules: [
@@ -155,10 +155,10 @@ describe.sequential("Ruleset", () => {
         // Re-deploy with changed rules; the ruleset must update in place.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            const zone = yield* Cloudflare.Zone("TestZone", {
+            const zone = yield* Cloudflare.Zone.Zone("TestZone", {
               name: unresolvedZoneName,
             }).pipe(AdoptPolicy.adopt(true), RemovalPolicy.destroy());
-            return yield* Cloudflare.Ruleset("TestRuleset", {
+            return yield* Cloudflare.Ruleset.Ruleset("TestRuleset", {
               zone,
               phase,
               rules: [
@@ -221,10 +221,10 @@ describe.sequential("Ruleset", () => {
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const zone = yield* Cloudflare.Zone("TestZone", {
+            const zone = yield* Cloudflare.Zone.Zone("TestZone", {
               name: zoneName,
             }).pipe(AdoptPolicy.adopt(true));
-            return yield* Cloudflare.Ruleset("TestRuleset", {
+            return yield* Cloudflare.Ruleset.Ruleset("TestRuleset", {
               zone,
               phase,
               rules: [
@@ -239,7 +239,9 @@ describe.sequential("Ruleset", () => {
           }),
         );
 
-        const provider = yield* Provider.findProvider(Cloudflare.Ruleset);
+        const provider = yield* Provider.findProvider(
+          Cloudflare.Ruleset.Ruleset,
+        );
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

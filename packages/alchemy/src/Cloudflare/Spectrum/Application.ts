@@ -11,31 +11,31 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SpectrumApplicationTypeId = "Cloudflare.Spectrum.Application" as const;
-type SpectrumApplicationTypeId = typeof SpectrumApplicationTypeId;
+const TypeId = "Cloudflare.Spectrum.Application" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How data travels from Cloudflare's edge to the origin. `direct` sends
  * traffic straight to the origin; `http`/`https` apply HTTP(S) processing
  * (Enterprise only).
  */
-export type SpectrumTrafficType = "direct" | "http" | "https";
+export type TrafficType = "direct" | "http" | "https";
 
 /**
  * The type of TLS termination at the edge for a Spectrum application.
  */
-export type SpectrumTls = "off" | "flexible" | "full" | "strict";
+export type Tls = "off" | "flexible" | "full" | "strict";
 
 /**
  * PROXY Protocol mode for origin connections.
  */
-export type SpectrumProxyProtocol = "off" | "v1" | "v2" | "simple";
+export type ProxyProtocol = "off" | "v1" | "v2" | "simple";
 
 /**
  * The edge DNS record Spectrum creates for the application — the hostname
  * clients connect to. Must live inside the application's zone.
  */
-export interface SpectrumDns {
+export interface Dns {
   /**
    * The fully-qualified edge hostname, e.g. `ssh.example.com`. Together
    * with `protocol`, this is the user-visible identity of the application
@@ -52,7 +52,7 @@ export interface SpectrumDns {
 /**
  * Origin lookup via DNS instead of fixed addresses. Requires `originPort`.
  */
-export interface SpectrumOriginDns {
+export interface OriginDns {
   /**
    * The hostname of the origin server.
    */
@@ -71,7 +71,7 @@ export interface SpectrumOriginDns {
 /**
  * The anycast edge IP configuration for the application's hostname.
  */
-export interface SpectrumEdgeIps {
+export interface EdgeIps {
   /**
    * `dynamic` (default) lets Cloudflare assign edge IPs; `static` pins the
    * application to BYOIP addresses listed in `ips` (Enterprise only).
@@ -89,7 +89,7 @@ export interface SpectrumEdgeIps {
   ips?: string[];
 }
 
-export interface SpectrumApplicationProps {
+export interface ApplicationProps {
   /**
    * Zone the application is created in. Stable — moving an application to
    * a different zone triggers a replacement.
@@ -100,7 +100,7 @@ export interface SpectrumApplicationProps {
    * Mutable — the PUT update accepts a new `dns`, but note `dns.name` +
    * `protocol` is the identity used for cold-state recovery.
    */
-  dns: SpectrumDns;
+  dns: Dns;
   /**
    * The edge port configuration, e.g. `"tcp/22"`, `"udp/53"`, or a range
    * `"tcp/1000-2000"`. Arbitrary ports, ranges, and UDP require an
@@ -111,7 +111,7 @@ export interface SpectrumApplicationProps {
    * How traffic travels to the origin. `http`/`https` are Enterprise only.
    * @default "direct"
    */
-  trafficType?: SpectrumTrafficType;
+  trafficType?: TrafficType;
   /**
    * Fixed origin addresses, e.g. `["tcp://203.0.113.1:22"]`. Provide
    * either `originDirect` or `originDns` + `originPort`.
@@ -120,7 +120,7 @@ export interface SpectrumApplicationProps {
   /**
    * Origin lookup via DNS. Must be combined with `originPort`.
    */
-  originDns?: SpectrumOriginDns;
+  originDns?: OriginDns;
   /**
    * The destination port at the origin (only with `originDns`). A range
    * string (e.g. `"1000-2000"`) is Enterprise only.
@@ -131,7 +131,7 @@ export interface SpectrumApplicationProps {
    * traffic types — Cloudflare rejects the field on `direct` TCP apps, so
    * leave it unset for those.
    */
-  tls?: SpectrumTls;
+  tls?: Tls;
   /**
    * Enables Argo Smart Routing (TCP + `direct` traffic type only).
    * @default false
@@ -146,20 +146,20 @@ export interface SpectrumApplicationProps {
    * Enables PROXY Protocol to the origin.
    * @default "off"
    */
-  proxyProtocol?: SpectrumProxyProtocol;
+  proxyProtocol?: ProxyProtocol;
   /**
    * The anycast edge IP configuration. Static BYOIP addresses are
    * Enterprise only.
    * @default { type: "dynamic", connectivity: "all" }
    */
-  edgeIps?: SpectrumEdgeIps;
+  edgeIps?: EdgeIps;
   /**
    * UUID of a tunnel virtual network to route origin traffic through.
    */
   virtualNetworkId?: string;
 }
 
-export interface SpectrumApplicationAttributes {
+export interface ApplicationAttributes {
   /** Cloudflare-assigned identifier of the Spectrum application. */
   appId: string;
   /** Zone the application belongs to. */
@@ -171,31 +171,31 @@ export interface SpectrumApplicationAttributes {
   /** The edge port configuration, e.g. `tcp/22`. */
   protocol: string;
   /** How traffic travels to the origin. */
-  trafficType: SpectrumTrafficType;
+  trafficType: TrafficType;
   /** Fixed origin addresses, if configured. */
   originDirect: string[] | undefined;
   /** Origin DNS lookup configuration, if configured. */
-  originDns: SpectrumOriginDns | undefined;
+  originDns: OriginDns | undefined;
   /** The destination port at the origin, if configured. */
   originPort: number | string | undefined;
   /** TLS termination at the edge, if reported. */
-  tls: SpectrumTls | undefined;
+  tls: Tls | undefined;
   /** Whether Argo Smart Routing is enabled. */
   argoSmartRouting: boolean;
   /** Whether IP Access rules are enabled. */
   ipFirewall: boolean;
   /** PROXY Protocol mode to the origin. */
-  proxyProtocol: SpectrumProxyProtocol;
+  proxyProtocol: ProxyProtocol;
   /** ISO8601 creation timestamp. */
   createdOn: string;
   /** ISO8601 last-modified timestamp. */
   modifiedOn: string;
 }
 
-export type SpectrumApplication = Resource<
-  SpectrumApplicationTypeId,
-  SpectrumApplicationProps,
-  SpectrumApplicationAttributes,
+export type Application = Resource<
+  TypeId,
+  ApplicationProps,
+  ApplicationAttributes,
   never,
   Providers
 >;
@@ -226,7 +226,7 @@ export type SpectrumApplication = Resource<
  * @section Proxying SSH
  * @example SSH on a fixed origin address
  * ```typescript
- * const ssh = yield* Cloudflare.SpectrumApplication("Ssh", {
+ * const ssh = yield* Cloudflare.Spectrum.Application("Ssh", {
  *   zoneId: zone.zoneId,
  *   dns: { type: "CNAME", name: "ssh.example.com" },
  *   protocol: "tcp/22",
@@ -237,7 +237,7 @@ export type SpectrumApplication = Resource<
  * @section Origin via DNS
  * @example Resolve the origin by hostname
  * ```typescript
- * yield* Cloudflare.SpectrumApplication("Minecraft", {
+ * yield* Cloudflare.Spectrum.Application("Minecraft", {
  *   zoneId: zone.zoneId,
  *   dns: { type: "CNAME", name: "mc.example.com" },
  *   protocol: "tcp/25565",
@@ -251,7 +251,7 @@ export type SpectrumApplication = Resource<
  * ```typescript
  * // Arbitrary ports/protocols, UDP, and proxyProtocol require an
  * // Enterprise plan with Spectrum.
- * yield* Cloudflare.SpectrumApplication("Dns", {
+ * yield* Cloudflare.Spectrum.Application("Dns", {
  *   zoneId: zone.zoneId,
  *   dns: { type: "CNAME", name: "dns.example.com" },
  *   protocol: "udp/53",
@@ -263,21 +263,16 @@ export type SpectrumApplication = Resource<
  *
  * @see https://developers.cloudflare.com/spectrum/
  */
-export const SpectrumApplication = Resource<SpectrumApplication>(
-  SpectrumApplicationTypeId,
-);
+export const Application = Resource<Application>(TypeId);
 
 /**
- * Returns true if the given value is a SpectrumApplication resource.
+ * Returns true if the given value is a Application resource.
  */
-export const isSpectrumApplication = (
-  value: unknown,
-): value is SpectrumApplication =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SpectrumApplicationTypeId;
+export const isApplication = (value: unknown): value is Application =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const SpectrumApplicationProvider = () =>
-  Provider.succeed(SpectrumApplication, {
+export const ApplicationProvider = () =>
+  Provider.succeed(Application, {
     stables: ["appId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {
@@ -391,7 +386,7 @@ export const SpectrumApplicationProvider = () =>
               ),
             ),
             Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as SpectrumApplicationAttributes[]),
+              Effect.succeed([] as ApplicationAttributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -435,7 +430,7 @@ const findByIdentity = (zoneId: string, dnsName: string, protocol: string) =>
  * the user did not set are omitted so the API applies its defaults — in
  * particular `tls`, which Cloudflare rejects on `direct` TCP apps.
  */
-const toRequestBody = (news: SpectrumApplicationProps) => ({
+const toRequestBody = (news: ApplicationProps) => ({
   dns: { name: news.dns.name, type: news.dns.type },
   protocol: news.protocol,
   trafficType: news.trafficType,
@@ -463,10 +458,7 @@ const asFull = (app: ObservedApp): Partial<FullApp> & ObservedApp => app;
  * left unset are only considered dirty when the observed value differs
  * from the API default, so a no-op deploy skips the PUT entirely.
  */
-const isDirty = (
-  observed: ObservedApp,
-  news: SpectrumApplicationProps,
-): boolean => {
+const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
   const o = asFull(observed);
   return (
     o.dns.name !== news.dns.name ||
@@ -486,10 +478,7 @@ const isDirty = (
   );
 };
 
-const edgeIpsDirty = (
-  o: Partial<FullApp>,
-  desired: SpectrumEdgeIps,
-): boolean => {
+const edgeIpsDirty = (o: Partial<FullApp>, desired: EdgeIps): boolean => {
   const observed = o.edgeIps ?? {};
   const observedIps =
     "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
@@ -512,7 +501,7 @@ const sameList = (observed: readonly string[], desired: readonly string[]) =>
 const toAttributes = (
   app: ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse,
   zoneId: string,
-): SpectrumApplicationAttributes => {
+): ApplicationAttributes => {
   const a = asFull(app as ObservedApp);
   return {
     appId: a.id,
@@ -522,22 +511,22 @@ const toAttributes = (
     dnsName: a.dns.name ?? "",
     dnsType: (a.dns.type ?? "CNAME") as "CNAME" | "ADDRESS",
     protocol: a.protocol,
-    trafficType: (a.trafficType ?? "direct") as SpectrumTrafficType,
+    trafficType: (a.trafficType ?? "direct") as TrafficType,
     originDirect: a.originDirect ? [...a.originDirect] : undefined,
     originDns: a.originDns
       ? {
           name: a.originDns.name ?? undefined,
           ttl: a.originDns.ttl ?? undefined,
           type: (a.originDns.type ?? undefined) as
-            | SpectrumOriginDns["type"]
+            | OriginDns["type"]
             | undefined,
         }
       : undefined,
     originPort: a.originPort ?? undefined,
-    tls: (a.tls ?? undefined) as SpectrumTls | undefined,
+    tls: (a.tls ?? undefined) as Tls | undefined,
     argoSmartRouting: a.argoSmartRouting ?? false,
     ipFirewall: a.ipFirewall ?? false,
-    proxyProtocol: (a.proxyProtocol ?? "off") as SpectrumProxyProtocol,
+    proxyProtocol: (a.proxyProtocol ?? "off") as ProxyProtocol,
     createdOn: a.createdOn,
     modifiedOn: a.modifiedOn,
   };

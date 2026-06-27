@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicSiteAclTypeId = "Cloudflare.MagicTransit.SiteAcl" as const;
-type MagicSiteAclTypeId = typeof MagicSiteAclTypeId;
+const TypeId = "Cloudflare.MagicTransit.SiteAcl" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Protocols a Magic WAN site ACL can match.
@@ -94,7 +94,7 @@ export interface MagicSiteAclAttributes {
 }
 
 export type MagicSiteAcl = Resource<
-  MagicSiteAclTypeId,
+  TypeId,
   MagicSiteAclProps,
   MagicSiteAclAttributes,
   never,
@@ -117,7 +117,7 @@ export type MagicSiteAcl = Resource<
  * @section Creating an ACL
  * @example Allow TCP between two LANs
  * ```typescript
- * yield* Cloudflare.MagicSiteAcl("lan-to-lan", {
+ * yield* Cloudflare.MagicTransit.MagicSiteAcl("lan-to-lan", {
  *   siteId: site.siteId,
  *   name: "office-to-lab",
  *   lan1: { lanId: officeLan.lanId, ports: [443] },
@@ -128,7 +128,7 @@ export type MagicSiteAcl = Resource<
  *
  * @example Unidirectional ACL forwarded locally
  * ```typescript
- * yield* Cloudflare.MagicSiteAcl("one-way", {
+ * yield* Cloudflare.MagicTransit.MagicSiteAcl("one-way", {
  *   siteId: site.siteId,
  *   name: "sensors-to-collector",
  *   lan1: { lanId: sensorsLan.lanId },
@@ -140,13 +140,13 @@ export type MagicSiteAcl = Resource<
  *
  * @see https://developers.cloudflare.com/magic-wan/configuration/connector/network-options/site-acls/
  */
-export const MagicSiteAcl = Resource<MagicSiteAcl>(MagicSiteAclTypeId);
+export const MagicSiteAcl = Resource<MagicSiteAcl>(TypeId);
 
 /**
  * Returns true if the given value is a MagicSiteAcl resource.
  */
 export const isMagicSiteAcl = (value: unknown): value is MagicSiteAcl =>
-  Predicate.hasProperty(value, "Type") && value.Type === MagicSiteAclTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MagicSiteAclProvider = () =>
   Provider.succeed(MagicSiteAcl, {

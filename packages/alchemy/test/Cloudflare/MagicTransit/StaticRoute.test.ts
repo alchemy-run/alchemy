@@ -90,7 +90,9 @@ test.provider("list returns a well-typed array of routes", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.MagicStaticRoute);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.MagicTransit.MagicStaticRoute,
+    );
     const all = yield* provider.list();
     expect(Array.isArray(all)).toBe(true);
     for (const route of all) {
@@ -111,7 +113,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       yield* stack.deploy(
-        Cloudflare.GreTunnel("ListRouteGre", {
+        Cloudflare.MagicTransit.GreTunnel("ListRouteGre", {
           name: "alch-gre-listroute1",
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.31",
@@ -120,7 +122,7 @@ test.provider.skipIf(!entitled)(
       );
 
       const route = yield* stack.deploy(
-        Cloudflare.MagicStaticRoute("ListRoute", {
+        Cloudflare.MagicTransit.MagicStaticRoute("ListRoute", {
           prefix: "10.114.0.0/24",
           nexthop: "10.213.14.11",
           priority: 100,
@@ -128,7 +130,7 @@ test.provider.skipIf(!entitled)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.MagicStaticRoute,
+        Cloudflare.MagicTransit.MagicStaticRoute,
       );
       const all = yield* provider.list();
 
@@ -155,7 +157,7 @@ test.provider.skipIf(!entitled)(
 
       // A static route's nexthop must live on a Magic tunnel interface.
       const tunnel = yield* stack.deploy(
-        Cloudflare.GreTunnel("RouteGre", {
+        Cloudflare.MagicTransit.GreTunnel("RouteGre", {
           name: "alch-gre-route1",
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.30",
@@ -164,7 +166,7 @@ test.provider.skipIf(!entitled)(
       );
 
       const route = yield* stack.deploy(
-        Cloudflare.MagicStaticRoute("Route", {
+        Cloudflare.MagicTransit.MagicStaticRoute("Route", {
           prefix: "10.112.0.0/24",
           nexthop: "10.213.12.11",
           priority: 100,
@@ -185,7 +187,7 @@ test.provider.skipIf(!entitled)(
 
       // Update mutable props in place — same routeId.
       const updated = yield* stack.deploy(
-        Cloudflare.MagicStaticRoute("Route", {
+        Cloudflare.MagicTransit.MagicStaticRoute("Route", {
           prefix: "10.112.0.0/24",
           nexthop: "10.213.12.11",
           priority: 150,

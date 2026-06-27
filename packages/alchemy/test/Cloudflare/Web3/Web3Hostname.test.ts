@@ -143,7 +143,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Create an IPFS hostname pinned to a DNSLink.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Web3Hostname("Gateway", {
+          return yield* Cloudflare.Web3.Hostname("Gateway", {
             zoneId,
             name,
             target: "ipfs",
@@ -169,7 +169,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Update mutable fields in place — same physical hostname.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Web3Hostname("Gateway", {
+          return yield* Cloudflare.Web3.Hostname("Gateway", {
             zoneId,
             name,
             target: "ipfs",
@@ -187,7 +187,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Changing the target replaces the hostname.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Web3Hostname("Gateway", {
+          return yield* Cloudflare.Web3.Hostname("Gateway", {
             zoneId,
             name,
             target: "ethereum",
@@ -219,14 +219,14 @@ test.provider.skipIf(!entitledZoneId)(
       yield* stack.destroy();
       yield* purgeHostname(zoneId, name);
 
-      const program = (entries: Cloudflare.Web3ContentListEntry[]) =>
+      const program = (entries: Cloudflare.Web3.ContentListEntry[]) =>
         Effect.gen(function* () {
-          const gateway = yield* Cloudflare.Web3Hostname("Universal", {
+          const gateway = yield* Cloudflare.Web3.Hostname("Universal", {
             zoneId,
             name,
             target: "ipfs_universal_path",
           });
-          const list = yield* Cloudflare.Web3HostnameContentList("Blocklist", {
+          const list = yield* Cloudflare.Web3.HostnameContentList("Blocklist", {
             zoneId,
             hostnameId: gateway.hostnameId,
             entries,

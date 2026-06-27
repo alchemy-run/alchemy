@@ -6,4 +6,4 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
  * scoped HTTP API token). A value written through a Write worker is
  * observable by a Read worker, which is what the test asserts.
  */
-export const TestNamespace = Cloudflare.KVNamespace("KVBindingTestNamespace");
+export const TestNamespace = Cloudflare.KV.Namespace("KVBindingTestNamespace");

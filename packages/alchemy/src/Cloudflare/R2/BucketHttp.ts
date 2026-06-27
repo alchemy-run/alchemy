@@ -3,32 +3,15 @@ import type * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
+import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { R2Bucket } from "./Bucket.ts";
+import type { Bucket } from "./Bucket.ts";
 import { R2Error, type R2Object } from "./BucketTypes.ts";
-
-export interface R2HttpScope {
-  accountId: string;
-  bucketName: string;
-  cfR2Jurisdiction: string | undefined;
-}
-export interface R2HttpToken {
-  value: Effect.Effect<Redacted.Redacted<string>>;
-  accountId: Effect.Effect<string>;
-}
-
-const R2_HTTP_PERMISSION_GROUPS: ApiTokenPermissionGroupRef[] = [
-  "Workers R2 Storage Read",
-  "Workers R2 Storage Write",
-];
-
-type PermissionGroup = (typeof R2_HTTP_PERMISSION_GROUPS)[number];
 
 export const makeHttpBucketBinding = <Client>(options: {
   permissionGroups: PermissionGroup[];
   makeClient: (
-    token: R2HttpToken,
+    token: HttpToken,
     bucketName: Effect.Effect<string>,
     jurisdiction: Effect.Effect<string>,
   ) => Client;
@@ -38,7 +21,7 @@ export const makeHttpBucketBinding = <Client>(options: {
     const self = yield* Self;
     const env = yield* CloudflareEnvironment;
 
-    return Effect.fn(function* (bucket: R2Bucket) {
+    return Effect.fn(function* (bucket: Bucket) {
       const { accountId } = yield* env;
       const token = yield* Token(`${self.LogicalId}Token`);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -57,19 +40,36 @@ export const makeHttpBucketBinding = <Client>(options: {
       const bound = {
         value: yield* token.value,
         accountId: yield* token.accountId,
-      } satisfies R2HttpToken;
+      } satisfies HttpToken;
       const bucketName = yield* bucket.bucketName;
       const jurisdiction = yield* bucket.jurisdiction;
       return options.makeClient(bound, bucketName, jurisdiction);
     });
   });
 
+export interface HttpScope {
+  accountId: string;
+  bucketName: string;
+  cfR2Jurisdiction: string | undefined;
+}
+export interface HttpToken {
+  value: Effect.Effect<Redacted.Redacted<string>>;
+  accountId: Effect.Effect<string>;
+}
+
+const R2_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
+  "Workers R2 Storage Read",
+  "Workers R2 Storage Write",
+];
+
+type PermissionGroup = (typeof R2_HTTP_PERMISSION_GROUPS)[number];
+
 /** Resolve the account, bucket, and jurisdiction once per operation. */
 export const makeR2HttpScope = (
-  token: R2HttpToken,
+  token: HttpToken,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
-): Effect.Effect<R2HttpScope> =>
+): Effect.Effect<HttpScope> =>
   Effect.gen(function* () {
     const accountId = yield* token.accountId;
     const bucket = yield* bucketName;

@@ -124,10 +124,13 @@ describe.sequential("HostnameAssociation", () => {
         yield* clearAssociation(zoneId);
 
         const created = yield* stack.deploy(
-          Cloudflare.HostnameAssociation("ManagedCaHosts", {
-            zoneId,
-            hostnames: [`mtls.${zoneName}`],
-          }),
+          Cloudflare.CertificateAuthorities.HostnameAssociation(
+            "ManagedCaHosts",
+            {
+              zoneId,
+              hostnames: [`mtls.${zoneName}`],
+            },
+          ),
         );
 
         expect(created.zoneId).toEqual(zoneId);
@@ -138,10 +141,13 @@ describe.sequential("HostnameAssociation", () => {
 
         // In-place update — hostnames are the mutable aspect of the singleton.
         const updated = yield* stack.deploy(
-          Cloudflare.HostnameAssociation("ManagedCaHosts", {
-            zoneId,
-            hostnames: [`mtls2.${zoneName}`, `mtls.${zoneName}`],
-          }),
+          Cloudflare.CertificateAuthorities.HostnameAssociation(
+            "ManagedCaHosts",
+            {
+              zoneId,
+              hostnames: [`mtls2.${zoneName}`, `mtls.${zoneName}`],
+            },
+          ),
         );
 
         expect([...updated.hostnames].sort()).toEqual([
@@ -175,15 +181,22 @@ describe.sequential("HostnameAssociation", () => {
 
         const { cert, assoc } = yield* stack.deploy(
           Effect.gen(function* () {
-            const cert = yield* Cloudflare.MtlsCertificate("CertAuthCa", {
-              ca: true,
-              certificates: CA_CERT_1,
-            });
-            const assoc = yield* Cloudflare.HostnameAssociation("CaHosts", {
-              zoneId,
-              mtlsCertificateId: cert.mtlsCertificateId,
-              hostnames: [`mtls-ca.${zoneName}`],
-            });
+            const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate(
+              "CertAuthCa",
+              {
+                ca: true,
+                certificates: CA_CERT_1,
+              },
+            );
+            const assoc =
+              yield* Cloudflare.CertificateAuthorities.HostnameAssociation(
+                "CaHosts",
+                {
+                  zoneId,
+                  mtlsCertificateId: cert.mtlsCertificateId,
+                  hostnames: [`mtls-ca.${zoneName}`],
+                },
+              );
             return { cert, assoc };
           }),
         );
@@ -218,13 +231,14 @@ describe.sequential("HostnameAssociation", () => {
 
         const first = yield* stack.deploy(
           Effect.gen(function* () {
-            const assoc = yield* Cloudflare.HostnameAssociation(
-              "ReplaceHosts",
-              {
-                zoneId,
-                hostnames: [`mtls-replace.${zoneName}`],
-              },
-            );
+            const assoc =
+              yield* Cloudflare.CertificateAuthorities.HostnameAssociation(
+                "ReplaceHosts",
+                {
+                  zoneId,
+                  hostnames: [`mtls-replace.${zoneName}`],
+                },
+              );
             return { assoc };
           }),
         );
@@ -238,18 +252,22 @@ describe.sequential("HostnameAssociation", () => {
         // deletes.
         const second = yield* stack.deploy(
           Effect.gen(function* () {
-            const cert = yield* Cloudflare.MtlsCertificate("ReplaceCa", {
-              ca: true,
-              certificates: CA_CERT_2,
-            });
-            const assoc = yield* Cloudflare.HostnameAssociation(
-              "ReplaceHosts",
+            const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate(
+              "ReplaceCa",
               {
-                zoneId,
-                mtlsCertificateId: cert.mtlsCertificateId,
-                hostnames: [`mtls-replace.${zoneName}`],
+                ca: true,
+                certificates: CA_CERT_2,
               },
             );
+            const assoc =
+              yield* Cloudflare.CertificateAuthorities.HostnameAssociation(
+                "ReplaceHosts",
+                {
+                  zoneId,
+                  mtlsCertificateId: cert.mtlsCertificateId,
+                  hostnames: [`mtls-replace.${zoneName}`],
+                },
+              );
             return { cert, assoc };
           }),
         );

@@ -9,15 +9,15 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { R2Bucket } from "./Bucket.ts";
+import type { Bucket } from "./Bucket.ts";
 
-const R2BucketSippyTypeId = "Cloudflare.R2.BucketSippy" as const;
-type R2BucketSippyTypeId = typeof R2BucketSippyTypeId;
+const TypeId = "Cloudflare.R2.BucketSippy" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Source bucket configuration for an AWS S3 origin.
  */
-export interface R2BucketSippyAwsSource {
+export interface BucketSippyAwsSource {
   /** Marks the source as an AWS S3 bucket. */
   provider: "aws";
   /**
@@ -42,7 +42,7 @@ export interface R2BucketSippyAwsSource {
 /**
  * Source bucket configuration for a Google Cloud Storage origin.
  */
-export interface R2BucketSippyGcsSource {
+export interface BucketSippyGcsSource {
   /** Marks the source as a Google Cloud Storage bucket. */
   provider: "gcs";
   /**
@@ -64,16 +64,14 @@ export interface R2BucketSippyGcsSource {
 /**
  * The upstream bucket Sippy pulls objects from on R2 cache misses.
  */
-export type R2BucketSippySource =
-  | R2BucketSippyAwsSource
-  | R2BucketSippyGcsSource;
+export type BucketSippySource = BucketSippyAwsSource | BucketSippyGcsSource;
 
 /**
  * R2 credentials Sippy uses to write migrated objects into the
  * destination bucket. Create an R2 API token with write access to the
  * bucket and pass its S3-compatible credentials here.
  */
-export interface R2BucketSippyDestination {
+export interface BucketSippyDestination {
   /**
    * Access Key ID of the R2 API token. Write-only at the secret level —
    * Cloudflare echoes only the key ID back.
@@ -85,10 +83,10 @@ export interface R2BucketSippyDestination {
   secretAccessKey: Redacted.Redacted<string>;
 }
 
-export interface R2BucketSippyProps {
+export interface BucketSippyProps {
   /**
    * Name of the R2 bucket to enable incremental migration into. Pass
-   * `bucket.bucketName` from a `Cloudflare.R2Bucket`.
+   * `bucket.bucketName` from a `Cloudflare.R2.Bucket`.
    *
    * Immutable — changing the bucket triggers a replacement.
    */
@@ -100,39 +98,39 @@ export interface R2BucketSippyProps {
    * Immutable — changing the jurisdiction triggers a replacement.
    * @default "default"
    */
-  jurisdiction?: R2Bucket.Jurisdiction;
+  jurisdiction?: Bucket.Jurisdiction;
   /**
    * The upstream AWS S3 or Google Cloud Storage bucket to migrate
    * objects from. Source credentials are write-only — they are sent to
    * Cloudflare but never read back.
    */
-  source: R2BucketSippySource;
+  source: BucketSippySource;
   /**
    * R2 API token credentials Sippy uses to write objects into the
    * destination bucket.
    */
-  destination: R2BucketSippyDestination;
+  destination: BucketSippyDestination;
 }
 
-export interface R2BucketSippyAttributes {
+export interface BucketSippyAttributes {
   /** Name of the R2 bucket Sippy is enabled on. */
   bucketName: string;
   /** Account the bucket lives in. */
   accountId: string;
   /** Jurisdiction of the bucket. */
-  jurisdiction: R2Bucket.Jurisdiction;
+  jurisdiction: Bucket.Jurisdiction;
   /** Whether Sippy is currently enabled on the bucket. */
   enabled: boolean;
   /** The configured source bucket as reported by Cloudflare (sans secrets). */
-  source: R2BucketSippy.SourceAttributes;
+  source: BucketSippy.SourceAttributes;
   /** The configured destination as reported by Cloudflare (sans secrets). */
-  destination: R2BucketSippy.DestinationAttributes;
+  destination: BucketSippy.DestinationAttributes;
 }
 
-export type R2BucketSippy = Resource<
-  R2BucketSippyTypeId,
-  R2BucketSippyProps,
-  R2BucketSippyAttributes,
+export type BucketSippy = Resource<
+  TypeId,
+  BucketSippyProps,
+  BucketSippyAttributes,
   never,
   Providers
 >;
@@ -155,9 +153,9 @@ export type R2BucketSippy = Resource<
  * @section Migrating from AWS S3
  * @example Enable Sippy on a bucket with an S3 source
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("Media");
+ * const bucket = yield* Cloudflare.R2.Bucket("Media");
  *
- * yield* Cloudflare.R2BucketSippy("MediaMigration", {
+ * yield* Cloudflare.R2.BucketSippy("MediaMigration", {
  *   bucketName: bucket.bucketName,
  *   source: {
  *     provider: "aws",
@@ -176,7 +174,7 @@ export type R2BucketSippy = Resource<
  * @section Migrating from Google Cloud Storage
  * @example Enable Sippy with a GCS source
  * ```typescript
- * yield* Cloudflare.R2BucketSippy("MediaMigration", {
+ * yield* Cloudflare.R2.BucketSippy("MediaMigration", {
  *   bucketName: bucket.bucketName,
  *   source: {
  *     provider: "gcs",
@@ -193,9 +191,9 @@ export type R2BucketSippy = Resource<
  *
  * @see https://developers.cloudflare.com/r2/data-migration/sippy/
  */
-export const R2BucketSippy = Resource<R2BucketSippy>(R2BucketSippyTypeId);
+export const BucketSippy = Resource<BucketSippy>(TypeId);
 
-export declare namespace R2BucketSippy {
+export declare namespace BucketSippy {
   /**
    * The source bucket as echoed back by Cloudflare. Secrets are never
    * returned.
@@ -219,13 +217,13 @@ export declare namespace R2BucketSippy {
 }
 
 /**
- * Returns true if the given value is an R2BucketSippy resource.
+ * Returns true if the given value is an BucketSippy resource.
  */
-export const isR2BucketSippy = (value: unknown): value is R2BucketSippy =>
-  Predicate.hasProperty(value, "Type") && value.Type === R2BucketSippyTypeId;
+export const isBucketSippy = (value: unknown): value is BucketSippy =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const R2BucketSippyProvider = () =>
-  Provider.succeed(R2BucketSippy, {
+export const BucketSippyProvider = () =>
+  Provider.succeed(BucketSippy, {
     stables: ["bucketName", "accountId", "jurisdiction"],
 
     diff: Effect.fn(function* ({ olds, news }) {
@@ -332,10 +330,10 @@ export const R2BucketSippyProvider = () =>
         (bucket) => {
           const bucketName = bucket.name;
           if (bucketName == null) {
-            return Effect.succeed([] as R2BucketSippyAttributes[]);
+            return Effect.succeed([] as BucketSippyAttributes[]);
           }
           const jurisdiction = (bucket.jurisdiction ??
-            "default") as R2Bucket.Jurisdiction;
+            "default") as Bucket.Jurisdiction;
           return r2
             .getBucketSippy({ accountId, bucketName, jurisdiction })
             .pipe(
@@ -348,7 +346,7 @@ export const R2BucketSippyProvider = () =>
               // rejects the Sippy route, contributes nothing — skip it.
               Effect.catchTag(
                 ["NoSuchBucket", "InvalidRoute", "Forbidden"],
-                () => Effect.succeed([] as R2BucketSippyAttributes[]),
+                () => Effect.succeed([] as BucketSippyAttributes[]),
               ),
             );
         },
@@ -363,7 +361,7 @@ export const R2BucketSippyProvider = () =>
  * accepts. Secrets are unwrapped here because the distilled TS types
  * declare the credential fields as plain strings.
  */
-const toRequestSource = (source: R2BucketSippySource) =>
+const toRequestSource = (source: BucketSippySource) =>
   source.provider === "aws"
     ? {
         provider: "aws" as const,
@@ -383,8 +381,8 @@ const toAttributes = (
   config: r2.GetBucketSippyResponse,
   accountId: string,
   bucketName: string,
-  jurisdiction: R2Bucket.Jurisdiction,
-): R2BucketSippyAttributes => ({
+  jurisdiction: Bucket.Jurisdiction,
+): BucketSippyAttributes => ({
   bucketName,
   accountId,
   jurisdiction,

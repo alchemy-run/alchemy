@@ -6,7 +6,7 @@ import BindingTargetWorker from "./binding-target-worker.ts";
 
 /**
  * Effect-native worker that calls another Effect-native worker's RPC method
- * via `Cloudflare.bindWorker`. This is the canonical Effect → Effect cross-
+ * via `Cloudflare.Workers.bindWorker`. This is the canonical Effect → Effect cross-
  * worker pattern: the bound stub returns Effects, errors and streams flow
  * back through the typed channel.
  *
@@ -18,7 +18,7 @@ export default class BindingEffectCaller extends Cloudflare.Worker<BindingEffect
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const target = yield* Cloudflare.bindWorker(BindingTargetWorker);
+    const target = yield* Cloudflare.Workers.bindWorker(BindingTargetWorker);
 
     return {
       fetch: Effect.gen(function* () {

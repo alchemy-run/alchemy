@@ -74,7 +74,7 @@ test.provider(
       // Create — enable Page Shield with defaults.
       const settings = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.PageShieldSettings("PageShield", {
+          return yield* Cloudflare.PageShield.Settings("PageShield", {
             zoneId,
           });
         }),
@@ -98,7 +98,7 @@ test.provider(
       // survive.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.PageShieldSettings("PageShield", {
+          return yield* Cloudflare.PageShield.Settings("PageShield", {
             zoneId,
             enabled: false,
           });
@@ -114,7 +114,7 @@ test.provider(
       // so the restore below is observable.
       const reenabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.PageShieldSettings("PageShield", {
+          return yield* Cloudflare.PageShield.Settings("PageShield", {
             zoneId,
             enabled: true,
           });
@@ -180,7 +180,7 @@ test.provider(
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.PageShieldSettings,
+        Cloudflare.PageShield.Settings,
       );
       const all = yield* provider.list();
 

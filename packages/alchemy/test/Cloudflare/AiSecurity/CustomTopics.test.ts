@@ -94,9 +94,7 @@ test.provider(
 // standing test zone is asserted only on an entitled account (env-gated).
 test.provider("list enumerates the custom topics across all zones", (stack) =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(
-      Cloudflare.AiSecurityCustomTopics,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.AI.CustomTopics);
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
@@ -123,7 +121,7 @@ test.provider.skipIf(!entitledZoneId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AiSecurityCustomTopics("Topics", {
+          return yield* Cloudflare.AI.CustomTopics("Topics", {
             zoneId,
             topics: [
               {
@@ -148,7 +146,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Update in place — the PUT replaces the whole list.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AiSecurityCustomTopics("Topics", {
+          return yield* Cloudflare.AI.CustomTopics("Topics", {
             zoneId,
             topics: [
               { label: "support", topic: "Questions about product support" },

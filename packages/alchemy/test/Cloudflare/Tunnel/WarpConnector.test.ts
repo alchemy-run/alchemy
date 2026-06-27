@@ -37,7 +37,7 @@ test.provider(
 
       const connector = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TunnelWarpConnector("SiteA", {
+          return yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
             name: "alchemy-test-warp-connector",
           }).pipe(adopt(true));
         }),
@@ -57,7 +57,7 @@ test.provider(
       // Rename converges in place — same tunnelId, no replacement.
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TunnelWarpConnector("SiteA", {
+          return yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
             name: "alchemy-test-warp-connector-v2",
           }).pipe(adopt(true));
         }),
@@ -94,14 +94,14 @@ test.provider(
 
       const connector = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TunnelWarpConnector("ListSite", {
+          return yield* Cloudflare.Tunnel.WarpConnector("ListSite", {
             name: "alchemy-test-warp-connector-list",
           }).pipe(adopt(true));
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TunnelWarpConnector,
+        Cloudflare.Tunnel.WarpConnector,
       );
       const all = yield* provider.list();
 

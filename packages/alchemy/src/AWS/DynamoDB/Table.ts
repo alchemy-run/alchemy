@@ -10,13 +10,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import { Unowned } from "../../AdoptPolicy.ts";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
-import { Unowned } from "../../AdoptPolicy.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -24,6 +23,7 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TableName = string;
@@ -174,8 +174,8 @@ export interface Table extends Resource<
  * @example Read and write items
  * ```typescript
  * // init
- * const getItem = yield* DynamoDB.GetItem.bind(table);
- * const putItem = yield* DynamoDB.PutItem.bind(table);
+ * const getItem = yield* AWS.DynamoDB.GetItem(table);
+ * const putItem = yield* AWS.DynamoDB.PutItem(table);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -199,9 +199,9 @@ export interface Table extends Resource<
  * @example Process table changes
  * ```typescript
  * // init
- * yield* DynamoDB.streams(table, {
- *   StreamViewType: "NEW_AND_OLD_IMAGES",
- * }).process(
+ * yield* DynamoDB.consumeTableChanges(
+ *   table,
+ *   { streamViewType: "NEW_AND_OLD_IMAGES" },
  *   Effect.fn(function* (record) {
  *     yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
  *   }),

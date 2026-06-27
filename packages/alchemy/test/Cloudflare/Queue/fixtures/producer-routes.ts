@@ -1,4 +1,4 @@
-import type { WriteQueueClient } from "@/Cloudflare/Queue/QueueWrite.ts";
+import type { WriteQueueClient } from "@/Cloudflare/Queues/WriteQueue.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";

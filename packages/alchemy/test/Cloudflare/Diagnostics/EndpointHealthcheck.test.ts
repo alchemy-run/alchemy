@@ -108,7 +108,7 @@ test.provider(
       yield* cleanLeftovers(accountId);
 
       const check = yield* stack.deploy(
-        Cloudflare.EndpointHealthcheck("Check", {
+        Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.1",
           name: "alchemy-diag-ehc",
         }),
@@ -127,7 +127,7 @@ test.provider(
 
       // Update the probed endpoint in place — same UUID.
       const updated = yield* stack.deploy(
-        Cloudflare.EndpointHealthcheck("Check", {
+        Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.2",
           name: "alchemy-diag-ehc",
         }),
@@ -145,7 +145,7 @@ test.provider(
 
       // No-op deploy — converges without churn, same UUID.
       const noop = yield* stack.deploy(
-        Cloudflare.EndpointHealthcheck("Check", {
+        Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.2",
           name: "alchemy-diag-ehc",
         }),
@@ -157,7 +157,7 @@ test.provider(
       // The endpoint changes too: endpoints are unique per account and
       // replacement creates the new healthcheck before deleting the old.
       const replaced = yield* stack.deploy(
-        Cloudflare.EndpointHealthcheck("Check", {
+        Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.3",
           name: "alchemy-diag-ehc-v2",
         }),
@@ -191,14 +191,14 @@ test.provider(
       yield* cleanLeftovers(accountId);
 
       const deployed = yield* stack.deploy(
-        Cloudflare.EndpointHealthcheck("ListCheck", {
+        Cloudflare.Diagnostics.EndpointHealthcheck("ListCheck", {
           endpoint: "10.78.0.1",
           name: "alchemy-diag-ehc-list",
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.EndpointHealthcheck,
+        Cloudflare.Diagnostics.EndpointHealthcheck,
       );
       const all = yield* provider.list();
 

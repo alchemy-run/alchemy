@@ -23,7 +23,7 @@ Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers() },
   Effect.gen(function* () {
-    yield* Cloudflare.R2Bucket("Bucket");
+    yield* Cloudflare.R2.Bucket("Bucket");
   }),
 );
 ```
@@ -42,7 +42,7 @@ Alchemy.Stack(
     providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
   },
   Effect.gen(function* () {
-    yield* Cloudflare.R2Bucket("Bucket");
+    yield* Cloudflare.R2.Bucket("Bucket");
     yield* AWS.SQS.Queue("Jobs");
   }),
 );

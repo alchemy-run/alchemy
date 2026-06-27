@@ -3,7 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 /** Secrets Store backing the bearer token. */
-export const Store = Cloudflare.SecretsStore("AuthSecrets");
+export const Store = Cloudflare.SecretsStore.Store("AuthSecrets");
 
 /**
  * Random-generated bearer token. `Random` persists its value in state, so the
@@ -18,7 +18,7 @@ export const AuthTokenValue = Random("AuthTokenValue");
 export const AuthToken = Effect.gen(function* () {
   const store = yield* Store;
   const value = yield* AuthTokenValue;
-  return yield* Cloudflare.Secret("AuthToken", {
+  return yield* Cloudflare.SecretsStore.Secret("AuthToken", {
     store,
     value: value.text,
   });

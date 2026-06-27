@@ -1,11 +1,11 @@
 ---
 title: Add a typed RPC Durable Object
-description: Replace alchemy's built-in DO method bridge with `Cloudflare.RpcDurableObjectNamespace` — a typed RPC group served on the DO's `fetch`, with a class-instance-preserving wire format. Walk through a single DO, drive it from a test, then layer in a Worker.
+description: Replace alchemy's built-in DO method bridge with `Cloudflare.RpcDurableObject` — a typed RPC group served on the DO's `fetch`, with a class-instance-preserving wire format. Walk through a single DO, drive it from a test, then layer in a Worker.
 sidebar:
   order: 12
 ---
 
-`Cloudflare.RpcDurableObjectNamespace` lets you define a Durable
+`Cloudflare.RpcDurableObject` lets you define a Durable
 Object's API as an [Effect RPC](/guides/effect-rpc) group — the same
 schema-typed `RpcGroup` you'd use anywhere else in Effect, served on
 the DO's `fetch`.
@@ -17,7 +17,7 @@ test it.
 :::note
 The [Durable Objects tutorial](/tutorial/cloudflare/durable-objects)
 uses alchemy's built-in method bridge, which `JSON.stringify`s each
-return value and strips class identity. `RpcDurableObjectNamespace`
+return value and strips class identity. `RpcDurableObject`
 runs an Effect RPC server on the DO's `fetch` instead, so both ends
 share one codec.
 :::
@@ -78,7 +78,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { CounterRpcs } from "./rpcs.ts";
 
-export default class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+export default class Counter extends Cloudflare.RpcDurableObject<Counter>()(
   "Counter",
   { schema: CounterRpcs },
   Effect.gen(function* () {
@@ -89,8 +89,8 @@ export default class Counter extends Cloudflare.RpcDurableObjectNamespace<Counte
 ) {}
 ```
 
-`Cloudflare.RpcDurableObjectNamespace<Self>()(...)` mirrors
-`Cloudflare.DurableObjectNamespace<Self>()(...)` — same outer/inner
+`Cloudflare.RpcDurableObject<Self>()(...)` mirrors
+`Cloudflare.DurableObject<Self>()(...)` — same outer/inner
 Effect pattern. The outer Effect resolves shared deps; the inner
 Effect runs once per DO instance.
 
@@ -273,7 +273,7 @@ Use the built-in DO bridge when method return values are primitives
 or `Schema.encodeUnknown`-compatible structs — it's lighter and
 ergonomic.
 
-Switch to `RpcDurableObjectNamespace` when:
+Switch to `RpcDurableObject` when:
 
 - Return values contain **`Schema.Class` instances** that downstream
   code branches on — the built-in bridge will silently flatten them.
@@ -285,12 +285,12 @@ Switch to `RpcDurableObjectNamespace` when:
 
 ## Bonus: yield the namespace from inside the DO
 
-Mirrors `yield* DurableObjectNamespace` on the regular class — useful
+Mirrors `yield* DurableObject` on the regular class — useful
 for fanning a call out to sibling instances:
 
 ```typescript
 Effect.gen(function* () {
-  const self = yield* Cloudflare.RpcDurableObjectNamespace;
+  const self = yield* Cloudflare.RpcDurableObject;
   const peer = yield* self.getByName("peer-1");
   yield* peer.setTitle({ title: "Sibling call" });
 });
@@ -313,7 +313,7 @@ import * as Layer from "effect/Layer";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { CounterRpcs } from "./rpcs.ts";
 
-export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+export class Counter extends Cloudflare.RpcDurableObject<Counter>()(
   "Counter",
   { schema: CounterRpcs },
 ) {}
@@ -331,7 +331,7 @@ this:
 
 ```diff lang="typescript"
 // src/counter.ts
- export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+ export class Counter extends Cloudflare.RpcDurableObject<Counter>()(
    "Counter",
    { schema: CounterRpcs },
  ) {}
@@ -485,7 +485,7 @@ different namespace, completely isolated state.
 
 ## Recap
 
-- `Cloudflare.RpcDurableObjectNamespace<Self>()(name, { schema }, impl)`
+- `Cloudflare.RpcDurableObject<Self>()(name, { schema }, impl)`
   is the inline form — class declaration carries the runtime.
 - `(name, { schema })` (no impl) is the **modular form** — pair it
   with `Class.make(impl)` so consumer scripts can import the class

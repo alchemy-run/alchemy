@@ -10,10 +10,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TunnelHostnameRouteTypeId = "Cloudflare.Tunnel.HostnameRoute" as const;
-type TunnelHostnameRouteTypeId = typeof TunnelHostnameRouteTypeId;
+const TypeId = "Cloudflare.Tunnel.HostnameRoute" as const;
+type TypeId = typeof TypeId;
 
-export interface TunnelHostnameRouteProps {
+export interface HostnameRouteProps {
   /**
    * The hostname to route through the tunnel (e.g.
    * `app.internal.example.com`). Unique per account. Mutable — updated
@@ -31,7 +31,7 @@ export interface TunnelHostnameRouteProps {
   comment?: string;
 }
 
-export type TunnelHostnameRouteAttributes = {
+export type HostnameRouteAttributes = {
   /** API UUID of the hostname route. */
   hostnameRouteId: string;
   /** Account that owns the route. */
@@ -46,10 +46,10 @@ export type TunnelHostnameRouteAttributes = {
   createdAt: string | undefined;
 };
 
-export type TunnelHostnameRoute = Resource<
-  TunnelHostnameRouteTypeId,
-  TunnelHostnameRouteProps,
-  TunnelHostnameRouteAttributes,
+export type HostnameRoute = Resource<
+  TypeId,
+  HostnameRouteProps,
+  HostnameRouteAttributes,
   never,
   Providers
 >;
@@ -66,8 +66,8 @@ export type TunnelHostnameRoute = Resource<
  * @section Creating a hostname route
  * @example Route an internal hostname through a tunnel
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("MyTunnel");
- * const route = yield* Cloudflare.TunnelHostnameRoute("AppRoute", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
+ * const route = yield* Cloudflare.Tunnel.HostnameRoute("AppRoute", {
  *   hostname: "app.internal.example.com",
  *   tunnelId: tunnel.tunnelId,
  * });
@@ -75,7 +75,7 @@ export type TunnelHostnameRoute = Resource<
  *
  * @example Add a comment
  * ```typescript
- * const route = yield* Cloudflare.TunnelHostnameRoute("AppRoute", {
+ * const route = yield* Cloudflare.Tunnel.HostnameRoute("AppRoute", {
  *   hostname: "app.internal.example.com",
  *   tunnelId: tunnel.tunnelId,
  *   comment: "Internal wiki behind the datacenter tunnel",
@@ -84,21 +84,16 @@ export type TunnelHostnameRoute = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/cloudflared/
  */
-export const TunnelHostnameRoute = Resource<TunnelHostnameRoute>(
-  TunnelHostnameRouteTypeId,
-);
+export const HostnameRoute = Resource<HostnameRoute>(TypeId);
 
 /**
- * Returns true if the given value is a TunnelHostnameRoute resource.
+ * Returns true if the given value is a HostnameRoute resource.
  */
-export const isTunnelHostnameRoute = (
-  value: unknown,
-): value is TunnelHostnameRoute =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TunnelHostnameRouteTypeId;
+export const isHostnameRoute = (value: unknown): value is HostnameRoute =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const TunnelHostnameRouteProvider = () =>
-  Provider.succeed(TunnelHostnameRoute, {
+export const HostnameRouteProvider = () =>
+  Provider.succeed(HostnameRoute, {
     stables: ["hostnameRouteId", "accountId"],
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -249,7 +244,7 @@ const findByHostname = (accountId: string, hostname: string) =>
 const toAttributes = (
   route: ObservedRoute,
   accountId: string,
-): TunnelHostnameRouteAttributes => ({
+): HostnameRouteAttributes => ({
   hostnameRouteId: route.id ?? "",
   accountId,
   hostname: route.hostname ?? "",

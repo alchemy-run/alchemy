@@ -123,24 +123,25 @@ Effect.gen(function* () {
 });
 ```
 
-## `Binding.Service` vs `Binding.Policy`
+## The `__ALCHEMY_RUNTIME__` guard
 
-A binding has two layers under the hood — and which one runs depends
-on the phase:
+A binding is a single `Binding.Service` whose setup Effect does two
+things — and the phase decides how much of it runs:
 
-| Layer              | Phase   | Job                                                   |
-| ------------------ | ------- | ----------------------------------------------------- |
-| `Binding.Service`  | Runtime | The lightweight typed SDK that ships with the bundle. |
-| `Binding.Policy`   | Plan    | The deploy-time logic that emits IAM / env / config.  |
+| Work                    | Phase | Job                                                      |
+| ----------------------- | ----- | -------------------------------------------------------- |
+| typed client            | both  | The lightweight typed SDK that ships with the bundle.    |
+| `host.bind(...)` wiring  | plan | Deploy-time registration of IAM / env / native bindings. |
 
-At plantime the Policy layer is provided, so calling `bind()`
-records what the function will need. At runtime the Policy layer is
-absent — `bind()` returns just the Service wrapper. The runtime
-bundle stays small because none of the planning code is included.
+The deploy-time wiring is fenced behind `if (!globalThis.__ALCHEMY_RUNTIME__)`.
+At plantime the guard is open, so calling `bind()` records what the
+function will need. At runtime the global flag is set, so the guard is
+skipped and `bind()` returns just the typed client. The runtime bundle
+stays small because the planning branch never executes.
 
-This is also how alchemy can let you write `bucket.get(...)` inside
-a Worker without bundling AWS / Cloudflare provisioning code:
-provisioning lives in `Policy`, not `Service`.
+This is also how alchemy can let you write `bucket.get(...)` inside a
+Worker without bundling AWS / Cloudflare provisioning code: the
+provisioning lives behind the guard, never on the runtime path.
 
 ## Why this matters
 
@@ -171,4 +172,4 @@ Effect.gen(function* () {
 ```
 
 Continue to [Binding](/concepts/binding) for the full mechanics of
-how `.bind()` wires resources into your handler.
+how `Bind(resource)` wires resources into your handler.

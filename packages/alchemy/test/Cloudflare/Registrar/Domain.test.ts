@@ -70,7 +70,7 @@ describe.sequential("Domain", () => {
 
         const domain = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegistrarDomain("Domain", props);
+            return yield* Cloudflare.Registrar.Domain("Domain", props);
           }),
         );
 
@@ -92,7 +92,7 @@ describe.sequential("Domain", () => {
         // Idempotent redeploy — still a no-op sync, initialSettings survive.
         const again = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegistrarDomain("Domain", props);
+            return yield* Cloudflare.Registrar.Domain("Domain", props);
           }),
         );
         expect(again.domainName).toEqual(domainName);
@@ -161,7 +161,7 @@ describe.sequential("Domain", () => {
         // In-place update: flip autoRenew away from the baseline.
         const domain = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegistrarDomain("Domain", {
+            return yield* Cloudflare.Registrar.Domain("Domain", {
               domainName,
               autoRenew: flipped,
             });
@@ -175,7 +175,7 @@ describe.sequential("Domain", () => {
         // Flip it back via an in-place update.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegistrarDomain("Domain", {
+            return yield* Cloudflare.Registrar.Domain("Domain", {
               domainName,
               autoRenew: baseline.autoRenew ?? true,
             });
@@ -205,7 +205,9 @@ describe.sequential("Domain", () => {
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.RegistrarDomain);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Registrar.Domain,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);

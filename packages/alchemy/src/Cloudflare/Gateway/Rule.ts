@@ -14,7 +14,7 @@ import type { Providers } from "../Providers.ts";
  * expressions match. Mirrors the open-ended literal union distilled exposes so
  * unknown values flowing back from Cloudflare narrow cleanly.
  */
-export type GatewayRuleAction =
+export type RuleAction =
   | "on"
   | "off"
   | "allow"
@@ -39,7 +39,7 @@ export type GatewayRuleAction =
  * the `dns_resolver` plane (which is what private-app destinations use when
  * Gateway needs to override the answer for an internal hostname).
  */
-export type GatewayRuleFilter =
+export type RuleFilter =
   | "http"
   | "dns"
   | "l4"
@@ -56,11 +56,11 @@ export type GatewayRuleFilter =
  * Only a subset is meaningful for any given `action`; consult Cloudflare's
  * Gateway rule docs for which settings apply per action.
  */
-export type GatewayRuleSettings = NonNullable<
+export type RuleSettings = NonNullable<
   zeroTrust.CreateGatewayRuleRequest["ruleSettings"]
 >;
 
-export interface GatewayRuleProps {
+export interface RuleProps {
   /**
    * Human-readable rule name. If omitted, a deterministic physical name is
    * generated from the app/stage/logical-id. Used during adoption to locate
@@ -72,13 +72,13 @@ export interface GatewayRuleProps {
    * reconciles; changing it triggers a replacement so a rule never silently
    * flips semantics under existing references.
    */
-  action: GatewayRuleAction;
+  action: RuleAction;
   /**
    * Protocol/layer the rule's `traffic` expression evaluates against.
    * Cloudflare currently accepts a single filter per rule; the SDK still
    * types it as an array to mirror the wire shape.
    */
-  filters: ReadonlyArray<GatewayRuleFilter>;
+  filters: ReadonlyArray<RuleFilter>;
   /**
    * Wirefilter expression used for traffic matching. Cloudflare auto-formats
    * and sanitises this server-side — to avoid perpetual diffs, prefer the
@@ -107,7 +107,7 @@ export interface GatewayRuleProps {
    * }
    * ```
    */
-  ruleSettings?: GatewayRuleSettings;
+  ruleSettings?: RuleSettings;
   /**
    * Rule precedence — lower values evaluate first. When unset, Cloudflare
    * picks one server-side; we then echo whatever it assigned back through
@@ -133,15 +133,15 @@ export interface GatewayRuleProps {
   adopt?: boolean;
 }
 
-export interface GatewayRuleAttributes {
+export interface RuleAttributes {
   /** Cloudflare-assigned rule UUID. */
   ruleId: string;
   /** Resolved display name (server-side). */
   name: string;
   /** Resolved action. */
-  action: GatewayRuleAction;
+  action: RuleAction;
   /** Resolved filters. */
-  filters: ReadonlyArray<GatewayRuleFilter>;
+  filters: ReadonlyArray<RuleFilter>;
   /** Server-assigned precedence (always populated on the response). */
   precedence: number;
   /** Account that owns this rule. */
@@ -152,10 +152,10 @@ export interface GatewayRuleAttributes {
   updatedAt: string | undefined;
 }
 
-export type GatewayRule = Resource<
+export type Rule = Resource<
   "Cloudflare.Gateway.Rule",
-  GatewayRuleProps,
-  GatewayRuleAttributes,
+  RuleProps,
+  RuleAttributes,
   never,
   Providers
 >;
@@ -167,7 +167,7 @@ export type GatewayRule = Resource<
  * they decide whether to allow, block, override, isolate, or redirect a
  * request based on wirefilter expressions over the request traffic,
  * the authenticated identity, and the device posture. The most common
- * companion to {@link AccessApplication} with a `private` destination is a
+ * companion to {@link Application} with a `private` destination is a
  * `dns` rule with `action: "override"` that points an internal hostname at
  * a Cloudflare Tunnel — without it, WARP intercepts the lookup but has
  * nowhere to send the answer.
@@ -177,7 +177,7 @@ export type GatewayRule = Resource<
  * @section DNS override for a private app
  * @example Resolve an internal hostname through a Cloudflare Tunnel
  * ```typescript
- * const adminDns = yield* Cloudflare.GatewayRule("AdminMicroagiDns", {
+ * const adminDns = yield* Cloudflare.Gateway.Rule("AdminMicroagiDns", {
  *   name: "research-admin-microagi-dns-override",
  *   action: "override",
  *   filters: ["dns"],
@@ -192,7 +192,7 @@ export type GatewayRule = Resource<
  * @section Block a category
  * @example Block known phishing on HTTP
  * ```typescript
- * yield* Cloudflare.GatewayRule("BlockPhishing", {
+ * yield* Cloudflare.Gateway.Rule("BlockPhishing", {
  *   name: "block-phishing",
  *   action: "block",
  *   filters: ["http"],
@@ -200,15 +200,15 @@ export type GatewayRule = Resource<
  * });
  * ```
  */
-export const GatewayRule = Resource<GatewayRule>("Cloudflare.Gateway.Rule");
+export const Rule = Resource<Rule>("Cloudflare.Gateway.Rule");
 
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
-export const GatewayRuleProvider = () =>
+export const RuleProvider = () =>
   Provider.effect(
-    GatewayRule,
+    Rule,
     Effect.gen(function* () {
       const env = yield* CloudflareEnvironment;
 
@@ -290,7 +290,7 @@ export const GatewayRuleProvider = () =>
                         accountId,
                         createdAt: r.createdAt,
                         updatedAt: r.updatedAt,
-                      } satisfies GatewayRuleAttributes,
+                      } satisfies RuleAttributes,
                     ];
                   }),
                 ),
@@ -299,11 +299,8 @@ export const GatewayRuleProvider = () =>
           }),
 
         diff: Effect.fn(function* ({ olds = {}, news }) {
-          if ((olds as GatewayRuleProps).action !== undefined) {
-            if (
-              (olds as GatewayRuleProps).action !==
-              (news as GatewayRuleProps).action
-            ) {
+          if ((olds as RuleProps).action !== undefined) {
+            if ((olds as RuleProps).action !== (news as RuleProps).action) {
               return { action: "replace" } as const;
             }
           }
@@ -402,7 +399,7 @@ export const GatewayRuleProvider = () =>
             accountId,
             createdAt: observed.createdAt,
             updatedAt: observed.updatedAt,
-          } satisfies GatewayRuleAttributes;
+          } satisfies RuleAttributes;
         }),
 
         delete: Effect.fn(function* ({ output }) {
@@ -432,7 +429,7 @@ export const GatewayRuleProvider = () =>
             accountId: output.accountId,
             createdAt: observed.createdAt ?? output.createdAt,
             updatedAt: observed.updatedAt ?? output.updatedAt,
-          } satisfies GatewayRuleAttributes;
+          } satisfies RuleAttributes;
         }),
       };
     }),
@@ -441,8 +438,8 @@ export const GatewayRuleProvider = () =>
 interface ObservedRule {
   readonly id?: string;
   readonly name?: string;
-  readonly action?: GatewayRuleAction;
-  readonly filters?: ReadonlyArray<GatewayRuleFilter>;
+  readonly action?: RuleAction;
+  readonly filters?: ReadonlyArray<RuleFilter>;
   readonly traffic?: string;
   readonly identity?: string;
   readonly devicePosture?: string;
@@ -465,8 +462,8 @@ const undefArr = <T>(
 const narrowRule = (raw: {
   id?: string | null;
   name?: string | null;
-  action?: GatewayRuleAction | null | string;
-  filters?: ReadonlyArray<GatewayRuleFilter | null> | null;
+  action?: RuleAction | null | string;
+  filters?: ReadonlyArray<RuleFilter | null> | null;
   traffic?: string | null;
   identity?: string | null;
   devicePosture?: string | null;
@@ -479,7 +476,7 @@ const narrowRule = (raw: {
 }): ObservedRule => ({
   id: undef(raw.id),
   name: undef(raw.name),
-  action: raw.action == null ? undefined : (raw.action as GatewayRuleAction),
+  action: raw.action == null ? undefined : (raw.action as RuleAction),
   filters: undefArr(raw.filters ?? undefined),
   traffic: undef(raw.traffic),
   identity: undef(raw.identity),
@@ -498,19 +495,19 @@ const narrowRule = (raw: {
 
 interface RuleMutableBody {
   name: string;
-  action: GatewayRuleAction;
-  filters: ReadonlyArray<GatewayRuleFilter>;
+  action: RuleAction;
+  filters: ReadonlyArray<RuleFilter>;
   traffic?: string;
   identity?: string;
   devicePosture?: string;
-  ruleSettings?: GatewayRuleSettings;
+  ruleSettings?: RuleSettings;
   precedence?: number;
   enabled?: boolean;
   description?: string;
 }
 
 const buildMutableBody = (
-  news: GatewayRuleProps,
+  news: RuleProps,
   resolvedName: string,
 ): RuleMutableBody => {
   const body: RuleMutableBody = {

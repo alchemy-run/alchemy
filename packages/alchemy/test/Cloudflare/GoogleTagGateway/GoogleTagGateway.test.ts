@@ -78,14 +78,17 @@ describe.sequential("GoogleTagGateway", () => {
           // Create — enable the gateway with a deterministic config.
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.GoogleTagGateway("Gtg", {
-                zone: { zoneId, name: zoneName },
-                enabled: true,
-                endpoint: "/metrics",
-                measurementId: "G-TEST123456",
-                hideOriginalIp: true,
-                setUpTag: false,
-              });
+              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
+                "Gtg",
+                {
+                  zone: { zoneId, name: zoneName },
+                  enabled: true,
+                  endpoint: "/metrics",
+                  measurementId: "G-TEST123456",
+                  hideOriginalIp: true,
+                  setUpTag: false,
+                },
+              );
             }),
           );
 
@@ -108,14 +111,17 @@ describe.sequential("GoogleTagGateway", () => {
           // Update in place — same zone, new endpoint and IP setting.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.GoogleTagGateway("Gtg", {
-                zone: { zoneId, name: zoneName },
-                enabled: true,
-                endpoint: "/collect2",
-                measurementId: "G-TEST123456",
-                hideOriginalIp: false,
-                setUpTag: false,
-              });
+              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
+                "Gtg",
+                {
+                  zone: { zoneId, name: zoneName },
+                  enabled: true,
+                  endpoint: "/collect2",
+                  measurementId: "G-TEST123456",
+                  hideOriginalIp: false,
+                  setUpTag: false,
+                },
+              );
             }),
           );
 
@@ -153,14 +159,17 @@ describe.sequential("GoogleTagGateway", () => {
 
         yield* Effect.gen(function* () {
           const program = Effect.gen(function* () {
-            return yield* Cloudflare.GoogleTagGateway("GtgNoop", {
-              zone: { zoneId, name: zoneName },
-              enabled: false,
-              endpoint: "/noop",
-              measurementId: "GTM-TEST123",
-              hideOriginalIp: false,
-              setUpTag: false,
-            });
+            return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
+              "GtgNoop",
+              {
+                zone: { zoneId, name: zoneName },
+                enabled: false,
+                endpoint: "/noop",
+                measurementId: "GTM-TEST123",
+                hideOriginalIp: false,
+                setUpTag: false,
+              },
+            );
           });
 
           const first = yield* stack.deploy(program);
@@ -218,19 +227,22 @@ describe.sequential("GoogleTagGateway", () => {
         yield* Effect.gen(function* () {
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.GoogleTagGateway("GtgList", {
-                zone: { zoneId, name: zoneName },
-                enabled: true,
-                endpoint: "/listcfg",
-                measurementId: "G-LIST123456",
-                hideOriginalIp: true,
-                setUpTag: false,
-              });
+              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
+                "GtgList",
+                {
+                  zone: { zoneId, name: zoneName },
+                  enabled: true,
+                  endpoint: "/listcfg",
+                  measurementId: "G-LIST123456",
+                  hideOriginalIp: true,
+                  setUpTag: false,
+                },
+              );
             }),
           );
 
           const provider = yield* Provider.findProvider(
-            Cloudflare.GoogleTagGateway,
+            Cloudflare.GoogleTagGateway.GoogleTagGateway,
           );
           const all = yield* provider.list();
 

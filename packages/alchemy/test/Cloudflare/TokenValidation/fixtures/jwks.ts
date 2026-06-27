@@ -1,4 +1,4 @@
-import type { TokenValidationJwkKey } from "@/Cloudflare/TokenValidation/Configuration";
+import type { JwkKey } from "@/Cloudflare/TokenValidation/Configuration";
 
 /**
  * Checked-in RSA public JWKs for token validation tests. These are the
@@ -9,7 +9,7 @@ import type { TokenValidationJwkKey } from "@/Cloudflare/TokenValidation/Configu
  * Two keys with distinct `kid`s allow exercising key rotation
  * (`putConfigurationCredential`) deterministically across runs.
  */
-export const JWKS_KEY_1: TokenValidationJwkKey = {
+export const JWKS_KEY_1: JwkKey = {
   kty: "RSA",
   alg: "RS256",
   kid: "alchemy-test-key-1",
@@ -17,7 +17,7 @@ export const JWKS_KEY_1: TokenValidationJwkKey = {
   e: "AQAB",
 };
 
-export const JWKS_KEY_2: TokenValidationJwkKey = {
+export const JWKS_KEY_2: JwkKey = {
   kty: "RSA",
   alg: "RS256",
   kid: "alchemy-test-key-2",

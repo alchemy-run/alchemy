@@ -69,7 +69,7 @@ test.provider.skipIf(!entitled)(
 
       const cert = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccessCertificate("BasicCert", {
+          return yield* Cloudflare.Access.Certificate("BasicCert", {
             certificate: CA_CERT_1,
           });
         }),
@@ -90,7 +90,7 @@ test.provider.skipIf(!entitled)(
       // Update — associate a hostname in place (same id).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccessCertificate("BasicCert", {
+          return yield* Cloudflare.Access.Certificate("BasicCert", {
             certificate: CA_CERT_1,
             associatedHostnames: ["access-cert.alchemy-test-2.us"],
           });
@@ -105,7 +105,7 @@ test.provider.skipIf(!entitled)(
       // is replaced with a new certificate id and fingerprint.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccessCertificate("BasicCert", {
+          return yield* Cloudflare.Access.Certificate("BasicCert", {
             certificate: CA_CERT_2,
           });
         }),
@@ -142,13 +142,13 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AccessCertificate,
+        Cloudflare.Access.Certificate,
       );
 
       if (entitled) {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.AccessCertificate("ListCert", {
+            return yield* Cloudflare.Access.Certificate("ListCert", {
               certificate: CA_CERT_1,
             });
           }),

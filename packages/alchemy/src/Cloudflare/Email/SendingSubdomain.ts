@@ -12,10 +12,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const EmailSendingSubdomainTypeId = "Cloudflare.EmailSendingSubdomain" as const;
-type EmailSendingSubdomainTypeId = typeof EmailSendingSubdomainTypeId;
+const SendingSubdomainTypeId = "Cloudflare.Email.SendingSubdomain" as const;
+type SendingSubdomainTypeId = typeof SendingSubdomainTypeId;
 
-export interface EmailSendingSubdomainProps {
+export interface SendingSubdomainProps {
   /**
    * Zone the sending subdomain is registered on. The subdomain name must
    * be within this zone.
@@ -34,7 +34,7 @@ export interface EmailSendingSubdomainProps {
   name: string;
 }
 
-export interface EmailSendingSubdomainAttributes {
+export interface SendingSubdomainAttributes {
   /** Cloudflare-assigned identifier of the sending subdomain. */
   subdomainId: string;
   /** Zone the sending subdomain is registered on. */
@@ -57,10 +57,10 @@ export interface EmailSendingSubdomainAttributes {
   modified: string | undefined;
 }
 
-export type EmailSendingSubdomain = Resource<
-  EmailSendingSubdomainTypeId,
-  EmailSendingSubdomainProps,
-  EmailSendingSubdomainAttributes,
+export type SendingSubdomain = Resource<
+  SendingSubdomainTypeId,
+  SendingSubdomainProps,
+  SendingSubdomainAttributes,
   never,
   Providers
 >;
@@ -88,7 +88,7 @@ export type EmailSendingSubdomain = Resource<
  * @section Registering a sending subdomain
  * @example Send mail from `mail.example.com`
  * ```typescript
- * const sending = yield* Cloudflare.EmailSendingSubdomain("Mail", {
+ * const sending = yield* Cloudflare.Email.SendingSubdomain("Mail", {
  *   zoneId: zone.zoneId,
  *   name: "mail.example.com",
  * });
@@ -111,21 +111,18 @@ export type EmailSendingSubdomain = Resource<
  *
  * @see https://developers.cloudflare.com/email-sending/
  */
-export const EmailSendingSubdomain = Resource<EmailSendingSubdomain>(
-  EmailSendingSubdomainTypeId,
+export const SendingSubdomain = Resource<SendingSubdomain>(
+  SendingSubdomainTypeId,
 );
 
 /**
- * Returns true if the given value is an EmailSendingSubdomain resource.
+ * Returns true if the given value is an SendingSubdomain resource.
  */
-export const isEmailSendingSubdomain = (
-  value: unknown,
-): value is EmailSendingSubdomain =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === EmailSendingSubdomainTypeId;
+export const isSendingSubdomain = (value: unknown): value is SendingSubdomain =>
+  Predicate.hasProperty(value, "Type") && value.Type === SendingSubdomainTypeId;
 
-export const EmailSendingSubdomainProvider = () =>
-  Provider.succeed(EmailSendingSubdomain, {
+export const SendingSubdomainProvider = () =>
+  Provider.succeed(SendingSubdomain, {
     // No update API exists — every attribute is stable across updates.
     stables: [
       "subdomainId",
@@ -164,8 +161,8 @@ export const EmailSendingSubdomainProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as EmailSendingSubdomainProps;
-      const n = news as EmailSendingSubdomainProps;
+      const o = olds as SendingSubdomainProps;
+      const n = news as SendingSubdomainProps;
       // The API has no update operation — any prop change is a replace.
       if (o.name !== undefined && o.name !== n.name) {
         return { action: "replace" } as const;
@@ -308,7 +305,7 @@ const findByName = (zoneId: string, name: string) =>
 const toAttributes = (
   subdomain: ObservedSubdomain,
   zoneId: string,
-): EmailSendingSubdomainAttributes => ({
+): SendingSubdomainAttributes => ({
   subdomainId: subdomain.tag,
   zoneId,
   name: subdomain.name,

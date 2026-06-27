@@ -11,30 +11,30 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TurnstileWidgetTypeId = "Cloudflare.Turnstile.Widget" as const;
-type TurnstileWidgetTypeId = typeof TurnstileWidgetTypeId;
+const TypeId = "Cloudflare.Turnstile.Widget" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Rendering / interaction mode of a Turnstile widget.
  */
-export type TurnstileWidgetMode = "managed" | "non-interactive" | "invisible";
+export type WidgetMode = "managed" | "non-interactive" | "invisible";
 
 /**
  * Region a Turnstile widget can be served from. Cannot be changed after
  * creation.
  */
-export type TurnstileWidgetRegion = "world" | "china";
+export type WidgetRegion = "world" | "china";
 
 /**
  * Clearance level granted when the widget is embedded on a Cloudflare zone.
  */
-export type TurnstileClearanceLevel =
+export type ClearanceLevel =
   | "no_clearance"
   | "jschallenge"
   | "managed"
   | "interactive";
 
-export type TurnstileWidgetProps = {
+export type WidgetProps = {
   /**
    * Human readable widget name. Not unique. If omitted, a unique name is
    * generated from the app, stage, and logical ID.
@@ -51,13 +51,13 @@ export type TurnstileWidgetProps = {
    * required), `non-interactive` (never requires interaction), or
    * `invisible` (no visible widget).
    */
-  mode: TurnstileWidgetMode;
+  mode: WidgetMode;
   /**
    * Region where this widget can be used. Cannot be changed after creation —
    * updating this property triggers a replacement.
    * @default "world"
    */
-  region?: TurnstileWidgetRegion;
+  region?: WidgetRegion;
   /**
    * If `true`, Cloudflare issues computationally expensive challenges in
    * response to malicious bots (Enterprise only).
@@ -69,7 +69,7 @@ export type TurnstileWidgetProps = {
    * grant challenge clearance, this setting determines the clearance level.
    * @default "no_clearance"
    */
-  clearanceLevel?: TurnstileClearanceLevel;
+  clearanceLevel?: ClearanceLevel;
   /**
    * Return the Ephemeral ID in `/siteverify` responses (Enterprise only).
    * @default false
@@ -82,7 +82,7 @@ export type TurnstileWidgetProps = {
   offlabel?: boolean;
 };
 
-export type TurnstileWidgetAttributes = {
+export type WidgetAttributes = {
   /**
    * Widget item identifier tag. This is the public sitekey embedded in HTML.
    */
@@ -107,11 +107,11 @@ export type TurnstileWidgetAttributes = {
   /**
    * Widget mode.
    */
-  mode: TurnstileWidgetMode;
+  mode: WidgetMode;
   /**
    * Region where this widget can be used.
    */
-  region: TurnstileWidgetRegion;
+  region: WidgetRegion;
   /**
    * Whether bot fight mode is enabled (Enterprise only).
    */
@@ -119,7 +119,7 @@ export type TurnstileWidgetAttributes = {
   /**
    * Clearance level granted on Cloudflare zones.
    */
-  clearanceLevel: TurnstileClearanceLevel;
+  clearanceLevel: ClearanceLevel;
   /**
    * Whether the Ephemeral ID is returned in `/siteverify` (Enterprise only).
    */
@@ -138,10 +138,10 @@ export type TurnstileWidgetAttributes = {
   modifiedOn: string;
 };
 
-export type TurnstileWidget = Resource<
-  TurnstileWidgetTypeId,
-  TurnstileWidgetProps,
-  TurnstileWidgetAttributes,
+export type Widget = Resource<
+  TypeId,
+  WidgetProps,
+  WidgetAttributes,
   never,
   Providers
 >;
@@ -159,7 +159,7 @@ export type TurnstileWidget = Resource<
  * @section Creating a Widget
  * @example Managed widget
  * ```typescript
- * const widget = yield* Cloudflare.TurnstileWidget("signup-form", {
+ * const widget = yield* Cloudflare.Turnstile.Widget("signup-form", {
  *   domains: ["example.com"],
  *   mode: "managed",
  * });
@@ -167,7 +167,7 @@ export type TurnstileWidget = Resource<
  *
  * @example Invisible widget with an explicit name
  * ```typescript
- * const widget = yield* Cloudflare.TurnstileWidget("api-guard", {
+ * const widget = yield* Cloudflare.Turnstile.Widget("api-guard", {
  *   name: "api-guard",
  *   domains: ["example.com", "app.example.com"],
  *   mode: "invisible",
@@ -186,16 +186,16 @@ export type TurnstileWidget = Resource<
  *
  * @see https://developers.cloudflare.com/turnstile/
  */
-export const TurnstileWidget = Resource<TurnstileWidget>(TurnstileWidgetTypeId);
+export const Widget = Resource<Widget>(TypeId);
 
 /**
- * Returns true if the given value is a TurnstileWidget resource.
+ * Returns true if the given value is a Widget resource.
  */
-export const isTurnstileWidget = (value: unknown): value is TurnstileWidget =>
-  Predicate.hasProperty(value, "Type") && value.Type === TurnstileWidgetTypeId;
+export const isWidget = (value: unknown): value is Widget =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const TurnstileWidgetProvider = () =>
-  Provider.succeed(TurnstileWidget, {
+export const WidgetProvider = () =>
+  Provider.succeed(Widget, {
     stables: ["sitekey", "accountId", "region", "createdOn"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -266,8 +266,7 @@ export const TurnstileWidgetProvider = () =>
         mode: news.mode,
         botFightMode: news.botFightMode ?? observedBool(observed.botFightMode),
         clearanceLevel:
-          news.clearanceLevel ??
-          (observed.clearanceLevel as TurnstileClearanceLevel),
+          news.clearanceLevel ?? (observed.clearanceLevel as ClearanceLevel),
         ephemeralId: news.ephemeralId ?? observedBool(observed.ephemeralId),
         offlabel: news.offlabel ?? observedBool(observed.offlabel),
       };
@@ -323,9 +322,7 @@ export const TurnstileWidgetProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is TurnstileWidgetAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is WidgetAttributes => row !== undefined);
     }),
   });
 
@@ -373,17 +370,17 @@ const toAttributes = (
     | turnstile.CreateWidgetResponse
     | turnstile.UpdateWidgetResponse,
   accountId: string,
-): TurnstileWidgetAttributes => ({
+): WidgetAttributes => ({
   sitekey: widget.sitekey,
   secret: Redacted.make(widget.secret),
   accountId,
   name: widget.name,
   // Distilled widens generated string enums to open unions (`string & {}`).
   domains: [...widget.domains],
-  mode: widget.mode as TurnstileWidgetMode,
-  region: widget.region as TurnstileWidgetRegion,
+  mode: widget.mode as WidgetMode,
+  region: widget.region as WidgetRegion,
   botFightMode: widget.botFightMode,
-  clearanceLevel: widget.clearanceLevel as TurnstileClearanceLevel,
+  clearanceLevel: widget.clearanceLevel as ClearanceLevel,
   ephemeralId: widget.ephemeralId,
   offlabel: widget.offlabel,
   createdOn: widget.createdOn,

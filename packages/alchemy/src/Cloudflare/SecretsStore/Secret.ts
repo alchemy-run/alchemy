@@ -10,7 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { SecretBinding } from "./SecretBinding.ts";
+
 export type StoreSecretProps = {
   /**
    * The Secrets Store that owns this secret.
@@ -77,8 +77,8 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * @section Creating a Secret
  * @example Basic Secret
  * ```typescript
- * const store = yield* Cloudflare.SecretsStore("MyStore");
- * const apiKey = yield* Cloudflare.StoreSecret("ApiKey", {
+ * const store = yield* Cloudflare.SecretsStore.Store("MyStore");
+ * const apiKey = yield* Cloudflare.SecretsStore.Secret("ApiKey", {
  *   store,
  *   value: Redacted.make(process.env.API_KEY!),
  * });
@@ -87,16 +87,14 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * @section Binding to a Worker
  * @example Reading a secret at runtime
  * ```typescript
- * const apiKey = yield* Cloudflare.StoreSecret.bind(ApiKey);
+ * const apiKey = yield* Cloudflare.SecretsStore.ReadSecret(ApiKey);
  * // `apiKey` is itself an Effect that resolves to the secret value:
  * const value = yield* apiKey;
  * // Or call `.get()` explicitly:
  * const value = yield* apiKey.get();
  * ```
  */
-export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret")({
-  bind: SecretBinding.bind,
-});
+export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret");
 
 export const StoreSecretProvider = () =>
   Provider.succeed(Secret, {

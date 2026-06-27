@@ -12,7 +12,7 @@ import { DoRpcs } from "./group.ts";
  * an `RpcClient` whose transport calls into this DO's `fetch`, so the
  * Worker's `*DO` handlers transparently delegate here.
  */
-export default class RpcHttpTestObject extends Cloudflare.DurableObjectNamespace<RpcHttpTestObject>()(
+export default class RpcHttpTestObject extends Cloudflare.DurableObject<RpcHttpTestObject>()(
   "RpcHttpTestObject",
   Effect.succeed(
     Effect.gen(function* () {

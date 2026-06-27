@@ -6,8 +6,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { type MemoOptions } from "../../Command/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
+import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
@@ -24,12 +24,13 @@ import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { Container } from "../Container/Container.ts";
-import type { DevContainerImage } from "../Container/ContainerApplication.ts";
-import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
+import type { Container } from "../Containers/Container.ts";
+import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
+import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
+import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
-import { type DurableObjectExport } from "./DurableObjectNamespace.ts";
+import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
@@ -42,7 +43,6 @@ import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
-import type { WorkflowExport } from "./Workflow.ts";
 
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
@@ -191,7 +191,7 @@ export interface WorkerProps<
     enabled?: boolean;
     previewsEnabled?: boolean;
   };
-  /** @internal used by Cloudflare.Vite resource */
+  /** @internal used by Cloudflare.Website.Vite resource */
   vite?: {
     rootDir?: string;
     memo?: MemoOptions;
@@ -372,7 +372,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     bindings?: WorkerBinding[];
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
-    hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
+    hyperdrives?: Record<string, Required<DevOrigin>>;
   },
   Providers
 >;
@@ -430,8 +430,8 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Defining an async Worker in your stack
  * ```typescript
  * // alchemy.run.ts
- * const db = yield* Cloudflare.D1Database("DB");
- * const bucket = yield* Cloudflare.R2Bucket("Bucket");
+ * const db = yield* Cloudflare.D1.Database("DB");
+ * const bucket = yield* Cloudflare.R2.Bucket("Bucket");
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
  *
@@ -494,7 +494,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * them away entirely.
  *
  * The class and `.make()` can live in the same file. This is the
- * same pattern used by `Container` and `DurableObjectNamespace`,
+ * same pattern used by `Container` and `DurableObject`,
  * and is recommended for any cross-Worker or cross-DO bindings.
  *
  * @example Worker Layer (class + .make() in one file)
@@ -660,14 +660,14 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section D1 Database
- * Bind a D1 database with `Cloudflare.D1Connection.bind`. D1 is a
+ * Bind a D1 database with `Cloudflare.D1.QueryDatabase`. D1 is a
  * serverless SQLite database — use `prepare` to build parameterized
  * queries and `all`, `first`, or `run` to execute them.
  *
  * @example Binding and querying D1
  * ```typescript
  * // init
- * const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ * const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -681,7 +681,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section Durable Objects
- * Yield a `DurableObjectNamespace` class in the init phase to get a
+ * Yield a `DurableObject` class in the init phase to get a
  * namespace handle. Call `getByName` or `getById` to get a typed RPC
  * stub, then call its methods from your runtime handlers.
  *
@@ -700,28 +700,38 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section Containers
- * Containers run long-lived processes alongside Durable Objects. Bind
- * one with `Cloudflare.Container.bind` and start it with
- * `Cloudflare.start`. You can call typed methods on the running
- * container or make HTTP requests to its exposed ports.
+ * Containers run long-lived processes alongside Durable Objects.
+ * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's init to
+ * bind, start, and monitor the container; then `yield* Sandbox`
+ * resolves the **running** instance. Call its typed methods or use
+ * `getTcpPort` to make HTTP requests to its exposed ports.
  *
- * @example Binding and starting a Container
+ * @example Running a Container from a Durable Object
  * ```typescript
- * // init (inside a DurableObjectNamespace)
- * const sandbox = yield* Cloudflare.Container.bind(Sandbox);
+ * export default class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
  *
- * return Effect.gen(function* () {
- *   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
- *
- *   return {
- *     exec: (cmd: string) => container.exec(cmd),
- *     fetch: Effect.gen(function* () {
- *       const { fetch } = yield* container.getTcpPort(3000);
- *       const res = yield* fetch(HttpClientRequest.get("http://container/"));
- *       return HttpServerResponse.fromClientResponse(res);
- *     }),
- *   };
- * });
+ *     return Effect.gen(function* () {
+ *       return {
+ *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         health: () =>
+ *           Effect.gen(function* () {
+ *             const { fetch } = yield* sandbox.getTcpPort(3000);
+ *             const res = yield* fetch(
+ *               HttpClientRequest.get("http://container/health"),
+ *             );
+ *             return yield* res.text;
+ *           }),
+ *       };
+ *     });
+ *   }).pipe(
+ *     Effect.provide(
+ *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
+ *     ),
+ *   ),
+ * ) {}
  * ```
  *
  * @section Dynamic Workers

@@ -53,7 +53,7 @@ injection, typed wrappers) see [Binding](/concepts/binding).
 ## Bindings in action
 
 A binding is what connects a resource to the platform's runtime. The
-syntax `yield* SomeResource.bind(target)` does three things at once:
+syntax `yield* ReadSomeResource(target)` does three things at once:
 
 1. Records the binding on the platform's deploy plan
 2. Generates any needed permissions/configuration
@@ -84,8 +84,8 @@ export default AWS.Lambda.Function(
   "Api",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const getJob = yield* DynamoDB.GetItem.bind(JobsTable);
-    const enqueue = yield* SQS.SendMessage.bind(JobQueue);
+    const getJob = yield* DynamoDB.GetItem(JobsTable);
+    const enqueue = yield* SQS.SendMessage(JobQueue);
 
     return {
       fetch: Effect.gen(function* () {

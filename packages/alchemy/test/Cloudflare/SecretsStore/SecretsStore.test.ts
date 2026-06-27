@@ -159,11 +159,13 @@ test.provider("list enumerates the deployed secrets store", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.SecretsStore("ListStore");
+        return yield* Cloudflare.SecretsStore.Store("ListStore");
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.SecretsStore);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.SecretsStore.Store,
+    );
     const all = yield* provider.list();
 
     expect(all.length).toBeGreaterThan(0);

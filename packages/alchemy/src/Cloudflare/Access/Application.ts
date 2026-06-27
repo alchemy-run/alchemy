@@ -14,7 +14,7 @@ import type { Providers } from "../Providers.ts";
  * Application type literal — every value Cloudflare's Access service
  * recognises. Stable across reconciles; changing it triggers a replacement.
  */
-export type AccessApplicationType =
+export type ApplicationType =
   | "self_hosted"
   | "saas"
   | "ssh"
@@ -31,13 +31,13 @@ export type AccessApplicationType =
  *
  * Cloudflare supports three destination flavours:
  * - `public` — a public hostname/URI you own in Cloudflare (the legacy
- *   `domain` field on `AccessApplicationProps` covers the simple case).
+ *   `domain` field on `ApplicationProps` covers the simple case).
  * - `private` — a hostname or CIDR reachable through a Cloudflare Tunnel.
  *   Traffic from WARP-enrolled devices is intercepted and forwarded
  *   through the tunnel; identity is enforced before forwarding.
  * - `via_mcp_server_portal` — routes via a managed MCP server portal.
  */
-export type AccessApplicationDestination =
+export type ApplicationDestination =
   | { type: "public"; uri: string }
   | {
       type: "private";
@@ -49,7 +49,7 @@ export type AccessApplicationDestination =
     }
   | { type: "via_mcp_server_portal"; mcpServerId: string };
 
-export interface AccessApplicationProps {
+export interface ApplicationProps {
   /**
    * The Access application type.
    *
@@ -59,7 +59,7 @@ export interface AccessApplicationProps {
    *
    * Immutable — changing the type triggers a replace.
    */
-  type: AccessApplicationType;
+  type: ApplicationType;
   /**
    * Human-readable display name. If omitted, a deterministic physical name
    * is generated from the app/stage/logical-id.
@@ -89,7 +89,7 @@ export interface AccessApplicationProps {
    * ]
    * ```
    */
-  destinations?: ReadonlyArray<AccessApplicationDestination>;
+  destinations?: ReadonlyArray<ApplicationDestination>;
   /**
    * Token TTL for sessions issued by this application. Accepts Go-style
    * duration strings, e.g. `"24h"`, `"720h"`, `"2h45m"`.
@@ -120,7 +120,7 @@ export interface AccessApplicationProps {
   /**
    * Reusable Access policies that gate access to this application, in
    * ascending order of precedence. Author each policy with the
-   * `Cloudflare.AccessPolicy` resource and pass `policy.policyId` (or a bare
+   * `Cloudflare.Access.Policy` resource and pass `policy.policyId` (or a bare
    * policy UUID) here — Access applications no longer accept inline policy
    * bodies in this provider.
    *
@@ -161,7 +161,7 @@ export interface AccessApplicationProps {
 /**
  * Output attributes persisted between reconciles.
  */
-export interface AccessApplicationAttributes {
+export interface ApplicationAttributes {
   /** Cloudflare-assigned application UUID. */
   applicationId: string;
   /** Audience tag used to verify JWTs issued for this application. */
@@ -169,9 +169,9 @@ export interface AccessApplicationAttributes {
   /** Resolved domain. Cloudflare fills this in for `warp`/`saas` apps. */
   domain: string;
   /** Resolved destinations (echoed back by Cloudflare). */
-  destinations: ReadonlyArray<AccessApplicationDestination> | undefined;
+  destinations: ReadonlyArray<ApplicationDestination> | undefined;
   /** Application type. */
-  type: AccessApplicationType;
+  type: ApplicationType;
   /** Display name (resolved). */
   name: string;
   /** Account that owns this application. */
@@ -182,10 +182,10 @@ export interface AccessApplicationAttributes {
   updatedAt: string | undefined;
 }
 
-export type AccessApplication = Resource<
+export type Application = Resource<
   "Cloudflare.Access.Application",
-  AccessApplicationProps,
-  AccessApplicationAttributes,
+  ApplicationProps,
+  ApplicationAttributes,
   never,
   Providers
 >;
@@ -198,7 +198,7 @@ export type AccessApplication = Resource<
  * type including `warp`, which Cloudflare requires for device enrolment via
  * the WARP client.
  *
- * Access policies are authored as standalone {@link AccessPolicy} resources
+ * Access policies are authored as standalone {@link Policy} resources
  * and referenced here by id — there is no inline-policy support.
  * @resource
  * @product Access
@@ -206,13 +206,13 @@ export type AccessApplication = Resource<
  * @section Creating an Application
  * @example Self-hosted application gated by a reusable Access policy
  * ```typescript
- * const allowMyOrg = yield* Cloudflare.AccessPolicy("AllowMyOrg", {
+ * const allowMyOrg = yield* Cloudflare.Access.Policy("AllowMyOrg", {
  *   name: "Allow example.com via Google",
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  *
- * const app = yield* Cloudflare.AccessApplication("InternalDashboard", {
+ * const app = yield* Cloudflare.Access.Application("InternalDashboard", {
  *   type: "self_hosted",
  *   domain: "dashboard.example.com",
  *   sessionDuration: "24h",
@@ -225,13 +225,13 @@ export type AccessApplication = Resource<
  * ```typescript
  * // There can only be ONE warp app per account; Cloudflare auto-derives the
  * // domain (`${authDomain}/warp`) so do not pass `domain` for this type.
- * const allowCorp = yield* Cloudflare.AccessPolicy("AllowCorpUsers", {
+ * const allowCorp = yield* Cloudflare.Access.Policy("AllowCorpUsers", {
  *   name: "Allow corp users",
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  *
- * const enroll = yield* Cloudflare.AccessApplication("warp-login", {
+ * const enroll = yield* Cloudflare.Access.Application("warp-login", {
  *   type: "warp",
  *   allowedIdps: [googleIdpId],
  *   autoRedirectToIdentity: true,
@@ -243,7 +243,7 @@ export type AccessApplication = Resource<
  * @section Self-hosted with Google IdP
  * @example Self-hosted application restricted to a Google Workspace group
  * ```typescript
- * const admins = yield* Cloudflare.AccessPolicy("AdminsOnly", {
+ * const admins = yield* Cloudflare.Access.Policy("AdminsOnly", {
  *   name: "Admins only",
  *   decision: "allow",
  *   include: [
@@ -256,7 +256,7 @@ export type AccessApplication = Resource<
  *   ],
  * });
  *
- * const app = yield* Cloudflare.AccessApplication("AdminConsole", {
+ * const app = yield* Cloudflare.Access.Application("AdminConsole", {
  *   type: "self_hosted",
  *   domain: "admin.example.com",
  *   allowedIdps: [googleIdpUuid],
@@ -265,7 +265,7 @@ export type AccessApplication = Resource<
  * });
  * ```
  */
-export const AccessApplication = Resource<AccessApplication>(
+export const Application = Resource<Application>(
   "Cloudflare.Access.Application",
 );
 
@@ -298,15 +298,14 @@ const retryTransientAccessError = <A, E extends { _tag: string }, R>(
     }),
   );
 
-export const AccessApplicationProvider = () =>
-  Provider.succeed(AccessApplication, {
+export const ApplicationProvider = () =>
+  Provider.succeed(Application, {
     stables: ["applicationId", "aud", "type", "accountId"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      if ((olds as AccessApplicationProps).type !== undefined) {
+      if ((olds as ApplicationProps).type !== undefined) {
         if (
-          (olds as AccessApplicationProps).type !==
-          (news as AccessApplicationProps).type
+          (olds as ApplicationProps).type !== (news as ApplicationProps).type
         ) {
           return { action: "replace" } as const;
         }
@@ -331,7 +330,7 @@ export const AccessApplicationProvider = () =>
         accountId: output.accountId,
         createdAt: observed.createdAt ?? output.createdAt,
         updatedAt: observed.updatedAt ?? output.updatedAt,
-      } satisfies AccessApplicationAttributes;
+      } satisfies ApplicationAttributes;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -458,7 +457,7 @@ export const AccessApplicationProvider = () =>
         accountId,
         createdAt: observed.createdAt,
         updatedAt: observed.updatedAt,
-      } satisfies AccessApplicationAttributes;
+      } satisfies ApplicationAttributes;
     }),
 
     // Account-scoped collection (pattern (b)): enumerate every Access
@@ -493,7 +492,7 @@ export const AccessApplicationProvider = () =>
                     accountId,
                     createdAt: app.createdAt,
                     updatedAt: app.updatedAt,
-                  } satisfies AccessApplicationAttributes,
+                  } satisfies ApplicationAttributes,
                 ];
               }),
             ),
@@ -518,7 +517,7 @@ const resolveName = (id: string, name: string | undefined) =>
   });
 
 const resolveAllowedIdps = (
-  idps: AccessApplicationProps["allowedIdps"],
+  idps: ApplicationProps["allowedIdps"],
 ): ReadonlyArray<string> | undefined =>
   idps === undefined
     ? undefined
@@ -576,9 +575,9 @@ interface ObservedApp {
   readonly id?: string;
   readonly aud?: string;
   readonly name?: string;
-  readonly type?: AccessApplicationType;
+  readonly type?: ApplicationType;
   readonly domain?: string;
-  readonly destinations?: ReadonlyArray<AccessApplicationDestination>;
+  readonly destinations?: ReadonlyArray<ApplicationDestination>;
   readonly allowedIdps?: ReadonlyArray<string>;
   readonly autoRedirectToIdentity?: boolean;
   readonly appLauncherVisible?: boolean;
@@ -601,7 +600,7 @@ const narrowApp = (raw: {
   id?: string | null;
   aud?: string | null;
   name?: string | null;
-  type?: AccessApplicationType | null | string;
+  type?: ApplicationType | null | string;
   domain?: string | null;
   destinations?: ReadonlyArray<unknown> | null;
   allowedIdps?: ReadonlyArray<string> | null;
@@ -616,12 +615,12 @@ const narrowApp = (raw: {
   id: undef(raw.id),
   aud: undef(raw.aud),
   name: undef(raw.name),
-  type: raw.type == null ? undefined : (raw.type as AccessApplicationType),
+  type: raw.type == null ? undefined : (raw.type as ApplicationType),
   domain: undef(raw.domain),
   destinations:
     raw.destinations == null
       ? undefined
-      : (raw.destinations as ReadonlyArray<AccessApplicationDestination>),
+      : (raw.destinations as ReadonlyArray<ApplicationDestination>),
   allowedIdps: undefArr(raw.allowedIdps ?? undefined),
   autoRedirectToIdentity: undef(raw.autoRedirectToIdentity),
   appLauncherVisible: undef(raw.appLauncherVisible),
@@ -675,8 +674,8 @@ type RequestPolicy = Exclude<
 
 interface AppMutableBody {
   domain?: string;
-  destinations?: ReadonlyArray<AccessApplicationDestination>;
-  type: AccessApplicationType;
+  destinations?: ReadonlyArray<ApplicationDestination>;
+  type: ApplicationType;
   name?: string;
   sessionDuration?: string;
   allowedIdps?: ReadonlyArray<string>;
@@ -735,7 +734,7 @@ const toRequestPolicies = (
   policies === undefined ? undefined : policies.map(toRequestPolicy);
 
 const resolvePolicies = (
-  policies: AccessApplicationProps["policies"],
+  policies: ApplicationProps["policies"],
 ): ReadonlyArray<ResolvedPolicy> | undefined =>
   policies === undefined
     ? undefined
@@ -744,7 +743,7 @@ const resolvePolicies = (
       (policies as ReadonlyArray<ResolvedPolicy>);
 
 const buildMutableBody = (
-  news: AccessApplicationProps,
+  news: ApplicationProps,
   resolvedName: string,
   resolvedAllowedIdps: ReadonlyArray<string> | undefined,
   resolvedPolicies: ReadonlyArray<ResolvedPolicy> | undefined,

@@ -16,7 +16,7 @@ export class TableAndQueue extends Context.Service<
   }
 >()("TableAndQueue") {}
 
-const TableAndQueueLive = Layer.effect(
+export const TableAndQueueLive = Layer.effect(
   TableAndQueue,
   Effect.gen(function* () {
     const table = yield* AWS.DynamoDB.Table("StreamSourceTable", {
@@ -41,34 +41,37 @@ export default DynamoDBStreamFunction.make(
   },
   Effect.gen(function* () {
     const { table, queue } = yield* TableAndQueue;
-    const sink = yield* AWS.SQS.QueueSink.bind(queue);
+    const sink = yield* AWS.SQS.QueueSink(queue);
 
-    yield* AWS.DynamoDB.stream(table, {
-      streamViewType: "NEW_AND_OLD_IMAGES",
-      startingPosition: "TRIM_HORIZON",
-      batchSize: 10,
-    }).process((stream) =>
-      stream.pipe(
-        Stream.map((record) =>
-          JSON.stringify({
-            eventName: record.eventName,
-            keys: record.dynamodb.Keys,
-            newImage: record.dynamodb.NewImage,
-            oldImage: record.dynamodb.OldImage,
-          }),
+    yield* AWS.DynamoDB.consumeTableChanges(
+      table,
+      {
+        streamViewType: "NEW_AND_OLD_IMAGES",
+        startingPosition: "TRIM_HORIZON",
+        batchSize: 10,
+      },
+      (stream) =>
+        stream.pipe(
+          Stream.map((record) =>
+            JSON.stringify({
+              eventName: record.eventName,
+              keys: record.dynamodb.Keys,
+              newImage: record.dynamodb.NewImage,
+              oldImage: record.dynamodb.OldImage,
+            }),
+          ),
+          Stream.run(sink),
         ),
-        Stream.run(sink),
-      ),
     );
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
         Layer.mergeAll(
           AWS.Lambda.TableEventSource,
-          AWS.SQS.QueueSinkLive,
+          AWS.SQS.QueueSinkHttp,
           TableAndQueueLive,
         ),
-        Layer.mergeAll(AWS.SQS.SendMessageBatchLive),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchHttp),
       ),
     ),
   ),
