@@ -37,6 +37,27 @@ class MissingDurableObjectNamespaces extends Data.TaggedError(
   expected: string[];
 }> {}
 
+/**
+ * Normalize a Worker's persisted `domains` state to `https://<hostname>`
+ * strings. Alchemy <= beta.44 stored each custom domain as a
+ * `{ id, hostname, zoneId }` object; beta.45+ stores `https://<hostname>`
+ * strings and the diff path calls string methods on each entry. Older state is
+ * coerced back to strings so `.endsWith` does not throw `u.endsWith is not a
+ * function` (#546). Entries that are neither a string nor an object with a
+ * string `hostname` are dropped rather than turned into a bogus `https://`
+ * value that would skew the diff.
+ *
+ * @internal exported for unit testing.
+ */
+export const normalizeStateDomains = (
+  domains: readonly unknown[] | undefined,
+): string[] =>
+  (domains ?? []).flatMap((u) => {
+    if (typeof u === "string") return [u];
+    const hostname = (u as { hostname?: unknown } | null)?.hostname;
+    return typeof hostname === "string" ? [`https://${hostname}`] : [];
+  });
+
 export const WorkerProvider = () =>
   ProviderLayer.select({
     live: () => LiveWorkerProvider(),
@@ -1205,7 +1226,7 @@ export const LiveWorkerProvider = () =>
           const newDomains = normalizeDomains(news.domain)
             .map((h) => `https://${h}`)
             .sort();
-          const oldDomains = (output?.domains ?? [])
+          const oldDomains = normalizeStateDomains(output?.domains)
             .filter((u) => !u.endsWith(".workers.dev"))
             .sort();
           const domainsChanged =
@@ -1240,7 +1261,9 @@ export const LiveWorkerProvider = () =>
             newCustomDomains.length > 0
               ? `https://${newCustomDomains[0]}`
               : news.url !== false
-                ? (output.domains ?? []).find((u) => u.endsWith(".workers.dev"))
+                ? normalizeStateDomains(output.domains).find((u) =>
+                    u.endsWith(".workers.dev"),
+                  )
                 : undefined;
           const urlStable = newUrl !== undefined && newUrl === output.url;
           // `durableObjectNamespaces` maps each hosted DO class name to the
