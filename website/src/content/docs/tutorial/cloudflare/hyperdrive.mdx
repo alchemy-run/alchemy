@@ -440,7 +440,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectionBindingLive)),
++  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 
@@ -485,7 +485,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectionBindingLive)),
++  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 
@@ -529,7 +529,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       }),
     };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectionBindingLive)),
++  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 

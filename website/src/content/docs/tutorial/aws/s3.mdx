@@ -72,14 +72,14 @@ Effect.gen(function* () {
 });
 ```
 
-Both `bind(bucket)` calls return a callable Effect: `putObject`
+Both capability calls return a callable Effect: `putObject`
 takes a `PutObjectRequest` (the AWS SDK shape, minus the `Bucket`
 field Alchemy fills in for you) and `getObject` takes a
 `GetObjectRequest`.
 
 ### One binding, one IAM statement
 
-Each `Binding(resource)` call is **1:1 with an IAM policy statement**
+Each `S3.PutObject(bucket)`-style capability call is **1:1 with an IAM policy statement**
 attached to your function's execution role. The mapping is
 deterministic:
 
@@ -90,7 +90,7 @@ deterministic:
 | `DynamoDB.PutItem(table)`    | `dynamodb:PutItem` | `table.tableArn`       |
 | `SQS.SendMessage(queue)`     | `sqs:SendMessage` | `queue.queueArn`        |
 
-So the two `bind` calls above produce exactly two statements on
+So the two capability calls above produce exactly two statements on
 the role:
 
 ```json
@@ -111,7 +111,7 @@ the role:
 ```
 
 The role is generated, never `"*"`-scoped, and regenerated from
-the call sites on every deploy — delete a `bind` call and the
+the call sites on every deploy — delete a capability call and the
 matching statement disappears next deploy. **The code is the
 policy.**
 
@@ -214,7 +214,7 @@ explicitly are the ones you actually have a recovery for
 ## Provide the runtime layers
 
 Bindings declare a capability; **runtime layers** implement it.
-For S3 those are `S3.PutObjectLive` and `S3.GetObjectLive` — both
+For S3 those are `S3.PutObjectHttp` and `S3.GetObjectHttp` — both
 ship in `alchemy/AWS/S3` and depend only on the AWS SDK and the
 ambient credentials. Provide them at the bottom of the function:
 
@@ -229,7 +229,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
     /* ... bindings + fetch ... */
 -  }),
 +  }).pipe(
-+    Effect.provide(Layer.mergeAll(S3.PutObjectLive, S3.GetObjectLive)),
++    Effect.provide(Layer.mergeAll(S3.PutObjectHttp, S3.GetObjectHttp)),
 +  ),
 ) {}
 ```

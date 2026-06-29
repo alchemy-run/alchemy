@@ -97,11 +97,11 @@ mapping plus IAM grant. Add it alongside the S3 bindings:
 ```diff lang="typescript"
 }).pipe(
   Effect.provide(
--    Layer.mergeAll(S3.PutObjectLive, S3.GetObjectLive),
+-    Layer.mergeAll(S3.PutObjectHttp, S3.GetObjectHttp),
 +    Layer.mergeAll(
 +      AWS.Lambda.BucketEventSource,
-+      S3.PutObjectLive,
-+      S3.GetObjectLive,
++      S3.PutObjectHttp,
++      S3.GetObjectHttp,
 +    ),
   ),
 ),

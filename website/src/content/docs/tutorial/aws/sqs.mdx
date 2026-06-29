@@ -79,11 +79,11 @@ add it to the merged layer alongside the others:
     Layer.mergeAll(
       AWS.Lambda.BucketEventSource,
       AWS.Lambda.TableEventSource,
-      DynamoDB.GetItemLive,
-      DynamoDB.PutItemLive,
-      S3.PutObjectLive,
-      S3.GetObjectLive,
-+      SQS.SendMessageLive,
+      DynamoDB.GetItemHttp,
+      DynamoDB.PutItemHttp,
+      S3.PutObjectHttp,
+      S3.GetObjectHttp,
++      SQS.SendMessageHttp,
     ),
   ),
 ),
@@ -199,7 +199,7 @@ on the queue ARN.
 ## Provide the runtime layer
 
 The consumer-side machinery for queue subscriptions ships in
-`Lambda.EventSource`. Provide it at the bottom of the
+`Lambda.QueueEventSource`. Provide it at the bottom of the
 function:
 
 ```diff lang="typescript"
@@ -207,7 +207,7 @@ function:
 // ...
     return {};
 -  }),
-+  }).pipe(Effect.provide(AWS.Lambda.EventSource)),
++  }).pipe(Effect.provide(AWS.Lambda.QueueEventSource)),
 ) {}
 ```
 
@@ -319,7 +319,7 @@ yield* DynamoDB.consumeTableChanges(table, {
 `QueueSink(queue)` grants `sqs:SendMessage` and
 `sqs:SendMessageBatch` on the queue ARN, then returns a
 `Sink<void, string, readonly string[]>` you compose with
-`Stream.run`. `QueueSinkLive` is itself implemented on top of
+`Stream.run`. `QueueSinkHttp` is itself implemented on top of
 `SendMessageBatch`, so split the merged layer into two tiers
 with `Layer.provideMerge` — sink + event sources on top,
 the underlying request layers + policy on the bottom:
@@ -330,25 +330,24 @@ the underlying request layers + policy on the bottom:
 -    Layer.mergeAll(
 -      AWS.Lambda.BucketEventSource,
 -      AWS.Lambda.TableEventSource,
--      DynamoDB.GetItemLive,
--      DynamoDB.PutItemLive,
--      S3.PutObjectLive,
--      S3.GetObjectLive,
--      SQS.SendMessageLive,
+-      DynamoDB.GetItemHttp,
+-      DynamoDB.PutItemHttp,
+-      S3.PutObjectHttp,
+-      S3.GetObjectHttp,
+-      SQS.SendMessageHttp,
 -    ),
 +    Layer.provideMerge(
 +      Layer.mergeAll(
 +        AWS.Lambda.BucketEventSource,
 +        AWS.Lambda.TableEventSource,
-+        SQS.QueueSinkLive,
++        SQS.QueueSinkHttp,
 +      ),
 +      Layer.mergeAll(
-+        DynamoDB.GetItemLive,
-+        DynamoDB.PutItemLive,
-+        S3.PutObjectLive,
-+        S3.GetObjectLive,
-+        SQS.SendMessageBatchLive,
-+        SQS.SendMessageBatchPolicyLive,
++        DynamoDB.GetItemHttp,
++        DynamoDB.PutItemHttp,
++        S3.PutObjectHttp,
++        S3.GetObjectHttp,
++        SQS.SendMessageBatchHttp,
 +      ),
 +    ),
   ),

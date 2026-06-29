@@ -181,7 +181,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json(users);
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectionBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 

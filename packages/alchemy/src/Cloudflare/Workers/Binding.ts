@@ -6,7 +6,7 @@ import type { WorkerBinding } from "./WorkerBinding.ts";
 
 /**
  * A Cloudflare **Worker-only binding** — the plain data value produced by
- * calling a {@link Service} (e.g. `Cloudflare.Images.Images({ name })`).
+ * calling a {@link Service} (e.g. `Cloudflare.Images.Images(name)`).
  *
  * These bindings (`Browser`, `Images`, `VersionMetadata`, `RateLimit`,
  * `Artifacts.Namespace`, …) have **no backing cloud resource**; they are only

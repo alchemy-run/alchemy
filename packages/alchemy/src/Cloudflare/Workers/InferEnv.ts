@@ -98,7 +98,7 @@ export type GetBindingType<T> =
  * shape and re-introduced via `Service` so callers get the standard
  * `(input, init?) => Promise<Response>` signature.
  *
- * Use {@link toPromiseApi} to wrap a binding into a Promise<T>-flavored view
+ * Use {@link toRpcAsync} to wrap a binding into a Promise<T>-flavored view
  * where envelopes are decoded for you.
  */
 export type RpcWireShape<Shape> = {
