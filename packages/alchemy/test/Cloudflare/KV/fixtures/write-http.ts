@@ -8,7 +8,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Write-only access via a scoped HTTP API token (`WriteNamespaceHttp`). */
 export default class KVWriteHttpWorker extends Cloudflare.Worker<KVWriteHttpWorker>()(
   "KVWriteHttpWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const namespace = yield* TestNamespace;
     const kv = yield* Cloudflare.KV.WriteNamespace(namespace);

@@ -24,7 +24,7 @@ interface Message {
 export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   "EffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     dev: {
       port: Config.number("PORT").pipe(Config.withDefault(1338)),
     },

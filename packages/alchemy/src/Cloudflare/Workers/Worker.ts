@@ -501,7 +501,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * export default class MyWorker extends Cloudflare.Worker<MyWorker>()(
  *   "MyWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
@@ -541,7 +541,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * >()("WorkerB") {}
  *
  * export default WorkerB.make(
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
@@ -565,7 +565,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *
  * export default class WorkerA extends Cloudflare.Worker<WorkerA>()(
  *   "WorkerA",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const b = yield* Cloudflare.Workers.bindWorker(WorkerB);
  *     return {
@@ -584,7 +584,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Enabling Node.js compatibility
  * ```typescript
  * {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *     date: "2026-03-17",
@@ -595,7 +595,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Serving static assets
  * ```typescript
  * {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   assets: "./public",
  * }
  * ```
@@ -628,7 +628,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Enabling logs and traces
  * ```typescript
  * {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   observability: {
  *     enabled: true,
  *     headSamplingRate: 1,

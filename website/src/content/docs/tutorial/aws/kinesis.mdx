@@ -109,7 +109,7 @@ import { Events } from "./stream.ts";
 
 export default class Audit extends AWS.Lambda.Function<Audit>()(
   "Audit",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const events = yield* Events;
     return {};
@@ -135,7 +135,7 @@ import { Events } from "./stream.ts";
 
 export default class Audit extends AWS.Lambda.Function<Audit>()(
   "Audit",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const events = yield* Events;
 +

@@ -50,7 +50,7 @@ const WeatherToolkitLayer = WeatherToolkit.toLayer({
 export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageModelTestWorker>()(
   "LanguageModelTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);

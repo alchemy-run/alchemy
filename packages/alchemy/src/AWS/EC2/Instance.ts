@@ -290,7 +290,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *   );
  *
  *   return {
- *     main: import.meta.filename,
+ *     main: import.meta.url,
  *     imageId,
  *     instanceType: "t3.small",
  *     subnetId: subnet.subnetId,

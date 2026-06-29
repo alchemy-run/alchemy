@@ -6,7 +6,7 @@ import { ReleaseVersion } from "./ReleaseVersion.ts";
 
 export default Cloudflare.Worker(
   "ReleaseService",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const versions = yield* ReleaseVersion;
 

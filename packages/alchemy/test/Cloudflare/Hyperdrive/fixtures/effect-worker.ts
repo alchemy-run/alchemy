@@ -13,7 +13,7 @@ import { connectionRoutes } from "./routes.ts";
  */
 export default class HyperdriveEffectWorker extends Cloudflare.Worker<HyperdriveEffectWorker>()(
   "HyperdriveEffectWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const { connection } = yield* HyperdriveConnection;
     const hd = yield* Cloudflare.Hyperdrive.Connect(connection);

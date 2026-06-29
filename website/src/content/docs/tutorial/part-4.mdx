@@ -49,7 +49,7 @@ Set a custom port for your Worker:
 export default Cloudflare.Worker(
   "Worker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
 +   dev: {
 +     port: 3000,
 +   },

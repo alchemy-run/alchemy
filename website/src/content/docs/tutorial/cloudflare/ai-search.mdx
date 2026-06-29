@@ -200,7 +200,7 @@ Call it during the Worker's init phase.
 
  export default class Api extends Cloudflare.Worker<Api>()(
    "Api",
-   { main: import.meta.filename },
+   { main: import.meta.url },
    Effect.gen(function* () {
 +    const aiSearch = yield* Search;
 +    const search = yield* Cloudflare.AI.QuerySearch(aiSearch);

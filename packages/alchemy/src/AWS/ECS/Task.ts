@@ -52,7 +52,7 @@ export class TaskEnvironment extends Context.Service<
 export interface TaskProps extends PlatformProps {
   /**
    * Module entrypoint for the bundled task program. This should typically be
-   * `import.meta.filename` from an inline Effect program.
+   * `import.meta.url` from an inline Effect program.
    */
   main: string;
   /**
@@ -250,7 +250,7 @@ export interface TaskRuntimeContext extends ProcessContext {
  * @example Basic Task
  * ```typescript
  * const task = yield* Task("ApiTask", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   cpu: 256,
  *   memory: 512,
  *   port: 3000,
@@ -261,7 +261,7 @@ export interface TaskRuntimeContext extends ProcessContext {
  * @example Task with a Sidecar
  * ```typescript
  * const task = yield* Task("ApiTask", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   port: 3000,
  *   sidecars: [
  *     {
@@ -278,7 +278,7 @@ export interface TaskRuntimeContext extends ProcessContext {
  * @example ARM64 with EFS Volume and Ephemeral Storage
  * ```typescript
  * const task = yield* Task("WorkerTask", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" },
  *   ephemeralStorage: { sizeInGiB: 40 },
  *   volumes: [

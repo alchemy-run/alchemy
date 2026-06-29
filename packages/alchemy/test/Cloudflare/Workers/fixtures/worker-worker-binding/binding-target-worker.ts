@@ -9,7 +9,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class BindingTargetWorker extends Cloudflare.Worker<BindingTargetWorker>()(
   "BindingTargetWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     return {

@@ -30,7 +30,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default Cloudflare.Worker(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
 
@@ -118,7 +118,7 @@ Layer to satisfy it:
 ```typescript
 export default Cloudflare.Worker(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const jobs = yield* JobService;
 
@@ -194,7 +194,7 @@ Bindings live in init; the actual cloud calls live in runtime:
 ```typescript
 Cloudflare.Worker(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     // ─── Init: declare dependencies ───
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);

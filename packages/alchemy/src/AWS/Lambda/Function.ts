@@ -333,7 +333,7 @@ const matchesConfiguredExternal = (
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
- *   { main: import.meta.filename, url: true },
+ *   { main: import.meta.url, url: true },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const getItem = yield* AWS.DynamoDB.GetItem(table);

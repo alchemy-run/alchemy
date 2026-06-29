@@ -15,7 +15,7 @@ import BindingTargetWorker from "./binding-target-worker.ts";
 export default class BindingEffectCaller extends Cloudflare.Worker<BindingEffectCaller>()(
   "BindingEffectCaller",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const target = yield* Cloudflare.Workers.bindWorker(BindingTargetWorker);

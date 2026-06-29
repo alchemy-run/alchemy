@@ -137,7 +137,7 @@ WorkerA's bundle actually contains the DO class:
  ) {}
 
 +export default WorkerA.make(
-+  { main: import.meta.filename },
++  { main: import.meta.url },
 +  Effect.gen(function* () {
 +    const counters = yield* Counter;
 +    return {
@@ -173,7 +173,7 @@ import { WorkerA } from "./workerA.ts";
 
 export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
   "WorkerB",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter.from(WorkerA);
     return {
@@ -282,7 +282,7 @@ namespace as `yield* Counter`:
 ```diff lang="typescript"
 // src/workerA.ts
  export default WorkerA.make(
-   { main: import.meta.filename },
+   { main: import.meta.url },
    Effect.gen(function* () {
 -    const counters = yield* Counter;
 +    const counters = yield* Counter.from(WorkerA);

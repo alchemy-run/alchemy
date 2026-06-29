@@ -9,7 +9,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Read + write access via the native Worker binding (`ReadWriteBucketBinding`). */
 export default class R2ReadWriteBindingWorker extends Cloudflare.Worker<R2ReadWriteBindingWorker>()(
   "R2ReadWriteBindingWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* TestBucket;
     const r2 = yield* Cloudflare.R2.ReadWriteBucket(bucket);

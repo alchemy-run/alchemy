@@ -153,7 +153,7 @@ import { Bucket } from "./bucket.ts";
 -  },
 -};
 +export default Cloudflare.Worker("Worker",
-+  { main: import.meta.filename },
++  { main: import.meta.url },
 +  Effect.gen(function* () {
 +    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 +
@@ -172,7 +172,7 @@ import { Bucket } from "./bucket.ts";
 ```
 
 The Worker resource declaration moves from `alchemy.run.ts` into the
-Worker file itself (using `import.meta.filename` as the `main`), and the
+Worker file itself (using `import.meta.url` as the `main`), and the
 Stack just `yield*`-s the imported Worker:
 
 ```typescript twoslash
@@ -208,7 +208,7 @@ export default Alchemy.Stack(
 | ------------ | ----------------------------- | ----------------------------- | ---------------------------------- |
 | Stack        | `await alchemy("name")`       | `Alchemy.Stack("name", ...)`  | `Alchemy.Stack("name", ...)`       |
 | Resources    | `await Bucket(...)`         | `Cloudflare.R2.Bucket(...)`    | `Cloudflare.R2.Bucket(...)`         |
-| Worker entry | `entrypoint`                  | `main`                        | `main: import.meta.filename`           |
+| Worker entry | `entrypoint`                  | `main`                        | `main: import.meta.url`           |
 | Bindings     | `bindings: { KEY: resource }` | `env: { Key: resource }`      | `yield* Binding(ref)`        |
 | Runtime code | `async fetch(req, env)`       | `async fetch(req, env)`       | `Effect.gen(function* () { ... })` |
 | Lifecycle    | `await app.finalize()`        | automatic                     | automatic                          |

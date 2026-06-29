@@ -86,7 +86,7 @@ own `work` RPC method so B can call back into it.
   export class A extends Cloudflare.Worker<A, {}>()("A") {}
 
 + export default A.make(
-+   { main: import.meta.filename },
++   { main: import.meta.url },
 +   Effect.gen(function* () {
 +     const b = yield* Cloudflare.Workers.bindWorker(B);
 +     return {
@@ -120,7 +120,7 @@ binds it.
   export class B extends Cloudflare.Worker<B, {}>()("B") {}
 
 + export default B.make(
-+   { main: import.meta.filename },
++   { main: import.meta.url },
 +   Effect.gen(function* () {
 +     const a = yield* Cloudflare.Workers.bindWorker(A);
 +     return {
@@ -208,7 +208,7 @@ and implementation in one expression:
 ```typescript
 export default Cloudflare.Worker(
   "MyWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     /* ... */
   }),

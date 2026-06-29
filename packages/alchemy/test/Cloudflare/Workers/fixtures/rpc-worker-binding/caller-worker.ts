@@ -17,7 +17,7 @@ import BindingTargetRpcWorker from "./target-worker.ts";
  */
 export default class BindingCallerRpcWorker extends Cloudflare.RpcWorker<BindingCallerRpcWorker>()(
   "BindingCallerRpcWorker",
-  { main: import.meta.filename, schema: CallerRpcs },
+  { main: import.meta.url, schema: CallerRpcs },
   Effect.gen(function* () {
     const target = yield* Cloudflare.RpcWorker.bind(BindingTargetRpcWorker);
 

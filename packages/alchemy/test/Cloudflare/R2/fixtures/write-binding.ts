@@ -8,7 +8,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Write-only access via the native Worker binding (`WriteBucketBinding`). */
 export default class R2WriteBindingWorker extends Cloudflare.Worker<R2WriteBindingWorker>()(
   "R2WriteBindingWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* TestBucket;
     const r2 = yield* Cloudflare.R2.WriteBucket(bucket);
