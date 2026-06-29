@@ -9,11 +9,11 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export const isKVNamespace = (value: unknown): value is KVNamespace =>
+export const isNamespace = (value: unknown): value is Namespace =>
   typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.KVNamespace";
+  (value as any)?.Type === "Cloudflare.KV.Namespace";
 
-export type KVNamespaceProps = {
+export type NamespaceProps = {
   /**
    * A human-readable string name for the namespace.
    * If omitted, a unique name will be generated.
@@ -22,9 +22,9 @@ export type KVNamespaceProps = {
   title?: string;
 };
 
-export type KVNamespace = Resource<
-  "Cloudflare.KVNamespace",
-  KVNamespaceProps,
+export type Namespace = Resource<
+  "Cloudflare.KV.Namespace",
+  NamespaceProps,
   {
     title: string;
     namespaceId: string;
@@ -47,7 +47,7 @@ export type KVNamespace = Resource<
  * @section Creating a Namespace
  * @example Basic KV namespace
  * ```typescript
- * const kv = yield* Cloudflare.KVNamespace("MyKV");
+ * const kv = yield* Cloudflare.KV.Namespace("MyKV");
  * ```
  *
  * @section Binding to a Worker
@@ -68,10 +68,10 @@ export type KVNamespace = Resource<
  * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
  * write-only access.
  */
-export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace");
+export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace");
 
-export const KVNamespaceProvider = () =>
-  Provider.succeed(KVNamespace, {
+export const NamespaceProvider = () =>
+  Provider.succeed(Namespace, {
     stables: ["namespaceId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

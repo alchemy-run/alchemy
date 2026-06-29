@@ -52,7 +52,7 @@ const getSettings = (zoneId: string) =>
   );
 
 // Both cases mutate the same zone-level fraud-detection settings singleton; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
-describe.sequential("FraudDetectionSettings", () => {
+describe.sequential("DetectionSettings", () => {
   test.provider(
     "adopts the zone singleton without writing and restores nothing on destroy",
     (stack) =>
@@ -67,7 +67,7 @@ describe.sequential("FraudDetectionSettings", () => {
         //    observes but never PUTs.
         const adopted = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.FraudDetectionSettings("Fraud", {
+            return yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
               zoneId,
             });
           }),
@@ -94,7 +94,7 @@ describe.sequential("FraudDetectionSettings", () => {
         //    skips the PUT (which would otherwise require a subscription).
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.FraudDetectionSettings("Fraud", {
+            return yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
               zoneId,
               usernameExpressions: [...(before.usernameExpressions ?? [])],
             });
@@ -179,7 +179,7 @@ describe.sequential("FraudDetectionSettings", () => {
           // 1. Create — enable user profiles with one username expression.
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.FraudDetectionSettings("Fraud", {
+              return yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
                 zoneId,
                 userProfiles: "enabled",
                 usernameExpressions: [expression],
@@ -201,7 +201,7 @@ describe.sequential("FraudDetectionSettings", () => {
           //    same singleton (same zoneId), sticky snapshot.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.FraudDetectionSettings("Fraud", {
+              return yield* Cloudflare.Fraud.DetectionSettings("Fraud", {
                 zoneId,
                 userProfiles: "enabled",
                 usernameExpressions: [expression],
@@ -267,7 +267,7 @@ describe.sequential("FraudDetectionSettings", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.FraudDetectionSettings,
+        Cloudflare.Fraud.DetectionSettings,
       );
       const all = yield* provider.list();
 

@@ -8,8 +8,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AddressMapTypeId = "Cloudflare.Addressing.AddressMap" as const;
-type AddressMapTypeId = typeof AddressMapTypeId;
+const TypeId = "Cloudflare.Addressing.AddressMap" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A zone or account membership on an Address Map. Zones (or whole accounts)
@@ -95,7 +95,7 @@ export interface AddressMapAttributes {
 }
 
 export type AddressMap = Resource<
-  AddressMapTypeId,
+  TypeId,
   AddressMapProps,
   AddressMapAttributes,
   never,
@@ -115,7 +115,7 @@ export type AddressMap = Resource<
  * @section Creating an Address Map
  * @example Disabled map with a description
  * ```typescript
- * const map = yield* Cloudflare.AddressMap("static-ips", {
+ * const map = yield* Cloudflare.Addressing.AddressMap("static-ips", {
  *   description: "static ingress IPs",
  *   enabled: false,
  * });
@@ -123,7 +123,7 @@ export type AddressMap = Resource<
  *
  * @example Map with IPs and zone memberships
  * ```typescript
- * const map = yield* Cloudflare.AddressMap("ingress", {
+ * const map = yield* Cloudflare.Addressing.AddressMap("ingress", {
  *   description: "ingress",
  *   enabled: true,
  *   ips: ["192.0.2.1"],
@@ -134,7 +134,7 @@ export type AddressMap = Resource<
  * @section Legacy TLS clients
  * @example Default SNI for clients without SNI
  * ```typescript
- * const map = yield* Cloudflare.AddressMap("legacy", {
+ * const map = yield* Cloudflare.Addressing.AddressMap("legacy", {
  *   enabled: true,
  *   defaultSni: "example.com",
  * });
@@ -142,13 +142,13 @@ export type AddressMap = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/address-maps/
  */
-export const AddressMap = Resource<AddressMap>(AddressMapTypeId);
+export const AddressMap = Resource<AddressMap>(TypeId);
 
 /**
  * Returns true if the given value is an AddressMap resource.
  */
 export const isAddressMap = (value: unknown): value is AddressMap =>
-  Predicate.hasProperty(value, "Type") && value.Type === AddressMapTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AddressMapProvider = () =>
   Provider.succeed(AddressMap, {

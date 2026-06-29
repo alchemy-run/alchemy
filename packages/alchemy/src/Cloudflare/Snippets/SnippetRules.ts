@@ -96,12 +96,12 @@ export type SnippetRules = Resource<
  * @section Activating Snippets
  * @example Route a path through a snippet
  * ```typescript
- * const snippet = yield* Cloudflare.Snippet("HeaderSnippet", {
+ * const snippet = yield* Cloudflare.Snippets.Snippet("HeaderSnippet", {
  *   zoneId: zone.zoneId,
  *   code: snippetCode,
  * });
  *
- * yield* Cloudflare.SnippetRules("Rules", {
+ * yield* Cloudflare.Snippets.SnippetRules("Rules", {
  *   zoneId: zone.zoneId,
  *   rules: [
  *     {

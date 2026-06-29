@@ -25,8 +25,8 @@ The goal: two Workers, `A` and `B`. Each one delegates half of its
 work to the other.
 
 ```
-GET /  →  A  ──fetch──▶  B
-              ◀──fetch───
+GET /  →  A  ──rpc──▶  B
+              ◀──rpc───
 ```
 
 Naively you'd write `import { B } from "./B.ts"` inside `A.ts` and
@@ -72,13 +72,15 @@ triggers any runtime code by importing the other's class.
 ## Add A's runtime, binding B
 
 Attach A's implementation with `A.make(...)`. Inside the Init phase,
-`yield* Cloudflare.Worker.bind(B)` produces a typed callable that
-will dispatch to B's deployed URL at runtime.
+`yield* Cloudflare.Workers.bindWorker(B)` produces a typed stub whose
+methods dispatch to B's deployed Worker at runtime. A also exposes its
+own `work` RPC method so B can call back into it.
 
 ```diff lang="typescript"
   // src/A.ts
   import * as Cloudflare from "alchemy/Cloudflare";
 + import * as Effect from "effect/Effect";
++ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 + import { B } from "./B.ts";
 
   export class A extends Cloudflare.Worker<A, {}>()("A") {}
@@ -86,19 +88,22 @@ will dispatch to B's deployed URL at runtime.
 + export default A.make(
 +   { main: import.meta.filename },
 +   Effect.gen(function* () {
-+     const b = yield* Cloudflare.Worker.bind(B);
++     const b = yield* Cloudflare.Workers.bindWorker(B);
 +     return {
 +       fetch: Effect.gen(function* () {
-+         return yield* b.fetch(new Request("https://b/work"));
++         // delegate half the work to B over the RPC stub
++         return HttpServerResponse.text(yield* b.work());
 +       }),
++       work: () => Effect.succeed("A handled its half"),
 +     };
 +   }),
 + );
 ```
 
-The `import { B }` line pulls in B's Tag only. `Worker.bind(B)`
-returns a deferred reference — at plan time it's an `Output<URL>`
-placeholder; at runtime it's a real `fetch` stub.
+The `import { B }` line pulls in B's Tag only. `bindWorker(B)`
+returns a typed RPC stub — at plan time it registers the service
+binding; at runtime `b.work()` round-trips to B's deployed Worker as
+a native RPC call.
 
 ## Add B's runtime, binding A
 
@@ -109,6 +114,7 @@ binds it.
   // src/B.ts
   import * as Cloudflare from "alchemy/Cloudflare";
 + import * as Effect from "effect/Effect";
++ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 + import { A } from "./A.ts";
 
   export class B extends Cloudflare.Worker<B, {}>()("B") {}
@@ -116,11 +122,12 @@ binds it.
 + export default B.make(
 +   { main: import.meta.filename },
 +   Effect.gen(function* () {
-+     const a = yield* Cloudflare.Worker.bind(A);
++     const a = yield* Cloudflare.Workers.bindWorker(A);
 +     return {
 +       fetch: Effect.gen(function* () {
-+         return yield* a.fetch(new Request("https://a/callback"));
++         return HttpServerResponse.text(yield* a.work());
 +       }),
++       work: () => Effect.succeed("B handled its half"),
 +     };
 +   }),
 + );

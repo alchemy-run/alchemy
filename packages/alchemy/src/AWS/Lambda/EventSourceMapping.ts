@@ -176,8 +176,8 @@ export interface EventSourceMapping extends Resource<
  * polled from the source and delivered to the function in batches.
  *
  * Most stacks create mappings indirectly through the higher-level event-source
- * helpers (`SQS.messages(queue).subscribe(...)`,
- * `Kinesis.events(stream).process(...)`, `DynamoDB.streams(table).process(...)`),
+ * helpers (`SQS.consumeQueueMessages(queue, ...)`,
+ * `Kinesis.consumeStreamRecords(stream, ...)`, `DynamoDB.consumeTableChanges(table, ...)`),
  * which wire up the matching IAM permissions automatically. Use this resource
  * directly when you need full control over batching, starting position, retry
  * behavior, or filtering.

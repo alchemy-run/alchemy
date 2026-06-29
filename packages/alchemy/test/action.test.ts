@@ -104,7 +104,9 @@ describe("Plan", () => {
       );
 
       // Pre-seed a `ran` row with a hash that matches { table: "users" }.
-      const { hashInput } = yield* Effect.promise(() => import("@/Util/hash"));
+      const { hashInput } = yield* Effect.promise(
+        () => import("@/Util/sha256"),
+      );
       const inputHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {
@@ -136,7 +138,9 @@ describe("Plan", () => {
         Effect.succeed({ rows: 1 }),
       );
 
-      const { hashInput } = yield* Effect.promise(() => import("@/Util/hash"));
+      const { hashInput } = yield* Effect.promise(
+        () => import("@/Util/sha256"),
+      );
       const oldHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {
@@ -168,7 +172,9 @@ describe("Plan", () => {
         Effect.succeed({ rows: 1 }),
       );
 
-      const { hashInput } = yield* Effect.promise(() => import("@/Util/hash"));
+      const { hashInput } = yield* Effect.promise(
+        () => import("@/Util/sha256"),
+      );
       const inputHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {
@@ -197,7 +203,9 @@ describe("Plan", () => {
   test(
     "task removed from stack -> taskDeletions",
     Effect.gen(function* () {
-      const { hashInput } = yield* Effect.promise(() => import("@/Util/hash"));
+      const { hashInput } = yield* Effect.promise(
+        () => import("@/Util/sha256"),
+      );
       const inputHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {

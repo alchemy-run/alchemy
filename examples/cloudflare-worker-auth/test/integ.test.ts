@@ -28,7 +28,7 @@ const { executeWhenReady } = Test;
  *  - Stack output: `authToken.text` is an `Output<Redacted<string>>`. It must
  *    be unwrapped via `Output.map(Redacted.value)` before being returned —
  *    otherwise it JSON-serializes to the literal string "<redacted>".
- *  - Worker check: `Cloudflare.Secret.bind(...)` resolves to `Redacted<string>`.
+ *  - Worker check: `Cloudflare.SecretsStore.ReadSecret(...)` resolves to `Redacted<string>`.
  *    The comparison must unwrap with `Redacted.value(expected)` — otherwise it
  *    compares against "Bearer <redacted>".
  *

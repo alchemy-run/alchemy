@@ -13,7 +13,7 @@ interface AddInstance {
     add(a: number, b: number): number;
   };
 }
-interface QueueMessage {
+interface Message {
   id: string;
   body: {
     text: string;
@@ -31,20 +31,19 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
-    const queue = yield* Cloudflare.Queue("EffectWorkerQueue");
-    const queueBinding = yield* Cloudflare.Queue.bind(queue);
+    const queue = yield* Cloudflare.Queues.Queue("EffectWorkerQueue");
+    const queueBinding = yield* Cloudflare.Queues.Queue(queue);
     const sandbox = yield* SandboxDO;
     const queueMessages = yield* QueueMessages;
     const workflow = yield* NotifyWorkflow;
 
-    yield* Cloudflare.messages<QueueMessage["body"]>(queue).subscribe(
-      (stream) =>
-        Stream.runForEach(stream, (msg) =>
-          queueMessages
-            .getByName("global")
-            .put({ id: msg.id, body: msg.body })
-            .pipe(Effect.asVoid),
-        ),
+    yield* Cloudflare.Queues.consumeQueueMessages<Message["body"]>(queue, (stream) =>
+      Stream.runForEach(stream, (msg) =>
+        queueMessages
+          .getByName("global")
+          .put({ id: msg.id, body: msg.body })
+          .pipe(Effect.asVoid),
+      ),
     );
 
     return {
@@ -103,23 +102,23 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     Effect.provide([
       Cloudflare.KV.ReadWriteNamespaceBinding,
       Cloudflare.Queues.WriteQueueBinding,
-      Cloudflare.QueueEventSourceLive,
+      Cloudflare.Queues.EventSourceLive,
     ]),
   ),
 ) {}
 
-export class QueueMessages extends Cloudflare.DurableObjectNamespace<QueueMessages>()(
+export class QueueMessages extends Cloudflare.DurableObject<QueueMessages>()(
   "QueueMessages",
   Effect.succeed(
     Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       return {
-        put: Effect.fn(function* (message: QueueMessage) {
+        put: Effect.fn(function* (message: Message) {
           yield* state.storage.put(message.id, message);
         }),
         list: Effect.fn(function* () {
-          const messages = new Map<string, QueueMessage>(
-            state.storage.kv.list<QueueMessage>(),
+          const messages = new Map<string, Message>(
+            state.storage.kv.list<Message>(),
           );
           return Array.from(messages.values());
         }),

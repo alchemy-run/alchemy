@@ -17,7 +17,6 @@ import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { AlchemyProfile, ProfileLive } from "./Auth/Profile.ts";
-import type { PolicyLike } from "./Binding.ts";
 import { Cli } from "./Cli/Cli.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
@@ -48,7 +47,6 @@ export type StackServices =
 export type ProviderServices =
   | ProviderCollectionLike
   | Provider<any>
-  | PolicyLike
   | EnvironmentLike
   | CredentialsLike;
 

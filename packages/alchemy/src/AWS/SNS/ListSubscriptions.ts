@@ -1,15 +1,13 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
-import type { Providers } from "../Providers.ts";
 
 export interface ListSubscriptionsRequest extends sns.ListSubscriptionsInput {}
 
 /** @binding */
-export class ListSubscriptions extends Binding.Service<
+export interface ListSubscriptions extends Binding.Service<
   ListSubscriptions,
+  "AWS.SNS.ListSubscriptions",
   () => Effect.Effect<
     (
       request?: ListSubscriptionsRequest,
@@ -18,46 +16,8 @@ export class ListSubscriptions extends Binding.Service<
       sns.ListSubscriptionsError
     >
   >
->()("AWS.SNS.ListSubscriptions") {}
+> {}
 
-export const ListSubscriptionsLive = Layer.effect(
-  ListSubscriptions,
-  Effect.gen(function* () {
-    const Policy = yield* ListSubscriptionsPolicy;
-    const listSubscriptions = yield* sns.listSubscriptions;
-
-    return Effect.fn(function* () {
-      yield* Policy();
-      return Effect.fn(function* (request?: ListSubscriptionsRequest) {
-        return yield* listSubscriptions(request ?? {});
-      });
-    });
-  }),
+export const ListSubscriptions = Binding.Service<ListSubscriptions>(
+  "AWS.SNS.ListSubscriptions",
 );
-
-export class ListSubscriptionsPolicy extends Binding.Policy<
-  ListSubscriptionsPolicy,
-  () => Effect.Effect<void>,
-  Providers
->()("AWS.SNS.ListSubscriptions") {}
-
-export const ListSubscriptionsPolicyLive =
-  ListSubscriptionsPolicy.layer.succeed(
-    Effect.fn(function* (host) {
-      if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.SNS.ListSubscriptions())`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: ["sns:ListSubscriptions"],
-              Resource: ["*"],
-            },
-          ],
-        });
-      } else {
-        return yield* Effect.die(
-          `ListSubscriptionsPolicy does not support runtime '${host.Type}'`,
-        );
-      }
-    }),
-  );

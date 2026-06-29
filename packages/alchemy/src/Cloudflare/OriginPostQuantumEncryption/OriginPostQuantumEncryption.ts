@@ -8,10 +8,9 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginPostQuantumEncryptionTypeId =
-  "Cloudflare.OriginPostQuantumEncryption" as const;
-type OriginPostQuantumEncryptionTypeId =
-  typeof OriginPostQuantumEncryptionTypeId;
+const TypeId =
+  "Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Value of the Origin Post-Quantum Encryption setting.
@@ -22,12 +21,9 @@ type OriginPostQuantumEncryptionTypeId =
  *   initiates it (Cloudflare's default).
  * - `"off"` — never use post-quantum key agreement to the origin.
  */
-export type OriginPostQuantumEncryptionValue =
-  | "preferred"
-  | "supported"
-  | "off";
+export type Value = "preferred" | "supported" | "off";
 
-export type OriginPostQuantumEncryptionProps = {
+export type Props = {
   /**
    * Zone the Origin Post-Quantum Encryption setting belongs to. Stable —
    * changing the zone triggers a replacement (the old zone's setting is
@@ -39,14 +35,14 @@ export type OriginPostQuantumEncryptionProps = {
    *
    * @default "supported"
    */
-  value?: OriginPostQuantumEncryptionValue;
+  value?: Value;
 };
 
-export type OriginPostQuantumEncryptionAttributes = {
+export type Attributes = {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** Resolved current value of the setting. */
-  value: OriginPostQuantumEncryptionValue;
+  value: Value;
   /**
    * Whether the setting can be modified on the zone's current plan.
    */
@@ -58,13 +54,13 @@ export type OriginPostQuantumEncryptionAttributes = {
    * on destroy, so deleting the resource puts the zone back the way it
    * was found.
    */
-  initialValue: OriginPostQuantumEncryptionValue;
+  initialValue: Value;
 };
 
 export type OriginPostQuantumEncryption = Resource<
-  OriginPostQuantumEncryptionTypeId,
-  OriginPostQuantumEncryptionProps,
-  OriginPostQuantumEncryptionAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -90,9 +86,9 @@ export type OriginPostQuantumEncryption = Resource<
  * @section Managing the setting
  * @example Prefer post-quantum key agreement to the origin
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+ * yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption("OriginPqe", {
  *   zoneId: zone.zoneId,
  *   value: "preferred",
  * });
@@ -100,7 +96,7 @@ export type OriginPostQuantumEncryption = Resource<
  *
  * @example Disable post-quantum key agreement to the origin
  * ```typescript
- * yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+ * yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption("OriginPqe", {
  *   zoneId: zone.zoneId,
  *   value: "off",
  * });
@@ -108,7 +104,7 @@ export type OriginPostQuantumEncryption = Resource<
  *
  * @example Pin the Cloudflare default explicitly
  * ```typescript
- * yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+ * yield* Cloudflare.OriginPostQuantumEncryption.OriginPostQuantumEncryption("OriginPqe", {
  *   zoneId: zone.zoneId,
  *   value: "supported",
  * });
@@ -117,7 +113,7 @@ export type OriginPostQuantumEncryption = Resource<
  * @see https://developers.cloudflare.com/ssl/origin-configuration/pqc-to-origin/
  */
 export const OriginPostQuantumEncryption =
-  Resource<OriginPostQuantumEncryption>(OriginPostQuantumEncryptionTypeId);
+  Resource<OriginPostQuantumEncryption>(TypeId);
 
 /**
  * Returns true if the given value is an OriginPostQuantumEncryption resource.
@@ -125,8 +121,7 @@ export const OriginPostQuantumEncryption =
 export const isOriginPostQuantumEncryption = (
   value: unknown,
 ): value is OriginPostQuantumEncryption =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginPostQuantumEncryptionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OriginPostQuantumEncryptionProvider = () =>
   Provider.succeed(OriginPostQuantumEncryption, {
@@ -155,15 +150,12 @@ export const OriginPostQuantumEncryptionProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is OriginPostQuantumEncryptionAttributes =>
-          row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as OriginPostQuantumEncryptionProps;
-      const n = news as OriginPostQuantumEncryptionProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -201,8 +193,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const desired: OriginPostQuantumEncryptionValue =
-        news.value ?? "supported";
+      const desired: Value = news.value ?? "supported";
 
       // 1. Observe — the setting always exists; read its live value.
       const observed = yield* pqe.getOriginPostQuantumEncryption({ zoneId });
@@ -251,7 +242,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
  * triple — Cloudflare only ever returns the three literals for this
  * setting; anything else collapses to the documented default.
  */
-const toValue = (value: string): OriginPostQuantumEncryptionValue =>
+const toValue = (value: string): Value =>
   value === "preferred" || value === "off" ? value : "supported";
 
 const toAttributes = (
@@ -259,8 +250,8 @@ const toAttributes = (
   setting:
     | pqe.GetOriginPostQuantumEncryptionResponse
     | pqe.PutOriginPostQuantumEncryptionResponse,
-  initialValue: OriginPostQuantumEncryptionValue,
-): OriginPostQuantumEncryptionAttributes => ({
+  initialValue: Value,
+): Attributes => ({
   zoneId,
   value: toValue(setting.value),
   editable: setting.editable,

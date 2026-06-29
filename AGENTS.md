@@ -118,16 +118,16 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 - **One workflow at a time**, ~12 concurrent agents (cap ≈ CPU cores − 2). Two parallel workflows double throughput but also double crash blast-radius — only do it when the machine and budget clearly allow.
 - **One agent per distilled service.** Service ownership is the unit of isolation: only the owner may touch `patches/{service}/` and regenerate `src/services/{service}.ts`, so generator runs never race. An agent may own several resources of its service; a very large same-service backlog (e.g. zero-trust) runs as a **sequential chain** of agents inside the workflow, in parallel with all other services.
 - **Shared-file discipline.** `Providers.ts` and the provider barrel `index.ts` are edited by every agent: single minimal insertions only, re-read and retry on edit conflict, never rewrite wholesale.
-- **`Layer.mergeAll` ceiling.** Keep `Providers.ts`'s provider layers in *nested* `Layer.mergeAll` groups (~90 entries each). A flat ~200-argument call exceeds tsgo's variadic inference and **silently drops the tail layers** from the inferred union, producing baffling `Provider<X> is not assignable to StackServices` cascades across every test file.
+- **`Layer.mergeAll` ceiling.** Keep `Providers.ts`'s provider layers in *nested* `Layer.mergeAll` groups (~90 entries each). A flat ~200-argument call exceeds tsc's variadic inference and **silently drops the tail layers** from the inferred union, producing baffling `Provider<X> is not assignable to StackServices` cascades across every test file.
 - **Crash resilience.** Word every task as *assess-first*: "partial work may exist from an interrupted run — list your dirs, read existing files, check registration, FINISH rather than rewrite." Completed agent results are banked in the workflow journal even if the workflow dies; the coordinator recovers them from `journal.jsonl` and re-dispatches only the lost tasks.
 - **The coordinator (not agents) does**: the authoritative type-check, distilled lib rebuilds, combined verification runs, catalog/index updates, cross-cutting fixes (shared-file restructures, Effect-version API migrations), and deterministic mass transforms (mechanical codemods are scripted centrally, not fanned out).
 - **Monitor for stalls**: an agent transcript that hasn't been written for ~5 minutes with no child test process is stalled — kill and re-dispatch; don't wait.
 
 ## Resource budget: one type-checker for the whole factory
 
-`tsgo -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
+`tsc -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
 
-- **Agents are banned** from running `tsgo`, `tsc`, or `bun run build` (root or distilled) in any form. The coordinator owns type-checking and runs a one-shot `bun tsgo -b` at wave boundaries.
+- **Agents are banned** from running `tsc` or `bun run build` (root or distilled) in any form. The coordinator owns type-checking and runs a one-shot `bun tsc -b` at wave boundaries.
 - **vitest resolves distilled from `src/*.ts` directly, NOT the built `lib/`** (the `bun` export condition; see `packages/alchemy/vitest.config.ts`). So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --service {service}` (+ oxlint/oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep and do NOT gate a test re-run on a build after regenerating. This applies to response-schema patches as well as error-tag-only patches.
 
 ## Speed doctrine: never wait on a hang
@@ -156,7 +156,7 @@ A wave task prompt is a contract. Include, every time:
 1. The **distilled service the agent owns** and the resources to build (with namespace + directory).
 2. **Assess-first** instruction (finish partial work, don't rewrite).
 3. The reading list: this file's Reconciler doctrine + Typed Error Doctrine, the catalog spec, the distilled service module + existing patches, current exemplar resources/tests (account-level CRUD, zone singleton capture-and-restore, observe-before-delete), and the registration files.
-4. The **type-check/build ban** (above) — agents never run `tsgo`/`tsc`/`bun run build`; the coordinator owns type-checking.
+4. The **type-check/build ban** (above) — agents never run `tsc`/`bun run build`; the coordinator owns type-checking.
 5. The **speed doctrine** (above) verbatim — agents rediscover unbounded waits otherwise.
 6. The **Typed Error Doctrine** hard rule with the patch-regenerate command for *their* service only.
 7. Registration discipline for the shared files, including the nested-mergeAll note.
@@ -741,7 +741,7 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+    const aiGateway = yield* Cloudflare.AIbind(Gateway);
 
     return {
       fetch: Effect.gen(function* () {
@@ -753,7 +753,7 @@ export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.AI.GatewayBindingLive)),
 ) {}
 ```
 
@@ -838,7 +838,7 @@ Notes:
 
 ## Reference implementations
 
-- Cloudflare AiGateway — [worker fixture](./packages/alchemy/test/Cloudflare/AiGateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare/AiGateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
+- Cloudflare.AI.Gateway — [worker fixture](./packages/alchemy/test/Cloudflare.AI.Gateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare.AI.Gateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
 - Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
 - Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
 - Cloudflare Cron Trigger — [worker + DO fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/cron-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) (cron handler writes to a DO; test polls a fetch route with `Effect.repeat` until the scheduled handler fires)
@@ -866,7 +866,7 @@ When a canonical resource needs mutable event-source configuration and there is 
 Always run type checking before committing changes:
 
 ```bash
-bun tsgo -b
+bun tsc -b
 ```
 
 This runs the TypeScript compiler in build mode, which checks all projects in the workspace (including the distilled packages, which are project references). This is critical because CI will fail if there are type errors.
@@ -883,13 +883,13 @@ vitest resolves distilled from `src/*.ts` directly (the `bun` export condition; 
 
 ## Multi-agent sessions: the coordinator owns type-checking
 
-When many agents work concurrently (see **The Resource Factory Process**), do NOT let each agent run `bun tsgo -b` — concurrent runs thrash the machine and race on `tsbuildinfo`. Agents never invoke the compiler; the coordinator runs a one-shot `bun tsgo -b` at wave boundaries as the authoritative type check.
+When many agents work concurrently (see **The Resource Factory Process**), do NOT let each agent run `bun tsc -b` — concurrent runs thrash the machine and race on `tsbuildinfo`. Agents never invoke the compiler; the coordinator runs a one-shot `bun tsc -b` at wave boundaries as the authoritative type check.
 
 ## Build Commands
 
 | Command           | Description                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------- |
-| `bun tsgo -b`     | Type check all projects (always run before committing)                                       |
+| `bun tsc -b`      | Type check all projects (always run before committing)                                       |
 | `bun run build`   | Clean, type check, and build the alchemy package                                             |
 | `bun build:clean` | Full clean rebuild: cleans all artifacts, reinstalls dependencies, builds, and downloads env |
 

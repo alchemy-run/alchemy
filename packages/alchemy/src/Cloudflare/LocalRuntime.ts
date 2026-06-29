@@ -7,8 +7,8 @@ import * as Path from "effect/Path";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
-import type { Queue } from "./Queue/Queue.ts";
-import type { QueueConsumer } from "./Queue/QueueConsumer.ts";
+import type { Queue } from "./Queues/Queue.ts";
+import type { Consumer } from "./Queues/Consumer.ts";
 
 export const LOCAL_ENTRY_URL = import.meta.resolve(
   // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
@@ -29,8 +29,8 @@ export class LocalRuntimeState extends Context.Service<
       Queue["Attributes"]
     >;
     readonly queueConsumers: MutableHashMap.MutableHashMap<
-      QueueConsumer["Attributes"]["consumerId"],
-      QueueConsumer["Attributes"]
+      Consumer["Attributes"]["consumerId"],
+      Consumer["Attributes"]
     >;
   }
 >()("alchemy/cloudflare/LocalRuntimeState") {}

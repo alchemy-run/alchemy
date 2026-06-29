@@ -62,7 +62,7 @@ test.provider.skipIf(!entitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DeviceDexTest("AppHealth", {
+          return yield* Cloudflare.Devices.DeviceDexTest("AppHealth", {
             name: TEST_NAME,
             data: {
               host: "https://app.example.com/health",
@@ -90,7 +90,7 @@ test.provider.skipIf(!entitled)(
       // Interval + description update converges in place — same test id.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DeviceDexTest("AppHealth", {
+          return yield* Cloudflare.Devices.DeviceDexTest("AppHealth", {
             name: TEST_NAME,
             data: {
               host: "https://app.example.com/health",
@@ -132,7 +132,7 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DeviceDexTest("ListResource", {
+          return yield* Cloudflare.Devices.DeviceDexTest("ListResource", {
             name: TEST_NAME,
             data: {
               host: "https://app.example.com/health",
@@ -145,7 +145,9 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.DeviceDexTest);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Devices.DeviceDexTest,
+      );
       const all = yield* provider.list();
 
       expect(all.some((t) => t.testId === deployed.testId)).toBe(true);
@@ -161,7 +163,9 @@ test.provider.skipIf(entitled)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.DeviceDexTest);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Devices.DeviceDexTest,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);

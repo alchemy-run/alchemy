@@ -115,7 +115,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const provider = yield* Provider.findProvider(
-        Cloudflare.TokenConfiguration,
+        Cloudflare.TokenValidation.TokenConfiguration,
       );
 
       if (!entitledZoneId) {
@@ -130,11 +130,14 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TokenConfiguration("JwtConfigList", {
-            zoneId,
-            tokenSources: ['http.request.headers["authorization"][0]'],
-            keys: [JWKS_KEY_1],
-          });
+          return yield* Cloudflare.TokenValidation.TokenConfiguration(
+            "JwtConfigList",
+            {
+              zoneId,
+              tokenSources: ['http.request.headers["authorization"][0]'],
+              keys: [JWKS_KEY_1],
+            },
+          );
         }),
       );
 
@@ -157,13 +160,16 @@ test.provider.skipIf(!entitledZoneId)(
       // -- Create: configuration with one key, rule that logs ------------
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const config = yield* Cloudflare.TokenConfiguration("JwtConfig", {
-            zoneId,
-            description: "v1",
-            tokenSources: ['http.request.headers["authorization"][0]'],
-            keys: [JWKS_KEY_1],
-          });
-          const rule = yield* Cloudflare.TokenValidationRule("JwtRule", {
+          const config = yield* Cloudflare.TokenValidation.TokenConfiguration(
+            "JwtConfig",
+            {
+              zoneId,
+              description: "v1",
+              tokenSources: ['http.request.headers["authorization"][0]'],
+              keys: [JWKS_KEY_1],
+            },
+          );
+          const rule = yield* Cloudflare.TokenValidation.Rule("JwtRule", {
             zoneId,
             description: "v1",
             action: "log",
@@ -197,16 +203,19 @@ test.provider.skipIf(!entitledZoneId)(
       // -- Update in place: patch metadata, rotate keys, flip the rule ---
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const config = yield* Cloudflare.TokenConfiguration("JwtConfig", {
-            zoneId,
-            description: "v2",
-            tokenSources: [
-              'http.request.headers["authorization"][0]',
-              'http.request.uri.args["token"][0]',
-            ],
-            keys: [JWKS_KEY_1, JWKS_KEY_2],
-          });
-          const rule = yield* Cloudflare.TokenValidationRule("JwtRule", {
+          const config = yield* Cloudflare.TokenValidation.TokenConfiguration(
+            "JwtConfig",
+            {
+              zoneId,
+              description: "v2",
+              tokenSources: [
+                'http.request.headers["authorization"][0]',
+                'http.request.uri.args["token"][0]',
+              ],
+              keys: [JWKS_KEY_1, JWKS_KEY_2],
+            },
+          );
+          const rule = yield* Cloudflare.TokenValidation.Rule("JwtRule", {
             zoneId,
             description: "v2",
             enabled: false,

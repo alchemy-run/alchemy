@@ -9,21 +9,21 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccountMemberTypeId = "Cloudflare.Account.Member" as const;
-type AccountMemberTypeId = typeof AccountMemberTypeId;
+const TypeId = "Cloudflare.Account.Member" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A member's invitation status in the account. New invites start as
  * `pending` and become `accepted` when the invitee accepts.
  */
-export type AccountMemberStatus = "accepted" | "pending";
+export type MemberStatus = "accepted" | "pending";
 
 /**
  * A scoped access policy attached to an account membership. Policies are an
  * Enterprise alternative to legacy `roles` — they grant a permission group
  * over a resource group with an explicit allow/deny.
  */
-export interface AccountMemberPolicy {
+export interface MemberPolicy {
   /**
    * Whether the policy allows or denies the permission groups on the
    * resource groups.
@@ -39,7 +39,7 @@ export interface AccountMemberPolicy {
   resourceGroups: { id: string }[];
 }
 
-export interface AccountMemberProps {
+export interface MemberProps {
   /**
    * The contact email address of the user to invite. The email is the
    * identity of the membership — there is no API to change it, so updating
@@ -61,7 +61,7 @@ export interface AccountMemberProps {
    *
    * Exactly one of `roles` or `policies` should be provided.
    */
-  policies?: AccountMemberPolicy[];
+  policies?: MemberPolicy[];
   /**
    * Status of the member invitation. Only `pending` can be requested when
    * inviting; the invitee flips it to `accepted` by accepting. Changing an
@@ -69,10 +69,10 @@ export interface AccountMemberProps {
    * (the member is removed and re-invited).
    * @default "pending"
    */
-  status?: AccountMemberStatus;
+  status?: MemberStatus;
 }
 
-export interface AccountMemberAttributes {
+export interface MemberAttributes {
   /**
    * Membership identifier tag assigned by Cloudflare.
    */
@@ -89,7 +89,7 @@ export interface AccountMemberAttributes {
    * The member's invitation status (`pending` until the invite is
    * accepted).
    */
-  status: AccountMemberStatus;
+  status: MemberStatus;
   /**
    * Roles assigned to the member, resolved to `{ id, name }` pairs.
    */
@@ -98,7 +98,7 @@ export interface AccountMemberAttributes {
    * Scoped access policies attached to the member, or `undefined` when the
    * membership uses legacy roles only.
    */
-  policies: AccountMemberPolicy[] | undefined;
+  policies: MemberPolicy[] | undefined;
   /**
    * The user id behind the membership, if the invitee already has a
    * Cloudflare user.
@@ -106,10 +106,10 @@ export interface AccountMemberAttributes {
   userId: string | undefined;
 }
 
-export type AccountMember = Resource<
-  AccountMemberTypeId,
-  AccountMemberProps,
-  AccountMemberAttributes,
+export type Member = Resource<
+  TypeId,
+  MemberProps,
+  MemberAttributes,
   never,
   Providers
 >;
@@ -134,12 +134,12 @@ export type AccountMember = Resource<
  * @section Inviting a member
  * @example Invite with a role looked up by name
  * ```typescript
- * const role = yield* Cloudflare.findAccountRoleByName(
+ * const role = yield* Cloudflare.Account.findAccountRoleByName(
  *   accountId,
  *   "Administrator Read Only",
  * );
  *
- * yield* Cloudflare.AccountMember("Auditor", {
+ * yield* Cloudflare.Account.Member("Auditor", {
  *   email: "auditor@example.com",
  *   roles: [role!.id],
  * });
@@ -149,7 +149,7 @@ export type AccountMember = Resource<
  * @example Swap the member's role in place
  * ```typescript
  * // Same email — the membership is updated, not replaced.
- * yield* Cloudflare.AccountMember("Auditor", {
+ * yield* Cloudflare.Account.Member("Auditor", {
  *   email: "auditor@example.com",
  *   roles: [adminRole.id],
  * });
@@ -158,7 +158,7 @@ export type AccountMember = Resource<
  * @section Scoped policies (Enterprise)
  * @example Invite with a scoped policy instead of roles
  * ```typescript
- * yield* Cloudflare.AccountMember("ScopedOperator", {
+ * yield* Cloudflare.Account.Member("ScopedOperator", {
  *   email: "operator@example.com",
  *   policies: [{
  *     access: "allow",
@@ -170,16 +170,16 @@ export type AccountMember = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/
  */
-export const AccountMember = Resource<AccountMember>(AccountMemberTypeId);
+export const Member = Resource<Member>(TypeId);
 
 /**
- * Returns true if the given value is an AccountMember resource.
+ * Returns true if the given value is an Member resource.
  */
-export const isAccountMember = (value: unknown): value is AccountMember =>
-  Predicate.hasProperty(value, "Type") && value.Type === AccountMemberTypeId;
+export const isMember = (value: unknown): value is Member =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const AccountMemberProvider = () =>
-  Provider.succeed(AccountMember, {
+export const MemberProvider = () =>
+  Provider.succeed(Member, {
     stables: ["memberId", "accountId", "email", "userId"],
 
     list: Effect.fn(function* () {
@@ -209,14 +209,12 @@ export const AccountMemberProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is AccountMemberAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is MemberAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Partial<AccountMemberProps>;
-      const n = news as AccountMemberProps;
+      const o = olds as Partial<MemberProps>;
+      const n = news as MemberProps;
       // No prior props to compare against — let the engine decide.
       if (o.email === undefined) return undefined;
       // The email is the identity of the invite — it cannot be changed.
@@ -345,7 +343,7 @@ export const AccountMemberProvider = () =>
  * Look up a legacy account role by its exact name (e.g. `"Administrator"`,
  * `"Administrator Read Only"`). Returns `undefined` when the account has no
  * role with that name. Useful for resolving the `roles` prop of
- * {@link AccountMember} without hard-coding role IDs.
+ * {@link Member} without hard-coding role IDs.
  */
 export const findAccountRoleByName = (accountId: string, name: string) =>
   accounts.listRoles.items({ accountId }).pipe(
@@ -400,7 +398,7 @@ const sameIdSet = (observed: readonly string[], desired: readonly string[]) =>
 
 const samePolicies = (
   observed: NonNullable<accounts.GetMemberResponse["policies"]>,
-  desired: AccountMemberPolicy[],
+  desired: MemberPolicy[],
 ) => {
   if (observed.length !== desired.length) return false;
   const normalize = (policies: readonly NormalizedPolicy[]) =>
@@ -437,11 +435,11 @@ const idList = (groups: readonly { id: string }[]) =>
 const toAttributes = (
   member: ObservedMember,
   accountId: string,
-): AccountMemberAttributes => ({
+): MemberAttributes => ({
   memberId: member.id ?? "",
   accountId,
   email: member.email ?? "",
-  status: (member.status ?? "pending") as AccountMemberStatus,
+  status: (member.status ?? "pending") as MemberStatus,
   roles: (member.roles ?? []).map((role) => ({
     id: role.id,
     name: role.name,

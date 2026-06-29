@@ -56,7 +56,7 @@ test.provider(
       yield* stack.destroy();
 
       const watermark = yield* stack.deploy(
-        Cloudflare.StreamWatermark("DefaultWatermark", {
+        Cloudflare.Stream.Watermark("DefaultWatermark", {
           url: PNG_URL,
         }),
       );
@@ -88,7 +88,7 @@ test.provider(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.StreamWatermark("ReplaceWatermark", {
+        Cloudflare.Stream.Watermark("ReplaceWatermark", {
           name: "alchemy-stream-wm-replace",
           url: PNG_URL,
         }),
@@ -98,7 +98,7 @@ test.provider(
 
       // No update endpoint — changing any prop must replace (new uid).
       const replaced = yield* stack.deploy(
-        Cloudflare.StreamWatermark("ReplaceWatermark", {
+        Cloudflare.Stream.Watermark("ReplaceWatermark", {
           name: "alchemy-stream-wm-replace",
           url: PNG_URL,
           position: "center",
@@ -119,7 +119,7 @@ test.provider(
 
       // Redeploying identical props is a no-op (same uid).
       const noop = yield* stack.deploy(
-        Cloudflare.StreamWatermark("ReplaceWatermark", {
+        Cloudflare.Stream.Watermark("ReplaceWatermark", {
           name: "alchemy-stream-wm-replace",
           url: PNG_URL,
           position: "center",
@@ -146,13 +146,15 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.StreamWatermark("ListWatermark", {
+        Cloudflare.Stream.Watermark("ListWatermark", {
           name: "alchemy-stream-wm-list",
           url: PNG_URL,
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.StreamWatermark);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Stream.Watermark,
+      );
       const all = yield* provider.list();
 
       expect(all.some((w) => w.watermarkId === deployed.watermarkId)).toBe(

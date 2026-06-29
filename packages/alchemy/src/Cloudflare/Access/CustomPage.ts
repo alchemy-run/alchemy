@@ -11,9 +11,9 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type AccessCustomPageType = "identity_denied" | "forbidden";
+export type CustomPageType = "identity_denied" | "forbidden";
 
-export type AccessCustomPageProps = {
+export type CustomPageProps = {
   /**
    * Display name for the custom page. Used as a stable identifier so the
    * provider can locate the page during adoption / state recovery. If
@@ -27,16 +27,16 @@ export type AccessCustomPageProps = {
    * shown when a user's identity is rejected by policy; `forbidden` is shown
    * when access is blocked outright. Changing the type replaces the page.
    */
-  type: AccessCustomPageType;
+  type: CustomPageType;
   /**
    * The custom HTML served for the page.
    */
   customHtml: string;
 };
 
-export type AccessCustomPage = Resource<
+export type CustomPage = Resource<
   "Cloudflare.Access.CustomPage",
-  AccessCustomPageProps,
+  CustomPageProps,
   {
     /** UUID of the custom page assigned by Cloudflare. */
     customPageId: string;
@@ -45,7 +45,7 @@ export type AccessCustomPage = Resource<
     /** Display name reported by Cloudflare. */
     name: string;
     /** The Access event type the page is shown for. */
-    type: AccessCustomPageType;
+    type: CustomPageType;
   },
   never,
   Providers
@@ -61,7 +61,7 @@ export type AccessCustomPage = Resource<
  * @section Creating a Custom Page
  * @example Custom forbidden page
  * ```typescript
- * const page = yield* Cloudflare.AccessCustomPage("Forbidden", {
+ * const page = yield* Cloudflare.Access.CustomPage("Forbidden", {
  *   type: "forbidden",
  *   customHtml: "<html><body><h1>Access denied</h1></body></html>",
  * });
@@ -69,7 +69,7 @@ export type AccessCustomPage = Resource<
  *
  * @example Custom identity-denied page with an explicit name
  * ```typescript
- * const page = yield* Cloudflare.AccessCustomPage("Denied", {
+ * const page = yield* Cloudflare.Access.CustomPage("Denied", {
  *   name: "corp-identity-denied",
  *   type: "identity_denied",
  *   customHtml: "<html><body><h1>Who are you?</h1></body></html>",
@@ -79,22 +79,20 @@ export type AccessCustomPage = Resource<
  * @section Updating the HTML
  * @example HTML and name converge in place
  * ```typescript
- * const page = yield* Cloudflare.AccessCustomPage("Forbidden", {
+ * const page = yield* Cloudflare.Access.CustomPage("Forbidden", {
  *   type: "forbidden",
  *   customHtml: "<html><body><h1>Still denied</h1></body></html>",
  * });
  * ```
  */
-export const AccessCustomPage = Resource<AccessCustomPage>(
-  "Cloudflare.Access.CustomPage",
-);
+export const CustomPage = Resource<CustomPage>("Cloudflare.Access.CustomPage");
 
-export const isAccessCustomPage = (value: unknown): value is AccessCustomPage =>
+export const isCustomPage = (value: unknown): value is CustomPage =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === "Cloudflare.Access.CustomPage";
 
-export const AccessCustomPageProvider = () =>
-  Provider.succeed(AccessCustomPage, {
+export const CustomPageProvider = () =>
+  Provider.succeed(CustomPage, {
     stables: ["customPageId", "accountId", "type"],
     // Account-scoped collection (pattern b). The list response items already
     // carry every Attribute field (uid/name/type) — read's Attributes don't
@@ -209,7 +207,7 @@ export const AccessCustomPageProvider = () =>
           );
         if (!created.uid) {
           return yield* Effect.fail(
-            new Error("AccessCustomPage: created page missing uid"),
+            new Error("CustomPage: created page missing uid"),
           );
         }
         return toAttrs({ ...created, type: news.type }, acct);
@@ -266,7 +264,7 @@ const toAttrs = (observed: ObservedPage, accountId: string) => ({
   customPageId: observed.uid!,
   accountId,
   name: observed.name ?? "",
-  type: (observed.type ?? "forbidden") as AccessCustomPageType,
+  type: (observed.type ?? "forbidden") as CustomPageType,
 });
 
 type ObservedPage = {

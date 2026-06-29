@@ -3,14 +3,14 @@ import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Sandbox } from "./Sandbox.ts";
 
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agents",
   Effect.gen(function* () {
     const container = yield* Sandbox;
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const sessions = new Map<string, Cloudflare.DurableWebSocket>();
+      const sessions = new Map<string, Cloudflare.WebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
         const session = socket.deserializeAttachment<{ id: string }>();
@@ -45,7 +45,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           return response;
         }).pipe(Effect.orDie),
         webSocketMessage: Effect.fn(function* (
-          socket: Cloudflare.DurableWebSocket,
+          socket: Cloudflare.WebSocket,
           message: string | Uint8Array,
         ) {
           const session = socket.deserializeAttachment<{ id: string }>();
@@ -59,7 +59,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           }
         }),
         webSocketClose: Effect.fn(function* (
-          ws: Cloudflare.DurableWebSocket,
+          ws: Cloudflare.WebSocket,
           code: number,
           reason: string,
           _wasClean: boolean,
@@ -74,7 +74,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(Sandbox, {
+      Cloudflare.Containers.layer(Sandbox, {
         enableInternet: true,
       }),
     ),

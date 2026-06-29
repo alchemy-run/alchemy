@@ -8,13 +8,13 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamLiveInputTypeId = "Cloudflare.Stream.LiveInput" as const;
-type StreamLiveInputTypeId = typeof StreamLiveInputTypeId;
+const TypeId = "Cloudflare.Stream.LiveInput" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Recording behavior of a live input.
  */
-export type StreamLiveInputRecording = {
+export type LiveInputRecording = {
   /**
    * Origins allowed to display videos created from this live input.
    * Enter allowed origin domains in an array, e.g. `["example.com"]`.
@@ -47,7 +47,7 @@ export type StreamLiveInputRecording = {
   timeoutSeconds?: number;
 };
 
-export type StreamLiveInputProps = {
+export type LiveInputProps = {
   /**
    * Sets the creator ID associated with this live input. Mutable.
    */
@@ -76,10 +76,10 @@ export type StreamLiveInputProps = {
    * `automatic` mode. Mutable.
    * @default { mode: "off" }
    */
-  recording?: StreamLiveInputRecording;
+  recording?: LiveInputRecording;
 };
 
-export type StreamLiveInputAttributes = {
+export type LiveInputAttributes = {
   /**
    * The unique identifier for the live input (Cloudflare `uid`).
    */
@@ -111,10 +111,10 @@ export type StreamLiveInputAttributes = {
   meta: Record<string, unknown>;
 };
 
-export type StreamLiveInput = Resource<
-  StreamLiveInputTypeId,
-  StreamLiveInputProps,
-  StreamLiveInputAttributes,
+export type LiveInput = Resource<
+  TypeId,
+  LiveInputProps,
+  LiveInputAttributes,
   never,
   Providers
 >;
@@ -135,12 +135,12 @@ export type StreamLiveInput = Resource<
  * @section Creating a live input
  * @example Basic live input
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {});
+ * const input = yield* Cloudflare.Stream.LiveInput("Broadcast", {});
  * ```
  *
  * @example Live input with automatic recording
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {
+ * const input = yield* Cloudflare.Stream.LiveInput("Broadcast", {
  *   meta: { name: "town-hall" },
  *   recording: {
  *     mode: "automatic",
@@ -153,23 +153,23 @@ export type StreamLiveInput = Resource<
  * @section Managing a live input
  * @example Disable ingest without deleting the input
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {
+ * const input = yield* Cloudflare.Stream.LiveInput("Broadcast", {
  *   enabled: false,
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/stream/stream-live/
  */
-export const StreamLiveInput = Resource<StreamLiveInput>(StreamLiveInputTypeId);
+export const LiveInput = Resource<LiveInput>(TypeId);
 
 /**
- * Returns true if the given value is a StreamLiveInput resource.
+ * Returns true if the given value is a LiveInput resource.
  */
-export const isStreamLiveInput = (value: unknown): value is StreamLiveInput =>
-  Predicate.hasProperty(value, "Type") && value.Type === StreamLiveInputTypeId;
+export const isLiveInput = (value: unknown): value is LiveInput =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const StreamLiveInputProvider = () =>
-  Provider.succeed(StreamLiveInput, {
+export const LiveInputProvider = () =>
+  Provider.succeed(LiveInput, {
     stables: ["liveInputId", "accountId", "created"],
 
     diff: Effect.fn(function* ({ output }) {
@@ -297,7 +297,7 @@ const toAttributes = (
     | stream.CreateLiveInputResponse
     | stream.UpdateLiveInputResponse,
   accountId: string,
-): StreamLiveInputAttributes => ({
+): LiveInputAttributes => ({
   liveInputId: input.uid ?? "",
   accountId,
   created: input.created ?? undefined,

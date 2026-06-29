@@ -12,9 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DevicePostureIntegrationTypeId =
-  "Cloudflare.Devices.PostureIntegration" as const;
-type DevicePostureIntegrationTypeId = typeof DevicePostureIntegrationTypeId;
+const TypeId = "Cloudflare.Devices.PostureIntegration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The third-party provider behind the posture integration. Determines
@@ -113,7 +112,7 @@ export type DevicePostureIntegrationAttributes = {
 };
 
 export type DevicePostureIntegration = Resource<
-  DevicePostureIntegrationTypeId,
+  TypeId,
   DevicePostureIntegrationProps,
   DevicePostureIntegrationAttributes,
   never,
@@ -135,7 +134,7 @@ export type DevicePostureIntegration = Resource<
  * @section Creating a posture integration
  * @example CrowdStrike Falcon
  * ```typescript
- * const falcon = yield* Cloudflare.DevicePostureIntegration("Falcon", {
+ * const falcon = yield* Cloudflare.Devices.DevicePostureIntegration("Falcon", {
  *   type: "crowdstrike_s2s",
  *   interval: "10m",
  *   config: {
@@ -149,7 +148,7 @@ export type DevicePostureIntegration = Resource<
  *
  * @example Custom service-to-service provider behind Access
  * ```typescript
- * const custom = yield* Cloudflare.DevicePostureIntegration("Custom", {
+ * const custom = yield* Cloudflare.Devices.DevicePostureIntegration("Custom", {
  *   type: "custom_s2s",
  *   interval: "30m",
  *   config: {
@@ -163,7 +162,7 @@ export type DevicePostureIntegration = Resource<
  *
  * @example Reference the integration from a posture rule
  * ```typescript
- * yield* Cloudflare.DevicePostureRule("FalconScore", {
+ * yield* Cloudflare.Devices.DevicePostureRule("FalconScore", {
  *   type: "crowdstrike_s2s",
  *   input: { connectionId: falcon.integrationId, os: "windows" },
  * });
@@ -171,9 +170,8 @@ export type DevicePostureIntegration = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/devices/service-providers/
  */
-export const DevicePostureIntegration = Resource<DevicePostureIntegration>(
-  DevicePostureIntegrationTypeId,
-);
+export const DevicePostureIntegration =
+  Resource<DevicePostureIntegration>(TypeId);
 
 /**
  * Returns true if the given value is a DevicePostureIntegration resource.
@@ -181,8 +179,7 @@ export const DevicePostureIntegration = Resource<DevicePostureIntegration>(
 export const isDevicePostureIntegration = (
   value: unknown,
 ): value is DevicePostureIntegration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DevicePostureIntegrationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DevicePostureIntegrationProvider = () =>
   Provider.succeed(DevicePostureIntegration, {

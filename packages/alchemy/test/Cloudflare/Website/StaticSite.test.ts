@@ -49,7 +49,10 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite("FixSite", staticSiteProps(cwd));
+          return yield* Cloudflare.Website.StaticSite(
+            "FixSite",
+            staticSiteProps(cwd),
+          );
         }),
       );
 
@@ -70,7 +73,10 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite("FixSite", staticSiteProps(cwd));
+          return yield* Cloudflare.Website.StaticSite(
+            "FixSite",
+            staticSiteProps(cwd),
+          );
         }),
       );
 
@@ -119,7 +125,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* class FixSite extends Cloudflare.StaticSite<FixSite>()(
+          return yield* class FixSite extends Cloudflare.Website.StaticSite<FixSite>()(
             "FixSite",
             staticSiteProps(cwd),
           ) {};
@@ -186,7 +192,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite(
+          return yield* Cloudflare.Website.StaticSite(
             "RelocSite",
             staticSiteProps(cwdA),
           );
@@ -215,7 +221,7 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite(
+          return yield* Cloudflare.Website.StaticSite(
             "RelocSite",
             staticSiteProps(cwdB),
           );
@@ -281,10 +287,13 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.StaticSite("BundleOnlyStaticSite", {
-              ...staticSiteProps(cwd),
-              main: workerPath,
-            });
+            return yield* Cloudflare.Website.StaticSite(
+              "BundleOnlyStaticSite",
+              {
+                ...staticSiteProps(cwd),
+                main: workerPath,
+              },
+            );
           }),
         );
 
@@ -336,7 +345,7 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.StaticSite(
+            return yield* Cloudflare.Website.StaticSite(
               "MissingOutputStaticSite",
               staticSiteProps(cwd),
             );
@@ -434,7 +443,10 @@ test.provider(
 
       const site = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite("MigSite", staticSiteProps(cwd));
+          return yield* Cloudflare.Website.StaticSite(
+            "MigSite",
+            staticSiteProps(cwd),
+          );
         }),
       );
 
@@ -519,7 +531,10 @@ test.provider(
 
       const site = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite("MigSite", staticSiteProps(cwd));
+          return yield* Cloudflare.Website.StaticSite(
+            "MigSite",
+            staticSiteProps(cwd),
+          );
         }),
       );
 
@@ -544,7 +559,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-const staticSiteProps = (cwd: string): Cloudflare.StaticSiteProps => ({
+const staticSiteProps = (cwd: string): Cloudflare.Website.StaticSiteProps => ({
   command: "bash build.sh",
   shell: true,
   cwd,

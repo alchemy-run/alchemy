@@ -37,7 +37,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
     },
   },
   Effect.gen(function* () {
-    const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
+    const artifacts = yield* Repos;
     const repos = yield* Repo;
 
     const findRepo = (name: string) =>
@@ -170,5 +170,5 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         HttpRouter.toHttpEffect,
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.ArtifactsBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(Binding))),
 ) {}

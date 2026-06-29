@@ -31,7 +31,7 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
 // `list()` fans out over account BYOIP IP prefixes (the read-only catalog
 // endpoint, available regardless of the BYOIP entitlement) and pages the BGP
 // prefixes under each. On an account with no onboarded BYOIP prefixes the
-// result is naturally an empty `AddressingBgpPrefixAttributes[]` — the exact
+// result is naturally an empty `BgpPrefixAttributes[]` — the exact
 // shape `read` produces. This exercises the distilled wiring live on every run
 // without requiring the BYOIP contract/entitlement.
 test.provider("list enumerates BGP prefixes across BYOIP prefixes", (stack) =>
@@ -39,7 +39,7 @@ test.provider("list enumerates BGP prefixes across BYOIP prefixes", (stack) =>
     yield* stack.destroy();
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AddressingBgpPrefix,
+      Cloudflare.Addressing.BgpPrefix,
     );
     const all = yield* retryForbidden(provider.list());
 

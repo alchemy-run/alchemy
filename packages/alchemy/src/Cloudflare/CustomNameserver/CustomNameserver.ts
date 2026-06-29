@@ -10,20 +10,20 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CustomNameserverTypeId = "Cloudflare.CustomNameserver" as const;
-type CustomNameserverTypeId = typeof CustomNameserverTypeId;
+const TypeId = "Cloudflare.CustomNameserver.CustomNameserver" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Verification status of an account custom nameserver. Deprecated by
  * Cloudflare but still returned by the API.
  */
-export type CustomNameserverStatus = "moved" | "pending" | "verified";
+export type Status = "moved" | "pending" | "verified";
 
 /**
  * A glue record (A/AAAA) that must be registered at the domain registrar
  * for the custom nameserver to resolve.
  */
-export interface CustomNameserverDnsRecord {
+export interface Record {
   /**
    * The record type of the glue record.
    */
@@ -34,7 +34,7 @@ export interface CustomNameserverDnsRecord {
   value: string | undefined;
 }
 
-export interface CustomNameserverProps {
+export interface Props {
   /**
    * The FQDN of the nameserver (e.g. `ns1.yourbrand.com`). Must be a
    * subdomain of a zone active on the same account.
@@ -52,7 +52,7 @@ export interface CustomNameserverProps {
   nsSet?: number;
 }
 
-export interface CustomNameserverAttributes {
+export interface Attributes {
   /**
    * The FQDN of the nameserver. Also the identifier used to delete it.
    */
@@ -69,12 +69,12 @@ export interface CustomNameserverAttributes {
    * Verification status of the nameserver (deprecated by Cloudflare but
    * still returned).
    */
-  status: CustomNameserverStatus;
+  status: Status;
   /**
    * A/AAAA glue records to register at the domain registrar so the
    * nameserver resolves.
    */
-  dnsRecords: CustomNameserverDnsRecord[];
+  dnsRecords: Record[];
   /**
    * The zone (on this account) that `nsName` belongs to.
    */
@@ -82,9 +82,9 @@ export interface CustomNameserverAttributes {
 }
 
 export type CustomNameserver = Resource<
-  CustomNameserverTypeId,
-  CustomNameserverProps,
-  CustomNameserverAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -114,7 +114,7 @@ export type CustomNameserver = Resource<
  * @section Creating a custom nameserver
  * @example Vanity nameserver on the default set
  * ```typescript
- * const ns1 = yield* Cloudflare.CustomNameserver("Ns1", {
+ * const ns1 = yield* Cloudflare.CustomNameserver.CustomNameserver("Ns1", {
  *   nsName: "ns1.yourbrand.com",
  * });
  *
@@ -124,7 +124,7 @@ export type CustomNameserver = Resource<
  *
  * @example Nameserver on a specific set
  * ```typescript
- * yield* Cloudflare.CustomNameserver("Ns2", {
+ * yield* Cloudflare.CustomNameserver.CustomNameserver("Ns2", {
  *   nsName: "ns2.yourbrand.com",
  *   nsSet: 2,
  * });
@@ -132,15 +132,13 @@ export type CustomNameserver = Resource<
  *
  * @see https://developers.cloudflare.com/dns/nameservers/custom-nameservers/account-custom-nameservers/
  */
-export const CustomNameserver = Resource<CustomNameserver>(
-  CustomNameserverTypeId,
-);
+export const CustomNameserver = Resource<CustomNameserver>(TypeId);
 
 /**
  * Returns true if the given value is a CustomNameserver resource.
  */
 export const isCustomNameserver = (value: unknown): value is CustomNameserver =>
-  Predicate.hasProperty(value, "Type") && value.Type === CustomNameserverTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomNameserverProvider = () =>
   Provider.succeed(CustomNameserver, {
@@ -164,7 +162,7 @@ export const CustomNameserverProvider = () =>
           // collection endpoint rejects with a typed entitlement error.
           // Treat that as an empty collection rather than failing `list`.
           Effect.catchTag("CustomNameserversNotEnabled", () =>
-            Effect.succeed([] as CustomNameserverAttributes[]),
+            Effect.succeed([] as Attributes[]),
           ),
         );
     }),
@@ -277,12 +275,12 @@ const findByName = (accountId: string, nsName: string) =>
 const toAttributes = (
   ns: ObservedNameserver | customNameservers.CreateCustomNameserverResponse,
   accountId: string,
-): CustomNameserverAttributes => ({
+): Attributes => ({
   nsName: ns.nsName,
   accountId,
   nsSet: ns.nsSet ?? undefined,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  status: ns.status as CustomNameserverStatus,
+  status: ns.status as Status,
   dnsRecords: ns.dnsRecords.map((record) => ({
     type: (record.type ?? undefined) as "A" | "AAAA" | undefined,
     value: record.value ?? undefined,

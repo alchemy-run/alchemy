@@ -10,10 +10,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "./lookup.ts";
 
-const ZoneHoldTypeId = "Cloudflare.Zone.Hold" as const;
-type ZoneHoldTypeId = typeof ZoneHoldTypeId;
+const TypeId = "Cloudflare.Zone.Hold" as const;
+type TypeId = typeof TypeId;
 
-export type ZoneHoldProps = {
+export type HoldProps = {
   /**
    * Zone to place the hold on. Stable — changing the zone triggers a
    * replacement (the hold is removed from the old zone and placed on the
@@ -32,7 +32,7 @@ export type ZoneHoldProps = {
   includeSubdomains?: boolean;
 };
 
-export type ZoneHoldAttributes = {
+export type HoldAttributes = {
   /** Zone the hold is placed on. */
   zoneId: string;
   /** Whether the hold is currently active. */
@@ -46,10 +46,10 @@ export type ZoneHoldAttributes = {
   includeSubdomains: boolean;
 };
 
-export type ZoneHold = Resource<
-  ZoneHoldTypeId,
-  ZoneHoldProps,
-  ZoneHoldAttributes,
+export type Hold = Resource<
+  TypeId,
+  HoldProps,
+  HoldAttributes,
   never,
   Providers
 >;
@@ -72,14 +72,14 @@ export type ZoneHold = Resource<
  * @section Holding a zone
  * @example Place a hold on a zone
  * ```typescript
- * const hold = yield* Cloudflare.ZoneHold("MyHold", {
+ * const hold = yield* Cloudflare.Zone.Hold("MyHold", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Hold the zone and all of its subdomains
  * ```typescript
- * yield* Cloudflare.ZoneHold("MyHold", {
+ * yield* Cloudflare.Zone.Hold("MyHold", {
  *   zoneId: zone.zoneId,
  *   includeSubdomains: true,
  * });
@@ -91,20 +91,20 @@ export type ZoneHold = Resource<
  * import { adopt } from "alchemy/AdoptPolicy";
  * // A hold carries no ownership markers, so the engine refuses to take
  * // over a pre-existing hold unless you opt in with `adopt(true)`.
- * const hold = yield* Cloudflare.ZoneHold("MyHold", {
+ * const hold = yield* Cloudflare.Zone.Hold("MyHold", {
  *   zoneId: zone.zoneId,
  * }).pipe(adopt(true));
  * ```
  *
  * @see https://developers.cloudflare.com/fundamentals/account/account-security/zone-holds/
  */
-export const ZoneHold = Resource<ZoneHold>(ZoneHoldTypeId);
+export const Hold = Resource<Hold>(TypeId);
 
 /**
- * Returns true if the given value is a ZoneHold resource.
+ * Returns true if the given value is a Hold resource.
  */
-export const isZoneHold = (value: unknown): value is ZoneHold =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneHoldTypeId;
+export const isHold = (value: unknown): value is Hold =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 // Cloudflare can transiently fail to authenticate a valid token, surfacing as
 // `Forbidden`. Retry with exponential backoff capped at 5s, bounded to ~8
@@ -114,8 +114,8 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis").pipe(
   Schedule.both(Schedule.recurs(8)),
 );
 
-export const ZoneHoldProvider = () =>
-  Provider.succeed(ZoneHold, {
+export const HoldProvider = () =>
+  Provider.succeed(Hold, {
     stables: ["zoneId"],
 
     list: Effect.fn(function* () {
@@ -145,12 +145,12 @@ export const ZoneHoldProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter((row): row is ZoneHoldAttributes => row !== undefined);
+      return rows.filter((row): row is HoldAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as ZoneHoldProps;
-      const n = news as ZoneHoldProps;
+      const o = olds as HoldProps;
+      const n = news as HoldProps;
       // zoneId is the hold's identity (one hold per zone). It is
       // Input<string>; compare only once both sides are concrete.
       const oldZoneId =
@@ -250,7 +250,7 @@ const toAttributes = (
     | zones.GetHoldResponse
     | zones.CreateHoldResponse
     | zones.PatchHoldResponse,
-): ZoneHoldAttributes => ({
+): HoldAttributes => ({
   zoneId,
   hold: hold.hold === true,
   holdAfter: hold.holdAfter ?? undefined,

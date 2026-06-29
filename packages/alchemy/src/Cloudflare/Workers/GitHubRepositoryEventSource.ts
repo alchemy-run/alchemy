@@ -2,7 +2,6 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import {
   RepositoryEventSource,
   webhookPath,
@@ -12,79 +11,60 @@ import {
   type WebhookEvent,
 } from "../../GitHub/RepositoryEventSource.ts";
 import { Webhook } from "../../GitHub/Webhook.ts";
+import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { isWorker, isWorkerEvent, Worker } from "./Worker.ts";
-import type { Providers } from "../Providers.ts";
+import { isWorkerEvent, Worker } from "./Worker.ts";
 
 /**
- * Deploy-time half of the GitHub event source for Cloudflare Workers.
+ * GitHub event source for Cloudflare Workers.
  *
- * Provisions a {@link Webhook} on the repository whose delivery URL points
- * at this Worker (at a deterministic per-repo path). The webhook secret is
- * bound onto the Worker separately by the runtime layer, via an `Output`
- * accessor, so the runtime can verify delivery signatures.
+ * Deploy-time: provisions a {@link Webhook} on the repository whose delivery
+ * URL points at this Worker (at a deterministic per-repo path). The webhook
+ * secret is bound onto the Worker via an `Output` accessor so the runtime can
+ * verify delivery signatures.
+ *
+ * Runtime: registers a `fetch` listener that claims requests on the
+ * repository's delivery path, verifies the `HMAC-SHA256` signature against the
+ * bound secret, and forwards each delivery to the subscriber. Requests on any
+ * other path fall through to the Worker's own `fetch` handler.
  * @binding
  * @product Workers
  * @category Workers & Compute
  */
-export class GitHubRepositoryEventSourcePolicy extends Binding.Policy<
-  GitHubRepositoryEventSourcePolicy,
-  (props: RepositoryEventSourceProps) => Effect.Effect<void>,
-  Providers
->()("GitHub.RepositoryEventSourcePolicy") {}
-
-export const GitHubRepositoryEventSourcePolicyLive =
-  GitHubRepositoryEventSourcePolicy.layer.effect(
-    Effect.gen(function* () {
-      // Loosely-typed constructor — yielding the resource class erases its
-      // `GitHub.Providers` requirement so it fits the policy's `Effect<void>`
-      // return type. The requirement is satisfied by the stack at plan time.
-      const createWebhook = yield* Webhook;
-
-      return Effect.fn(function* (host, props) {
-        if (!isWorker(host)) {
-          return yield* Effect.die(
-            `GitHub.events(...).subscribe(...) is only supported on ` +
-              `Cloudflare.Worker hosts (got '${host.Type}').`,
-          );
-        }
-        const worker = host as Worker;
-        const path = webhookPath(props);
-
-        yield* createWebhook(`${props.owner}/${props.repository}`, {
-          owner: props.owner,
-          repository: props.repository,
-          url: Output.interpolate`${worker.url}${path}`,
-          events: [...(props.events ?? ["push"])],
-          secret: props.secret,
-          contentType: "json",
-        });
-      });
-    }),
-  );
-
-/**
- * Runtime half of the GitHub event source for Cloudflare Workers.
- *
- * Registers a `fetch` listener that claims requests on the repository's
- * delivery path, verifies the `HMAC-SHA256` signature against the bound
- * secret, and forwards each delivery to the subscriber as a single-element
- * `Stream`. Requests on any other path fall through to the Worker's own
- * `fetch` handler.
- */
 export const GitHubRepositoryEventSourceLive = Layer.effect(
   RepositoryEventSource,
   Effect.gen(function* () {
-    const policy = yield* GitHubRepositoryEventSourcePolicy;
     const ctx = yield* Worker;
+    // Loosely-typed constructor — yielding the resource class erases its
+    // `GitHub.Providers` requirement. The requirement is satisfied by the
+    // stack at plan time.
+    const createWebhook = yield* Webhook;
 
     return Effect.fn(function* (
       props: RepositoryEventSourceProps,
       process: (event: WebhookEvent) => Effect.Effect<void, never, never>,
     ) {
-      yield* policy(props);
-
       const path = webhookPath(props);
+
+      // Deploy-time: provision the repository webhook pointing at this Worker.
+      // Skipped once running inside the deployed Worker (the global guard).
+      // Namespaced under the host so the webhook's logical identity matches the
+      // previous Binding.Policy.
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* Namespace.push(
+          ctx.LogicalId,
+          Effect.gen(function* () {
+            yield* createWebhook(`${props.owner}/${props.repository}`, {
+              owner: props.owner,
+              repository: props.repository,
+              url: Output.interpolate`${ctx.url}${path}`,
+              events: [...(props.events ?? ["push"])],
+              secret: props.secret,
+              contentType: "json",
+            });
+          }),
+        );
+      }
 
       // Bind the webhook secret as a Worker env accessor under a
       // deterministic key. This single `yield*` does both halves: at plan

@@ -7,12 +7,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { FlagshipBinding } from "./FlagshipBinding.ts";
 
-const FlagshipAppTypeId = "Cloudflare.Flagship.App" as const;
-type FlagshipAppTypeId = typeof FlagshipAppTypeId;
+const TypeId = "Cloudflare.Flagship.App" as const;
+type TypeId = typeof TypeId;
 
-export type FlagshipAppProps = {
+export type AppProps = {
   /**
    * Human readable app name. Apps group flags by project or service. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
@@ -21,7 +20,7 @@ export type FlagshipAppProps = {
   name?: string;
 };
 
-export type FlagshipAppAttributes = {
+export type AppAttributes = {
   /**
    * Server-generated app identifier. Stable across updates; used as the
    * `appId` for flags, the Worker binding, and all evaluation calls.
@@ -50,13 +49,7 @@ export type FlagshipAppAttributes = {
   updatedBy: string;
 };
 
-export type FlagshipApp = Resource<
-  FlagshipAppTypeId,
-  FlagshipAppProps,
-  FlagshipAppAttributes,
-  never,
-  Providers
->;
+export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
 
 /**
  * A Cloudflare Flagship app — a container for feature flags.
@@ -71,12 +64,12 @@ export type FlagshipApp = Resource<
  * @section Creating an App
  * @example App with a generated name
  * ```typescript
- * const app = yield* Cloudflare.FlagshipApp("Flags", {});
+ * const app = yield* Cloudflare.Flagship.App("Flags", {});
  * ```
  *
  * @example App with an explicit name
  * ```typescript
- * const app = yield* Cloudflare.FlagshipApp("Flags", {
+ * const app = yield* Cloudflare.Flagship.App("Flags", {
  *   name: "my-service-flags",
  * });
  * ```
@@ -84,9 +77,9 @@ export type FlagshipApp = Resource<
  * @section Using the App
  * @example Define flags in the app
  * ```typescript
- * const app = yield* Cloudflare.FlagshipApp("Flags", {});
+ * const app = yield* Cloudflare.Flagship.App("Flags", {});
  *
- * const flag = yield* Cloudflare.FlagshipFlag("NewCheckout", {
+ * const flag = yield* Cloudflare.Flagship.Flag("NewCheckout", {
  *   appId: app.appId,
  *   key: "new-checkout",
  *   defaultVariation: "off",
@@ -96,17 +89,17 @@ export type FlagshipApp = Resource<
  *
  * @section Binding to a Worker
  * @example Effect-style Worker (recommended)
- * `FlagshipApp.bind(app)` attaches the binding to the surrounding Worker and
- * returns the runtime client for evaluating flags. Every `Flagship` method is
- * mirrored as an Effect, so no `Effect.tryPromise` wrapping is needed.
+ * `Cloudflare.Flagship.ReadFlags(app)` attaches the binding to the surrounding
+ * Worker and returns the runtime client for evaluating flags. Every `Flagship`
+ * method is mirrored as an Effect, so no `Effect.tryPromise` wrapping is needed.
  * ```typescript
- * export const App = Cloudflare.FlagshipApp("Flags", {});
+ * export const App = Cloudflare.Flagship.App("Flags", {});
  *
  * Cloudflare.Worker(
  *   "FlagsWorker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const flags = yield* Cloudflare.FlagshipApp.bind(App);
+ *     const flags = yield* Cloudflare.Flagship.ReadFlags(App);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const enabled = yield* flags.getBooleanValue("new-checkout", false, {
@@ -115,7 +108,7 @@ export type FlagshipApp = Resource<
  *         return HttpServerResponse.text(enabled ? "on" : "off");
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.FlagshipBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.Flagship.ReadFlagsBinding)),
  * );
  * ```
  *
@@ -123,7 +116,7 @@ export type FlagshipApp = Resource<
  * Declaring the app on a Worker's `env` maps it to the native `Flagship`
  * runtime binding via `InferEnv`.
  * ```typescript
- * export const App = Cloudflare.FlagshipApp("Flags", {});
+ * export const App = Cloudflare.Flagship.App("Flags", {});
  *
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
@@ -151,22 +144,16 @@ export type FlagshipApp = Resource<
  * @see https://developers.cloudflare.com/flagship/
  * @see https://developers.cloudflare.com/api/resources/flagship/
  */
-export const FlagshipApp = Resource<FlagshipApp>(FlagshipAppTypeId)({
-  /**
-   * Bind this app to the surrounding Worker, returning the Effect-native
-   * {@link FlagshipClient} for evaluating feature flags at runtime.
-   */
-  bind: FlagshipBinding.bind,
-});
+export const App = Resource<App>(TypeId);
 
 /**
- * Returns true if the given value is a FlagshipApp resource.
+ * Returns true if the given value is a Flagship App resource.
  */
-export const isFlagshipApp = (value: unknown): value is FlagshipApp =>
-  Predicate.hasProperty(value, "Type") && value.Type === FlagshipAppTypeId;
+export const isApp = (value: unknown): value is App =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const FlagshipAppProvider = () =>
-  Provider.succeed(FlagshipApp, {
+export const AppProvider = () =>
+  Provider.succeed(App, {
     stables: ["appId", "accountId", "createdAt"],
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -275,7 +262,7 @@ const toAttributes = (
     | flagship.CreateAppResponse
     | flagship.UpdateAppResponse,
   accountId: string,
-): FlagshipAppAttributes => ({
+): AppAttributes => ({
   appId: app.id,
   accountId,
   name: app.name,

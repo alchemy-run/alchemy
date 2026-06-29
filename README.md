@@ -44,7 +44,7 @@ One `bind()` wires the binding, env var, and typed connection — at deploy time
 ---
 
 - **One program, one language.** Resources, Lambdas/Workers, IAM, and SDKs live in the same Effect program — no YAML, no second runtime.
-- **Bindings, not glue code.** `S3.GetObject.bind(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
+- **Bindings, not glue code.** `S3.GetObject(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
 - **Errors in the type system.** Every cloud API failure is a tagged Effect error you handle — or don't — on purpose.
 - **AWS + Cloudflare today.** S3, SQS, DynamoDB, Kinesis, Lambda, EC2 / Workers, R2, D1, Durable Objects, Containers.
 - **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.

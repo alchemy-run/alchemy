@@ -12,8 +12,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const PageShieldPolicyTypeId = "Cloudflare.PageShield.Policy" as const;
-type PageShieldPolicyTypeId = typeof PageShieldPolicyTypeId;
+const TypeId = "Cloudflare.PageShield.Policy" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Action a Page Shield policy takes when its expression matches:
@@ -21,12 +21,9 @@ type PageShieldPolicyTypeId = typeof PageShieldPolicyTypeId;
  * violations, and `add_reporting_directives` injects report-to /
  * report-uri directives.
  */
-export type PageShieldPolicyAction =
-  | "allow"
-  | "log"
-  | "add_reporting_directives";
+export type PolicyAction = "allow" | "log" | "add_reporting_directives";
 
-export interface PageShieldPolicyProps {
+export interface PolicyProps {
   /**
    * Zone the policy belongs to. Stable — changing the zone triggers a
    * replacement.
@@ -44,7 +41,7 @@ export interface PageShieldPolicyProps {
    * The action to take when `expression` matches: `allow` (enforce the
    * CSP), `log` (report only), or `add_reporting_directives`. Mutable.
    */
-  action: PageShieldPolicyAction;
+  action: PolicyAction;
   /**
    * Whether the policy is enabled. Mutable.
    * @default true
@@ -63,13 +60,13 @@ export interface PageShieldPolicyProps {
   value: string;
 }
 
-export interface PageShieldPolicyAttributes {
+export interface PolicyAttributes {
   /** Auto-assigned identifier of the policy. */
   policyId: string;
   /** Zone the policy belongs to. */
   zoneId: string;
   /** The action taken when the expression matches. */
-  action: PageShieldPolicyAction;
+  action: PolicyAction;
   /** Human readable description of the policy. */
   description: string;
   /** Whether the policy is enabled. */
@@ -80,10 +77,10 @@ export interface PageShieldPolicyAttributes {
   value: string;
 }
 
-export type PageShieldPolicy = Resource<
-  PageShieldPolicyTypeId,
-  PageShieldPolicyProps,
-  PageShieldPolicyAttributes,
+export type Policy = Resource<
+  TypeId,
+  PolicyProps,
+  PolicyAttributes,
   never,
   Providers
 >;
@@ -101,20 +98,20 @@ export type PageShieldPolicy = Resource<
  * non-entitled zones, creation fails with the typed `PolicyQuotaExceeded`
  * error ("exceeded the maximum number of rules in the phase
  * http_response_page_shield: 1 out of 0"). Page Shield itself should be
- * enabled on the zone first — see `Cloudflare.PageShieldSettings`.
+ * enabled on the zone first — see `Cloudflare.PageShield.Settings`.
  * @resource
  * @product Page Shield
  * @category Application Security
  * @section Creating a Policy
  * @example Log-only CSP policy
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.PageShieldSettings("PageShield", {
+ * yield* Cloudflare.PageShield.Settings("PageShield", {
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.PageShieldPolicy("LogScripts", {
+ * yield* Cloudflare.PageShield.Policy("LogScripts", {
  *   zoneId: zone.zoneId,
  *   action: "log",
  *   expression: 'http.host eq "example.com"',
@@ -124,7 +121,7 @@ export type PageShieldPolicy = Resource<
  *
  * @example Enforcing CSP policy with a description
  * ```typescript
- * yield* Cloudflare.PageShieldPolicy("EnforceScripts", {
+ * yield* Cloudflare.PageShield.Policy("EnforceScripts", {
  *   zoneId: zone.zoneId,
  *   description: "block third-party scripts on checkout",
  *   action: "allow",
@@ -135,18 +132,16 @@ export type PageShieldPolicy = Resource<
  *
  * @see https://developers.cloudflare.com/page-shield/policies/
  */
-export const PageShieldPolicy = Resource<PageShieldPolicy>(
-  PageShieldPolicyTypeId,
-);
+export const Policy = Resource<Policy>(TypeId);
 
 /**
- * Returns true if the given value is a PageShieldPolicy resource.
+ * Returns true if the given value is a Policy resource.
  */
-export const isPageShieldPolicy = (value: unknown): value is PageShieldPolicy =>
-  Predicate.hasProperty(value, "Type") && value.Type === PageShieldPolicyTypeId;
+export const isPolicy = (value: unknown): value is Policy =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const PageShieldPolicyProvider = () =>
-  Provider.succeed(PageShieldPolicy, {
+export const PolicyProvider = () =>
+  Provider.succeed(Policy, {
     stables: ["policyId", "zoneId"],
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -284,11 +279,11 @@ type ObservedPolicy =
 const toAttributes = (
   zoneId: string,
   policy: ObservedPolicy,
-): PageShieldPolicyAttributes => ({
+): PolicyAttributes => ({
   policyId: policy.id,
   zoneId,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  action: policy.action as PageShieldPolicyAction,
+  action: policy.action as PolicyAction,
   description: policy.description,
   enabled: policy.enabled,
   expression: policy.expression,

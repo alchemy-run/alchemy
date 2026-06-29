@@ -61,7 +61,9 @@ test.provider(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.ShareResource);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ResourceSharing.ShareResource,
+      );
 
       // Reads (list) succeed without the Resource Sharing Edit permission, so
       // the read-only assertion always runs: list() fans out over every sent
@@ -86,7 +88,7 @@ test.provider(
       // deploy would fail with the typed `Forbidden` (HTTP 403, code 10000).
       if (recipientAccountId) {
         const policyA = yield* stack.deploy(
-          Cloudflare.GatewayRule("ListEntryPolicyA", {
+          Cloudflare.Gateway.Rule("ListEntryPolicyA", {
             action: "block",
             traffic: 'dns.fqdn == "list-entry-a.alchemy-test.example"',
             filters: ["dns"],
@@ -94,7 +96,7 @@ test.provider(
           }),
         );
         const policyB = yield* stack.deploy(
-          Cloudflare.GatewayRule("ListEntryPolicyB", {
+          Cloudflare.Gateway.Rule("ListEntryPolicyB", {
             action: "block",
             traffic: 'dns.fqdn == "list-entry-b.alchemy-test.example"',
             filters: ["dns"],
@@ -103,7 +105,7 @@ test.provider(
         );
 
         const share = yield* stack.deploy(
-          Cloudflare.Share("ListEntryShare", {
+          Cloudflare.ResourceSharing.Share("ListEntryShare", {
             name: "alchemy-list-entry-share",
             recipients: [{ accountId: recipientAccountId }],
             resources: [
@@ -113,7 +115,7 @@ test.provider(
         );
 
         const entry = yield* stack.deploy(
-          Cloudflare.ShareResource("ListEntry", {
+          Cloudflare.ResourceSharing.ShareResource("ListEntry", {
             shareId: share.shareId,
             resourceType: "gateway-policy",
             resourceId: policyB.ruleId,

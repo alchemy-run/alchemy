@@ -1,7 +1,6 @@
-import * as Binding from "@/Binding";
-import { Browser } from "@/Cloudflare/Browser/Browser.ts";
+import { Browser } from "@/Cloudflare/Workers/Browser.ts";
 import { Images } from "@/Cloudflare/Images/Images.ts";
-import { RateLimit } from "@/Cloudflare/RateLimit/RateLimit.ts";
+import { RateLimit } from "@/Cloudflare/Workers/RateLimit.ts";
 import { VersionMetadata } from "@/Cloudflare/Workers/VersionMetadata.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import { Resource } from "@/Resource";
@@ -60,17 +59,6 @@ describe("Effectable: migrated constructs are real Effects", () => {
   );
 
   test(
-    "Binding.Policy is an Effect",
-    Effect.gen(function* () {
-      const Policy = Binding.Policy<
-        any,
-        (resource: any) => Effect.Effect<void>
-      >()("Test.EffectablePolicy");
-      expect(Effect.isEffect(Policy)).toBe(true);
-    }),
-  );
-
-  test(
     "Platform/Worker construct is an Effect",
     Effect.gen(function* () {
       const w = Worker("EffectableProbeWorker", { main: "./unused.ts" });
@@ -85,13 +73,16 @@ describe("Effectable: deliberate non-Effect binding markers", () => {
   // resolver both branch on `Effect.isEffect`). They remain yield*-able via
   // `[Symbol.iterator]`. See the marker JSDoc for the rationale.
   const markers: Array<[name: string, marker: any]> = [
-    ["Images", Images({})],
+    ["Images", Images("IMAGES")],
     [
       "RateLimit",
-      RateLimit({ namespaceId: 1, simple: { limit: 1, period: 60 } }),
+      RateLimit("THROTTLE", {
+        namespaceId: 1,
+        simple: { limit: 1, period: 60 },
+      }),
     ],
-    ["Browser", Browser({})],
-    ["VersionMetadata", VersionMetadata({})],
+    ["Browser", Browser("BROWSER")],
+    ["VersionMetadata", VersionMetadata("CF_VERSION_METADATA")],
   ];
 
   for (const [name, marker] of markers) {

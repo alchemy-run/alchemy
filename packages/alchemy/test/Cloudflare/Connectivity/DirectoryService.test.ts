@@ -53,20 +53,23 @@ test.provider("tcp service lifecycle: create, update, host switch", (stack) =>
     // Create — tcp database service on a tunnel-backed IPv4 host.
     const { tunnel, service } = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        const service = yield* Cloudflare.DirectoryService("PgService", {
-          name: "alchemy-connectivity-dirsvc-tcp",
-          type: "tcp",
-          tcpPort: 5432,
-          appProtocol: "postgresql",
-          host: {
-            ipv4: "10.10.0.21",
-            network: { tunnelId: tunnel.tunnelId },
+        const service = yield* Cloudflare.Connectivity.DirectoryService(
+          "PgService",
+          {
+            name: "alchemy-connectivity-dirsvc-tcp",
+            type: "tcp",
+            tcpPort: 5432,
+            appProtocol: "postgresql",
+            host: {
+              ipv4: "10.10.0.21",
+              network: { tunnelId: tunnel.tunnelId },
+            },
           },
-        });
+        );
         return { tunnel, service };
       }),
     );
@@ -90,11 +93,11 @@ test.provider("tcp service lifecycle: create, update, host switch", (stack) =>
     // Update in place — new name and port, same serviceId.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("PgService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("PgService", {
           name: "alchemy-connectivity-dirsvc-tcp-v2",
           type: "tcp",
           tcpPort: 5433,
@@ -118,11 +121,11 @@ test.provider("tcp service lifecycle: create, update, host switch", (stack) =>
     // update, same serviceId. Keep the tunnel deployed across steps.
     const rehosted = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("PgService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("PgService", {
           name: "alchemy-connectivity-dirsvc-tcp-v2",
           type: "tcp",
           tcpPort: 5433,
@@ -144,11 +147,11 @@ test.provider("tcp service lifecycle: create, update, host switch", (stack) =>
     // Redeploying identical props is a no-op (same serviceId, no drift).
     const noop = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("PgService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("PgService", {
           name: "alchemy-connectivity-dirsvc-tcp-v2",
           type: "tcp",
           tcpPort: 5433,
@@ -178,11 +181,11 @@ test.provider("http service with explicit ports and default name", (stack) =>
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcHttpTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcHttpTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("HttpService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("HttpService", {
           type: "http",
           httpPort: 8080,
           httpsPort: 8443,
@@ -214,11 +217,11 @@ test.provider("http service with explicit ports and default name", (stack) =>
     // Update ports in place.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcHttpTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcHttpTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("HttpService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("HttpService", {
           type: "http",
           httpPort: 3000,
           httpsPort: 3001,
@@ -248,11 +251,11 @@ test.provider("list enumerates the deployed directory service", (stack) =>
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcListTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcListTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("ListService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("ListService", {
           name: "alchemy-connectivity-dirsvc-list",
           type: "tcp",
           tcpPort: 5432,
@@ -264,7 +267,9 @@ test.provider("list enumerates the deployed directory service", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.DirectoryService);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.Connectivity.DirectoryService,
+    );
     const all = yield* provider.list();
 
     expect(all.some((s) => s.serviceId === service.serviceId)).toBe(true);
@@ -285,11 +290,11 @@ test.provider("recreates after out-of-band delete", (stack) =>
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcHealTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcHealTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("HealService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("HealService", {
           name: "alchemy-connectivity-dirsvc-heal",
           type: "http",
           httpPort: 8080,
@@ -315,11 +320,11 @@ test.provider("recreates after out-of-band delete", (stack) =>
 
     const healed = yield* stack.deploy(
       Effect.gen(function* () {
-        const tunnel = yield* Cloudflare.Tunnel("DirSvcHealTunnel", {
+        const tunnel = yield* Cloudflare.Tunnel.Tunnel("DirSvcHealTunnel", {
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        return yield* Cloudflare.DirectoryService("HealService", {
+        return yield* Cloudflare.Connectivity.DirectoryService("HealService", {
           name: "alchemy-connectivity-dirsvc-heal",
           type: "http",
           httpPort: 9090,

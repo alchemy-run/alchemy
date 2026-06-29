@@ -118,11 +118,11 @@ The generator inside `Cloudflare.Worker` is the **Init phase**. It
 runs both at *plan time* (when Alchemy builds the deployment graph)
 and at *runtime* (when the Worker boots a fresh isolate). Anything
 you `yield*` here must be safe in both contexts — typically resource
-binding factories like `R2Bucket.bind(...)`, never per-request work.
+binding factories like `R2.ReadWriteBucket(...)`, never per-request work.
 
 ### 3a. Bind an R2 bucket for storage
 
-Tasks need to live somewhere durable. Declare an `R2Bucket` resource
+Tasks need to live somewhere durable. Declare an `Bucket` resource
 and bind it inside Init — `bind()` returns a typed handle whose
 `get` / `put` / `delete` / `list` methods we'll call from the
 handlers below.
@@ -131,7 +131,7 @@ handlers below.
 // src/bucket.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Tasks = Cloudflare.R2Bucket("Tasks");
+export const Tasks = Cloudflare.R2.Bucket("Tasks");
 ```
 
 ```typescript twoslash
@@ -467,7 +467,7 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { TaskDOApi, decodeTask, encodeTask } from "./api.ts";
 import { Task } from "./task.ts";
 
-export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
+export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

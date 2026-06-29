@@ -97,7 +97,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.IpsecTunnel);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.IpsecTunnel,
+      );
 
       if (!entitled) {
         // Unentitled accounts can't enumerate tunnels — list() swallows the
@@ -108,7 +110,7 @@ test.provider(
       }
 
       const tunnel = yield* stack.deploy(
-        Cloudflare.IpsecTunnel("ListIpsec", {
+        Cloudflare.MagicTransit.IpsecTunnel("ListIpsec", {
           name: "alch-ipsec-list1",
           cloudflareEndpoint: cfEndpoint,
           interfaceAddress: "10.213.12.10/31",
@@ -139,7 +141,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const tunnel = yield* stack.deploy(
-        Cloudflare.IpsecTunnel("Ipsec", {
+        Cloudflare.MagicTransit.IpsecTunnel("Ipsec", {
           name: "alch-ipsec-test1",
           cloudflareEndpoint: cfEndpoint,
           customerEndpoint: "198.51.100.20",
@@ -167,7 +169,7 @@ test.provider.skipIf(!entitled)(
 
       // Update mutable props in place — same tunnelId.
       const updated = yield* stack.deploy(
-        Cloudflare.IpsecTunnel("Ipsec", {
+        Cloudflare.MagicTransit.IpsecTunnel("Ipsec", {
           name: "alch-ipsec-test1",
           cloudflareEndpoint: cfEndpoint,
           customerEndpoint: "198.51.100.20",
@@ -184,7 +186,7 @@ test.provider.skipIf(!entitled)(
 
       // The tunnel name is unique routing identity — changing it replaces.
       const replaced = yield* stack.deploy(
-        Cloudflare.IpsecTunnel("Ipsec", {
+        Cloudflare.MagicTransit.IpsecTunnel("Ipsec", {
           name: "alch-ipsec-test2",
           cloudflareEndpoint: cfEndpoint,
           interfaceAddress: "10.213.11.10/31",

@@ -7,7 +7,7 @@ import ImagesEffectWorker from "./effect-worker.ts";
 export const AsyncWorker = Cloudflare.Worker("ImagesAsyncWorker", {
   main: pathe.resolve(import.meta.dirname, "async-worker.ts"),
   env: {
-    MEDIA: Cloudflare.Images({ name: "MEDIA" }),
+    MEDIA: Cloudflare.Images.Images("MEDIA"),
   },
 });
 

@@ -8,11 +8,11 @@ import { CounterRpcs } from "./group.ts";
 
 /**
  * Typed counter Durable Object built on
- * {@link Cloudflare.RpcDurableObjectNamespace}. Persists `count` in
+ * {@link Cloudflare.RpcDurableObject}. Persists `count` in
  * `state.storage` and serves `Increment` / `Get` / `CountUpTo` over
  * an `RpcServer.toHttpEffect(group)` on the DO's `fetch`.
  */
-export default class RpcCounterObject extends Cloudflare.RpcDurableObjectNamespace<RpcCounterObject>()(
+export default class RpcCounterObject extends Cloudflare.RpcDurableObject<RpcCounterObject>()(
   "RpcCounterObject",
   { schema: CounterRpcs },
   Effect.gen(function* () {

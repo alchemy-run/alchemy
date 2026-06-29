@@ -36,10 +36,13 @@ test.provider.skipIf(!magicTransit)(
       // Create.
       const filter = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TcpFlowProtectionFilter("Filter", {
-            expression: "tcp.dstport in {443}",
-            mode: "monitoring",
-          });
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionFilter(
+            "Filter",
+            {
+              expression: "tcp.dstport in {443}",
+              mode: "monitoring",
+            },
+          );
         }),
       );
       expect(filter.expression).toEqual("tcp.dstport in {443}");
@@ -56,10 +59,13 @@ test.provider.skipIf(!magicTransit)(
       // In-place update — expression and mode are patched, id is stable.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TcpFlowProtectionFilter("Filter", {
-            expression: "tcp.srcport in {179}",
-            mode: "enabled",
-          });
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionFilter(
+            "Filter",
+            {
+              expression: "tcp.srcport in {179}",
+              mode: "enabled",
+            },
+          );
         }),
       );
       expect(updated.filterId).toEqual(filter.filterId);
@@ -89,7 +95,7 @@ test.provider.skipIf(!magicTransit)(
 test.provider("list returns the account's TCP flow protection filters", () =>
   Effect.gen(function* () {
     const provider = yield* Provider.findProvider(
-      Cloudflare.TcpFlowProtectionFilter,
+      Cloudflare.DdosProtection.TcpFlowProtectionFilter,
     );
     const all = yield* provider.list();
     expect(Array.isArray(all)).toBe(true);
@@ -109,15 +115,18 @@ test.provider.skipIf(!magicTransit)(
 
       const filter = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TcpFlowProtectionFilter("ListFilter", {
-            expression: "tcp.dstport in {8443}",
-            mode: "monitoring",
-          });
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionFilter(
+            "ListFilter",
+            {
+              expression: "tcp.dstport in {8443}",
+              mode: "monitoring",
+            },
+          );
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TcpFlowProtectionFilter,
+        Cloudflare.DdosProtection.TcpFlowProtectionFilter,
       );
       const all = yield* provider.list();
       expect(all.some((f) => f.filterId === filter.filterId)).toBe(true);

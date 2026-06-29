@@ -14,7 +14,7 @@ export class RemoteContainer extends Cloudflare.Container<RemoteContainer>()(
  * Durable Object that binds and starts the {@link RemoteContainer} and
  * proxies an HTTP request to the echo server running on port 8080 inside it.
  */
-export class RemoteContainerObject extends Cloudflare.DurableObjectNamespace<RemoteContainerObject>()(
+export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContainerObject>()(
   "RemoteContainerObject",
   Effect.gen(function* () {
     const container = yield* RemoteContainer;
@@ -34,7 +34,7 @@ export class RemoteContainerObject extends Cloudflare.DurableObjectNamespace<Rem
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(RemoteContainer, {
+      Cloudflare.Containers.layer(RemoteContainer, {
         enableInternet: true,
       }),
     ),

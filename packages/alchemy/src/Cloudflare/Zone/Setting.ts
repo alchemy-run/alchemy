@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "./lookup.ts";
 
-const ZoneSettingTypeId = "Cloudflare.Zone.Setting" as const;
-type ZoneSettingTypeId = typeof ZoneSettingTypeId;
+const TypeId = "Cloudflare.Zone.Setting" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Identifier of a Cloudflare zone setting — every value Cloudflare
@@ -17,7 +17,7 @@ type ZoneSettingTypeId = typeof ZoneSettingTypeId;
  * `(string & {})` tail keeps the type forward-compatible with settings
  * Cloudflare adds later.
  */
-export type ZoneSettingId =
+export type SettingId =
   | "0rtt"
   | "advanced_ddos"
   | "aegis"
@@ -83,7 +83,7 @@ export type ZoneSettingId =
   | (string & {});
 
 /**
- * The concrete, enumerable members of {@link ZoneSettingId}. Cloudflare has no
+ * The concrete, enumerable members of {@link SettingId}. Cloudflare has no
  * "list all settings" operation in the distilled `zones` service (only a
  * per-setting `getSetting`), so `list()` fans out a `getSetting` over this
  * known set on every zone. Forward-compatible settings (the `(string & {})`
@@ -152,9 +152,9 @@ const KNOWN_ZONE_SETTING_IDS = [
   "waf",
   "webp",
   "websockets",
-] as const satisfies readonly ZoneSettingId[];
+] as const satisfies readonly SettingId[];
 
-export type ZoneSettingProps = {
+export type SettingProps = {
   /**
    * Zone the setting belongs to. Stable — changing the zone triggers a
    * replacement (the old zone's setting is restored to the value it had
@@ -166,10 +166,10 @@ export type ZoneSettingProps = {
    * `browser_cache_ttl`, `min_tls_version`). Stable — the setting id is
    * the resource's identity, so changing it triggers a replacement.
    *
-   * Declared as plain `string` (narrowed to {@link ZoneSettingId}) so
+   * Declared as plain `string` (narrowed to {@link SettingId}) so
    * `diff` can compare without resolving an `Input`.
    */
-  settingId: ZoneSettingId;
+  settingId: SettingId;
   /**
    * Desired value of the setting. The shape depends on `settingId` —
    * on/off toggles take `"on"`/`"off"`, `browser_cache_ttl` takes a
@@ -181,7 +181,7 @@ export type ZoneSettingProps = {
   value: unknown;
 };
 
-export type ZoneSettingAttributes = {
+export type SettingAttributes = {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** The managed setting's identifier. */
@@ -203,10 +203,10 @@ export type ZoneSettingAttributes = {
   initialValue: unknown;
 };
 
-export type ZoneSetting = Resource<
-  ZoneSettingTypeId,
-  ZoneSettingProps,
-  ZoneSettingAttributes,
+export type Setting = Resource<
+  TypeId,
+  SettingProps,
+  SettingAttributes,
   never,
   Providers
 >;
@@ -231,7 +231,7 @@ export type ZoneSetting = Resource<
  * @section Toggle settings
  * @example Force HTTPS on the whole zone
  * ```typescript
- * yield* Cloudflare.ZoneSetting("AlwaysUseHttps", {
+ * yield* Cloudflare.Zone.Setting("AlwaysUseHttps", {
  *   zoneId: zone.zoneId,
  *   settingId: "always_use_https",
  *   value: "on",
@@ -240,7 +240,7 @@ export type ZoneSetting = Resource<
  *
  * @example Disable Always Online
  * ```typescript
- * yield* Cloudflare.ZoneSetting("AlwaysOnline", {
+ * yield* Cloudflare.Zone.Setting("AlwaysOnline", {
  *   zoneId: zone.zoneId,
  *   settingId: "always_online",
  *   value: "off",
@@ -250,7 +250,7 @@ export type ZoneSetting = Resource<
  * @section Numeric settings
  * @example Browser cache TTL of one hour
  * ```typescript
- * yield* Cloudflare.ZoneSetting("BrowserCacheTtl", {
+ * yield* Cloudflare.Zone.Setting("BrowserCacheTtl", {
  *   zoneId: zone.zoneId,
  *   settingId: "browser_cache_ttl",
  *   value: 3600,
@@ -260,7 +260,7 @@ export type ZoneSetting = Resource<
  * @section TLS settings
  * @example Require at least TLS 1.2
  * ```typescript
- * yield* Cloudflare.ZoneSetting("MinTls", {
+ * yield* Cloudflare.Zone.Setting("MinTls", {
  *   zoneId: zone.zoneId,
  *   settingId: "min_tls_version",
  *   value: "1.2",
@@ -269,21 +269,21 @@ export type ZoneSetting = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/zones/subresources/settings/
  */
-export const ZoneSetting = Resource<ZoneSetting>(ZoneSettingTypeId);
+export const Setting = Resource<Setting>(TypeId);
 
 /**
- * Returns true if the given value is a ZoneSetting resource.
+ * Returns true if the given value is a Setting resource.
  */
-export const isZoneSetting = (value: unknown): value is ZoneSetting =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneSettingTypeId;
+export const isSetting = (value: unknown): value is Setting =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const ZoneSettingProvider = () =>
-  Provider.succeed(ZoneSetting, {
+export const SettingProvider = () =>
+  Provider.succeed(Setting, {
     stables: ["zoneId", "settingId", "initialValue"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as ZoneSettingProps;
-      const n = news as ZoneSettingProps;
+      const o = olds as SettingProps;
+      const n = news as SettingProps;
       // settingId is the resource's identity.
       const oldSettingId = output?.settingId ?? o.settingId;
       if (oldSettingId !== undefined && oldSettingId !== n.settingId) {
@@ -399,7 +399,7 @@ export const ZoneSettingProvider = () =>
             // Zone removed out-of-band or the setting is plan-gated / not
             // exposed to this token — skip it rather than fail the listing.
             Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
-              Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
+              Effect.succeed<SettingAttributes | undefined>(undefined),
             ),
             // A handful of structured settings (e.g.
             // `automatic_platform_optimization`) can return a scalar value
@@ -411,14 +411,12 @@ export const ZoneSettingProvider = () =>
             // whole listing. See the agent report's neededPatch (widen the
             // `GetSettingResponse` member to accept the scalar form).
             Effect.catch(() =>
-              Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
+              Effect.succeed<SettingAttributes | undefined>(undefined),
             ),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ZoneSettingAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SettingAttributes => row !== undefined);
     }),
   });
 
@@ -436,7 +434,7 @@ const toAttributes = (
   settingId: string,
   setting: zones.GetSettingResponse | zones.PatchSettingResponse,
   initialValue: unknown,
-): ZoneSettingAttributes => {
+): SettingAttributes => {
   const s = setting as {
     value?: unknown;
     editable?: boolean | null;

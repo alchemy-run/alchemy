@@ -12,11 +12,11 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { findZoneByName } from "./lookup.ts";
 
-export type ZoneType = "full" | "partial" | "secondary" | "internal";
-export type ZoneStatus = "initializing" | "pending" | "active" | "moved";
+export type Type = "full" | "partial" | "secondary" | "internal";
+export type Status = "initializing" | "pending" | "active" | "moved";
 
 /** Metadata about the zone (Cloudflare `meta`). */
-export type ZoneMeta = {
+export type Meta = {
   /** @deprecated Always `false`. */
   cdnOnly: boolean | undefined;
   /** Number of allowed custom certificates. */
@@ -34,7 +34,7 @@ export type ZoneMeta = {
 };
 
 /** The owner of the zone (Cloudflare `owner`). */
-export type ZoneOwner = {
+export type Owner = {
   /** Owner identifier. */
   id: string | undefined;
   /** Owner name. */
@@ -44,7 +44,7 @@ export type ZoneOwner = {
 };
 
 /** An organizational unit (tenant) the zone belongs to. */
-export type ZoneTenant = {
+export type Tenant = {
   /** Tenant identifier. */
   id: string | undefined;
   /** Tenant name. */
@@ -52,7 +52,7 @@ export type ZoneTenant = {
 };
 
 /** The immediate parent organizational unit of the zone. */
-export type ZoneTenantUnit = {
+export type TenantUnit = {
   /** Tenant unit identifier. */
   id: string | undefined;
 };
@@ -65,7 +65,7 @@ export type ZoneTenantUnit = {
  * flattened identifiers (Cloudflare exposes these as `id` and `account.id`);
  * every other field keeps Cloudflare's own (camelCased) name.
  */
-export type ZoneAttributes = {
+export type Attributes = {
   /** Zone identifier (Cloudflare `id`). Stable across updates. */
   zoneId: string;
   /** The fully-qualified domain name (e.g. `example.com`). */
@@ -78,9 +78,9 @@ export type ZoneAttributes = {
    * Zone type. A full zone hosts its DNS at Cloudflare; a partial zone is a
    * partner/CNAME setup.
    */
-  type: ZoneType;
+  type: Type;
   /** The zone status on Cloudflare. */
-  status: ZoneStatus | undefined;
+  status: Status | undefined;
   /**
    * Whether the zone is DNS-only (Cloudflare's proxy/security features
    * disabled).
@@ -112,16 +112,16 @@ export type ZoneAttributes = {
   /** Verification key for partial zone setup. */
   verificationKey: string | undefined;
   /** Metadata about the zone. */
-  meta: ZoneMeta;
+  meta: Meta;
   /** The owner of the zone. */
-  owner: ZoneOwner;
+  owner: Owner;
   /** The root organizational unit (tenant) the zone belongs to. */
-  tenant: ZoneTenant | undefined;
+  tenant: Tenant | undefined;
   /** The immediate parent organizational unit of the zone. */
-  tenantUnit: ZoneTenantUnit | undefined;
+  tenantUnit: TenantUnit | undefined;
 };
 
-export type ZoneProps = {
+export type Props = {
   /**
    * The fully-qualified zone name (e.g. `example.com`). Stable — changing it
    * triggers a replacement.
@@ -132,7 +132,7 @@ export type ZoneProps = {
    * partner/CNAME setups.
    * @default "full"
    */
-  type?: ZoneType;
+  type?: Type;
   /**
    * Pause Cloudflare's proxy on the zone (DNS-only).
    * @default false
@@ -145,9 +145,9 @@ export type ZoneProps = {
 };
 
 export type Zone = Resource<
-  "Cloudflare.Zone",
-  ZoneProps,
-  ZoneAttributes,
+  "Cloudflare.Zone.Zone",
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -165,7 +165,7 @@ export type Zone = Resource<
  * @section Creating a Zone
  * @example Create a new zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("MyZone", {
+ * const zone = yield* Cloudflare.Zone.Zone("MyZone", {
  *   name: "example.com",
  * });
  * ```
@@ -173,7 +173,7 @@ export type Zone = Resource<
  * @example Allow destruction
  * ```typescript
  * import { destroy } from "alchemy/RemovalPolicy";
- * yield* Cloudflare.Zone("MyZone", { name: "example.com" }).pipe(destroy());
+ * yield* Cloudflare.Zone.Zone("MyZone", { name: "example.com" }).pipe(destroy());
  * ```
  *
  * @section Adopting an existing Zone
@@ -182,13 +182,13 @@ export type Zone = Resource<
  * import { adopt } from "alchemy/AdoptPolicy";
  * // A zone carries no ownership markers, so the engine refuses to take over a
  * // pre-existing zone unless you opt in with `adopt(true)`.
- * const zone = yield* Cloudflare.Zone("MyZone", {
+ * const zone = yield* Cloudflare.Zone.Zone("MyZone", {
  *   name: "example.com",
  * }).pipe(adopt(true));
  * // zone.zoneId, zone.nameServers, zone.accountId, ...
  * ```
  */
-export const Zone = Resource<Zone>("Cloudflare.Zone", {
+export const Zone = Resource<Zone>("Cloudflare.Zone.Zone", {
   defaultRemovalPolicy: "retain",
 });
 
@@ -341,21 +341,19 @@ export const ZoneProvider = () =>
                 ),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is ZoneAttributes => row !== undefined,
-            );
+            return rows.filter((row): row is Attributes => row !== undefined);
           }),
       };
     }),
   );
 
-/** @internal — shape a distilled zones API result into `ZoneAttributes`. */
+/** @internal — shape a distilled zones API result into `Attributes`. */
 export const toZoneAttributes = (
   result: zones.GetZoneResponse,
   fallbackAccountId: string,
-): ZoneAttributes => {
+): Attributes => {
   // Cloudflare returns `null` for absent fields; drop them so every optional
-  // attribute is simply `undefined` (matching `ZoneAttributes`).
+  // attribute is simply `undefined` (matching `Attributes`).
   const z = stripNullFields(result);
   return {
     zoneId: z.id,
@@ -380,7 +378,7 @@ export const toZoneAttributes = (
     owner: z.owner,
     tenant: z.tenant,
     tenantUnit: z.tenantUnit,
-  } as ZoneAttributes;
+  } as Attributes;
 };
 
 const stringArrayEq = Array.makeEquivalence(Equivalence.String);

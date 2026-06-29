@@ -83,10 +83,10 @@ test.provider(
       // Create — meeting lifecycle events to a fixed URL.
       const v1 = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
+          return yield* Cloudflare.RealtimeKit.Webhook("Webhook", {
             appId: app.appId,
             name: LIFECYCLE_WEBHOOK_NAME,
             url: LIFECYCLE_WEBHOOK_URL,
@@ -114,10 +114,10 @@ test.provider(
       // webhook (no replacement).
       const v2 = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
+          return yield* Cloudflare.RealtimeKit.Webhook("Webhook", {
             appId: app.appId,
             name: LIFECYCLE_WEBHOOK_NAME,
             url: LIFECYCLE_WEBHOOK_URL,
@@ -138,10 +138,10 @@ test.provider(
       // Idempotent re-deploy — reconcile must detect the no-op.
       const v3 = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
+          return yield* Cloudflare.RealtimeKit.Webhook("Webhook", {
             appId: app.appId,
             name: LIFECYCLE_WEBHOOK_NAME,
             url: LIFECYCLE_WEBHOOK_URL,
@@ -171,7 +171,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.RealtimeKitWebhook,
+        Cloudflare.RealtimeKit.Webhook,
       );
 
       const entitled = yield* probeEntitlement;
@@ -187,10 +187,10 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.RealtimeKitApp("App", {
+          const app = yield* Cloudflare.RealtimeKit.App("App", {
             name: APP_NAME,
           });
-          return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
+          return yield* Cloudflare.RealtimeKit.Webhook("Webhook", {
             appId: app.appId,
             name: LIST_WEBHOOK_NAME,
             url: LIST_WEBHOOK_URL,

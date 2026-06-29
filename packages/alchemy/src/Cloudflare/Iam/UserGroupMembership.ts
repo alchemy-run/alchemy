@@ -10,11 +10,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IamUserGroupMembershipTypeId =
-  "Cloudflare.Iam.UserGroupMembership" as const;
-type IamUserGroupMembershipTypeId = typeof IamUserGroupMembershipTypeId;
+const TypeId = "Cloudflare.Iam.UserGroupMembership" as const;
+type TypeId = typeof TypeId;
 
-export interface IamUserGroupMembershipProps {
+export interface UserGroupMembershipProps {
   /**
    * ID of the user group to add the member to — e.g.
    * `userGroup.userGroupId`. Immutable — changing it triggers a
@@ -29,7 +28,7 @@ export interface IamUserGroupMembershipProps {
   memberId: string;
 }
 
-export interface IamUserGroupMembershipAttributes {
+export interface UserGroupMembershipAttributes {
   /** ID of the user group the member belongs to. */
   userGroupId: string;
   /** Account member ID of the member. */
@@ -42,10 +41,10 @@ export interface IamUserGroupMembershipAttributes {
   status: string | undefined;
 }
 
-export type IamUserGroupMembership = Resource<
-  IamUserGroupMembershipTypeId,
-  IamUserGroupMembershipProps,
-  IamUserGroupMembershipAttributes,
+export type UserGroupMembership = Resource<
+  TypeId,
+  UserGroupMembershipProps,
+  UserGroupMembershipAttributes,
   never,
   Providers
 >;
@@ -67,9 +66,9 @@ export type IamUserGroupMembership = Resource<
  * @section Adding a Member
  * @example Add an account member to a user group
  * ```typescript
- * const group = yield* Cloudflare.IamUserGroup("Operators", {});
+ * const group = yield* Cloudflare.Iam.UserGroup("Operators", {});
  *
- * yield* Cloudflare.IamUserGroupMembership("SamInOperators", {
+ * yield* Cloudflare.Iam.UserGroupMembership("SamInOperators", {
  *   userGroup: group.userGroupId,
  *   memberId: "b67b4c279ea0177a0ddff0a2ef64b11b",
  * });
@@ -77,21 +76,18 @@ export type IamUserGroupMembership = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/user-groups/
  */
-export const IamUserGroupMembership = Resource<IamUserGroupMembership>(
-  IamUserGroupMembershipTypeId,
-);
+export const UserGroupMembership = Resource<UserGroupMembership>(TypeId);
 
 /**
- * Returns true if the given value is an IamUserGroupMembership resource.
+ * Returns true if the given value is an UserGroupMembership resource.
  */
-export const isIamUserGroupMembership = (
+export const isUserGroupMembership = (
   value: unknown,
-): value is IamUserGroupMembership =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === IamUserGroupMembershipTypeId;
+): value is UserGroupMembership =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const IamUserGroupMembershipProvider = () =>
-  Provider.succeed(IamUserGroupMembership, {
+export const UserGroupMembershipProvider = () =>
+  Provider.succeed(UserGroupMembership, {
     stables: ["userGroupId", "memberId", "accountId"],
 
     // Parent fan-out: memberships are keyed by (user group, member) and
@@ -116,7 +112,7 @@ export const IamUserGroupMembershipProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.result ?? []).map(
-                    (member): IamUserGroupMembershipAttributes =>
+                    (member): UserGroupMembershipAttributes =>
                       toAttributes(member, group.id, accountId),
                   ),
                 ),
@@ -124,14 +120,14 @@ export const IamUserGroupMembershipProvider = () =>
               // Group removed out-of-band between enumeration and member
               // listing — skip it.
               Effect.catchTag("UserGroupNotFound", () =>
-                Effect.succeed([] as IamUserGroupMembershipAttributes[]),
+                Effect.succeed([] as UserGroupMembershipAttributes[]),
               ),
               // A group whose policy Cloudflare can't validate rejects the
               // member listing with a 400 ("Policy validation failed"). It's
               // not ours to enumerate — contribute nothing rather than failing
               // the whole account-wide listing.
               Effect.catchTag("PolicyValidationFailed", () =>
-                Effect.succeed([] as IamUserGroupMembershipAttributes[]),
+                Effect.succeed([] as UserGroupMembershipAttributes[]),
               ),
             ),
         { concurrency: 10 },
@@ -180,7 +176,7 @@ export const IamUserGroupMembershipProvider = () =>
       return observed ? toAttributes(observed, userGroupId, acct) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const userGroupId = news.userGroup as string;
@@ -281,7 +277,7 @@ const toAttributes = (
   member: ObservedMember,
   userGroupId: string,
   accountId: string,
-): IamUserGroupMembershipAttributes => ({
+): UserGroupMembershipAttributes => ({
   userGroupId,
   memberId: member.id,
   accountId,

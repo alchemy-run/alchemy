@@ -9,8 +9,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccountTypeId = "Cloudflare.Account" as const;
-type AccountTypeId = typeof AccountTypeId;
+const TypeId = "Cloudflare.Account.Account" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The kind of Cloudflare account. Cannot be changed after creation.
@@ -95,7 +95,7 @@ export interface AccountAttributes {
 }
 
 export type Account = Resource<
-  AccountTypeId,
+  TypeId,
   AccountProps,
   AccountAttributes,
   never,
@@ -122,12 +122,12 @@ export type Account = Resource<
  * @section Creating an account
  * @example Standard subaccount with a generated name
  * ```typescript
- * const account = yield* Cloudflare.Account("CustomerAccount", {});
+ * const account = yield* Cloudflare.Account.Account("CustomerAccount", {});
  * ```
  *
  * @example Subaccount on a specific tenant unit
  * ```typescript
- * const account = yield* Cloudflare.Account("CustomerAccount", {
+ * const account = yield* Cloudflare.Account.Account("CustomerAccount", {
  *   name: "Customer: ACME Inc",
  *   unit: { id: tenantUnitId },
  * });
@@ -136,7 +136,7 @@ export type Account = Resource<
  * @section Account settings
  * @example Enforce two-factor authentication for all members
  * ```typescript
- * const account = yield* Cloudflare.Account("CustomerAccount", {
+ * const account = yield* Cloudflare.Account.Account("CustomerAccount", {
  *   name: "Customer: ACME Inc",
  *   enforceTwofactor: true,
  *   abuseContactEmail: "abuse@acme.example",
@@ -145,13 +145,13 @@ export type Account = Resource<
  *
  * @see https://developers.cloudflare.com/tenant/how-to/manage-accounts/
  */
-export const Account = Resource<Account>(AccountTypeId);
+export const Account = Resource<Account>(TypeId);
 
 /**
  * Returns true if the given value is an Account resource.
  */
 export const isAccount = (value: unknown): value is Account =>
-  Predicate.hasProperty(value, "Type") && value.Type === AccountTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountProvider = () =>
   Provider.succeed(Account, {
@@ -257,10 +257,6 @@ export const AccountProvider = () =>
         .pipe(Effect.catchTag("InvalidRoute", () => Effect.void));
     }),
   });
-
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
 
 type ObservedAccount =
   | accounts.GetAccountResponse

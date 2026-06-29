@@ -8,9 +8,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IndicatorFeedPermissionTypeId =
-  "Cloudflare.Intel.IndicatorFeedPermission" as const;
-type IndicatorFeedPermissionTypeId = typeof IndicatorFeedPermissionTypeId;
+const TypeId = "Cloudflare.Intel.IndicatorFeedPermission" as const;
+type TypeId = typeof TypeId;
 
 export interface IndicatorFeedPermissionProps {
   /**
@@ -35,7 +34,7 @@ export interface IndicatorFeedPermissionAttributes {
 }
 
 export type IndicatorFeedPermission = Resource<
-  IndicatorFeedPermissionTypeId,
+  TypeId,
   IndicatorFeedPermissionProps,
   IndicatorFeedPermissionAttributes,
   never,
@@ -60,11 +59,11 @@ export type IndicatorFeedPermission = Resource<
  * @section Granting Access
  * @example Grant a consumer account access to a feed
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("threat-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
  * });
  *
- * yield* Cloudflare.IndicatorFeedPermission("partner-access", {
+ * yield* Cloudflare.Intel.IndicatorFeedPermission("partner-access", {
  *   feedId: feed.feedId,
  *   accountTag: "023e105f4ecef8ad9ca31a8372d0c353",
  * });
@@ -72,9 +71,8 @@ export type IndicatorFeedPermission = Resource<
  *
  * @see https://developers.cloudflare.com/security-center/indicator-feeds/
  */
-export const IndicatorFeedPermission = Resource<IndicatorFeedPermission>(
-  IndicatorFeedPermissionTypeId,
-);
+export const IndicatorFeedPermission =
+  Resource<IndicatorFeedPermission>(TypeId);
 
 /**
  * Returns true if the given value is an IndicatorFeedPermission resource.
@@ -82,8 +80,7 @@ export const IndicatorFeedPermission = Resource<IndicatorFeedPermission>(
 export const isIndicatorFeedPermission = (
   value: unknown,
 ): value is IndicatorFeedPermission =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === IndicatorFeedPermissionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IndicatorFeedPermissionProvider = () =>
   Provider.succeed(IndicatorFeedPermission, {

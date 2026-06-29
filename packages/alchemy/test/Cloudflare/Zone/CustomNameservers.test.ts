@@ -67,7 +67,7 @@ test.provider(
 
       const customNs = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneCustomNameservers("CustomNs", {
+          return yield* Cloudflare.Zone.CustomNameservers("CustomNs", {
             zoneId,
             enabled: false,
           });
@@ -87,7 +87,7 @@ test.provider(
       // and applies nothing.
       const steady = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneCustomNameservers("CustomNs", {
+          return yield* Cloudflare.Zone.CustomNameservers("CustomNs", {
             zoneId,
             enabled: false,
           });
@@ -144,7 +144,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ZoneCustomNameservers,
+        Cloudflare.Zone.CustomNameservers,
       );
       const all = yield* provider.list();
 
@@ -178,7 +178,7 @@ test.provider.skipIf(!acnsZoneId)(
 
       const enabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneCustomNameservers("AcnsList", {
+          return yield* Cloudflare.Zone.CustomNameservers("AcnsList", {
             zoneId,
             enabled: true,
           });
@@ -187,7 +187,7 @@ test.provider.skipIf(!acnsZoneId)(
       expect(enabled.enabled).toEqual(true);
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ZoneCustomNameservers,
+        Cloudflare.Zone.CustomNameservers,
       );
       const all = yield* provider.list();
       expect(all.some((x) => x.zoneId === zoneId && x.enabled)).toBe(true);
@@ -206,7 +206,7 @@ test.provider.skipIf(!acnsZoneId)(
 
       const enabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneCustomNameservers("AcnsToggle", {
+          return yield* Cloudflare.Zone.CustomNameservers("AcnsToggle", {
             zoneId,
             enabled: true,
           });

@@ -10,10 +10,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { RulesetOutputRule, RulesetPhase } from "./Ruleset.ts";
+import type { OutputRule, Phase } from "./Ruleset.ts";
 
-const CustomRulesetTypeId = "Cloudflare.Rulesets.CustomRuleset" as const;
-type CustomRulesetTypeId = typeof CustomRulesetTypeId;
+const TypeId = "Cloudflare.Rulesets.CustomRuleset" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Kind of a standalone account-level ruleset. `custom` rulesets are deployed
@@ -46,7 +46,7 @@ export type CustomRulesetProps = {
    * The phase the ruleset belongs to (e.g. `http_request_firewall_custom`).
    * Changing the phase triggers a replacement.
    */
-  phase: RulesetPhase;
+  phase: Phase;
   /**
    * The full list of rules in the ruleset. This resource owns every rule —
    * rules added out-of-band are overwritten on the next deploy.
@@ -71,11 +71,11 @@ export type CustomRulesetAttributes = {
   /** The human-readable name of the ruleset. */
   name: string;
   /** The phase of the ruleset. */
-  phase: RulesetPhase;
+  phase: Phase;
   /** An informative description of the ruleset. */
   description: string | undefined;
   /** The list of rules in the ruleset. */
-  rules: RulesetOutputRule[];
+  rules: OutputRule[];
   /** The timestamp of when the ruleset was last modified. */
   lastUpdated: string;
   /** The version of the ruleset. */
@@ -83,7 +83,7 @@ export type CustomRulesetAttributes = {
 };
 
 export type CustomRuleset = Resource<
-  CustomRulesetTypeId,
+  TypeId,
   CustomRulesetProps,
   CustomRulesetAttributes,
   never,
@@ -96,11 +96,11 @@ export type CustomRuleset = Resource<
  * Custom rulesets are the Enterprise WAF deployment workflow: define a
  * reusable ruleset once at the account level, then deploy it across zones
  * with an `execute` rule in a phase entrypoint (see
- * `Cloudflare.RulesetAccountEntrypoint`). Account-level WAF phases require
+ * `Cloudflare.Ruleset.AccountEntrypoint`). Account-level WAF phases require
  * an Enterprise plan — on lower plans, creation fails with the typed
  * `PhaseNotEntitled` error.
  *
- * For zone-level rules, use `Cloudflare.Ruleset` (the zone phase
+ * For zone-level rules, use `Cloudflare.Ruleset.Ruleset` (the zone phase
  * entrypoint) instead.
  * @resource
  * @product Rulesets
@@ -108,7 +108,7 @@ export type CustomRuleset = Resource<
  * @section Custom Rulesets
  * @example Define an account custom WAF ruleset
  * ```typescript
- * const ruleset = yield* Cloudflare.CustomRuleset("SharedWafRules", {
+ * const ruleset = yield* Cloudflare.Ruleset.CustomRuleset("SharedWafRules", {
  *   phase: "http_request_firewall_custom",
  *   description: "Org-wide exploit probes",
  *   rules: [
@@ -123,7 +123,7 @@ export type CustomRuleset = Resource<
  *
  * @example Deploy the custom ruleset via the account entrypoint
  * ```typescript
- * yield* Cloudflare.RulesetAccountEntrypoint("WafDeployment", {
+ * yield* Cloudflare.Ruleset.AccountEntrypoint("WafDeployment", {
  *   phase: "http_request_firewall_custom",
  *   rules: [
  *     {
@@ -138,13 +138,13 @@ export type CustomRuleset = Resource<
  *
  * @see https://developers.cloudflare.com/waf/account/custom-rulesets/
  */
-export const CustomRuleset = Resource<CustomRuleset>(CustomRulesetTypeId);
+export const CustomRuleset = Resource<CustomRuleset>(TypeId);
 
 /**
  * Returns true if the given value is a CustomRuleset resource.
  */
 export const isCustomRuleset = (value: unknown): value is CustomRuleset =>
-  Predicate.hasProperty(value, "Type") && value.Type === CustomRulesetTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomRulesetProvider = () =>
   Provider.succeed(CustomRuleset, {
@@ -346,7 +346,7 @@ const toCustomRulesetAttributes = (
  * Strip server-assigned per-rule fields so observed rules can be compared
  * structurally against the desired props.
  */
-const normalizeObservedRules = (rules: RulesetOutputRule[]) =>
+const normalizeObservedRules = (rules: OutputRule[]) =>
   rules.map(({ id: _id, ...rule }) => rule);
 
 const normalizeDesiredRules = (rules: CustomRulesetRule[]) =>

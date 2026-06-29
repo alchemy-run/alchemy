@@ -12,9 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ObservabilityDestinationTypeId =
-  "Cloudflare.Workers.ObservabilityDestination" as const;
-type ObservabilityDestinationTypeId = typeof ObservabilityDestinationTypeId;
+const TypeId = "Cloudflare.Workers.ObservabilityDestination" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The Workers Logs dataset exported by an observability destination.
@@ -108,7 +107,7 @@ export interface ObservabilityDestinationAttributes {
 }
 
 export type ObservabilityDestination = Resource<
-  ObservabilityDestinationTypeId,
+  TypeId,
   ObservabilityDestinationProps,
   ObservabilityDestinationAttributes,
   never,
@@ -140,7 +139,7 @@ export type ObservabilityDestination = Resource<
  * @section Exporting Workers traces
  * @example Push traces to an OTLP collector
  * ```typescript
- * const traces = yield* Cloudflare.ObservabilityDestination("Traces", {
+ * const traces = yield* Cloudflare.Workers.ObservabilityDestination("Traces", {
  *   url: "https://otel.example.com/v1/traces",
  *   headers: { authorization: secret },
  *   logpushDataset: "opentelemetry-traces",
@@ -150,7 +149,7 @@ export type ObservabilityDestination = Resource<
  * @section Exporting Workers logs
  * @example Push logs, skipping the create-time preflight
  * ```typescript
- * const logs = yield* Cloudflare.ObservabilityDestination("Logs", {
+ * const logs = yield* Cloudflare.Workers.ObservabilityDestination("Logs", {
  *   name: "my-app-logs",
  *   url: "https://collector.example.com/v1/logs",
  *   logpushDataset: "opentelemetry-logs",
@@ -161,7 +160,7 @@ export type ObservabilityDestination = Resource<
  * @section Pausing an export
  * @example Disable the destination without deleting it
  * ```typescript
- * yield* Cloudflare.ObservabilityDestination("Logs", {
+ * yield* Cloudflare.Workers.ObservabilityDestination("Logs", {
  *   name: "my-app-logs",
  *   url: "https://collector.example.com/v1/logs",
  *   logpushDataset: "opentelemetry-logs",
@@ -169,9 +168,8 @@ export type ObservabilityDestination = Resource<
  * });
  * ```
  */
-export const ObservabilityDestination = Resource<ObservabilityDestination>(
-  ObservabilityDestinationTypeId,
-);
+export const ObservabilityDestination =
+  Resource<ObservabilityDestination>(TypeId);
 
 /**
  * Returns true if the given value is an ObservabilityDestination resource.
@@ -179,8 +177,7 @@ export const ObservabilityDestination = Resource<ObservabilityDestination>(
 export const isObservabilityDestination = (
   value: unknown,
 ): value is ObservabilityDestination =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ObservabilityDestinationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ObservabilityDestinationProvider = () =>
   Provider.succeed(ObservabilityDestination, {

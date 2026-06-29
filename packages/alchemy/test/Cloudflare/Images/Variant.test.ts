@@ -85,7 +85,7 @@ test.provider(
       // These tests use fixed names and always run the same way, so take over
       // any such leftover rather than failing with `OwnedBySomeoneElse`.
       const created = yield* stack.deploy(
-        Cloudflare.ImagesVariant("alchemytestvariant", {
+        Cloudflare.Images.Variant("alchemytestvariant", {
           fit: "cover",
           width: 100,
           height: 100,
@@ -116,7 +116,7 @@ test.provider(
 
       // Update mutable options in place — same variant name, PATCHed options.
       const updated = yield* stack.deploy(
-        Cloudflare.ImagesVariant("alchemytestvariant", {
+        Cloudflare.Images.Variant("alchemytestvariant", {
           fit: "contain",
           width: 200,
           height: 100,
@@ -148,7 +148,7 @@ test.provider(
 
       // No-op redeploy — identical props, still the same variant.
       const noop = yield* stack.deploy(
-        Cloudflare.ImagesVariant("alchemytestvariant", {
+        Cloudflare.Images.Variant("alchemytestvariant", {
           fit: "contain",
           width: 200,
           height: 100,
@@ -180,7 +180,7 @@ test.provider(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.ImagesVariant("ReplaceVariant", {
+        Cloudflare.Images.Variant("ReplaceVariant", {
           name: "alchemyreplacea",
           fit: "cover",
           width: 64,
@@ -191,7 +191,7 @@ test.provider(
 
       // Renaming the variant replaces it — the name is the API path id.
       const replaced = yield* stack.deploy(
-        Cloudflare.ImagesVariant("ReplaceVariant", {
+        Cloudflare.Images.Variant("ReplaceVariant", {
           name: "alchemyreplaceb",
           fit: "cover",
           width: 64,
@@ -234,14 +234,14 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_IMAGES_LIST)(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.ImagesVariant("alchemytestlistvariant", {
+        Cloudflare.Images.Variant("alchemytestlistvariant", {
           fit: "cover",
           width: 120,
           height: 120,
         }).pipe(adopt(true)),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.ImagesVariant);
+      const provider = yield* Provider.findProvider(Cloudflare.Images.Variant);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);

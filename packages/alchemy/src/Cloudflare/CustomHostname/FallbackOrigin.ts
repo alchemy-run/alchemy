@@ -18,7 +18,7 @@ export interface FallbackOriginProps {
   /**
    * Your origin hostname that requests to custom hostnames are sent to.
    * Must be a DNS record (A, AAAA or CNAME) within the zone — create the
-   * `Cloudflare.DnsRecord` first and pass its name.
+   * `Cloudflare.DNS.Record` first and pass its name.
    *
    * Mutable — the API is a PUT-style upsert.
    */
@@ -39,7 +39,7 @@ export interface FallbackOriginAttributes {
 }
 
 export type FallbackOrigin = Resource<
-  "Cloudflare.FallbackOrigin",
+  "Cloudflare.CustomHostname.FallbackOrigin",
   FallbackOriginProps,
   FallbackOriginAttributes,
   never,
@@ -63,26 +63,26 @@ export type FallbackOrigin = Resource<
  * @section Setting the Fallback Origin
  * @example Point custom hostname traffic at your origin
  * ```typescript
- * const record = yield* Cloudflare.DnsRecord("Origin", {
+ * const record = yield* Cloudflare.DNS.Record("Origin", {
  *   zoneId: zone.zoneId,
  *   name: "origin.my-saas.com",
  *   type: "A",
  *   content: "203.0.113.1",
  *   proxied: true,
  * });
- * const fallback = yield* Cloudflare.FallbackOrigin("Fallback", {
+ * const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
  *   zoneId: zone.zoneId,
  *   origin: record.name,
  * });
  * ```
  */
 export const FallbackOrigin = Resource<FallbackOrigin>(
-  "Cloudflare.FallbackOrigin",
+  "Cloudflare.CustomHostname.FallbackOrigin",
 );
 
 export const isFallbackOrigin = (value: unknown): value is FallbackOrigin =>
   Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.FallbackOrigin";
+  value.Type === "Cloudflare.CustomHostname.FallbackOrigin";
 
 export const FallbackOriginProvider = () =>
   Provider.succeed(FallbackOrigin, {

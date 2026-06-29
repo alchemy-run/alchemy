@@ -32,19 +32,19 @@ const _____ = Effect.gen(function* () {
   const worker = yield* Api2;
   const _url = worker.url;
   const _eff = Effect.gen(function* () {
-    const rpc = yield* Cloudflare.bindWorker(worker);
+    const rpc = yield* Cloudflare.Workers.bindWorker(worker);
     rpc.getUser();
   });
 
   const worker2 = yield* Api;
   const _eff2 = Effect.gen(function* () {
-    const rpc2 = yield* Cloudflare.bindWorker(worker2);
+    const rpc2 = yield* Cloudflare.Workers.bindWorker(worker2);
     rpc2.getUser();
   });
 
   const worker3 = yield* Api3;
   const _eff3 = Effect.gen(function* () {
-    const rpc3 = yield* Cloudflare.bindWorker(worker3);
+    const rpc3 = yield* Cloudflare.Workers.bindWorker(worker3);
     rpc3.getUser();
   });
 });

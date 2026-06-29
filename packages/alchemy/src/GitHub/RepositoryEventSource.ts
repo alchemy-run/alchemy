@@ -95,33 +95,64 @@ export interface RepositoryEventSourceProps<
  *
  * Wiring the webhook (delivery URL, secret, IAM/bindings) is handled by the
  * host-specific runtime layer — see
- * `Cloudflare.GitHubRepositoryEventSourceLive` for the Cloudflare Worker
+ * `Cloudflare.Workers.GitHubRepositoryEventSourceLive` for the Cloudflare Worker
  * implementation.
  * @binding
  * @example
  * ```typescript
  * // `event.name` is narrowed to "push" | "pull_request"
- * yield* GitHub.events({
- *   owner: "my-org",
- *   repository: "my-repo",
- *   events: ["push", "pull_request"],
- *   secret,
- * }).subscribe((event) =>
+ * yield* GitHub.consumeRepositoryEvents(
+ *   {
+ *     owner: "my-org",
+ *     repository: "my-repo",
+ *     events: ["push", "pull_request"],
+ *     secret,
+ *   },
+ *   (event) => Effect.log(`received ${event.name} (${event.id})`),
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // When you don't need to pass any options, the handler is the only argument.
+ * yield* GitHub.consumeRepositoryEvents((event) =>
  *   Effect.log(`received ${event.name} (${event.id})`),
  * );
  * ```
  */
-export const events = <
+export function consumeRepositoryEvents<Req = never>(
+  process: (
+    event: WebhookEvent<SelectedEvent<readonly WebhookEventName[]>>,
+  ) => Effect.Effect<void, never, Req | Providers>,
+): Effect.Effect<void, never, RepositoryEventSource>;
+export function consumeRepositoryEvents<
   const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
+  Req = never,
 >(
   props: RepositoryEventSourceProps<E>,
-) => ({
-  subscribe: <Req = never>(
-    process: (
-      event: WebhookEvent<SelectedEvent<E>>,
-    ) => Effect.Effect<void, never, Req | Providers>,
-  ) => RepositoryEventSource.use((source) => source(props, process)),
-});
+  process: (
+    event: WebhookEvent<SelectedEvent<E>>,
+  ) => Effect.Effect<void, never, Req | Providers>,
+): Effect.Effect<void, never, RepositoryEventSource>;
+export function consumeRepositoryEvents<
+  const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
+  Req = never,
+>(
+  propsOrProcess:
+    | RepositoryEventSourceProps<E>
+    | ((
+        event: WebhookEvent<SelectedEvent<E>>,
+      ) => Effect.Effect<void, never, Req | Providers>),
+  maybeProcess?: (
+    event: WebhookEvent<SelectedEvent<E>>,
+  ) => Effect.Effect<void, never, Req | Providers>,
+) {
+  const [props, process] =
+    typeof propsOrProcess === "function"
+      ? [{} as RepositoryEventSourceProps<E>, propsOrProcess]
+      : [propsOrProcess, maybeProcess!];
+  return RepositoryEventSource.use((source) => source(props, process));
+}
 
 export type RepositoryEventSourceService = <
   E extends readonly WebhookEventName[] = readonly WebhookEventName[],

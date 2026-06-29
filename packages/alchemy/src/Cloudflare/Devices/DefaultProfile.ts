@@ -222,7 +222,7 @@ export type DeviceDefaultProfile = Resource<
  * @section Configuring split tunneling
  * @example Exclude-mode (default): tunnel everything except listed routes
  * ```typescript
- * yield* Cloudflare.DeviceDefaultProfile("Default", {
+ * yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
  *   mode: "exclude",
  *   splitTunnelExclude: [
  *     { address: "10.0.0.0/8", description: "RFC1918" },
@@ -234,7 +234,7 @@ export type DeviceDefaultProfile = Resource<
  *
  * @example Include-mode: only listed routes go through WARP
  * ```typescript
- * yield* Cloudflare.DeviceDefaultProfile("Default", {
+ * yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
  *   mode: "include",
  *   splitTunnelInclude: [
  *     { address: "10.42.0.0/16", description: "Prod VPC" },
@@ -245,7 +245,7 @@ export type DeviceDefaultProfile = Resource<
  * @section Configuring fallback domains
  * @example Resolve a private suffix via an on-prem DNS server
  * ```typescript
- * yield* Cloudflare.DeviceDefaultProfile("Default", {
+ * yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
  *   fallbackDomains: [
  *     {
  *       suffix: "corp.example.com",

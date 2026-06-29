@@ -11,10 +11,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TunnelVirtualNetworkTypeId = "Cloudflare.Tunnel.VirtualNetwork" as const;
-type TunnelVirtualNetworkTypeId = typeof TunnelVirtualNetworkTypeId;
+const TypeId = "Cloudflare.Tunnel.VirtualNetwork" as const;
+type TypeId = typeof TypeId;
 
-export interface TunnelVirtualNetworkProps {
+export interface VirtualNetworkProps {
   /**
    * User-friendly name for the virtual network. Names are unique per
    * account, which makes the name the resource's identity during adoption
@@ -41,7 +41,7 @@ export interface TunnelVirtualNetworkProps {
   isDefaultNetwork?: boolean;
 }
 
-export interface TunnelVirtualNetworkAttributes {
+export interface VirtualNetworkAttributes {
   /** UUID of the virtual network, assigned by Cloudflare. */
   virtualNetworkId: string;
   /** Cloudflare account that owns the virtual network. */
@@ -56,10 +56,10 @@ export interface TunnelVirtualNetworkAttributes {
   createdAt: string;
 }
 
-export type TunnelVirtualNetwork = Resource<
-  TunnelVirtualNetworkTypeId,
-  TunnelVirtualNetworkProps,
-  TunnelVirtualNetworkAttributes,
+export type VirtualNetwork = Resource<
+  TypeId,
+  VirtualNetworkProps,
+  VirtualNetworkAttributes,
   never,
   Providers
 >;
@@ -69,13 +69,13 @@ export type TunnelVirtualNetwork = Resource<
  * for Cloudflare Tunnel private networks.
  *
  * Virtual networks let you run overlapping CIDR ranges side by side: each
- * {@link TunnelRoute} can target a `virtualNetworkId`, and WARP clients
+ * {@link Route} can target a `virtualNetworkId`, and WARP clients
  * switch between virtual networks to choose which copy of `10.0.0.0/8`
  * they see. Every account starts with a single `default` virtual network.
  *
  * Name and comment are mutable in place. Deleting a virtual network
  * requires that no routes reference it — express that relationship by
- * passing `vnet.virtualNetworkId` into your `TunnelRoute`s so destroy
+ * passing `vnet.virtualNetworkId` into your `Route`s so destroy
  * ordering is correct.
  * @resource
  * @product Tunnels
@@ -83,15 +83,15 @@ export type TunnelVirtualNetwork = Resource<
  * @section Creating a Virtual Network
  * @example Basic virtual network
  * ```typescript
- * const vnet = yield* Cloudflare.TunnelVirtualNetwork("Staging", {
+ * const vnet = yield* Cloudflare.Tunnel.VirtualNetwork("Staging", {
  *   comment: "staging private network",
  * });
  * ```
  *
  * @example Route a tunnel CIDR through the virtual network
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("MyTunnel");
- * yield* Cloudflare.TunnelRoute("StagingNet", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
+ * yield* Cloudflare.Tunnel.Route("StagingNet", {
  *   tunnelId: tunnel.tunnelId,
  *   network: "10.4.0.0/16",
  *   virtualNetworkId: vnet.virtualNetworkId,
@@ -102,28 +102,23 @@ export type TunnelVirtualNetwork = Resource<
  * @example Promote a virtual network to the account default
  * ```typescript
  * // Only one default per account — promoting demotes the previous one.
- * const vnet = yield* Cloudflare.TunnelVirtualNetwork("Primary", {
+ * const vnet = yield* Cloudflare.Tunnel.VirtualNetwork("Primary", {
  *   isDefaultNetwork: true,
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/cloudflared/tunnel-virtual-networks/
  */
-export const TunnelVirtualNetwork = Resource<TunnelVirtualNetwork>(
-  TunnelVirtualNetworkTypeId,
-);
+export const VirtualNetwork = Resource<VirtualNetwork>(TypeId);
 
 /**
- * Returns true if the given value is a TunnelVirtualNetwork resource.
+ * Returns true if the given value is a VirtualNetwork resource.
  */
-export const isTunnelVirtualNetwork = (
-  value: unknown,
-): value is TunnelVirtualNetwork =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TunnelVirtualNetworkTypeId;
+export const isVirtualNetwork = (value: unknown): value is VirtualNetwork =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const TunnelVirtualNetworkProvider = () =>
-  Provider.succeed(TunnelVirtualNetwork, {
+export const VirtualNetworkProvider = () =>
+  Provider.succeed(VirtualNetwork, {
     stables: ["virtualNetworkId", "accountId", "createdAt"],
 
     diff: Effect.fn(function* ({ output }) {
@@ -250,7 +245,7 @@ export const TunnelVirtualNetworkProvider = () =>
                 // for account-wide teardown.
                 .filter((v) => !v.isDefaultNetwork)
                 .map(
-                  (v): TunnelVirtualNetworkAttributes => ({
+                  (v): VirtualNetworkAttributes => ({
                     virtualNetworkId: v.id,
                     accountId,
                     name: v.name,
@@ -299,7 +294,7 @@ const resolveName = (id: string, name: string | undefined) =>
 const toAttributes = (
   vnet: ObservedVnet,
   accountId: string,
-): TunnelVirtualNetworkAttributes => ({
+): VirtualNetworkAttributes => ({
   virtualNetworkId: vnet.id,
   accountId,
   name: vnet.name,

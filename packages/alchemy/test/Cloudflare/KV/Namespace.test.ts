@@ -26,7 +26,7 @@ test.provider("create and delete namespace with default props", (stack) =>
 
     const namespace = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* KV.KVNamespace("DefaultNamespace");
+        return yield* KV.Namespace("DefaultNamespace");
       }),
     );
 
@@ -53,7 +53,7 @@ test.provider("create, update, delete namespace", (stack) =>
 
     const namespace = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* KV.KVNamespace("TestNamespace");
+        return yield* KV.Namespace("TestNamespace");
       }),
     );
 
@@ -66,7 +66,7 @@ test.provider("create, update, delete namespace", (stack) =>
 
     const updatedNamespace = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* KV.KVNamespace("TestNamespace", {
+        return yield* KV.Namespace("TestNamespace", {
           title: namespace.title + "-updated",
         });
       }),
@@ -95,11 +95,11 @@ test.provider("list enumerates the deployed namespace", (stack) =>
 
     const namespace = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* KV.KVNamespace("ListNamespace");
+        return yield* KV.Namespace("ListNamespace");
       }),
     );
 
-    const provider = yield* Provider.findProvider(KV.KVNamespace);
+    const provider = yield* Provider.findProvider(KV.Namespace);
     const all = yield* provider.list();
 
     expect(all.some((ns) => ns.namespaceId === namespace.namespaceId)).toBe(
@@ -132,7 +132,7 @@ test.provider(
       // Phase 1: deploy normally so a real KV namespace exists on Cloudflare.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* KV.KVNamespace("AdoptableNamespace", { title });
+          return yield* KV.Namespace("AdoptableNamespace", { title });
         }),
       );
       expect(initial.title).toEqual(title);
@@ -154,7 +154,7 @@ test.provider(
       // returns plain attrs — silent adoption.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* KV.KVNamespace("AdoptableNamespace", { title });
+          return yield* KV.Namespace("AdoptableNamespace", { title });
         }),
       );
 

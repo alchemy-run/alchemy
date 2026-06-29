@@ -11,21 +11,21 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MtlsCertificateTypeId = "Cloudflare.MtlsCertificate" as const;
-type MtlsCertificateTypeId = typeof MtlsCertificateTypeId;
+const TypeId = "Cloudflare.MtlsCertificate.MtlsCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How the certificate was created and who manages it. Certificates uploaded
  * through this resource are always `"custom"`.
  */
-export type MtlsCertificateType =
+export type Type =
   | "custom"
   | "gateway_managed"
   | "access_managed"
   // Keep the union open so new Cloudflare types aren't blocked by stale types.
   | (string & {});
 
-export type MtlsCertificateProps = {
+export type Props = {
   /**
    * Optional human-readable name for the certificate. If omitted, a unique
    * name will be generated. There is no update API, so changing the name
@@ -55,7 +55,7 @@ export type MtlsCertificateProps = {
   privateKey?: Redacted.Redacted<string>;
 };
 
-export type MtlsCertificateAttributes = {
+export type Attributes = {
   /**
    * Unique identifier of the uploaded certificate.
    */
@@ -95,13 +95,13 @@ export type MtlsCertificateAttributes = {
   /**
    * How the certificate was created and who manages it.
    */
-  type: MtlsCertificateType | undefined;
+  type: Type | undefined;
 };
 
 export type MtlsCertificate = Resource<
-  MtlsCertificateTypeId,
-  MtlsCertificateProps,
-  MtlsCertificateAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -124,7 +124,7 @@ export type MtlsCertificate = Resource<
  * @section Uploading Certificates
  * @example CA certificate
  * ```typescript
- * const ca = yield* Cloudflare.MtlsCertificate("client-ca", {
+ * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("client-ca", {
  *   ca: true,
  *   certificates: caPem,
  * });
@@ -132,7 +132,7 @@ export type MtlsCertificate = Resource<
  *
  * @example Leaf certificate with private key
  * ```typescript
- * const cert = yield* Cloudflare.MtlsCertificate("origin-client-cert", {
+ * const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate("origin-client-cert", {
  *   ca: false,
  *   certificates: leafPem,
  *   privateKey: alchemy.secret.env.ORIGIN_CLIENT_KEY,
@@ -141,7 +141,7 @@ export type MtlsCertificate = Resource<
  *
  * @example Named certificate
  * ```typescript
- * const ca = yield* Cloudflare.MtlsCertificate("client-ca", {
+ * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("client-ca", {
  *   name: "my-client-ca",
  *   ca: true,
  *   certificates: caPem,
@@ -151,12 +151,12 @@ export type MtlsCertificate = Resource<
  * @section Referencing from Hyperdrive
  * @example Verify the origin with an uploaded CA
  * ```typescript
- * const ca = yield* Cloudflare.MtlsCertificate("db-ca", {
+ * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("db-ca", {
  *   ca: true,
  *   certificates: caPem,
  * });
  *
- * const hd = yield* Cloudflare.Hyperdrive("my-db", {
+ * const hd = yield* Cloudflare.Hyperdrive.Connection("my-db", {
  *   origin: { ... },
  *   mtls: {
  *     caCertificateId: ca.mtlsCertificateId,
@@ -167,13 +167,13 @@ export type MtlsCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  */
-export const MtlsCertificate = Resource<MtlsCertificate>(MtlsCertificateTypeId);
+export const MtlsCertificate = Resource<MtlsCertificate>(TypeId);
 
 /**
  * Returns true if the given value is a MtlsCertificate resource.
  */
 export const isMtlsCertificate = (value: unknown): value is MtlsCertificate =>
-  Predicate.hasProperty(value, "Type") && value.Type === MtlsCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MtlsCertificateProvider = () =>
   Provider.succeed(MtlsCertificate, {
@@ -347,14 +347,14 @@ type CertificateShape = {
   signature?: string | null;
   expiresOn?: string | null;
   uploadedOn?: string | null;
-  type?: MtlsCertificateType | null;
+  type?: Type | null;
 };
 
 const toAttributes = (
   cert: CertificateShape,
   accountId: string,
-  news?: MtlsCertificateProps,
-): MtlsCertificateAttributes => ({
+  news?: Props,
+): Attributes => ({
   mtlsCertificateId: cert.id!,
   accountId,
   name: cert.name ?? undefined,

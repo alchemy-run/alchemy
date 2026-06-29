@@ -74,7 +74,7 @@ describe.sequential("EmailRouting", () => {
       // Capture the pre-test enabled state to restore at the end.
       const before = yield* getEmailRouting(zoneId);
 
-      const provider = yield* Provider.findProvider(Cloudflare.EmailRouting);
+      const provider = yield* Provider.findProvider(Cloudflare.Email.Routing);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

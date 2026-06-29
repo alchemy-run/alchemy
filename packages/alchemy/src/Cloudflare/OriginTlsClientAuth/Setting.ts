@@ -8,11 +8,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginTlsClientAuthSettingTypeId =
-  "Cloudflare.OriginTlsClientAuth.Setting" as const;
-type OriginTlsClientAuthSettingTypeId = typeof OriginTlsClientAuthSettingTypeId;
+const TypeId = "Cloudflare.OriginTlsClientAuth.Setting" as const;
+type TypeId = typeof TypeId;
 
-export type OriginTlsClientAuthSettingProps = {
+export type SettingProps = {
   /**
    * Zone the setting belongs to. Stable — changing the zone triggers a
    * replacement (the old zone's setting is restored to the value it had
@@ -22,7 +21,7 @@ export type OriginTlsClientAuthSettingProps = {
   /**
    * Whether zone-level Authenticated Origin Pulls is enabled. When enabled,
    * Cloudflare presents the zone's uploaded client certificate
-   * ({@link OriginTlsClientAuthCertificate}) to your origin on every pull.
+   * ({@link Certificate}) to your origin on every pull.
    *
    * Mutable — updated in place.
    * @default false (Cloudflare's default)
@@ -30,7 +29,7 @@ export type OriginTlsClientAuthSettingProps = {
   enabled: boolean;
 };
 
-export type OriginTlsClientAuthSettingAttributes = {
+export type SettingAttributes = {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** Whether zone-level Authenticated Origin Pulls is currently enabled. */
@@ -43,10 +42,10 @@ export type OriginTlsClientAuthSettingAttributes = {
   initialEnabled: boolean;
 };
 
-export type OriginTlsClientAuthSetting = Resource<
-  OriginTlsClientAuthSettingTypeId,
-  OriginTlsClientAuthSettingProps,
-  OriginTlsClientAuthSettingAttributes,
+export type Setting = Resource<
+  TypeId,
+  SettingProps,
+  SettingAttributes,
   never,
   Providers
 >;
@@ -62,7 +61,7 @@ export type OriginTlsClientAuthSetting = Resource<
  * Alchemy first managed it (captured as `initialEnabled`).
  *
  * Enabling AOP only has effect once a zone client certificate is uploaded
- * ({@link OriginTlsClientAuthCertificate}) and your origin is configured to
+ * ({@link Certificate}) and your origin is configured to
  * verify it — enabling the flag alone does not break traffic unless the
  * origin enforces mTLS.
  * @resource
@@ -71,13 +70,13 @@ export type OriginTlsClientAuthSetting = Resource<
  * @section Enabling Authenticated Origin Pulls
  * @example Enable zone-level AOP
  * ```typescript
- * const cert = yield* Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
+ * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
  *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
  * });
  *
- * yield* Cloudflare.OriginTlsClientAuthSetting("Aop", {
+ * yield* Cloudflare.OriginTlsClientAuth.Setting("Aop", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -85,7 +84,7 @@ export type OriginTlsClientAuthSetting = Resource<
  *
  * @example Pin AOP off
  * ```typescript
- * yield* Cloudflare.OriginTlsClientAuthSetting("Aop", {
+ * yield* Cloudflare.OriginTlsClientAuth.Setting("Aop", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -93,21 +92,16 @@ export type OriginTlsClientAuthSetting = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/
  */
-export const OriginTlsClientAuthSetting = Resource<OriginTlsClientAuthSetting>(
-  OriginTlsClientAuthSettingTypeId,
-);
+export const Setting = Resource<Setting>(TypeId);
 
 /**
- * Returns true if the given value is an OriginTlsClientAuthSetting resource.
+ * Returns true if the given value is an Setting resource.
  */
-export const isOriginTlsClientAuthSetting = (
-  value: unknown,
-): value is OriginTlsClientAuthSetting =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginTlsClientAuthSettingTypeId;
+export const isSetting = (value: unknown): value is Setting =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const OriginTlsClientAuthSettingProvider = () =>
-  Provider.succeed(OriginTlsClientAuthSetting, {
+export const SettingProvider = () =>
+  Provider.succeed(Setting, {
     nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled"],
 
@@ -120,7 +114,7 @@ export const OriginTlsClientAuthSettingProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           originTls.getSetting({ zoneId }).pipe(
-            Effect.map((observed): OriginTlsClientAuthSettingAttributes => {
+            Effect.map((observed): SettingAttributes => {
               const enabled = observed.enabled ?? false;
               // Enumeration adopts the live value as the pre-management
               // baseline, mirroring a cold `read`.
@@ -131,14 +125,12 @@ export const OriginTlsClientAuthSettingProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is OriginTlsClientAuthSettingAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SettingAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as OriginTlsClientAuthSettingProps;
-      const n = news as OriginTlsClientAuthSettingProps;
+      const o = olds as SettingProps;
+      const n = news as SettingProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);

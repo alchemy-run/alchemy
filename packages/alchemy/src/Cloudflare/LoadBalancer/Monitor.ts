@@ -11,13 +11,13 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LoadBalancerMonitorTypeId = "Cloudflare.LoadBalancer.Monitor" as const;
-type LoadBalancerMonitorTypeId = typeof LoadBalancerMonitorTypeId;
+const TypeId = "Cloudflare.LoadBalancer.Monitor" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Protocol a Load Balancing monitor probes origins with.
  */
-export type LoadBalancerMonitorType =
+export type MonitorType =
   | "http"
   | "https"
   | "tcp"
@@ -25,12 +25,12 @@ export type LoadBalancerMonitorType =
   | "icmp_ping"
   | "smtp";
 
-export interface LoadBalancerMonitorProps {
+export interface MonitorProps {
   /**
    * The protocol to use for the health check.
    * @default "http"
    */
-  type?: LoadBalancerMonitorType;
+  type?: MonitorType;
   /**
    * Object description. Monitors have no name field, so the description
    * doubles as the monitor's identity for state recovery — if omitted, a
@@ -118,7 +118,7 @@ export interface LoadBalancerMonitorProps {
   probeZone?: string;
 }
 
-export interface LoadBalancerMonitorAttributes {
+export interface MonitorAttributes {
   /** Cloudflare-assigned monitor identifier. */
   monitorId: string;
   /** The Cloudflare account the monitor belongs to. */
@@ -126,17 +126,17 @@ export interface LoadBalancerMonitorAttributes {
   /** Monitor description (carries the physical name when generated). */
   description: string;
   /** Probe protocol. */
-  type: LoadBalancerMonitorType;
+  type: MonitorType;
   /** ISO8601 creation timestamp. */
   createdOn: string | undefined;
   /** ISO8601 last-modified timestamp. */
   modifiedOn: string | undefined;
 }
 
-export type LoadBalancerMonitor = Resource<
-  LoadBalancerMonitorTypeId,
-  LoadBalancerMonitorProps,
-  LoadBalancerMonitorAttributes,
+export type Monitor = Resource<
+  TypeId,
+  MonitorProps,
+  MonitorAttributes,
   never,
   Providers
 >;
@@ -158,7 +158,7 @@ export type LoadBalancerMonitor = Resource<
  * @section Creating a Monitor
  * @example HTTPS health check
  * ```typescript
- * const monitor = yield* Cloudflare.LoadBalancerMonitor("ApiMonitor", {
+ * const monitor = yield* Cloudflare.LoadBalancer.Monitor("ApiMonitor", {
  *   type: "https",
  *   path: "/health",
  *   expectedCodes: "2xx",
@@ -167,7 +167,7 @@ export type LoadBalancerMonitor = Resource<
  *
  * @example TCP port check
  * ```typescript
- * const tcp = yield* Cloudflare.LoadBalancerMonitor("DbMonitor", {
+ * const tcp = yield* Cloudflare.LoadBalancer.Monitor("DbMonitor", {
  *   type: "tcp",
  *   port: 5432,
  * });
@@ -176,7 +176,7 @@ export type LoadBalancerMonitor = Resource<
  * @section Using with a Pool
  * @example Attach the monitor to a pool
  * ```typescript
- * const pool = yield* Cloudflare.LoadBalancerPool("ApiPool", {
+ * const pool = yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  *   monitor: monitor.monitorId,
  * });
@@ -184,21 +184,16 @@ export type LoadBalancerMonitor = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/monitors/
  */
-export const LoadBalancerMonitor = Resource<LoadBalancerMonitor>(
-  LoadBalancerMonitorTypeId,
-);
+export const Monitor = Resource<Monitor>(TypeId);
 
 /**
- * Returns true if the given value is a LoadBalancerMonitor resource.
+ * Returns true if the given value is a Monitor resource.
  */
-export const isLoadBalancerMonitor = (
-  value: unknown,
-): value is LoadBalancerMonitor =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LoadBalancerMonitorTypeId;
+export const isMonitor = (value: unknown): value is Monitor =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const LoadBalancerMonitorProvider = () =>
-  Provider.succeed(LoadBalancerMonitor, {
+export const MonitorProvider = () =>
+  Provider.succeed(Monitor, {
     stables: ["monitorId", "accountId", "createdOn"],
 
     // Account-scoped collection: monitors are enumerated by the account-wide
@@ -218,7 +213,7 @@ export const LoadBalancerMonitorProvider = () =>
       );
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
@@ -334,7 +329,7 @@ const createDescription = (id: string, description: string | undefined) =>
     return description ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const buildBody = (news: LoadBalancerMonitorProps, description: string) => ({
+const buildBody = (news: MonitorProps, description: string) => ({
   description,
   type: news.type ?? ("http" as const),
   method: news.method,
@@ -394,11 +389,11 @@ const monitorDirty = (
 const toAttributes = (
   monitor: ObservedMonitor,
   accountId: string,
-): LoadBalancerMonitorAttributes => ({
+): MonitorAttributes => ({
   monitorId: monitor.id ?? "",
   accountId,
   description: monitor.description ?? "",
-  type: (monitor.type ?? "http") as LoadBalancerMonitorType,
+  type: (monitor.type ?? "http") as MonitorType,
   createdOn: monitor.createdOn ?? undefined,
   modifiedOn: monitor.modifiedOn ?? undefined,
 });

@@ -75,7 +75,7 @@ describe.sequential("SmartTieredCache", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SmartTieredCache("SmartCache", {
+            return yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
               zoneId,
             });
           }),
@@ -112,7 +112,7 @@ describe.sequential("SmartTieredCache", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SmartTieredCache("SmartCache", {
+            return yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
               zoneId,
               enabled: false,
             });
@@ -124,7 +124,7 @@ describe.sequential("SmartTieredCache", () => {
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SmartTieredCache("SmartCache", {
+            return yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
               zoneId,
               enabled: true,
             });
@@ -158,7 +158,7 @@ describe.sequential("SmartTieredCache", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SmartTieredCache,
+        Cloudflare.Cache.SmartTieredCache,
       );
       const all = yield* provider.list();
 

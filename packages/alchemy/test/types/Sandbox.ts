@@ -23,7 +23,7 @@ export const SandboxLive = Sandbox.make(
   })),
   Effect.gen(function* () {
     // bind dependencies
-    // yield* Cloudflare.Queue()
+    // yield* Cloudflare.Queues.Queue()
     const cp = yield* ChildProcessSpawner;
 
     // return http effect

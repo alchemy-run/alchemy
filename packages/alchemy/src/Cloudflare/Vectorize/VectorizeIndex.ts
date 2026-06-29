@@ -9,14 +9,13 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { VectorizeIndexBinding } from "./VectorizeIndexBinding.ts";
 
-const VectorizeIndexTypeId = "Cloudflare.VectorizeIndex" as const;
-type VectorizeIndexTypeId = typeof VectorizeIndexTypeId;
+const TypeId = "Cloudflare.VectorizeIndex" as const;
+type TypeId = typeof TypeId;
 
 export type DistanceMetric = "cosine" | "euclidean" | "dot-product";
 
-export type VectorizePreset =
+export type Preset =
   | "@cf/baai/bge-small-en-v1.5"
   | "@cf/baai/bge-base-en-v1.5"
   | "@cf/baai/bge-large-en-v1.5"
@@ -27,7 +26,7 @@ export type VectorizePreset =
 
 const DEFAULT_METRIC: DistanceMetric = "cosine";
 
-export type VectorizeIndexProps = {
+export type IndexProps = {
   /**
    * Name of the index. If omitted, a unique name will be generated.
    * Must be lowercase alphanumeric with hyphens. Changing it triggers a
@@ -52,7 +51,7 @@ export type VectorizeIndexProps = {
    * to match the named model. Mutually exclusive with `dimensions`/`metric`.
    * Cannot be changed after creation — updating this triggers a replacement.
    */
-  preset?: VectorizePreset;
+  preset?: Preset;
   /**
    * Human-readable description of the index. Vectorize has no update API,
    * so changing the description triggers a replacement.
@@ -60,7 +59,7 @@ export type VectorizeIndexProps = {
   description?: string;
 };
 
-export type VectorizeIndexAttributes = {
+export type IndexAttributes = {
   indexName: string;
   dimensions: number | undefined;
   metric: DistanceMetric | undefined;
@@ -70,10 +69,10 @@ export type VectorizeIndexAttributes = {
   modifiedOn: string | undefined;
 };
 
-export type VectorizeIndex = Resource<
-  VectorizeIndexTypeId,
-  VectorizeIndexProps,
-  VectorizeIndexAttributes,
+export type Index = Resource<
+  TypeId,
+  IndexProps,
+  IndexAttributes,
   never,
   Providers
 >;
@@ -93,7 +92,7 @@ export type VectorizeIndex = Resource<
  * @section Creating an Index
  * @example Index with explicit dimensions and metric
  * ```typescript
- * const index = yield* Cloudflare.VectorizeIndex("my-index", {
+ * const index = yield* Cloudflare.Vectorize.Index("my-index", {
  *   dimensions: 768,
  *   metric: "cosine",
  * });
@@ -102,14 +101,14 @@ export type VectorizeIndex = Resource<
  * @example Index from a managed embedding model preset
  * A preset fixes the dimensions and metric to match the named model.
  * ```typescript
- * const index = yield* Cloudflare.VectorizeIndex("my-index", {
+ * const index = yield* Cloudflare.Vectorize.Index("my-index", {
  *   preset: "@cf/baai/bge-base-en-v1.5",
  * });
  * ```
  *
  * @example Index with a description
  * ```typescript
- * const index = yield* Cloudflare.VectorizeIndex("my-index", {
+ * const index = yield* Cloudflare.Vectorize.Index("my-index", {
  *   dimensions: 1536,
  *   metric: "euclidean",
  *   description: "Product catalog embeddings",
@@ -119,7 +118,7 @@ export type VectorizeIndex = Resource<
  * @section Binding to a Worker
  * @example Querying an index inside a Worker
  * ```typescript
- * const index = yield* Cloudflare.VectorizeConnection.bind(MyIndex);
+ * const index = yield* Cloudflare.Vectorize.SearchIndex(MyIndex);
  *
  * // Insert vectors
  * yield* index.upsert([
@@ -132,18 +131,16 @@ export type VectorizeIndex = Resource<
  *
  * @see https://developers.cloudflare.com/vectorize/
  */
-export const VectorizeIndex = Resource<VectorizeIndex>(VectorizeIndexTypeId)({
-  bind: VectorizeIndexBinding.bind,
-});
+export const Index = Resource<Index>(TypeId);
 
 /**
- * Returns true if the given value is a VectorizeIndex resource.
+ * Returns true if the given value is a Vectorize Index resource.
  */
-export const isVectorizeIndex = (value: unknown): value is VectorizeIndex =>
-  Predicate.hasProperty(value, "Type") && value.Type === VectorizeIndexTypeId;
+export const isIndex = (value: unknown): value is Index =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const VectorizeIndexProvider = () =>
-  Provider.succeed(VectorizeIndex, {
+export const IndexProvider = () =>
+  Provider.succeed(Index, {
     stables: ["indexName", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -251,7 +248,7 @@ const toAttributes = (
   index: vectorize.GetIndexResponse | vectorize.CreateIndexResponse,
   name: string,
   accountId: string,
-): VectorizeIndexAttributes => ({
+): IndexAttributes => ({
   indexName: index.name ?? name,
   dimensions: index.config?.dimensions,
   // Distilled widened generated string enums to open unions (`string & {}`).
@@ -268,10 +265,10 @@ const createIndexName = (id: string, name: string | undefined) =>
   });
 
 const buildConfig = (
-  news: VectorizeIndexProps,
+  news: IndexProps,
 ): vectorize.CreateIndexRequest["config"] =>
   news.preset !== undefined
-    ? // `VectorizePreset` is intentionally open (`| (string & {})`) so
+    ? // `Preset` is intentionally open (`| (string & {})`) so
       // new Cloudflare presets aren't blocked by stale types. The
       // distilled type is the strict-at-release-time union; cast
       // through for the API call.

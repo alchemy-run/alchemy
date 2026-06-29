@@ -105,10 +105,10 @@ test.provider("attach and detach a custom domain", (stack) =>
 
     const { project, domain } = yield* stack.deploy(
       Effect.gen(function* () {
-        const project = yield* Cloudflare.PagesProject("DomainCrudProject", {
+        const project = yield* Cloudflare.Pages.Project("DomainCrudProject", {
           name: PROJECT_CRUD,
         }).pipe(adopt(true));
-        const domain = yield* Cloudflare.PagesDomain("CrudDomain", {
+        const domain = yield* Cloudflare.Pages.Domain("CrudDomain", {
           projectName: project.name,
           name: DOMAIN_CRUD,
         }).pipe(adopt(true));
@@ -138,10 +138,10 @@ test.provider("attach and detach a custom domain", (stack) =>
     // Redeploying identical props is a no-op (same attachment).
     const noop = yield* stack.deploy(
       Effect.gen(function* () {
-        const project = yield* Cloudflare.PagesProject("DomainCrudProject", {
+        const project = yield* Cloudflare.Pages.Project("DomainCrudProject", {
           name: PROJECT_CRUD,
         }).pipe(adopt(true));
-        const domain = yield* Cloudflare.PagesDomain("CrudDomain", {
+        const domain = yield* Cloudflare.Pages.Domain("CrudDomain", {
           projectName: project.name,
           name: DOMAIN_CRUD,
         }).pipe(adopt(true));
@@ -172,10 +172,10 @@ test.provider("changing the domain name triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const project = yield* Cloudflare.PagesProject("DomainReplProject", {
+        const project = yield* Cloudflare.Pages.Project("DomainReplProject", {
           name: PROJECT_REPLACE,
         }).pipe(adopt(true));
-        const domain = yield* Cloudflare.PagesDomain("ReplaceDomain", {
+        const domain = yield* Cloudflare.Pages.Domain("ReplaceDomain", {
           projectName: project.name,
           name: DOMAIN_REPLACE_A,
         }).pipe(adopt(true));
@@ -187,10 +187,10 @@ test.provider("changing the domain name triggers replacement", (stack) =>
 
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        const project = yield* Cloudflare.PagesProject("DomainReplProject", {
+        const project = yield* Cloudflare.Pages.Project("DomainReplProject", {
           name: PROJECT_REPLACE,
         }).pipe(adopt(true));
-        const domain = yield* Cloudflare.PagesDomain("ReplaceDomain", {
+        const domain = yield* Cloudflare.Pages.Domain("ReplaceDomain", {
           projectName: project.name,
           name: DOMAIN_REPLACE_B,
         }).pipe(adopt(true));
@@ -241,10 +241,10 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
 
       const { domain } = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Cloudflare.PagesProject("DomainListProject", {
+          const project = yield* Cloudflare.Pages.Project("DomainListProject", {
             name: PROJECT_LIST,
           }).pipe(adopt(true));
-          const domain = yield* Cloudflare.PagesDomain("ListDomain", {
+          const domain = yield* Cloudflare.Pages.Domain("ListDomain", {
             projectName: project.name,
             name: DOMAIN_LIST,
           }).pipe(adopt(true));
@@ -252,7 +252,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.PagesDomain);
+      const provider = yield* Provider.findProvider(Cloudflare.Pages.Domain);
       const all = yield* provider.list();
 
       const found = all.find((d) => d.domainId === domain.domainId);

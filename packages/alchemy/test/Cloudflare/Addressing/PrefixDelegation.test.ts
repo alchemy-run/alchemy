@@ -32,14 +32,14 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
 // prefixes (the catalog `listPrefixes` endpoint is available regardless of the
 // BYOIP entitlement and returns an empty array on accounts with no onboarded
 // prefixes), then listing each prefix's delegations. The result is a
-// well-typed `AddressingPrefixDelegationAttributes[]` — the exact shape `read`
+// well-typed `PrefixDelegationAttributes[]` — the exact shape `read`
 // produces — and is empty on a non-BYOIP account.
 test.provider("list enumerates prefix delegations (read-only)", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AddressingPrefixDelegation,
+      Cloudflare.Addressing.PrefixDelegation,
     );
     const all = yield* retryForbidden(provider.list());
 

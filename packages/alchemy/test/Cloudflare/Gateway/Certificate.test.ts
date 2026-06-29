@@ -2,7 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
-import type { GatewayCertificateAttributes } from "@/Cloudflare/Gateway/Certificate";
+import type { CertificateAttributes } from "@/Cloudflare/Gateway/Certificate";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
@@ -81,18 +81,12 @@ const findQuotaError = (
 const deployUnlessQuotaReached = (
   stack: Test.ScratchStack,
   eff: Effect.Effect<any, any, any>,
-): Effect.Effect<GatewayCertificateAttributes | undefined, any, any> =>
+): Effect.Effect<CertificateAttributes | undefined, any, any> =>
   stack
     .deploy(eff)
     .pipe(
       Effect.catchCause(
-        (
-          cause,
-        ): Effect.Effect<
-          GatewayCertificateAttributes | undefined,
-          any,
-          never
-        > =>
+        (cause): Effect.Effect<CertificateAttributes | undefined, any, never> =>
           findQuotaError(cause)
             ? Effect.succeed(undefined)
             : Effect.failCause(cause),
@@ -114,7 +108,7 @@ test.provider(
 
       const cert = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("InspectionCa", {
+        Cloudflare.Gateway.Certificate("InspectionCa", {
           validityPeriodDays: 30,
         }),
       );
@@ -138,7 +132,7 @@ test.provider(
 
       // Deactivate in place — same certificate, new binding status.
       const deactivated = yield* stack.deploy(
-        Cloudflare.GatewayCertificate("InspectionCa", {
+        Cloudflare.Gateway.Certificate("InspectionCa", {
           validityPeriodDays: 30,
           activate: false,
         }),
@@ -164,7 +158,7 @@ test.provider.skipIf(!runGatewayCertTests)(
       // activation round-trips.
       const first = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("ShortCa", {
+        Cloudflare.Gateway.Certificate("ShortCa", {
           validityPeriodDays: 30,
           activate: false,
         }),
@@ -178,7 +172,7 @@ test.provider.skipIf(!runGatewayCertTests)(
 
       const second = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("ShortCa", {
+        Cloudflare.Gateway.Certificate("ShortCa", {
           validityPeriodDays: 60,
           activate: false,
         }),
@@ -209,14 +203,14 @@ test.provider(
 
       const cert = yield* deployUnlessQuotaReached(
         stack,
-        Cloudflare.GatewayCertificate("ListCa", {
+        Cloudflare.Gateway.Certificate("ListCa", {
           validityPeriodDays: 30,
           activate: false,
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.GatewayCertificate,
+        Cloudflare.Gateway.Certificate,
       );
       const all = yield* provider.list();
 

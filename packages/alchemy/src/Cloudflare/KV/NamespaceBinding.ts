@@ -1,8 +1,8 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { KVNamespace } from "./Namespace.ts";
-import { KVNamespaceError } from "./NamespaceTypes.ts";
+import type { Namespace } from "./Namespace.ts";
+import { NamespaceError } from "./NamespaceTypes.ts";
 
 /**
  * Shared scaffolding for the Worker-binding implementations of the KV
@@ -20,7 +20,7 @@ export const makeKVNamespaceBinding = <Client>(options: {
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (namespace: KVNamespace) {
+    return Effect.fn(function* (namespace: Namespace) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${namespace}`({
           bindings: [
@@ -40,7 +40,7 @@ export const makeKVNamespaceBinding = <Client>(options: {
 /** Primitives shared by the read and write halves of the binding client. */
 export const makeKVNamespaceHelpers = (
   env: Record<string, any>,
-  namespace: KVNamespace,
+  namespace: Namespace,
 ) => {
   const raw = Effect.sync(
     // Lazy — the WorkerEnvironment binding is not populated until runtime.
@@ -49,11 +49,11 @@ export const makeKVNamespaceHelpers = (
 
   const tryPromise = <T>(
     fn: () => Promise<T>,
-  ): Effect.Effect<T, KVNamespaceError> =>
+  ): Effect.Effect<T, NamespaceError> =>
     Effect.tryPromise({
       try: fn,
       catch: (error: any) =>
-        new KVNamespaceError({
+        new NamespaceError({
           message: error?.message ?? "Unknown error",
           cause: error,
         }),
@@ -61,7 +61,7 @@ export const makeKVNamespaceHelpers = (
 
   const use = <T>(
     fn: (raw: runtime.KVNamespace<string>) => Promise<T>,
-  ): Effect.Effect<T, KVNamespaceError> =>
+  ): Effect.Effect<T, NamespaceError> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
   return { raw, use, tryPromise };

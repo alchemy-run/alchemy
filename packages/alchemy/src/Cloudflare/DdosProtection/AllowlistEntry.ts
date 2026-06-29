@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DdosAllowlistEntryTypeId =
-  "Cloudflare.DdosProtection.AllowlistEntry" as const;
-type DdosAllowlistEntryTypeId = typeof DdosAllowlistEntryTypeId;
+const TypeId = "Cloudflare.DdosProtection.AllowlistEntry" as const;
+type TypeId = typeof TypeId;
 
 export interface DdosAllowlistEntryProps {
   /**
@@ -56,7 +55,7 @@ export interface DdosAllowlistEntryAttributes {
 }
 
 export type DdosAllowlistEntry = Resource<
-  DdosAllowlistEntryTypeId,
+  TypeId,
   DdosAllowlistEntryProps,
   DdosAllowlistEntryAttributes,
   never,
@@ -85,7 +84,7 @@ export type DdosAllowlistEntry = Resource<
  * @section Creating an allowlist entry
  * @example Allowlist a trusted prefix
  * ```typescript
- * const entry = yield* Cloudflare.DdosAllowlistEntry("OfficeEgress", {
+ * const entry = yield* Cloudflare.DdosProtection.DdosAllowlistEntry("OfficeEgress", {
  *   prefix: "192.0.2.0/24",
  *   enabled: true,
  * });
@@ -94,7 +93,7 @@ export type DdosAllowlistEntry = Resource<
  * @example Staged entry with an explicit comment
  * ```typescript
  * // `enabled: false` keeps the entry inert until you flip it on.
- * yield* Cloudflare.DdosAllowlistEntry("PartnerRange", {
+ * yield* Cloudflare.DdosProtection.DdosAllowlistEntry("PartnerRange", {
  *   prefix: "198.51.100.0/24",
  *   comment: "partner NAT range — enable during migration",
  *   enabled: false,
@@ -103,9 +102,7 @@ export type DdosAllowlistEntry = Resource<
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
  */
-export const DdosAllowlistEntry = Resource<DdosAllowlistEntry>(
-  DdosAllowlistEntryTypeId,
-);
+export const DdosAllowlistEntry = Resource<DdosAllowlistEntry>(TypeId);
 
 /**
  * Returns true if the given value is a DdosAllowlistEntry resource.
@@ -113,8 +110,7 @@ export const DdosAllowlistEntry = Resource<DdosAllowlistEntry>(
 export const isDdosAllowlistEntry = (
   value: unknown,
 ): value is DdosAllowlistEntry =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DdosAllowlistEntryTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DdosAllowlistEntryProvider = () =>
   Provider.succeed(DdosAllowlistEntry, {

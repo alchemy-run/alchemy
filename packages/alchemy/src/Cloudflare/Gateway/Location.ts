@@ -12,14 +12,14 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayLocationTypeId = "Cloudflare.Gateway.Location" as const;
-type GatewayLocationTypeId = typeof GatewayLocationTypeId;
+const TypeId = "Cloudflare.Gateway.Location" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A source network range (CIDR) requests at a Gateway location may
  * originate from.
  */
-export interface GatewayLocationNetwork {
+export interface LocationNetwork {
   /**
    * IPv4 CIDR, e.g. `203.0.113.0/24`.
    */
@@ -32,11 +32,11 @@ export interface GatewayLocationNetwork {
  * and token requirement, DoT, IPv4/IPv6 toggles) is available without
  * re-declaring the structure.
  */
-export type GatewayLocationEndpoints = NonNullable<
+export type LocationEndpoints = NonNullable<
   zeroTrust.UpdateGatewayLocationRequest["endpoints"]
 >;
 
-export interface GatewayLocationProps {
+export interface LocationProps {
   /**
    * Display name for the location. Used as a stable identifier so the
    * provider can locate it by name during adoption / state recovery. If
@@ -70,7 +70,7 @@ export interface GatewayLocationProps {
    * Destination endpoint configuration (DoH / DoT / IPv4 / IPv6 toggles
    * and source networks). Mutable.
    */
-  endpoints?: GatewayLocationEndpoints;
+  endpoints?: LocationEndpoints;
   /**
    * Source network ranges (IPv4 CIDRs) requests at this location originate
    * from. Only takes effect when non-empty and the IPv4 endpoint is
@@ -78,10 +78,10 @@ export interface GatewayLocationProps {
    *
    * @default []
    */
-  networks?: GatewayLocationNetwork[];
+  networks?: LocationNetwork[];
 }
 
-export interface GatewayLocationAttributes {
+export interface LocationAttributes {
   /** UUID of the location, assigned by Cloudflare. */
   locationId: string;
   /** Cloudflare account that owns the location. */
@@ -104,17 +104,17 @@ export interface GatewayLocationAttributes {
   /** Identifier of the DNS destination IPv4 pair, if a dedicated pair is assigned. */
   dnsDestinationIpsId: string | undefined;
   /** Source network ranges configured for this location. */
-  networks: GatewayLocationNetwork[];
+  networks: LocationNetwork[];
   /** ISO8601 creation timestamp. */
   createdAt: string | undefined;
   /** ISO8601 last-update timestamp. */
   updatedAt: string | undefined;
 }
 
-export type GatewayLocation = Resource<
-  GatewayLocationTypeId,
-  GatewayLocationProps,
-  GatewayLocationAttributes,
+export type Location = Resource<
+  TypeId,
+  LocationProps,
+  LocationAttributes,
   never,
   Providers
 >;
@@ -135,7 +135,7 @@ export type GatewayLocation = Resource<
  * @section Creating a Location
  * @example DoH-only location
  * ```typescript
- * const office = yield* Cloudflare.GatewayLocation("Office", {
+ * const office = yield* Cloudflare.Gateway.Location("Office", {
  *   ecsSupport: false,
  * });
  * // Point your resolver at the assigned DoH endpoint:
@@ -144,7 +144,7 @@ export type GatewayLocation = Resource<
  *
  * @example Location with IPv4 source networks
  * ```typescript
- * const office = yield* Cloudflare.GatewayLocation("Office", {
+ * const office = yield* Cloudflare.Gateway.Location("Office", {
  *   networks: [{ network: "203.0.113.0/24" }],
  *   endpoints: {
  *     doh: { enabled: true },
@@ -157,13 +157,13 @@ export type GatewayLocation = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/agentless/dns/locations/
  */
-export const GatewayLocation = Resource<GatewayLocation>(GatewayLocationTypeId);
+export const Location = Resource<Location>(TypeId);
 
 /**
- * Returns true if the given value is a GatewayLocation resource.
+ * Returns true if the given value is a Location resource.
  */
-export const isGatewayLocation = (value: unknown): value is GatewayLocation =>
-  Predicate.hasProperty(value, "Type") && value.Type === GatewayLocationTypeId;
+export const isLocation = (value: unknown): value is Location =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Right after a location create/update, Cloudflare's edge intermittently
@@ -183,8 +183,8 @@ const isTransientFeatureAccessBlip = (e: {
   e._tag === "Unauthorized" &&
   (e.message ?? "").includes("does not have access to this feature");
 
-export const GatewayLocationProvider = () =>
-  Provider.succeed(GatewayLocation, {
+export const LocationProvider = () =>
+  Provider.succeed(Location, {
     stables: ["locationId", "accountId", "dohSubdomain", "ip", "createdAt"],
 
     // Account-scoped collection: enumerate every Gateway location in the
@@ -372,8 +372,8 @@ const resolveName = (id: string, name: string | undefined) =>
   });
 
 const sameNetworks = (
-  observed: ReadonlyArray<GatewayLocationNetwork>,
-  desired: ReadonlyArray<GatewayLocationNetwork>,
+  observed: ReadonlyArray<LocationNetwork>,
+  desired: ReadonlyArray<LocationNetwork>,
 ): boolean =>
   arrayEqualsUnordered(
     observed.map((n) => n.network),
@@ -386,7 +386,7 @@ const sameNetworks = (
  */
 const sameEndpoints = (
   observed: ObservedLocation["endpoints"],
-  desired: GatewayLocationEndpoints,
+  desired: LocationEndpoints,
 ): boolean => {
   if (!observed) return false;
   const sameNetworkList = (
@@ -422,7 +422,7 @@ const toAttributes = (
     | zeroTrust.UpdateGatewayLocationResponse
     | ListedLocation,
   accountId: string,
-): GatewayLocationAttributes => ({
+): LocationAttributes => ({
   locationId: location.id ?? "",
   accountId,
   name: location.name ?? "",

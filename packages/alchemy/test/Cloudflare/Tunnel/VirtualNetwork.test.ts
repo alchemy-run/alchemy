@@ -53,7 +53,7 @@ test.provider("create, verify, and destroy a virtual network", (stack) =>
     yield* stack.destroy();
 
     const vnet = yield* stack.deploy(
-      Cloudflare.TunnelVirtualNetwork("BasicVnet", {
+      Cloudflare.Tunnel.VirtualNetwork("BasicVnet", {
         name: "alchemy-zt-vnet-basic",
         comment: "alchemy test vnet",
       }).pipe(adopt(true)),
@@ -81,14 +81,14 @@ test.provider("update name and comment in place (same id)", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.TunnelVirtualNetwork("UpdateVnet", {
+      Cloudflare.Tunnel.VirtualNetwork("UpdateVnet", {
         name: "alchemy-zt-vnet-update",
         comment: "v1",
       }).pipe(adopt(true)),
     );
 
     const updated = yield* stack.deploy(
-      Cloudflare.TunnelVirtualNetwork("UpdateVnet", {
+      Cloudflare.Tunnel.VirtualNetwork("UpdateVnet", {
         name: "alchemy-zt-vnet-update-v2",
         comment: "v2",
       }).pipe(adopt(true)),
@@ -105,7 +105,7 @@ test.provider("update name and comment in place (same id)", (stack) =>
 
     // Redeploying identical props is a no-op.
     const noop = yield* stack.deploy(
-      Cloudflare.TunnelVirtualNetwork("UpdateVnet", {
+      Cloudflare.Tunnel.VirtualNetwork("UpdateVnet", {
         name: "alchemy-zt-vnet-update-v2",
         comment: "v2",
       }).pipe(adopt(true)),
@@ -124,7 +124,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     const vnet = yield* stack.deploy(
-      Cloudflare.TunnelVirtualNetwork("HealVnet", {
+      Cloudflare.Tunnel.VirtualNetwork("HealVnet", {
         name: "alchemy-zt-vnet-heal",
         comment: "v1",
       }).pipe(adopt(true)),
@@ -146,7 +146,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     // Change a prop to force reconcile — it must observe the vnet as
     // missing and recreate it instead of failing on a 404.
     const healed = yield* stack.deploy(
-      Cloudflare.TunnelVirtualNetwork("HealVnet", {
+      Cloudflare.Tunnel.VirtualNetwork("HealVnet", {
         name: "alchemy-zt-vnet-heal",
         comment: "v2",
       }).pipe(adopt(true)),
@@ -167,14 +167,14 @@ test.provider("list enumerates the deployed virtual network", (stack) =>
     yield* stack.destroy();
 
     const deployed = yield* stack.deploy(
-      Cloudflare.TunnelVirtualNetwork("ListVnet", {
+      Cloudflare.Tunnel.VirtualNetwork("ListVnet", {
         name: "alchemy-zt-vnet-list",
         comment: "alchemy list test vnet",
       }).pipe(adopt(true)),
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.TunnelVirtualNetwork,
+      Cloudflare.Tunnel.VirtualNetwork,
     );
     const all = yield* provider.list();
 

@@ -21,10 +21,10 @@ import type { Providers } from "../Providers.ts";
  * `CreateAccessGroupForAccountRequest` so the full Cloudflare rule surface is
  * available without re-declaring the union.
  */
-export type AccessGroupRule =
+export type GroupRule =
   zeroTrust.CreateAccessGroupForAccountRequest["include"][number];
 
-export type AccessGroupProps = {
+export type GroupProps = {
   /**
    * Display name for the group. Used as a stable identifier so the provider
    * can locate the group by name during adoption / state recovery. If
@@ -37,17 +37,17 @@ export type AccessGroupProps = {
    * Rules combined with logical OR. A user needs to meet only one of the
    * Include rules to match the group. Required and must be non-empty.
    */
-  include: AccessGroupRule[];
+  include: GroupRule[];
   /**
    * Rules combined with logical NOT. A user matching any Exclude rule does
    * not match the group, even if they satisfied an Include rule.
    */
-  exclude?: AccessGroupRule[];
+  exclude?: GroupRule[];
   /**
    * Rules combined with logical AND. A user must satisfy every Require rule
    * in addition to an Include rule.
    */
-  require?: AccessGroupRule[];
+  require?: GroupRule[];
   /**
    * Whether this is the default group for the Zero Trust organization.
    *
@@ -56,9 +56,9 @@ export type AccessGroupProps = {
   isDefault?: boolean;
 };
 
-export type AccessGroup = Resource<
+export type Group = Resource<
   "Cloudflare.Access.Group",
-  AccessGroupProps,
+  GroupProps,
   {
     /** UUID of the group assigned by Cloudflare. */
     groupId: string;
@@ -84,14 +84,14 @@ export type AccessGroup = Resource<
  * @section Creating a Group
  * @example Allow a single email domain
  * ```typescript
- * const group = yield* Cloudflare.AccessGroup("ExampleDomain", {
+ * const group = yield* Cloudflare.Access.Group("ExampleDomain", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  * ```
  *
  * @example Combine include, exclude and require rules
  * ```typescript
- * const group = yield* Cloudflare.AccessGroup("UsEngineers", {
+ * const group = yield* Cloudflare.Access.Group("UsEngineers", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  *   exclude: [{ email: { email: "intern@example.com" } }],
  *   require: [{ geo: { countryCode: "US" } }],
@@ -101,24 +101,24 @@ export type AccessGroup = Resource<
  * @section Referencing a Group from a Policy
  * @example Allow members of the group
  * ```typescript
- * const group = yield* Cloudflare.AccessGroup("Team", {
+ * const group = yield* Cloudflare.Access.Group("Team", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  *
- * const policy = yield* Cloudflare.AccessPolicy("AllowTeam", {
+ * const policy = yield* Cloudflare.Access.Policy("AllowTeam", {
  *   decision: "allow",
  *   include: [{ group: { id: group.groupId } }],
  * });
  * ```
  */
-export const AccessGroup = Resource<AccessGroup>("Cloudflare.Access.Group");
+export const Group = Resource<Group>("Cloudflare.Access.Group");
 
-export const isAccessGroup = (value: unknown): value is AccessGroup =>
+export const isGroup = (value: unknown): value is Group =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === "Cloudflare.Access.Group";
 
-export const AccessGroupProvider = () =>
-  Provider.succeed(AccessGroup, {
+export const GroupProvider = () =>
+  Provider.succeed(Group, {
     stables: ["groupId", "accountId"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -185,11 +185,7 @@ export const AccessGroupProvider = () =>
           ),
         );
     }),
-    reconcile: Effect.fn(function* ({
-      id,
-      news = {} as AccessGroupProps,
-      output,
-    }) {
+    reconcile: Effect.fn(function* ({ id, news = {} as GroupProps, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createGroupName(id, news.name);
       const acct = output?.accountId ?? accountId;
@@ -260,9 +256,7 @@ export const AccessGroupProvider = () =>
       }
 
       if (!ensured.id) {
-        return yield* Effect.fail(
-          new Error("AccessGroup: ensured group missing id"),
-        );
+        return yield* Effect.fail(new Error("Group: ensured group missing id"));
       }
       return {
         groupId: ensured.id,

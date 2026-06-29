@@ -3,7 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import Backend, { Bucket } from "./src/backend.ts";
 
-export class Website extends Cloudflare.Vite<Website>()("Website", {
+export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
   compatibility: {
     flags: ["nodejs_compat"],
   },

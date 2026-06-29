@@ -82,7 +82,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "FixVite",
             viteProps(rootDir, memoInclude),
           );
@@ -103,7 +103,7 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "FixVite",
             viteProps(rootDir, memoInclude),
           );
@@ -151,7 +151,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* class FixVite extends Cloudflare.Vite<FixVite>()(
+          return yield* class FixVite extends Cloudflare.Website.Vite<FixVite>()(
             "FixVite",
             viteProps(rootDir, memoInclude),
           ) {};
@@ -175,7 +175,7 @@ test.provider(
 // ─────────────────────────────────────────────────────────────────────
 // Path-relocation behavior for the vite path
 //
-// `Cloudflare.Vite` stores a path-insensitive `hash.input` made from
+// `Cloudflare.Website.Vite` stores a path-insensitive `hash.input` made from
 // the memo'd input tree plus build-affecting Vite options. The diff is:
 //
 //   `input !== output.hash?.input`
@@ -215,7 +215,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "ViteReloc",
             viteProps(rootA, memoInclude),
           );
@@ -242,7 +242,7 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite(
+          return yield* Cloudflare.Website.Vite(
             "ViteReloc",
             viteProps(rootB, memoInclude),
           );
@@ -281,7 +281,7 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("FixViteEnv", {
+          return yield* Cloudflare.Website.Vite("FixViteEnv", {
             ...viteProps(rootDir, memoInclude),
             env: { VITE_TEST_MARKER: marker1 },
           });

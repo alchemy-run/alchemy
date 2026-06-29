@@ -9,7 +9,7 @@ import { AuthToken } from "./AuthToken.ts";
  * A Worker with a single bearer-token protected route, mirroring the auth
  * check in `@alchemy.run/pr-package`.
  *
- * `Cloudflare.Secret.bind(...)` resolves to `Redacted<string>`. The comparison
+ * `Cloudflare.SecretsStore.ReadSecret(...)` resolves to `Redacted<string>`. The comparison
  * MUST unwrap it with `Redacted.value(expected)` — coercing a `Redacted` to a
  * string yields the literal `"<redacted>"`, so `Bearer ${expected}` would
  * compare against `"Bearer <redacted>"` and silently accept the wrong token.
@@ -21,7 +21,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const authToken = yield* Cloudflare.Secret.bind(AuthToken);
+    const authToken = yield* Cloudflare.SecretsStore.ReadSecret(AuthToken);
 
     return {
       fetch: Effect.gen(function* () {
@@ -50,5 +50,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         ),
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.SecretBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.SecretsStore.ReadSecretBinding)),
 ) {}

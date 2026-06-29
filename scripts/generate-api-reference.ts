@@ -426,8 +426,7 @@ function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   const items: SidebarItem[] = [];
   for (const [service, servicePages] of byService) {
     // Prefer the human product name from `@product`; fall back to the dir name.
-    const label =
-      servicePages.find((p) => p.product)?.product || service;
+    const label = servicePages.find((p) => p.product)?.product || service;
     items.push({
       label,
       collapsed: true,
@@ -518,7 +517,7 @@ async function main() {
     }
 
     // Mirror the source directory structure; name the page after the
-    // tagged declaration (e.g. Cloudflare/AiSearch/AiSearchInstance.md).
+    // tagged declaration (e.g. Cloudflare.AI.Search/AiSearchInstance.md).
     const relDir = path.dirname(entry.relativePath);
     const outputRelative = path.join(relDir, `${primary.name}.md`);
 
@@ -556,9 +555,16 @@ async function main() {
   }
 
   const sidebar = buildProvidersSidebar(pageEntries);
-  const sidebarPath = path.join(websiteRoot, "src/generated/providers-sidebar.json");
+  const sidebarPath = path.join(
+    websiteRoot,
+    "src/generated/providers-sidebar.json",
+  );
   await fs.mkdir(path.dirname(sidebarPath), { recursive: true });
-  await fs.writeFile(sidebarPath, `${JSON.stringify(sidebar, null, 2)}\n`, "utf8");
+  await fs.writeFile(
+    sidebarPath,
+    `${JSON.stringify(sidebar, null, 2)}\n`,
+    "utf8",
+  );
 
   console.log(
     `Done. Wrote ${written} resource pages (skipped ${skipped} untagged) to ${normalizeSlashes(
