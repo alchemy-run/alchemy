@@ -1,7 +1,6 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "alchemy-bench-containers-wrangler",
-  "main": "src/index.ts",
+  "main": "worker.ts",
   "compatibility_date": "2026-06-29",
   // A single container class, backed by a Durable Object. Each
   // `getContainer(binding, name)` is a distinct DO instance and therefore a

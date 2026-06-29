@@ -1,8 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.ts", "bench.ts"],
-  "compilerOptions": {
-    "rootDir": ".",
-    "types": ["bun", "@cloudflare/workers-types"]
-  }
-}

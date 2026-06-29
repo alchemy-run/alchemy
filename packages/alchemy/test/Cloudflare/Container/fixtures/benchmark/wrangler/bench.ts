@@ -5,9 +5,14 @@
  * the two are directly comparable, but uses zero Alchemy code — just `fetch`
  * against the deployed worker.
  *
- * Usage:
- *   WORKER_URL=https://<your-worker>.workers.dev bun bench.ts
+ * Usage (from this directory):
+ *   bun x wrangler deploy                     # build + push the image, deploy the worker
+ *   WORKER_URL=https://<worker>.workers.dev bun bench.ts
  *   BENCH_N=2 BENCH_CONCURRENCY=2 WORKER_URL=... bun bench.ts
+ *   bun x wrangler delete                     # tear down
+ *
+ * `wrangler` and `@cloudflare/containers` resolve from the `alchemy` package's
+ * devDependencies (catalog), so no separate install is needed.
  */
 
 const WORKER_URL = (process.env.WORKER_URL ?? process.argv[2] ?? "").replace(
@@ -16,7 +21,9 @@ const WORKER_URL = (process.env.WORKER_URL ?? process.argv[2] ?? "").replace(
 );
 const N = Number(process.env.BENCH_N ?? 2);
 const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? N);
-const REQUEST_TIMEOUT_MS = Number(process.env.BENCH_REQUEST_TIMEOUT_MS ?? 240_000);
+const REQUEST_TIMEOUT_MS = Number(
+  process.env.BENCH_REQUEST_TIMEOUT_MS ?? 240_000,
+);
 
 if (!WORKER_URL) {
   console.error(
@@ -81,12 +88,15 @@ const runPool = async (
 ): Promise<Array<{ sample?: Sample; failure?: string }>> => {
   const results: Array<{ sample?: Sample; failure?: string }> = [];
   let next = 0;
-  const workers = Array.from({ length: Math.min(concurrency, names.length) }, async () => {
-    while (next < names.length) {
-      const i = next++;
-      results[i] = await boot(names[i]);
-    }
-  });
+  const workers = Array.from(
+    { length: Math.min(concurrency, names.length) },
+    async () => {
+      while (next < names.length) {
+        const i = next++;
+        results[i] = await boot(names[i]);
+      }
+    },
+  );
   await Promise.all(workers);
   return results;
 };
