@@ -362,7 +362,7 @@ function builtInPlugins(
   ];
 }
 
-function bundleErrorFromUnknown(error: unknown): BundleError {
+export function bundleErrorFromUnknown(error: unknown): BundleError {
   const message = error instanceof Error ? error.message : String(error);
   return new BundleError({
     message,

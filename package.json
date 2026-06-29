@@ -69,9 +69,9 @@
       "@cloudflare/workers-types": "^4.20250805.0",
       "@distilled.cloud/aws": "workspace:*",
       "@distilled.cloud/axiom": "workspace:*",
-      "@distilled.cloud/cloudflare-rolldown-plugin": "0.11.3",
-      "@distilled.cloud/cloudflare-runtime": "0.11.3",
-      "@distilled.cloud/cloudflare-vite-plugin": "0.11.3",
+      "@distilled.cloud/cloudflare-rolldown-plugin": "0.12.0",
+      "@distilled.cloud/cloudflare-runtime": "0.12.0",
+      "@distilled.cloud/cloudflare-vite-plugin": "0.12.0",
       "@distilled.cloud/cloudflare": "workspace:*",
       "@distilled.cloud/core": "workspace:*",
       "@distilled.cloud/neon": "workspace:*",
@@ -118,6 +118,16 @@
       "oxfmt": "^0.36.0",
       "oxlint": "^1.51.0",
       "pathe": "^2.0.3"
+    },
+    "catalogs": {
+      "fixtures": {
+        "@tanstack/react-router": "^1.167.4",
+        "@vitejs/plugin-react": "^6.0.2",
+        "@vitejs/plugin-rsc": "^0.5.27",
+        "@tanstack/react-start": "^1.166.15",
+        "react-dom": "^19.2.7",
+        "react-router": "7.16.0"
+      }
     }
   },
   "devDependencies": {

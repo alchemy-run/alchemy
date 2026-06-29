@@ -47,7 +47,6 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as Hash from "effect/Hash";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -61,6 +60,7 @@ import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
+import { sha256 } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
@@ -328,6 +328,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
           env: props.env,
           bundleOptions: {
@@ -419,6 +420,7 @@ export const LocalWorkerProvider = () =>
           {
             compatibilityDate: worker.compatibility.date,
             compatibilityFlags: worker.compatibility.flags,
+            viteEnvironments: worker.viteEnvironments,
             worker: {
               name: worker.name,
               bindings: worker.workerBindings,
@@ -442,7 +444,7 @@ export const LocalWorkerProvider = () =>
       const instances = new Map<
         string,
         {
-          hash: number;
+          signature: string;
           fiber: Fiber.Fiber<
             Worker["Attributes"],
             Bundle.BundleError | WorkerValidationError | RuntimeError
@@ -500,8 +502,8 @@ export const LocalWorkerProvider = () =>
             props: news,
             bindings: newBindings,
           };
-          const hash = Hash.structure(options);
-          if (instances.get(options.id)?.hash === hash) {
+          const signature = yield* structuralSignature(options);
+          if (instances.get(options.id)?.signature === signature) {
             return { action: "noop" };
           }
           const name = yield* createWorkerName(id, news.name);
@@ -575,10 +577,10 @@ export const LocalWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const options = { id, props: news as WorkerPropsWithDev, bindings };
-          const hash = Hash.structure(options);
+          const signature = yield* structuralSignature(options);
           const existing = instances.get(options.id);
           if (existing) {
-            if (existing.hash === hash) {
+            if (existing.signature === signature) {
               yield* Effect.log(
                 `[${options.id}] No changes, using existing instance`,
               );
@@ -596,7 +598,7 @@ export const LocalWorkerProvider = () =>
             Effect.forkDetach,
             Scope.provide(scope),
           );
-          instances.set(options.id, { hash, fiber, scope });
+          instances.set(options.id, { signature, fiber, scope });
           return yield* Fiber.join(fiber).pipe(
             Effect.onExit((exit) =>
               Effect.sync(() => {
@@ -729,6 +731,48 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       return yield* unsupported();
   }
 });
+
+/**
+ * Stable, collision-free structural signature used to decide whether a
+ * locally-running dev Worker needs to be torn down and restarted.
+ *
+ * We deliberately do NOT use `Hash.structure` here: Effect's structural
+ * hash folds sibling fields together with XOR, so when the *same* value
+ * change appears in two sibling subtrees the diffs cancel and the hash is
+ * unchanged. The Worker config mirrors `env` values into `bindings`
+ * (e.g. `DEV_MARKER`/an R2 bucket name appear in both `props.env` and the
+ * derived `bindings`), which is exactly the shape that collides — so an
+ * env-only or rebind change would be silently treated as "no change" and
+ * the dev Worker would never restart with the new bindings.
+ *
+ * A canonical JSON serialization (sorted keys, unwrapped `Redacted`,
+ * cycle-safe) gives an exact comparison instead of a lossy fingerprint. We
+ * hash that serialization with SHA-256 so each retained signature is a fixed
+ * 64-char digest rather than a copy of the whole props/bindings blob.
+ */
+const structuralSignature = (value: unknown): Effect.Effect<string> => {
+  const seen = new WeakSet<object>();
+  const normalize = (input: unknown): unknown => {
+    if (typeof input === "bigint") return `bigint:${input.toString()}`;
+    if (input === null || typeof input !== "object") return input;
+    if (Redacted.isRedacted(input)) {
+      return { __redacted: normalize(Redacted.value(input)) };
+    }
+    if (seen.has(input)) return "[circular]";
+    seen.add(input);
+    if (input instanceof Uint8Array) return { __bytes: Array.from(input) };
+    if (Array.isArray(input)) return input.map(normalize);
+    return Object.fromEntries(
+      Object.keys(input)
+        .sort()
+        .map((key) => [
+          key,
+          normalize((input as Record<string, unknown>)[key]),
+        ]),
+    );
+  };
+  return sha256(JSON.stringify(normalize(value)));
+};
 
 const toRuntimeAssets = (
   assets: WorkerAssetsConfig | undefined,
