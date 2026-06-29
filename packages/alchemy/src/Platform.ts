@@ -242,7 +242,12 @@ export const Platform = <
   type: R["Type"],
   hooks: {
     createRuntimeContext: (id: string) => BaseRuntimeContext;
-    onCreate?: (resource: R, props: any) => Effect.Effect<void>;
+    // `onCreate` runs inside the resource-construction context, which already
+    // carries the Stack's providers — so the hook may yield child resources
+    // (e.g. an async Worker registering a `WorkflowResource` for a bound
+    // Workflow). Allow an ambient requirement (`any`) rather than forcing
+    // `never`; it is discharged by the surrounding provider context.
+    onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
   },
   methods?: { [key: string]: any },
 ): any => {

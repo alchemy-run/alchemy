@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { ExecutionContext } from "../../ExecutionContext.ts";
+import type { Input } from "../../Input.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
@@ -150,6 +151,52 @@ export const isWorkflowExport = (value: unknown): value is WorkflowExport =>
   (value as any).kind === "workflow";
 
 /**
+ * Props for the reference (async) form of {@link Workflow}. Used when binding
+ * a Workflow class to a plain async Worker (one without an Effect runtime) via
+ * the Worker's `env`. Mirrors `DurableObjectProps`.
+ */
+export interface WorkflowRefProps {
+  /**
+   * Name of the exported `WorkflowEntrypoint` class.
+   *
+   * @default name
+   */
+  className?: string;
+  /**
+   * Worker script that hosts the Workflow class. Omit this when the workflow
+   * is hosted by the Worker that declares the binding.
+   */
+  scriptName?: Input<string>;
+}
+
+/**
+ * A lightweight reference to a Workflow, produced by the props-only form of
+ * {@link Workflow} (`Workflow(name, { className })`). Carries just enough
+ * metadata to emit the `workflow` binding for an async Worker and to drive
+ * the `putWorkflow` lifecycle. Mirrors `DurableObjectLike`.
+ */
+export interface WorkflowLike<Params = unknown> {
+  kind: TypeId;
+  name: string;
+  /** @internal phantom */
+  workflowName?: string;
+  /** @internal phantom */
+  className?: string;
+  /** @internal phantom */
+  scriptName?: Input<string>;
+  /** @internal phantom */
+  Params?: Params;
+}
+
+/**
+ * Type guard for the reference (async) form of a Workflow.
+ */
+export const isWorkflowLike = (value: unknown): value is WorkflowLike =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { kind?: unknown }).kind === TypeId;
+
+/**
  * Type guard for workflow binding metadata in the Worker binding contract.
  */
 export const isWorkflowBinding = (binding: {
@@ -204,6 +251,10 @@ export interface WorkflowClass extends Effect.Effect<
       new (_: never): WorkflowImpl<Input, Result>;
     };
   };
+  <Params = unknown>(
+    name: string,
+    props?: WorkflowRefProps,
+  ): WorkflowLike<Params>;
   <Input = unknown, Result = unknown, InitReq = never>(
     name: string,
     impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
@@ -346,6 +397,70 @@ export class WorkflowScope extends Context.Service<
  * };
  * ```
  *
+ * @section Binding in an Async Worker
+ * When using an Async Worker (plain `async fetch` handler, no Effect
+ * runtime), declare Workflows in the `env` prop of the Worker resource.
+ * Pass a `Workflow` reference with a `className` matching the exported
+ * `WorkflowEntrypoint` subclass in your worker source file. If `className`
+ * is omitted, it defaults to the binding name. Use `Cloudflare.InferEnv`
+ * to get a fully typed `env` object that includes the workflow binding.
+ *
+ * @example Declaring a Workflow binding in the stack
+ * ```typescript
+ * // alchemy.run.ts
+ * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+ *
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     MY_WORKFLOW: Cloudflare.Workflow<{ value: string }>("MyWorkflow", {
+ *       className: "MyWorkflow",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @example Using the Workflow from a plain async handler
+ * ```typescript
+ * // src/worker.ts
+ * import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
+ * import type { WorkerEnv } from "../alchemy.run.ts";
+ *
+ * export class MyWorkflow extends WorkflowEntrypoint<WorkerEnv, { value: string }> {
+ *   async run(event: Readonly<WorkflowEvent<{ value: string }>>, step: WorkflowStep) {
+ *     return await step.do("greet", async () => `Hello, ${event.payload.value}!`);
+ *   }
+ * }
+ *
+ * export default {
+ *   async fetch(request: Request, env: WorkerEnv) {
+ *     const instance = await env.MY_WORKFLOW.create({ params: { value: "world" } });
+ *     return Response.json({ instanceId: instance.id });
+ *   },
+ * };
+ * ```
+ *
+ * @section Cross-Script Binding in an Async Worker
+ * Async Workers can also bind to a Workflow hosted by another Worker
+ * script. The host Worker declares and exports the `WorkflowEntrypoint`
+ * class. The consumer Worker declares a `Workflow` with `scriptName` set
+ * to the host Worker's script name. Cross-script references are bindings
+ * only — Alchemy does not drive `putWorkflow` for the foreign class, so
+ * deploy the host first.
+ *
+ * @example Consumer Worker binds to the host script
+ * ```typescript
+ * const consumer = yield* Cloudflare.Worker("Consumer", {
+ *   main: "./src/consumer.ts",
+ *   env: {
+ *     MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow", {
+ *       className: "MyWorkflow",
+ *       scriptName: host.workerName,
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * @section Testing Workflows
  * Workflows run asynchronously, so tests start an instance and
  * poll until it reaches a terminal status. A simple recipe with
@@ -381,91 +496,105 @@ export class WorkflowScope extends Context.Service<
  * ```
  */
 export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
-  ...args: [] | [name: string, impl: Effect.Effect<WorkflowImpl<any, any>>]
-) =>
-  args.length === 0
-    ? Workflow
-    : effectClass(
-        Effect.gen(function* () {
-          const [name, impl] = args;
-          const worker = yield* Worker;
+  ...args:
+    | []
+    | [name: string, impl: Effect.Effect<WorkflowImpl<any, any>>]
+    | [name: string, props?: WorkflowRefProps]
+) => {
+  if (args.length === 0) {
+    return Workflow;
+  }
+  const [name, second] = args;
+  if (!Effect.isEffect(second)) {
+    // Props-only (async) reference form: returns a plain `WorkflowLike` that an
+    // async Worker binds via `env`. `WorkerAsyncBindings` emits the `workflow`
+    // binding and drives `putWorkflow` for locally-hosted workflows.
+    const props = second as WorkflowRefProps | undefined;
+    return {
+      kind: TypeId,
+      name,
+      workflowName: name,
+      className: props?.className ?? name,
+      scriptName: props?.scriptName,
+    } satisfies WorkflowLike;
+  }
+  const impl = second;
+  return effectClass(
+    Effect.gen(function* () {
+      const worker = yield* Worker;
 
-          // Add the workflow binding to the Worker metadata
-          yield* worker.bind`${name}`({
-            bindings: [
-              {
-                type: "workflow",
-                name,
-                workflowName: name,
-                className: name,
-              },
-            ],
-          });
-
-          // Create the Workflow API resource (putWorkflow / deleteWorkflow)
-          yield* WorkflowResource(name, {
+      // Add the workflow binding to the Worker metadata
+      yield* worker.bind`${name}`({
+        bindings: [
+          {
+            type: "workflow",
+            name,
             workflowName: name,
             className: name,
-            scriptName: worker.workerName,
-          });
+          },
+        ],
+      });
 
-          const services =
-            yield* Effect.context<Effect.Services<typeof impl>>();
+      // Create the Workflow API resource (putWorkflow / deleteWorkflow)
+      yield* WorkflowResource(name, {
+        workflowName: name,
+        className: name,
+        scriptName: worker.workerName,
+      });
 
-          const binding = yield* Effect.all([
-            WorkerEnvironment,
-            ALCHEMY_PHASE,
-          ]).pipe(
-            Effect.flatMap(([env, phase]) => {
-              if (env === undefined || phase === "plan") {
-                return Effect.succeed(undefined as any);
-              }
-              const wf = env[name];
-              if (!wf) {
-                return Effect.die(
-                  new Error(`Workflow '${name}' not found in env`),
-                );
-              }
-              return Effect.succeed(wf);
-            }),
-          );
+      const services = yield* Effect.context<Effect.Services<typeof impl>>();
 
-          const self: WorkflowHandle<any, any> = {
-            Type: TypeId,
-            name,
-            create: (input: unknown) =>
-              Effect.tryPromise(() => binding.create({ params: input })).pipe(
-                Effect.map(wrapInstance),
-                Effect.orDie,
-              ),
-            get: (instanceId: string) =>
-              Effect.tryPromise(() => binding.get(instanceId)).pipe(
-                Effect.map(wrapInstance),
-                Effect.orDie,
-              ),
-          };
-
-          const fn = yield* impl.pipe(
-            Effect.provideService(WorkflowScope, self as any),
-          );
-
-          yield* worker.export(name, {
-            kind: "workflow",
-            make: (env: unknown) =>
-              Effect.succeed(((input: unknown) =>
-                fn(input).pipe(
-                  Effect.provideService(
-                    WorkerEnvironment,
-                    env as Record<string, any>,
-                  ),
-                )) as WorkflowImpl<any, any>).pipe(
-                Effect.provideContext(services),
-              ),
-          } satisfies WorkflowExport);
-
-          return self;
+      const binding = yield* Effect.all([
+        WorkerEnvironment,
+        ALCHEMY_PHASE,
+      ]).pipe(
+        Effect.flatMap(([env, phase]) => {
+          if (env === undefined || phase === "plan") {
+            return Effect.succeed(undefined as any);
+          }
+          const wf = env[name];
+          if (!wf) {
+            return Effect.die(new Error(`Workflow '${name}' not found in env`));
+          }
+          return Effect.succeed(wf);
         }),
-      )) as any);
+      );
+
+      const self: WorkflowHandle<any, any> = {
+        Type: TypeId,
+        name,
+        create: (input: unknown) =>
+          Effect.tryPromise(() => binding.create({ params: input })).pipe(
+            Effect.map(wrapInstance),
+            Effect.orDie,
+          ),
+        get: (instanceId: string) =>
+          Effect.tryPromise(() => binding.get(instanceId)).pipe(
+            Effect.map(wrapInstance),
+            Effect.orDie,
+          ),
+      };
+
+      const fn = yield* impl.pipe(
+        Effect.provideService(WorkflowScope, self as any),
+      );
+
+      yield* worker.export(name, {
+        kind: "workflow",
+        make: (env: unknown) =>
+          Effect.succeed(((input: unknown) =>
+            fn(input).pipe(
+              Effect.provideService(
+                WorkerEnvironment,
+                env as Record<string, any>,
+              ),
+            )) as WorkflowImpl<any, any>).pipe(Effect.provideContext(services)),
+      } satisfies WorkflowExport);
+
+      return self;
+    }),
+  );
+}) as any);
 
 // ---------------------------------------------------------------------------
 // WorkflowResource -- manages the Cloudflare Workflows API lifecycle
