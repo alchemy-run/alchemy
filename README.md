@@ -60,8 +60,6 @@ Use the root action to deploy `prod` from `main`, deploy PR previews as
 
 ```yaml
 - uses: alchemy-run/alchemy-effect@v1
-  with:
-    working-directory: docs
   env:
     CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
