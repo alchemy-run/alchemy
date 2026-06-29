@@ -1,6 +1,7 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -10,6 +11,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { makeFetchRpcStub } from "../../Rpc.ts";
 import { type Fetcher } from "../Fetcher.ts";
+import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import {
   ContainerCrashedError,
   ContainerError,
@@ -19,6 +21,51 @@ import {
   type Container,
   type ContainerStartupOptions,
 } from "./Container.ts";
+
+/**
+ * Per-container-instance start coordination (start mutex + confirmed-ready
+ * port cache).
+ *
+ * `startContainer` can be invoked more than once for the same physical
+ * container: the {@link layer} helper calls it once per Durable Object, but a
+ * caller may also use `startContainer` directly from several places. If the
+ * mutex/ready-cache lived in each `startContainer` closure, those calls would
+ * not coordinate — two of them could both observe `running === false` and both
+ * call `container.start()`, with the second throwing "already running" (see
+ * cloudflare/containers#173).
+ *
+ * Keying off the Durable Object's `DurableObjectState` (stable for the life of
+ * a DO instance, and a distinct object per instance) makes the coordination
+ * per-container-instance regardless of how many `startContainer` calls share
+ * it. The map is module-scoped, but Workers isolates are per-isolate and each
+ * DO instance has its own `DurableObjectState`, so instances never collide; the
+ * `WeakMap` lets entries be collected with the instance. We deliberately do NOT
+ * key on the container's logical id — that is shared across every
+ * `getByName(...)` instance of the same class, which must each start
+ * independently.
+ */
+const startCoordination = new WeakMap<
+  object,
+  {
+    readonly startMutex: ReturnType<typeof Semaphore.makeUnsafe>;
+    readonly readyPorts: Set<number>;
+  }
+>();
+
+const getStartCoordination = (key: object) => {
+  let coordination = startCoordination.get(key);
+  if (!coordination) {
+    // `makeUnsafe` (rather than `Effect.makeSemaphore`) because this runs in a
+    // synchronous cache-miss branch; the semaphore is a plain mutable primitive
+    // shared across effects, created once per DO instance.
+    coordination = {
+      startMutex: Semaphore.makeUnsafe(1),
+      readyPorts: new Set<number>(),
+    };
+    startCoordination.set(key, coordination);
+  }
+  return coordination;
+};
 
 export const layer = <Image extends Container.Decl.Any>(
   container: Image,
@@ -112,17 +159,23 @@ export const startContainer = Effect.fn(function* <
             cause: defect,
           });
 
-  // Coalesce concurrent starts. Native uses a `startInFlight` promise so two
-  // racing callers never both invoke `container.start()` (which throws
-  // "already running" — see cloudflare/containers#173). A 1-permit semaphore
-  // serialises the start path; the second entrant sees `running === true` and
-  // skips, so `start()` is issued exactly once.
-  const startMutex = Semaphore.makeUnsafe(1);
-
-  // Ports already confirmed listening on this instance. Once a port has
-  // answered we skip the readiness probe entirely (like native's `healthy`
-  // state), so steady-state requests pay no polling cost.
-  const readyPorts = new Set<number>();
+  // Coalesce concurrent starts and share the confirmed-ready port cache across
+  // every caller for THIS Durable Object instance (see `startCoordination`).
+  // Native uses a `startInFlight` promise so two racing callers never both
+  // invoke `container.start()` ("already running" — cloudflare/containers#173);
+  // the 1-permit mutex serialises the start path so the second entrant sees
+  // `running === true` and skips. `readyPorts` lets steady-state requests skip
+  // the readiness probe entirely (like native's `healthy` state).
+  //
+  // Key on `DurableObjectState` (stable + unique per DO instance). It is
+  // resolvable here because the bind effect above already runs in the DO
+  // context; fall back to a fresh per-call key in the unusual event it isn't.
+  const doState = yield* Effect.serviceOption(DurableObjectState).pipe(
+    Effect.map(Option.getOrUndefined),
+  );
+  const coordinationKey: object =
+    (doState?.container as object | undefined) ?? doState ?? {};
+  const { startMutex, readyPorts } = getStartCoordination(coordinationKey);
 
   const launchMonitor = Effect.forkDetach(
     container.monitor().pipe(
