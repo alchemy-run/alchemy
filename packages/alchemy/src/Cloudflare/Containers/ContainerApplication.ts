@@ -149,13 +149,17 @@ export interface ContainerApplicationProps extends PlatformProps {
    */
   dockerfile?: string;
   /**
-   * Initial number of instances to maintain.
-   * @default 1
+   * Initial number of instances to maintain. Matches wrangler, which forces
+   * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
+   * @default 0
    */
   instances?: number;
   /**
-   * Maximum number of instances the application may scale to.
-   * @default 1
+   * Maximum number of instances the application may scale to. Matches
+   * wrangler's default of 20. A value of 1 serializes every Durable Object
+   * instance through a single container slot, so the default lets containers
+   * scale concurrently out of the box.
+   * @default 20
    */
   maxInstances?: number;
   /**
@@ -164,8 +168,10 @@ export interface ContainerApplicationProps extends PlatformProps {
    */
   schedulingPolicy?: ContainerApplication.SchedulingPolicy;
   /**
-   * Instance type for each deployment.
-   * @default "dev"
+   * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
+   * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
+   * {@link disk} is set. (`"dev"` is wrangler's deprecated alias for `"lite"`.)
+   * @default "lite"
    */
   instanceType?: ContainerApplication.InstanceType;
   /**
