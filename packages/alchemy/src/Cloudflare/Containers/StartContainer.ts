@@ -1,7 +1,6 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -167,14 +166,12 @@ export const startContainer = Effect.fn(function* <
   // `running === true` and skips. `readyPorts` lets steady-state requests skip
   // the readiness probe entirely (like native's `healthy` state).
   //
-  // Key on `DurableObjectState` (stable + unique per DO instance). It is
-  // resolvable here because the bind effect above already runs in the DO
-  // context; fall back to a fresh per-call key in the unusual event it isn't.
-  const doState = yield* Effect.serviceOption(DurableObjectState).pipe(
-    Effect.map(Option.getOrUndefined),
-  );
+  // Key on `DurableObjectState` (stable + unique per DO instance). Requiring it
+  // is correct: a container only ever runs inside a Durable Object, so this is
+  // an honest dependency rather than a silent fallback.
+  const doState = yield* DurableObjectState;
   const coordinationKey: object =
-    (doState?.container as object | undefined) ?? doState ?? {};
+    (doState.container as object | undefined) ?? doState;
   const { startMutex, readyPorts } = getStartCoordination(coordinationKey);
 
   const launchMonitor = Effect.forkDetach(
