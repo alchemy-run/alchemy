@@ -4,6 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Redacted } from "effect/Redacted";
 import type * as Stream from "effect/Stream";
 import type { Rpc } from "../../Rpc.ts";
+import type { WorkflowLike } from "../Workflows/Workflow.ts";
 // NOTE: import the service modules directly rather than `import * as Cloudflare
 // from "../index.ts"`. Importing the whole Cloudflare barrel here creates a
 // circular re-export when the barrel does `export * from "./Workers/index.ts"`
@@ -79,15 +80,17 @@ export type GetBindingType<T> =
                                         ? WorkerVersionMetadata
                                         : T extends WorkerLoaderResource
                                           ? WorkerLoader
-                                          : T extends DurableObjectLike
-                                            ? DurableObjectNamespace<
-                                                Exclude<T["Shape"], undefined>
-                                              >
-                                            : T extends Redacted<any>
-                                              ? // redacteds are always stored as secret_text, so are always string
-                                                // we JSON.stringify when not a Redacted<string>
-                                                string
-                                              : T;
+                                          : T extends WorkflowLike<infer Params>
+                                            ? Workflow<Params>
+                                            : T extends DurableObjectLike
+                                              ? DurableObjectNamespace<
+                                                  Exclude<T["Shape"], undefined>
+                                                >
+                                              : T extends Redacted<any>
+                                                ? // redacteds are always stored as secret_text, so are always string
+                                                  // we JSON.stringify when not a Redacted<string>
+                                                  string
+                                                : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
