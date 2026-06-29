@@ -10,12 +10,12 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* Cloudflare.Vite("ViteDoFixture", {
+    const worker = yield* Cloudflare.Website.Vite("ViteDoFixture", {
       assets: {
         runWorkerFirst: ["/api/*"],
       },
       env: {
-        Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+        Counter: Cloudflare.DurableObject<Counter>("Counter", {
           className: "Counter",
         }),
       },

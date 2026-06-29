@@ -293,7 +293,7 @@ test.provider(
       // Resolve the hashed bundle URL by reading the deployed HTML, then
       // assert the marker that `main.ts` references via
       // `import.meta.env.VITE_TEST_MARKER` was actually inlined into the
-      // served JS asset by `Cloudflare.Vite`'s `env`-→-`define` plumbing.
+      // served JS asset by `Cloudflare.Website.Vite`'s `env`-→-`define` plumbing.
       const bundleUrl1 = yield* discoverBundleUrl(site1.url!);
       yield* expectUrlContains(bundleUrl1, marker1, {
         timeout: "60 seconds",
@@ -303,7 +303,7 @@ test.provider(
       const marker2 = `vite-env-2-${Date.now()}`;
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("FixViteEnv", {
+          return yield* Cloudflare.Website.Vite("FixViteEnv", {
             ...viteProps(rootDir, memoInclude),
             env: { VITE_TEST_MARKER: marker2 },
           });
@@ -354,7 +354,7 @@ test.provider(
 
       const site = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("ViteDo", {
+          return yield* Cloudflare.Website.Vite("ViteDo", {
             ...viteProps(rootDir, memoInclude),
             compatibility: {
               date: "2026-03-17",
@@ -364,12 +364,9 @@ test.provider(
               runWorkerFirst: ["/api/*"],
             },
             env: {
-              Counter: Cloudflare.DurableObjectNamespace<ViteDoCounter>(
-                "Counter",
-                {
-                  className: "Counter",
-                },
-              ),
+              Counter: Cloudflare.DurableObject<ViteDoCounter>("Counter", {
+                className: "Counter",
+              }),
             },
           });
         }),
@@ -444,7 +441,7 @@ test.provider(
 
       const site = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("ReactRouterRsc", {
+          return yield* Cloudflare.Website.Vite("ReactRouterRsc", {
             ...viteProps(rootDir, memoInclude),
             assets,
             compatibility,
@@ -524,8 +521,8 @@ devTest.provider(
         const deploy = (bucketId: string, marker: string) =>
           stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* Cloudflare.R2Bucket(bucketId);
-              const worker = yield* Cloudflare.Vite("TanStackDevBindings", {
+              const bucket = yield* Cloudflare.R2.Bucket(bucketId);
+              const worker = yield* Cloudflare.Website.Vite("TanStackDevBindings", {
                 ...viteProps(rootDir, memoInclude),
                 assets: {
                   runWorkerFirst: true,

@@ -9,7 +9,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* Cloudflare.Vite("ReactRouterRscFixture", {
+    const worker = yield* Cloudflare.Website.Vite("ReactRouterRscFixture", {
       assets: {
         runWorkerFirst: true,
       },
