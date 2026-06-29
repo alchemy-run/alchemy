@@ -98,3 +98,114 @@ test(
   }).pipe(logLevel),
   { timeout: 30_000 },
 );
+
+// ---------------------------------------------------------------------------
+// Cross-script binding: a consumer Worker binds a Workflow hosted by another
+// Worker script via `scriptName`. The host owns the workflow (props-only form
+// with no `scriptName` → drives `putWorkflow`); the consumer's binding is a
+// reference only. Inline `script` keeps both workers in this one file.
+// ---------------------------------------------------------------------------
+
+// Host hosts the WorkflowEntrypoint class AND drives a workflow instance.
+const hostWorkflowScript = `import { WorkflowEntrypoint } from "cloudflare:workers";
+export class MyWorkflow extends WorkflowEntrypoint {
+  async run(event, step) {
+    const greeting = await step.do("greet", async () => \`Hello, \${event.payload.value}!\`);
+    return await step.do("finalize", async () => ({ greeting }));
+  }
+}
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/workflow/start/")) {
+      const value = url.pathname.split("/workflow/start/")[1] ?? "world";
+      const instance = await env.MY_WORKFLOW.create({ params: { value } });
+      return Response.json({ instanceId: instance.id });
+    }
+    if (url.pathname.startsWith("/workflow/status/")) {
+      const id = url.pathname.split("/workflow/status/")[1] ?? "";
+      const instance = await env.MY_WORKFLOW.get(id);
+      return Response.json(await instance.status());
+    }
+    return new Response("ok");
+  },
+};
+`;
+
+// Consumer has no class — it only references the host's workflow.
+const consumerWorkflowScript = `export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/workflow/start/")) {
+      const value = url.pathname.split("/workflow/start/")[1] ?? "world";
+      const instance = await env.MY_WORKFLOW.create({ params: { value } });
+      return Response.json({ instanceId: instance.id });
+    }
+    if (url.pathname.startsWith("/workflow/status/")) {
+      const id = url.pathname.split("/workflow/status/")[1] ?? "";
+      const instance = await env.MY_WORKFLOW.get(id);
+      return Response.json(await instance.status());
+    }
+    return new Response("ok");
+  },
+};
+`;
+
+test.provider(
+  "async worker workflow binding accepts scriptName (cross-script)",
+  (scratch) =>
+    Effect.gen(function* () {
+      // Deploy the host first so its workflow exists (putWorkflow) before the
+      // consumer references it by scriptName.
+      yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            host: yield* Cloudflare.Worker("host-workflow-worker", {
+              script: hostWorkflowScript,
+              env: {
+                MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow"),
+              },
+            }),
+          };
+        }),
+      );
+
+      const deployed = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const host = yield* Cloudflare.Worker("host-workflow-worker", {
+            script: hostWorkflowScript,
+            env: {
+              MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow"),
+            },
+          });
+          const consumer = yield* Cloudflare.Worker(
+            "consumer-workflow-worker",
+            {
+              script: consumerWorkflowScript,
+              env: {
+                MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow", {
+                  scriptName: host.workerName,
+                }),
+              },
+            },
+          );
+          return { consumer, host };
+        }),
+      );
+
+      // Start + complete a workflow instance through the CONSUMER's binding,
+      // exercising both `create` and `get` across the cross-script reference.
+      const lastStatus = yield* runWorkflowToCompletion(
+        deployed.consumer.url!,
+      ).pipe(
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
+      );
+
+      expect(lastStatus.status).toBe("complete");
+      expect(lastStatus.error).toBeFalsy();
+      expect(lastStatus.output?.greeting).toBe("Hello, world!");
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
