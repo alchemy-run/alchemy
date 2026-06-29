@@ -10,7 +10,7 @@ import type { Dataset as AnalyticsEngineDatasetLike } from "./Dataset.ts";
  *
  * `WriteDataset` is a single identifier that is simultaneously the binding's
  * Context tag, its type, and the callable —
- * `yield* Cloudflare.AnalyticsEngineDataset.WriteDataset(dataset)`.
+ * `yield* Cloudflare.AnalyticsEngine.WriteDataset(dataset)`.
  *
  * @binding
  * @product Analytics Engine
@@ -18,7 +18,7 @@ import type { Dataset as AnalyticsEngineDatasetLike } from "./Dataset.ts";
  *
  * @example Write a data point inside a Worker
  * ```typescript
- * const analytics = yield* Cloudflare.AnalyticsEngineDataset.WriteDataset(Dataset);
+ * const analytics = yield* Cloudflare.AnalyticsEngine.WriteDataset(Dataset);
  * yield* analytics.writeDataPoint({ blobs: ["signup"] });
  * ```
  */

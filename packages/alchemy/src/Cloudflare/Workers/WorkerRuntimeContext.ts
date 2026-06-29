@@ -147,7 +147,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       // layer the fetch path uses, then envelope-encodes the result so
       // `Effect.fail` round-trips as `RpcErrorEnvelope` and `Stream` as
       // `RpcStreamEnvelope` (consumers wrap the binding with
-      // `toPromiseApi`/`bindWorker` to decode).
+      // `toRpcAsync`/`bindWorker` to decode).
 
       return {
         ...exports,

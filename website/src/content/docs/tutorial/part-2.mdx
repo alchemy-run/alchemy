@@ -98,7 +98,7 @@ Stack. You can safely import them from multiple files.
 
 Now the Worker can import `Bucket` and bind it in the Init phase:
 
-```typescript twoslash errorReplace='.*::Type 'R2BucketBinding' is not assignable to type 'WorkerServices | PlatformServices'.'
+```typescript twoslash errorReplace='.*::Type 'ReadWriteBucket' is not assignable to type 'WorkerServices | PlatformServices'.'
 // src/worker.ts
 // @errors: 2345
 // @noEmit: true
@@ -132,9 +132,9 @@ export default Cloudflare.Worker(
 
 ## Provide the binding layer
 
-The previous step showed a type error — `Bucket.bind` requires the
-`R2BucketBinding` service. Fix it by piping the outer Effect through
-`R2BucketBindingLive`:
+The previous step showed a type error — `Cloudflare.R2.ReadWriteBucket(Bucket)`
+requires the `Cloudflare.R2.ReadWriteBucketBinding` service. Fix it by piping
+the outer Effect through `Cloudflare.R2.ReadWriteBucketBinding`:
 
 ```typescript twoslash errorReplace='.*::Type 'R2Error' is not assignable to type 'HttpServerError | HttpBodyError'.'
 // src/worker.ts
@@ -162,9 +162,9 @@ export default Cloudflare.Worker(
 );
 ```
 
-`R2BucketBindingLive` tells the Worker runtime how to look up the
-underlying R2 binding from the Cloudflare environment. Without it,
-`bind` wouldn't know where to find the bucket at runtime.
+`ReadWriteBucketBinding` tells the Worker runtime how to look up the
+underlying R2 binding from the Cloudflare environment. Without it, the
+`ReadWriteBucket` binding wouldn't know where to find the bucket at runtime.
 
 ## Add the PUT handler
 

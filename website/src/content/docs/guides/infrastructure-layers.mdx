@@ -274,7 +274,7 @@ export const JobServiceR2 = Layer.effect(
   JobService,
   Effect.gen(function* () {
     const Bucket = yield* Cloudflare.R2.Bucket("Jobs");
-    const r2 = yield* Cloudflare.R2.ReadWrite(Bucket);
+    const r2 = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
       getJob: Effect.fn(function* (id: string) {

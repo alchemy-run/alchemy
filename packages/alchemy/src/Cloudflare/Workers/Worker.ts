@@ -533,7 +533,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *   "WorkerA",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const b = yield* Cloudflare.Worker.bind(WorkerB);
+ *     const b = yield* Cloudflare.Workers.bindWorker(WorkerB);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         return yield* b.greet("world");
@@ -614,14 +614,14 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section R2 Bucket
- * Bind an R2 bucket in the init phase with `Cloudflare.R2Bucket.bind`.
+ * Bind an R2 bucket in the init phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
  * methods you can call in your runtime handlers.
  *
  * @example Binding and using R2
  * ```typescript
  * // init
- * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
  * return {
  *   fetch: Effect.gen(function* () {

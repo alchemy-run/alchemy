@@ -135,10 +135,10 @@ Add the DynamoDB lives next to the S3 ones:
   Effect.provide(
     Layer.mergeAll(
       AWS.Lambda.BucketEventSource,
-+      DynamoDB.GetItemLive,
-+      DynamoDB.PutItemLive,
-      S3.PutObjectLive,
-      S3.GetObjectLive,
++      DynamoDB.GetItemHttp,
++      DynamoDB.PutItemHttp,
+      S3.PutObjectHttp,
+      S3.GetObjectHttp,
     ),
   ),
 ),

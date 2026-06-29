@@ -88,8 +88,8 @@ protobuf, or raw blobs without changing the binding.
   Effect.provide(
     Layer.mergeAll(
       // ... existing layers ...
-+      Kinesis.PutRecordLive,
-      SQS.SendMessageLive,
++      Kinesis.PutRecordHttp,
+      SQS.SendMessageHttp,
     ),
   ),
 ),
@@ -120,7 +120,7 @@ export default class Audit extends AWS.Lambda.Function<Audit>()(
 ## Subscribe to records
 
 `Kinesis.consumeStreamRecords(stream, ...)` mirrors the SQS
-`messages(...)` shape from the previous part.
+`consumeQueueMessages(...)` shape from the previous part.
 Add the smallest possible subscription — log each record's
 partition key:
 
@@ -229,7 +229,7 @@ bun alchemy deploy
 Three functions now coexist: `Api` produces records, `Worker`
 consumes the SQS queue, and `Audit` consumes the Kinesis stream.
 Each one gets a least-privilege policy that names exactly the
-resources its `bind`/`messages`/`process` calls touched — no
+resources its capability and `consume*` calls touched — no
 `"*"`, no IAM JSON to maintain.
 
 ## Verify
@@ -279,5 +279,5 @@ the same binding pattern, with IAM policies that match exactly
 the operations you call. The same `Stream`-shaped consumer
 surface drives every event source you've added, so adding more
 (SNS topics, EventBridge buses, Step Functions invocations) is
-a matter of declaring the resource and pointing `messages` /
-`.process` at it.
+a matter of declaring the resource and pointing the matching
+`consume*` helper at it.
