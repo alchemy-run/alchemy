@@ -17,6 +17,7 @@ import {
   type ConfigureContext,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
+import * as Region from "./Region.ts";
 import {
   getEnv,
   getEnvRedacted,
@@ -94,20 +95,25 @@ export const AwsAuth = AuthProviderLayer<
       accessKeyId,
       secretAccessKey,
       sessionToken,
+      region,
     }: {
       accessKeyId: Redacted.Redacted<string>;
       secretAccessKey: Redacted.Redacted<string>;
       sessionToken?: Redacted.Redacted<string>;
+      region: string;
     }) =>
       STS.getCallerIdentity({}).pipe(
         Effect.provide(
-          Layer.succeed(
-            Credentials,
-            Effect.succeed({
-              accessKeyId,
-              secretAccessKey,
-              sessionToken,
-            }),
+          Layer.mergeAll(
+            Layer.succeed(
+              Credentials,
+              Effect.succeed({
+                accessKeyId,
+                secretAccessKey,
+                sessionToken,
+              }),
+            ),
+            Region.of(region),
           ),
         ),
         Effect.flatMap((self) =>
@@ -143,6 +149,7 @@ export const AwsAuth = AuthProviderLayer<
         accessKeyId: Redacted.make(accessKeyId),
         secretAccessKey: Redacted.make(secretAccessKey),
         sessionToken: sessionToken ? Redacted.make(sessionToken) : undefined,
+        region,
       });
 
       yield* store.write<AwsStoredCredentials>(profileName, "aws", {
@@ -234,7 +241,12 @@ export const AwsAuth = AuthProviderLayer<
               }
               const accountId = yield* getEnvRequired("AWS_ACCOUNT_ID").pipe(
                 Effect.catch(() =>
-                  getAccountId({ accessKeyId, secretAccessKey, sessionToken }),
+                  getAccountId({
+                    accessKeyId,
+                    secretAccessKey,
+                    sessionToken,
+                    region,
+                  }),
                 ),
               );
               return {
@@ -277,11 +289,12 @@ export const AwsAuth = AuthProviderLayer<
                 creds.accountId
                   ? Effect.succeed(creds)
                   : creds.credentials.pipe(
-                      Effect.flatMap((creds) =>
+                      Effect.flatMap((resolved) =>
                         getAccountId({
-                          accessKeyId: creds.accessKeyId,
-                          secretAccessKey: creds.secretAccessKey,
-                          sessionToken: creds.sessionToken,
+                          accessKeyId: resolved.accessKeyId,
+                          secretAccessKey: resolved.secretAccessKey,
+                          sessionToken: resolved.sessionToken,
+                          region: creds.region,
                         }),
                       ),
                       Effect.map(
