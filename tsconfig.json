@@ -119,6 +119,9 @@
     },
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
+    },
+    {
+      "path": "./perf/cloudflare-containers-wrangler/tsconfig.json"
     }
   ],
   "compilerOptions": {

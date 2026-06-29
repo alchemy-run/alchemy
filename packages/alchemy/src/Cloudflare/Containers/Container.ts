@@ -43,6 +43,45 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
   readonly cause?: unknown;
 }> {}
 
+/**
+ * No container instance could be allocated within the start budget — the
+ * account is at its concurrent-instance cap (`maxInstances`) or the platform
+ * is still provisioning. Mirrors `@cloudflare/containers`'
+ * `NO_CONTAINER_INSTANCE_ERROR` (surfaced as HTTP 503 by native).
+ */
+export class NoContainerInstanceError extends Data.TaggedError(
+  "NoContainerInstanceError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * Cloudflare is rate limiting container starts ("too many containers per
+ * second"). Mirrors `@cloudflare/containers`' `RATE_LIMITED_ERROR` (HTTP 429).
+ * Hammering `start()` while rate limited only prolongs it, so callers should
+ * back off rather than retry tightly.
+ */
+export class ContainerRateLimitedError extends Data.TaggedError(
+  "ContainerRateLimitedError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * The container instance exited/crashed while we were waiting for its port —
+ * the entrypoint failed to bind or died. Mirrors native's "container exited"
+ * detection (`!this.container.running` mid-wait); not curable by continuing to
+ * poll the same instance.
+ */
+export class ContainerCrashedError extends Data.TaggedError(
+  "ContainerCrashedError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
 
 /**
