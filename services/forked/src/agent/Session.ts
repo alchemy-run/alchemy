@@ -54,7 +54,7 @@ const Tools = Layer.mergeAll(
  * id (`CoderSession.getByName(postId)`) so each post gets its own isolated
  * workspace, scratch database, and read-state.
  */
-export class CoderSession extends Cloudflare.DurableObjectNamespace<CoderSession>()(
+export class CoderSession extends Cloudflare.DurableObject<CoderSession>()(
   "CoderSession",
   Effect.gen(function* () {
     const coder = yield* Coder;

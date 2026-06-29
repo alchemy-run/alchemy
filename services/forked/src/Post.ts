@@ -59,7 +59,7 @@ export interface PostSeed {
  * repository and the list of replies/forks branching off it — together the
  * instances form the post graph.
  */
-export class Post extends Cloudflare.DurableObjectNamespace<Post>()(
+export class Post extends Cloudflare.DurableObject<Post>()(
   "Post",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

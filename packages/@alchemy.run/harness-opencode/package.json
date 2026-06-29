@@ -16,6 +16,7 @@
     "build": "tsc -b",
     "test": "doppler run -- bun test",
     "deploy": "doppler run -- bun alchemy deploy ./test/stack.ts",
+    "destroy": "doppler run -- bun alchemy destroy ./test/stack.ts",
     "dev": "doppler run -- bun alchemy dev ./test/stack.ts",
     "tail": "doppler run -- bun alchemy tail ./test/stack.ts",
     "test:integ": "doppler run -- bun test test/integ.test.ts",

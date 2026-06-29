@@ -1,7 +1,7 @@
 import {
   DEFAULT_DOCKERFILE,
   makeCodingAgentContainer,
-} from "alchemy/Cloudflare";
+} from "alchemy/Cloudflare/AI";
 import { OpenCodeAgent, type OpenCodeAgentOptions } from "./OpenCodeAgent.ts";
 
 /**

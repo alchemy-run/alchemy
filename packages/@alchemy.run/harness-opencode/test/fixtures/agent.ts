@@ -3,8 +3,8 @@ import type {
   CodingAgentEvent,
   CodingAgentMessage,
 } from "alchemy/AI";
-import { CodingAgentContainer } from "alchemy/Cloudflare";
 import * as Cloudflare from "alchemy/Cloudflare";
+import { CodingAgentContainer } from "alchemy/Cloudflare/AI";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
@@ -39,7 +39,7 @@ const KEEP_ALIVE_MS = 6 * 60 * 60 * 1000;
  * - WebSocket clients are served by a per-socket pump over the container's live
  *   event stream (`container.events()`), forwarding each event as a frame.
  */
-export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
+export default class Agent extends Cloudflare.DurableObject<Agent>()(
   "Agent",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
@@ -114,7 +114,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
       );
 
       // ── WebSocket pump: container live event stream → socket frames ──────
-      const pump = (socket: Cloudflare.DurableWebSocket) =>
+      const pump = (socket: Cloudflare.WebSocket) =>
         container.events().pipe(
           Stream.runForEach((event: CodingAgentEvent) =>
             socket.send(JSON.stringify(event)),
@@ -122,7 +122,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
           Effect.catchCause(() => Effect.void),
         );
 
-      const startPump = (socket: Cloudflare.DurableWebSocket) =>
+      const startPump = (socket: Cloudflare.WebSocket) =>
         Effect.forkDetach(pump(socket)).pipe(Effect.asVoid);
 
       // Keep idle sockets alive: the runtime auto-replies "pong" to a client
@@ -192,7 +192,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
         }),
 
         webSocketClose: Effect.fn(function* (
-          socket: Cloudflare.DurableWebSocket,
+          socket: Cloudflare.WebSocket,
           code: number,
           reason: string,
         ) {
@@ -207,7 +207,9 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     });
   }).pipe(
     Effect.provide(
-      Cloudflare.layerContainer(CodingAgentContainer, { enableInternet: true }),
+      Cloudflare.Containers.layer(CodingAgentContainer, {
+        enableInternet: true,
+      }),
     ),
   ),
 ) {}

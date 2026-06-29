@@ -7,7 +7,7 @@ import type {
   CodingAgentSessionControl,
 } from "../../AI/CodingAgent.ts";
 import { CodingAgentRuntime } from "../../AI/CodingAgentRuntime.ts";
-import { Container } from "../Container/Container.ts";
+import { Container } from "../Containers/Container.ts";
 
 /** Where the agent checks out and works on each repository inside the container. */
 export const WORKSPACE = "/workspace";
