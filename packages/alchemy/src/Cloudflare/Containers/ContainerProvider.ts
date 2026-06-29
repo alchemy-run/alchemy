@@ -5,17 +5,10 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
-import {
-  dockerBuild,
-  dockerTag,
-  materializeDockerfile,
-  pushImage,
-  runDockerCommand,
-  writeContextFiles,
-} from "../../Bundle/Docker.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
+import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -65,6 +58,7 @@ export const LiveContainerProvider = () =>
       const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+      const docker = yield* Docker;
 
       const telemetry = yield* CloudflareLogs;
 
@@ -226,13 +220,8 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
-          yield* runDockerCommand([
-            "pull",
-            "--platform",
-            platform,
-            build.image,
-          ]);
-          yield* dockerTag(build.image, imageRef);
+          yield* docker.image.pull(build.image, platform);
+          yield* docker.image.tag(build.image, imageRef);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -242,11 +231,11 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Building container image ${imageRef}...`);
           }
-          yield* dockerBuild({
+          yield* docker.image.build({
             tag: imageRef,
             context: build.context,
             platform,
-            extraArgs: ["-f", build.dockerfile],
+            file: build.dockerfile,
           });
         } else {
           // Effect-native program: materialize the generated Dockerfile and
@@ -269,19 +258,15 @@ export const LiveContainerProvider = () =>
             props.external,
             props.autoInstallExternals,
           );
-          yield* materializeDockerfile(finalDockerfile, contextDir);
-          yield* writeContextFiles(
-            contextDir,
-            build.files.map((f, i) => ({
-              // Keep the entry rename to `index.mjs` so the Dockerfile
-              // ENTRYPOINT (`ENTRYPOINT ["bun", "/app/index.mjs"]`) stays
-              // valid; preserve rolldown-assigned fileNames for every other
-              // chunk so intra-bundle relative imports resolve at runtime.
+          yield* docker.materialize({
+            context: contextDir,
+            dockerfile: finalDockerfile,
+            files: build.files.map((f, i) => ({
               path: i === 0 ? "index.mjs" : f.path,
               content: f.content,
             })),
-          );
-          yield* dockerBuild({
+          });
+          yield* docker.image.build({
             tag: imageRef,
             context: contextDir,
             platform,
@@ -312,7 +297,7 @@ export const LiveContainerProvider = () =>
           );
         }
 
-        yield* pushImage(imageRef, {
+        yield* docker.image.push(imageRef, {
           username,
           password: credentials.password,
           server: registryId,

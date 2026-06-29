@@ -115,6 +115,12 @@
       "worker": "./src/Bundle/index.ts",
       "import": "./lib/Bundle/index.js"
     },
+    "./Docker": {
+      "types": "./lib/Docker/index.d.ts",
+      "bun": "./src/Docker/index.ts",
+      "worker": "./src/Docker/index.ts",
+      "import": "./lib/Docker/index.js"
+    },
     "./ContentType": {
       "types": "./lib/ContentType.d.ts",
       "bun": "./src/ContentType.ts",

@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
+import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -681,6 +682,7 @@ export const providers = () =>
         RandomProvider(),
       ),
     ),
+    Layer.provide(DockerLive),
     Layer.provideMerge(localRuntimeServices()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
