@@ -133,7 +133,7 @@ export interface RpcWorkerClass extends Effect.Effect<
   /**
    * Bind a typed Effect rpc client to a worker resource, using the
    * worker's declared rpc {@link RpcGroup.RpcGroup} schema. Mirrors
-   * `Cloudflare.R2Bucket.bind(MyBucket)` and friends.
+   * `Cloudflare.R2.ReadWriteBucket(MyBucket)` and friends.
    *
    * Yield once at **init** — the result is a normal `RpcClient` you
    * can call directly from any per-request handler. Internally each
@@ -183,7 +183,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
     }
     const worker = (yield* workerEff) as Worker;
     // Register the service binding on the surrounding worker at INIT.
-    // Mirrors `Cloudflare.bindWorker` — yielding the class is *not*
+    // Mirrors `Cloudflare.Workers.bindWorker` — yielding the class is *not*
     // enough; we need an explicit `self.bind\`${worker}\`(...)` so
     // workerd surfaces the stub on `env` at request time.
     const self = yield* WorkerCtor;
@@ -283,7 +283,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * @example Pure schema description
  * The rpc group and its schemas live outside any worker so both the
  * server (`RpcWorker`) and any consumers (`RpcClient.make` /
- * `RpcDurableObjectNamespace`) import the same value.
+ * `RpcDurableObject`) import the same value.
  * ```typescript
  * import * as Schema from "effect/Schema";
  * import { Rpc, RpcGroup } from "effect/unstable/rpc";
@@ -382,7 +382,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  *   { main: import.meta.filename, schema: TaskRpcs },
  * ) {}
  * ```
- * See {@link RpcDurableObjectNamespace} for the consumer side
+ * See {@link RpcDurableObject} for the consumer side
  * (`Counter.from(TaskWorker)`).
  *
  * @section Binding it from another worker
@@ -464,7 +464,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  *
  * @section Yielding the surrounding worker from inside the impl
  * @example `yield* RpcWorker` inside the init effect
- * Mirrors `yield* DurableObjectNamespace` — yield the tag to access
+ * Mirrors `yield* DurableObject` — yield the tag to access
  * the surrounding worker.
  * ```typescript
  * Effect.gen(function* () {

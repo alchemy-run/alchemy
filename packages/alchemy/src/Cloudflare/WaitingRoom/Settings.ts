@@ -9,10 +9,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const WaitingRoomSettingsTypeId = "Cloudflare.WaitingRoom.Settings" as const;
-type WaitingRoomSettingsTypeId = typeof WaitingRoomSettingsTypeId;
+const TypeId = "Cloudflare.WaitingRoom.Settings" as const;
+type TypeId = typeof TypeId;
 
-export type WaitingRoomSettingsProps = {
+export type SettingsProps = {
   /**
    * Zone whose waiting room settings are managed. Stable — changing the
    * zone triggers a replacement (the old zone's settings are restored to
@@ -28,7 +28,7 @@ export type WaitingRoomSettingsProps = {
   searchEngineCrawlerBypass?: boolean;
 };
 
-export type WaitingRoomSettingsAttributes = {
+export type SettingsAttributes = {
   /** Zone the settings belong to. */
   zoneId: string;
   /** Whether verified search engine crawlers bypass all waiting rooms. */
@@ -41,10 +41,10 @@ export type WaitingRoomSettingsAttributes = {
   initialSearchEngineCrawlerBypass: boolean;
 };
 
-export type WaitingRoomSettings = Resource<
-  WaitingRoomSettingsTypeId,
-  WaitingRoomSettingsProps,
-  WaitingRoomSettingsAttributes,
+export type Settings = Resource<
+  TypeId,
+  SettingsProps,
+  SettingsAttributes,
   never,
   Providers
 >;
@@ -69,7 +69,7 @@ export type WaitingRoomSettings = Resource<
  * @section Managing settings
  * @example Let search engine crawlers bypass waiting rooms
  * ```typescript
- * yield* Cloudflare.WaitingRoomSettings("CrawlerBypass", {
+ * yield* Cloudflare.WaitingRoom.Settings("CrawlerBypass", {
  *   zoneId: zone.zoneId,
  *   searchEngineCrawlerBypass: true,
  * });
@@ -77,7 +77,7 @@ export type WaitingRoomSettings = Resource<
  *
  * @example Pin the settings to their defaults
  * ```typescript
- * yield* Cloudflare.WaitingRoomSettings("Defaults", {
+ * yield* Cloudflare.WaitingRoom.Settings("Defaults", {
  *   zoneId: zone.zoneId,
  *   searchEngineCrawlerBypass: false,
  * });
@@ -85,21 +85,16 @@ export type WaitingRoomSettings = Resource<
  *
  * @see https://developers.cloudflare.com/waiting-room/
  */
-export const WaitingRoomSettings = Resource<WaitingRoomSettings>(
-  WaitingRoomSettingsTypeId,
-);
+export const Settings = Resource<Settings>(TypeId);
 
 /**
- * Returns true if the given value is a WaitingRoomSettings resource.
+ * Returns true if the given value is a Settings resource.
  */
-export const isWaitingRoomSettings = (
-  value: unknown,
-): value is WaitingRoomSettings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === WaitingRoomSettingsTypeId;
+export const isSettings = (value: unknown): value is Settings =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const WaitingRoomSettingsProvider = () =>
-  Provider.succeed(WaitingRoomSettings, {
+export const SettingsProvider = () =>
+  Provider.succeed(Settings, {
     nuke: { singleton: true },
     stables: ["zoneId", "initialSearchEngineCrawlerBypass"],
 
@@ -141,14 +136,12 @@ export const WaitingRoomSettingsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is WaitingRoomSettingsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SettingsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as WaitingRoomSettingsProps;
-      const n = news as WaitingRoomSettingsProps;
+      const o = olds as SettingsProps;
+      const n = news as SettingsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -237,7 +230,7 @@ const toAttributes = (
   zoneId: string,
   searchEngineCrawlerBypass: boolean,
   initialSearchEngineCrawlerBypass: boolean,
-): WaitingRoomSettingsAttributes => ({
+): SettingsAttributes => ({
   zoneId,
   searchEngineCrawlerBypass,
   initialSearchEngineCrawlerBypass,

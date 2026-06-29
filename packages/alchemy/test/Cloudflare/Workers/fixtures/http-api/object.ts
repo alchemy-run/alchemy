@@ -28,7 +28,7 @@ export class TaskDOApi extends HttpApi.make("TaskDOApi").add(TasksDOGroup) {}
  * Persists tasks in the DO's transactional storage and exposes simple
  * RPC methods that the Worker calls from its HttpApi handlers.
  */
-export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
+export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

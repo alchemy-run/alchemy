@@ -67,7 +67,7 @@ test.provider("list enumerates accessible accounts (read-only)", (stack) =>
 
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.Account);
+    const provider = yield* Provider.findProvider(Cloudflare.Account.Account);
     const all = yield* provider.list();
 
     expect(all.length).toBeGreaterThan(0);
@@ -109,7 +109,7 @@ test.provider.skipIf(!tenantEntitled)(
       yield* stack.destroy();
 
       const account = yield* stack.deploy(
-        Cloudflare.Account("TestSubaccount", {
+        Cloudflare.Account.Account("TestSubaccount", {
           name: "alchemy-test-subaccount",
         }),
       );
@@ -126,7 +126,7 @@ test.provider.skipIf(!tenantEntitled)(
 
       // Rename + settings update happen in place (same account id).
       const updated = yield* stack.deploy(
-        Cloudflare.Account("TestSubaccount", {
+        Cloudflare.Account.Account("TestSubaccount", {
           name: "alchemy-test-subaccount-renamed",
           enforceTwofactor: true,
         }),

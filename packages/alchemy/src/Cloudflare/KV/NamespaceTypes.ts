@@ -1,6 +1,6 @@
 import * as Data from "effect/Data";
 
-export class KVNamespaceError extends Data.TaggedError("KVNamespaceError")<{
+export class NamespaceError extends Data.TaggedError("NamespaceError")<{
   message: string;
   cause: Error;
 }> {}

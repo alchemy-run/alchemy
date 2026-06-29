@@ -114,11 +114,11 @@ test.provider.skipIf(!lbEnabled)(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const pool = yield* Cloudflare.LoadBalancerPool("Pool", {
+          const pool = yield* Cloudflare.LoadBalancer.Pool("Pool", {
             name: NAME_POOL,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
           });
-          const lb = yield* Cloudflare.LoadBalancer("Lb", {
+          const lb = yield* Cloudflare.LoadBalancer.LoadBalancer("Lb", {
             zoneId,
             name: NAME_LIFECYCLE,
             defaultPools: [pool.poolId],
@@ -146,11 +146,11 @@ test.provider.skipIf(!lbEnabled)(
       // engine never has to replace and drop a dependency in one deploy.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const pool = yield* Cloudflare.LoadBalancerPool("Pool", {
+          const pool = yield* Cloudflare.LoadBalancer.Pool("Pool", {
             name: NAME_POOL,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
           });
-          const lb = yield* Cloudflare.LoadBalancer("Lb", {
+          const lb = yield* Cloudflare.LoadBalancer.LoadBalancer("Lb", {
             zoneId,
             name: NAME_LIFECYCLE,
             defaultPools: [pool.poolId],
@@ -190,7 +190,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LoadBalancer.LoadBalancer,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -223,11 +225,11 @@ test.provider.skipIf(!lbEnabled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const pool = yield* Cloudflare.LoadBalancerPool("Pool", {
+          const pool = yield* Cloudflare.LoadBalancer.Pool("Pool", {
             name: NAME_POOL,
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
           });
-          const lb = yield* Cloudflare.LoadBalancer("Lb", {
+          const lb = yield* Cloudflare.LoadBalancer.LoadBalancer("Lb", {
             zoneId,
             name: NAME_LIFECYCLE,
             defaultPools: [pool.poolId],
@@ -239,7 +241,9 @@ test.provider.skipIf(!lbEnabled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LoadBalancer.LoadBalancer,
+      );
       const all = yield* provider.list();
 
       const row = all.find(

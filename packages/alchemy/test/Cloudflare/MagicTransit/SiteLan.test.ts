@@ -29,7 +29,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicSiteLan);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicSiteLan,
+      );
       const all = yield* provider.list();
 
       // Either the exhaustively-paginated LANs (entitled) or [] (unentitled).
@@ -50,11 +52,11 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const site = yield* Cloudflare.MagicSite("Site", {
+          const site = yield* Cloudflare.MagicTransit.MagicSite("Site", {
             name: "alchemy-magic-site-lanlist",
             description: "alchemy magic site list test",
           });
-          const lan = yield* Cloudflare.MagicSiteLan("ListLan", {
+          const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("ListLan", {
             siteId: site.siteId,
             physport: 2,
             name: "alchemy-site-lan-list",
@@ -67,7 +69,9 @@ test.provider.skipIf(!entitled)(
 
       expect(deployed.lan.lanId).toBeTruthy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicSiteLan);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicSiteLan,
+      );
       const all = yield* provider.list();
 
       // The deployed LAN is present in the exhaustively-paginated result,

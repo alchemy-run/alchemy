@@ -53,7 +53,7 @@ test.provider(
       yield* stack.destroy();
 
       const webhook = yield* stack.deploy(
-        Cloudflare.StreamWebhook("Notifications", {
+        Cloudflare.Stream.Webhook("Notifications", {
           notificationUrl: "https://example.com/hooks/stream",
         }),
       );
@@ -69,7 +69,7 @@ test.provider(
 
       // Update the URL in place — PUT is a true upsert.
       const updated = yield* stack.deploy(
-        Cloudflare.StreamWebhook("Notifications", {
+        Cloudflare.Stream.Webhook("Notifications", {
           notificationUrl: "https://example.com/hooks/stream-v2",
         }),
       );
@@ -85,7 +85,7 @@ test.provider(
 
       // Redeploying identical props is a no-op.
       const noop = yield* stack.deploy(
-        Cloudflare.StreamWebhook("Notifications", {
+        Cloudflare.Stream.Webhook("Notifications", {
           notificationUrl: "https://example.com/hooks/stream-v2",
         }),
       );
@@ -115,7 +115,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.StreamWebhook);
+      const provider = yield* Provider.findProvider(Cloudflare.Stream.Webhook);
       const all = yield* provider.list();
 
       // Account singleton: zero or one webhook, each well-typed Attributes

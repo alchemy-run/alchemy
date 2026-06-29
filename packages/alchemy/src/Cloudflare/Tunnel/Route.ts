@@ -9,7 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type TunnelRouteProps = {
+export type RouteProps = {
   /**
    * UUID of the `cfd_tunnel` this route attaches to.
    *
@@ -48,9 +48,9 @@ export type TunnelRouteProps = {
   adopt?: boolean;
 };
 
-export type TunnelRoute = Resource<
-  "Cloudflare.TunnelRoute",
-  TunnelRouteProps,
+export type Route = Resource<
+  "Cloudflare.Tunnel.Route",
+  RouteProps,
   {
     /**
      * UUID of the route, assigned by Cloudflare.
@@ -96,8 +96,8 @@ export type TunnelRoute = Resource<
  * @section Creating a Route
  * @example Basic route
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("MyTunnel");
- * const route = yield* Cloudflare.TunnelRoute("PrivateNet", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
+ * const route = yield* Cloudflare.Tunnel.Route("PrivateNet", {
  *   tunnelId: tunnel.tunnelId,
  *   network: "10.4.0.0/16",
  * });
@@ -105,7 +105,7 @@ export type TunnelRoute = Resource<
  *
  * @example Route with a comment and explicit virtual network
  * ```typescript
- * const route = yield* Cloudflare.TunnelRoute("DcRoute", {
+ * const route = yield* Cloudflare.Tunnel.Route("DcRoute", {
  *   tunnelId: tunnel.tunnelId,
  *   network: "10.50.0.0/16",
  *   comment: "Datacenter A private subnet",
@@ -114,10 +114,10 @@ export type TunnelRoute = Resource<
  * });
  * ```
  */
-export const TunnelRoute = Resource<TunnelRoute>("Cloudflare.TunnelRoute");
+export const Route = Resource<Route>("Cloudflare.Tunnel.Route");
 
-export const TunnelRouteProvider = () =>
-  Provider.succeed(TunnelRoute, {
+export const RouteProvider = () =>
+  Provider.succeed(Route, {
     stables: [
       "routeId",
       "accountId",
@@ -217,7 +217,7 @@ export const TunnelRouteProvider = () =>
 
       if (!observed) {
         return yield* Effect.die(
-          `TunnelRoute create returned no id for network ${network} on tunnel ${tunnelId}`,
+          `Route create returned no id for network ${network} on tunnel ${tunnelId}`,
         );
       }
 

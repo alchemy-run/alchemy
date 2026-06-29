@@ -1,4 +1,4 @@
-import type { ReadBucketClient } from "@/Cloudflare/R2/BucketRead.ts";
+import type { ReadBucketClient } from "@/Cloudflare/R2/ReadBucket.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 

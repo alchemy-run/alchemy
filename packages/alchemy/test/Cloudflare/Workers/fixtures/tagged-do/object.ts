@@ -2,14 +2,14 @@ import * as Cloudflare from "@/Cloudflare";
 import type { RuntimeContext } from "@/index";
 import * as Effect from "effect/Effect";
 
-export const MyDB = Cloudflare.D1Database("MyDB");
+export const MyDB = Cloudflare.D1.Database("MyDB");
 
 const DO_COUNT_KEY = "do_count";
 
 // Tag — D1 RPC methods take an explicit row `key` so the shared D1 table
 // can be partitioned per-caller. The DO storage methods don't need one
 // because per-instance storage is already isolated by `getByName(name)`.
-export class Counter extends Cloudflare.DurableObjectNamespace<
+export class Counter extends Cloudflare.DurableObject<
   Counter,
   {
     incrementD1: (key: string) => Effect.Effect<number, never, RuntimeContext>;
@@ -23,7 +23,7 @@ export class Counter extends Cloudflare.DurableObjectNamespace<
 // Layer
 export const CounterLive = Counter.make(
   Effect.gen(function* () {
-    const db = yield* Cloudflare.D1Connection.bind(MyDB);
+    const db = yield* Cloudflare.D1.QueryDatabase(MyDB);
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {

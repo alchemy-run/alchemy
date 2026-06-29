@@ -16,7 +16,7 @@ The contents of the file to write.`;
 export class WriteFile extends AI.Tool<WriteFile>()("writeFile")`
 Create or overwrite a file at the given ${path} with the provided ${contents}.` {}
 
-export const Storage = Cloudflare.R2Bucket("Storage");
+export const Storage = Cloudflare.R2.Bucket("Storage");
 
 export const WriteFileR2 = Layer.effect(
   WriteFile,

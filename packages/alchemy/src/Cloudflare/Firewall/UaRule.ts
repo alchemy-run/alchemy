@@ -101,7 +101,7 @@ export type UaRule = Resource<
  * @section Blocking a User-Agent
  * @example Block a scraper outright
  * ```typescript
- * yield* Cloudflare.UaRule("BlockScraper", {
+ * yield* Cloudflare.Firewall.UaRule("BlockScraper", {
  *   zoneId: zone.zoneId,
  *   userAgent: "BadBot/1.2 (+http://badbot.example)",
  *   mode: "block",
@@ -112,7 +112,7 @@ export type UaRule = Resource<
  * @section Challenging a User-Agent
  * @example Managed challenge instead of a hard block
  * ```typescript
- * yield* Cloudflare.UaRule("ChallengeOldClient", {
+ * yield* Cloudflare.Firewall.UaRule("ChallengeOldClient", {
  *   zoneId: zone.zoneId,
  *   userAgent: "LegacyApp/0.9",
  *   mode: "managed_challenge",
@@ -122,7 +122,7 @@ export type UaRule = Resource<
  * @section Pausing a rule
  * @example Temporarily disable a rule without deleting it
  * ```typescript
- * yield* Cloudflare.UaRule("BlockScraper", {
+ * yield* Cloudflare.Firewall.UaRule("BlockScraper", {
  *   zoneId: zone.zoneId,
  *   userAgent: "BadBot/1.2 (+http://badbot.example)",
  *   mode: "block",

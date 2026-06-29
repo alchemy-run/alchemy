@@ -74,7 +74,7 @@ test.provider.skipIf(!magicTransit)(
       // Create.
       const entry = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosAllowlistEntry("Entry", {
+          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry("Entry", {
             prefix: "192.0.2.0/24",
             comment: "alchemy ddos allowlist test",
             enabled: false,
@@ -95,7 +95,7 @@ test.provider.skipIf(!magicTransit)(
       // In-place update — comment and enabled are patched, id is stable.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosAllowlistEntry("Entry", {
+          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry("Entry", {
             prefix: "192.0.2.0/24",
             comment: "alchemy ddos allowlist test (updated)",
             enabled: true,
@@ -109,7 +109,7 @@ test.provider.skipIf(!magicTransit)(
       // Replacement — the prefix is the entry's identity.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosAllowlistEntry("Entry", {
+          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry("Entry", {
             prefix: "198.51.100.0/24",
             comment: "alchemy ddos allowlist test (replaced)",
             enabled: true,
@@ -147,7 +147,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.DdosAllowlistEntry,
+        Cloudflare.DdosProtection.DdosAllowlistEntry,
       );
       const all = yield* provider.list();
 
@@ -168,16 +168,19 @@ test.provider.skipIf(!magicTransit)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosAllowlistEntry("ListEntry", {
-            prefix: "203.0.113.0/24",
-            comment: "alchemy ddos allowlist list test",
-            enabled: false,
-          });
+          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry(
+            "ListEntry",
+            {
+              prefix: "203.0.113.0/24",
+              comment: "alchemy ddos allowlist list test",
+              enabled: false,
+            },
+          );
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.DdosAllowlistEntry,
+        Cloudflare.DdosProtection.DdosAllowlistEntry,
       );
       const all = yield* provider.list();
 

@@ -11,9 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CloudIntegrationTypeId =
-  "Cloudflare.MagicCloudNetworking.CloudIntegration" as const;
-type CloudIntegrationTypeId = typeof CloudIntegrationTypeId;
+const TypeId = "Cloudflare.MagicCloudNetworking.CloudIntegration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud provider an integration discovers resources from.
@@ -117,7 +116,7 @@ export interface CloudIntegrationAttributes {
 }
 
 export type CloudIntegration = Resource<
-  CloudIntegrationTypeId,
+  TypeId,
   CloudIntegrationProps,
   CloudIntegrationAttributes,
   never,
@@ -143,7 +142,7 @@ export type CloudIntegration = Resource<
  * @section Creating an integration
  * @example Register an AWS account
  * ```typescript
- * const aws = yield* Cloudflare.CloudIntegration("Discovery", {
+ * const aws = yield* Cloudflare.MagicCloudNetworking.CloudIntegration("Discovery", {
  *   cloudType: "AWS",
  *   description: "production AWS account",
  * });
@@ -152,7 +151,7 @@ export type CloudIntegration = Resource<
  *
  * @example Wire credentials after creating the IAM role
  * ```typescript
- * yield* Cloudflare.CloudIntegration("Discovery", {
+ * yield* Cloudflare.MagicCloudNetworking.CloudIntegration("Discovery", {
  *   cloudType: "AWS",
  *   awsArn: "arn:aws:iam::123456789012:role/cloudflare-mcn-discovery",
  * });
@@ -161,7 +160,7 @@ export type CloudIntegration = Resource<
  * @section GCP
  * @example Register a GCP project
  * ```typescript
- * yield* Cloudflare.CloudIntegration("GcpDiscovery", {
+ * yield* Cloudflare.MagicCloudNetworking.CloudIntegration("GcpDiscovery", {
  *   cloudType: "GOOGLE",
  *   gcpProjectId: "my-project",
  *   gcpServiceAccountEmail: "mcn@my-project.iam.gserviceaccount.com",
@@ -170,15 +169,13 @@ export type CloudIntegration = Resource<
  *
  * @see https://developers.cloudflare.com/magic-cloud-networking/
  */
-export const CloudIntegration = Resource<CloudIntegration>(
-  CloudIntegrationTypeId,
-);
+export const CloudIntegration = Resource<CloudIntegration>(TypeId);
 
 /**
  * Returns true if the given value is a CloudIntegration resource.
  */
 export const isCloudIntegration = (value: unknown): value is CloudIntegration =>
-  Predicate.hasProperty(value, "Type") && value.Type === CloudIntegrationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CloudIntegrationProvider = () =>
   Provider.succeed(CloudIntegration, {

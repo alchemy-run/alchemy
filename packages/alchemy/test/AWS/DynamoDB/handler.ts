@@ -29,35 +29,30 @@ export default DynamoDBTestFunction.make(
       attributes: { pk: "S", sk: "S" },
     });
 
-    const getItem = yield* DynamoDB.GetItem.bind(sourceTable);
-    const batchGetItem = yield* DynamoDB.BatchGetItem.bind(sourceTable);
-    const batchWriteItem = yield* DynamoDB.BatchWriteItem.bind(sourceTable);
+    const getItem = yield* DynamoDB.GetItem(sourceTable);
+    const batchGetItem = yield* DynamoDB.BatchGetItem(sourceTable);
+    const batchWriteItem = yield* DynamoDB.BatchWriteItem(sourceTable);
     const batchExecuteStatement =
-      yield* DynamoDB.BatchExecuteStatement.bind(sourceTable);
-    const describeTable = yield* DynamoDB.DescribeTable.bind(sourceTable);
-    const describeTimeToLive =
-      yield* DynamoDB.DescribeTimeToLive.bind(sourceTable);
-    const executeStatement = yield* DynamoDB.ExecuteStatement.bind(sourceTable);
-    const executeTransaction =
-      yield* DynamoDB.ExecuteTransaction.bind(sourceTable);
-    const putItem = yield* DynamoDB.PutItem.bind(sourceTable);
-    const deleteItem = yield* DynamoDB.DeleteItem.bind(sourceTable);
-    const listTables = yield* DynamoDB.ListTables.bind();
-    const listTagsOfResource =
-      yield* DynamoDB.ListTagsOfResource.bind(sourceTable);
-    const updateItem = yield* DynamoDB.UpdateItem.bind(sourceTable);
-    const updateTimeToLive = yield* DynamoDB.UpdateTimeToLive.bind(sourceTable);
-    const query = yield* DynamoDB.Query.bind(sourceTable);
-    const scan = yield* DynamoDB.Scan.bind(sourceTable);
+      yield* DynamoDB.BatchExecuteStatement(sourceTable);
+    const describeTable = yield* DynamoDB.DescribeTable(sourceTable);
+    const describeTimeToLive = yield* DynamoDB.DescribeTimeToLive(sourceTable);
+    const executeStatement = yield* DynamoDB.ExecuteStatement(sourceTable);
+    const executeTransaction = yield* DynamoDB.ExecuteTransaction(sourceTable);
+    const putItem = yield* DynamoDB.PutItem(sourceTable);
+    const deleteItem = yield* DynamoDB.DeleteItem(sourceTable);
+    const listTables = yield* DynamoDB.ListTables();
+    const listTagsOfResource = yield* DynamoDB.ListTagsOfResource(sourceTable);
+    const updateItem = yield* DynamoDB.UpdateItem(sourceTable);
+    const updateTimeToLive = yield* DynamoDB.UpdateTimeToLive(sourceTable);
+    const query = yield* DynamoDB.Query(sourceTable);
+    const scan = yield* DynamoDB.Scan(sourceTable);
     const TableName = yield* sourceTable.tableName;
-    const restoreTableToPointInTime =
-      yield* DynamoDB.RestoreTableToPointInTime.bind(
-        sourceTable,
-        restoreTargetTable,
-      );
-    const transactGetItems = yield* DynamoDB.TransactGetItems.bind(sourceTable);
-    const transactWriteItems =
-      yield* DynamoDB.TransactWriteItems.bind(sourceTable);
+    const restoreTableToPointInTime = yield* DynamoDB.RestoreTableToPointInTime(
+      sourceTable,
+      restoreTargetTable,
+    );
+    const transactGetItems = yield* DynamoDB.TransactGetItems(sourceTable);
+    const transactWriteItems = yield* DynamoDB.TransactWriteItems(sourceTable);
 
     return {
       fetch: Effect.gen(function* () {
@@ -336,25 +331,25 @@ export default DynamoDBTestFunction.make(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        DynamoDB.BatchExecuteStatementLive,
-        DynamoDB.BatchGetItemLive,
-        DynamoDB.BatchWriteItemLive,
-        DynamoDB.DescribeTableLive,
-        DynamoDB.DescribeTimeToLiveLive,
-        DynamoDB.ExecuteStatementLive,
-        DynamoDB.ExecuteTransactionLive,
-        DynamoDB.GetItemLive,
-        DynamoDB.ListTablesLive,
-        DynamoDB.ListTagsOfResourceLive,
-        DynamoDB.PutItemLive,
-        DynamoDB.DeleteItemLive,
-        DynamoDB.UpdateItemLive,
-        DynamoDB.UpdateTimeToLiveLive,
-        DynamoDB.QueryLive,
-        DynamoDB.RestoreTableToPointInTimeLive,
-        DynamoDB.ScanLive,
-        DynamoDB.TransactGetItemsLive,
-        DynamoDB.TransactWriteItemsLive,
+        DynamoDB.BatchExecuteStatementHttp,
+        DynamoDB.BatchGetItemHttp,
+        DynamoDB.BatchWriteItemHttp,
+        DynamoDB.DescribeTableHttp,
+        DynamoDB.DescribeTimeToLiveHttp,
+        DynamoDB.ExecuteStatementHttp,
+        DynamoDB.ExecuteTransactionHttp,
+        DynamoDB.GetItemHttp,
+        DynamoDB.ListTablesHttp,
+        DynamoDB.ListTagsOfResourceHttp,
+        DynamoDB.PutItemHttp,
+        DynamoDB.DeleteItemHttp,
+        DynamoDB.UpdateItemHttp,
+        DynamoDB.UpdateTimeToLiveHttp,
+        DynamoDB.QueryHttp,
+        DynamoDB.RestoreTableToPointInTimeHttp,
+        DynamoDB.ScanHttp,
+        DynamoDB.TransactGetItemsHttp,
+        DynamoDB.TransactWriteItemsHttp,
       ),
     ),
   ),

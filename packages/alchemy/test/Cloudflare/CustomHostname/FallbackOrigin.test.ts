@@ -113,7 +113,9 @@ test.provider("list enumerates fallback origins across all zones", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.FallbackOrigin);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.CustomHostname.FallbackOrigin,
+    );
     const all = yield* provider.list();
 
     // Well-typed `FallbackOriginAttributes[]`: each element matches the
@@ -143,21 +145,23 @@ testSaas(
 
       yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.DnsRecord("OriginA", {
+          const record = yield* Cloudflare.DNS.Record("OriginA", {
             zoneId,
             name: ORIGIN_A,
             type: "A",
             content: "203.0.113.50",
             proxied: true,
           }).pipe(adopt(true));
-          return yield* Cloudflare.FallbackOrigin("Fallback", {
+          return yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
             zoneId,
             origin: record.name,
           }).pipe(adopt(true));
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.FallbackOrigin);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.CustomHostname.FallbackOrigin,
+      );
       const all = yield* provider.list();
       expect(
         all.some((o) => o.zoneId === zoneId && o.origin === ORIGIN_A),
@@ -180,17 +184,20 @@ testSaas(
       // Create: an origin DNS record plus the fallback origin pointing at it.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.DnsRecord("OriginA", {
+          const record = yield* Cloudflare.DNS.Record("OriginA", {
             zoneId,
             name: ORIGIN_A,
             type: "A",
             content: "203.0.113.50",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.FallbackOrigin("Fallback", {
-            zoneId,
-            origin: record.name,
-          }).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
+            "Fallback",
+            {
+              zoneId,
+              origin: record.name,
+            },
+          ).pipe(adopt(true));
           return { record, fallback };
         }),
       );
@@ -205,17 +212,20 @@ testSaas(
       // Re-deploying the same desired state is a no-op.
       const again = yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.DnsRecord("OriginA", {
+          const record = yield* Cloudflare.DNS.Record("OriginA", {
             zoneId,
             name: ORIGIN_A,
             type: "A",
             content: "203.0.113.50",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.FallbackOrigin("Fallback", {
-            zoneId,
-            origin: record.name,
-          }).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
+            "Fallback",
+            {
+              zoneId,
+              origin: record.name,
+            },
+          ).pipe(adopt(true));
           return { record, fallback };
         }),
       );
@@ -225,17 +235,20 @@ testSaas(
       // singleton is updated in place).
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const record = yield* Cloudflare.DnsRecord("OriginB", {
+          const record = yield* Cloudflare.DNS.Record("OriginB", {
             zoneId,
             name: ORIGIN_B,
             type: "A",
             content: "203.0.113.51",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.FallbackOrigin("Fallback", {
-            zoneId,
-            origin: record.name,
-          }).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
+            "Fallback",
+            {
+              zoneId,
+              origin: record.name,
+            },
+          ).pipe(adopt(true));
           return { record, fallback };
         }),
       );

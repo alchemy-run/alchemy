@@ -10,4 +10,4 @@ import * as Cloudflare from "alchemy/Cloudflare";
  * Effect worker's `Main` type currently only exposes a `fetch` handler, so
  * consumer-side wiring on Effect workers is a follow-up.
  */
-export const Queue = Cloudflare.Queue("Queue");
+export const Queue = Cloudflare.Queues.Queue("Queue");

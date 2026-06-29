@@ -6,7 +6,7 @@ import {
   type HyperdriveOrigin,
   type Module,
   type Assets as RuntimeAssets,
-  type DurableObjectNamespace as RuntimeDurableObjectNamespace,
+  type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
   type RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
@@ -256,7 +256,7 @@ export const LocalWorkerProvider = () =>
         ];
         const durableObjectNamespaces: Record<
           string,
-          RuntimeDurableObjectNamespace & { uniqueKey: string }
+          RuntimeDurableObject & { uniqueKey: string }
         > = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         const containers: Record<string, ContainerImage> = {};

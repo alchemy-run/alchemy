@@ -49,7 +49,7 @@ describe.sequential("MagicNetworkMonitoring.Rule", () => {
 
       const { rule } = yield* stack.deploy(
         Effect.gen(function* () {
-          const config = yield* Cloudflare.MagicNetworkMonitoringConfig(
+          const config = yield* Cloudflare.MagicNetworkMonitoring.Config(
             "Config",
             {
               name: "alchemy-mnm-list-test",
@@ -58,7 +58,7 @@ describe.sequential("MagicNetworkMonitoring.Rule", () => {
           );
           // Rules cannot exist without the account config — sequence the
           // rule after the config via its accountId output.
-          const rule = yield* Cloudflare.MagicNetworkMonitoringRule("Rule", {
+          const rule = yield* Cloudflare.MagicNetworkMonitoring.Rule("Rule", {
             accountId: config.accountId,
             type: "threshold",
             prefixes: ["10.0.0.0/24"],
@@ -70,7 +70,7 @@ describe.sequential("MagicNetworkMonitoring.Rule", () => {
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.MagicNetworkMonitoringRule,
+        Cloudflare.MagicNetworkMonitoring.Rule,
       );
       const all = yield* provider.list().pipe(
         Effect.flatMap((all) =>

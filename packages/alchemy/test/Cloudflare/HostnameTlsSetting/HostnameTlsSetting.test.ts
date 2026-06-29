@@ -113,18 +113,21 @@ test.provider(
       if (acmZoneId && acmHostname) {
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.HostnameTlsSetting("ListMinTls", {
-              zoneId: acmZoneId,
-              settingId: "min_tls_version",
-              hostname: acmHostname,
-              value: "1.2",
-            });
+            return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting(
+              "ListMinTls",
+              {
+                zoneId: acmZoneId,
+                settingId: "min_tls_version",
+                hostname: acmHostname,
+                value: "1.2",
+              },
+            );
           }),
         );
       }
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.HostnameTlsSetting,
+        Cloudflare.HostnameTlsSetting.HostnameTlsSetting,
       );
       const all = yield* provider.list();
 
@@ -158,12 +161,15 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.HostnameTlsSetting("MinTls", {
-            zoneId,
-            settingId: "min_tls_version",
-            hostname,
-            value: "1.2",
-          });
+          return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting(
+            "MinTls",
+            {
+              zoneId,
+              settingId: "min_tls_version",
+              hostname,
+              value: "1.2",
+            },
+          );
         }),
       );
 
@@ -180,12 +186,15 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
       // Update in place — PUT upserts the same (settingId, hostname) pair.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.HostnameTlsSetting("MinTls", {
-            zoneId,
-            settingId: "min_tls_version",
-            hostname,
-            value: "1.3",
-          });
+          return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting(
+            "MinTls",
+            {
+              zoneId,
+              settingId: "min_tls_version",
+              hostname,
+              value: "1.3",
+            },
+          );
         }),
       );
       expect(updated.hostname).toEqual(hostname);

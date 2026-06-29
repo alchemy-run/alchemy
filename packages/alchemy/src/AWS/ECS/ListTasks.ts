@@ -1,11 +1,7 @@
 import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
-import { isTask } from "./Task.ts";
 import type { Cluster } from "./Cluster.ts";
-import type { Providers } from "../Providers.ts";
 
 export interface ListTasksRequest extends Omit<
   ECS.ListTasksRequest,
@@ -13,8 +9,9 @@ export interface ListTasksRequest extends Omit<
 > {}
 
 /** @binding */
-export class ListTasks extends Binding.Service<
+export interface ListTasks extends Binding.Service<
   ListTasks,
+  "AWS.ECS.ListTasks",
   (
     cluster: Cluster,
   ) => Effect.Effect<
@@ -22,49 +19,5 @@ export class ListTasks extends Binding.Service<
       request: ListTasksRequest,
     ) => Effect.Effect<ECS.ListTasksResponse, ECS.ListTasksError>
   >
->()("AWS.ECS.ListTasks") {}
-
-export const ListTasksLive = Layer.effect(
-  ListTasks,
-  Effect.gen(function* () {
-    const Policy = yield* ListTasksPolicy;
-    const listTasks = yield* ECS.listTasks;
-
-    return Effect.fn(function* (cluster: Cluster) {
-      yield* Policy(cluster);
-      const clusterArn = (yield* cluster.clusterArn) as unknown as string;
-      return Effect.fn(function* (request: ListTasksRequest) {
-        return yield* listTasks({
-          ...request,
-          cluster: clusterArn,
-        });
-      });
-    });
-  }),
-);
-
-export class ListTasksPolicy extends Binding.Policy<
-  ListTasksPolicy,
-  (cluster: Cluster) => Effect.Effect<void>,
-  Providers
->()("AWS.ECS.ListTasks") {}
-
-export const ListTasksPolicyLive = ListTasksPolicy.layer.succeed(
-  Effect.fn(function* (host, cluster) {
-    if (isFunction(host) || isTask(host)) {
-      yield* host.bind`Allow(${host}, AWS.ECS.ListTasks(${cluster}))`({
-        policyStatements: [
-          {
-            Effect: "Allow",
-            Action: ["ecs:ListTasks"],
-            Resource: ["*"],
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        `ListTasksPolicy does not support runtime '${host.Type}'`,
-      );
-    }
-  }),
-);
+> {}
+export const ListTasks = Binding.Service<ListTasks>("AWS.ECS.ListTasks");

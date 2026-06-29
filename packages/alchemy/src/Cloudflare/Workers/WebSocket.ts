@@ -6,7 +6,7 @@ import { DurableObjectState } from "./DurableObjectState.ts";
 
 export type RawWebSocket = cf.WebSocket;
 
-export interface DurableWebSocket {
+export interface WebSocket {
   readonly ws: RawWebSocket;
   send(data: string | Uint8Array): Effect.Effect<void>;
   close(code: number, reason: string): Effect.Effect<void>;
@@ -14,7 +14,7 @@ export interface DurableWebSocket {
   deserializeAttachment<T>(): T | null;
 }
 
-export const fromWebSocket = (ws: RawWebSocket): DurableWebSocket => ({
+export const fromWebSocket = (ws: RawWebSocket): WebSocket => ({
   ws,
   send: (data) => Effect.sync(() => ws.send(data as any)),
   close: (code, reason) => Effect.sync(() => ws.close(code, reason)),

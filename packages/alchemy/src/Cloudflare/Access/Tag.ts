@@ -10,7 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type AccessTagProps = {
+export type TagProps = {
   /**
    * The name of the tag. The name IS the tag's identity on the Cloudflare
    * API (it is the path parameter for get/update/delete), so changing it
@@ -22,9 +22,9 @@ export type AccessTagProps = {
   name?: string;
 };
 
-export type AccessTag = Resource<
+export type Tag = Resource<
   "Cloudflare.Access.Tag",
-  AccessTagProps,
+  TagProps,
   {
     /** The name of the tag — also its identity on the Cloudflare API. */
     name: string;
@@ -47,12 +47,12 @@ export type AccessTag = Resource<
  * @section Creating a Tag
  * @example Tag with a generated name
  * ```typescript
- * const tag = yield* Cloudflare.AccessTag("Team", {});
+ * const tag = yield* Cloudflare.Access.Tag("Team", {});
  * ```
  *
  * @example Tag with an explicit name
  * ```typescript
- * const tag = yield* Cloudflare.AccessTag("Team", {
+ * const tag = yield* Cloudflare.Access.Tag("Team", {
  *   name: "platform-team",
  * });
  * ```
@@ -60,23 +60,23 @@ export type AccessTag = Resource<
  * @section Tagging an Application
  * @example Reference from an Access application
  * ```typescript
- * const tag = yield* Cloudflare.AccessTag("Team", { name: "platform-team" });
+ * const tag = yield* Cloudflare.Access.Tag("Team", { name: "platform-team" });
  *
- * const app = yield* Cloudflare.AccessApplication("Dashboard", {
+ * const app = yield* Cloudflare.Access.Application("Dashboard", {
  *   type: "self_hosted",
  *   domain: "dash.example.com",
  *   tags: [tag.name],
  * });
  * ```
  */
-export const AccessTag = Resource<AccessTag>("Cloudflare.Access.Tag");
+export const Tag = Resource<Tag>("Cloudflare.Access.Tag");
 
-export const isAccessTag = (value: unknown): value is AccessTag =>
+export const isTag = (value: unknown): value is Tag =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === "Cloudflare.Access.Tag";
 
-export const AccessTagProvider = () =>
-  Provider.succeed(AccessTag, {
+export const TagProvider = () =>
+  Provider.succeed(Tag, {
     stables: ["name", "accountId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

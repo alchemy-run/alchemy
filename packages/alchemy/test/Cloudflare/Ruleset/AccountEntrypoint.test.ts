@@ -79,17 +79,20 @@ test.provider(
       // executes it (the Enterprise WAF deployment workflow).
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const ruleset = yield* Cloudflare.CustomRuleset("SharedRules", {
-            phase,
-            rules: [
-              {
-                description: "Block exploit probes",
-                expression: `lower(http.request.uri.path) contains "/.env"`,
-                action: "block",
-              },
-            ],
-          });
-          const entrypoint = yield* Cloudflare.RulesetAccountEntrypoint(
+          const ruleset = yield* Cloudflare.Ruleset.CustomRuleset(
+            "SharedRules",
+            {
+              phase,
+              rules: [
+                {
+                  description: "Block exploit probes",
+                  expression: `lower(http.request.uri.path) contains "/.env"`,
+                  action: "block",
+                },
+              ],
+            },
+          );
+          const entrypoint = yield* Cloudflare.Ruleset.AccountEntrypoint(
             "WafDeployment",
             {
               phase,
@@ -119,17 +122,20 @@ test.provider(
       // Update the description in place — same singleton entrypoint.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const ruleset = yield* Cloudflare.CustomRuleset("SharedRules", {
-            phase,
-            rules: [
-              {
-                description: "Block exploit probes",
-                expression: `lower(http.request.uri.path) contains "/.env"`,
-                action: "block",
-              },
-            ],
-          });
-          return yield* Cloudflare.RulesetAccountEntrypoint("WafDeployment", {
+          const ruleset = yield* Cloudflare.Ruleset.CustomRuleset(
+            "SharedRules",
+            {
+              phase,
+              rules: [
+                {
+                  description: "Block exploit probes",
+                  expression: `lower(http.request.uri.path) contains "/.env"`,
+                  action: "block",
+                },
+              ],
+            },
+          );
+          return yield* Cloudflare.Ruleset.AccountEntrypoint("WafDeployment", {
             phase,
             description: "alchemy account entrypoint v2",
             rules: [
@@ -177,7 +183,7 @@ test.provider(
         );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.RulesetAccountEntrypoint,
+        Cloudflare.Ruleset.AccountEntrypoint,
       );
 
       if (Result.isFailure(probe)) {
@@ -194,17 +200,20 @@ test.provider(
       // exhaustively-enumerated result.
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const ruleset = yield* Cloudflare.CustomRuleset("SharedRules", {
-            phase,
-            rules: [
-              {
-                description: "Block exploit probes",
-                expression: `lower(http.request.uri.path) contains "/.env"`,
-                action: "block",
-              },
-            ],
-          });
-          return yield* Cloudflare.RulesetAccountEntrypoint("WafDeployment", {
+          const ruleset = yield* Cloudflare.Ruleset.CustomRuleset(
+            "SharedRules",
+            {
+              phase,
+              rules: [
+                {
+                  description: "Block exploit probes",
+                  expression: `lower(http.request.uri.path) contains "/.env"`,
+                  action: "block",
+                },
+              ],
+            },
+          );
+          return yield* Cloudflare.Ruleset.AccountEntrypoint("WafDeployment", {
             phase,
             description: "alchemy account entrypoint list",
             rules: [

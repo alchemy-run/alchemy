@@ -68,7 +68,7 @@ export default WorkerA.make(
   }).pipe(
     Effect.provide(
       // WorkerA hosts `Counter`, so it must provide `CounterLive`.
-      CounterLive.pipe(Layer.provide(Cloudflare.D1ConnectionLive)),
+      CounterLive.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding)),
     ),
   ),
 );

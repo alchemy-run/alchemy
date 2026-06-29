@@ -12,13 +12,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 
 const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)));
-afterAll(
-  Effect.gen(function* () {
-    if (!process.env.NO_DESTROY) {
-      yield* destroy(Stack);
-    }
-  }),
-);
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
   "serves the TanStack Start Solid app shell",
@@ -33,7 +27,7 @@ test(
     const html = yield* res.text;
     expect(html).toContain("TanStack Start Solid");
     expect(html).toContain(
-      "Hello from TanStack Start Solid on Cloudflare.Vite",
+      "Hello from TanStack Start Solid on Cloudflare.Website.Vite",
     );
   }),
   { timeout: 180_000 },

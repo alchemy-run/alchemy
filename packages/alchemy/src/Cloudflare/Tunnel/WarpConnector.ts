@@ -12,10 +12,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TunnelWarpConnectorTypeId = "Cloudflare.Tunnel.WarpConnector" as const;
-type TunnelWarpConnectorTypeId = typeof TunnelWarpConnectorTypeId;
+const TypeId = "Cloudflare.Tunnel.WarpConnector" as const;
+type TypeId = typeof TypeId;
 
-export interface TunnelWarpConnectorProps {
+export interface WarpConnectorProps {
   /**
    * User-friendly name for the WARP Connector tunnel. Tunnel names are
    * unique per account, which makes the name the resource's identity
@@ -26,7 +26,7 @@ export interface TunnelWarpConnectorProps {
   name?: string;
 }
 
-export interface TunnelWarpConnectorAttributes {
+export interface WarpConnectorAttributes {
   /** UUID of the WARP Connector tunnel, assigned by Cloudflare. */
   tunnelId: string;
   /** Cloudflare account that owns the tunnel. */
@@ -47,10 +47,10 @@ export interface TunnelWarpConnectorAttributes {
   token: Redacted.Redacted<string>;
 }
 
-export type TunnelWarpConnector = Resource<
-  TunnelWarpConnectorTypeId,
-  TunnelWarpConnectorProps,
-  TunnelWarpConnectorAttributes,
+export type WarpConnector = Resource<
+  TypeId,
+  WarpConnectorProps,
+  WarpConnectorAttributes,
   never,
   Providers
 >;
@@ -62,15 +62,15 @@ export type TunnelWarpConnector = Resource<
  *
  * The resource manages the tunnel record itself (CRUD); a WARP Connector
  * host joins it at runtime using the `token` attribute. Pair with
- * {@link TunnelRoute} to route private CIDRs through the connector and
- * {@link TunnelVirtualNetwork} to isolate overlapping address space.
+ * {@link Route} to route private CIDRs through the connector and
+ * {@link VirtualNetwork} to isolate overlapping address space.
  * @resource
  * @product Tunnels
  * @category Cloudflare One (Zero Trust)
  * @section Creating a WARP Connector
  * @example Basic WARP Connector tunnel
  * ```typescript
- * const connector = yield* Cloudflare.TunnelWarpConnector("SiteA", {
+ * const connector = yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
  *   name: "site-a-connector",
  * });
  * // Provision the host with: warp-cli connector new <Redacted.value(connector.token)>
@@ -78,7 +78,7 @@ export type TunnelWarpConnector = Resource<
  *
  * @example Route a private network through the connector
  * ```typescript
- * yield* Cloudflare.TunnelRoute("SiteANet", {
+ * yield* Cloudflare.Tunnel.Route("SiteANet", {
  *   tunnelId: connector.tunnelId,
  *   network: "10.8.0.0/16",
  * });
@@ -88,28 +88,23 @@ export type TunnelWarpConnector = Resource<
  * @example Rename in place
  * ```typescript
  * // Renaming patches the existing tunnel — same tunnelId, no replacement.
- * const connector = yield* Cloudflare.TunnelWarpConnector("SiteA", {
+ * const connector = yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
  *   name: "site-a-connector-v2",
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/warp-connector/
  */
-export const TunnelWarpConnector = Resource<TunnelWarpConnector>(
-  TunnelWarpConnectorTypeId,
-);
+export const WarpConnector = Resource<WarpConnector>(TypeId);
 
 /**
- * Returns true if the given value is a TunnelWarpConnector resource.
+ * Returns true if the given value is a WarpConnector resource.
  */
-export const isTunnelWarpConnector = (
-  value: unknown,
-): value is TunnelWarpConnector =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TunnelWarpConnectorTypeId;
+export const isWarpConnector = (value: unknown): value is WarpConnector =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const TunnelWarpConnectorProvider = () =>
-  Provider.succeed(TunnelWarpConnector, {
+export const WarpConnectorProvider = () =>
+  Provider.succeed(WarpConnector, {
     stables: ["tunnelId", "accountId", "createdAt"],
 
     diff: Effect.fn(function* ({ output }) {
@@ -167,7 +162,7 @@ export const TunnelWarpConnectorProvider = () =>
           toAttributes(t, accountId).pipe(
             Effect.map(Option.some),
             Effect.catchTag("TunnelNotFound", () =>
-              Effect.succeed(Option.none<TunnelWarpConnectorAttributes>()),
+              Effect.succeed(Option.none<WarpConnectorAttributes>()),
             ),
           ),
         { concurrency: 10 },
@@ -286,5 +281,5 @@ const toAttributes = Effect.fn(function* (
     status: tunnel.status ?? undefined,
     createdAt: tunnel.createdAt ?? undefined,
     token: Redacted.make(token),
-  } satisfies TunnelWarpConnectorAttributes;
+  } satisfies WarpConnectorAttributes;
 });

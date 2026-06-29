@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CustomTrustStoreTypeId = "Cloudflare.Acm.CustomTrustStore" as const;
-type CustomTrustStoreTypeId = typeof CustomTrustStoreTypeId;
+const TypeId = "Cloudflare.Acm.CustomTrustStore" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Lifecycle status of an uploaded custom trust store certificate.
@@ -69,7 +69,7 @@ export interface CustomTrustStoreAttributes {
 }
 
 export type CustomTrustStore = Resource<
-  CustomTrustStoreTypeId,
+  TypeId,
   CustomTrustStoreProps,
   CustomTrustStoreAttributes,
   never,
@@ -97,7 +97,7 @@ export type CustomTrustStore = Resource<
  * @section Uploading a root CA
  * @example Trust a private root CA for origin pulls
  * ```typescript
- * const trustStore = yield* Cloudflare.CustomTrustStore("OriginRootCa", {
+ * const trustStore = yield* Cloudflare.Acm.CustomTrustStore("OriginRootCa", {
  *   zoneId: zone.zoneId,
  *   certificate: rootCaPem, // "-----BEGIN CERTIFICATE-----\n..."
  * });
@@ -107,7 +107,7 @@ export type CustomTrustStore = Resource<
  * ```typescript
  * const fs = yield* FileSystem.FileSystem;
  * const pem = yield* fs.readFileString("./certs/root-ca.pem");
- * yield* Cloudflare.CustomTrustStore("OriginRootCa", {
+ * yield* Cloudflare.Acm.CustomTrustStore("OriginRootCa", {
  *   zoneId: zone.zoneId,
  *   certificate: pem,
  * });
@@ -115,15 +115,13 @@ export type CustomTrustStore = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/acm/
  */
-export const CustomTrustStore = Resource<CustomTrustStore>(
-  CustomTrustStoreTypeId,
-);
+export const CustomTrustStore = Resource<CustomTrustStore>(TypeId);
 
 /**
  * Returns true if the given value is a CustomTrustStore resource.
  */
 export const isCustomTrustStore = (value: unknown): value is CustomTrustStore =>
-  Predicate.hasProperty(value, "Type") && value.Type === CustomTrustStoreTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomTrustStoreProvider = () =>
   Provider.succeed(CustomTrustStore, {

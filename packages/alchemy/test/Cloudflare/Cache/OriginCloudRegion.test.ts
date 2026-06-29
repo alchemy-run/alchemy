@@ -89,7 +89,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.OriginCloudRegion("ApiOrigin", {
+          return yield* Cloudflare.Cache.OriginCloudRegion("ApiOrigin", {
             zoneId,
             ip: "192.0.2.10",
             vendor: "aws",
@@ -111,7 +111,7 @@ test.provider(
       // Update in place — vendor/region are mutable; the IP identity holds.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.OriginCloudRegion("ApiOrigin", {
+          return yield* Cloudflare.Cache.OriginCloudRegion("ApiOrigin", {
             zoneId,
             ip: "192.0.2.10",
             vendor: "aws",
@@ -129,7 +129,7 @@ test.provider(
       // must be gone and the new one present.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.OriginCloudRegion("ApiOrigin", {
+          return yield* Cloudflare.Cache.OriginCloudRegion("ApiOrigin", {
             zoneId,
             ip: "192.0.2.20",
             vendor: "aws",

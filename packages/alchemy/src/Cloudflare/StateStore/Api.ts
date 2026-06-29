@@ -13,8 +13,8 @@ import {
   StateApi,
   StateAuthLive,
 } from "../../State/HttpStateApi.ts";
-import { Secret } from "../SecretsStore/Secret.ts";
-import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
+import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
+import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
 import Store from "./Store.ts";
 import { AuthToken } from "./Token.ts";
@@ -109,7 +109,7 @@ export default Worker(
     },
   },
   Effect.gen(function* () {
-    const remoteSecret = yield* Secret.bind(AuthToken);
+    const remoteSecret = yield* ReadSecret(AuthToken);
     const store = yield* Store;
 
     const bearerTokenValidator = Layer.succeed(
@@ -319,7 +319,7 @@ export default Worker(
         // Effect.provide(TelemetryLive),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(SecretBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(ReadSecretBinding))),
 );
 
 /**

@@ -11,13 +11,13 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ApiShieldOperationTypeId = "Cloudflare.ApiShield.Operation" as const;
-type ApiShieldOperationTypeId = typeof ApiShieldOperationTypeId;
+const TypeId = "Cloudflare.ApiShield.Operation" as const;
+type TypeId = typeof TypeId;
 
 /**
  * HTTP method of an API Shield operation.
  */
-export type ApiShieldOperationMethod =
+export type OperationMethod =
   | "GET"
   | "POST"
   | "HEAD"
@@ -28,7 +28,7 @@ export type ApiShieldOperationMethod =
   | "PATCH"
   | "TRACE";
 
-export interface ApiShieldOperationProps {
+export interface OperationProps {
   /**
    * Zone the operation is registered on.
    *
@@ -41,7 +41,7 @@ export interface ApiShieldOperationProps {
    * Immutable — an operation is the `(method, host, endpoint)` tuple, so
    * changing the method triggers a replacement.
    */
-  method: ApiShieldOperationMethod;
+  method: OperationMethod;
   /**
    * RFC3986-compliant host the endpoint lives on (e.g. `api.example.com`).
    * Must belong to the zone.
@@ -59,13 +59,13 @@ export interface ApiShieldOperationProps {
   endpoint: string;
 }
 
-export interface ApiShieldOperationAttributes {
+export interface OperationAttributes {
   /** Cloudflare-assigned UUID of the operation. */
   operationId: string;
   /** Zone the operation is registered on. */
   zoneId: string;
   /** The HTTP method used to access the endpoint. */
-  method: ApiShieldOperationMethod;
+  method: OperationMethod;
   /** RFC3986-compliant host the endpoint lives on. */
   host: string;
   /**
@@ -77,10 +77,10 @@ export interface ApiShieldOperationAttributes {
   lastUpdated: string;
 }
 
-export type ApiShieldOperation = Resource<
-  ApiShieldOperationTypeId,
-  ApiShieldOperationProps,
-  ApiShieldOperationAttributes,
+export type Operation = Resource<
+  TypeId,
+  OperationProps,
+  OperationAttributes,
   never,
   Providers
 >;
@@ -105,7 +105,7 @@ export type ApiShieldOperation = Resource<
  * @section Registering an Operation
  * @example Register a GET endpoint
  * ```typescript
- * const op = yield* Cloudflare.ApiShieldOperation("GetUser", {
+ * const op = yield* Cloudflare.ApiShield.Operation("GetUser", {
  *   zoneId: zone.zoneId,
  *   method: "GET",
  *   host: "api.example.com",
@@ -116,7 +116,7 @@ export type ApiShieldOperation = Resource<
  *
  * @example Register a POST endpoint
  * ```typescript
- * yield* Cloudflare.ApiShieldOperation("CreateUser", {
+ * yield* Cloudflare.ApiShield.Operation("CreateUser", {
  *   zoneId: zone.zoneId,
  *   method: "POST",
  *   host: "api.example.com",
@@ -126,21 +126,16 @@ export type ApiShieldOperation = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/management-and-monitoring/endpoint-management/
  */
-export const ApiShieldOperation = Resource<ApiShieldOperation>(
-  ApiShieldOperationTypeId,
-);
+export const Operation = Resource<Operation>(TypeId);
 
 /**
- * Returns true if the given value is an ApiShieldOperation resource.
+ * Returns true if the given value is an Operation resource.
  */
-export const isApiShieldOperation = (
-  value: unknown,
-): value is ApiShieldOperation =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ApiShieldOperationTypeId;
+export const isOperation = (value: unknown): value is Operation =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const ApiShieldOperationProvider = () =>
-  Provider.succeed(ApiShieldOperation, {
+export const OperationProvider = () =>
+  Provider.succeed(Operation, {
     // An operation has no mutable aspect — every attribute except the
     // last-updated timestamp survives any non-replacing deploy.
     stables: ["operationId", "zoneId", "method", "host", "endpoint"],
@@ -169,7 +164,7 @@ export const ApiShieldOperationProvider = () =>
               times: 5,
             }),
             Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as ApiShieldOperationAttributes[]),
+              Effect.succeed([] as OperationAttributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -178,8 +173,8 @@ export const ApiShieldOperationProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds, news }) {
-      const o = olds as ApiShieldOperationProps | undefined;
-      const n = news as ApiShieldOperationProps;
+      const o = olds as OperationProps | undefined;
+      const n = news as OperationProps;
       if (o?.endpoint === undefined) return undefined;
       // The tuple is the operation's identity — any change replaces.
       if (o.method !== n.method || o.host !== n.host) {
@@ -215,7 +210,7 @@ export const ApiShieldOperationProvider = () =>
       // zone (state was lost, or it was registered out-of-band). The tuple
       // is pure identity and carries no ownership markers, so report it as
       // `Unowned` and let the adopt policy gate the takeover.
-      const tuple = output ?? (olds as ApiShieldOperationProps | undefined);
+      const tuple = output ?? (olds as OperationProps | undefined);
       if (tuple?.endpoint !== undefined && typeof tuple.host === "string") {
         const observed = yield* findByTuple(zoneId, {
           method: tuple.method,
@@ -314,11 +309,11 @@ const findByTuple = (
 const toAttributes = (
   op: ObservedOperation,
   zoneId: string,
-): ApiShieldOperationAttributes => ({
+): OperationAttributes => ({
   operationId: op.operationId,
   zoneId,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  method: op.method as ApiShieldOperationMethod,
+  method: op.method as OperationMethod,
   host: op.host,
   endpoint: op.endpoint,
   lastUpdated: op.lastUpdated,

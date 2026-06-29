@@ -120,8 +120,7 @@ export interface WorkerLoaderClass extends Context.Service<
  *   "EvalWorker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     // Registers the `worker_loader` binding on this Worker and returns the
- *     // runtime handle in one step — no separate `.bind(...)`.
+ *     // Registers the `worker_loader` binding on this Worker
  *     const loader = yield* Cloudflare.WorkerLoader("LOADER");
  *
  *     return {

@@ -21,11 +21,11 @@ at the end:
 ```typescript
 // v1 — alchemy.run.ts
 import alchemy from "alchemy";
-import { Worker, R2Bucket } from "alchemy/cloudflare";
+import { Worker, Bucket } from "alchemy/cloudflare";
 
 const app = await alchemy("my-app", {});
 
-const bucket = await R2Bucket("bucket", {});
+const bucket = await Bucket("bucket", {});
 const worker = await Worker("worker", {
   entrypoint: "./src/worker.ts",
   bindings: { BUCKET: bucket },
@@ -45,7 +45,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export const Bucket = Cloudflare.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
@@ -65,7 +65,7 @@ export default Alchemy.Stack(
 Key differences:
 
 - `await alchemy("name")` + `await app.finalize()` → `Alchemy.Stack("name", { providers }, effect)`
-- `await R2Bucket("name", {})` → `Cloudflare.R2Bucket("name")`
+- `await Bucket("name", {})` → `Cloudflare.R2.Bucket("name")`
 - `await Worker("name", { entrypoint })` → `Cloudflare.Worker("name", { main })`
 - `entrypoint` is now called `main`
 - Resources are declared at the top level, then `yield*`-ed inside the Stack
@@ -207,9 +207,9 @@ export default Alchemy.Stack(
 |              | v1 (async)                    | v2 (async style)              | v2 (Effect style)                  |
 | ------------ | ----------------------------- | ----------------------------- | ---------------------------------- |
 | Stack        | `await alchemy("name")`       | `Alchemy.Stack("name", ...)`  | `Alchemy.Stack("name", ...)`       |
-| Resources    | `await R2Bucket(...)`         | `Cloudflare.R2Bucket(...)`    | `Cloudflare.R2Bucket(...)`         |
+| Resources    | `await Bucket(...)`         | `Cloudflare.R2.Bucket(...)`    | `Cloudflare.R2.Bucket(...)`         |
 | Worker entry | `entrypoint`                  | `main`                        | `main: import.meta.filename`           |
-| Bindings     | `bindings: { KEY: resource }` | `env: { Key: resource }`      | `yield* Resource.bind(ref)`        |
+| Bindings     | `bindings: { KEY: resource }` | `env: { Key: resource }`      | `yield* Binding(ref)`        |
 | Runtime code | `async fetch(req, env)`       | `async fetch(req, env)`       | `Effect.gen(function* () { ... })` |
 | Lifecycle    | `await app.finalize()`        | automatic                     | automatic                          |
 | Type safety  | runtime errors                | typed `env` via `InferEnv`    | full Effect type system            |

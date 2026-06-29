@@ -8,7 +8,7 @@ import { WriteFileDevBox } from "./tools/Fs.ts";
 import { GrepLive } from "./tools/Grep.ts";
 import { SqlDurableObjectLive } from "./tools/Sql.ts";
 
-export class ReleaseVersion extends Cloudflare.DurableObjectNamespace<ReleaseVersion>()(
+export class ReleaseVersion extends Cloudflare.DurableObject<ReleaseVersion>()(
   "ReleaseBlogger",
   Effect.gen(function* () {
     const blogger = yield* ReleaseBlogger;
@@ -26,9 +26,9 @@ export class ReleaseVersion extends Cloudflare.DurableObjectNamespace<ReleaseVer
         Layer.provideMerge(WriteFileDevBox),
         Layer.provideMerge(GrepLive),
         Layer.provideMerge(EvalLive),
-        Layer.provideMerge(Cloudflare.layerChatDurableObject),
+        Layer.provideMerge(Cloudflare.AI.layerChatDurableObject),
         Layer.provideMerge(
-          Cloudflare.layerContainer(DevBox, {
+          Cloudflare.Containers.layer(DevBox, {
             enableInternet: true,
           }),
         ),

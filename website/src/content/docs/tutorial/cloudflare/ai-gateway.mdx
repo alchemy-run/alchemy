@@ -28,7 +28,7 @@ show up in the AI Gateway dashboard.
 // src/AiGateway.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const Gateway = Cloudflare.AiGateway("Gateway", {
+export const Gateway = Cloudflare.AI.Gateway("Gateway", {
   cacheTtl: 60,
   collectLogs: true,
 });
@@ -65,7 +65,7 @@ you can find it in the dashboard.
 
 ## Bind the gateway into the Worker
 
-`Cloudflare.AiGateway.bind(Gateway)` returns a typed client whose
+`Cloudflare.AI.QueryGateway(Gateway)` returns a typed client whose
 methods are wrapped in Effect — `run` for raw inference, `getUrl` for
 the gateway endpoint, `getLog`/`patchLog` for the request log, and
 `model({...})` for building a `LanguageModel` layer.
@@ -80,7 +80,7 @@ the gateway endpoint, `getLog`/`patchLog` for the request log, and
    "Api",
    { main: import.meta.filename },
    Effect.gen(function* () {
-+    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
++    const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
      return {
        fetch: Effect.gen(function* () {
@@ -88,13 +88,13 @@ the gateway endpoint, `getLog`/`patchLog` for the request log, and
        }),
      };
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
++  }).pipe(Effect.provide(Cloudflare.AI.QueryGatewayBinding)),
  ) {}
 ```
 
-`Cloudflare.AiGatewayBindingLive` is the runtime side of the
+`Cloudflare.AI.QueryGatewayBinding` is the runtime side of the
 binding. Provide it once at the bottom of the Init layer chain and
-every `bind(...)` further up will resolve.
+every `QueryGateway(...)` further up will resolve.
 
 ## Build a `LanguageModel` layer
 
@@ -104,7 +104,7 @@ that satisfies Effect's standard AI service.
 
 ```diff lang="typescript"
    Effect.gen(function* () {
-     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+     const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 +
 +    const languageModel = aiGateway.model({
 +      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
@@ -231,11 +231,11 @@ soon as the Worker flushes it.
 
 ## Tune caching, rate limits, and DLP
 
-Every prop on `Cloudflare.AiGateway` maps to an update API call — no
+Every prop on `Cloudflare.AI.Gateway` maps to an update API call — no
 replacement, no downtime. A production-grade config might look like:
 
 ```typescript
-export const Gateway = Cloudflare.AiGateway("Gateway", {
+export const Gateway = Cloudflare.AI.Gateway("Gateway", {
   id: "prod-gateway",
   cacheTtl: 300,
   cacheInvalidateOnUpdate: true,
@@ -255,7 +255,7 @@ in place.
 
 ## What you have now
 
-- A `Cloudflare.AiGateway` resource with caching, logging, and (when
+- A `Cloudflare.AI.Gateway` resource with caching, logging, and (when
   you want them) rate limiting and auth.
 - An Effect `LanguageModel.LanguageModel` Layer that proxies Workers
   AI through that gateway.

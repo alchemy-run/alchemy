@@ -9,12 +9,12 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamSigningKeyTypeId = "Cloudflare.Stream.SigningKey" as const;
-type StreamSigningKeyTypeId = typeof StreamSigningKeyTypeId;
+const TypeId = "Cloudflare.Stream.SigningKey" as const;
+type TypeId = typeof TypeId;
 
-export type StreamSigningKeyProps = {};
+export type SigningKeyProps = {};
 
-export type StreamSigningKeyAttributes = {
+export type SigningKeyAttributes = {
   /**
    * The unique identifier of the signing key.
    */
@@ -39,10 +39,10 @@ export type StreamSigningKeyAttributes = {
   jwk: Redacted.Redacted<string>;
 };
 
-export type StreamSigningKey = Resource<
-  StreamSigningKeyTypeId,
-  StreamSigningKeyProps,
-  StreamSigningKeyAttributes,
+export type SigningKey = Resource<
+  TypeId,
+  SigningKeyProps,
+  SigningKeyAttributes,
   never,
   Providers
 >;
@@ -65,7 +65,7 @@ export type StreamSigningKey = Resource<
  * @section Creating a signing key
  * @example Signing key for signed playback URLs
  * ```typescript
- * const key = yield* Cloudflare.StreamSigningKey("PlaybackKey", {});
+ * const key = yield* Cloudflare.Stream.SigningKey("PlaybackKey", {});
  *
  * // key.pem / key.jwk are Redacted<string> — use them server-side to
  * // sign playback tokens for videos with requireSignedURLs enabled.
@@ -74,18 +74,16 @@ export type StreamSigningKey = Resource<
  *
  * @see https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/
  */
-export const StreamSigningKey = Resource<StreamSigningKey>(
-  StreamSigningKeyTypeId,
-);
+export const SigningKey = Resource<SigningKey>(TypeId);
 
 /**
- * Returns true if the given value is a StreamSigningKey resource.
+ * Returns true if the given value is a SigningKey resource.
  */
-export const isStreamSigningKey = (value: unknown): value is StreamSigningKey =>
-  Predicate.hasProperty(value, "Type") && value.Type === StreamSigningKeyTypeId;
+export const isSigningKey = (value: unknown): value is SigningKey =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const StreamSigningKeyProvider = () =>
-  Provider.succeed(StreamSigningKey, {
+export const SigningKeyProvider = () =>
+  Provider.succeed(SigningKey, {
     stables: ["keyId", "accountId", "created", "pem", "jwk"],
 
     list: Effect.fn(function* () {
@@ -111,7 +109,7 @@ export const StreamSigningKeyProvider = () =>
                     created: key.created ?? undefined,
                     pem: Redacted.make(""),
                     jwk: Redacted.make(""),
-                  }) satisfies StreamSigningKeyAttributes,
+                  }) satisfies SigningKeyAttributes,
               ),
           ),
         ),
@@ -162,7 +160,7 @@ export const StreamSigningKeyProvider = () =>
         created: created.created ?? undefined,
         pem: Redacted.make(created.pem ?? ""),
         jwk: Redacted.make(created.jwk ?? ""),
-      } satisfies StreamSigningKeyAttributes;
+      } satisfies SigningKeyAttributes;
     }),
 
     delete: Effect.fn(function* ({ output }) {

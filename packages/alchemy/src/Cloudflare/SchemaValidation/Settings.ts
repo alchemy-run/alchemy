@@ -8,17 +8,16 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SchemaValidationSettingsTypeId =
-  "Cloudflare.SchemaValidation.Settings" as const;
-type SchemaValidationSettingsTypeId = typeof SchemaValidationSettingsTypeId;
+const TypeId = "Cloudflare.SchemaValidation.Settings" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Mitigation action applied when a request does not conform to a schema:
  * `log` records the request, `block` denies it, `none` does nothing.
  */
-export type SchemaValidationMitigationAction = "none" | "log" | "block";
+export type MitigationAction = "none" | "log" | "block";
 
-export interface SchemaValidationSettingsProps {
+export interface SettingsProps {
   /**
    * Zone the settings belong to. Stable — changing the zone triggers a
    * replacement (the old zone's settings are restored to the values they
@@ -30,7 +29,7 @@ export interface SchemaValidationSettingsProps {
    * an enabled schema: `log` records it, `block` denies it, `none` does
    * nothing. `log` and `block` may be plan-gated (API Shield entitlement).
    */
-  validationDefaultMitigationAction: SchemaValidationMitigationAction;
+  validationDefaultMitigationAction: MitigationAction;
   /**
    * Zone-wide kill switch. When set to `"none"`, schema validation is
    * skipped entirely for every request, overriding both the zone default
@@ -40,18 +39,18 @@ export interface SchemaValidationSettingsProps {
   validationOverrideMitigationAction?: "none" | null;
 }
 
-export interface SchemaValidationSettingsAttributes {
+export interface SettingsAttributes {
   /** Zone the settings belong to. */
   zoneId: string;
   /** The default mitigation action for non-conforming requests. */
-  validationDefaultMitigationAction: SchemaValidationMitigationAction;
+  validationDefaultMitigationAction: MitigationAction;
   /** The zone-wide override (`"none"` = validation disabled), if set. */
   validationOverrideMitigationAction: "none" | null;
   /**
    * The default action the zone had before Alchemy first managed these
    * settings. Restored on destroy.
    */
-  initialDefaultMitigationAction: SchemaValidationMitigationAction;
+  initialDefaultMitigationAction: MitigationAction;
   /**
    * The override the zone had before Alchemy first managed these settings.
    * Restored on destroy.
@@ -59,10 +58,10 @@ export interface SchemaValidationSettingsAttributes {
   initialOverrideMitigationAction: "none" | null;
 }
 
-export type SchemaValidationSettings = Resource<
-  SchemaValidationSettingsTypeId,
-  SchemaValidationSettingsProps,
-  SchemaValidationSettingsAttributes,
+export type Settings = Resource<
+  TypeId,
+  SettingsProps,
+  SettingsAttributes,
   never,
   Providers
 >;
@@ -86,7 +85,7 @@ export type SchemaValidationSettings = Resource<
  * @section Managing the zone default
  * @example Block non-conforming requests
  * ```typescript
- * yield* Cloudflare.SchemaValidationSettings("Validation", {
+ * yield* Cloudflare.SchemaValidation.Settings("Validation", {
  *   zoneId: zone.zoneId,
  *   validationDefaultMitigationAction: "block",
  * });
@@ -95,7 +94,7 @@ export type SchemaValidationSettings = Resource<
  * @section Kill switch
  * @example Temporarily disable validation zone-wide
  * ```typescript
- * yield* Cloudflare.SchemaValidationSettings("Validation", {
+ * yield* Cloudflare.SchemaValidation.Settings("Validation", {
  *   zoneId: zone.zoneId,
  *   validationDefaultMitigationAction: "block",
  *   // overrides every schema and per-operation setting:
@@ -105,21 +104,16 @@ export type SchemaValidationSettings = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const SchemaValidationSettings = Resource<SchemaValidationSettings>(
-  SchemaValidationSettingsTypeId,
-);
+export const Settings = Resource<Settings>(TypeId);
 
 /**
- * Returns true if the given value is a SchemaValidationSettings resource.
+ * Returns true if the given value is a Settings resource.
  */
-export const isSchemaValidationSettings = (
-  value: unknown,
-): value is SchemaValidationSettings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SchemaValidationSettingsTypeId;
+export const isSettings = (value: unknown): value is Settings =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const SchemaValidationSettingsProvider = () =>
-  Provider.succeed(SchemaValidationSettings, {
+export const SettingsProvider = () =>
+  Provider.succeed(Settings, {
     nuke: { singleton: true },
     stables: [
       "zoneId",
@@ -147,14 +141,12 @@ export const SchemaValidationSettingsProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is SchemaValidationSettingsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SettingsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as SchemaValidationSettingsProps;
-      const n = news as SchemaValidationSettingsProps;
+      const o = olds as SettingsProps;
+      const n = news as SettingsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -263,8 +255,7 @@ type SettingResponse =
 
 const observedState = (setting: SettingResponse) => ({
   // Distilled widens the generated enum to an open union (`string & {}`).
-  defaultAction:
-    setting.validationDefaultMitigationAction as SchemaValidationMitigationAction,
+  defaultAction: setting.validationDefaultMitigationAction as MitigationAction,
   overrideAction: setting.validationOverrideMitigationAction ?? null,
 });
 
@@ -272,10 +263,10 @@ const toAttributes = (
   zoneId: string,
   setting: SettingResponse,
   initial: {
-    defaultAction: SchemaValidationMitigationAction;
+    defaultAction: MitigationAction;
     overrideAction: "none" | null;
   },
-): SchemaValidationSettingsAttributes => {
+): SettingsAttributes => {
   const current = observedState(setting);
   return {
     zoneId,

@@ -6,7 +6,7 @@ import * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type * as Serverless from "../../Serverless/index.ts";
-import type { DurableObjectExport } from "./DurableObjectNamespace.ts";
+import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import {
   ExportedHandlerMethods,
@@ -14,7 +14,7 @@ import {
   WorkerTypeId,
   type WorkerEvent,
 } from "./Worker.ts";
-import type { WorkflowExport } from "./Workflow.ts";
+import type { WorkflowExport } from "../Workflows/Workflow.ts";
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
@@ -147,7 +147,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       // layer the fetch path uses, then envelope-encodes the result so
       // `Effect.fail` round-trips as `RpcErrorEnvelope` and `Stream` as
       // `RpcStreamEnvelope` (consumers wrap the binding with
-      // `toPromiseApi`/`bindWorker` to decode).
+      // `toRpcAsync`/`bindWorker` to decode).
 
       return {
         ...exports,

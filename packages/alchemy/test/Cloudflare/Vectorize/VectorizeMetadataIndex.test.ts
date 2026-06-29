@@ -55,301 +55,313 @@ const waitForIndexGone = (accountId: string, indexName: string) =>
     schedule: Schedule.both(Schedule.spaced("2 seconds"), Schedule.recurs(15)),
   });
 
-describe.skipIf(!!process.env.FAST)("Cloudflare.VectorizeMetadataIndex", () => {
-  test.provider(
-    "create and delete a metadata index",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+describe.skipIf(!!process.env.FAST)(
+  "Cloudflare.Vectorize.MetadataIndex",
+  () => {
+    test.provider(
+      "create and delete a metadata index",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        const { index, meta } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const index = yield* Cloudflare.VectorizeIndex("ParentIdx", {
-              dimensions: 32,
-              metric: "cosine",
-            });
-            const meta = yield* Cloudflare.VectorizeMetadataIndex("MetaIdx", {
-              indexName: index.indexName,
-              propertyName: "category",
-              indexType: "string",
-            });
-            return { index, meta };
-          }),
-        );
+          const { index, meta } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const index = yield* Cloudflare.Vectorize.Index("ParentIdx", {
+                dimensions: 32,
+                metric: "cosine",
+              });
+              const meta = yield* Cloudflare.Vectorize.MetadataIndex(
+                "MetaIdx",
+                {
+                  indexName: index.indexName,
+                  propertyName: "category",
+                  indexType: "string",
+                },
+              );
+              return { index, meta };
+            }),
+          );
 
-        expect(meta.propertyName).toBe("category");
-        expect(meta.indexType).toBe("string");
-        expect(meta.indexName).toBe(index.indexName);
+          expect(meta.propertyName).toBe("category");
+          expect(meta.indexType).toBe("string");
+          expect(meta.indexName).toBe(index.indexName);
 
-        // The metadata index appears in the parent's list once Cloudflare
-        // processes the async mutation — slow and variable under full
-        // concurrent load, so use the wider capped poll.
-        const entries = yield* poll({
-          description: "metadata index exists with propertyName=category",
-          effect: listMetadataIndexes(accountId, index.indexName),
-          predicate: (entries) =>
-            entries.some((e) => e.propertyName === "category"),
-          schedule: metaIndexPoll,
-        });
-        expect(
-          entries.find((e) => e.propertyName === "category")?.indexType,
-        ).toBe("String");
+          // The metadata index appears in the parent's list once Cloudflare
+          // processes the async mutation — slow and variable under full
+          // concurrent load, so use the wider capped poll.
+          const entries = yield* poll({
+            description: "metadata index exists with propertyName=category",
+            effect: listMetadataIndexes(accountId, index.indexName),
+            predicate: (entries) =>
+              entries.some((e) => e.propertyName === "category"),
+            schedule: metaIndexPoll,
+          });
+          expect(
+            entries.find((e) => e.propertyName === "category")?.indexType,
+          ).toBe("String");
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        // Both parent and metadata index are gone.
-        const after = yield* listMetadataIndexes(accountId, index.indexName);
-        expect(after.length).toBe(0);
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    // The single metadata-index materialization can take up to the ~240s
-    // poll ceiling under concurrent load — give headroom above the cap so a
-    // healthy-but-slow run never races the vitest timeout.
-    { timeout: 300_000 },
-  );
+          // Both parent and metadata index are gone.
+          const after = yield* listMetadataIndexes(accountId, index.indexName);
+          expect(after.length).toBe(0);
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      // The single metadata-index materialization can take up to the ~240s
+      // poll ceiling under concurrent load — give headroom above the cap so a
+      // healthy-but-slow run never races the vitest timeout.
+      { timeout: 300_000 },
+    );
 
-  test.provider(
-    "multiple metadata indexes on the same parent coexist",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    test.provider(
+      "multiple metadata indexes on the same parent coexist",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        const { index } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const index = yield* Cloudflare.VectorizeIndex("MultiParent", {
-              dimensions: 32,
-              metric: "cosine",
-            });
-            yield* Cloudflare.VectorizeMetadataIndex("CategoryMeta", {
-              indexName: index.indexName,
-              propertyName: "category",
-              indexType: "string",
-            });
-            yield* Cloudflare.VectorizeMetadataIndex("PriceMeta", {
-              indexName: index.indexName,
-              propertyName: "price",
-              indexType: "number",
-            });
-            return { index };
-          }),
-        );
-        const entries = yield* poll({
-          description: "metadata index includes category and price",
-          effect: listMetadataIndexes(accountId, index.indexName),
-          predicate: (entries) =>
-            entries.some((e) => e.propertyName === "category") &&
-            entries.some((e) => e.propertyName === "price"),
-          schedule: multiMetaIndexPoll,
-        });
-        expect(
-          entries.find((e) => e.propertyName === "category")?.indexType,
-        ).toBe("String");
-        expect(entries.find((e) => e.propertyName === "price")?.indexType).toBe(
-          "Number",
-        );
+          const { index } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const index = yield* Cloudflare.Vectorize.Index("MultiParent", {
+                dimensions: 32,
+                metric: "cosine",
+              });
+              yield* Cloudflare.Vectorize.MetadataIndex("CategoryMeta", {
+                indexName: index.indexName,
+                propertyName: "category",
+                indexType: "string",
+              });
+              yield* Cloudflare.Vectorize.MetadataIndex("PriceMeta", {
+                indexName: index.indexName,
+                propertyName: "price",
+                indexType: "number",
+              });
+              return { index };
+            }),
+          );
+          const entries = yield* poll({
+            description: "metadata index includes category and price",
+            effect: listMetadataIndexes(accountId, index.indexName),
+            predicate: (entries) =>
+              entries.some((e) => e.propertyName === "category") &&
+              entries.some((e) => e.propertyName === "price"),
+            schedule: multiMetaIndexPoll,
+          });
+          expect(
+            entries.find((e) => e.propertyName === "category")?.indexType,
+          ).toBe("String");
+          expect(
+            entries.find((e) => e.propertyName === "price")?.indexType,
+          ).toBe("Number");
 
-        yield* stack.destroy();
-      }).pipe(
-        // Guarantee teardown even if a poll/assertion fails or the test is
-        // interrupted by a timeout — the scratch stack's state is in-memory
-        // only, so a body that throws before the trailing `destroy()` would
-        // otherwise leak the parent + metadata indexes with no next-run
-        // cleanup.
-        Effect.ensuring(stack.destroy().pipe(Effect.ignore)),
-        logLevel,
-      ),
-    // TWO sequential metadata-index materializations on one parent, capped at
-    // the wider ~330s `multiMetaIndexPoll` ceiling under full concurrent load
-    // — give the test headroom above that cap (plus create/destroy overhead)
-    // so a healthy-but-slow run never races the vitest timeout. The poll cap
-    // still makes a real regression fail fast.
-    { timeout: 420_000 },
-  );
+          yield* stack.destroy();
+        }).pipe(
+          // Guarantee teardown even if a poll/assertion fails or the test is
+          // interrupted by a timeout — the scratch stack's state is in-memory
+          // only, so a body that throws before the trailing `destroy()` would
+          // otherwise leak the parent + metadata indexes with no next-run
+          // cleanup.
+          Effect.ensuring(stack.destroy().pipe(Effect.ignore)),
+          logLevel,
+        ),
+      // TWO sequential metadata-index materializations on one parent, capped at
+      // the wider ~330s `multiMetaIndexPoll` ceiling under full concurrent load
+      // — give the test headroom above that cap (plus create/destroy overhead)
+      // so a healthy-but-slow run never races the vitest timeout. The poll cap
+      // still makes a real regression fail fast.
+      { timeout: 420_000 },
+    );
 
-  test.provider(
-    "replacing the parent index also replaces the metadata index",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    test.provider(
+      "replacing the parent index also replaces the metadata index",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        // Initial deploy with dimensions=32.
-        const { index: oldIndex } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const index = yield* Cloudflare.VectorizeIndex("ReplaceParent", {
-              dimensions: 32,
-              metric: "cosine",
-            });
-            yield* Cloudflare.VectorizeMetadataIndex("ReplaceMeta", {
-              indexName: index.indexName,
-              propertyName: "tag",
-              indexType: "string",
-            });
-            return { index };
-          }),
-        );
-        yield* poll({
-          description: "metadata index exists with propertyName=tag",
-          effect: listMetadataIndexes(accountId, oldIndex.indexName),
-          predicate: (entries) => entries.some((e) => e.propertyName === "tag"),
-          schedule: metaIndexPoll,
-        });
-
-        // Re-deploy with different dimensions — the parent replaces, which
-        // also replaces the metadata index on the new parent.
-        const { index: newIndex, meta: newMeta } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const index = yield* Cloudflare.VectorizeIndex("ReplaceParent", {
-              dimensions: 64,
-              metric: "cosine",
-            });
-            const meta = yield* Cloudflare.VectorizeMetadataIndex(
-              "ReplaceMeta",
-              {
+          // Initial deploy with dimensions=32.
+          const { index: oldIndex } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const index = yield* Cloudflare.Vectorize.Index("ReplaceParent", {
+                dimensions: 32,
+                metric: "cosine",
+              });
+              yield* Cloudflare.Vectorize.MetadataIndex("ReplaceMeta", {
                 indexName: index.indexName,
                 propertyName: "tag",
                 indexType: "string",
-              },
-            );
-            return { index, meta };
-          }),
-        );
+              });
+              return { index };
+            }),
+          );
+          yield* poll({
+            description: "metadata index exists with propertyName=tag",
+            effect: listMetadataIndexes(accountId, oldIndex.indexName),
+            predicate: (entries) =>
+              entries.some((e) => e.propertyName === "tag"),
+            schedule: metaIndexPoll,
+          });
 
-        expect(newIndex.indexName).not.toBe(oldIndex.indexName);
-        expect(newMeta.indexName).toBe(newIndex.indexName);
+          // Re-deploy with different dimensions — the parent replaces, which
+          // also replaces the metadata index on the new parent.
+          const { index: newIndex, meta: newMeta } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const index = yield* Cloudflare.Vectorize.Index("ReplaceParent", {
+                dimensions: 64,
+                metric: "cosine",
+              });
+              const meta = yield* Cloudflare.Vectorize.MetadataIndex(
+                "ReplaceMeta",
+                {
+                  indexName: index.indexName,
+                  propertyName: "tag",
+                  indexType: "string",
+                },
+              );
+              return { index, meta };
+            }),
+          );
 
-        // Old parent is gone — bounded typed wait for the replacement's
-        // delete of the old index to settle.
-        const oldGone = yield* waitForIndexGone(accountId, oldIndex.indexName);
-        expect(oldGone).toBe(true);
+          expect(newIndex.indexName).not.toBe(oldIndex.indexName);
+          expect(newMeta.indexName).toBe(newIndex.indexName);
 
-        // The new parent has the metadata index.
-        yield* poll({
-          description: "metadata index exists with propertyName=tag",
-          effect: listMetadataIndexes(accountId, newIndex.indexName),
-          predicate: (entries) => entries.some((e) => e.propertyName === "tag"),
-          schedule: metaIndexPoll,
-        });
+          // Old parent is gone — bounded typed wait for the replacement's
+          // delete of the old index to settle.
+          const oldGone = yield* waitForIndexGone(
+            accountId,
+            oldIndex.indexName,
+          );
+          expect(oldGone).toBe(true);
 
-        yield* stack.destroy();
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    // Two sequential metadata-index materializations plus a parent
-    // replacement (delete old + create new) and a bounded gone-wait — give
-    // this genuinely slow create+replace+poll lifecycle real headroom above
-    // the two poll caps (2 x ~240s) + the ~30s gone-wait so a healthy run
-    // never races the timeout. Still bounded so a real regression fails fast.
-    { timeout: 600_000 },
-  );
+          // The new parent has the metadata index.
+          yield* poll({
+            description: "metadata index exists with propertyName=tag",
+            effect: listMetadataIndexes(accountId, newIndex.indexName),
+            predicate: (entries) =>
+              entries.some((e) => e.propertyName === "tag"),
+            schedule: metaIndexPoll,
+          });
 
-  test.provider(
-    "list enumerates the deployed metadata index",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+          yield* stack.destroy();
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      // Two sequential metadata-index materializations plus a parent
+      // replacement (delete old + create new) and a bounded gone-wait — give
+      // this genuinely slow create+replace+poll lifecycle real headroom above
+      // the two poll caps (2 x ~240s) + the ~30s gone-wait so a healthy run
+      // never races the timeout. Still bounded so a real regression fails fast.
+      { timeout: 600_000 },
+    );
 
-        const { index } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const index = yield* Cloudflare.VectorizeIndex("ListParent", {
-              dimensions: 32,
-              metric: "cosine",
-            });
-            yield* Cloudflare.VectorizeMetadataIndex("ListMeta", {
-              indexName: index.indexName,
-              propertyName: "category",
-              indexType: "string",
-            });
-            return { index };
-          }),
-        );
+    test.provider(
+      "list enumerates the deployed metadata index",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.VectorizeMetadataIndex,
-        );
+          const { index } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const index = yield* Cloudflare.Vectorize.Index("ListParent", {
+                dimensions: 32,
+                metric: "cosine",
+              });
+              yield* Cloudflare.Vectorize.MetadataIndex("ListMeta", {
+                indexName: index.indexName,
+                propertyName: "category",
+                indexType: "string",
+              });
+              return { index };
+            }),
+          );
 
-        // Cloudflare processes the create as an async mutation, so the entry
-        // appears in list() once the mutation is applied — slow and variable
-        // under full concurrent load, so use the wider capped poll.
-        const all = yield* poll({
-          description: "list() includes the deployed metadata index",
-          effect: provider.list(),
-          predicate: (all) =>
-            all.some(
-              (x) =>
-                x.indexName === index.indexName &&
-                x.propertyName === "category",
-            ),
-          schedule: metaIndexPoll,
-        });
+          const provider = yield* Provider.findProvider(
+            Cloudflare.Vectorize.MetadataIndex,
+          );
 
-        const entry = all.find(
-          (x) =>
-            x.indexName === index.indexName && x.propertyName === "category",
-        );
-        expect(entry?.indexType).toBe("string");
-        expect(entry?.accountId).toBeDefined();
+          // Cloudflare processes the create as an async mutation, so the entry
+          // appears in list() once the mutation is applied — slow and variable
+          // under full concurrent load, so use the wider capped poll.
+          const all = yield* poll({
+            description: "list() includes the deployed metadata index",
+            effect: provider.list(),
+            predicate: (all) =>
+              all.some(
+                (x) =>
+                  x.indexName === index.indexName &&
+                  x.propertyName === "category",
+              ),
+            schedule: metaIndexPoll,
+          });
 
-        yield* stack.destroy();
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    // The single metadata-index materialization can take up to the ~240s
-    // poll ceiling under concurrent load — give headroom above the cap.
-    { timeout: 300_000 },
-  );
+          const entry = all.find(
+            (x) =>
+              x.indexName === index.indexName && x.propertyName === "category",
+          );
+          expect(entry?.indexType).toBe("string");
+          expect(entry?.accountId).toBeDefined();
 
-  test.provider(
-    "destroy is idempotent when the parent index was deleted out-of-band",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      // The single metadata-index materialization can take up to the ~240s
+      // poll ceiling under concurrent load — give headroom above the cap.
+      { timeout: 300_000 },
+    );
 
-        yield* stack.destroy();
+    test.provider(
+      "destroy is idempotent when the parent index was deleted out-of-band",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const { index } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const index = yield* Cloudflare.VectorizeIndex("OobParent", {
-              dimensions: 32,
-              metric: "cosine",
-            });
-            yield* Cloudflare.VectorizeMetadataIndex("OobMeta", {
-              indexName: index.indexName,
-              propertyName: "ns",
-              indexType: "string",
-            });
-            return { index };
-          }),
-        );
-        yield* poll({
-          description: "metadata index exists with propertyName=ns",
-          effect: listMetadataIndexes(accountId, index.indexName),
-          predicate: (entries) => entries.some((e) => e.propertyName === "ns"),
-          schedule: metaIndexPoll,
-        });
+          yield* stack.destroy();
 
-        // Simulate Cloudflare's cascading delete: drop the parent directly.
-        // On Cloudflare's side this also removes the metadata index.
-        yield* vectorize.deleteIndex({
-          accountId,
-          indexName: index.indexName,
-        });
+          const { index } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const index = yield* Cloudflare.Vectorize.Index("OobParent", {
+                dimensions: 32,
+                metric: "cosine",
+              });
+              yield* Cloudflare.Vectorize.MetadataIndex("OobMeta", {
+                indexName: index.indexName,
+                propertyName: "ns",
+                indexType: "string",
+              });
+              return { index };
+            }),
+          );
+          yield* poll({
+            description: "metadata index exists with propertyName=ns",
+            effect: listMetadataIndexes(accountId, index.indexName),
+            predicate: (entries) =>
+              entries.some((e) => e.propertyName === "ns"),
+            schedule: metaIndexPoll,
+          });
 
-        // Bounded typed wait for the out-of-band delete to actually settle
-        // before exercising the idempotent `destroy` path.
-        const gone = yield* waitForIndexGone(accountId, index.indexName);
-        expect(gone).toBe(true);
+          // Simulate Cloudflare's cascading delete: drop the parent directly.
+          // On Cloudflare's side this also removes the metadata index.
+          yield* vectorize.deleteIndex({
+            accountId,
+            indexName: index.indexName,
+          });
 
-        // The metadata index provider's delete tolerates 404/410 from the
-        // missing parent, so `destroy` succeeds without erroring.
-        yield* stack.destroy();
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    // One metadata-index materialization (capped at ~240s under concurrent
-    // load) plus an out-of-band delete + gone-wait — keep headroom above the
-    // poll ceiling so a healthy-but-slow run never races the vitest timeout.
-    { timeout: 300_000 },
-  );
-});
+          // Bounded typed wait for the out-of-band delete to actually settle
+          // before exercising the idempotent `destroy` path.
+          const gone = yield* waitForIndexGone(accountId, index.indexName);
+          expect(gone).toBe(true);
+
+          // The metadata index provider's delete tolerates 404/410 from the
+          // missing parent, so `destroy` succeeds without erroring.
+          yield* stack.destroy();
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      // One metadata-index materialization (capped at ~240s under concurrent
+      // load) plus an out-of-band delete + gone-wait — keep headroom above the
+      // poll ceiling so a healthy-but-slow run never races the vitest timeout.
+      { timeout: 300_000 },
+    );
+  },
+);
 
 const listMetadataIndexes = Effect.fn(function* (
   accountId: string,

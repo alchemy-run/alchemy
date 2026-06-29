@@ -64,7 +64,7 @@ export default class ServiceFunction extends AWS.Lambda.Function<ServiceFunction
     Effect.provide(
       Layer.provideMerge(
         Layer.mergeAll(DatabaseAurora),
-        Layer.mergeAll(NetworkLive, AWS.RDS.ConnectLive),
+        Layer.mergeAll(NetworkLive, AWS.RDS.ConnectHttp),
       ),
     ),
   ),

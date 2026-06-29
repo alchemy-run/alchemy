@@ -1,10 +1,7 @@
-import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
-import type { Providers } from "../Providers.ts";
 
 export interface DescribeTimeToLiveRequest extends Omit<
   DynamoDB.DescribeTimeToLiveInput,
@@ -12,8 +9,9 @@ export interface DescribeTimeToLiveRequest extends Omit<
 > {}
 
 /** @binding */
-export class DescribeTimeToLive extends Binding.Service<
+export interface DescribeTimeToLive extends Binding.Service<
   DescribeTimeToLive,
+  "AWS.DynamoDB.DescribeTimeToLive",
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
@@ -24,52 +22,7 @@ export class DescribeTimeToLive extends Binding.Service<
       DynamoDB.DescribeTimeToLiveError
     >
   >
->()("AWS.DynamoDB.DescribeTimeToLive") {}
-
-export const DescribeTimeToLiveLive = Layer.effect(
-  DescribeTimeToLive,
-  Effect.gen(function* () {
-    const Policy = yield* DescribeTimeToLivePolicy;
-    const describeTimeToLive = yield* DynamoDB.describeTimeToLive;
-
-    return Effect.fn(function* <T extends Table>(table: T) {
-      const TableName = yield* table.tableName;
-      yield* Policy(table);
-      return Effect.fn(function* (request?: DescribeTimeToLiveRequest) {
-        return yield* describeTimeToLive({
-          ...request,
-          TableName: yield* TableName,
-        });
-      });
-    });
-  }),
+> {}
+export const DescribeTimeToLive = Binding.Service<DescribeTimeToLive>(
+  "AWS.DynamoDB.DescribeTimeToLive",
 );
-
-export class DescribeTimeToLivePolicy extends Binding.Policy<
-  DescribeTimeToLivePolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>,
-  Providers
->()("AWS.DynamoDB.DescribeTimeToLive") {}
-
-export const DescribeTimeToLivePolicyLive =
-  DescribeTimeToLivePolicy.layer.succeed(
-    Effect.fn(function* (host, table) {
-      if (isFunction(host)) {
-        yield* host.bind`Allow(${host}, AWS.DynamoDB.DescribeTimeToLive(${table}))`(
-          {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["dynamodb:DescribeTimeToLive"],
-                Resource: [table.tableArn],
-              },
-            ],
-          },
-        );
-      } else {
-        return yield* Effect.die(
-          `DescribeTimeToLivePolicy does not support runtime '${host.Type}'`,
-        );
-      }
-    }),
-  );

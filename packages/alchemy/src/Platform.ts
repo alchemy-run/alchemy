@@ -11,7 +11,6 @@ import type { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import type { PolicyLike } from "./Binding.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
@@ -100,7 +99,6 @@ export type PlatformServices =
   | NodeServices
   | ExecutionContext
   | HttpClient
-  | PolicyLike
   | Provider<any>
   | ProviderCollectionLike
   | Scope
@@ -305,7 +303,7 @@ export const Platform = <
             hooks.onCreate
               ? Effect.flatMap(
                   // `props` may itself be an Effect (e.g. when wrapped by
-                  // `Cloudflare.Vite` via `Effect.map`); resolve it before
+                  // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
                   // handing it to the hook so `onCreate` always sees the
                   // plain props object — the second call site (in
                   // `cls.make`) already does this.

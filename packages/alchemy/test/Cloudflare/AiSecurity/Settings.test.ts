@@ -100,7 +100,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const provider = yield* Provider.findProvider(
-        Cloudflare.AiSecuritySettings,
+        Cloudflare.AI.SecuritySettings,
       );
       const all = yield* provider.list();
 
@@ -132,7 +132,7 @@ test.provider.skipIf(!entitledZoneId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AiSecuritySettings("AiSecurity", {
+          return yield* Cloudflare.AI.SecuritySettings("AiSecurity", {
             zoneId,
             enabled: true,
           });
@@ -151,7 +151,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Update in place — same singleton, initial value survives.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AiSecuritySettings("AiSecurity", {
+          return yield* Cloudflare.AI.SecuritySettings("AiSecurity", {
             zoneId,
             enabled: false,
           });

@@ -24,22 +24,22 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
 
 /**
  * End-to-end Cloudflare Queue round-trip via
- * `Cloudflare.messages(queue).subscribe(...)`.
+ * `Cloudflare.Queues.consumeQueueMessages(queue, handler)`.
  *
  * Stack:
  *
  * - `Counter` Durable Object (per-key count + last-bodies tail).
- * - `RoundTripQueue` (Cloudflare.Queue).
+ * - `RoundTripQueue` (Cloudflare.Queues.Queue).
  * - `QueueRoundTripWorker` — exposes:
  *     - `POST /send?name=K`  →  enqueues a message via the
  *       `Cloudflare.Queues.WriteQueue` producer.
  *     - subscribe handler    →  increments the named Counter DO
  *       and stores the body, via
- *       `Cloudflare.messages(RoundTripQueue).subscribe(...)`.
+ *       `Cloudflare.Queues.consumeQueueMessages(RoundTripQueue, handler)`.
  *     - `GET /count?name=K`  →  reads the DO snapshot.
- * - `Cloudflare.QueueConsumer` is auto-created by the policy
- *   side of `messages().subscribe(...)` — there is no explicit
- *   `QueueConsumer(...)` yield in the stack.
+ * - `Cloudflare.Queues.Consumer` is auto-created by the policy
+ *   side of `consumeQueueMessages(...)` — there is no explicit
+ *   `Consumer(...)` yield in the stack.
  *
  * The test sends N messages, then polls `/count?name=K` with
  * exponential backoff until the DO reports `count >= N`. The
@@ -59,7 +59,7 @@ test.provider(
           // The Worker's init body yields Counter and
           // RoundTripQueue internally — yielding QueueWorker is
           // enough to bring the whole stack (Queue +
-          // QueueConsumer + Counter DO + Worker) into the plan.
+          // Consumer + Counter DO + Worker) into the plan.
           const worker = yield* QueueWorker;
           return { url: worker.url };
         }),

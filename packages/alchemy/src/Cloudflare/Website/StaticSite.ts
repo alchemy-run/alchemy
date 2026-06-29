@@ -37,7 +37,7 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    *
    * @example
    * ```typescript
-   * Cloudflare.StaticSite("App", {
+   * Cloudflare.Website.StaticSite("App", {
    *   command: "npm run build",
    *   outdir: "dist",
    *   main: "./src/worker.ts",
@@ -87,7 +87,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * produces a directory of files — Hugo, Zola, Eleventy, or any custom
  * pipeline.
  *
- * For Vite-based projects, prefer `Cloudflare.Vite` which handles
+ * For Vite-based projects, prefer `Cloudflare.Website.Vite` which handles
  * building automatically.
  *
  * @resource
@@ -113,7 +113,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Deploying a Hugo site
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("Blog", {
+ * const site = yield* Cloudflare.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
  *   outdir: "public",
  *   main: "./src/worker.ts",
@@ -126,7 +126,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example SPA-style routing
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("App", {
+ * const site = yield* Cloudflare.Website.StaticSite("App", {
  *   command: "npm run build",
  *   outdir: "dist",
  *   main: "./src/worker.ts",
@@ -143,7 +143,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Building a frontend in a monorepo
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("Web", {
+ * const site = yield* Cloudflare.Website.StaticSite("Web", {
  *   cwd: "apps/web",
  *   command: "npm run build",
  *   outdir: "dist",
@@ -157,7 +157,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Narrowing the memo scope
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("Docs", {
+ * const site = yield* Cloudflare.Website.StaticSite("Docs", {
  *   command: "npm run build",
  *   outdir: "dist",
  *   main: "./src/worker.ts",
@@ -175,7 +175,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Declaring a Worker class
  * ```typescript
- * class Blog extends Cloudflare.StaticSite<Blog>()("Blog", {
+ * class Blog extends Cloudflare.Website.StaticSite<Blog>()("Blog", {
  *   command: "hugo --minify",
  *   outdir: "public",
  *   main: "./src/worker.ts",

@@ -51,7 +51,7 @@ test.provider(
       yield* stack.destroy();
 
       const profile = yield* stack.deploy(
-        Cloudflare.DeviceCustomProfile("Contractors", {
+        Cloudflare.Devices.DeviceCustomProfile("Contractors", {
           name: "alchemy-test-custom-profile",
           match: 'identity.email == "contractor@alchemy-test-2.us"',
           precedence: 12010,
@@ -78,7 +78,7 @@ test.provider(
       // Update mutable props (body + split-tunnel exclude list) in place —
       // same policyId.
       const updated = yield* stack.deploy(
-        Cloudflare.DeviceCustomProfile("Contractors", {
+        Cloudflare.Devices.DeviceCustomProfile("Contractors", {
           name: "alchemy-test-custom-profile",
           match: 'identity.email == "contractor@alchemy-test-2.us"',
           precedence: 12010,
@@ -123,7 +123,7 @@ test.provider("list enumerates the deployed custom device profile", (stack) =>
     yield* stack.destroy();
 
     const deployed = yield* stack.deploy(
-      Cloudflare.DeviceCustomProfile("ListProfile", {
+      Cloudflare.Devices.DeviceCustomProfile("ListProfile", {
         name: "alchemy-test-custom-profile-list",
         match: 'identity.email == "list@alchemy-test-2.us"',
         precedence: 12011,
@@ -132,7 +132,7 @@ test.provider("list enumerates the deployed custom device profile", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.DeviceCustomProfile,
+      Cloudflare.Devices.DeviceCustomProfile,
     );
     const all = yield* provider.list();
 

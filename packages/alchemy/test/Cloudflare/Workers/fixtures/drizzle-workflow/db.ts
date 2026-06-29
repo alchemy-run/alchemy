@@ -30,7 +30,7 @@ export const NeonDb = Effect.gen(function* () {
 
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDb;
-  return yield* Cloudflare.Hyperdrive("DrizzleWorkflowEdge", {
+  return yield* Cloudflare.Hyperdrive.Connection("DrizzleWorkflowEdge", {
     origin: branch.origin,
   });
 });

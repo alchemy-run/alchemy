@@ -7,15 +7,15 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const GatewayConfigurationTypeId = "Cloudflare.Gateway.Configuration" as const;
-type GatewayConfigurationTypeId = typeof GatewayConfigurationTypeId;
+const TypeId = "Cloudflare.Gateway.Configuration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The Gateway account settings blocks this resource can manage. Only the
  * blocks you declare are patched (and captured for restore-on-destroy);
  * everything else on the account configuration is left untouched.
  */
-export interface GatewayConfigurationSettings {
+export interface ConfigurationSettings {
   /** Activity logging master toggle for the account. */
   activityLog?: { enabled?: boolean };
   /** Anti-virus scanning of file downloads/uploads. */
@@ -70,7 +70,7 @@ export interface GatewayConfigurationSettings {
   };
   /**
    * The Gateway-managed certificate used for TLS interception. Reference
-   * a `Cloudflare.GatewayCertificate`'s `certificateId` here.
+   * a `Cloudflare.Gateway.Certificate`'s `certificateId` here.
    */
   certificate?: { id: string };
   /** Match on both email aliases and the primary address. */
@@ -89,16 +89,16 @@ export interface GatewayConfigurationSettings {
   tlsDecrypt?: { enabled?: boolean };
 }
 
-export type GatewayConfigurationBlockKey = keyof GatewayConfigurationSettings;
+export type ConfigurationBlockKey = keyof ConfigurationSettings;
 
-export interface GatewayConfigurationProps {
+export interface ConfigurationProps {
   /**
    * The settings blocks to manage. Reconcile patches only the declared
    * blocks (Cloudflare PATCH semantics — undeclared blocks are never
    * touched), and destroy restores each declared block to the value it
    * had before Alchemy first managed it.
    */
-  settings: GatewayConfigurationSettings;
+  settings: ConfigurationSettings;
 }
 
 /**
@@ -106,11 +106,11 @@ export interface GatewayConfigurationProps {
  * Cloudflare before Alchemy first patched them. `null` records a block
  * that was absent at capture time.
  */
-export type GatewayConfigurationSnapshot = Partial<
-  Record<GatewayConfigurationBlockKey, unknown>
+export type ConfigurationSnapshot = Partial<
+  Record<ConfigurationBlockKey, unknown>
 >;
 
-export interface GatewayConfigurationAttributes {
+export interface ConfigurationAttributes {
   /** Account that owns the Gateway configuration singleton. */
   accountId: string;
   /** The full observed Gateway settings after reconciliation. */
@@ -119,17 +119,17 @@ export interface GatewayConfigurationAttributes {
    * The managed blocks' pre-management values, restored on destroy so
    * deleting the resource puts the account back the way it was found.
    */
-  initialSettings: GatewayConfigurationSnapshot;
+  initialSettings: ConfigurationSnapshot;
   /** ISO8601 creation timestamp of the configuration. */
   createdAt: string | undefined;
   /** ISO8601 last-update timestamp of the configuration. */
   updatedAt: string | undefined;
 }
 
-export type GatewayConfiguration = Resource<
-  GatewayConfigurationTypeId,
-  GatewayConfigurationProps,
-  GatewayConfigurationAttributes,
+export type Configuration = Resource<
+  TypeId,
+  ConfigurationProps,
+  ConfigurationAttributes,
   never,
   Providers
 >;
@@ -153,7 +153,7 @@ export type GatewayConfiguration = Resource<
  * @section Managing Gateway settings
  * @example Enable activity logging and TLS decryption
  * ```typescript
- * yield* Cloudflare.GatewayConfiguration("Gateway", {
+ * yield* Cloudflare.Gateway.Configuration("Gateway", {
  *   settings: {
  *     activityLog: { enabled: true },
  *     tlsDecrypt: { enabled: true },
@@ -163,7 +163,7 @@ export type GatewayConfiguration = Resource<
  *
  * @example Custom block page
  * ```typescript
- * yield* Cloudflare.GatewayConfiguration("Gateway", {
+ * yield* Cloudflare.Gateway.Configuration("Gateway", {
  *   settings: {
  *     blockPage: {
  *       enabled: true,
@@ -178,8 +178,8 @@ export type GatewayConfiguration = Resource<
  * @section TLS interception
  * @example Use a Gateway certificate for inspection
  * ```typescript
- * const cert = yield* Cloudflare.GatewayCertificate("InspectionCa", {});
- * yield* Cloudflare.GatewayConfiguration("Gateway", {
+ * const cert = yield* Cloudflare.Gateway.Certificate("InspectionCa", {});
+ * yield* Cloudflare.Gateway.Configuration("Gateway", {
  *   settings: {
  *     tlsDecrypt: { enabled: true },
  *     certificate: { id: cert.certificateId },
@@ -189,21 +189,16 @@ export type GatewayConfiguration = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/gateway/
  */
-export const GatewayConfiguration = Resource<GatewayConfiguration>(
-  GatewayConfigurationTypeId,
-);
+export const Configuration = Resource<Configuration>(TypeId);
 
 /**
- * Returns true if the given value is a GatewayConfiguration resource.
+ * Returns true if the given value is a Configuration resource.
  */
-export const isGatewayConfiguration = (
-  value: unknown,
-): value is GatewayConfiguration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === GatewayConfigurationTypeId;
+export const isConfiguration = (value: unknown): value is Configuration =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const GatewayConfigurationProvider = () =>
-  Provider.succeed(GatewayConfiguration, {
+export const ConfigurationProvider = () =>
+  Provider.succeed(Configuration, {
     nuke: { singleton: true },
     stables: ["accountId", "initialSettings", "createdAt"],
 
@@ -237,7 +232,7 @@ export const GatewayConfigurationProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const desired = (news.settings ?? {}) as GatewayConfigurationSettings;
+      const desired = (news.settings ?? {}) as ConfigurationSettings;
       const managed = managedKeys(desired);
 
       // 1. Observe — the singleton always exists; read its live state.
@@ -251,7 +246,7 @@ export const GatewayConfigurationProvider = () =>
       //    restored on destroy. Blocks newly managed by this update are
       //    captured now; previously captured blocks keep their original
       //    snapshot.
-      const initialSettings: GatewayConfigurationSnapshot = {
+      const initialSettings: ConfigurationSnapshot = {
         ...captureBlocks(observedSettings, managed),
         ...output?.initialSettings,
       };
@@ -280,9 +275,7 @@ export const GatewayConfigurationProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { accountId, initialSettings } = output;
-      const managed = Object.keys(
-        initialSettings,
-      ) as GatewayConfigurationBlockKey[];
+      const managed = Object.keys(initialSettings) as ConfigurationBlockKey[];
       if (managed.length === 0) return;
       // Observe — restore only the blocks that still diverge from their
       // captured pre-management value (idempotent re-delete).
@@ -317,9 +310,9 @@ export const GatewayConfigurationProvider = () =>
   });
 
 const managedKeys = (
-  settings: GatewayConfigurationSettings,
-): GatewayConfigurationBlockKey[] =>
-  (Object.keys(settings) as GatewayConfigurationBlockKey[]).filter(
+  settings: ConfigurationSettings,
+): ConfigurationBlockKey[] =>
+  (Object.keys(settings) as ConfigurationBlockKey[]).filter(
     (key) => settings[key] !== undefined,
   );
 
@@ -331,9 +324,9 @@ const managedKeys = (
  */
 const captureBlocks = (
   observedSettings: Record<string, unknown>,
-  keys: GatewayConfigurationBlockKey[],
-): GatewayConfigurationSnapshot => {
-  const snapshot: GatewayConfigurationSnapshot = {};
+  keys: ConfigurationBlockKey[],
+): ConfigurationSnapshot => {
+  const snapshot: ConfigurationSnapshot = {};
   for (const key of keys) {
     snapshot[key] = sanitizeBlock(observedSettings[key]) ?? null;
   }
@@ -341,8 +334,8 @@ const captureBlocks = (
 };
 
 const pickBlocks = (
-  settings: GatewayConfigurationSettings,
-  keys: GatewayConfigurationBlockKey[],
+  settings: ConfigurationSettings,
+  keys: ConfigurationBlockKey[],
 ): Record<string, unknown> => {
   const picked: Record<string, unknown> = {};
   for (const key of keys) picked[key] = settings[key];
@@ -427,8 +420,8 @@ const deepEquals = (a: unknown, b: unknown): boolean => {
 const toAttributes = (
   accountId: string,
   observed: zeroTrust.GetGatewayConfigurationResponse,
-  initialSettings: GatewayConfigurationSnapshot,
-): GatewayConfigurationAttributes => ({
+  initialSettings: ConfigurationSnapshot,
+): ConfigurationAttributes => ({
   accountId,
   settings: observed.settings ?? {},
   initialSettings,

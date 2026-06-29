@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DispatchNamespaceTypeId = "Cloudflare.Workers.DispatchNamespace" as const;
-type DispatchNamespaceTypeId = typeof DispatchNamespaceTypeId;
+const TypeId = "Cloudflare.Workers.DispatchNamespace" as const;
+type TypeId = typeof TypeId;
 
 export interface DispatchNamespaceProps {
   /**
@@ -58,7 +58,7 @@ export interface DispatchNamespaceAttributes {
 }
 
 export type DispatchNamespace = Resource<
-  DispatchNamespaceTypeId,
+  TypeId,
   DispatchNamespaceProps,
   DispatchNamespaceAttributes,
   never,
@@ -82,12 +82,12 @@ export type DispatchNamespace = Resource<
  * @section Creating a Dispatch Namespace
  * @example Namespace with a generated name
  * ```typescript
- * const namespace = yield* Cloudflare.DispatchNamespace("Customers", {});
+ * const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Customers", {});
  * ```
  *
  * @example Namespace with an explicit name
  * ```typescript
- * const namespace = yield* Cloudflare.DispatchNamespace("Customers", {
+ * const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Customers", {
  *   name: "my-platform-customers",
  * });
  * ```
@@ -103,9 +103,7 @@ export type DispatchNamespace = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
  */
-export const DispatchNamespace = Resource<DispatchNamespace>(
-  DispatchNamespaceTypeId,
-);
+export const DispatchNamespace = Resource<DispatchNamespace>(TypeId);
 
 /**
  * Returns true if the given value is a DispatchNamespace resource.
@@ -113,8 +111,7 @@ export const DispatchNamespace = Resource<DispatchNamespace>(
 export const isDispatchNamespace = (
   value: unknown,
 ): value is DispatchNamespace =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === DispatchNamespaceTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DispatchNamespaceProvider = () =>
   Provider.succeed(DispatchNamespace, {

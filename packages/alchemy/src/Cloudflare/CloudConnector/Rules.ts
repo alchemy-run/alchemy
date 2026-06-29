@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CloudConnectorRulesTypeId = "Cloudflare.CloudConnector.Rules" as const;
-type CloudConnectorRulesTypeId = typeof CloudConnectorRulesTypeId;
+const TypeId = "Cloudflare.CloudConnector.Rules" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud-provider object storage a Cloud Connector rule routes matching
@@ -26,7 +26,7 @@ export type CloudConnectorProvider =
  * A single Cloud Connector rule routing matching traffic directly to a
  * cloud-provider object-storage bucket.
  */
-export interface CloudConnectorRule {
+export interface Rule {
   /**
    * The cloud provider hosting the bucket the rule routes traffic to.
    */
@@ -39,7 +39,7 @@ export interface CloudConnectorRule {
   /**
    * Host of the target bucket — e.g. `mybucket.s3.amazonaws.com` for S3,
    * or an R2 bucket's public host. Accepts an `Input` so it can reference
-   * another resource's output (commonly an `R2Bucket`).
+   * another resource's output (commonly an `Bucket`).
    */
   host: string;
   /**
@@ -53,7 +53,7 @@ export interface CloudConnectorRule {
   description?: string;
 }
 
-export interface CloudConnectorRulesProps {
+export interface RulesProps {
   /**
    * Zone the rules apply to. Stable — changing the zone triggers
    * replacement.
@@ -64,13 +64,13 @@ export interface CloudConnectorRulesProps {
    * this resource and replaced atomically on every change — rules
    * managed elsewhere in the zone will be overwritten on deploy.
    */
-  rules: CloudConnectorRule[];
+  rules: Rule[];
 }
 
 /**
  * A Cloud Connector rule as Cloudflare reports it.
  */
-export interface CloudConnectorRuleAttribute {
+export interface RuleAttribute {
   /** Cloudflare-assigned identifier of the rule. */
   id: string | undefined;
   /** The cloud provider the rule routes traffic to. */
@@ -85,17 +85,17 @@ export interface CloudConnectorRuleAttribute {
   description: string | undefined;
 }
 
-export interface CloudConnectorRulesAttributes {
+export interface RulesAttributes {
   /** Zone that owns the rule list. */
   zoneId: string;
   /** The ordered rule list as Cloudflare reports it. */
-  rules: CloudConnectorRuleAttribute[];
+  rules: RuleAttribute[];
 }
 
-export type CloudConnectorRules = Resource<
-  CloudConnectorRulesTypeId,
-  CloudConnectorRulesProps,
-  CloudConnectorRulesAttributes,
+export type Rules = Resource<
+  TypeId,
+  RulesProps,
+  RulesAttributes,
   never,
   Providers
 >;
@@ -110,7 +110,7 @@ export type CloudConnectorRules = Resource<
  *
  * The zone has exactly one rule list — the API only supports replacing the
  * whole list — so this resource owns it in its entirety (PUT-replace
- * semantics) and there should be at most one `CloudConnectorRules`
+ * semantics) and there should be at most one `Rules`
  * resource per zone. Destroying the resource clears the list.
  *
  * Safety: when there is no prior state and the zone already has a
@@ -125,7 +125,7 @@ export type CloudConnectorRules = Resource<
  * @section Routing to object storage
  * @example Serve a path prefix from an S3 bucket
  * ```typescript
- * yield* Cloudflare.CloudConnectorRules("Rules", {
+ * yield* Cloudflare.CloudConnector.Rules("Rules", {
  *   zoneId: zone.zoneId,
  *   rules: [
  *     {
@@ -140,9 +140,9 @@ export type CloudConnectorRules = Resource<
  *
  * @example Serve static assets from an R2 bucket
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("Assets", {});
+ * const bucket = yield* Cloudflare.R2.Bucket("Assets", {});
  *
- * yield* Cloudflare.CloudConnectorRules("Rules", {
+ * yield* Cloudflare.CloudConnector.Rules("Rules", {
  *   zoneId: zone.zoneId,
  *   rules: [
  *     {
@@ -158,21 +158,16 @@ export type CloudConnectorRules = Resource<
  *
  * @see https://developers.cloudflare.com/rules/cloud-connector/
  */
-export const CloudConnectorRules = Resource<CloudConnectorRules>(
-  CloudConnectorRulesTypeId,
-);
+export const Rules = Resource<Rules>(TypeId);
 
 /**
- * Returns true if the given value is a CloudConnectorRules resource.
+ * Returns true if the given value is a Rules resource.
  */
-export const isCloudConnectorRules = (
-  value: unknown,
-): value is CloudConnectorRules =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === CloudConnectorRulesTypeId;
+export const isRules = (value: unknown): value is Rules =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const CloudConnectorRulesProvider = () =>
-  Provider.succeed(CloudConnectorRules, {
+export const RulesProvider = () =>
+  Provider.succeed(Rules, {
     stables: ["zoneId"],
 
     list: Effect.fn(function* () {
@@ -184,7 +179,7 @@ export const CloudConnectorRulesProvider = () =>
         zones,
         (zone) =>
           listObservedRules(zone.id).pipe(
-            Effect.map((rules): CloudConnectorRulesAttributes | undefined =>
+            Effect.map((rules): RulesAttributes | undefined =>
               // A zone with no rules has nothing to manage — same as
               // `read` returning `undefined` for an empty list.
               rules.length === 0 ? undefined : { zoneId: zone.id, rules },
@@ -194,14 +189,12 @@ export const CloudConnectorRulesProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is CloudConnectorRulesAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is RulesAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      const o = olds as CloudConnectorRulesProps;
-      const n = news as CloudConnectorRulesProps;
+      const o = olds as RulesProps;
+      const n = news as RulesProps;
       // zoneId is the resource's identity; compare only once both sides
       // are concrete.
       const oldZoneId =
@@ -222,7 +215,7 @@ export const CloudConnectorRulesProvider = () =>
       // An empty list means the resource doesn't exist — the API has no
       // separate "created but empty" state.
       if (observed.length === 0) return undefined;
-      const attrs: CloudConnectorRulesAttributes = { zoneId, rules: observed };
+      const attrs: RulesAttributes = { zoneId, rules: observed };
       // No prior state of our own but the zone already has rules — they
       // may be managed by hand or by another tool. Refuse to take over
       // unless adoption is explicitly allowed.
@@ -260,7 +253,7 @@ export const CloudConnectorRulesProvider = () =>
       // Re-read so attributes carry Cloudflare's canonical view,
       // including server-assigned rule ids.
       const synced = yield* listObservedRules(zoneId);
-      return { zoneId, rules: synced } satisfies CloudConnectorRulesAttributes;
+      return { zoneId, rules: synced } satisfies RulesAttributes;
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -282,7 +275,7 @@ const listObservedRules = (zoneId: string) =>
     Effect.catchTag("CloudConnectorRulesNotFound", () =>
       Effect.succeed({ result: [] }),
     ),
-    Effect.map((response): CloudConnectorRuleAttribute[] =>
+    Effect.map((response): RuleAttribute[] =>
       response.result.flatMap((rule) =>
         rule.expression == null ||
         rule.provider == null ||
@@ -310,7 +303,7 @@ const rulesEqual = (
     enabled: boolean;
     description: string | undefined;
   }>,
-  observed: ReadonlyArray<CloudConnectorRuleAttribute>,
+  observed: ReadonlyArray<RuleAttribute>,
 ): boolean =>
   desired.length === observed.length &&
   desired.every((d, i) => {

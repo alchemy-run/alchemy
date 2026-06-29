@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const RegionalTieredCacheTypeId =
-  "Cloudflare.Cache.RegionalTieredCache" as const;
-type RegionalTieredCacheTypeId = typeof RegionalTieredCacheTypeId;
+const TypeId = "Cloudflare.Cache.RegionalTieredCache" as const;
+type TypeId = typeof TypeId;
 
 export interface RegionalTieredCacheProps {
   /**
@@ -49,7 +48,7 @@ export interface RegionalTieredCacheAttributes {
 }
 
 export type RegionalTieredCache = Resource<
-  RegionalTieredCacheTypeId,
+  TypeId,
   RegionalTieredCacheProps,
   RegionalTieredCacheAttributes,
   never,
@@ -82,16 +81,16 @@ export type RegionalTieredCache = Resource<
  * @section Managing Regional Tiered Cache
  * @example Enable Regional Tiered Cache on an Enterprise zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.RegionalTieredCache("RegionalCache", {
+ * yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Regional Tiered Cache
  * ```typescript
- * yield* Cloudflare.RegionalTieredCache("RegionalCache", {
+ * yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -99,9 +98,7 @@ export type RegionalTieredCache = Resource<
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/#regional-tiered-cache
  */
-export const RegionalTieredCache = Resource<RegionalTieredCache>(
-  RegionalTieredCacheTypeId,
-);
+export const RegionalTieredCache = Resource<RegionalTieredCache>(TypeId);
 
 /**
  * Returns true if the given value is a RegionalTieredCache resource.
@@ -109,8 +106,7 @@ export const RegionalTieredCache = Resource<RegionalTieredCache>(
 export const isRegionalTieredCache = (
   value: unknown,
 ): value is RegionalTieredCache =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RegionalTieredCacheTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
   (props.enabled ?? true) ? "on" : "off";

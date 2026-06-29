@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const VariantsTypeId = "Cloudflare.Cache.Variants" as const;
-type VariantsTypeId = typeof VariantsTypeId;
+const TypeId = "Cloudflare.Cache.Variants" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The file extensions the Variants setting can configure. Each key maps to
@@ -66,7 +66,7 @@ export interface VariantsAttributes {
 }
 
 export type Variants = Resource<
-  VariantsTypeId,
+  TypeId,
   VariantsProps,
   VariantsAttributes,
   never,
@@ -98,9 +98,9 @@ export type Variants = Resource<
  * @section Managing Variants
  * @example Serve WebP for JPEG URLs
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.Variants("ImageVariants", {
+ * yield* Cloudflare.Cache.Variants("ImageVariants", {
  *   zoneId: zone.zoneId,
  *   jpeg: ["image/webp"],
  *   jpg: ["image/webp"],
@@ -109,7 +109,7 @@ export type Variants = Resource<
  *
  * @example Allow WebP and AVIF for all common image extensions
  * ```typescript
- * yield* Cloudflare.Variants("ImageVariants", {
+ * yield* Cloudflare.Cache.Variants("ImageVariants", {
  *   zoneId: zone.zoneId,
  *   jpeg: ["image/webp", "image/avif"],
  *   jpg: ["image/webp", "image/avif"],
@@ -120,13 +120,13 @@ export type Variants = Resource<
  *
  * @see https://developers.cloudflare.com/cache/advanced-configuration/variants/
  */
-export const Variants = Resource<Variants>(VariantsTypeId);
+export const Variants = Resource<Variants>(TypeId);
 
 /**
  * Returns true if the given value is a Variants resource.
  */
 export const isVariants = (value: unknown): value is Variants =>
-  Predicate.hasProperty(value, "Type") && value.Type === VariantsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /** The file-extension keys the Variants setting supports. */
 const EXTENSION_KEYS = [

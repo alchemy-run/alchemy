@@ -78,7 +78,7 @@ describe.sequential("UniversalSsl", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: false,
             });
@@ -113,7 +113,7 @@ describe.sequential("UniversalSsl", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: false,
             });
@@ -125,7 +125,7 @@ describe.sequential("UniversalSsl", () => {
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: true,
             });
@@ -161,7 +161,7 @@ describe.sequential("UniversalSsl", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: true,
             });
@@ -193,7 +193,9 @@ describe.sequential("UniversalSsl", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.UniversalSsl);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Ssl.UniversalSsl,
+      );
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

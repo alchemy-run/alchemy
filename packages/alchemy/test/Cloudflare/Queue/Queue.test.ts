@@ -43,7 +43,7 @@ const seedDevQueue = (input: {
       value: {
         kind: "resource",
         status: "created",
-        resourceType: "Cloudflare.Queue",
+        resourceType: "Cloudflare.Queues.Queue",
         namespace: undefined,
         fqn: input.fqn,
         logicalId: input.fqn,
@@ -88,7 +88,7 @@ test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         return { queue };
       }),
     );
@@ -145,11 +145,11 @@ test.provider("list enumerates the deployed queue", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Queue("ListQueue");
+        return yield* Cloudflare.Queues.Queue("ListQueue");
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.Queue);
+    const provider = yield* Provider.findProvider(Cloudflare.Queues.Queue);
 
     // A just-created queue can lag the account-wide list under load — poll
     // until it shows up (bounded) instead of asserting on the first read.

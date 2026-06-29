@@ -71,7 +71,7 @@ test.provider(
       const flippedProtocolDetection = true;
 
       const config = yield* stack.deploy(
-        Cloudflare.GatewayConfiguration("Gateway", {
+        Cloudflare.Gateway.Configuration("Gateway", {
           settings: {
             activityLog: { enabled: flippedActivityLog },
             protocolDetection: { enabled: flippedProtocolDetection },
@@ -93,7 +93,7 @@ test.provider(
 
       // Update in place — flip activityLog back; protocolDetection stays.
       const updated = yield* stack.deploy(
-        Cloudflare.GatewayConfiguration("Gateway", {
+        Cloudflare.Gateway.Configuration("Gateway", {
           settings: {
             activityLog: { enabled: !flippedActivityLog },
             protocolDetection: { enabled: flippedProtocolDetection },
@@ -130,7 +130,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.GatewayConfiguration,
+        Cloudflare.Gateway.Configuration,
       );
       const all = yield* provider.list();
 

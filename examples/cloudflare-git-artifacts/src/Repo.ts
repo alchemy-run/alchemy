@@ -8,7 +8,7 @@ export type Metadata = {
   createdAt: number;
 };
 
-export default class Repo extends Cloudflare.DurableObjectNamespace<Repo>()(
+export default class Repo extends Cloudflare.DurableObject<Repo>()(
   "Repo",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;

@@ -59,7 +59,7 @@ test.provider(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
-        Cloudflare.ZoneTransferTsig("TestTsig", {
+        Cloudflare.DNS.ZoneTransferTsig("TestTsig", {
           name: "alchemy-dnszt-tsig-test.",
           algo: "hmac-sha512.",
           secret: Redacted.make(SECRET_A),
@@ -79,7 +79,7 @@ test.provider(
 
       // Rotate the secret in place — same physical TSIG.
       const rotated = yield* stack.deploy(
-        Cloudflare.ZoneTransferTsig("TestTsig", {
+        Cloudflare.DNS.ZoneTransferTsig("TestTsig", {
           name: "alchemy-dnszt-tsig-test.",
           algo: "hmac-sha512.",
           secret: Redacted.make(SECRET_B),
@@ -110,7 +110,7 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.ZoneTransferTsig("ListTsig", {
+        Cloudflare.DNS.ZoneTransferTsig("ListTsig", {
           name: "alchemy-dnszt-tsig-list.",
           algo: "hmac-sha512.",
           secret: Redacted.make(SECRET_A),
@@ -118,7 +118,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ZoneTransferTsig,
+        Cloudflare.DNS.ZoneTransferTsig,
       );
       const all = yield* provider.list();
 

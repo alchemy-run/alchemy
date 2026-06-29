@@ -206,7 +206,7 @@ const del = (base: string, key: string) =>
   );
 
 /**
- * Drive the FULL {@link ReadWriteKVNamespaceClient} surface through one
+ * Drive the FULL {@link ReadWriteNamespaceClient} surface through one
  * read-write worker: every write method (`put`, `put` with metadata/ttl,
  * `delete`) and every read method (`get` text/json, bulk `get`,
  * `getWithMetadata`, `list` with prefix). Keys are namespaced by `label`

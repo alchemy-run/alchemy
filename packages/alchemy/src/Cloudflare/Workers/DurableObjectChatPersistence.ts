@@ -43,13 +43,13 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * import { Chat, LanguageModel } from "effect/unstable/ai";
  * import { Persistence } from "effect/unstable/persistence";
  *
- * export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatBackend>()(
+ * export default class ChatBackend extends Cloudflare.DurableObject<ChatBackend>()(
  *   "ChatBackend",
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {
  *       const persistence = yield* Persistence.layerResultPersisted({
  *         storeId: "alchemy.chat",
- *       }).pipe(Layer.provide(Cloudflare.DurableObjectChatPersistence));
+ *       }).pipe(Layer.provide(Cloudflare.AI.DurableObjectChatPersistence));
  *
  *       return {
  *         send: (threadId: string, prompt: string) =>
@@ -68,11 +68,11 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * ```typescript
  * const aiPersistence = yield* Persistence.layerResultPersisted({
  *   storeId: "alchemy.chat",
- * }).pipe(Layer.provide(Cloudflare.DurableObjectChatPersistence));
+ * }).pipe(Layer.provide(Cloudflare.AI.DurableObjectChatPersistence));
  *
  * const auditPersistence = yield* Persistence.layerResultPersisted({
  *   storeId: "alchemy.audit",
- * }).pipe(Layer.provide(Cloudflare.DurableObjectChatPersistence));
+ * }).pipe(Layer.provide(Cloudflare.AI.DurableObjectChatPersistence));
  * ```
  */
 export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(

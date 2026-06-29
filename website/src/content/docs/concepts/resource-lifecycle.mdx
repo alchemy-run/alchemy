@@ -60,7 +60,7 @@ last persisted state and classifies each resource:
 
 [g]+[/g] [b]Queue[/b] [d](AWS.SQS.Queue)[/d]
 [y]~[/y] [b]Worker[/b] [d](Cloudflare.Worker)[/d]
-[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]`} />
+[d]•[/d] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d]`} />
 
 The classification comes from each provider's `diff` function. See
 [Provider › diff](/concepts/provider#diff) for how providers decide
@@ -129,12 +129,12 @@ order** — dependents go first.
 <Terminal content={`[u]Plan[/u]: [r]2 to delete[/r]
 
 [r]-[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d]
-[r]-[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+[r]-[/r] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d]
 
 Proceed?
 ◉ Yes ○ No
 [r]✗[/r] [b]Worker[/b] [d](Cloudflare.Worker)[/d] [r]deleted[/r]
-[r]✗[/r] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [r]deleted[/r]`} />
+[r]✗[/r] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d] [r]deleted[/r]`} />
 
 ## Idempotency and recovery
 

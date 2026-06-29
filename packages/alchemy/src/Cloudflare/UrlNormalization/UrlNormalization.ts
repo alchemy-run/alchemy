@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const UrlNormalizationTypeId = "Cloudflare.UrlNormalization" as const;
-type UrlNormalizationTypeId = typeof UrlNormalizationTypeId;
+const TypeId = "Cloudflare.UrlNormalization.UrlNormalization" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Which URLs Cloudflare normalizes.
@@ -29,9 +29,9 @@ export type UrlNormalizationScope = "incoming" | "both" | "none";
  *   normalizations (e.g. collapsing `//` sequences). The zone default.
  * - `"rfc3986"` — strict RFC 3986 normalization only.
  */
-export type UrlNormalizationType = "cloudflare" | "rfc3986";
+export type Type = "cloudflare" | "rfc3986";
 
-export interface UrlNormalizationProps {
+export interface Props {
   /**
    * Zone whose URL normalization is managed. Stable — changing the zone
    * triggers a replacement (the old zone's URL normalization is reset to
@@ -57,10 +57,10 @@ export interface UrlNormalizationProps {
    *
    * @default "cloudflare"
    */
-  type?: UrlNormalizationType;
+  type?: Type;
 }
 
-export interface UrlNormalizationAttributes {
+export interface Attributes {
   /** Zone whose URL normalization is managed. */
   zoneId: string;
   /** Observed scope of the URL normalization. */
@@ -70,9 +70,9 @@ export interface UrlNormalizationAttributes {
 }
 
 export type UrlNormalization = Resource<
-  UrlNormalizationTypeId,
-  UrlNormalizationProps,
-  UrlNormalizationAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -94,7 +94,7 @@ export type UrlNormalization = Resource<
  * @section Managing URL normalization
  * @example Normalize URLs sent to the origin too
  * ```typescript
- * yield* Cloudflare.UrlNormalization("UrlNormalization", {
+ * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
  *   scope: "both",
  * });
@@ -102,7 +102,7 @@ export type UrlNormalization = Resource<
  *
  * @example Strict RFC 3986 normalization
  * ```typescript
- * yield* Cloudflare.UrlNormalization("UrlNormalization", {
+ * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
  *   scope: "incoming",
  *   type: "rfc3986",
@@ -111,7 +111,7 @@ export type UrlNormalization = Resource<
  *
  * @example Disable URL normalization
  * ```typescript
- * yield* Cloudflare.UrlNormalization("UrlNormalization", {
+ * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
  *   scope: "none",
  * });
@@ -119,20 +119,18 @@ export type UrlNormalization = Resource<
  *
  * @see https://developers.cloudflare.com/rules/normalization/
  */
-export const UrlNormalization = Resource<UrlNormalization>(
-  UrlNormalizationTypeId,
-);
+export const UrlNormalization = Resource<UrlNormalization>(TypeId);
 
 /**
  * Returns true if the given value is a UrlNormalization resource.
  */
 export const isUrlNormalization = (value: unknown): value is UrlNormalization =>
-  Predicate.hasProperty(value, "Type") && value.Type === UrlNormalizationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /** Cloudflare's zone default scope. */
 const DEFAULT_SCOPE: UrlNormalizationScope = "incoming";
 /** Cloudflare's zone default normalization type. */
-const DEFAULT_TYPE: UrlNormalizationType = "cloudflare";
+const DEFAULT_TYPE: Type = "cloudflare";
 
 export const UrlNormalizationProvider = () =>
   Provider.succeed(UrlNormalization, {
@@ -166,14 +164,12 @@ export const UrlNormalizationProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is UrlNormalizationAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as UrlNormalizationProps;
-      const n = news as UrlNormalizationProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -235,7 +231,7 @@ export const UrlNormalizationProvider = () =>
 const toAttributes = (
   zoneId: string,
   observed: urlNormalization.GetUrlNormalizationResponse,
-): UrlNormalizationAttributes => ({
+): Attributes => ({
   zoneId,
   scope: observed.scope,
   type: observed.type,

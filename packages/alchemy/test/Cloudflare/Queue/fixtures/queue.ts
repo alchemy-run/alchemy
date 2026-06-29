@@ -6,4 +6,4 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
  * Read/ReadWrite split — only a Write producer, exercised over the
  * native Worker binding and over a scoped HTTP API token.
  */
-export const TestQueue = Cloudflare.Queue("QueueBindingTestQueue");
+export const TestQueue = Cloudflare.Queues.Queue("QueueBindingTestQueue");
