@@ -21,6 +21,7 @@ import { isQueue } from "../Queues/Queue.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
+import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
 import { isDurableObjectLike } from "./DurableObject.ts";
@@ -64,6 +65,20 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             ? getHyperdriveDevOrigin(binding)
             : undefined,
         });
+
+        // A locally-hosted Workflow (no `scriptName`) must be registered with
+        // Cloudflare via `putWorkflow` once the host Worker exists. Cross-script
+        // references (with `scriptName`) are reference-only — the host owns the
+        // workflow resource. `scriptName: resource.workerName` makes the
+        // WorkflowResource depend on the Worker so it reconciles afterwards.
+        if (isWorkflowLike(binding) && !binding.scriptName) {
+          const workflowName = binding.workflowName ?? binding.name;
+          yield* WorkflowResource(workflowName, {
+            workflowName,
+            className: binding.className ?? binding.name,
+            scriptName: resource.workerName,
+          });
+        }
       } else {
         return yield* Effect.die(`Unknown binding type: ${bindingName}`);
       }
@@ -152,6 +167,14 @@ const toBinding = (
     return {
       type: "durable_object_namespace",
       name: bindingName,
+      className: binding.className ?? binding.name,
+      scriptName: binding.scriptName,
+    };
+  } else if (isWorkflowLike(binding)) {
+    return {
+      type: "workflow",
+      name: bindingName,
+      workflowName: binding.workflowName ?? binding.name,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
     };

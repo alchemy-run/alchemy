@@ -576,7 +576,7 @@ and you don't want to duplicate it in the route handler.
 
 Effect-native workers serialize their results as wire envelopes:
 `Effect.fail` becomes an `RpcErrorEnvelope`, `Stream` becomes an
-encoded `ReadableStream`. `toPromiseApi` is the consumer-side
+encoded `ReadableStream`. `toRpcAsync` is the consumer-side
 wrapper that auto-decodes those envelopes into a clean `Promise<T>`
 API:
 
@@ -587,7 +587,7 @@ API:
 +import type Backend from "../backend.ts";
  import { env } from "../env.ts";
 
-+const backend = Cloudflare.toPromiseApi<Backend>(env.BACKEND);
++const backend = Cloudflare.toRpcAsync<Backend>(env.BACKEND);
 ```
 
 Error envelopes are thrown so `await` rejects; stream envelopes
@@ -622,7 +622,7 @@ not a request, and the return value is the value itself (no
 
 :::tip[Calling RPC from another Effect-native Worker?]
 Use [`Cloudflare.Workers.bindWorker(Backend)`](/providers/cloudflare/workers/worker)
-instead of `toPromiseApi`. It returns the same shape with `Effect`
+instead of `toRpcAsync`. It returns the same shape with `Effect`
 return values, preserving typed errors and decoded streams instead
 of throwing them away.
 :::

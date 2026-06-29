@@ -12,16 +12,11 @@ import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
-  dockerBuild,
-  materializeDockerfile,
-  pushImage,
-  writeContextFiles,
-} from "../../Bundle/Docker.ts";
-import {
   findCwdForBundle,
   getStableContextDir,
 } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
@@ -345,6 +340,7 @@ export const TaskProvider = () =>
     Task,
     Effect.gen(function* () {
       const stack = yield* Stack;
+      const docker = yield* Docker;
 
       const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
@@ -724,15 +720,16 @@ await Effect.runPromise(program);
         );
         const registry = credentials.proxyEndpoint.replace(/^https?:\/\//, "");
 
-        yield* materializeDockerfile(dockerfile, contextDir);
-        yield* writeContextFiles(contextDir, [
-          { path: "index.mjs", content: code },
-        ]);
-        yield* dockerBuild({
+        yield* docker.materialize({
+          context: contextDir,
+          dockerfile: dockerfile,
+          files: [{ path: "index.mjs", content: code }],
+        });
+        yield* docker.image.build({
           tag: imageUri,
           context: contextDir,
         });
-        yield* pushImage(imageUri, {
+        yield* docker.image.push(imageUri, {
           username: "AWS",
           password,
           server: registry,

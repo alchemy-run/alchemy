@@ -172,7 +172,7 @@ export type Bucket = Resource<
  * @section Binding to a Worker
  * @example Reading and writing objects
  * ```typescript
- * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
  * // Write an object
  * yield* bucket.put("hello.txt", "Hello, World!");
@@ -186,7 +186,7 @@ export type Bucket = Resource<
  *
  * @example Streaming upload with content length
  * ```typescript
- * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
  * yield* bucket.put("upload.bin", request.stream, {
  *   contentLength: Number(request.headers["content-length"] ?? 0),

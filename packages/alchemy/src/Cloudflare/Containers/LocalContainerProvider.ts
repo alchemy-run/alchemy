@@ -1,9 +1,10 @@
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import { materializeDockerfile } from "../../Bundle/Docker.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
@@ -41,6 +42,8 @@ export const LocalContainerProvider = () =>
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       const { dotAlchemy } = yield* AlchemyContext;
+      const docker = yield* Docker;
+      const path = yield* Path.Path;
 
       // Bundle the container entrypoint and write it (plus the generated
       // Dockerfile) into a stable build context directory. `Docker.build` in
@@ -68,7 +71,7 @@ export const LocalContainerProvider = () =>
           news.external,
           news.autoInstallExternals,
         );
-        const [bundle, dockerfile] = yield* Effect.all(
+        const [bundle] = yield* Effect.all(
           [
             bundleContainerProgram({
               id,
@@ -79,13 +82,17 @@ export const LocalContainerProvider = () =>
               external: news.external,
               outdir: context,
             }),
-            materializeDockerfile(dockerfileContent, context),
+            docker.materialize({
+              context: context,
+              dockerfile: dockerfileContent,
+              files: [],
+            }),
           ],
           { concurrency: "unbounded" },
         );
         return {
           context,
-          dockerfile,
+          dockerfile: path.join(context, "Dockerfile"),
           hash: yield* sha256Object({
             bundle: bundle.hash,
             dockerfileContent,

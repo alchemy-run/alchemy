@@ -8,7 +8,7 @@ sidebar:
 A Cloudflare Queue gives you reliable, at-least-once delivery
 between Workers. The Worker that *sends* messages uses
 `Cloudflare.Queues.WriteQueue(...)` from the [Queue producer
-binding](/providers/cloudflare/queue) — covered in the resource
+binding](/providers/cloudflare/queues/queue) — covered in the resource
 docs. This tutorial focuses on the *consumer* side: receiving
 batches with the Effect-style
 `Cloudflare.Queues.consumeQueueMessages(queue, handler)` API.
@@ -97,7 +97,7 @@ expected to return `Effect.Effect<void>`.
     const queueResource = yield* Queue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
-+   yield* Cloudflare.Queues.messages<QueueMessageBody>(
++   yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
 +     queueResource,
 +     (stream) =>
 +       Stream.runForEach(stream, (msg) =>
@@ -131,8 +131,8 @@ retryDelay: "1 second"             // singular and plural units both work
 ```diff lang="typescript"
 +import * as Duration from "effect/Duration";
 
-- Cloudflare.Queues.messages<QueueMessageBody>(queueResource, (stream) =>
-+ Cloudflare.Queues.messages<QueueMessageBody>(
+- Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(queueResource, (stream) =>
++ Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
 +   queueResource,
 +   {
 +     batchSize: 25,
