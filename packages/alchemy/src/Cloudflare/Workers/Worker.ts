@@ -28,6 +28,7 @@ import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
+import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
@@ -175,6 +176,27 @@ export interface WorkerProps<
    * name from the stack, stage, and logical ID.
    */
   name?: string;
+  /**
+   * Deploy this Worker into a Workers for Platforms dispatch namespace as a
+   * "user worker" — a customer Worker that a platform Worker dispatches to at
+   * runtime via a dynamic-dispatch binding — instead of as a regular
+   * account-level Worker.
+   *
+   * Accepts the namespace name or a {@link DispatchNamespace} resource. The
+   * Worker's put/read/delete switch from the account-level
+   * `/workers/scripts` endpoints to the dispatch-namespace
+   * `/workers/dispatch/namespaces/:namespace/scripts` endpoints.
+   *
+   * User workers are not directly routable: they have no `workers.dev`
+   * subdomain, custom domains, or cron triggers, so {@link url},
+   * {@link domain}, and {@link crons} are ignored when this is set. Changing
+   * the namespace (or moving a Worker in or out of one) replaces the Worker,
+   * since an account-level script and a dispatch-namespace script are
+   * distinct cloud resources.
+   *
+   * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
+   */
+  namespace?: string | DispatchNamespace;
   /**
    * Whether to enable a workers.dev URL for this worker
    * @default true
@@ -389,6 +411,11 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     workerId: string;
     workerName: string;
+    /**
+     * The Workers for Platforms dispatch namespace this Worker was deployed
+     * into, or `undefined` for a regular account-level Worker.
+     */
+    namespace: string | undefined;
     logpush: boolean | undefined;
     url: string | undefined;
     tags: string[] | undefined;
