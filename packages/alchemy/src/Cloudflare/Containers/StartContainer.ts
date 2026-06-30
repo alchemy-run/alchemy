@@ -180,18 +180,28 @@ export const startContainer = Effect.fn(function* <
       Effect.catchTag("ContainerError", (error) =>
         Effect.logError(`Container monitor error: ${error.message}`),
       ),
+      // When the container exits (stopped, crashed, or slept), its ports are no
+      // longer listening — drop the confirmed-ready marks so the next request
+      // re-probes the freshly (re)started instance instead of fetching a dead
+      // port. This is the analog of native's monitor clearing the `healthy`
+      // state on exit.
+      Effect.ensuring(Effect.sync(() => readyPorts.clear())),
     ),
   );
 
-  // Start the container if it isn't running, serialised + classified. Backs
-  // off on rate limiting instead of hammering the allocator.
-  const ensureRunning = Semaphore.withPermits(
+  // The actual (re)start, serialised through the mutex so racing callers never
+  // both invoke `container.start()` ("already running" — see
+  // cloudflare/containers#173). Re-checks `running` under the lock.
+  const startOnce = Semaphore.withPermits(
     startMutex,
     1,
   )(
     Effect.gen(function* () {
       if (yield* container.running) return;
       yield* Effect.logDebug("Container not running, starting...");
+      // A (re)start means nothing is listening yet — clear any stale ready
+      // marks from a previous run so the next request re-probes this instance.
+      yield* Effect.sync(() => readyPorts.clear());
       yield* container.start(options).pipe(
         Effect.catchDefect((defect) => Effect.fail(classifyDefect(defect, -1))),
         // A rate limit is transient — back off well clear of the per-second
@@ -210,6 +220,16 @@ export const startContainer = Effect.fn(function* <
       yield* launchMonitor;
     }),
   );
+
+  // Ensure the container is running. Fast path: when it's already running (the
+  // steady state) this is a single cheap `running` read and avoids contending
+  // on the start mutex. Only an actual (re)start acquires the lock — which is
+  // also what makes auto-restart work: a stopped/crashed container has
+  // `running === false`, so the next call transparently restarts it.
+  const ensureRunning = Effect.gen(function* () {
+    if (yield* container.running) return;
+    yield* startOnce;
+  });
 
   // A single readiness probe: any response at all (even a non-2xx) proves the
   // port is accepting connections. Each probe is hard-capped so a hung connect
@@ -262,18 +282,35 @@ export const startContainer = Effect.fn(function* <
       ),
     );
 
-  // Retry every readiness failure that could plausibly clear by waiting on the
-  // same instance — a not-yet-listening port, a still-allocating instance, a
-  // hung/timed-out probe, even a transient `running === false` read during cold
-  // start (which we can't reliably distinguish from a real crash without
-  // native's monitor exit code, so we keep polling within the bounded budget
-  // and only surface `ContainerCrashedError` if it never recovers). The one
-  // failure NOT retried here is a rate limit, which `ensureRunning` already
-  // backs off on — spinning the port loop would only make it worse.
+  // Retry ONLY failures that can clear by waiting on the SAME instance:
+  //   - `ContainerError`           — the port isn't listening yet (the app is
+  //                                  still booting; the container process is up)
+  //   - `NoContainerInstanceError` — an instance is still being allocated
+  // Fail fast on the rest:
+  //   - `ContainerCrashedError`    — the container PROCESS has exited
+  //                                  (`running === false`). `running` reflects
+  //                                  the process, not the app, so this is never
+  //                                  "still starting" — it's fatal for this
+  //                                  instance. Spinning the budget on a
+  //                                  crash-looping container just wastes ~20-60s
+  //                                  per request; surface it in ~one poll.
+  //   - `ContainerRateLimitedError`— back off in `ensureRunning`, don't spin.
+  // This matches `@cloudflare/containers`, whose `waitForPort` /
+  // `doStartContainer` throw immediately on `!running`.
   const isTransientReadiness = (e: ReadinessError) =>
-    e._tag !== "ContainerRateLimitedError";
+    e._tag === "ContainerError" || e._tag === "NoContainerInstanceError";
 
   // Phase 2 (native `waitForPort`): poll the port until it accepts connections.
+  // Crash detection is poll-based (`probePort` surfaces `ContainerCrashedError`
+  // on an observed `!running`, which `isTransientReadiness` does NOT retry).
+  //
+  // NB: we deliberately do NOT race `container.monitor()` for faster crash
+  // detection. The monitor wrapper settles immediately for a not-yet-allocated
+  // instance (and loses the exit code that native uses to tell "queued" from
+  // "exited"), so racing it mis-reports healthy, still-provisioning containers
+  // as crashed under concurrent startup — it dropped a 100-instance cold start
+  // to <10% success. Polling is correct under load; the price is that crash
+  // detection is bounded by the probe cadence rather than instant.
   const waitForPort = (portNumber: number) =>
     readyPorts.has(portNumber)
       ? Effect.void
@@ -294,23 +331,25 @@ export const startContainer = Effect.fn(function* <
         );
 
   // Phase 1 (native `doStartContainer`) + phase 2: ensure the instance is
-  // started (bounded, rate-limit aware), then wait for the port.
+  // started (bounded, rate-limit aware), then wait for the port. `ensureRunning`
+  // is ALWAYS run (cheap when already running) rather than short-circuiting on
+  // `readyPorts` — otherwise a container that has since stopped/crashed would
+  // never be restarted. The port probe (`waitForPort`) is what `readyPorts`
+  // skips in steady state.
   const ensureReady = (portNumber: number) =>
-    readyPorts.has(portNumber)
-      ? Effect.void
-      : ensureRunning.pipe(
-          Effect.retry({
-            while: (
-              e:
-                | ContainerError
-                | NoContainerInstanceError
-                | ContainerRateLimitedError,
-            ) => e._tag === "NoContainerInstanceError",
-            schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
-            times: GET_CONTAINER_RETRIES,
-          }),
-          Effect.andThen(() => waitForPort(portNumber)),
-        );
+    ensureRunning.pipe(
+      Effect.retry({
+        while: (
+          e:
+            | ContainerError
+            | NoContainerInstanceError
+            | ContainerRateLimitedError,
+        ) => e._tag === "NoContainerInstanceError",
+        schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
+        times: GET_CONTAINER_RETRIES,
+      }),
+      Effect.andThen(() => waitForPort(portNumber)),
+    );
 
   const getTcpPort = (portNumber: number) =>
     Effect.succeed({
@@ -333,7 +372,14 @@ export const startContainer = Effect.fn(function* <
               }),
             ),
           ),
+          // Only retry a generic transient blip: a not-yet-ready port
+          // (`ContainerError`) or a transport hiccup on the real request such
+          // as "Network connection lost" (`HttpClientError`). A crash, rate
+          // limit, or exhausted no-instance budget is surfaced immediately so a
+          // crash-looping container fails fast instead of re-starting 3× more.
           Effect.retry({
+            while: (e) =>
+              e._tag === "ContainerError" || e._tag === "HttpClientError",
             schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
             times: REQUEST_RETRIES,
           }),

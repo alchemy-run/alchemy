@@ -9,6 +9,7 @@
  *   bun x wrangler deploy                     # build + push the image, deploy the worker
  *   WORKER_URL=https://<worker>.workers.dev bun bench.ts
  *   BENCH_N=2 BENCH_CONCURRENCY=2 WORKER_URL=... bun bench.ts
+ *   BENCH_CRASH=1 WORKER_URL=... bun bench.ts   # crash-loop fail-fast baseline
  *   bun x wrangler delete                     # tear down
  *
  * `wrangler` and `@cloudflare/containers` resolve from the `alchemy` package's
@@ -24,6 +25,10 @@ const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? N);
 const REQUEST_TIMEOUT_MS = Number(
   process.env.BENCH_REQUEST_TIMEOUT_MS ?? 240_000,
 );
+// When set, benchmark how fast native surfaces a fatal crash (the baseline
+// Alchemy's fail-fast behaviour is compared against) instead of cold start.
+const CRASH = process.env.BENCH_CRASH === "1";
+const CRASH_N = Number(process.env.BENCH_CRASH_N ?? 10);
 
 if (!WORKER_URL) {
   console.error(
@@ -118,8 +123,67 @@ const stats = (xs: number[]) => {
   };
 };
 
+// One crash-loop attempt: time how long until the failure surfaces. `ok` is
+// true only on a 2xx (never, for a crash-looping container).
+const crashAttempt = async (
+  name: string,
+): Promise<{ outside: number; inside: number | undefined; ok: boolean }> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const start = Date.now();
+  try {
+    const res = await fetch(
+      `${WORKER_URL}/crashloop?name=${encodeURIComponent(name)}`,
+      { headers: { connection: "close" }, signal: controller.signal },
+    );
+    const body = await res.text();
+    const outside = Date.now() - start;
+    const parsed = JSON.parse(body) as { ms?: number; ok?: boolean };
+    return { outside, inside: parsed.ms, ok: parsed.ok ?? false };
+  } catch {
+    return { outside: Date.now() - start, inside: undefined, ok: false };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const runCrash = async () => {
+  const nonce = crypto.randomUUID().slice(0, 8);
+  const names = Array.from(
+    { length: CRASH_N },
+    (_, i) => `crash-${nonce}-${i}`,
+  );
+  const results = await Promise.all(names.map(crashAttempt));
+  const outside = stats(results.map((r) => r.outside));
+  const inside = stats(
+    results
+      .map((r) => r.inside)
+      .filter((m): m is number => typeof m === "number"),
+  );
+  const sec = (n: number) => `${(n / 1000).toFixed(1)}s`;
+  const failed = results.filter((r) => !r.ok).length;
+  console.log(
+    [
+      "",
+      `wrangler + @cloudflare/containers crash-loop fail-fast (N=${CRASH_N})`,
+      `── fatal crash (container exits immediately) ──`,
+      `  detected-as-failed: ${failed}/${CRASH_N}`,
+      `  time-to-fail inside (worker):`,
+      `    min ${sec(inside.min)}  p50 ${sec(inside.p50)}  p95 ${sec(inside.p95)}  max ${sec(inside.max)}  mean ${sec(inside.mean)}`,
+      `  time-to-fail outside (client):`,
+      `    min ${sec(outside.min)}  p50 ${sec(outside.p50)}  p95 ${sec(outside.p95)}  max ${sec(outside.max)}  mean ${sec(outside.mean)}`,
+      "",
+    ].join("\n"),
+  );
+};
+
 const main = async () => {
   await wait(WORKER_URL);
+
+  if (CRASH) {
+    await runCrash();
+    return;
+  }
 
   const nonce = crypto.randomUUID().slice(0, 8);
   const names = Array.from({ length: N }, (_, i) => `${nonce}-${i}`);

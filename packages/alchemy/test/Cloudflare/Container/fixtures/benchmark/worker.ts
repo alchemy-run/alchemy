@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { BenchBunObject } from "./bun-object.ts";
+import { BenchCrashObject } from "./crashloop-object.ts";
 import { BenchEffectfulObject } from "./effectful-object.ts";
 import { BenchRemoteObject } from "./remote-object.ts";
 
@@ -14,9 +15,10 @@ import { BenchRemoteObject } from "./remote-object.ts";
  * - `GET /effectful?name=X` → effectful (bundled Effect program) container
  * - `GET /remote?name=X`    → remote (pre-built echo image) container
  * - `GET /bun?name=X`       → bun-baseline (same base image, no Effect bundle)
+ * - `GET /crashloop?name=X` → a container that exits immediately (fail-fast)
  *
  * The test fires N distinct names per route concurrently to spin up N
- * containers and compares the two variants.
+ * containers and compares the variants.
  */
 export default class BenchWorker extends Cloudflare.Worker<BenchWorker>()(
   "BenchWorker",
@@ -27,6 +29,7 @@ export default class BenchWorker extends Cloudflare.Worker<BenchWorker>()(
     const effectful = yield* BenchEffectfulObject;
     const remote = yield* BenchRemoteObject;
     const bun = yield* BenchBunObject;
+    const crash = yield* BenchCrashObject;
 
     return {
       fetch: Effect.gen(function* () {
@@ -46,6 +49,11 @@ export default class BenchWorker extends Cloudflare.Worker<BenchWorker>()(
 
         if (url.pathname === "/bun") {
           const result = yield* bun.getByName(name).boot();
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (url.pathname === "/crashloop") {
+          const result = yield* crash.getByName(name).boot();
           return yield* HttpServerResponse.json(result);
         }
 

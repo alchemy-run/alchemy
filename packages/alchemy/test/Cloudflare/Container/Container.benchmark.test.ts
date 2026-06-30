@@ -244,4 +244,65 @@ describe("container cold-start benchmark", () => {
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );
+
+  // Number of crash-loop attempts to time. Small — this measures latency-to-
+  // fail, not throughput.
+  const CRASH_N = Number(process.env.BENCH_CRASH_N ?? 10);
+
+  test(
+    "surfaces a fatal crash fast instead of burning the readiness budget",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      yield* waitForWorker(url);
+
+      const nonce = yield* Effect.sync(() => crypto.randomUUID().slice(0, 8));
+      const client = freshConn(yield* HttpClient.HttpClient);
+
+      const results = yield* Effect.forEach(
+        Array.from({ length: CRASH_N }, (_, i) => `crash-${nonce}-${i}`),
+        (name) =>
+          Effect.gen(function* () {
+            const start = yield* Effect.sync(() => Date.now());
+            const res = yield* client
+              .get(`${url}/crashloop?name=${encodeURIComponent(name)}`)
+              .pipe(Effect.timeout(REQUEST_TIMEOUT));
+            const body = yield* res.text;
+            const outside = (yield* Effect.sync(() => Date.now())) - start;
+            const parsed = JSON.parse(body) as { ms: number; ok: boolean };
+            return { outside, inside: parsed.ms, ok: parsed.ok };
+          }),
+        { concurrency: CRASH_N },
+      );
+
+      const insideStats = stats(results.map((r) => r.inside));
+      const outsideStats = stats(results.map((r) => r.outside));
+      const sec = (n: number) => `${(n / 1000).toFixed(1)}s`;
+      const failedFast = results.filter((r) => !r.ok).length;
+
+      yield* Effect.sync(() =>
+        console.log(
+          [
+            "",
+            `Container crash-loop fail-fast (N=${CRASH_N})`,
+            `── fatal crash (container exits immediately) ──`,
+            `  detected-as-failed: ${failedFast}/${CRASH_N}`,
+            `  time-to-fail inside (DO):`,
+            `    min ${sec(insideStats.min)}  p50 ${sec(insideStats.p50)}  p95 ${sec(insideStats.p95)}  max ${sec(insideStats.max)}  mean ${sec(insideStats.mean)}`,
+            `  time-to-fail outside (client):`,
+            `    min ${sec(outsideStats.min)}  p50 ${sec(outsideStats.p50)}  p95 ${sec(outsideStats.p95)}  max ${sec(outsideStats.max)}  mean ${sec(outsideStats.mean)}`,
+            "",
+          ].join("\n"),
+        ),
+      );
+
+      // Every attempt must be detected as failed — the container crash-loops.
+      expect(failedFast).toBe(CRASH_N);
+      // And it must fail FAST: before the fix this retried the crash for the
+      // full readiness budget (tens of seconds → minutes); aligned with native
+      // it surfaces in ~one poll past the platform's allocation time. Bound well
+      // under the per-request ceiling to catch a regression to budget-burning.
+      expect(insideStats.p95).toBeLessThan(60_000);
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
 });
