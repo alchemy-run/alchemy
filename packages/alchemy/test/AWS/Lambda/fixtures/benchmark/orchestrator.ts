@@ -1,11 +1,12 @@
 import * as AWS from "@/AWS";
+import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { BenchExternal } from "./external-image.ts";
@@ -28,27 +29,30 @@ import { Sandbox } from "../microvm/sandbox.ts";
 type Variant = {
   readonly run: (
     req: AWS.Lambda.RunMicrovmRequest,
-  ) => Effect.Effect<{ microvmId: string; endpoint: string }, any>;
-  readonly get: (req: {
-    microvmIdentifier: string;
-  }) => Effect.Effect<{ state: string }, any>;
-  readonly auth: (req: {
-    microvmIdentifier: string;
-    expirationInMinutes: number;
-    allowedPorts: { port: number }[];
-  }) => Effect.Effect<
-    {
-      authToken: Record<string, string | Redacted.Redacted<string> | undefined>;
-    },
-    any
+  ) => Effect.Effect<microvms.RunMicrovmResponse, microvms.RunMicrovmError>;
+  readonly get: (
+    req: AWS.Lambda.GetMicrovmRequest,
+  ) => Effect.Effect<microvms.GetMicrovmResponse, microvms.GetMicrovmError>;
+  readonly auth: (
+    req: AWS.Lambda.CreateAuthTokenRequest,
+  ) => Effect.Effect<
+    microvms.CreateMicrovmAuthTokenResponse,
+    microvms.CreateMicrovmAuthTokenError
   >;
-  readonly term: (req: {
-    microvmIdentifier: string;
-  }) => Effect.Effect<unknown, any>;
+  readonly term: (
+    req: AWS.Lambda.TerminateMicrovmRequest,
+  ) => Effect.Effect<
+    microvms.TerminateMicrovmResponse,
+    microvms.TerminateMicrovmError
+  >;
   readonly reachable: (
     endpoint: string,
-    authToken: Record<string, string | Redacted.Redacted<string> | undefined>,
-  ) => Effect.Effect<unknown, any, any>;
+    authToken: AWS.Lambda.MicrovmConnection["authToken"],
+  ) => Effect.Effect<
+    unknown,
+    HttpClientError.HttpClientError,
+    HttpClient.HttpClient
+  >;
 };
 
 export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestrator>()(

@@ -26,12 +26,15 @@ const HOOK_TIMEOUT = 600_000;
 // run a very wide ceiling.
 const TEST_TIMEOUT = 2_400_000;
 
-// How many boot→shutdown cycles to run per variant. Each cycle boots ONE fresh
-// container (distinct DO name → distinct container), times its cold start, then
-// shuts it down — run sequentially so the per-iteration series shows how cold
-// start trends as the same image is booted and torn down repeatedly. Mirrors
-// the MicroVM benchmark so the two compare apples-to-apples.
-const ITER = Number(process.env.BENCH_ITER ?? 10);
+// Cold-start under modest concurrency, measured in batches. Each batch boots
+// CONCURRENCY fresh containers AT ONCE (distinct DO names → distinct
+// containers), waits for all to become reachable, then stops all of them before
+// the next batch. Running BATCHES batches of distinct keys (CONCURRENCY ×
+// BATCHES total cold starts) reveals both the under-load cold start (within a
+// batch) and the trend across batches (warm image/edge), while never holding
+// more than CONCURRENCY containers at once. Mirrors the MicroVM benchmark.
+const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? 10);
+const BATCHES = Number(process.env.BENCH_BATCHES ?? 10);
 // Each named DO instance boots its own container; the route blocks until the
 // container is reachable (up to the start layer's ~3min cap), so allow a long
 // per-request ceiling.
@@ -71,8 +74,8 @@ const waitForWorker = (url: string) =>
   });
 
 interface Sample {
-  /** 1-based iteration index (order the cycle ran in). */
-  readonly iter: number;
+  /** 1-based batch index this sample belongs to. */
+  readonly batch: number;
   /** Wall-clock latency of the boot request, measured by the client (outside). */
   readonly outside: number;
   /** Inside the DO: container start → reachable (available service). */
@@ -85,11 +88,16 @@ interface VariantResult {
   readonly failures: ReadonlyArray<string>;
 }
 
-// One boot→shutdown cycle, timed from the outside. `/boot` returns the
-// inside-measured `{ bootMs, readyMs }` (container start → reachable);
-// `/shutdown` destroys the container (best-effort, not timed) so the next cycle
-// is an independent cold start.
-const cycle = (baseUrl: string, variant: string, iter: number, name: string) =>
+// Boot ONE fresh container and time the cold start from the outside. `/boot`
+// returns the inside-measured `{ bootMs, readyMs }` (container start →
+// reachable). Does NOT shut down — the batch stops all of its instances
+// together afterwards, so CONCURRENCY containers are alive at once.
+const bootOne = (
+  baseUrl: string,
+  variant: string,
+  batch: number,
+  name: string,
+) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
     const q = `variant=${variant}&name=${encodeURIComponent(name)}`;
@@ -121,11 +129,18 @@ const cycle = (baseUrl: string, variant: string, iter: number, name: string) =>
         return undefined;
       }
     })();
-    // Tear it down (best-effort) so the next cycle is a fresh cold start.
+    return { sample: { batch, outside, readyMs }, failure: undefined };
+  });
+
+// Stop one container (best-effort, untimed) so the next batch is a fresh cold
+// start and we never hold more than CONCURRENCY containers at once.
+const shutdownOne = (baseUrl: string, variant: string, name: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    const q = `variant=${variant}&name=${encodeURIComponent(name)}`;
     yield* client
       .get(`${baseUrl}/shutdown?${q}`)
       .pipe(Effect.timeout("60 seconds"), Effect.ignore);
-    return { sample: { iter, outside, readyMs }, failure: undefined };
   });
 
 const runVariant = (
@@ -135,22 +150,38 @@ const runVariant = (
   nonce: string,
 ) =>
   Effect.gen(function* () {
-    const outcomes: Array<{
-      sample: Sample | undefined;
-      failure: string | undefined;
-    }> = [];
     // Untimed warm-up: the FIRST pull of a freshly-pushed image (and its shared
     // base, e.g. oven/bun:latest) onto a cold edge metal costs tens of seconds
     // — a one-time DEPLOY artifact charged to whichever variant boots first, NOT
     // a per-cold-start cost. Boot+shutdown once here so the image is distributed
-    // before timing, isolating container cold start (the benchmark's actual
-    // goal) from image distribution. The per-iteration series below is then a
-    // fair, image-independent comparison across variants.
-    yield* cycle(baseUrl, variant, 0, `${nonce}-${variant}-warm`);
-    // Sequential: we want the trend over time as the same image is re-booted.
-    for (let i = 1; i <= ITER; i++) {
-      outcomes.push(
-        yield* cycle(baseUrl, variant, i, `${nonce}-${variant}-${i}`),
+    // before timing, isolating container cold start from image distribution.
+    const warm = `${nonce}-${variant}-warm`;
+    yield* bootOne(baseUrl, variant, 0, warm);
+    yield* shutdownOne(baseUrl, variant, warm);
+
+    const outcomes: Array<{
+      sample: Sample | undefined;
+      failure: string | undefined;
+    }> = [];
+    // BATCHES batches of CONCURRENCY concurrent cold starts. Within a batch the
+    // boots race (placement under load); batch-over-batch shows the trend. Each
+    // batch is fully stopped before the next so at most CONCURRENCY containers
+    // are alive at once.
+    for (let b = 1; b <= BATCHES; b++) {
+      const names = Array.from(
+        { length: CONCURRENCY },
+        (_, i) => `${nonce}-${variant}-b${b}-${i}`,
+      );
+      const batch = yield* Effect.forEach(
+        names,
+        (name) => bootOne(baseUrl, variant, b, name),
+        { concurrency: CONCURRENCY },
+      );
+      outcomes.push(...batch);
+      yield* Effect.forEach(
+        names,
+        (name) => shutdownOne(baseUrl, variant, name),
+        { concurrency: CONCURRENCY },
       );
     }
     const samples = outcomes
@@ -183,19 +214,27 @@ const stats = (xs: ReadonlyArray<number>) => {
 const sN = (n: number) => `${(n / 1000).toFixed(1)}s`;
 
 const formatVariant = (r: VariantResult) => {
-  const ordered = [...r.samples].sort((a, b) => a.iter - b.iter);
+  const total = CONCURRENCY * BATCHES;
   const ready = stats(
     r.samples
       .map((s) => s.readyMs)
       .filter((m): m is number => typeof m === "number"),
   );
   const outside = stats(r.samples.map((s) => s.outside));
+  // Per-batch mean readyMs — the headline: does the under-load cold start
+  // shrink batch-over-batch as the image/edge warms?
+  const byBatch: string[] = [];
+  for (let b = 1; b <= BATCHES; b++) {
+    const xs = r.samples
+      .filter((s) => s.batch === b)
+      .map((s) => s.readyMs)
+      .filter((m): m is number => typeof m === "number");
+    byBatch.push(xs.length > 0 ? sN(stats(xs).mean) : "—");
+  }
   return [
     `── ${r.label} ──`,
-    `  ok: ${r.samples.length}/${ITER}   failed: ${r.failures.length}`,
-    // The per-iteration series is the headline: does cold start shrink as we
-    // boot/shutdown the same image repeatedly?
-    `  readyMs by iteration: ${ordered.map((x) => sN(x.readyMs ?? 0)).join("  ")}`,
+    `  ok: ${r.samples.length}/${total}   failed: ${r.failures.length}   (${CONCURRENCY} concurrent × ${BATCHES} batches)`,
+    `  readyMs by batch (mean): ${byBatch.join("  ")}`,
     `  readyMs (start→reachable): min ${sN(ready.min)}  p50 ${sN(ready.p50)}  p95 ${sN(ready.p95)}  max ${sN(ready.max)}  mean ${sN(ready.mean)}`,
     `  outside (client):          min ${sN(outside.min)}  p50 ${sN(outside.p50)}  p95 ${sN(outside.p95)}  max ${sN(outside.max)}  mean ${sN(outside.mean)}`,
     ...(r.failures.length > 0
@@ -219,7 +258,7 @@ describe("container cold-start benchmark", () => {
   });
 
   test(
-    `boot→shutdown ${ITER}× per variant and compares cold-start trend`,
+    `cold-start: ${CONCURRENCY} concurrent × ${BATCHES} batches per variant`,
     Effect.gen(function* () {
       const { url } = yield* stack;
       yield* waitForWorker(url);
@@ -245,7 +284,7 @@ describe("container cold-start benchmark", () => {
 
       const report = [
         "",
-        `Container cold-start benchmark (boot→shutdown ×${ITER} per variant; image pre-warmed to the metal so we measure container cold start, not first-pull distribution)`,
+        `Container cold-start benchmark (${CONCURRENCY} concurrent × ${BATCHES} batches = ${CONCURRENCY * BATCHES} cold starts per variant; image pre-warmed to the metal so we measure container cold start, not first-pull distribution)`,
         ...blocks,
         "",
       ].join("\n");

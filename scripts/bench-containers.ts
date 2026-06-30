@@ -9,16 +9,18 @@
  * per-variant reports into a single markdown comparison written to
  * `bench-report.md` (override with BENCH_OUT).
  *
- * Each benchmark boots → shuts down each variant `BENCH_ITER` times
- * sequentially (a fresh instance/key per cycle), measuring the time until the
- * in-instance service is reachable. Cloudflare images are pre-warmed to the
- * edge metal first so we measure container cold start, not one-time image
- * distribution.
+ * Each benchmark runs `BENCH_BATCHES` batches of `BENCH_CONCURRENCY` concurrent
+ * cold starts per variant (a fresh instance/key each), measuring the time until
+ * the in-instance service is reachable. Only CONCURRENCY instances are alive at
+ * once (each batch is torn down before the next), and the per-batch mean shows
+ * the trend over time. Cloudflare images are pre-warmed to the edge metal first
+ * so we measure container cold start, not one-time image distribution.
  *
  * Flags / env:
  *   --containers-only        run only the Cloudflare Container benchmark
  *   --microvm                force-run the MicroVM benchmark
- *   BENCH_ITER=N             cycles per variant (default 10)
+ *   BENCH_CONCURRENCY=N      concurrent boots per batch (CF default 10, VM 5)
+ *   BENCH_BATCHES=N          number of batches per variant (default 10)
  *   BENCH_OUT=path           report output path (default ./bench-report.md)
  *   LAMBDA_TEST_MICROVM=1    enables the MicroVM benchmark (preview, gated)
  *
@@ -54,7 +56,7 @@ const suites: Suite[] = [
     title: "Cloudflare Containers (Worker → DO → Container)",
     header: "Container cold-start benchmark",
     test: "test/Cloudflare/Container/Container.benchmark.test.ts",
-    filter: "cold-start trend",
+    filter: "cold-start:",
     env: { ALCHEMY_PROFILE: "testing" },
   },
   {
@@ -62,7 +64,7 @@ const suites: Suite[] = [
     title: "AWS Lambda MicroVM (Lambda host + Worker host)",
     header: "MicroVM cold-start benchmark",
     test: "test/AWS/Lambda/Microvm.benchmark.test.ts",
-    filter: "boot→shutdown",
+    filter: "cold-start:",
     env: { ALCHEMY_PROFILE: "testing", LAMBDA_TEST_MICROVM: "1" },
   },
 ];
@@ -89,7 +91,7 @@ async function runSuite(suite: Suite): Promise<string> {
   const decoder = new TextDecoder();
   let captured = "";
   const pump = async (stream: ReadableStream<Uint8Array>) => {
-    // @ts-expect-error Bun streams are async-iterable
+    // @ts-expect-error Bun's ReadableStream is async-iterable at runtime
     for await (const chunk of stream) {
       const text = decoder.decode(chunk);
       captured += text;
@@ -129,7 +131,8 @@ interface Row {
   readonly bootP50: string;
   readonly readyP50: string;
   readonly readyMean: string;
-  readonly firstReady: string;
+  readonly firstBatch: string;
+  readonly lastBatch: string;
   readonly ok: string;
 }
 
@@ -140,14 +143,24 @@ function parseRows(report: string, platform: string): Row[] {
   let variant = "";
   let ok = "";
   let bootP50 = "—";
-  let firstReady = "—";
+  let firstBatch = "—";
+  let lastBatch = "—";
   let readyP50 = "—";
   let readyMean = "—";
   const flush = () => {
     if (variant) {
-      rows.push({ platform, variant, bootP50, readyP50, readyMean, firstReady, ok });
+      rows.push({
+        platform,
+        variant,
+        bootP50,
+        readyP50,
+        readyMean,
+        firstBatch,
+        lastBatch,
+        ok,
+      });
     }
-    bootP50 = firstReady = readyP50 = readyMean = "—";
+    bootP50 = firstBatch = lastBatch = readyP50 = readyMean = "—";
     ok = "";
   };
   for (const l of lines) {
@@ -159,8 +172,18 @@ function parseRows(report: string, platform: string): Row[] {
     }
     const okM = l.match(/ok:\s*(\d+\/\d+)/);
     if (okM) ok = okM[1];
-    const series = l.match(/readyMs by iteration:\s*([\d.]+s)/);
-    if (series) firstReady = series[1];
+    // The per-batch mean series: first value = batch 1 (coldest), last = final.
+    const series = l.match(/readyMs by batch \(mean\):\s*(.+)$/);
+    if (series) {
+      const vals = series[1]
+        .trim()
+        .split(/\s+/)
+        .filter((v) => /[\d.]+s/.test(v));
+      if (vals.length > 0) {
+        firstBatch = vals[0];
+        lastBatch = vals[vals.length - 1];
+      }
+    }
     const boot = l.match(/bootMs[^:]*:.*p50\s+([\d.]+s)/);
     if (boot) bootP50 = boot[1];
     const ready = l.match(/readyMs[^:]*:.*p50\s+([\d.]+s).*mean\s+([\d.]+s)/);
@@ -194,11 +217,11 @@ async function main() {
   }
 
   const summary = [
-    "| Platform | Variant | ok | boot p50 | ready p50 | ready mean | 1st boot |",
+    "| Platform | Variant | ok | boot p50 | ready p50 | ready mean | batch 1 → last (mean) |",
     "| --- | --- | --- | --- | --- | --- | --- |",
     ...allRows.map(
       (r) =>
-        `| ${r.platform} | ${r.variant} | ${r.ok} | ${r.bootP50} | ${r.readyP50} | ${r.readyMean} | ${r.firstReady} |`,
+        `| ${r.platform} | ${r.variant} | ${r.ok} | ${r.bootP50} | ${r.readyP50} | ${r.readyMean} | ${r.firstBatch} → ${r.lastBatch} |`,
     ),
   ].join("\n");
 
@@ -209,9 +232,9 @@ async function main() {
   const md = [
     "# Cold-start benchmark report",
     "",
-    `_Generated ${new Date().toISOString()} · ${process.env.BENCH_ITER ?? 10} boot→shutdown cycles per variant._`,
+    `_Generated ${new Date().toISOString()} · ${process.env.BENCH_BATCHES ?? 10} batches of ${process.env.BENCH_CONCURRENCY ?? "10 (CF) / 5 (VM)"} concurrent cold starts per variant._`,
     "",
-    "Each variant boots a fresh instance (distinct key) from the same image, times the cold start until the in-instance service is reachable, then shuts it down — repeated sequentially so the trend over time is visible. Cloudflare images are pre-warmed to the edge metal so we measure container cold start, not one-time image distribution. `ready` = time to available service; `boot` = provision→running (MicroVM only).",
+    "Each variant runs N batches of C concurrent cold starts — each batch boots C fresh instances (distinct keys) from the same image AT ONCE, times each cold start until the in-instance service is reachable, then tears the whole batch down before the next (so at most C are alive). The per-batch mean shows the trend over time (`batch 1 → last`). Cloudflare images are pre-warmed to the edge metal so we measure container cold start, not one-time image distribution. `ready` = time to available service; `boot` = provision→running (MicroVM only).",
     microvmNote,
     "## Summary",
     "",

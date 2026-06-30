@@ -30,12 +30,19 @@ const TEST_TIMEOUT = 1_800_000;
 // are asynchronous (minutes).
 const skip = !process.env.LAMBDA_TEST_MICROVM;
 
-// How many boot→shutdown cycles to run per variant. Each cycle boots ONE fresh
-// MicroVM (distinct key), times its cold start, then shuts it down — run
-// sequentially so the per-iteration series reveals how cold start trends as the
-// same image is booted and torn down repeatedly. Sequential also keeps only one
-// MicroVM alive at a time, respecting the per-account memory quota.
-const ITER = Number(process.env.BENCH_ITER ?? 10);
+// Cold-start under modest concurrency, in batches. Each batch boots CONCURRENCY
+// fresh MicroVMs AT ONCE (distinct keys), waits for all to become reachable,
+// then terminates all of them before the next batch. BATCHES batches of distinct
+// keys (CONCURRENCY × BATCHES total cold starts) show both the under-load cold
+// start (within a batch) and the trend across batches, while never holding more
+// than CONCURRENCY MicroVMs at once.
+//
+// NOTE: MicroVM has a per-account *memory* quota — each instance reserves its
+// `minimumMemoryInMiB` (512 here) — so CONCURRENCY defaults lower than the
+// Container benchmark's 10. Raise BENCH_CONCURRENCY on an account with a larger
+// quota (a `ServiceQuotaExceededException` means it's too high).
+const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? 5);
+const BATCHES = Number(process.env.BENCH_BATCHES ?? 10);
 // `/boot` blocks until the MicroVM is reachable; allow a long cold-start ceiling.
 const REQUEST_TIMEOUT = "180 seconds";
 
@@ -66,8 +73,8 @@ const waitForHost = (url: string) =>
   });
 
 interface Sample {
-  /** 1-based iteration index (order the cycle ran in). */
-  readonly iter: number;
+  /** 1-based batch index this sample belongs to. */
+  readonly batch: number;
   /** Wall-clock latency of the boot request, measured by the client (outside). */
   readonly outside: number;
   /** Inside: RunMicrovm → RUNNING (provisioned). */
@@ -82,10 +89,16 @@ interface VariantResult {
   readonly failures: ReadonlyArray<string>;
 }
 
-// One boot→shutdown cycle, timed from the outside. `/boot` returns the
-// inside-measured `{ id, bootMs, readyMs }`; `/shutdown` tears the MicroVM down
-// (best-effort, not timed) so the next cycle is an independent cold start.
-const cycle = (baseUrl: string, variant: string, iter: number, key: string) =>
+// Boot ONE fresh MicroVM and time the cold start from the outside. `/boot`
+// returns the inside-measured `{ id, bootMs, readyMs }`. Does NOT terminate —
+// the batch terminates all of its instances together afterwards (by id), so
+// CONCURRENCY MicroVMs are alive at once.
+const bootOne = (
+  baseUrl: string,
+  variant: string,
+  batch: number,
+  key: string,
+) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
     const q = `variant=${variant}&key=${encodeURIComponent(key)}`;
@@ -103,11 +116,16 @@ const cycle = (baseUrl: string, variant: string, iter: number, key: string) =>
     const outside = (yield* Effect.sync(() => Date.now())) - start;
 
     if (!result.ok)
-      return { sample: undefined, failure: `${key}: ${result.error}` };
+      return {
+        sample: undefined,
+        failure: `${key}: ${result.error}`,
+        id: undefined,
+      };
     if (result.status !== 200) {
       return {
         sample: undefined,
         failure: `${key}: HTTP ${result.status} ${result.body.slice(0, 160)}`,
+        id: undefined,
       };
     }
     const parsed = JSON.parse(result.body) as {
@@ -115,19 +133,26 @@ const cycle = (baseUrl: string, variant: string, iter: number, key: string) =>
       bootMs: number;
       readyMs: number;
     };
-    // Tear it down (best-effort) so the next cycle is a fresh cold start.
-    yield* client
-      .get(`${baseUrl}/shutdown?variant=${variant}&id=${parsed.id}`)
-      .pipe(Effect.timeout("60 seconds"), Effect.ignore);
     return {
       sample: {
-        iter,
+        batch,
         outside,
         bootMs: parsed.bootMs,
         readyMs: parsed.readyMs,
       },
       failure: undefined,
+      id: parsed.id,
     };
+  });
+
+// Terminate one MicroVM by id (best-effort, untimed) so the next batch is a
+// fresh cold start and we never hold more than CONCURRENCY MicroVMs at once.
+const shutdownOne = (baseUrl: string, variant: string, id: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    yield* client
+      .get(`${baseUrl}/shutdown?variant=${variant}&id=${id}`)
+      .pipe(Effect.timeout("60 seconds"), Effect.ignore);
   });
 
 const runVariant = (
@@ -141,11 +166,28 @@ const runVariant = (
       sample: Sample | undefined;
       failure: string | undefined;
     }> = [];
-    // Sequential: we want the trend over time, and only one MicroVM alive.
-    for (let i = 1; i <= ITER; i++) {
-      outcomes.push(
-        yield* cycle(baseUrl, variant, i, `${nonce}-${variant}-${i}`),
+    // BATCHES batches of CONCURRENCY concurrent cold starts. Each batch is fully
+    // terminated before the next so at most CONCURRENCY MicroVMs are alive.
+    for (let b = 1; b <= BATCHES; b++) {
+      const keys = Array.from(
+        { length: CONCURRENCY },
+        (_, i) => `${nonce}-${variant}-b${b}-${i}`,
       );
+      const batch = yield* Effect.forEach(
+        keys,
+        (key) => bootOne(baseUrl, variant, b, key),
+        { concurrency: CONCURRENCY },
+      );
+      outcomes.push(
+        ...batch.map((o) => ({ sample: o.sample, failure: o.failure })),
+      );
+      // Terminate every MicroVM this batch successfully booted.
+      const ids = batch
+        .map((o) => o.id)
+        .filter((id): id is string => id !== undefined);
+      yield* Effect.forEach(ids, (id) => shutdownOne(baseUrl, variant, id), {
+        concurrency: CONCURRENCY,
+      });
     }
     const samples = outcomes
       .map((o) => o.sample)
@@ -173,16 +215,21 @@ const stats = (xs: ReadonlyArray<number>) => {
 const s = (n: number) => `${(n / 1000).toFixed(1)}s`;
 
 const formatVariant = (r: VariantResult) => {
-  const ordered = [...r.samples].sort((a, b) => a.iter - b.iter);
+  const total = CONCURRENCY * BATCHES;
   const boot = stats(r.samples.map((x) => x.bootMs));
   const ready = stats(r.samples.map((x) => x.readyMs));
   const outside = stats(r.samples.map((x) => x.outside));
+  // Per-batch mean readyMs — the headline: does the under-load cold start shrink
+  // batch-over-batch?
+  const byBatch: string[] = [];
+  for (let b = 1; b <= BATCHES; b++) {
+    const xs = r.samples.filter((x) => x.batch === b).map((x) => x.readyMs);
+    byBatch.push(xs.length > 0 ? s(stats(xs).mean) : "—");
+  }
   return [
     `── ${r.label} ──`,
-    `  ok: ${r.samples.length}/${ITER}   failed: ${r.failures.length}`,
-    // The per-iteration series is the headline: does cold start shrink as we
-    // boot/shutdown the same image repeatedly?
-    `  readyMs by iteration: ${ordered.map((x) => s(x.readyMs)).join("  ")}`,
+    `  ok: ${r.samples.length}/${total}   failed: ${r.failures.length}   (${CONCURRENCY} concurrent × ${BATCHES} batches)`,
+    `  readyMs by batch (mean): ${byBatch.join("  ")}`,
     `  bootMs  (run→RUNNING):   min ${s(boot.min)}  p50 ${s(boot.p50)}  p95 ${s(boot.p95)}  max ${s(boot.max)}  mean ${s(boot.mean)}`,
     `  readyMs (run→reachable): min ${s(ready.min)}  p50 ${s(ready.p50)}  p95 ${s(ready.p95)}  max ${s(ready.max)}  mean ${s(ready.mean)}`,
     `  outside (client):        min ${s(outside.min)}  p50 ${s(outside.p50)}  p95 ${s(outside.p95)}  max ${s(outside.max)}  mean ${s(outside.mean)}`,
@@ -193,18 +240,19 @@ const formatVariant = (r: VariantResult) => {
 };
 
 /**
- * MicroVM cold-start benchmark. For each variant, run {@link ITER} boot→shutdown
- * cycles sequentially — each boots ONE fresh MicroVM (distinct key) from the
- * same image, times the cold start from the OUTSIDE (driving `/boot` then
- * `/shutdown`), and tears it down. The report shows cold start split into
- * `bootMs` (RunMicrovm → RUNNING) and `readyMs` (RunMicrovm → in-VM service
- * answers), plus the per-iteration series so the warm-up trend is visible.
+ * MicroVM cold-start benchmark. For each variant, run {@link BATCHES} batches of
+ * {@link CONCURRENCY} concurrent boots — each batch boots that many fresh
+ * MicroVMs (distinct keys) from the same image at once, times each cold start
+ * from the OUTSIDE (driving `/boot`), then terminates all of them (`/shutdown`)
+ * before the next batch. The report splits cold start into `bootMs` (RunMicrovm
+ * → RUNNING) and `readyMs` (RunMicrovm → in-VM service answers), and shows the
+ * per-batch mean so the under-load trend across batches is visible.
  *
  * Driven from BOTH a Lambda host and a Cloudflare Worker host (cross-cloud
  * assume-role). Mirrors the Cloudflare Container benchmark so the two compare.
  *
- * Run WITHOUT NO_DESTROY so iteration 1 reflects a fresh deploy. Set BENCH_ITER
- * to change the cycle count.
+ * Run WITHOUT NO_DESTROY so batch 1 reflects a fresh deploy. Tune with
+ * BENCH_CONCURRENCY / BENCH_BATCHES.
  */
 describe.skipIf(skip)("microvm cold-start benchmark", () => {
   const stack = beforeAll(deploy(BenchmarkStack), { timeout: HOOK_TIMEOUT });
@@ -213,7 +261,7 @@ describe.skipIf(skip)("microvm cold-start benchmark", () => {
   });
 
   test(
-    `boot→shutdown ${ITER}× per variant from Lambda and Worker hosts`,
+    `cold-start: ${CONCURRENCY} concurrent × ${BATCHES} batches across Lambda and Worker hosts`,
     Effect.gen(function* () {
       const { url, workerUrl } = yield* stack;
       const lambdaUrl = url.replace(/\/+$/, "");
@@ -256,7 +304,7 @@ describe.skipIf(skip)("microvm cold-start benchmark", () => {
 
       const report = [
         "",
-        `MicroVM cold-start benchmark (boot→shutdown ×${ITER} per variant)`,
+        `MicroVM cold-start benchmark (${CONCURRENCY} concurrent × ${BATCHES} batches = ${CONCURRENCY * BATCHES} cold starts per variant)`,
         ...blocks,
         "",
       ].join("\n");
