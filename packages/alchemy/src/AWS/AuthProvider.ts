@@ -113,6 +113,10 @@ export const AwsAuth = AuthProviderLayer<
                 sessionToken,
               }),
             ),
+            // Provide Region directly from the resolved inputs. Relying on the
+            // ambient Region provider (Region.fromEnvironment) here would
+            // deadlock: it derives the region from AWSEnvironment, which is the
+            // very service still being constructed by this STS call.
             Region.of(region),
           ),
         ),
