@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import * as Duration from "effect/Duration";
+import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
@@ -12,25 +12,16 @@ import { BenchExternal } from "./external-image.ts";
 import { Sandbox } from "../microvm/sandbox.ts";
 
 /**
- * Cold-start benchmark orchestrator (the AWS analog of the Cloudflare Container
- * benchmark's Durable Object). Each request launches ONE fresh MicroVM,
- * measures — from inside the Lambda — the time from `RunMicrovm` until the
- * in-VM server is reachable, then terminates it. The elapsed delta is the
- * MicroVM "started and reachable" latency, directly comparable to the Container
- * benchmark's "DO start → reachable" number.
- *
- * - `GET /boot/effectful` → effectful (bundled Effect program), reachable when
- *   its `hello` RPC answers.
- * - `GET /boot/external`  → external (plain Dockerfile, Python HTTP server),
- *   reachable when a raw HTTPS GET to its endpoint answers.
+ * Cloudflare Worker cold-start benchmark host — the cross-cloud analog of the
+ * Lambda {@link import("./orchestrator.ts")}. Same routes, same measurement,
+ * but driven from a Worker: binding the AWS MicroVM operations causes Alchemy
+ * to provision an IAM User + AccessKey + assume-role Role (once per worker) and
+ * assume that role at runtime (see `MicrovmBinding.ts`). This measures the
+ * Worker → MicroVM cold-start path.
  */
-export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestrator>()(
-  "MicrovmBenchOrchestrator",
-  {
-    main: import.meta.filename,
-    url: true,
-    timeout: Duration.seconds(120),
-  },
+export default Cloudflare.Worker(
+  "MicrovmBenchWorker",
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const runEffectful = yield* AWS.Lambda.RunMicrovm(Sandbox);
     const getEffectful = yield* AWS.Lambda.GetMicrovm(Sandbox);
@@ -42,7 +33,6 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
     const authExternal = yield* AWS.Lambda.CreateAuthToken(BenchExternal);
     const termExternal = yield* AWS.Lambda.TerminateMicrovm(BenchExternal);
 
-    // Boot one MicroVM, time RunMicrovm → reachable, then terminate it.
     const boot = (
       run: typeof runEffectful,
       get: typeof getEffectful,
@@ -72,7 +62,7 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
                 ? Effect.void
                 : Effect.fail(new Error(`microvm ${m.state}`)),
             ),
-            Effect.retry({ schedule: Schedule.spaced("1 second"), times: 90 }),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 60 }),
             Effect.orDie,
           );
           const { authToken } = yield* auth({
@@ -100,9 +90,9 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const url = new URL(request.originalUrl);
+        const url = new URL(request.url, "http://microvm");
 
-        if (request.method === "GET" && url.pathname === "/boot/effectful") {
+        if (url.pathname === "/boot/effectful") {
           return yield* boot(
             runEffectful,
             getEffectful,
@@ -119,7 +109,7 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
           );
         }
 
-        if (request.method === "GET" && url.pathname === "/boot/external") {
+        if (url.pathname === "/boot/external") {
           return yield* boot(
             runExternal,
             getExternal,
@@ -149,4 +139,4 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
       ),
     ),
   ),
-) {}
+);

@@ -1,8 +1,10 @@
 import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -10,7 +12,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import BenchmarkStack from "./fixtures/benchmark/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: AWS.providers(),
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
   state: Alchemy.localState(),
 });
 
@@ -79,14 +81,14 @@ interface VariantResult {
 }
 
 // Fire one boot request and time the full outside round-trip. A 200 carries
-// `{ ms }` (the inside-Lambda measurement); anything else is recorded as a
+// `{ ms }` (the inside-host measurement); anything else is recorded as a
 // failure rather than throwing, so one bad boot doesn't sink the whole run.
-const boot = (baseUrl: string, name: string) =>
+const boot = (baseUrl: string, path: string, name: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
     const start = yield* Effect.sync(() => Date.now());
     const result = yield* client
-      .get(`${baseUrl}/boot?name=${encodeURIComponent(name)}`)
+      .get(`${baseUrl}${path}?name=${encodeURIComponent(name)}`)
       .pipe(
         Effect.flatMap((r) =>
           Effect.map(r.text, (body) => ({ status: r.status, body })),
@@ -118,11 +120,16 @@ const boot = (baseUrl: string, name: string) =>
     return { sample: { outside, inside }, failure: undefined };
   });
 
-const runVariant = (baseUrl: string, label: string, nonce: string) =>
+const runVariant = (
+  baseUrl: string,
+  path: string,
+  label: string,
+  nonce: string,
+) =>
   Effect.gen(function* () {
     const outcomes = yield* Effect.forEach(
       Array.from({ length: N }, (_, i) => `${nonce}-${i}`),
-      (name) => boot(baseUrl, name),
+      (name) => boot(baseUrl, path, name),
       { concurrency: CONCURRENCY },
     );
     const samples = outcomes
@@ -174,10 +181,24 @@ const formatVariant = (r: VariantResult) => {
 };
 
 /**
- * MicroVM cold-start benchmark: launch N MicroVM instances from the effectful
- * {@link Sandbox} image and time how long each takes to run and become
- * reachable. The report mirrors the Cloudflare Container cold-start benchmark
- * (`Container.benchmark.test.ts`) so the two can be compared side by side.
+ * MicroVM cold-start benchmark: launch N MicroVM instances per variant and time
+ * how long each takes to run and become reachable. The report mirrors the
+ * Cloudflare Container cold-start benchmark (`Container.benchmark.test.ts`) so
+ * the two can be compared side by side.
+ *
+ * Breadth matches the Container benchmark:
+ * - effectful (bundled Effect image), reachable via its in-VM RPC.
+ * - external (plain Dockerfile, no Effect bundle), reachable via raw HTTP.
+ *
+ * Depth: each variant is driven from BOTH hosts — a Lambda orchestrator
+ * (Lambda → MicroVM) and a Cloudflare Worker (Worker → MicroVM, cross-cloud
+ * assume-role). The variants run serially so they don't contend for the same
+ * pool of concurrent MicroVM starts.
+ *
+ * Note on crash-loop fail-fast (the Container benchmark's 4th case): MicroVM
+ * bakes a Firecracker snapshot at *build* time, so a fatally-crashing image
+ * surfaces as a CREATE_FAILED at deploy — never at boot — and so has no
+ * runtime fail-fast analog to measure here.
  *
  * Set NO_DESTROY=1 to keep the deploy between runs while iterating, and
  * BENCH_N / BENCH_CONCURRENCY to scale the load (mind the MicroVM memory quota).
@@ -189,23 +210,48 @@ describe.skipIf(skip)("microvm cold-start benchmark", () => {
   });
 
   test(
-    `boots ${N} MicroVMs and reports startup latency`,
+    `boots ${N} MicroVMs per variant from Lambda and Worker hosts`,
     Effect.gen(function* () {
-      const { url } = yield* stack;
-      const baseUrl = url.replace(/\/+$/, "");
-      yield* waitForOrchestrator(baseUrl);
+      const { url, workerUrl } = yield* stack;
+      const lambdaUrl = url.replace(/\/+$/, "");
+      const cfUrl = workerUrl.replace(/\/+$/, "");
+      yield* waitForOrchestrator(lambdaUrl);
+      yield* waitForOrchestrator(cfUrl);
 
       const nonce = yield* Effect.sync(() => crypto.randomUUID().slice(0, 8));
-      const result = yield* runVariant(
-        baseUrl,
-        "microvm (effectful image)",
-        `vm-${nonce}`,
+
+      const lambdaEffectful = yield* runVariant(
+        lambdaUrl,
+        "/boot/effectful",
+        "Lambda → MicroVM (effectful image)",
+        `le-${nonce}`,
+      );
+      const lambdaExternal = yield* runVariant(
+        lambdaUrl,
+        "/boot/external",
+        "Lambda → MicroVM (external Dockerfile)",
+        `lx-${nonce}`,
+      );
+      const workerEffectful = yield* runVariant(
+        cfUrl,
+        "/boot/effectful",
+        "Worker → MicroVM (effectful image)",
+        `we-${nonce}`,
+      );
+      const workerExternal = yield* runVariant(
+        cfUrl,
+        "/boot/external",
+        "Worker → MicroVM (external Dockerfile)",
+        `wx-${nonce}`,
       );
 
       const report = [
         "",
         `MicroVM cold-start benchmark (N=${N}, concurrency=${CONCURRENCY})`,
-        formatVariant(result),
+        formatVariant(lambdaEffectful),
+        formatVariant(lambdaExternal),
+        formatVariant(workerEffectful),
+        formatVariant(workerExternal),
         "",
       ].join("\n");
       // `console.log` (not `Effect.logInfo`) so the report always reaches the
@@ -214,7 +260,10 @@ describe.skipIf(skip)("microvm cold-start benchmark", () => {
 
       // Informational, but a run where nothing started indicates a broken
       // deploy rather than slow MicroVMs.
-      expect(result.samples.length).toBeGreaterThan(0);
+      expect(lambdaEffectful.samples.length).toBeGreaterThan(0);
+      expect(lambdaExternal.samples.length).toBeGreaterThan(0);
+      expect(workerEffectful.samples.length).toBeGreaterThan(0);
+      expect(workerExternal.samples.length).toBeGreaterThan(0);
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );
