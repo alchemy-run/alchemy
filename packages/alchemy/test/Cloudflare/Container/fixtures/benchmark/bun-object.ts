@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 
 /**
@@ -41,13 +42,25 @@ export class BenchBunObject extends Cloudflare.DurableObject<BenchBunObject>()(
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
+            // Retry until reachable so the first post-deploy boot records the
+            // true cold start (image distribution + start) instead of failing
+            // while the image is still landing on the edge metal.
+            yield* fetch(HttpClientRequest.get("http://container/")).pipe(
+              Effect.flatMap((r) => r.text),
+              Effect.retry({
+                schedule: Schedule.exponential("1 second").pipe(
+                  Schedule.either(Schedule.spaced("5 seconds")),
+                ),
+                times: 40,
+              }),
             );
-            yield* response.text;
             const end = yield* Effect.sync(() => Date.now());
-            return { ms: end - start };
+            return { bootMs: end - start, readyMs: end - start };
           }),
+        // Tear the container down so each boot is an independent cold start and
+        // repeated boots don't accumulate against the account's
+        // concurrent-container cap.
+        shutdown: () => container.destroy().pipe(Effect.ignore),
       };
     });
   }).pipe(

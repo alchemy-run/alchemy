@@ -31,12 +31,33 @@ export default class BenchWorker extends Cloudflare.Worker<BenchWorker>()(
     const bun = yield* BenchBunObject;
     const crash = yield* BenchCrashObject;
 
+    // Cold-start variants exposed on the boot/shutdown lifecycle routes. The
+    // crash-loop object is intentionally excluded (it has no steady-state
+    // `shutdown` and a different `boot` shape) and keeps its dedicated route.
+    const objectFor = (variant: string) =>
+      variant === "remote" ? remote : variant === "bun" ? bun : effectful;
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         const name = url.searchParams.get("name") ?? "default";
+        const variant = url.searchParams.get("variant") ?? "effectful";
 
+        // Lifecycle routes (the benchmark times boot/shutdown from outside): a
+        // distinct `name` is a distinct DO → distinct container, so each /boot
+        // is a fresh cold start; /shutdown tears it down so the next boot is
+        // independent and the account's container cap isn't exhausted.
+        if (url.pathname === "/boot") {
+          const result = yield* objectFor(variant).getByName(name).boot();
+          return yield* HttpServerResponse.json(result);
+        }
+        if (url.pathname === "/shutdown") {
+          yield* objectFor(variant).getByName(name).shutdown();
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
+        // Back-compat single-shot routes (boot only).
         if (url.pathname === "/effectful") {
           const result = yield* effectful.getByName(name).boot();
           return yield* HttpServerResponse.json(result);

@@ -11,6 +11,7 @@
   "module": "./lib/index.js",
   "scripts": {
     "audit:service": "bun scripts/audit-service.ts",
+    "bench:containers": "bun scripts/bench-containers.ts",
     "build:clean:shallow": "bun clean:shallow . && bun run build",
     "build:clean": "bun clean . && bun i && bun run build && bun download:env",
     "build:packages": "bun tsc -b && bun run --filter './packages/*' build",

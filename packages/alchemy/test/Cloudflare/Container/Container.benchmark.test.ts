@@ -26,10 +26,12 @@ const HOOK_TIMEOUT = 600_000;
 // run a very wide ceiling.
 const TEST_TIMEOUT = 2_400_000;
 
-// Number of container instances to spin up per variant, and how many to start
-// concurrently. Override with BENCH_N / BENCH_CONCURRENCY when probing limits.
-const N = Number(process.env.BENCH_N ?? 100);
-const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? N);
+// How many boot→shutdown cycles to run per variant. Each cycle boots ONE fresh
+// container (distinct DO name → distinct container), times its cold start, then
+// shuts it down — run sequentially so the per-iteration series shows how cold
+// start trends as the same image is booted and torn down repeatedly. Mirrors
+// the MicroVM benchmark so the two compare apples-to-apples.
+const ITER = Number(process.env.BENCH_ITER ?? 10);
 // Each named DO instance boots its own container; the route blocks until the
 // container is reachable (up to the start layer's ~3min cap), so allow a long
 // per-request ceiling.
@@ -69,10 +71,12 @@ const waitForWorker = (url: string) =>
   });
 
 interface Sample {
-  /** Wall-clock latency of the whole request, measured outside (the client). */
+  /** 1-based iteration index (order the cycle ran in). */
+  readonly iter: number;
+  /** Wall-clock latency of the boot request, measured by the client (outside). */
   readonly outside: number;
-  /** Latency reported from inside the DO (container start → reachable). */
-  readonly inside: number | undefined;
+  /** Inside the DO: container start → reachable (available service). */
+  readonly readyMs: number | undefined;
 }
 
 interface VariantResult {
@@ -81,58 +85,74 @@ interface VariantResult {
   readonly failures: ReadonlyArray<string>;
 }
 
-// Fire one boot request and time the full outside round-trip. A 200 carries
-// `{ ms }` (the inside-DO measurement); anything else is recorded as a failure
-// rather than throwing, so one bad instance doesn't sink the whole run.
-const boot = (baseUrl: string, path: string, name: string) =>
+// One boot→shutdown cycle, timed from the outside. `/boot` returns the
+// inside-measured `{ bootMs, readyMs }` (container start → reachable);
+// `/shutdown` destroys the container (best-effort, not timed) so the next cycle
+// is an independent cold start.
+const cycle = (baseUrl: string, variant: string, iter: number, name: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
+    const q = `variant=${variant}&name=${encodeURIComponent(name)}`;
     const start = yield* Effect.sync(() => Date.now());
-    const result = yield* client
-      .get(`${baseUrl}${path}?name=${encodeURIComponent(name)}`)
-      .pipe(
-        Effect.flatMap((r) =>
-          Effect.map(r.text, (body) => ({ status: r.status, body })),
-        ),
-        Effect.timeout(REQUEST_TIMEOUT),
-        Effect.map((res) => ({ ok: true as const, ...res })),
-        Effect.catch((err) =>
-          Effect.succeed({ ok: false as const, error: String(err) }),
-        ),
-      );
+    const result = yield* client.get(`${baseUrl}/boot?${q}`).pipe(
+      Effect.flatMap((r) =>
+        Effect.map(r.text, (body) => ({ status: r.status, body })),
+      ),
+      Effect.timeout(REQUEST_TIMEOUT),
+      Effect.map((res) => ({ ok: true as const, ...res })),
+      Effect.catch((err) =>
+        Effect.succeed({ ok: false as const, error: String(err) }),
+      ),
+    );
     const outside = (yield* Effect.sync(() => Date.now())) - start;
 
-    if (!result.ok) {
+    if (!result.ok)
       return { sample: undefined, failure: `${name}: ${result.error}` };
-    }
     if (result.status !== 200) {
       return {
         sample: undefined,
-        failure: `${name}: HTTP ${result.status} ${result.body.slice(0, 200)}`,
+        failure: `${name}: HTTP ${result.status} ${result.body.slice(0, 160)}`,
       };
     }
-    const inside = (() => {
+    const readyMs = (() => {
       try {
-        return (JSON.parse(result.body) as { ms?: number }).ms;
+        return (JSON.parse(result.body) as { readyMs?: number }).readyMs;
       } catch {
         return undefined;
       }
     })();
-    return { sample: { outside, inside }, failure: undefined };
+    // Tear it down (best-effort) so the next cycle is a fresh cold start.
+    yield* client
+      .get(`${baseUrl}/shutdown?${q}`)
+      .pipe(Effect.timeout("60 seconds"), Effect.ignore);
+    return { sample: { iter, outside, readyMs }, failure: undefined };
   });
 
 const runVariant = (
   baseUrl: string,
-  path: string,
+  variant: string,
   label: string,
   nonce: string,
 ) =>
   Effect.gen(function* () {
-    const outcomes = yield* Effect.forEach(
-      Array.from({ length: N }, (_, i) => `${nonce}-${i}`),
-      (name) => boot(baseUrl, path, name),
-      { concurrency: CONCURRENCY },
-    );
+    const outcomes: Array<{
+      sample: Sample | undefined;
+      failure: string | undefined;
+    }> = [];
+    // Untimed warm-up: the FIRST pull of a freshly-pushed image (and its shared
+    // base, e.g. oven/bun:latest) onto a cold edge metal costs tens of seconds
+    // — a one-time DEPLOY artifact charged to whichever variant boots first, NOT
+    // a per-cold-start cost. Boot+shutdown once here so the image is distributed
+    // before timing, isolating container cold start (the benchmark's actual
+    // goal) from image distribution. The per-iteration series below is then a
+    // fair, image-independent comparison across variants.
+    yield* cycle(baseUrl, variant, 0, `${nonce}-${variant}-warm`);
+    // Sequential: we want the trend over time as the same image is re-booted.
+    for (let i = 1; i <= ITER; i++) {
+      outcomes.push(
+        yield* cycle(baseUrl, variant, i, `${nonce}-${variant}-${i}`),
+      );
+    }
     const samples = outcomes
       .map((o) => o.sample)
       .filter((s): s is Sample => s !== undefined);
@@ -160,21 +180,24 @@ const stats = (xs: ReadonlyArray<number>) => {
   };
 };
 
+const sN = (n: number) => `${(n / 1000).toFixed(1)}s`;
+
 const formatVariant = (r: VariantResult) => {
-  const outside = stats(r.samples.map((s) => s.outside));
-  const inside = stats(
+  const ordered = [...r.samples].sort((a, b) => a.iter - b.iter);
+  const ready = stats(
     r.samples
-      .map((s) => s.inside)
+      .map((s) => s.readyMs)
       .filter((m): m is number => typeof m === "number"),
   );
-  const ms = (n: number) => `${(n / 1000).toFixed(1)}s`;
+  const outside = stats(r.samples.map((s) => s.outside));
   return [
     `── ${r.label} ──`,
-    `  ok: ${r.samples.length}/${N}   failed: ${r.failures.length}`,
-    `  outside (client round-trip):`,
-    `    min ${ms(outside.min)}  p50 ${ms(outside.p50)}  p90 ${ms(outside.p90)}  p95 ${ms(outside.p95)}  p99 ${ms(outside.p99)}  max ${ms(outside.max)}  mean ${ms(outside.mean)}`,
-    `  inside (DO start→reachable):`,
-    `    min ${ms(inside.min)}  p50 ${ms(inside.p50)}  p90 ${ms(inside.p90)}  p95 ${ms(inside.p95)}  p99 ${ms(inside.p99)}  max ${ms(inside.max)}  mean ${ms(inside.mean)}`,
+    `  ok: ${r.samples.length}/${ITER}   failed: ${r.failures.length}`,
+    // The per-iteration series is the headline: does cold start shrink as we
+    // boot/shutdown the same image repeatedly?
+    `  readyMs by iteration: ${ordered.map((x) => sN(x.readyMs ?? 0)).join("  ")}`,
+    `  readyMs (start→reachable): min ${sN(ready.min)}  p50 ${sN(ready.p50)}  p95 ${sN(ready.p95)}  max ${sN(ready.max)}  mean ${sN(ready.mean)}`,
+    `  outside (client):          min ${sN(outside.min)}  p50 ${sN(outside.p50)}  p95 ${sN(outside.p95)}  max ${sN(outside.max)}  mean ${sN(outside.mean)}`,
     ...(r.failures.length > 0
       ? [`  failures:`, ...r.failures.slice(0, 5).map((f) => `    - ${f}`)]
       : []),
@@ -196,40 +219,34 @@ describe("container cold-start benchmark", () => {
   });
 
   test(
-    `spins up ${N} instances per variant and compares startup latency`,
+    `boot→shutdown ${ITER}× per variant and compares cold-start trend`,
     Effect.gen(function* () {
       const { url } = yield* stack;
       yield* waitForWorker(url);
 
       const nonce = yield* Effect.sync(() => crypto.randomUUID().slice(0, 8));
 
-      // Run the two variants sequentially so they don't contend for the same
-      // pool of concurrent container starts (which would muddy the comparison).
-      const effectful = yield* runVariant(
-        url,
-        "/effectful",
-        "effectful (bundled Effect image)",
-        `eff-${nonce}`,
-      );
-      const remote = yield* runVariant(
-        url,
-        "/remote",
-        "non-effectful (remote echo image)",
-        `rem-${nonce}`,
-      );
-      const bun = yield* runVariant(
-        url,
-        "/bun",
-        "non-effectful (oven/bun:latest, no Effect bundle)",
-        `bun-${nonce}`,
-      );
+      const variants = [
+        { variant: "effectful", label: "effectful (bundled Effect image)" },
+        {
+          variant: "bun",
+          label: "non-effectful (oven/bun:latest, no Effect bundle)",
+        },
+        { variant: "remote", label: "non-effectful (remote echo image)" },
+      ];
+
+      const blocks: string[] = [];
+      let totalSamples = 0;
+      for (const v of variants) {
+        const r = yield* runVariant(url, v.variant, v.label, nonce);
+        totalSamples += r.samples.length;
+        blocks.push(formatVariant(r));
+      }
 
       const report = [
         "",
-        `Container cold-start benchmark (N=${N}, concurrency=${CONCURRENCY})`,
-        formatVariant(effectful),
-        formatVariant(bun),
-        formatVariant(remote),
+        `Container cold-start benchmark (boot→shutdown ×${ITER} per variant; image pre-warmed to the metal so we measure container cold start, not first-pull distribution)`,
+        ...blocks,
         "",
       ].join("\n");
       // `console.log` (not `Effect.logInfo`) so the report always reaches the
@@ -238,9 +255,7 @@ describe("container cold-start benchmark", () => {
 
       // The benchmark is informational, but a run where nothing started at all
       // indicates a broken deploy rather than slow containers.
-      expect(effectful.samples.length).toBeGreaterThan(0);
-      expect(remote.samples.length).toBeGreaterThan(0);
-      expect(bun.samples.length).toBeGreaterThan(0);
+      expect(totalSamples).toBeGreaterThan(0);
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );

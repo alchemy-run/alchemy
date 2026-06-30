@@ -24,21 +24,19 @@ const logLevel = Effect.provideService(
 // Building the effectful image (Firecracker snapshot, server-side) and
 // deploying the orchestrator Lambda comfortably exceeds the default hook budget.
 const HOOK_TIMEOUT = 1_500_000;
-const TEST_TIMEOUT = 1_200_000;
+const TEST_TIMEOUT = 1_800_000;
 
 // MicroVM is a preview feature: gated, account must be onboarded, image builds
 // are asynchronous (minutes).
 const skip = !process.env.LAMBDA_TEST_MICROVM;
 
-// Number of MicroVMs to boot, and how many concurrently. MicroVM has a per-
-// account *memory* quota (each instance reserves its `minimumMemoryInMiB`), so
-// the defaults are deliberately small — unlike the Cloudflare Container
-// benchmark's N=100. Raise BENCH_N / BENCH_CONCURRENCY on an account with a
-// larger quota.
-const N = Number(process.env.BENCH_N ?? 5);
-const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? N);
-// Each /boot launches a MicroVM and blocks until it is reachable, then
-// terminates it; allow a long per-request ceiling for cold starts.
+// How many boot→shutdown cycles to run per variant. Each cycle boots ONE fresh
+// MicroVM (distinct key), times its cold start, then shuts it down — run
+// sequentially so the per-iteration series reveals how cold start trends as the
+// same image is booted and torn down repeatedly. Sequential also keeps only one
+// MicroVM alive at a time, respecting the per-account memory quota.
+const ITER = Number(process.env.BENCH_ITER ?? 10);
+// `/boot` blocks until the MicroVM is reachable; allow a long cold-start ceiling.
 const REQUEST_TIMEOUT = "180 seconds";
 
 // Force `Connection: close` so each request opens a fresh connection rather
@@ -47,15 +45,15 @@ const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
 
-// Wait for the freshly-deployed Lambda URL to answer 200 before benchmarking.
-const waitForOrchestrator = (url: string) =>
+// Wait for the freshly-deployed host URL to answer 200 before benchmarking.
+const waitForHost = (url: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
     yield* client.get(url).pipe(
       Effect.flatMap((r) =>
         r.status === 200
           ? Effect.succeed(r)
-          : Effect.fail(new Error(`orchestrator not ready: ${r.status}`)),
+          : Effect.fail(new Error(`host not ready: ${r.status}`)),
       ),
       Effect.timeout("30 seconds"),
       Effect.retry({
@@ -68,10 +66,14 @@ const waitForOrchestrator = (url: string) =>
   });
 
 interface Sample {
-  /** Wall-clock latency of the whole request, measured by the client. */
+  /** 1-based iteration index (order the cycle ran in). */
+  readonly iter: number;
+  /** Wall-clock latency of the boot request, measured by the client (outside). */
   readonly outside: number;
-  /** Latency reported from inside the Lambda (run → MicroVM reachable). */
-  readonly inside: number | undefined;
+  /** Inside: RunMicrovm → RUNNING (provisioned). */
+  readonly bootMs: number;
+  /** Inside: RunMicrovm → in-VM service answers (available). */
+  readonly readyMs: number;
 }
 
 interface VariantResult {
@@ -80,58 +82,71 @@ interface VariantResult {
   readonly failures: ReadonlyArray<string>;
 }
 
-// Fire one boot request and time the full outside round-trip. A 200 carries
-// `{ ms }` (the inside-host measurement); anything else is recorded as a
-// failure rather than throwing, so one bad boot doesn't sink the whole run.
-const boot = (baseUrl: string, path: string, name: string) =>
+// One boot→shutdown cycle, timed from the outside. `/boot` returns the
+// inside-measured `{ id, bootMs, readyMs }`; `/shutdown` tears the MicroVM down
+// (best-effort, not timed) so the next cycle is an independent cold start.
+const cycle = (baseUrl: string, variant: string, iter: number, key: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
+    const q = `variant=${variant}&key=${encodeURIComponent(key)}`;
     const start = yield* Effect.sync(() => Date.now());
-    const result = yield* client
-      .get(`${baseUrl}${path}?name=${encodeURIComponent(name)}`)
-      .pipe(
-        Effect.flatMap((r) =>
-          Effect.map(r.text, (body) => ({ status: r.status, body })),
-        ),
-        Effect.timeout(REQUEST_TIMEOUT),
-        Effect.map((res) => ({ ok: true as const, ...res })),
-        Effect.catch((err) =>
-          Effect.succeed({ ok: false as const, error: String(err) }),
-        ),
-      );
+    const result = yield* client.get(`${baseUrl}/boot?${q}`).pipe(
+      Effect.flatMap((r) =>
+        Effect.map(r.text, (body) => ({ status: r.status, body })),
+      ),
+      Effect.timeout(REQUEST_TIMEOUT),
+      Effect.map((res) => ({ ok: true as const, ...res })),
+      Effect.catch((err) =>
+        Effect.succeed({ ok: false as const, error: String(err) }),
+      ),
+    );
     const outside = (yield* Effect.sync(() => Date.now())) - start;
 
-    if (!result.ok) {
-      return { sample: undefined, failure: `${name}: ${result.error}` };
-    }
+    if (!result.ok)
+      return { sample: undefined, failure: `${key}: ${result.error}` };
     if (result.status !== 200) {
       return {
         sample: undefined,
-        failure: `${name}: HTTP ${result.status} ${result.body.slice(0, 200)}`,
+        failure: `${key}: HTTP ${result.status} ${result.body.slice(0, 160)}`,
       };
     }
-    const inside = (() => {
-      try {
-        return (JSON.parse(result.body) as { ms?: number }).ms;
-      } catch {
-        return undefined;
-      }
-    })();
-    return { sample: { outside, inside }, failure: undefined };
+    const parsed = JSON.parse(result.body) as {
+      id: string;
+      bootMs: number;
+      readyMs: number;
+    };
+    // Tear it down (best-effort) so the next cycle is a fresh cold start.
+    yield* client
+      .get(`${baseUrl}/shutdown?variant=${variant}&id=${parsed.id}`)
+      .pipe(Effect.timeout("60 seconds"), Effect.ignore);
+    return {
+      sample: {
+        iter,
+        outside,
+        bootMs: parsed.bootMs,
+        readyMs: parsed.readyMs,
+      },
+      failure: undefined,
+    };
   });
 
 const runVariant = (
   baseUrl: string,
-  path: string,
+  variant: string,
   label: string,
   nonce: string,
 ) =>
   Effect.gen(function* () {
-    const outcomes = yield* Effect.forEach(
-      Array.from({ length: N }, (_, i) => `${nonce}-${i}`),
-      (name) => boot(baseUrl, path, name),
-      { concurrency: CONCURRENCY },
-    );
+    const outcomes: Array<{
+      sample: Sample | undefined;
+      failure: string | undefined;
+    }> = [];
+    // Sequential: we want the trend over time, and only one MicroVM alive.
+    for (let i = 1; i <= ITER; i++) {
+      outcomes.push(
+        yield* cycle(baseUrl, variant, i, `${nonce}-${variant}-${i}`),
+      );
+    }
     const samples = outcomes
       .map((o) => o.sample)
       .filter((s): s is Sample => s !== undefined);
@@ -142,9 +157,7 @@ const runVariant = (
   });
 
 const stats = (xs: ReadonlyArray<number>) => {
-  if (xs.length === 0) {
-    return { min: 0, max: 0, mean: 0, p50: 0, p90: 0, p95: 0, p99: 0 };
-  }
+  if (xs.length === 0) return { min: 0, max: 0, mean: 0, p50: 0, p95: 0 };
   const sorted = [...xs].sort((a, b) => a - b);
   const pct = (p: number) =>
     sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
@@ -153,27 +166,26 @@ const stats = (xs: ReadonlyArray<number>) => {
     max: sorted[sorted.length - 1],
     mean: Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length),
     p50: pct(50),
-    p90: pct(90),
     p95: pct(95),
-    p99: pct(99),
   };
 };
 
+const s = (n: number) => `${(n / 1000).toFixed(1)}s`;
+
 const formatVariant = (r: VariantResult) => {
-  const outside = stats(r.samples.map((s) => s.outside));
-  const inside = stats(
-    r.samples
-      .map((s) => s.inside)
-      .filter((m): m is number => typeof m === "number"),
-  );
-  const ms = (n: number) => `${(n / 1000).toFixed(1)}s`;
+  const ordered = [...r.samples].sort((a, b) => a.iter - b.iter);
+  const boot = stats(r.samples.map((x) => x.bootMs));
+  const ready = stats(r.samples.map((x) => x.readyMs));
+  const outside = stats(r.samples.map((x) => x.outside));
   return [
     `── ${r.label} ──`,
-    `  ok: ${r.samples.length}/${N}   failed: ${r.failures.length}`,
-    `  outside (client round-trip):`,
-    `    min ${ms(outside.min)}  p50 ${ms(outside.p50)}  p90 ${ms(outside.p90)}  p95 ${ms(outside.p95)}  p99 ${ms(outside.p99)}  max ${ms(outside.max)}  mean ${ms(outside.mean)}`,
-    `  inside (RunMicrovm → reachable):`,
-    `    min ${ms(inside.min)}  p50 ${ms(inside.p50)}  p90 ${ms(inside.p90)}  p95 ${ms(inside.p95)}  p99 ${ms(inside.p99)}  max ${ms(inside.max)}  mean ${ms(inside.mean)}`,
+    `  ok: ${r.samples.length}/${ITER}   failed: ${r.failures.length}`,
+    // The per-iteration series is the headline: does cold start shrink as we
+    // boot/shutdown the same image repeatedly?
+    `  readyMs by iteration: ${ordered.map((x) => s(x.readyMs)).join("  ")}`,
+    `  bootMs  (run→RUNNING):   min ${s(boot.min)}  p50 ${s(boot.p50)}  p95 ${s(boot.p95)}  max ${s(boot.max)}  mean ${s(boot.mean)}`,
+    `  readyMs (run→reachable): min ${s(ready.min)}  p50 ${s(ready.p50)}  p95 ${s(ready.p95)}  max ${s(ready.max)}  mean ${s(ready.mean)}`,
+    `  outside (client):        min ${s(outside.min)}  p50 ${s(outside.p50)}  p95 ${s(outside.p95)}  max ${s(outside.max)}  mean ${s(outside.mean)}`,
     ...(r.failures.length > 0
       ? [`  failures:`, ...r.failures.slice(0, 5).map((f) => `    - ${f}`)]
       : []),
@@ -181,27 +193,18 @@ const formatVariant = (r: VariantResult) => {
 };
 
 /**
- * MicroVM cold-start benchmark: launch N MicroVM instances per variant and time
- * how long each takes to run and become reachable. The report mirrors the
- * Cloudflare Container cold-start benchmark (`Container.benchmark.test.ts`) so
- * the two can be compared side by side.
+ * MicroVM cold-start benchmark. For each variant, run {@link ITER} boot→shutdown
+ * cycles sequentially — each boots ONE fresh MicroVM (distinct key) from the
+ * same image, times the cold start from the OUTSIDE (driving `/boot` then
+ * `/shutdown`), and tears it down. The report shows cold start split into
+ * `bootMs` (RunMicrovm → RUNNING) and `readyMs` (RunMicrovm → in-VM service
+ * answers), plus the per-iteration series so the warm-up trend is visible.
  *
- * Breadth matches the Container benchmark:
- * - effectful (bundled Effect image), reachable via its in-VM RPC.
- * - external (plain Dockerfile, no Effect bundle), reachable via raw HTTP.
+ * Driven from BOTH a Lambda host and a Cloudflare Worker host (cross-cloud
+ * assume-role). Mirrors the Cloudflare Container benchmark so the two compare.
  *
- * Depth: each variant is driven from BOTH hosts — a Lambda orchestrator
- * (Lambda → MicroVM) and a Cloudflare Worker (Worker → MicroVM, cross-cloud
- * assume-role). The variants run serially so they don't contend for the same
- * pool of concurrent MicroVM starts.
- *
- * Note on crash-loop fail-fast (the Container benchmark's 4th case): MicroVM
- * bakes a Firecracker snapshot at *build* time, so a fatally-crashing image
- * surfaces as a CREATE_FAILED at deploy — never at boot — and so has no
- * runtime fail-fast analog to measure here.
- *
- * Set NO_DESTROY=1 to keep the deploy between runs while iterating, and
- * BENCH_N / BENCH_CONCURRENCY to scale the load (mind the MicroVM memory quota).
+ * Run WITHOUT NO_DESTROY so iteration 1 reflects a fresh deploy. Set BENCH_ITER
+ * to change the cycle count.
  */
 describe.skipIf(skip)("microvm cold-start benchmark", () => {
   const stack = beforeAll(deploy(BenchmarkStack), { timeout: HOOK_TIMEOUT });
@@ -210,48 +213,51 @@ describe.skipIf(skip)("microvm cold-start benchmark", () => {
   });
 
   test(
-    `boots ${N} MicroVMs per variant from Lambda and Worker hosts`,
+    `boot→shutdown ${ITER}× per variant from Lambda and Worker hosts`,
     Effect.gen(function* () {
       const { url, workerUrl } = yield* stack;
       const lambdaUrl = url.replace(/\/+$/, "");
       const cfUrl = workerUrl.replace(/\/+$/, "");
-      yield* waitForOrchestrator(lambdaUrl);
-      yield* waitForOrchestrator(cfUrl);
+      yield* waitForHost(lambdaUrl);
+      yield* waitForHost(cfUrl);
 
       const nonce = yield* Effect.sync(() => crypto.randomUUID().slice(0, 8));
 
-      const lambdaEffectful = yield* runVariant(
-        lambdaUrl,
-        "/boot/effectful",
-        "Lambda → MicroVM (effectful image)",
-        `le-${nonce}`,
-      );
-      const lambdaExternal = yield* runVariant(
-        lambdaUrl,
-        "/boot/external",
-        "Lambda → MicroVM (external Dockerfile)",
-        `lx-${nonce}`,
-      );
-      const workerEffectful = yield* runVariant(
-        cfUrl,
-        "/boot/effectful",
-        "Worker → MicroVM (effectful image)",
-        `we-${nonce}`,
-      );
-      const workerExternal = yield* runVariant(
-        cfUrl,
-        "/boot/external",
-        "Worker → MicroVM (external Dockerfile)",
-        `wx-${nonce}`,
-      );
+      const variants = [
+        {
+          base: lambdaUrl,
+          variant: "effectful",
+          label: "Lambda → MicroVM (effectful image)",
+        },
+        {
+          base: lambdaUrl,
+          variant: "external",
+          label: "Lambda → MicroVM (external Dockerfile)",
+        },
+        {
+          base: cfUrl,
+          variant: "effectful",
+          label: "Worker → MicroVM (effectful image)",
+        },
+        {
+          base: cfUrl,
+          variant: "external",
+          label: "Worker → MicroVM (external Dockerfile)",
+        },
+      ];
+
+      const blocks: string[] = [];
+      let totalSamples = 0;
+      for (const v of variants) {
+        const r = yield* runVariant(v.base, v.variant, v.label, `${nonce}`);
+        totalSamples += r.samples.length;
+        blocks.push(formatVariant(r));
+      }
 
       const report = [
         "",
-        `MicroVM cold-start benchmark (N=${N}, concurrency=${CONCURRENCY})`,
-        formatVariant(lambdaEffectful),
-        formatVariant(lambdaExternal),
-        formatVariant(workerEffectful),
-        formatVariant(workerExternal),
+        `MicroVM cold-start benchmark (boot→shutdown ×${ITER} per variant)`,
+        ...blocks,
         "",
       ].join("\n");
       // `console.log` (not `Effect.logInfo`) so the report always reaches the
@@ -260,10 +266,7 @@ describe.skipIf(skip)("microvm cold-start benchmark", () => {
 
       // Informational, but a run where nothing started indicates a broken
       // deploy rather than slow MicroVMs.
-      expect(lambdaEffectful.samples.length).toBeGreaterThan(0);
-      expect(lambdaExternal.samples.length).toBeGreaterThan(0);
-      expect(workerEffectful.samples.length).toBeGreaterThan(0);
-      expect(workerExternal.samples.length).toBeGreaterThan(0);
+      expect(totalSamples).toBeGreaterThan(0);
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );
