@@ -2,6 +2,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import { Config } from "effect";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { KV } from "./KV.ts";
 import Room from "./Room.ts";
 
@@ -30,7 +31,16 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
         Effect.gen(function* () {
           const key = `workflow:smoke:${roomId}`;
           yield* kv.put(key, message);
-          const got = yield* kv.get(key);
+          // KV is eventually consistent: a read immediately after a write can
+          // briefly miss or return stale data. Re-read until it reflects the
+          // write (bounded, so a genuine failure still surfaces below).
+          const got = yield* kv.get(key).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("500 millis"),
+              until: (value) => value === message,
+              times: 10,
+            }),
+          );
           if (got !== message) {
             return yield* Effect.die(
               new Error(
