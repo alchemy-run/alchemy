@@ -119,6 +119,9 @@
     },
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
+    },
+    {
+      "path": "./benchmark/container/tsconfig.json"
     }
   ],
   "compilerOptions": {

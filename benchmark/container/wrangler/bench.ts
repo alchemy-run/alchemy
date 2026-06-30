@@ -1,9 +1,9 @@
 /**
- * Standalone cold-start benchmark for the plain wrangler + `@cloudflare/containers`
- * worker. Mirrors the methodology of the Alchemy benchmark
- * (`packages/alchemy/test/Cloudflare/Container/Container.benchmark.test.ts`) so
- * the two are directly comparable, but uses zero Alchemy code — just `fetch`
- * against the deployed worker.
+ * Standalone cold-start baseline for the plain wrangler + `@cloudflare/containers`
+ * worker — no Alchemy involved. Mirrors the methodology of the Alchemy driver
+ * (`benchmark/container/test/bench.test.ts`) so the two are directly
+ * comparable, but uses zero Alchemy code — just `fetch` against the deployed
+ * worker.
  *
  * Usage (from this directory):
  *   bun x wrangler deploy                     # build + push the image, deploy the worker

@@ -11,7 +11,11 @@ import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
-import { fromAssumeRole, fromCredentials } from "../Credentials.ts";
+import type {
+  AwsCredentialProviderError,
+  ResolvedCredentials,
+} from "@distilled.cloud/aws/Credentials";
+import { Credentials, makeAssumeRoleResolver } from "../Credentials.ts";
 import { AccessKey } from "../IAM/AccessKey.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Role } from "../IAM/Role.ts";
@@ -200,13 +204,15 @@ const imagePolicyStatements = <Req, Res, Err, Self>(
 interface WorkerAwsAccess {
   /** The shared least-privilege Role each binding contributes statements to. */
   readonly role: Role;
-  /** Accessor for the role ARN (registered on the worker at deploy). */
-  readonly roleArn: Effect.Effect<string>;
-  /** Accessor for the IAM user's access key id. */
-  readonly accessKeyId: Effect.Effect<string>;
-  /** Accessor for the IAM user's secret access key. */
-  readonly secretAccessKey: Effect.Effect<
-    Redacted.Redacted<string> | undefined
+  /**
+   * Shared assumed-role credentials resolver, single-flight + expiry-aware,
+   * built ONCE per host (see {@link ensureWorkerAwsAccess}). Every binding and
+   * every request reuses this exact resolver, so `AssumeRole` runs once and is
+   * re-run only when the cached credentials approach expiry — never per request.
+   */
+  readonly credentials: Effect.Effect<
+    ResolvedCredentials,
+    AwsCredentialProviderError
   >;
 }
 
@@ -268,7 +274,36 @@ const ensureWorkerAwsAccess = (host: WorkerHost) =>
       const secretAccessKey = yield* accessKey.secretAccessKey;
       const roleArn = yield* role.roleArn;
 
-      return { role, roleArn, accessKeyId, secretAccessKey };
+      // The long-lived IAM-user credentials that sign `AssumeRole`. Read lazily
+      // from the worker environment on each refresh (NOT captured eagerly, so
+      // this is valid at deploy time where the env isn't populated yet).
+      const base = Layer.succeed(
+        Credentials,
+        Effect.gen(function* () {
+          const id = yield* accessKeyId;
+          const secret = yield* secretAccessKey;
+          return {
+            accessKeyId: Redacted.make(id),
+            secretAccessKey: secret
+              ? Redacted.isRedacted(secret)
+                ? secret
+                : Redacted.make(secret)
+              : Redacted.make(""),
+            sessionToken: undefined,
+          } satisfies ResolvedCredentials;
+        }),
+      );
+
+      // Build the single-flight, expiry-aware assume-role cache ONCE. STS is
+      // global, so the endpoint region is a fixed default; the per-request
+      // operation provides its own image-derived `Region` separately.
+      const credentials = yield* makeAssumeRoleResolver({
+        roleArn,
+        base,
+        region: "us-east-1",
+      });
+
+      return { role, credentials };
     }),
   );
 
@@ -286,20 +321,13 @@ const withRuntimeCredentials = <A, E>(
 ): Effect.Effect<A, E, any> =>
   access
     ? Effect.gen(function* () {
-        const keyId = yield* access.accessKeyId;
-        const secret = yield* access.secretAccessKey;
-        const arn = yield* access.roleArn;
         const reg = yield* region;
-        const credentials = fromAssumeRole({
-          roleArn: arn,
-          region: reg,
-          base: fromCredentials({
-            accessKeyId: keyId,
-            secretAccessKey: secret ? Redacted.value(secret) : "",
-          }),
-        });
+        // Provide the SHARED cached resolver built once in
+        // `ensureWorkerAwsAccess` — NOT a fresh assume-role layer per request —
+        // so the assumed-role credentials are reused (and only refreshed near
+        // expiry) instead of re-assuming the role on every call.
         return yield* eff.pipe(
-          Effect.provide(credentials),
+          Effect.provide(Layer.succeed(Credentials, access.credentials)),
           Effect.provide(Layer.succeed(Region, Effect.succeed(reg))),
           Effect.provide(FetchHttpClient.layer),
         );

@@ -1,5 +1,5 @@
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
+import * as AWS from "alchemy/AWS";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
@@ -8,15 +8,16 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { BenchExternal } from "./external-image.ts";
-import { Sandbox } from "../microvm/sandbox.ts";
+import { ExternalMicrovm } from "./external-image.ts";
+import { Sandbox } from "./sandbox.ts";
 
 /**
- * Cloudflare Worker cold-start benchmark host — the cross-cloud analog of the
- * Lambda {@link import("./orchestrator.ts")}. Same `boot`/`shutdown` lifecycle
- * and timings, but driven from a Worker (binding the AWS MicroVM ops provisions
- * an IAM User + AccessKey + assume-role Role once per worker; see
- * `MicrovmBinding.ts`). This measures the Worker → MicroVM cold-start path.
+ * Cloudflare Worker host for the MicroVM cold-start benchmark — the cross-cloud
+ * analog of the Lambda {@link import("./orchestrator.ts")}. Same boot/shutdown
+ * lifecycle and `readyMs` (time to usable service), but driven from a Worker:
+ * binding the AWS MicroVM ops provisions an IAM User + AccessKey + assume-role
+ * Role once per worker (see `MicrovmBinding.ts`), measuring the Worker → MicroVM
+ * cold-start path.
  */
 type Variant = {
   readonly run: (
@@ -63,10 +64,10 @@ export default Cloudflare.Worker(
         }),
     };
     const external: Variant = {
-      run: yield* AWS.Lambda.RunMicrovm(BenchExternal),
-      get: yield* AWS.Lambda.GetMicrovm(BenchExternal),
-      auth: yield* AWS.Lambda.CreateAuthToken(BenchExternal),
-      term: yield* AWS.Lambda.TerminateMicrovm(BenchExternal),
+      run: yield* AWS.Lambda.RunMicrovm(ExternalMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(ExternalMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(ExternalMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(ExternalMicrovm),
       reachable: (endpoint, authToken) =>
         Effect.gen(function* () {
           const client = yield* HttpClient.HttpClient;
@@ -101,7 +102,6 @@ export default Cloudflare.Worker(
               times: 180,
             }),
           );
-          const bootMs = (yield* Effect.sync(() => Date.now())) - start;
           const { authToken } = yield* v.auth({
             microvmIdentifier: vm.microvmId,
             expirationInMinutes: 5,
@@ -114,11 +114,7 @@ export default Cloudflare.Worker(
             }),
           );
           const readyMs = (yield* Effect.sync(() => Date.now())) - start;
-          return yield* HttpServerResponse.json({
-            id: vm.microvmId,
-            bootMs,
-            readyMs,
-          });
+          return yield* HttpServerResponse.json({ id: vm.microvmId, readyMs });
         }).pipe(
           Effect.onError(() =>
             v.term({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),

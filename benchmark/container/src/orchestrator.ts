@@ -1,4 +1,4 @@
-import * as AWS from "@/AWS";
+import * as AWS from "alchemy/AWS";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,22 +9,18 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { BenchExternal } from "./external-image.ts";
-import { Sandbox } from "../microvm/sandbox.ts";
+import { ExternalMicrovm } from "./external-image.ts";
+import { Sandbox } from "./sandbox.ts";
 
 /**
- * Cold-start benchmark orchestrator (the AWS analog of the Cloudflare Container
- * benchmark's Durable Object). It exposes a `boot`/`shutdown` lifecycle so the
- * benchmark can drive — and time — each cold start from the OUTSIDE:
+ * Lambda host for the MicroVM cold-start benchmark. Exposes a boot/shutdown
+ * lifecycle so the driver can time each cold start from the OUTSIDE:
  *
  * - `GET /boot?variant=effectful|external&key=K` launches ONE fresh MicroVM and
- *   blocks until it is reachable, returning `{ id, bootMs, readyMs }` where
- *   `bootMs` = `RunMicrovm` → `RUNNING` (provisioned) and `readyMs` =
- *   `RunMicrovm` → in-VM service answers (available). It does NOT terminate.
+ *   blocks until its in-VM service answers, returning `{ id, readyMs }` where
+ *   `readyMs` = `RunMicrovm` → service-available (time to usable service). It
+ *   does NOT terminate.
  * - `GET /shutdown?variant=…&id=ID` terminates the MicroVM.
- *
- * The benchmark loops boot→shutdown with a fresh `key` each iteration to watch
- * how cold start trends over successive boots of the same image.
  */
 type Variant = {
   readonly run: (
@@ -55,7 +51,7 @@ type Variant = {
   >;
 };
 
-export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestrator>()(
+export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
   "MicrovmBenchOrchestrator",
   {
     main: import.meta.filename,
@@ -78,10 +74,10 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
         }),
     };
     const external: Variant = {
-      run: yield* AWS.Lambda.RunMicrovm(BenchExternal),
-      get: yield* AWS.Lambda.GetMicrovm(BenchExternal),
-      auth: yield* AWS.Lambda.CreateAuthToken(BenchExternal),
-      term: yield* AWS.Lambda.TerminateMicrovm(BenchExternal),
+      run: yield* AWS.Lambda.RunMicrovm(ExternalMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(ExternalMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(ExternalMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(ExternalMicrovm),
       reachable: (endpoint, authToken) =>
         Effect.gen(function* () {
           const client = yield* HttpClient.HttpClient;
@@ -94,9 +90,9 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
     const pick = (v: string | null): Variant =>
       v === "external" ? external : effectful;
 
-    // Run one fresh MicroVM and time RunMicrovm → RUNNING (bootMs) and
-    // RunMicrovm → service-reachable (readyMs). Leaves it running for an
-    // explicit /shutdown; self-terminates only if boot itself fails.
+    // Run one fresh MicroVM and time RunMicrovm → service-reachable (readyMs).
+    // Leaves it running for an explicit /shutdown; self-terminates only if boot
+    // itself fails.
     const boot = (v: Variant) =>
       Effect.gen(function* () {
         const start = yield* Effect.sync(() => Date.now());
@@ -119,7 +115,6 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
               times: 180,
             }),
           );
-          const bootMs = (yield* Effect.sync(() => Date.now())) - start;
           const { authToken } = yield* v.auth({
             microvmIdentifier: vm.microvmId,
             expirationInMinutes: 5,
@@ -132,14 +127,8 @@ export default class BenchOrchestrator extends AWS.Lambda.Function<BenchOrchestr
             }),
           );
           const readyMs = (yield* Effect.sync(() => Date.now())) - start;
-          return yield* HttpServerResponse.json({
-            id: vm.microvmId,
-            bootMs,
-            readyMs,
-          });
+          return yield* HttpServerResponse.json({ id: vm.microvmId, readyMs });
         }).pipe(
-          // Only clean up if boot FAILED — a successful boot is torn down by the
-          // explicit /shutdown call so the benchmark can time it separately.
           Effect.onError(() =>
             v.term({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
           ),
