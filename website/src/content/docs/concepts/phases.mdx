@@ -27,7 +27,7 @@ an Effect from inside an Effect**.
 ```typescript
 Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     // ─── Init phase ───
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);

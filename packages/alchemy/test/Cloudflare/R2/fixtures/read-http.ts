@@ -8,7 +8,7 @@ import { readRoutes } from "./read-routes.ts";
 /** Read-only access via a scoped HTTP API token (`ReadBucketHttp`). */
 export default class R2ReadHttpWorker extends Cloudflare.Worker<R2ReadHttpWorker>()(
   "R2ReadHttpWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* TestBucket;
     const r2 = yield* Cloudflare.R2.ReadBucket(bucket);

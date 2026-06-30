@@ -8,7 +8,7 @@ import { readRoutes } from "./read-routes.ts";
 /** Read-only access via a scoped HTTP API token (`ReadNamespaceHttp`). */
 export default class KVReadHttpWorker extends Cloudflare.Worker<KVReadHttpWorker>()(
   "KVReadHttpWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const namespace = yield* TestNamespace;
     const kv = yield* Cloudflare.KV.ReadNamespace(namespace);

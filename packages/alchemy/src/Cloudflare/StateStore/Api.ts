@@ -101,7 +101,7 @@ export default Worker(
   "Api",
   {
     name: STATE_STORE_SCRIPT_NAME,
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
     compatibility: {
       flags: ["nodejs_compat"],

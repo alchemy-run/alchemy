@@ -12,7 +12,7 @@ import { d1Routes } from "./routes.ts";
 export default class D1EffectWorker extends Cloudflare.Worker<D1EffectWorker>()(
   "D1EffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const database = yield* TestDatabase;

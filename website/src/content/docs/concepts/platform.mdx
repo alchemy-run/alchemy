@@ -27,7 +27,7 @@ import { Bucket } from "./bucket.ts";
 
 export default Cloudflare.Worker(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     // Init: bind a resource. The binding is the typed SDK.
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
@@ -82,7 +82,7 @@ by hand:
 ```typescript
 export default AWS.Lambda.Function(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const getJob = yield* DynamoDB.GetItem(JobsTable);
     const enqueue = yield* SQS.SendMessage(JobQueue);
@@ -140,7 +140,7 @@ through Effect's context:
 ```typescript
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     return {

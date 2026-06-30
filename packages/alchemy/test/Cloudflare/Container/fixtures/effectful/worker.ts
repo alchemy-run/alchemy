@@ -7,7 +7,7 @@ import { Object } from "./object.ts";
 export default Cloudflare.Worker(
   "Worker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const objects = yield* Object;

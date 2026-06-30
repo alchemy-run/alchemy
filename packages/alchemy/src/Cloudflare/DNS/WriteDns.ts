@@ -46,7 +46,7 @@ import type { Zone } from "../Zone/Zone.ts";
  *
  * export class WriteDnsrWorker extends Cloudflare.Worker<WriteDnsrWorker>()(
  *   "WriteDnsrWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     // Init phase — bind the write client scoped to the zone.
  *     const dns = yield* Cloudflare.DNS.WriteDns(Zone);

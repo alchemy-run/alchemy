@@ -8,7 +8,7 @@ import { producerRoutes } from "./producer-routes.ts";
 /** Producer (send) access via a scoped HTTP API token (`WriteQueueHttp`). */
 export default class QueueWriteHttpWorker extends Cloudflare.Worker<QueueWriteHttpWorker>()(
   "QueueWriteHttpWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const queue = yield* TestQueue;
     const producer = yield* Cloudflare.Queues.WriteQueue(queue);

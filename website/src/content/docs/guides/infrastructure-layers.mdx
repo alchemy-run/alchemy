@@ -144,7 +144,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default Cloudflare.Worker(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     return {
       fetch: Effect.gen(function* () {
@@ -168,7 +168,7 @@ call it from `fetch`:
 
  export default Cloudflare.Worker(
    "Api",
-   { main: import.meta.filename },
+   { main: import.meta.url },
    Effect.gen(function* () {
 +    const jobs = yield* JobService;
 +
@@ -202,7 +202,7 @@ KV namespace resource into the Stack:
 
  export default Cloudflare.Worker(
    "Api",
-   { main: import.meta.filename },
+   { main: import.meta.url },
    Effect.gen(function* () {
      // ...
 -  }),
@@ -241,7 +241,7 @@ has a stable logical id:
  // src/Admin.ts
  export default Cloudflare.Worker(
    "Admin",
-   { main: import.meta.filename },
+   { main: import.meta.url },
    Effect.gen(function* () {
      const jobs = yield* JobService;
      // ...

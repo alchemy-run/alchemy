@@ -21,7 +21,7 @@ export class DevBox extends Cloudflare.Container<
 
 export default DevBox.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     dockerfile: `FROM oven/bun:1.3`,
   },
   Effect.gen(function* () {

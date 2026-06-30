@@ -106,7 +106,7 @@ import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const apiKey = yield* Config.redacted("OPENAI_API_KEY");
 

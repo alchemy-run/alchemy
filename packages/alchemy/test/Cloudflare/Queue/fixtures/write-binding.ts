@@ -8,7 +8,7 @@ import { producerRoutes } from "./producer-routes.ts";
 /** Producer (send) access via the native Worker binding (`WriteQueueBinding`). */
 export default class QueueWriteBindingWorker extends Cloudflare.Worker<QueueWriteBindingWorker>()(
   "QueueWriteBindingWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const queue = yield* TestQueue;
     const producer = yield* Cloudflare.Queues.WriteQueue(queue);

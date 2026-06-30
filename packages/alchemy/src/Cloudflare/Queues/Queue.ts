@@ -82,7 +82,7 @@ export type Queue = Resource<
  *
  * export default Cloudflare.Worker(
  *   "Worker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const queue = yield* Cloudflare.Queues.WriteQueue(Queue);
  *

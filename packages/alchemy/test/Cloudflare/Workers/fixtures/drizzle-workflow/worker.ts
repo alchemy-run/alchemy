@@ -14,7 +14,7 @@ import DrizzleWorkflow from "./workflow.ts";
 export default class DrizzleWorkflowWorker extends Cloudflare.Worker<DrizzleWorkflowWorker>()(
   "DrizzleWorkflowWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const workflow = yield* DrizzleWorkflow;

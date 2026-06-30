@@ -25,7 +25,7 @@ const page = (title: string, body: string) =>
 export default class AiSearchCrawlTargetWorker extends Cloudflare.Worker<AiSearchCrawlTargetWorker>()(
   "AiSearchCrawlTargetWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     return {

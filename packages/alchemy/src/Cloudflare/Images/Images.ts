@@ -33,7 +33,7 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * ```typescript
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  *
- * Cloudflare.Worker("ImageWorker", { main: import.meta.filename },
+ * Cloudflare.Worker("ImageWorker", { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const images = yield* Cloudflare.Images.Images("PIPELINE");
  *     return {

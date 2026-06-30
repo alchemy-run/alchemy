@@ -13,7 +13,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 export default class DynamicLoaderEffectWorker extends Cloudflare.Worker<DynamicLoaderEffectWorker>()(
   "DynamicLoaderEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const loader = yield* Cloudflare.WorkerLoader("LOADER");
