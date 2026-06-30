@@ -527,8 +527,10 @@ export const InstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) => error instanceof InstanceStillExists,
-            schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
+            // Termination (shutting-down -> terminated) can take a couple of
+            // minutes; the prior ~64s budget timed out intermittently.
+            schedule: Schedule.spaced("5 seconds").pipe(
+              Schedule.both(Schedule.recurs(48)),
             ),
           }),
           Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),

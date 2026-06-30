@@ -7,6 +7,15 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
+ * Alchemy-managed EC2 key pair granting SSH access to the instance. Exported so
+ * the test can resolve it in the same deploy and read its (redacted) private
+ * key — yielding the same logical id returns the same resource.
+ */
+export const keyPair = AWS.EC2.KeyPair("Ec2E2EKeyPair", {
+  keyType: "ed25519",
+});
+
+/**
  * End-to-end fixture for a hosted `AWS.EC2.Instance`: a long-running server.
  *
  * The props Effect provisions the networking (a public-subnet VPC) and the
@@ -19,6 +28,23 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
   "Ec2E2EInstance",
   Effect.gen(function* () {
+    // Props (image AMI lookup, networking) are only needed at plan/deploy
+    // time. Inside the deployed instance the resource already exists and only
+    // `exports.program` is used, so short-circuit before the infra-resolving
+    // calls — `__ALCHEMY_RUNTIME__` is folded to `true` in the bundle, so this
+    // branch (and the AWS SDK it pulls in) is dead-code-eliminated from the
+    // image.
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return {
+        main: import.meta.filename,
+        imageId: "",
+        instanceType: "t3.small",
+        subnetId: "",
+        securityGroupIds: [],
+        port: 3000,
+      };
+    }
+
     const imageId = yield* AWS.EC2.amazonLinux2023();
     const network = yield* AWS.EC2.Network("Ec2E2ENetwork", {
       cidrBlock: "10.81.0.0/16",
@@ -35,6 +61,13 @@ export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
           cidrIpv4: "0.0.0.0/0",
           description: "app",
         },
+        {
+          ipProtocol: "tcp",
+          fromPort: 22,
+          toPort: 22,
+          cidrIpv4: "0.0.0.0/0",
+          description: "ssh",
+        },
       ],
       egress: [
         {
@@ -45,6 +78,9 @@ export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
       ],
     });
 
+    // An Alchemy-managed EC2 key pair grants SSH access to the instance.
+    const key = yield* keyPair;
+
     return {
       main: import.meta.filename,
       imageId,
@@ -53,9 +89,8 @@ export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
       securityGroupIds: [securityGroup.groupId],
       associatePublicIpAddress: true,
       port: 3000,
-      // SSM access so the test can read journalctl / cloud-init logs if the
-      // service doesn't come up (the systemd unit logs to journald, not
-      // CloudWatch).
+      keyName: key.keyName,
+      // SSM access so the instance is manageable via Session Manager.
       roleManagedPolicyArns: [
         "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
       ],

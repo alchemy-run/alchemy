@@ -290,39 +290,54 @@ await Effect.runPromise(program).catch((err) => {
     region: string;
   }) {
     const appDir = `/opt/${unitName}`;
+    const bucket = yield* Assets.BucketName;
+    // User-data runs once via cloud-init's `scripts-user` (once-per-instance),
+    // and is skipped on any subsequent boot — so it must NOT carry the work
+    // that can fail transiently (bun install over the network, S3 sync). It
+    // only writes the setup script + unit and enables the service. The systemd
+    // service (Restart=always) runs the setup on every start, so a flaky bun
+    // install / S3 read self-heals and the service survives reboots.
     return `#!/bin/bash
-set -euo pipefail
-
-PKG_INSTALL=""
-if command -v dnf >/dev/null 2>&1; then
-  PKG_INSTALL="dnf install -y"
-elif command -v yum >/dev/null 2>&1; then
-  PKG_INSTALL="yum install -y"
-fi
-
-if [ -n "$PKG_INSTALL" ]; then
-  $PKG_INSTALL unzip curl awscli
-fi
+set -uo pipefail
 
 mkdir -p "${appDir}"
 
-export HOME=/root
-if [ ! -x /root/.bun/bin/bun ]; then
-  curl -fsSL https://bun.sh/install | bash
-fi
-
-cat >/usr/local/bin/${unitName}-sync.sh <<'EOF'
+cat >/usr/local/bin/${unitName}-setup.sh <<'SETUP_EOF'
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
+export HOME=/root
+
+# unzip (needed below) — install if missing.
+command -v unzip >/dev/null 2>&1 || {
+  (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
+    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) || true
+}
+
+# AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
+command -v aws >/dev/null 2>&1 || {
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
+    && (cd /tmp && unzip -q -o awscliv2.zip && ./aws/install) || true
+}
+
+# bun — retry the network install a few times.
+if [ ! -x /root/.bun/bin/bun ]; then
+  for attempt in 1 2 3 4 5; do
+    curl -fsSL https://bun.sh/install | bash && break
+    sleep 5
+  done
+fi
+
+# Sync the bundle + env from S3 (must succeed for the service to start).
+set -e
 mkdir -p "${appDir}"
-aws s3 cp "s3://${yield* Assets.BucketName}/${bundleKey}" "${appDir}/bundle.zip" --region "${region}"
-aws s3 cp "s3://${yield* Assets.BucketName}/${envKey}" "${appDir}/env" --region "${region}"
+aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/bundle.zip" --region "${region}"
+aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
 rm -f "${appDir}/index.mjs"
 unzip -o "${appDir}/bundle.zip" -d "${appDir}"
-EOF
-chmod +x /usr/local/bin/${unitName}-sync.sh
+SETUP_EOF
+chmod +x /usr/local/bin/${unitName}-setup.sh
 
-cat >/etc/systemd/system/${unitName}.service <<'EOF'
+cat >/etc/systemd/system/${unitName}.service <<'UNIT_EOF'
 [Unit]
 Description=Alchemy EC2 instance runtime ${unitName}
 After=network-online.target
@@ -331,17 +346,16 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${appDir}
-ExecStartPre=/usr/local/bin/${unitName}-sync.sh
-EnvironmentFile=${appDir}/env
+ExecStartPre=/usr/local/bin/${unitName}-setup.sh
+EnvironmentFile=-${appDir}/env
 ExecStart=/root/.bun/bin/bun ${appDir}/index.mjs
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF
+UNIT_EOF
 
-/usr/local/bin/${unitName}-sync.sh
 systemctl daemon-reload
 systemctl enable --now ${unitName}.service
 `;
