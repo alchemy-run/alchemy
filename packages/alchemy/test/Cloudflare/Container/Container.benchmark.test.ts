@@ -78,6 +78,8 @@ interface Sample {
   readonly batch: number;
   /** Wall-clock latency of the boot request, measured by the client (outside). */
   readonly outside: number;
+  /** Inside the DO: container start → RUNNING (provisioned). */
+  readonly bootMs: number | undefined;
   /** Inside the DO: container start → reachable (available service). */
   readonly readyMs: number | undefined;
 }
@@ -122,14 +124,18 @@ const bootOne = (
         failure: `${name}: HTTP ${result.status} ${result.body.slice(0, 160)}`,
       };
     }
-    const readyMs = (() => {
+    const { bootMs, readyMs } = (() => {
       try {
-        return (JSON.parse(result.body) as { readyMs?: number }).readyMs;
+        const parsed = JSON.parse(result.body) as {
+          bootMs?: number;
+          readyMs?: number;
+        };
+        return { bootMs: parsed.bootMs, readyMs: parsed.readyMs };
       } catch {
-        return undefined;
+        return { bootMs: undefined, readyMs: undefined };
       }
     })();
-    return { sample: { batch, outside, readyMs }, failure: undefined };
+    return { sample: { batch, outside, bootMs, readyMs }, failure: undefined };
   });
 
 // Stop one container (best-effort, untimed) so the next batch is a fresh cold
@@ -215,6 +221,11 @@ const sN = (n: number) => `${(n / 1000).toFixed(1)}s`;
 
 const formatVariant = (r: VariantResult) => {
   const total = CONCURRENCY * BATCHES;
+  const boot = stats(
+    r.samples
+      .map((s) => s.bootMs)
+      .filter((m): m is number => typeof m === "number"),
+  );
   const ready = stats(
     r.samples
       .map((s) => s.readyMs)
@@ -235,8 +246,9 @@ const formatVariant = (r: VariantResult) => {
     `── ${r.label} ──`,
     `  ok: ${r.samples.length}/${total}   failed: ${r.failures.length}   (${CONCURRENCY} concurrent × ${BATCHES} batches)`,
     `  readyMs by batch (mean): ${byBatch.join("  ")}`,
-    `  readyMs (start→reachable): min ${sN(ready.min)}  p50 ${sN(ready.p50)}  p95 ${sN(ready.p95)}  max ${sN(ready.max)}  mean ${sN(ready.mean)}`,
-    `  outside (client):          min ${sN(outside.min)}  p50 ${sN(outside.p50)}  p95 ${sN(outside.p95)}  max ${sN(outside.max)}  mean ${sN(outside.mean)}`,
+    `  bootMs  (start→RUNNING):    min ${sN(boot.min)}  p50 ${sN(boot.p50)}  p95 ${sN(boot.p95)}  mean ${sN(boot.mean)}  max ${sN(boot.max)}`,
+    `  readyMs (start→reachable): min ${sN(ready.min)}  p50 ${sN(ready.p50)}  p95 ${sN(ready.p95)}  mean ${sN(ready.mean)}  max ${sN(ready.max)}`,
+    `  outside (client):          min ${sN(outside.min)}  p50 ${sN(outside.p50)}  p95 ${sN(outside.p95)}  mean ${sN(outside.mean)}  max ${sN(outside.max)}`,
     ...(r.failures.length > 0
       ? [`  failures:`, ...r.failures.slice(0, 5).map((f) => `    - ${f}`)]
       : []),

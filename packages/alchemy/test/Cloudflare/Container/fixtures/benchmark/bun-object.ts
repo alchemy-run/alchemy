@@ -42,9 +42,24 @@ export class BenchBunObject extends Cloudflare.DurableObject<BenchBunObject>()(
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
-            // Retry until reachable so the first post-deploy boot records the
-            // true cold start (image distribution + start) instead of failing
-            // while the image is still landing on the edge metal.
+            // Phase 1 (bootMs): wait until the container instance is RUNNING
+            // (allocate + start, incl. first-boot image distribution).
+            yield* container.running.pipe(
+              Effect.flatMap((r) =>
+                r
+                  ? Effect.void
+                  : Effect.fail(new Error("container not running")),
+              ),
+              Effect.retry({
+                schedule: Schedule.exponential("1 second").pipe(
+                  Schedule.either(Schedule.spaced("5 seconds")),
+                ),
+                times: 40,
+              }),
+            );
+            const booted = yield* Effect.sync(() => Date.now());
+            // Phase 2 (readyMs): wait until the Bun.serve HTTP server answers on
+            // its TCP port — RUNNING→reachable.
             yield* fetch(HttpClientRequest.get("http://container/")).pipe(
               Effect.flatMap((r) => r.text),
               Effect.retry({
@@ -55,7 +70,7 @@ export class BenchBunObject extends Cloudflare.DurableObject<BenchBunObject>()(
               }),
             );
             const end = yield* Effect.sync(() => Date.now());
-            return { bootMs: end - start, readyMs: end - start };
+            return { bootMs: booted - start, readyMs: end - start };
           }),
         // Tear the container down so each boot is an independent cold start and
         // repeated boots don't accumulate against the account's

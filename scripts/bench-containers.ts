@@ -91,8 +91,7 @@ async function runSuite(suite: Suite): Promise<string> {
   const decoder = new TextDecoder();
   let captured = "";
   const pump = async (stream: ReadableStream<Uint8Array>) => {
-    // @ts-expect-error Bun's ReadableStream is async-iterable at runtime
-    for await (const chunk of stream) {
+    for await (const chunk of stream as any) {
       const text = decoder.decode(chunk);
       captured += text;
       process.stdout.write(text);
@@ -125,16 +124,37 @@ function extractReport(output: string, header: string): string {
   return block.join("\n");
 }
 
+interface Phase {
+  p50: string;
+  p95: string;
+  mean: string;
+  max: string;
+}
+
 interface Row {
   readonly platform: string;
   readonly variant: string;
-  readonly bootP50: string;
-  readonly readyP50: string;
-  readonly readyMean: string;
+  readonly ok: string;
+  readonly boot: Phase;
+  readonly ready: Phase;
   readonly firstBatch: string;
   readonly lastBatch: string;
-  readonly ok: string;
 }
+
+const emptyPhase = (): Phase => ({ p50: "—", p95: "—", mean: "—", max: "—" });
+
+/** Pull a single `<key> <value>s` metric out of a stat line. */
+const stat = (line: string, key: string): string => {
+  const m = line.match(new RegExp(`${key}\\s+([\\d.]+s)`));
+  return m ? m[1] : "—";
+};
+
+const phaseOf = (line: string): Phase => ({
+  p50: stat(line, "p50"),
+  p95: stat(line, "p95"),
+  mean: stat(line, "mean"),
+  max: stat(line, "max"),
+});
 
 /** Parse per-variant rows out of a captured report block. */
 function parseRows(report: string, platform: string): Row[] {
@@ -142,25 +162,17 @@ function parseRows(report: string, platform: string): Row[] {
   const lines = report.split("\n");
   let variant = "";
   let ok = "";
-  let bootP50 = "—";
   let firstBatch = "—";
   let lastBatch = "—";
-  let readyP50 = "—";
-  let readyMean = "—";
+  let boot = emptyPhase();
+  let ready = emptyPhase();
   const flush = () => {
     if (variant) {
-      rows.push({
-        platform,
-        variant,
-        bootP50,
-        readyP50,
-        readyMean,
-        firstBatch,
-        lastBatch,
-        ok,
-      });
+      rows.push({ platform, variant, ok, boot, ready, firstBatch, lastBatch });
     }
-    bootP50 = firstBatch = lastBatch = readyP50 = readyMean = "—";
+    firstBatch = lastBatch = "—";
+    boot = emptyPhase();
+    ready = emptyPhase();
     ok = "";
   };
   for (const l of lines) {
@@ -184,13 +196,11 @@ function parseRows(report: string, platform: string): Row[] {
         lastBatch = vals[vals.length - 1];
       }
     }
-    const boot = l.match(/bootMs[^:]*:.*p50\s+([\d.]+s)/);
-    if (boot) bootP50 = boot[1];
-    const ready = l.match(/readyMs[^:]*:.*p50\s+([\d.]+s).*mean\s+([\d.]+s)/);
-    if (ready) {
-      readyP50 = ready[1];
-      readyMean = ready[2];
-    }
+    // Stat lines: `bootMs (…RUNNING):` and `readyMs (…reachable):`. Guard the
+    // ready match on "reachable" so the "readyMs by batch (mean)" series above
+    // is not mistaken for the stat line.
+    if (/bootMs\s+\(/.test(l)) boot = phaseOf(l);
+    if (/readyMs\s+\([^)]*reachable\)/.test(l)) ready = phaseOf(l);
   }
   flush();
   return rows;
@@ -217,11 +227,11 @@ async function main() {
   }
 
   const summary = [
-    "| Platform | Variant | ok | boot p50 | ready p50 | ready mean | batch 1 → last (mean) |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    "| Platform | Variant | ok | boot p50 | boot p95 | boot mean | boot max | ready p50 | ready p95 | ready mean | ready max | batch 1 → last |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...allRows.map(
       (r) =>
-        `| ${r.platform} | ${r.variant} | ${r.ok} | ${r.bootP50} | ${r.readyP50} | ${r.readyMean} | ${r.firstBatch} → ${r.lastBatch} |`,
+        `| ${r.platform} | ${r.variant} | ${r.ok} | ${r.boot.p50} | ${r.boot.p95} | ${r.boot.mean} | ${r.boot.max} | ${r.ready.p50} | ${r.ready.p95} | ${r.ready.mean} | ${r.ready.max} | ${r.firstBatch} → ${r.lastBatch} |`,
     ),
   ].join("\n");
 
@@ -234,7 +244,7 @@ async function main() {
     "",
     `_Generated ${new Date().toISOString()} · ${process.env.BENCH_BATCHES ?? 10} batches of ${process.env.BENCH_CONCURRENCY ?? "10 (CF) / 5 (VM)"} concurrent cold starts per variant._`,
     "",
-    "Each variant runs N batches of C concurrent cold starts — each batch boots C fresh instances (distinct keys) from the same image AT ONCE, times each cold start until the in-instance service is reachable, then tears the whole batch down before the next (so at most C are alive). The per-batch mean shows the trend over time (`batch 1 → last`). Cloudflare images are pre-warmed to the edge metal so we measure container cold start, not one-time image distribution. `ready` = time to available service; `boot` = provision→running (MicroVM only).",
+    "Each variant runs N batches of C concurrent cold starts — each batch boots C fresh instances (distinct keys) from the same image AT ONCE, times each cold start until the in-instance service is reachable, then tears the whole batch down before the next (so at most C are alive). The per-batch mean shows the trend over time (`batch 1 → last`). Cloudflare images are pre-warmed to the edge metal so we measure container cold start, not one-time image distribution. `boot` = provision→running, `ready` = →available service. Cloudflare reports `running` the instant `start()` is signaled, so its boot phase is ~0 and the whole cold start shows up in `ready`; MicroVM exposes a distinct `RunMicrovm→RUNNING` state, so its boot/ready split is meaningful.",
     microvmNote,
     "## Summary",
     "",

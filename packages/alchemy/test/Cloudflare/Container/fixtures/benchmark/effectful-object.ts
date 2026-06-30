@@ -26,11 +26,28 @@ export class BenchEffectfulObject extends Cloudflare.DurableObject<BenchEffectfu
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
-            // A freshly-built image is still distributing to the edge metal on
-            // the first boots after a deploy, so the container start errors
-            // until it lands. Retry so the FIRST boot records the true
-            // post-deploy cold start (distribution + start → reachable) instead
-            // of failing — that wait IS the cold start we want to measure.
+            // Phase 1 (bootMs): wait until the container instance is RUNNING —
+            // the analog of MicroVM's RunMicrovm→RUNNING provision phase. A
+            // freshly-built image is still distributing to the edge metal on
+            // the first boots after a deploy, so `running` stays false until it
+            // lands; retry so the wait (distribution + allocate + start) is
+            // captured rather than failing.
+            yield* container.running.pipe(
+              Effect.flatMap((r) =>
+                r
+                  ? Effect.void
+                  : Effect.fail(new Error("container not running")),
+              ),
+              Effect.retry({
+                schedule: Schedule.exponential("1 second").pipe(
+                  Schedule.either(Schedule.spaced("5 seconds")),
+                ),
+                times: 40,
+              }),
+            );
+            const booted = yield* Effect.sync(() => Date.now());
+            // Phase 2 (readyMs): wait until the in-container server answers RPC
+            // (the app is listening) — RUNNING→reachable.
             yield* container.ping().pipe(
               Effect.retry({
                 schedule: Schedule.exponential("1 second").pipe(
@@ -40,7 +57,7 @@ export class BenchEffectfulObject extends Cloudflare.DurableObject<BenchEffectfu
               }),
             );
             const end = yield* Effect.sync(() => Date.now());
-            return { bootMs: end - start, readyMs: end - start };
+            return { bootMs: booted - start, readyMs: end - start };
           }),
         // Tear the container down so each boot is an independent cold start and
         // repeated boots don't accumulate against the account's

@@ -230,9 +230,9 @@ const formatVariant = (r: VariantResult) => {
     `── ${r.label} ──`,
     `  ok: ${r.samples.length}/${total}   failed: ${r.failures.length}   (${CONCURRENCY} concurrent × ${BATCHES} batches)`,
     `  readyMs by batch (mean): ${byBatch.join("  ")}`,
-    `  bootMs  (run→RUNNING):   min ${s(boot.min)}  p50 ${s(boot.p50)}  p95 ${s(boot.p95)}  max ${s(boot.max)}  mean ${s(boot.mean)}`,
-    `  readyMs (run→reachable): min ${s(ready.min)}  p50 ${s(ready.p50)}  p95 ${s(ready.p95)}  max ${s(ready.max)}  mean ${s(ready.mean)}`,
-    `  outside (client):        min ${s(outside.min)}  p50 ${s(outside.p50)}  p95 ${s(outside.p95)}  max ${s(outside.max)}  mean ${s(outside.mean)}`,
+    `  bootMs  (run→RUNNING):   min ${s(boot.min)}  p50 ${s(boot.p50)}  p95 ${s(boot.p95)}  mean ${s(boot.mean)}  max ${s(boot.max)}`,
+    `  readyMs (run→reachable): min ${s(ready.min)}  p50 ${s(ready.p50)}  p95 ${s(ready.p95)}  mean ${s(ready.mean)}  max ${s(ready.max)}`,
+    `  outside (client):        min ${s(outside.min)}  p50 ${s(outside.p50)}  p95 ${s(outside.p95)}  mean ${s(outside.mean)}  max ${s(outside.max)}`,
     ...(r.failures.length > 0
       ? [`  failures:`, ...r.failures.slice(0, 5).map((f) => `    - ${f}`)]
       : []),
