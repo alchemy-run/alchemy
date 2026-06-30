@@ -3,7 +3,6 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,12 +16,15 @@ import {
 } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
-import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import {
   createInternalTags,
@@ -230,7 +232,7 @@ export type TaskServices = Credentials | Region | ServerHost | AWSEnvironment;
 
 export type TaskShape = Main<TaskServices>;
 
-export interface TaskRuntimeContext extends ProcessContext {
+export interface TaskRuntimeContext extends HostRuntimeContext {
   readonly Type: "AWS.ECS.Task";
 }
 
@@ -295,44 +297,9 @@ export interface TaskRuntimeContext extends ProcessContext {
  */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {
-    createRuntimeContext: (id): TaskRuntimeContext => {
-      const runners: Effect.Effect<void, never, any>[] = [];
-      const env: Record<string, any> = {};
-
-      return {
-        Type: "AWS.ECS.Task",
-        id,
-        env,
-        set: (bindingId: string, output: Output.Output) =>
-          Effect.sync(() => {
-            const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-            env[key] = output.pipe(
-              Output.map((value) => JSON.stringify(value)),
-            );
-            return key;
-          }),
-        get: <T>(key: string) =>
-          Config.string(key).pipe(
-            Effect.flatMap((value) =>
-              Effect.try({
-                try: () => JSON.parse(value) as T,
-                catch: (error) => error as Error,
-              }),
-            ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
-          ),
-        run: (effect: Effect.Effect<void, never, any>) =>
-          Effect.sync(() => {
-            runners.push(effect);
-          }),
-      };
-    },
+    createRuntimeContext: createHostRuntimeContext("AWS.ECS.Task") as (
+      id: string,
+    ) => TaskRuntimeContext,
   });
 
 export const TaskProvider = () =>
@@ -585,14 +552,27 @@ export const TaskProvider = () =>
               input: entry,
               cwd,
               platform: "node",
+              // The container runs on `bun`; keep `bun`/`bun:*` external (the
+              // runtime provides them) and resolve the `bun` export condition
+              // so `@effect/platform-bun` picks its Bun implementations.
+              external: [
+                "bun",
+                "bun:*",
+                ...((props.build?.input?.external as string[] | undefined) ??
+                  []),
+              ],
+              resolve: {
+                conditionNames: ["bun", "import", "module", "default"],
+                ...props.build?.input?.resolve,
+              },
               plugins: [props.build?.input?.plugins, plugins],
             },
             {
               ...props.build?.output,
               format: "esm",
               sourcemap: props.build?.output?.sourcemap ?? false,
-              minify: props.build?.output?.minify ?? true,
-              entryFileNames: "index.js",
+              minify: props.build?.output?.minify ?? false,
+              entryFileNames: "index.mjs",
             },
           );
         });
@@ -603,7 +583,8 @@ export const TaskProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { NodeServices } from "@effect/platform-node";
+import { BunServices } from "@effect/platform-bun";
+import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -617,13 +598,17 @@ import * as Region from "@distilled.cloud/aws/Region";
 import { ${handler} as handler } from ${JSON.stringify(importPath)};
 
 const platform = Layer.mergeAll(
-  NodeServices.layer,
+  BunServices.layer,
   FetchHttpClient.layer,
   Logger.layer([Logger.consolePretty()]),
 );
 
+// Resolve the bundled program (the runners registered via host.run / serve)
+// and run it with a Bun HTTP server bound to PORT, so a returned { fetch }
+// handler is actually served and host.run loops stay alive.
 const program = handler.pipe(
-  Effect.flatMap((task) => task.RuntimeContext.exports.program),
+  Effect.flatMap((task) => task.RuntimeContext.exports),
+  Effect.flatMap((exports) => exports.program),
   Effect.provide(
     Layer.effect(
       Stack,
@@ -641,6 +626,7 @@ const program = handler.pipe(
     ).pipe(
       Layer.provideMerge(Credentials.fromEnv()),
       Layer.provideMerge(Region.fromEnv()),
+      Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(
@@ -653,31 +639,40 @@ const program = handler.pipe(
   Effect.scoped
 );
 
-await Effect.runPromise(program);
+console.log("Task bootstrap starting...");
+await Effect.runPromise(program).catch((err) => {
+  console.error("Task bootstrap failed:", err);
+  process.exit(1);
+});
 `,
               ),
             );
 
-        const mainFile = bundleOutput.files[0];
-        const code =
-          typeof mainFile.content === "string"
-            ? new TextEncoder().encode(mainFile.content)
-            : mainFile.content;
+        // Return every emitted file (entry + shared chunks). Dynamic imports in
+        // the Bun HTTP server / AWS SDK split into chunks; dropping any of them
+        // crashes the container with `Cannot find module './chunk-XXX.js'`.
+        const files = bundleOutput.files.map((file) => ({
+          path: file.path,
+          content:
+            typeof file.content === "string"
+              ? new TextEncoder().encode(file.content)
+              : file.content,
+        }));
 
-        return { code, hash: bundleOutput.hash };
+        return { files, hash: bundleOutput.hash };
       });
 
       const buildAndPushImage = Effect.fn(function* ({
         id,
         repositoryUri,
         hash,
-        code,
+        files,
         props,
       }: {
         id: string;
         repositoryUri: string;
         hash: string;
-        code: Uint8Array<ArrayBufferLike>;
+        files: { path: string; content: Uint8Array<ArrayBufferLike> }[];
         props: TaskProps;
       }) {
         const realMain = yield* fs.realPath(props.main);
@@ -695,6 +690,10 @@ await Effect.runPromise(program);
             `FROM ${base}`,
             `WORKDIR /app`,
             `COPY index.mjs /app/index.mjs`,
+            // Copy any additional rolldown chunks (`chunk-XXX.js`,
+            // `BunServices-YYY.js`, …). Non-trivial bundles always emit at
+            // least one; minimal bundles emit none and the COPY no-ops.
+            `COPY *.js /app/`,
           ];
           if (props.port !== undefined) {
             lines.push(
@@ -723,11 +722,26 @@ await Effect.runPromise(program);
         yield* docker.materialize({
           context: contextDir,
           dockerfile: dockerfile,
-          files: [{ path: "index.mjs", content: code }],
+          // Entry chunk becomes `index.mjs`; all other chunks keep their
+          // emitted `*.js` names so the entry's relative imports resolve.
+          files: files.map((file, index) => ({
+            path: index === 0 ? "index.mjs" : file.path,
+            content: file.content,
+          })),
         });
+        // Build for the architecture the task definition declares (Fargate
+        // defaults to X86_64 when `runtimePlatform` is unset). Without this, an
+        // image built on an ARM64 host (e.g. Apple Silicon) is rejected at task
+        // start with `image Manifest does not contain descriptor matching
+        // platform 'linux/amd64'`.
+        const buildPlatform =
+          props.runtimePlatform?.cpuArchitecture === "ARM64"
+            ? "linux/arm64"
+            : "linux/amd64";
         yield* docker.image.build({
           tag: imageUri,
           context: contextDir,
+          platform: buildPlatform,
         });
         yield* docker.image.push(imageUri, {
           username: "AWS",
@@ -996,12 +1010,12 @@ await Effect.runPromise(program);
           // definitions are versioned in AWS, so registering a new revision
           // is the unit of "update" — the prior revision is deregistered
           // only on `delete` of the resource.
-          const { code, hash } = yield* bundleProgram(id, news);
+          const { files, hash } = yield* bundleProgram(id, news);
           const imageUri = yield* buildAndPushImage({
             id,
             repositoryUri,
             hash,
-            code,
+            files,
             props: {
               ...news,
               env: {
@@ -1155,6 +1169,11 @@ await Effect.runPromise(program);
               RoleName: output.taskRoleName,
             })
             .pipe(
+              // The role may already be gone (delete re-run / race) — treat a
+              // missing role as "no policies to delete" so delete is idempotent.
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed({ PolicyNames: [] as string[] }),
+              ),
               Effect.flatMap((policies) =>
                 Effect.all(
                   (policies.PolicyNames ?? []).map((policyName) =>
@@ -1183,6 +1202,9 @@ await Effect.runPromise(program);
                 RoleName: roleName,
               })
               .pipe(
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed({ AttachedPolicies: [] }),
+                ),
                 Effect.flatMap((policies) =>
                   Effect.all(
                     (policies.AttachedPolicies ?? []).map((policy) =>
