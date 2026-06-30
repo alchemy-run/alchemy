@@ -8,8 +8,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { BunMicrovm } from "./bun-image.ts";
 import { ExternalMicrovm } from "./external-image.ts";
-import { Sandbox } from "./sandbox.ts";
+import { EffectfulBun } from "./effectful-bun.ts";
+import { EffectfulNode } from "./effectful-node.ts";
+import { NodeMicrovm } from "./node-image.ts";
 
 /**
  * Cloudflare Worker host for the MicroVM cold-start benchmark — the cross-cloud
@@ -49,36 +52,78 @@ export default Cloudflare.Worker(
   "MicrovmBenchWorker",
   { main: import.meta.filename },
   Effect.gen(function* () {
-    const effectful: Variant = {
-      run: yield* AWS.Lambda.RunMicrovm(Sandbox),
-      get: yield* AWS.Lambda.GetMicrovm(Sandbox),
-      auth: yield* AWS.Lambda.CreateAuthToken(Sandbox),
-      term: yield* AWS.Lambda.TerminateMicrovm(Sandbox),
+    const rawReachable = (
+      endpoint: string,
+      authToken: Record<
+        string,
+        string | Redacted.Redacted<string> | undefined
+      >,
+    ) =>
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const res = yield* client.get(`https://${endpoint}/`, {
+          headers: AWS.Lambda.microvmAuthHeaders(authToken),
+        });
+        return yield* res.text;
+      });
+
+    const effectfulBun: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(EffectfulBun),
+      get: yield* AWS.Lambda.GetMicrovm(EffectfulBun),
+      auth: yield* AWS.Lambda.CreateAuthToken(EffectfulBun),
+      term: yield* AWS.Lambda.TerminateMicrovm(EffectfulBun),
       reachable: (endpoint, authToken) =>
         Effect.gen(function* () {
-          const sandbox = yield* AWS.Lambda.connectMicrovm(Sandbox, {
+          const sandbox = yield* AWS.Lambda.connectMicrovm(EffectfulBun, {
             endpoint,
             authToken,
           });
           return yield* sandbox.hello("bench");
         }),
     };
+    const effectfulNode: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(EffectfulNode),
+      get: yield* AWS.Lambda.GetMicrovm(EffectfulNode),
+      auth: yield* AWS.Lambda.CreateAuthToken(EffectfulNode),
+      term: yield* AWS.Lambda.TerminateMicrovm(EffectfulNode),
+      reachable: (endpoint, authToken) =>
+        Effect.gen(function* () {
+          const sandbox = yield* AWS.Lambda.connectMicrovm(EffectfulNode, {
+            endpoint,
+            authToken,
+          });
+          return yield* sandbox.hello("bench");
+        }),
+    };
+    const bun: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(BunMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(BunMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(BunMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(BunMicrovm),
+      reachable: rawReachable,
+    };
+    const node: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(NodeMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(NodeMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(NodeMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(NodeMicrovm),
+      reachable: rawReachable,
+    };
     const external: Variant = {
       run: yield* AWS.Lambda.RunMicrovm(ExternalMicrovm),
       get: yield* AWS.Lambda.GetMicrovm(ExternalMicrovm),
       auth: yield* AWS.Lambda.CreateAuthToken(ExternalMicrovm),
       term: yield* AWS.Lambda.TerminateMicrovm(ExternalMicrovm),
-      reachable: (endpoint, authToken) =>
-        Effect.gen(function* () {
-          const client = yield* HttpClient.HttpClient;
-          const res = yield* client.get(`https://${endpoint}/`, {
-            headers: AWS.Lambda.microvmAuthHeaders(authToken),
-          });
-          return yield* res.text;
-        }),
+      reachable: rawReachable,
     };
-    const pick = (v: string | null): Variant =>
-      v === "external" ? external : effectful;
+    const variants: Record<string, Variant> = {
+      "effectful-bun": effectfulBun,
+      "effectful-node": effectfulNode,
+      bun,
+      node,
+      external,
+    };
+    const pick = (v: string | null): Variant => variants[v ?? ""] ?? effectfulBun;
 
     const boot = (v: Variant) =>
       Effect.gen(function* () {

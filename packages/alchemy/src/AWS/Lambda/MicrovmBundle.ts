@@ -31,7 +31,9 @@ export const buildMicrovmDockerfile = (
   const base = userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`;
   const installRuntime =
     runtime === "bun"
-      ? "RUN curl -fsSL https://bun.sh/install | bash && ln -s /root/.bun/bin/bun /usr/local/bin/bun"
+      ? // `bun.sh/install` unpacks a zip, so the minimal MicroVM base needs
+        // `unzip` (and `tar`) present before the installer runs.
+        "RUN dnf install -y unzip tar && curl -fsSL https://bun.sh/install | bash && ln -s /root/.bun/bin/bun /usr/local/bin/bun && dnf clean all"
       : "RUN dnf install -y nodejs && dnf clean all";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   return [

@@ -9,8 +9,11 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { BunMicrovm } from "./bun-image.ts";
 import { ExternalMicrovm } from "./external-image.ts";
-import { Sandbox } from "./sandbox.ts";
+import { EffectfulBun } from "./effectful-bun.ts";
+import { EffectfulNode } from "./effectful-node.ts";
+import { NodeMicrovm } from "./node-image.ts";
 
 /**
  * Lambda host for the MicroVM cold-start benchmark. Exposes a boot/shutdown
@@ -59,36 +62,77 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
     timeout: Duration.seconds(120),
   },
   Effect.gen(function* () {
-    const effectful: Variant = {
-      run: yield* AWS.Lambda.RunMicrovm(Sandbox),
-      get: yield* AWS.Lambda.GetMicrovm(Sandbox),
-      auth: yield* AWS.Lambda.CreateAuthToken(Sandbox),
-      term: yield* AWS.Lambda.TerminateMicrovm(Sandbox),
-      reachable: (endpoint, authToken) =>
-        Effect.gen(function* () {
-          const sandbox = yield* AWS.Lambda.connectMicrovm(Sandbox, {
-            endpoint,
-            authToken,
-          });
-          return yield* sandbox.hello("bench");
-        }),
-    };
-    const external: Variant = {
-      run: yield* AWS.Lambda.RunMicrovm(ExternalMicrovm),
-      get: yield* AWS.Lambda.GetMicrovm(ExternalMicrovm),
-      auth: yield* AWS.Lambda.CreateAuthToken(ExternalMicrovm),
-      term: yield* AWS.Lambda.TerminateMicrovm(ExternalMicrovm),
-      reachable: (endpoint, authToken) =>
+    // Plain-HTTP reachable check shared by every non-effectful (raw) image:
+    // hit `GET /` with the MicroVM auth headers and read the body.
+    const rawReachable =
+      (endpoint: string, authToken: AWS.Lambda.MicrovmConnection["authToken"]) =>
         Effect.gen(function* () {
           const client = yield* HttpClient.HttpClient;
           const res = yield* client.get(`https://${endpoint}/`, {
             headers: AWS.Lambda.microvmAuthHeaders(authToken),
           });
           return yield* res.text;
+        });
+
+    const effectfulBun: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(EffectfulBun),
+      get: yield* AWS.Lambda.GetMicrovm(EffectfulBun),
+      auth: yield* AWS.Lambda.CreateAuthToken(EffectfulBun),
+      term: yield* AWS.Lambda.TerminateMicrovm(EffectfulBun),
+      reachable: (endpoint, authToken) =>
+        Effect.gen(function* () {
+          const sandbox = yield* AWS.Lambda.connectMicrovm(EffectfulBun, {
+            endpoint,
+            authToken,
+          });
+          return yield* sandbox.hello("bench");
         }),
     };
-    const pick = (v: string | null): Variant =>
-      v === "external" ? external : effectful;
+    const effectfulNode: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(EffectfulNode),
+      get: yield* AWS.Lambda.GetMicrovm(EffectfulNode),
+      auth: yield* AWS.Lambda.CreateAuthToken(EffectfulNode),
+      term: yield* AWS.Lambda.TerminateMicrovm(EffectfulNode),
+      reachable: (endpoint, authToken) =>
+        Effect.gen(function* () {
+          const sandbox = yield* AWS.Lambda.connectMicrovm(EffectfulNode, {
+            endpoint,
+            authToken,
+          });
+          return yield* sandbox.hello("bench");
+        }),
+    };
+    // Raw baselines: same image-build path + `GET /` reachable as each other,
+    // differing only by runtime (bun / node) or language (Python external).
+    const bun: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(BunMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(BunMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(BunMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(BunMicrovm),
+      reachable: rawReachable,
+    };
+    const node: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(NodeMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(NodeMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(NodeMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(NodeMicrovm),
+      reachable: rawReachable,
+    };
+    const external: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(ExternalMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(ExternalMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(ExternalMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(ExternalMicrovm),
+      reachable: rawReachable,
+    };
+    const variants: Record<string, Variant> = {
+      "effectful-bun": effectfulBun,
+      "effectful-node": effectfulNode,
+      bun,
+      node,
+      external,
+    };
+    const pick = (v: string | null): Variant => variants[v ?? ""] ?? effectfulBun;
 
     // Run one fresh MicroVM and time RunMicrovm → service-reachable (readyMs).
     // Leaves it running for an explicit /shutdown; self-terminates only if boot

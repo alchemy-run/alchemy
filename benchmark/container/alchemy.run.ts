@@ -3,12 +3,15 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import BunMicrovmLive from "./src/bun-image.ts";
 import ContainerWorker from "./src/container-worker.ts";
+import EffectfulBunLive from "./src/effectful-bun.ts";
 import EffectfulContainerLive from "./src/effectful-container.ts";
+import EffectfulNodeLive from "./src/effectful-node.ts";
 import ExternalMicrovmLive from "./src/external-image.ts";
 import MicrovmWorker from "./src/microvm-worker.ts";
+import NodeMicrovmLive from "./src/node-image.ts";
 import Orchestrator from "./src/orchestrator.ts";
-import SandboxLive from "./src/sandbox.ts";
 
 /**
  * MicroVM is a gated AWS Lambda preview. The container benchmark runs against
@@ -23,7 +26,8 @@ export const benchMicrovm = !!process.env.BENCH_MICROVM;
  * - Cloudflare: a {@link ContainerWorker} fronting three container variants
  *   (effectful bundled-Effect image, bun-baseline Dockerfile, remote pre-built
  *   image), each behind its own Durable Object.
- * - AWS (optional, `BENCH_MICROVM=1`): two MicroVM images (effectful + external
+ * - AWS (optional, `BENCH_MICROVM=1`): five MicroVM images (effectful Effect
+ *   bundle on bun + node, raw bun + node baselines, and an external Python
  *   Dockerfile) booted by both a Lambda {@link Orchestrator} and a cross-cloud
  *   Cloudflare {@link MicrovmWorker}.
  *
@@ -55,7 +59,10 @@ export default Alchemy.Stack(
       benchMicrovm
         ? Layer.mergeAll(
             EffectfulContainerLive,
-            SandboxLive,
+            EffectfulBunLive,
+            EffectfulNodeLive,
+            BunMicrovmLive,
+            NodeMicrovmLive,
             ExternalMicrovmLive,
           )
         : EffectfulContainerLive,

@@ -1,6 +1,6 @@
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
-import { SandboxBuildRole } from "./sandbox.ts";
+import { MicrovmBuildRole } from "./build-role.ts";
 
 /**
  * Non-Effect ("external") MicroVM image — built server-side from a plain
@@ -13,7 +13,7 @@ export class ExternalMicrovm extends AWS.Lambda.MicrovmImage<ExternalMicrovm>()(
 ) {}
 
 export default ExternalMicrovm.make(
-  SandboxBuildRole.pipe(
+  MicrovmBuildRole.pipe(
     Effect.map((buildRole) => ({
       context: new URL("../contexts/microvm-python/", import.meta.url).pathname,
       buildRole,

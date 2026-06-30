@@ -21,11 +21,17 @@ import Stack, { benchMicrovm } from "../alchemy.run.ts";
  * - `report/summary.csv`      — per-variant aggregate stats
  * - `report/report.md`        — human-readable markdown report
  *
- * Methodology: for each variant, run BATCHES batches of CONCURRENCY concurrent
- * boots (distinct keys → distinct instances). Each batch boots all at once,
- * waits for every instance to reach usable service, then shuts them all down
- * before the next batch — so at most CONCURRENCY instances are alive, and the
- * batch-over-batch trend shows image/edge warm-up.
+ * Methodology: targets run sequentially so they never contend for shared
+ * quotas. Each round uses distinct keys → distinct instances; a round boots its
+ * instances, waits for each to reach usable service, then shuts them all down
+ * before the next round, and the round-over-round trend shows image/edge warm-up.
+ *
+ * - Containers are measured UNDER CONCURRENT LOAD: BATCHES rounds × CONCURRENCY
+ *   simultaneous boots (no comparable per-instance API throttle).
+ * - MicroVMs are measured INDEPENDENTLY: MICROVM_BOOTS serial boots at
+ *   concurrency 1. The Lambda MicroVM API is throttled per account/Region
+ *   (RunMicrovm 5 TPS/burst 5, TerminateMicrovm 10 TPS), so booting >1 at once
+ *   would measure API admission, not VM cold start.
  *
  * MicroVM variants (Lambda + cross-cloud Worker hosts) only run when the stack
  * was deployed with `BENCH_MICROVM=1`. Set `NO_DESTROY=1` to keep the deploy
@@ -39,11 +45,20 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const HOOK_TIMEOUT = 1_500_000;
 const TEST_TIMEOUT = 3_000_000;
 
-// Containers tolerate higher concurrency; MicroVM has a per-account memory
-// quota (each instance reserves minimumMemoryInMiB), so it defaults lower.
+// Containers tolerate high concurrency (no comparable per-instance API limit),
+// so they're measured under concurrent load: CONCURRENCY boots per round.
 const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? 10);
-const MICROVM_CONCURRENCY = Number(process.env.BENCH_MICROVM_CONCURRENCY ?? 5);
 const BATCHES = Number(process.env.BENCH_BATCHES ?? 10);
+
+// MicroVM cold starts MUST be measured independently. The Lambda MicroVM API is
+// throttled per account/Region — RunMicrovm is 5 TPS / burst 5, SuspendMicrovm
+// 2 TPS, TerminateMicrovm 10 TPS
+// (https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html#microvms-quotas).
+// Booting N>1 at once means boots 2..N partly measure API admission/throttling
+// instead of VM cold start. So MicroVM defaults to concurrency 1 (each boot is a
+// fully isolated launch→ready→terminate), sampled MICROVM_BOOTS times serially.
+const MICROVM_CONCURRENCY = Number(process.env.BENCH_MICROVM_CONCURRENCY ?? 1);
+const MICROVM_BOOTS = Number(process.env.BENCH_MICROVM_BOOTS ?? 25);
 const REQUEST_TIMEOUT = "240 seconds";
 
 const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
@@ -64,7 +79,10 @@ interface Target {
   readonly keyParam: "name" | "key";
   /** Shutdown addresses by the boot key (`name`) or by the returned id (`id`). */
   readonly shutdownBy: "name" | "id";
+  /** Instances booted simultaneously per round (1 = fully isolated boots). */
   readonly concurrency: number;
+  /** Number of rounds; total samples = rounds × concurrency. */
+  readonly rounds: number;
 }
 
 interface Sample {
@@ -187,7 +205,7 @@ const runTarget = (t: Target, nonce: string) =>
     yield* shutdownOne(t, warm, warmId);
 
     const samples: Sample[] = [];
-    for (let b = 1; b <= BATCHES; b++) {
+    for (let b = 1; b <= t.rounds; b++) {
       const keys = Array.from(
         { length: t.concurrency },
         (_, i) => `${nonce}-${t.env}-${t.variant}-b${b}-${i}`,
@@ -274,8 +292,11 @@ const summarize = (samples: ReadonlyArray<Sample>) => {
       g.map((s) => s.readyMs).filter((m): m is number => typeof m === "number"),
     );
     const outside = stats(g.filter((s) => s.ok).map((s) => s.outside));
+    // Variable round count per target (containers vs serial MicroVM), so derive
+    // the span from the samples themselves rather than a global batch count.
+    const maxBatch = g.reduce((m, s) => Math.max(m, s.batch), 0);
     const byBatch: Array<number | undefined> = [];
-    for (let b = 1; b <= BATCHES; b++) {
+    for (let b = 1; b <= maxBatch; b++) {
       const xs = g
         .filter((s) => s.batch === b)
         .map((s) => s.readyMs)
@@ -308,7 +329,8 @@ const buildSummaryCsv = (rows: ReadonlyArray<Summary>) => {
     "ready_p95_ms",
     "ready_mean_ms",
     "ready_max_ms",
-    ...Array.from({ length: BATCHES }, (_, i) => `batch_${i + 1}_mean_ms`),
+    // Per-round mean trend (semicolon-separated; round count varies by target).
+    "round_means_ms",
   ].join(",");
   const lines = rows.map((r) =>
     [
@@ -321,7 +343,7 @@ const buildSummaryCsv = (rows: ReadonlyArray<Summary>) => {
       r.ready.p95,
       r.ready.mean,
       r.ready.max,
-      ...r.byBatch.map((b) => b ?? ""),
+      r.byBatch.map((b) => b ?? "").join(";"),
     ]
       .map(csvEscape)
       .join(","),
@@ -334,7 +356,7 @@ const buildReport = (
   meta: { runId: string; total: number },
 ) => {
   const head =
-    "| environment | variant | ok | ready p50 | ready p95 | ready mean | ready max | batch 1 → last (mean) |";
+    "| environment | variant | ok | ready p50 | ready p95 | ready mean | ready max | first → last round (mean) |";
   const sep = "| --- | --- | --- | --- | --- | --- | --- | --- |";
   const body = rows.map((r) => {
     const first = r.byBatch[0];
@@ -350,7 +372,7 @@ const buildReport = (
     ``,
     `Run \`${meta.runId}\` — ${meta.total} samples. Metric: **time to usable service** (host start → first successful request).`,
     ``,
-    `Methodology: ${BATCHES} batches × CONCURRENCY concurrent boots per variant (containers ${CONCURRENCY}, MicroVM ${MICROVM_CONCURRENCY}); each batch boots all at once, waits for every instance to become usable, then shuts them down before the next. The image is pre-warmed once (untimed) so we measure cold start, not first-pull distribution.`,
+    `Methodology: targets run sequentially so they never contend for shared quotas. Containers are measured under concurrent load (${BATCHES} rounds × ${CONCURRENCY} simultaneous boots). MicroVMs are measured **independently** — ${MICROVM_BOOTS} serial boots at concurrency ${MICROVM_CONCURRENCY} — because the Lambda MicroVM API is throttled per account/Region (RunMicrovm 5 TPS/burst 5, TerminateMicrovm 10 TPS), so concurrent boots would measure API admission rather than VM cold start. Each boot launches, waits until the service is usable, then terminates before the next; the image is pre-warmed once (untimed) so we measure cold start, not first-pull distribution.`,
     ``,
     head,
     sep,
@@ -376,6 +398,7 @@ const buildTargets = (outputs: {
       keyParam: "name",
       shutdownBy: "name",
       concurrency: CONCURRENCY,
+      rounds: BATCHES,
     },
     {
       env: "container",
@@ -385,6 +408,7 @@ const buildTargets = (outputs: {
       keyParam: "name",
       shutdownBy: "name",
       concurrency: CONCURRENCY,
+      rounds: BATCHES,
     },
     {
       env: "container",
@@ -394,49 +418,39 @@ const buildTargets = (outputs: {
       keyParam: "name",
       shutdownBy: "name",
       concurrency: CONCURRENCY,
+      rounds: BATCHES,
     },
   ];
   if (benchMicrovm && outputs.lambdaUrl && outputs.microvmWorkerUrl) {
     const lambda = clean(outputs.lambdaUrl);
     const worker = clean(outputs.microvmWorkerUrl);
-    targets.push(
-      {
-        env: "lambda→microvm",
-        host: lambda,
-        variant: "effectful",
-        label: "Lambda → MicroVM (effectful image)",
-        keyParam: "key",
-        shutdownBy: "id",
-        concurrency: MICROVM_CONCURRENCY,
-      },
-      {
-        env: "lambda→microvm",
-        host: lambda,
-        variant: "external",
-        label: "Lambda → MicroVM (external Dockerfile)",
-        keyParam: "key",
-        shutdownBy: "id",
-        concurrency: MICROVM_CONCURRENCY,
-      },
-      {
-        env: "worker→microvm",
-        host: worker,
-        variant: "effectful",
-        label: "Worker → MicroVM (effectful image)",
-        keyParam: "key",
-        shutdownBy: "id",
-        concurrency: MICROVM_CONCURRENCY,
-      },
-      {
-        env: "worker→microvm",
-        host: worker,
-        variant: "external",
-        label: "Worker → MicroVM (external Dockerfile)",
-        keyParam: "key",
-        shutdownBy: "id",
-        concurrency: MICROVM_CONCURRENCY,
-      },
-    );
+    // Per host, the node-vs-bun matrix: effectful (alchemy/Effect bundle) on
+    // each runtime, the raw baseline on each runtime, plus the Python external.
+    const microvmVariants: ReadonlyArray<{ variant: string; label: string }> = [
+      { variant: "effectful-bun", label: "effectful (Effect bundle, bun)" },
+      { variant: "effectful-node", label: "effectful (Effect bundle, node)" },
+      { variant: "bun", label: "bun baseline (raw Bun.serve)" },
+      { variant: "node", label: "node baseline (raw http)" },
+      { variant: "external", label: "external (Python Dockerfile)" },
+    ];
+    for (const host of [
+      { env: "lambda→microvm", url: lambda },
+      { env: "worker→microvm", url: worker },
+    ]) {
+      for (const v of microvmVariants) {
+        targets.push({
+          env: host.env,
+          host: host.url,
+          variant: v.variant,
+          label: `${host.env} (${v.label})`,
+          keyParam: "key",
+          shutdownBy: "id",
+          // Isolated, serial boots — see the MICROVM_CONCURRENCY rationale above.
+          concurrency: MICROVM_CONCURRENCY,
+          rounds: MICROVM_BOOTS,
+        });
+      }
+    }
   }
   return targets;
 };
