@@ -1,6 +1,6 @@
 import { isResolved } from "@/Diff.ts";
 import * as Plan from "@/Plan";
-import { Platform, type Main } from "@/Platform.ts";
+import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
 import { Resource } from "@/Resource";
 import {
@@ -21,11 +21,11 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 // A minimal hosted Platform (like AWS.ECS.Task / AWS.EC2.Instance) whose
 // runtime context is built by the shared `createHostRuntimeContext`. Its
 // provider is a no-op so the plan never touches the cloud.
-interface Host extends Resource<
-  "Test.Host",
-  { main?: string },
-  { ok: boolean }
-> {}
+interface HostProps extends PlatformProps {
+  main?: string;
+}
+
+interface Host extends Resource<"Test.Host", HostProps, { ok: boolean }> {}
 
 type HostServices = ServerHost;
 type HostShape = Main<HostServices>;
@@ -55,9 +55,8 @@ const { test } = Test.make({
 const makePlan = <A, Err, Req>(
   effect: Effect.Effect<A, Err, Req>,
 ): Effect.Effect<Plan.Plan<A>, Err, State> =>
-  // @ts-expect-error - Stack.make's typing erases R unsoundly here
   effect.pipe(
-    // @ts-expect-error
+    // @ts-expect-error - Stack.make's typing erases R unsoundly here
     Stack.make({
       name: "test",
       providers: Layer.empty,
