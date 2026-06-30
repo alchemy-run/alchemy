@@ -9,7 +9,11 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import WfpPlatformWorker from "./fixtures/platform-worker.ts";
-import { DispatchNs, userWorkerScript } from "./fixtures/shared.ts";
+import {
+  AsyncPlatformWorker,
+  DispatchNs,
+  userWorkerScript,
+} from "./fixtures/shared.ts";
 
 /**
  * End-to-end test for the Workers for Platforms dynamic-dispatch binding
@@ -50,8 +54,10 @@ const Stack = Alchemy.Stack(
       script: userWorkerScript,
     });
     const platformWorker = yield* WfpPlatformWorker;
+    const asyncPlatformWorker = yield* AsyncPlatformWorker;
     return {
       platformUrl: platformWorker.url.as<string>(),
+      asyncPlatformUrl: asyncPlatformWorker.url.as<string>(),
       userWorkerName: userWorker.workerName.as<string>(),
     };
   }),
@@ -89,21 +95,25 @@ const untilOk = <E, R>(
 const stack = beforeAll(
   WFP_ENABLED
     ? deploy(Stack)
-    : Effect.succeed({ platformUrl: "", userWorkerName: "" }),
+    : Effect.succeed({
+        platformUrl: "",
+        asyncPlatformUrl: "",
+        userWorkerName: "",
+      }),
   { timeout: HOOK_TIMEOUT },
 );
 afterAll.skipIf(!WFP_ENABLED || !!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: HOOK_TIMEOUT,
 });
 
-test.skipIf(!WFP_ENABLED)(
-  "platform worker dispatches to a user worker in the namespace",
+// Drive one platform worker base URL: dispatch to `scriptName`, assert the
+// request reached the dispatched user worker (not the platform worker's own
+// fallback) and that the path + header were forwarded.
+const assertDispatch = (base: string, scriptName: string) =>
   Effect.gen(function* () {
-    const { platformUrl, userWorkerName } = yield* stack;
     const client = yield* HttpClient.HttpClient;
-
     const res = yield* untilOk(
-      client.get(`${platformUrl}/dispatch/${userWorkerName}/hello`, {
+      client.get(`${base}/dispatch/${scriptName}/hello`, {
         headers: { "x-custom": "ping" },
       }),
     );
@@ -114,11 +124,27 @@ test.skipIf(!WFP_ENABLED)(
       path: string;
       customHeader: string;
     };
-    // Proves the request reached the dispatched user worker — not the platform
-    // worker's own fallback route.
     expect(body.handledBy).toBe("user-worker");
     expect(body.path).toBe("/hello");
     expect(body.customHeader).toBe("ping");
+  });
+
+// Effect-native platform worker: binds the namespace via `Get`.
+test.skipIf(!WFP_ENABLED)(
+  "Get binding dispatches to a user worker in the namespace",
+  Effect.gen(function* () {
+    const { platformUrl, userWorkerName } = yield* stack;
+    yield* assertDispatch(platformUrl, userWorkerName);
+  }).pipe(logLevel),
+  { timeout: TEST_TIMEOUT },
+);
+
+// Async platform worker: binds the namespace via `env: { DISPATCH }` + InferEnv.
+test.skipIf(!WFP_ENABLED)(
+  "env binding (InferEnv) dispatches to a user worker in the namespace",
+  Effect.gen(function* () {
+    const { asyncPlatformUrl, userWorkerName } = yield* stack;
+    yield* assertDispatch(asyncPlatformUrl, userWorkerName);
   }).pipe(logLevel),
   { timeout: TEST_TIMEOUT },
 );
