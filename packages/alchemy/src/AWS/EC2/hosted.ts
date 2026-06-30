@@ -155,26 +155,14 @@ export const createEc2HostedSupport = ({
           input: entry,
           cwd,
           platform: "node",
-          // The hosted process runs under `bun` (installed by the user-data);
-          // keep `bun`/`bun:*` external and resolve the `bun` export condition
-          // so `@effect/platform-bun` picks its Bun implementations.
-          external: [
-            "bun",
-            "bun:*",
-            ...((props.build?.input?.external as string[] | undefined) ?? []),
-          ],
-          resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
-            ...props.build?.input?.resolve,
-          },
           plugins: [props.build?.input?.plugins, plugins],
         },
         {
           ...props.build?.output,
           format: "esm",
           sourcemap: props.build?.output?.sourcemap ?? false,
-          minify: props.build?.output?.minify ?? false,
-          entryFileNames: "index.mjs",
+          minify: props.build?.output?.minify ?? true,
+          entryFileNames: "index.js",
         },
       );
     });
@@ -185,8 +173,7 @@ export const createEc2HostedSupport = ({
           realMain,
           virtualEntryPlugin(
             (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
+import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -200,14 +187,11 @@ import * as Region from "@distilled.cloud/aws/Region";
 import { ${handler} as handler } from ${JSON.stringify(importPath)};
 
 const platform = Layer.mergeAll(
-  BunServices.layer,
+  NodeServices.layer,
   FetchHttpClient.layer,
   Logger.layer([Logger.consolePretty()]),
 );
 
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT, so a returned { fetch }
-// handler is actually served and host.run loops stay alive.
 const program = handler.pipe(
   Effect.flatMap((instance) => instance.RuntimeContext.exports),
   Effect.flatMap((exports) => exports.program),
@@ -228,7 +212,6 @@ const program = handler.pipe(
     ).pipe(
       Layer.provideMerge(Credentials.fromEnv()),
       Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(
@@ -241,28 +224,18 @@ const program = handler.pipe(
   Effect.scoped
 );
 
-console.log("Instance bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Instance bootstrap failed:", err);
-  process.exit(1);
-});
+await Effect.runPromise(program);
 `,
           ),
         );
 
-    // Zip every emitted file: the entry becomes `index.mjs` (what the systemd
-    // unit runs) and shared chunks keep their `*.js` names so the entry's
-    // relative imports resolve. Dropping a chunk crashes the process at start.
-    const toBytes = (content: string | Uint8Array<ArrayBufferLike>) =>
-      typeof content === "string" ? new TextEncoder().encode(content) : content;
-    const [entryFile, ...chunkFiles] = bundleOutput.files;
-    const archive = yield* zipCode(
-      toBytes(entryFile.content),
-      chunkFiles.map((file) => ({
-        path: file.path,
-        content: toBytes(file.content),
-      })),
-    );
+    const mainFile = bundleOutput.files[0];
+    const code =
+      typeof mainFile.content === "string"
+        ? new TextEncoder().encode(mainFile.content)
+        : mainFile.content;
+
+    const archive = yield* zipCode(code);
     return { archive, hash: bundleOutput.hash };
   });
 
