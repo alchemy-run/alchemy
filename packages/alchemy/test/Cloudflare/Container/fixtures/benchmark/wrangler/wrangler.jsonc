@@ -11,6 +11,11 @@
       "class_name": "BenchContainer",
       "image": "./Dockerfile",
       "max_instances": 100
+    },
+    {
+      "class_name": "CrashContainer",
+      "image": "./Dockerfile.crash",
+      "max_instances": 100
     }
   ],
   "durable_objects": {
@@ -18,6 +23,10 @@
       {
         "class_name": "BenchContainer",
         "name": "BENCH_CONTAINER"
+      },
+      {
+        "class_name": "CrashContainer",
+        "name": "CRASH_CONTAINER"
       }
     ]
   },
@@ -25,6 +34,10 @@
     {
       "new_sqlite_classes": ["BenchContainer"],
       "tag": "v1"
+    },
+    {
+      "new_sqlite_classes": ["CrashContainer"],
+      "tag": "v2"
     }
   ]
 }
