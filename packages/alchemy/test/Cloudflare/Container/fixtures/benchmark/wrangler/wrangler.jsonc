@@ -1,0 +1,30 @@
+{
+  "name": "alchemy-bench-containers-wrangler",
+  "main": "worker.ts",
+  "compatibility_date": "2026-06-29",
+  // A single container class, backed by a Durable Object. Each
+  // `getContainer(binding, name)` is a distinct DO instance and therefore a
+  // distinct container instance — the benchmark drives N distinct names to
+  // spin up N containers. `max_instances` must be >= the largest N we test.
+  "containers": [
+    {
+      "class_name": "BenchContainer",
+      "image": "./Dockerfile",
+      "max_instances": 100
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "BenchContainer",
+        "name": "BENCH_CONTAINER"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "new_sqlite_classes": ["BenchContainer"],
+      "tag": "v1"
+    }
+  ]
+}

@@ -1,6 +1,5 @@
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as STS from "@distilled.cloud/aws/sts";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -18,6 +17,7 @@ import {
   type ConfigureContext,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
+import * as Region from "./Region.ts";
 import {
   getEnv,
   getEnvRedacted,
@@ -117,7 +117,7 @@ export const AwsAuth = AuthProviderLayer<
             // ambient Region provider (Region.fromEnvironment) here would
             // deadlock: it derives the region from AWSEnvironment, which is the
             // very service still being constructed by this STS call.
-            Layer.succeed(Region, Effect.succeed(region)),
+            Region.of(region),
           ),
         ),
         Effect.flatMap((self) =>
