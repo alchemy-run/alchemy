@@ -1,17 +1,18 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
-import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { PlatformProps } from "../../Platform.ts";
 import type { ResourceBinding } from "../../Resource.ts";
-import type { ProcessContext } from "../../Server/Process.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+} from "../../Server/Process.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
@@ -72,55 +73,12 @@ export interface Ec2HostedCleanupState {
 
 /**
  * Deploy-time / plan-time host context for EC2-backed platforms that bundle a
- * long-lived program (`exports.program`) and collect background work via `run`.
+ * long-lived program (`exports.program`) and collect background work via `run`
+ * / HTTP handlers via `serve`. Alias of the shared {@link HostRuntimeContext}.
  */
-export interface Ec2HostRuntimeContext extends ProcessContext {
-  exports: Effect.Effect<{
-    readonly program: Effect.Effect<void, never, any>;
-  }>;
-}
+export type Ec2HostRuntimeContext = HostRuntimeContext;
 
-export const createEc2HostRuntimeContext =
-  (type: string) =>
-  (id: string): Ec2HostRuntimeContext => {
-    const runners: Effect.Effect<void, never, any>[] = [];
-    const env: Record<string, any> = {};
-
-    return {
-      Type: type,
-      id,
-      env,
-      set: (bindingId: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        Config.string(key).pipe(
-          Effect.flatMap((value) =>
-            Effect.try({
-              try: () => JSON.parse(value) as T,
-              catch: (error) => error as Error,
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
-              }),
-            ),
-          ),
-        ),
-      run: (effect: Effect.Effect<void, never, any>) =>
-        Effect.sync(() => {
-          runners.push(effect);
-        }),
-      exports: Effect.sync(() => ({
-        program: Effect.all(runners, { concurrency: "unbounded" }),
-      })),
-    } satisfies Ec2HostRuntimeContext;
-  };
+export const createEc2HostRuntimeContext = createHostRuntimeContext;
 
 export const createEc2HostedSupport = ({
   stackName,
@@ -235,7 +193,8 @@ const platform = Layer.mergeAll(
 );
 
 const program = handler.pipe(
-  Effect.flatMap((instance) => instance.RuntimeContext.exports.program),
+  Effect.flatMap((instance) => instance.RuntimeContext.exports),
+  Effect.flatMap((exports) => exports.program),
   Effect.provide(
     Layer.effect(
       Stack,

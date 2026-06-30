@@ -21,6 +21,7 @@ import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
+import { ServerHost, type ProcessContext } from "./Server/Process.ts";
 import {
   CurrentRuntimeContext,
   RuntimeContext,
@@ -437,6 +438,18 @@ export const Platform = <
                         Layer.succeed(Platform.Platform, runtimeContext),
                         Layer.succeed(PlatformContext, runtimeContext),
                         Layer.succeed(RuntimeContext, runtimeContext),
+                        // Host contexts (EC2 instances, ECS tasks, processes)
+                        // carry a `run` for registering long-running loops.
+                        // Expose it as `ServerHost` so an inline program can
+                        // `yield* ServerHost` during plan/deploy without the
+                        // caller providing the layer itself.
+                        "run" in runtimeContext &&
+                          typeof (runtimeContext as { run?: unknown }).run ===
+                            "function"
+                          ? Layer.succeed(ServerHost, {
+                              run: (runtimeContext as ProcessContext).run,
+                            })
+                          : Layer.empty,
                         Layer.succeed(resource.Self, instance),
                         Layer.succeed(Platform.Self, instance),
                         Layer.succeed(Self, instance),
