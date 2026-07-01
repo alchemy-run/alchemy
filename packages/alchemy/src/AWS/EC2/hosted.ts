@@ -6,6 +6,7 @@ import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { PlatformProps } from "../../Platform.ts";
 import type { ResourceBinding } from "../../Resource.ts";
@@ -28,7 +29,7 @@ export interface Ec2HostedBinding {
 export interface Ec2HostedProps extends PlatformProps {
   imageId: string;
   instanceType: string;
-  keyName?: string;
+  keyName?: Input<string>;
   instanceProfileName?: string;
   userData?: string;
   subnetId?: any;
@@ -832,7 +833,7 @@ systemctl enable --now ${unitName}.service
     return {
       ImageId: news.imageId,
       InstanceType: news.instanceType,
-      KeyName: news.keyName,
+      KeyName: news.keyName as string | undefined,
       IamInstanceProfile: runtime.instanceProfileName
         ? {
             Name: runtime.instanceProfileName,

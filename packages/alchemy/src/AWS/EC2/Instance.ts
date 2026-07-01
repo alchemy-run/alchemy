@@ -70,9 +70,10 @@ export interface InstanceProps extends PlatformProps {
    */
   securityGroupIds?: Input<SecurityGroupId>[];
   /**
-   * Optional EC2 key pair name for SSH access.
+   * Optional EC2 key pair name for SSH access. Accepts a reference such as
+   * `AWS.EC2.KeyPair(...).keyName`.
    */
-  keyName?: string;
+  keyName?: Input<string>;
   /**
    * Optional IAM instance profile name to attach at launch.
    */
@@ -555,7 +556,7 @@ export const InstanceProvider = () =>
             {
               imageId: news.imageId,
               instanceType: news.instanceType,
-              keyName: news.keyName,
+              keyName: news.keyName as string | undefined,
               subnetId: news.subnetId as string | undefined,
               securityGroupIds: news.securityGroupIds as string[] | undefined,
               associatePublicIpAddress: news.associatePublicIpAddress,

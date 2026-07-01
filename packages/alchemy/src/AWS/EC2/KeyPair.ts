@@ -156,7 +156,11 @@ export const KeyPairProvider = () =>
           const info = yield* describeByName(keyName);
           if (!info?.KeyPairId) return undefined;
           const tags = yield* createInternalTags(id);
-          if (!hasTags(tags, info.Tags)) {
+          const observedTags: Record<string, string | undefined> =
+            Object.fromEntries(
+              (info.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
+            );
+          if (!hasTags(tags, observedTags)) {
             // Exists but unbranded — let the engine gate adoption behind --adopt.
             return Unowned({
               keyPairId: info.KeyPairId as KeyPairId,
@@ -306,11 +310,9 @@ export const KeyPairProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* ec2
-            .deleteKeyPair({ KeyPairId: output.keyPairId })
-            .pipe(
-              Effect.catchTag("InvalidKeyPair.NotFound", () => Effect.void),
-            );
+          // `deleteKeyPair` is idempotent — deleting a missing key pair
+          // succeeds, so there is no NotFound error to catch.
+          yield* ec2.deleteKeyPair({ KeyPairId: output.keyPairId });
         }),
       };
     }),

@@ -35,17 +35,23 @@ export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
     // branch (and the AWS SDK it pulls in) is dead-code-eliminated from the
     // image.
     if (globalThis.__ALCHEMY_RUNTIME__) {
+      // Only the required props need a value here; the infra-derived ones
+      // (subnetId / securityGroupIds / …) are unused at runtime and are left
+      // unset so the stub still satisfies `InstanceProps`.
       return {
         main: import.meta.filename,
         imageId: "",
         instanceType: "t3.small",
-        subnetId: "",
-        securityGroupIds: [],
         port: 3000,
       };
     }
 
     const imageId = yield* AWS.EC2.amazonLinux2023();
+    if (!imageId) {
+      return yield* Effect.die(
+        new Error("could not resolve an Amazon Linux 2023 AMI"),
+      );
+    }
     const network = yield* AWS.EC2.Network("Ec2E2ENetwork", {
       cidrBlock: "10.81.0.0/16",
       availabilityZones: 1,
