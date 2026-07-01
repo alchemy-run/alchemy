@@ -25,16 +25,16 @@ export interface HandlerOptions extends AliasParserOptions {
 }
 
 const bindings = Layer.mergeAll(
-  Cloudflare.R2BucketBindingLive,
-  Cloudflare.KVNamespaceBindingLive,
-  Cloudflare.SecretBindingLive,
+  Cloudflare.R2.ReadWriteBucketBinding,
+  Cloudflare.KV.ReadWriteNamespaceBinding,
+  Cloudflare.SecretsStore.ReadSecretBinding,
 );
 
 /**
  * Init effect for a pr-package worker. Pass as the third argument to
  * `Cloudflare.Worker<X>()(...)` in your stack file.
  *
- * The user's stack file must be the worker entry (`main: import.meta.filename`)
+ * The user's stack file must be the worker entry (`main: import.meta.url`)
  * because `parseAliasUrl` is a closure that has to live in the bundle.
  *
  * @example
@@ -43,7 +43,7 @@ const bindings = Layer.mergeAll(
  *
  * class Api extends Cloudflare.Worker<Api>()(
  *   "Api",
- *   { main: import.meta.filename, url: true, ... },
+ *   { main: import.meta.url, url: true, ... },
  *   PrPackage.handler({
  *     parseAliasUrl: (url) => ({ pkgName: "...", tag: "..." }),
  *   }),
@@ -52,9 +52,11 @@ const bindings = Layer.mergeAll(
  */
 export const handler = (options: HandlerOptions = {}) =>
   Effect.gen(function* () {
-    const r2 = yield* Cloudflare.R2Bucket.bind(yield* Bucket);
-    const kv = yield* Cloudflare.KVNamespace.bind(yield* TagIndex);
-    const authToken = yield* Cloudflare.Secret.bind(yield* AuthToken);
+    const r2 = yield* Cloudflare.R2.ReadWriteBucket(yield* Bucket);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(yield* TagIndex);
+    const authToken = yield* Cloudflare.SecretsStore.ReadSecret(
+      yield* AuthToken,
+    );
     const packages = yield* PackageStore;
 
     const parseAliasUrl: ParseAliasUrl = options.parseAliasUrl ?? (() => null);

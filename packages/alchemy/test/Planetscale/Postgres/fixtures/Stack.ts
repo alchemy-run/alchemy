@@ -33,7 +33,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
 
 export const Hyperdrive = Effect.gen(function* () {
   const { role } = yield* PlanetscaleDb;
-  return yield* Cloudflare.Hyperdrive("HyperdriveTestEdge", {
+  return yield* Cloudflare.Hyperdrive.Connection("HyperdriveTestEdge", {
     origin: role.origin,
     // The test asserts read-your-writes across separate HTTP requests;
     // Hyperdrive's query cache (60s default) would serve stale SELECTs.

@@ -394,7 +394,7 @@ export interface Distribution extends Resource<
  * `Distribution` manages the CDN layer for static sites and HTTP origins such
  * as Lambda Function URLs and ALBs. It exposes the distribution domain and
  * hosted zone ID needed for Route 53 alias records.
- *
+ * @resource
  * @section Creating Distributions
  * @example Private S3 Origin
  * ```typescript
@@ -570,7 +570,7 @@ export const DistributionProvider = () =>
         ).pipe(
           Effect.andThen(() => getCurrent(distributionId)),
           Effect.flatMap(
-            Effect.fnUntraced(function* (current) {
+            Effect.fn(function* (current) {
               if (!current) {
                 yield* Effect.logInfo(
                   `CloudFront Distribution delete: ${distributionId} already absent while waiting`,
@@ -658,6 +658,21 @@ export const DistributionProvider = () =>
               summaries,
               (summary) =>
                 getCurrent(summary.Id).pipe(
+                  // Hydrating every distribution fires three read calls each
+                  // (getDistribution + getDistributionConfig +
+                  // listTagsForResource). Across a busy account that trips
+                  // CloudFront's low read throttle, so ride it out.
+                  Effect.retry({
+                    while: (error) => error._tag === "ThrottlingException",
+                    // Steady, capped backoff: CloudFront's read throttle
+                    // resets quickly, so a fixed cadence drains far faster
+                    // than an exponential whose tail delay can balloon past
+                    // the test budget on a busy account.
+                    schedule: Schedule.spaced("1 second").pipe(
+                      Schedule.jittered,
+                      Schedule.both(Schedule.recurs(30)),
+                    ),
+                  }),
                   Effect.map((current) =>
                     current
                       ? toAttrs(

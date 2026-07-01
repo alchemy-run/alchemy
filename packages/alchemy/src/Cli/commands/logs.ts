@@ -62,7 +62,7 @@ export const logsCommand = Command.make(
       "alchemy.limit": a.limit,
     }),
   )(
-    Effect.fnUntraced(function* ({
+    Effect.fn(function* ({
       main,
       stage,
       envFile,

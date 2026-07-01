@@ -1,6 +1,7 @@
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -8,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const RegionalTieredCacheTypeId =
-  "Cloudflare.Cache.RegionalTieredCache" as const;
-type RegionalTieredCacheTypeId = typeof RegionalTieredCacheTypeId;
+const TypeId = "Cloudflare.Cache.RegionalTieredCache" as const;
+type TypeId = typeof TypeId;
 
 export interface RegionalTieredCacheProps {
   /**
@@ -48,7 +48,7 @@ export interface RegionalTieredCacheAttributes {
 }
 
 export type RegionalTieredCache = Resource<
-  RegionalTieredCacheTypeId,
+  TypeId,
   RegionalTieredCacheProps,
   RegionalTieredCacheAttributes,
   never,
@@ -75,20 +75,22 @@ export type RegionalTieredCache = Resource<
  *
  * Only one `RegionalTieredCache` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
- *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  * @section Managing Regional Tiered Cache
  * @example Enable Regional Tiered Cache on an Enterprise zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.RegionalTieredCache("RegionalCache", {
+ * yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Regional Tiered Cache
  * ```typescript
- * yield* Cloudflare.RegionalTieredCache("RegionalCache", {
+ * yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -96,9 +98,7 @@ export type RegionalTieredCache = Resource<
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/#regional-tiered-cache
  */
-export const RegionalTieredCache = Resource<RegionalTieredCache>(
-  RegionalTieredCacheTypeId,
-);
+export const RegionalTieredCache = Resource<RegionalTieredCache>(TypeId);
 
 /**
  * Returns true if the given value is a RegionalTieredCache resource.
@@ -106,11 +106,18 @@ export const RegionalTieredCache = Resource<RegionalTieredCache>(
 export const isRegionalTieredCache = (
   value: unknown,
 ): value is RegionalTieredCache =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RegionalTieredCacheTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
   (props.enabled ?? true) ? "on" : "off";
+
+// Cloudflare can transiently fail to authenticate a valid token, surfacing as
+// `Unauthorized`/`Forbidden`. Retry with exponential backoff capped at 5s,
+// bounded to ~8 attempts so a persistently-failing call still fails fast.
+const transientAuthRetrySchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("5 seconds")),
+  Schedule.both(Schedule.recurs(8)),
+);
 
 export const RegionalTieredCacheProvider = () =>
   Provider.succeed(RegionalTieredCache, {
@@ -127,6 +134,15 @@ export const RegionalTieredCacheProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           cache.getRegionalTieredCache({ zoneId }).pipe(
+            // Cloudflare intermittently rejects a *valid* token with
+            // `Unauthorized`/`Forbidden` (a transient edge auth failure).
+            // Retry with capped backoff rather than dropping the zone, so a
+            // genuinely accessible zone never falls out of the enumeration on
+            // a blip.
+            Effect.retry({
+              while: (e) => e._tag === "Unauthorized" || e._tag === "Forbidden",
+              schedule: transientAuthRetrySchedule,
+            }),
             Effect.map((observed) =>
               toAttributes(zoneId, observed, observed.value),
             ),

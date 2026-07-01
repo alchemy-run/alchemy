@@ -11,9 +11,8 @@ import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccountResourceTagsTypeId =
-  "Cloudflare.Tags.AccountResourceTags" as const;
-type AccountResourceTagsTypeId = typeof AccountResourceTagsTypeId;
+const TypeId = "Cloudflare.Tags.AccountResourceTags" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Account-level resource types that can carry tags via Cloudflare's unified
@@ -95,7 +94,7 @@ export interface AccountResourceTagsAttributes {
 }
 
 export type AccountResourceTags = Resource<
-  AccountResourceTagsTypeId,
+  TypeId,
   AccountResourceTagsProps,
   AccountResourceTagsAttributes,
   never,
@@ -115,13 +114,15 @@ export type AccountResourceTags = Resource<
  * a non-empty tag set on the target resource is reported as `Unowned`, and
  * the engine refuses to take it over (i.e. clobber the existing tags)
  * unless `--adopt` or `adopt(true)` is set.
- *
+ * @resource
+ * @product Resource Tagging
+ * @category Account & Identity
  * @section Tagging a resource
  * @example Tag a KV namespace
  * ```typescript
- * const kv = yield* Cloudflare.KVNamespace("cache", {});
+ * const kv = yield* Cloudflare.KV.Namespace("cache", {});
  *
- * yield* Cloudflare.AccountResourceTags("cache-tags", {
+ * yield* Cloudflare.Tags.AccountResourceTags("cache-tags", {
  *   resourceType: "kv_namespace",
  *   resourceId: kv.namespaceId,
  *   tags: { team: "platform", env: "production" },
@@ -130,7 +131,7 @@ export type AccountResourceTags = Resource<
  *
  * @example Tag the account itself
  * ```typescript
- * yield* Cloudflare.AccountResourceTags("account-tags", {
+ * yield* Cloudflare.Tags.AccountResourceTags("account-tags", {
  *   resourceType: "account",
  *   resourceId: accountId,
  *   tags: { "cost-center": "eng-42" },
@@ -139,9 +140,7 @@ export type AccountResourceTags = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/account/tags/
  */
-export const AccountResourceTags = Resource<AccountResourceTags>(
-  AccountResourceTagsTypeId,
-);
+export const AccountResourceTags = Resource<AccountResourceTags>(TypeId);
 
 /**
  * Returns true if the given value is an AccountResourceTags resource.
@@ -149,8 +148,7 @@ export const AccountResourceTags = Resource<AccountResourceTags>(
 export const isAccountResourceTags = (
   value: unknown,
 ): value is AccountResourceTags =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AccountResourceTagsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountResourceTagsProvider = () =>
   Provider.succeed(AccountResourceTags, {

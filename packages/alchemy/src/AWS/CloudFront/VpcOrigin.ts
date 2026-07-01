@@ -108,7 +108,7 @@ export interface VpcOrigin extends Resource<
  * Load Balancer, Network Load Balancer, or EC2 instance inside a VPC without
  * exposing it to the public internet. Reference the resulting `vpcOriginId`
  * from a distribution origin's `vpcOriginConfig`.
- *
+ * @resource
  * @section Creating VPC Origins
  * @example Private ALB Origin
  * ```typescript

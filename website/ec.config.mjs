@@ -31,8 +31,22 @@ const twoslashPlugins = [
         moduleResolution: /** @type {any} */ (100), // Bundler
         module: /** @type {any} */ (99), // ESNext
         target: /** @type {any} */ (9), // ES2022
+        lib: ["esnext", "dom"],
         strict: true,
         types: ["bun"],
+        // Mirror the repo's tsconfig.base.json so samples resolve the
+        // `alchemy` source the same way the package itself is typechecked.
+        // `allowImportingTsExtensions` is required because the alchemy
+        // sources import sibling modules with explicit `.ts` extensions;
+        // without it those imports fail to resolve and inference collapses
+        // to `unknown` (e.g. `Cloudflare.providers()` losing its
+        // `StackServices` requirement). `skipLibCheck` avoids spurious
+        // global type conflicts (e.g. @cloudflare/workers-types vs DOM).
+        allowImportingTsExtensions: true,
+        rewriteRelativeImportExtensions: true,
+        skipLibCheck: true,
+        esModuleInterop: true,
+        resolveJsonModule: true,
         baseUrl,
         paths: {
           alchemy: ["./packages/alchemy/src/index.ts"],

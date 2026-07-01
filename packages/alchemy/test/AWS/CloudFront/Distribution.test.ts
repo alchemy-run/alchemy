@@ -116,18 +116,24 @@ describe("AWS.CloudFront.Distribution", () => {
   // Attributes. This runs without deploying anything (distribution create +
   // disable-before-delete exceeds CI budget — see the gated full test below),
   // so it verifies the live list op cheaply.
-  test.provider("list enumerates account distributions", () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(Distribution);
-      const all = yield* provider.list();
+  test.provider(
+    "list enumerates account distributions",
+    () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(Distribution);
+        const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      for (const item of all) {
-        expect(item.distributionId).toBeDefined();
-        expect(item.distributionArn).toBeDefined();
-        expect(item.domainName).toBeDefined();
-      }
-    }),
+        expect(Array.isArray(all)).toBe(true);
+        for (const item of all) {
+          expect(item.distributionId).toBeDefined();
+          expect(item.distributionArn).toBeDefined();
+          expect(item.domainName).toBeDefined();
+        }
+      }),
+    // Hydrating every distribution in a busy account (3 read calls each)
+    // under CloudFront's aggressive read throttle takes a while even with
+    // the provider's bounded retry — give it ample headroom.
+    { timeout: 300_000 },
   );
 
   // Full lifecycle: deploy a real distribution, assert it shows up in the

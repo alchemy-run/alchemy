@@ -6,10 +6,11 @@ import * as Predicate from "effect/Predicate";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
+import { Artifacts, ArtifactStore, makeScopedArtifacts } from "../Artifacts.ts";
 import { InstanceId } from "../InstanceId.ts";
 import type { Platform } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import type { ResourceClass, ResourceLike } from "../Resource.ts";
+import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { RpcProviderProxy } from "./RpcProviderProxy.ts";
@@ -164,7 +165,7 @@ export const effect = <
   LogsReq = never,
   ListReq = never,
 >(
-  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   serverEntryUrl: string,
   eff: Effect.Effect<
     RpcProviderService<
@@ -188,6 +189,7 @@ export const effect = <
       const client = yield* Effect.serviceOption(RpcProviderProxy);
       const context = yield* Effect.context();
       const stack = yield* Stack;
+      const store = yield* ArtifactStore;
 
       if (client._tag === "None") {
         const provider = withDefaultList(yield* eff);
@@ -203,7 +205,13 @@ export const effect = <
                 layerFallback(Stage, stack.stage),
                 Predicate.hasProperty(args[0], "instanceId") &&
                   Predicate.isString(args[0].instanceId)
-                  ? layerFallback(InstanceId, args[0].instanceId)
+                  ? Layer.merge(
+                      layerFallback(InstanceId, args[0].instanceId),
+                      Layer.succeed(
+                        Artifacts,
+                        makeScopedArtifacts(store, args[0].instanceId),
+                      ),
+                    )
                   : Layer.empty,
               );
               return result.pipe(

@@ -40,6 +40,7 @@ export interface UsagePlanProps {
   tags?: Record<string, string>;
 }
 
+/** @resource */
 export interface UsagePlan extends Resource<
   "AWS.ApiGateway.UsagePlan",
   UsagePlanProps,

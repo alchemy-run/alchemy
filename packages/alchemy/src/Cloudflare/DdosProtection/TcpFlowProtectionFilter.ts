@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TcpFlowProtectionFilterTypeId =
-  "Cloudflare.DdosProtection.TcpFlowProtectionFilter" as const;
-type TcpFlowProtectionFilterTypeId = typeof TcpFlowProtectionFilterTypeId;
+const TypeId = "Cloudflare.DdosProtection.TcpFlowProtectionFilter" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Operating mode of an Advanced TCP Protection filter: the filter applies
@@ -49,7 +48,7 @@ export interface TcpFlowProtectionFilterAttributes {
 }
 
 export type TcpFlowProtectionFilter = Resource<
-  TcpFlowProtectionFilterTypeId,
+  TypeId,
   TcpFlowProtectionFilterProps,
   TcpFlowProtectionFilterAttributes,
   never,
@@ -72,11 +71,13 @@ export type TcpFlowProtectionFilter = Resource<
  * state, `read` scans for an existing filter with the same expression and
  * reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DDoS Protection
+ * @category Network
  * @section Creating a filter
  * @example Scope flow mitigation to HTTPS traffic
  * ```typescript
- * const filter = yield* Cloudflare.TcpFlowProtectionFilter("HttpsOnly", {
+ * const filter = yield* Cloudflare.DdosProtection.TcpFlowProtectionFilter("HttpsOnly", {
  *   expression: "tcp.dstport in {443}",
  *   mode: "enabled",
  * });
@@ -84,7 +85,7 @@ export type TcpFlowProtectionFilter = Resource<
  *
  * @example Exclude a trusted source port
  * ```typescript
- * yield* Cloudflare.TcpFlowProtectionFilter("SkipBgp", {
+ * yield* Cloudflare.DdosProtection.TcpFlowProtectionFilter("SkipBgp", {
  *   expression: "tcp.srcport in {179}",
  *   mode: "disabled",
  * });
@@ -92,9 +93,8 @@ export type TcpFlowProtectionFilter = Resource<
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
  */
-export const TcpFlowProtectionFilter = Resource<TcpFlowProtectionFilter>(
-  TcpFlowProtectionFilterTypeId,
-);
+export const TcpFlowProtectionFilter =
+  Resource<TcpFlowProtectionFilter>(TypeId);
 
 /**
  * Returns true if the given value is a TcpFlowProtectionFilter resource.
@@ -102,8 +102,7 @@ export const TcpFlowProtectionFilter = Resource<TcpFlowProtectionFilter>(
 export const isTcpFlowProtectionFilter = (
   value: unknown,
 ): value is TcpFlowProtectionFilter =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TcpFlowProtectionFilterTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TcpFlowProtectionFilterProvider = () =>
   Provider.succeed(TcpFlowProtectionFilter, {

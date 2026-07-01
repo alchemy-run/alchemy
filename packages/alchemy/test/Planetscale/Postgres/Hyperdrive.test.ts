@@ -31,12 +31,12 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("Hyperdrive", () => {
   /**
    * End-to-end: deploy a {@link Planetscale.PostgresDatabase} + branch +
-   * role, point a {@link Cloudflare.Hyperdrive} at the role's origin, and
+   * role, point a {@link Cloudflare.Hyperdrive.Connection} at the role's origin, and
    * exercise the Drizzle Effect client over real Postgres via a Worker.
    *
    * Validates that:
    *   - migrations applied from the fixtures dir produce the expected table
-   *   - `Cloudflare.Hyperdrive.bind(...) + Drizzle.postgres(...)` produces
+   *   - `Cloudflare.Hyperdrive.Connect(...) + Drizzle.postgres(...)` produces
    *     a working Effect-native client at runtime
    *   - INSERT / SELECT / DELETE round-trip through Hyperdrive to Planetscale
    */

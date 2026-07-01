@@ -136,9 +136,13 @@ it.live(
         );
       }).pipe(Effect.provide(layer));
 
-      expect(result).toBeInstanceOf(secretsStore.MaximumStoresExceeded);
+      // Assert on the tag, not `instanceof`: distilled errors are defined as
+      // `class X extends applyErrorMatchers(Schema.TaggedErrorClass(...))`, so
+      // the decoder constructs instances of the inner schema class — they
+      // carry the right `_tag` but are not `instanceof` the exported subclass.
       const err = result as secretsStore.MaximumStoresExceeded;
       expect(err._tag).toBe("MaximumStoresExceeded");
+      expect(err.code).toBe(1003);
       expect(err.message).toBe("maximum_stores_exceeded");
     }),
 );
@@ -155,11 +159,13 @@ test.provider("list enumerates the deployed secrets store", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.SecretsStore("ListStore");
+        return yield* Cloudflare.SecretsStore.Store("ListStore");
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.SecretsStore);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.SecretsStore.Store,
+    );
     const all = yield* provider.list();
 
     expect(all.length).toBeGreaterThan(0);

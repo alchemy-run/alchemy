@@ -27,7 +27,7 @@ test.provider("create and delete database with default props", (stack) =>
 
     const database = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("DefaultDatabase");
+        return yield* Cloudflare.D1.Database("DefaultDatabase");
       }),
     );
 
@@ -54,7 +54,7 @@ test.provider("create, update, delete database", (stack) =>
 
     const database = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("TestDatabase", {
+        return yield* Cloudflare.D1.Database("TestDatabase", {
           readReplication: { mode: "disabled" },
         });
       }),
@@ -68,7 +68,7 @@ test.provider("create, update, delete database", (stack) =>
 
     const updatedDatabase = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("TestDatabase", {
+        return yield* Cloudflare.D1.Database("TestDatabase", {
           readReplication: { mode: "auto" },
         });
       }),
@@ -110,7 +110,7 @@ test.provider("applies migrations from migrationsDir", (stack) =>
 
     const database = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("MigrationDatabase", {
+        return yield* Cloudflare.D1.Database("MigrationDatabase", {
           migrationsDir,
         });
       }),
@@ -150,7 +150,7 @@ test.provider("applies migrations from migrationsDir", (stack) =>
 
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("MigrationDatabase", {
+        return yield* Cloudflare.D1.Database("MigrationDatabase", {
           migrationsDir,
         });
       }),
@@ -193,7 +193,7 @@ test.provider("applies migrations using a custom migrationsTable", (stack) =>
 
     const database = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("CustomMigrationsTableDb", {
+        return yield* Cloudflare.D1.Database("CustomMigrationsTableDb", {
           migrationsDir,
           migrationsTable: "custom_migration_tracking",
         });
@@ -239,7 +239,7 @@ test.provider(
       // migrationsDir.
       const seeded = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1Database("LegacyMigrationDb");
+          return yield* Cloudflare.D1.Database("LegacyMigrationDb");
         }),
       );
 
@@ -264,7 +264,7 @@ test.provider(
       // the new migrations on top.
       const upgraded = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1Database("LegacyMigrationDb", {
+          return yield* Cloudflare.D1.Database("LegacyMigrationDb", {
             migrationsDir,
           });
         }),
@@ -327,7 +327,7 @@ test.provider("imports SQL files via importFiles", (stack) =>
 
     const database = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.D1Database("ImportDatabase", {
+        return yield* Cloudflare.D1.Database("ImportDatabase", {
           importFiles: [importPath],
         });
       }),
@@ -372,10 +372,10 @@ test.provider("clones a database by databaseId", (stack) =>
 
     const { source, target } = yield* stack.deploy(
       Effect.gen(function* () {
-        const source = yield* Cloudflare.D1Database("CloneByIdSource", {
+        const source = yield* Cloudflare.D1.Database("CloneByIdSource", {
           importFiles: [seedPath],
         });
-        const target = yield* Cloudflare.D1Database("CloneByIdTarget", {
+        const target = yield* Cloudflare.D1.Database("CloneByIdTarget", {
           clone: { databaseId: source.databaseId },
         });
         return { source, target };
@@ -423,10 +423,10 @@ test.provider("clones a database by name lookup", (stack) =>
 
     const { source, target } = yield* stack.deploy(
       Effect.gen(function* () {
-        const source = yield* Cloudflare.D1Database("CloneByNameSource", {
+        const source = yield* Cloudflare.D1.Database("CloneByNameSource", {
           importFiles: [seedPath],
         });
-        const target = yield* Cloudflare.D1Database("CloneByNameTarget", {
+        const target = yield* Cloudflare.D1.Database("CloneByNameTarget", {
           clone: { name: source.databaseName },
         });
         return { source, target };
@@ -475,10 +475,10 @@ test.provider(
 
       const { source, target } = yield* stack.deploy(
         Effect.gen(function* () {
-          const source = yield* Cloudflare.D1Database("CloneDirectSource", {
+          const source = yield* Cloudflare.D1.Database("CloneDirectSource", {
             importFiles: [seedPath],
           });
-          const target = yield* Cloudflare.D1Database("CloneDirectTarget", {
+          const target = yield* Cloudflare.D1.Database("CloneDirectTarget", {
             clone: source,
           });
           return { source, target };
@@ -569,7 +569,7 @@ test.provider(
       // Phase 1: deploy normally so a real D1 database exists.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1Database("AdoptableDatabase", {
+          return yield* Cloudflare.D1.Database("AdoptableDatabase", {
             name: databaseName,
           });
         }),
@@ -592,7 +592,7 @@ test.provider(
       // attrs — silent adoption.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1Database("AdoptableDatabase", {
+          return yield* Cloudflare.D1.Database("AdoptableDatabase", {
             name: databaseName,
           });
         }),

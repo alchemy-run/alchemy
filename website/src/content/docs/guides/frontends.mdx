@@ -5,14 +5,14 @@ sidebar:
   order: 5
 ---
 
-`Cloudflare.Vite` covers TanStack Start, Astro, SolidStart, Nuxt, and
-plain React. `Cloudflare.StaticSite` wraps any custom build pipeline
+`Cloudflare.Website.Vite` covers TanStack Start, Astro, SolidStart, Nuxt, and
+plain React. `Cloudflare.Website.StaticSite` wraps any custom build pipeline
 — Hugo, Eleventy, mdBook, Jekyll. One declaration. Alchemy builds
 and deploys to Cloudflare.
 
 ## Vite-based frameworks
 
-`Cloudflare.Vite` uses Cloudflare's Vite plugin to build the server
+`Cloudflare.Website.Vite` uses Cloudflare's Vite plugin to build the server
 bundle and client assets in one `vite build`. No manual entrypoint,
 no Wrangler config, no asset directory plumbing. Inputs are
 content-hashed so unchanged projects skip the build entirely.
@@ -22,7 +22,7 @@ content-hashed so unchanged projects skip the build entirely.
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const App = Cloudflare.Vite("App", {
+export const App = Cloudflare.Website.Vite("App", {
   compatibility: { flags: ["nodejs_compat"] },
 });
 ```
@@ -33,7 +33,7 @@ export const App = Cloudflare.Vite("App", {
 import * as Cloudflare from "alchemy/Cloudflare";
 
 // Astro builds via Vite — one declaration, static or SSR.
-export const Site = Cloudflare.Vite("Site");
+export const Site = Cloudflare.Website.Vite("Site");
 ```
 
 **React + Vite**
@@ -41,7 +41,7 @@ export const Site = Cloudflare.Vite("Site");
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const App = Cloudflare.Vite("App");
+export const App = Cloudflare.Website.Vite("App");
 ```
 
 - **SSR with `nodejs_compat`** — For frameworks that need Node APIs
@@ -55,7 +55,7 @@ export const App = Cloudflare.Vite("App");
 
 ## Static sites with any build pipeline
 
-For everything Vite doesn't build, `Cloudflare.StaticSite` runs a
+For everything Vite doesn't build, `Cloudflare.Website.StaticSite` runs a
 shell command, hashes the output directory, and deploys the result
 as a Worker with static assets:
 
@@ -64,7 +64,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 
 // Any custom build pipeline — point command at the script,
 // outdir at the output directory.
-export const Blog = Cloudflare.StaticSite("Blog", {
+export const Blog = Cloudflare.Website.StaticSite("Blog", {
   command: "hugo --minify",
   outdir: "public",
 });
@@ -84,7 +84,7 @@ functions and loaders read a typed `env` with no extra wiring.
 import { Bucket } from "./Bucket.ts";
 import { DB } from "./DB.ts";
 
-export const App = Cloudflare.Vite("App", {
+export const App = Cloudflare.Website.Vite("App", {
   env: { Bucket, DB },
 });
 

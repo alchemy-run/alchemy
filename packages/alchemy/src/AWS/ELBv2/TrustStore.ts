@@ -45,7 +45,7 @@ export interface TrustStore extends Resource<
  * An ELBv2 trust store. A trust store holds the CA certificate bundle used by
  * an HTTPS listener configured for mutual TLS (mTLS) `verify` mode to validate
  * client certificates.
- *
+ * @resource
  * @section Creating a Trust Store
  * @example Basic trust store from an S3 CA bundle
  * ```typescript

@@ -67,10 +67,10 @@ describe.sequential("EmailRule", () => {
 
         const rule = yield* stack.deploy(
           Effect.gen(function* () {
-            const routing = yield* Cloudflare.EmailRouting("Routing", {
+            const routing = yield* Cloudflare.Email.Routing("Routing", {
               zone: zoneName,
             });
-            return yield* Cloudflare.EmailRule("ListRule", {
+            return yield* Cloudflare.Email.Rule("ListRule", {
               zone: { zoneId: routing.zoneId },
               name: "alchemy list test",
               matchers: [
@@ -88,8 +88,18 @@ describe.sequential("EmailRule", () => {
         expect(rule.zoneId).toEqual(zoneId);
         expect(rule.ruleId).not.toEqual("");
 
-        const provider = yield* Provider.findProvider(Cloudflare.EmailRule);
-        const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(Cloudflare.Email.Rule);
+        // The freshly-minted scoped token propagates eventually-consistently,
+        // so the account-wide enumeration intermittently 401s (`Unauthorized`,
+        // code 10000) or 403s (`Forbidden`). Both are transient here — ride
+        // out the blip like every other out-of-band call in this suite.
+        const all = yield* provider.list().pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+        );
 
         const row = all.find((r) => r.ruleId === rule.ruleId);
         expect(row).toBeDefined();

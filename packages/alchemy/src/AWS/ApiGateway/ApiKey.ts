@@ -53,6 +53,7 @@ export interface ApiKeyProps {
   tags?: Record<string, string>;
 }
 
+/** @resource */
 export interface ApiKey extends Resource<
   "AWS.ApiGateway.ApiKey",
   ApiKeyProps,

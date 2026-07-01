@@ -13,17 +13,19 @@ const { test } = Test.make({ providers: AWS.providers() });
 // API Gateway custom domain can't be provisioned in CI (see the gated test
 // below) — but this still verifies the pagination + mapping against the live
 // API and asserts every returned row is well-formed.
-test.provider("list returns the account/region domain names", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DomainName);
-    const all = yield* provider.list();
+test.provider.skipIf(!!process.env.FAST)(
+  "list returns the account/region domain names",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(DomainName);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const d of all) {
-      expect(typeof d.domainName).toBe("string");
-      expect(d.tags).toBeDefined();
-    }
-  }),
+      expect(Array.isArray(all)).toBe(true);
+      for (const d of all) {
+        expect(typeof d.domainName).toBe("string");
+        expect(d.tags).toBeDefined();
+      }
+    }),
 );
 
 // Full deploy-then-list assertion. SKIPPED by default because an API Gateway
@@ -39,7 +41,7 @@ test.provider("list returns the account/region domain names", () =>
 const domainName = process.env.AWS_TEST_APIGATEWAY_DOMAIN_NAME;
 const certificateArn = process.env.AWS_TEST_APIGATEWAY_CERT_ARN;
 
-test.provider.skipIf(!domainName || !certificateArn)(
+test.provider.skipIf(!!process.env.FAST)(
   "list enumerates the deployed domain name",
   (stack) =>
     Effect.gen(function* () {

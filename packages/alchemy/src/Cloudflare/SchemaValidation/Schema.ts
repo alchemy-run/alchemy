@@ -12,11 +12,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SchemaValidationSchemaTypeId =
-  "Cloudflare.SchemaValidation.Schema" as const;
-type SchemaValidationSchemaTypeId = typeof SchemaValidationSchemaTypeId;
+const TypeId = "Cloudflare.SchemaValidation.Schema" as const;
+type TypeId = typeof TypeId;
 
-export interface SchemaValidationSchemaProps {
+export interface SchemaProps {
   /**
    * Zone the schema is uploaded to.
    *
@@ -61,7 +60,7 @@ export interface SchemaValidationSchemaProps {
   validationEnabled?: boolean;
 }
 
-export interface SchemaValidationSchemaAttributes {
+export interface SchemaAttributes {
   /** Cloudflare-assigned UUID of the schema. */
   schemaId: string;
   /** Zone the schema is uploaded to. */
@@ -79,9 +78,9 @@ export interface SchemaValidationSchemaAttributes {
 }
 
 export type SchemaValidationSchema = Resource<
-  SchemaValidationSchemaTypeId,
-  SchemaValidationSchemaProps,
-  SchemaValidationSchemaAttributes,
+  TypeId,
+  SchemaProps,
+  SchemaAttributes,
   never,
   Providers
 >;
@@ -95,11 +94,13 @@ export type SchemaValidationSchema = Resource<
  * delete those operations). The schema body is immutable: changing `source`
  * uploads a new schema and deletes the old one (replacement). Only the
  * `validationEnabled` flag is mutable in place.
- *
+ * @resource
+ * @product Schema Validation
+ * @category Application Security
  * @section Uploading a Schema
  * @example Upload an OpenAPI v3 schema
  * ```typescript
- * const schema = yield* Cloudflare.SchemaValidationSchema("ApiSchema", {
+ * const schema = yield* Cloudflare.SchemaValidation.SchemaValidationSchema("ApiSchema", {
  *   zoneId: zone.zoneId,
  *   source: JSON.stringify({
  *     openapi: "3.0.0",
@@ -119,7 +120,7 @@ export type SchemaValidationSchema = Resource<
  *
  * @example Upload a schema without enabling validation
  * ```typescript
- * const schema = yield* Cloudflare.SchemaValidationSchema("DraftSchema", {
+ * const schema = yield* Cloudflare.SchemaValidation.SchemaValidationSchema("DraftSchema", {
  *   zoneId: zone.zoneId,
  *   source: openApiDocument,
  *   validationEnabled: false,
@@ -132,7 +133,7 @@ export type SchemaValidationSchema = Resource<
  * // Enabling (false → true) patches the schema in place. Disabling an
  * // enabled schema is rejected by Cloudflare, so `true` → `false` (like a
  * // `source` change) replaces the schema instead.
- * yield* Cloudflare.SchemaValidationSchema("DraftSchema", {
+ * yield* Cloudflare.SchemaValidation.SchemaValidationSchema("DraftSchema", {
  *   zoneId: zone.zoneId,
  *   source: openApiDocument,
  *   validationEnabled: true,
@@ -141,20 +142,15 @@ export type SchemaValidationSchema = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const SchemaValidationSchema = Resource<SchemaValidationSchema>(
-  SchemaValidationSchemaTypeId,
-);
+export const SchemaValidationSchema = Resource<SchemaValidationSchema>(TypeId);
 
 /**
  * Returns true if the given value is a SchemaValidationSchema resource.
  */
-export const isSchemaValidationSchema = (
-  value: unknown,
-): value is SchemaValidationSchema =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SchemaValidationSchemaTypeId;
+export const isSchema = (value: unknown): value is SchemaValidationSchema =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const SchemaValidationSchemaProvider = () =>
+export const SchemaProvider = () =>
   Provider.succeed(SchemaValidationSchema, {
     stables: ["schemaId", "zoneId", "name", "kind", "source", "createdAt"],
 
@@ -296,8 +292,13 @@ export const SchemaValidationSchemaProvider = () =>
                   ),
                 ),
               ),
-              Effect.catchTag("InvalidRoute", () =>
-                Effect.succeed<SchemaValidationSchemaAttributes[]>([]),
+              // Skip zones schema-validation can't enumerate: `InvalidRoute`
+              // (feature not available on the zone), `ZonePurged` (the
+              // account-wide zone listing can momentarily include a zone that
+              // has since been purged), and `Forbidden` (the scoped token /
+              // zone plan doesn't grant schema-validation access).
+              Effect.catchTag(["InvalidRoute", "ZonePurged", "Forbidden"], () =>
+                Effect.succeed<SchemaAttributes[]>([]),
               ),
             ),
         { concurrency: 10 },
@@ -341,7 +342,7 @@ const toAttributes = (
     | schemaValidation.CreateSchemaResponse
     | schemaValidation.PatchSchemaResponse
     | schemaValidation.ListSchemasResponse["result"][number],
-): SchemaValidationSchemaAttributes => ({
+): SchemaAttributes => ({
   schemaId: schema.schemaId,
   zoneId,
   name: schema.name,

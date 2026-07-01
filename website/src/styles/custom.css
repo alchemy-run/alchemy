@@ -8,6 +8,9 @@
   --sl-font: var(--alc-font-sans);
   --sl-font-mono: var(--alc-font-mono);
   --sl-font-headings: var(--alc-font-serif);
+  /* Widen the docs sidebar (Starlight default is 18rem) so long generated
+     provider entries (e.g. GitHubRepositoryEventSourcePolicy) don't wrap. */
+  --sl-sidebar-width: 20rem;
   /* Match the marketing header (64px tall, 32px horizontal padding, no
      vertical padding) so docs and landing pages line up pixel-for-pixel. */
   --sl-nav-height: 4rem;
@@ -865,4 +868,14 @@ header.header {
   background: color-mix(in srgb, var(--alc-bg-nav) 92%, transparent) !important;
   backdrop-filter: saturate(140%) blur(8px);
   border-bottom: 1px solid var(--alc-hairline) !important;
+}
+
+/* ── Docs sidebar: elide long entries with an ellipsis instead of wrapping
+   onto a second line (the generated provider pages have long names like
+   GitHubRepositoryEventSourcePolicy). ── */
+.sidebar-content a {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

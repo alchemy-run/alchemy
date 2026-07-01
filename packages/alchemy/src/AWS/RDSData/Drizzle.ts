@@ -3,15 +3,21 @@ import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import { drizzle as drizzleDataApi } from "drizzle-orm/aws-data-api/pg";
 import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { ExecutionContext } from "../../ExecutionContext.ts";
 import { proxyChainPromise } from "../../Util/proxy-chain.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
-import { BatchExecuteStatementPolicy } from "./BatchExecuteStatement.ts";
-import { BeginTransactionPolicy } from "./BeginTransaction.ts";
-import { CommitTransactionPolicy } from "./CommitTransaction.ts";
-import { ExecuteStatementPolicy } from "./ExecuteStatement.ts";
-import { RollbackTransactionPolicy } from "./RollbackTransaction.ts";
+import { BatchExecuteStatement } from "./BatchExecuteStatement.ts";
+import { BatchExecuteStatementHttp } from "./BatchExecuteStatementHttp.ts";
+import { BeginTransaction } from "./BeginTransaction.ts";
+import { BeginTransactionHttp } from "./BeginTransactionHttp.ts";
+import { CommitTransaction } from "./CommitTransaction.ts";
+import { CommitTransactionHttp } from "./CommitTransactionHttp.ts";
+import { ExecuteStatement } from "./ExecuteStatement.ts";
+import { ExecuteStatementHttp } from "./ExecuteStatementHttp.ts";
+import { RollbackTransaction } from "./RollbackTransaction.ts";
+import { RollbackTransactionHttp } from "./RollbackTransactionHttp.ts";
 
 export interface DataApiOptions<TRelations extends AnyRelations> {
   /** Secrets Manager secret holding the cluster's credentials. */
@@ -36,8 +42,9 @@ export interface DataApiOptions<TRelations extends AnyRelations> {
  * `RDSDataClient` + drizzle instance are built lazily and memoized on the
  * current `ExecutionContext`, so they're created at most once per invocation.
  * IAM for every Data API operation drizzle may issue (statements +
- * transactions) is attached at deploy time via the RDSData policies, which come
- * from `AWS.providers()` on the Stack — nothing extra to provide on the Function.
+ * transactions) is attached at deploy time by binding the RDSData capabilities,
+ * whose impl layers this binding provides itself — nothing extra to wire onto
+ * the Function.
  *
  * @binding
  * @example
@@ -56,23 +63,18 @@ export const drizzle = <TRelations extends AnyRelations = EmptyRelations>(
 ) =>
   Effect.gen(function* () {
     const database = options.database ?? "app";
-    // Attach IAM (deploy-time) for every Data API operation drizzle may issue.
-    // We yield the *policies* directly rather than the binding Services — the
-    // Service `Live` layers resolve the distilled SDK ops, which would require
-    // the AWS environment (Region/Credentials) at runtime; this binding talks
-    // to the Data API through its own `RDSDataClient`, so it needs none of
-    // that. Each policy is a no-op at runtime (its layer isn't provided).
-    const policyOptions = { secret: options.secret, database };
-    const execPolicy = yield* ExecuteStatementPolicy;
-    const batchPolicy = yield* BatchExecuteStatementPolicy;
-    const beginPolicy = yield* BeginTransactionPolicy;
-    const commitPolicy = yield* CommitTransactionPolicy;
-    const rollbackPolicy = yield* RollbackTransactionPolicy;
-    yield* execPolicy(cluster, policyOptions);
-    yield* batchPolicy(cluster, policyOptions);
-    yield* beginPolicy(cluster, policyOptions);
-    yield* commitPolicy(cluster, policyOptions);
-    yield* rollbackPolicy(cluster, policyOptions);
+    // Attach IAM (deploy-time) for every Data API operation drizzle may issue by
+    // binding each RDSData capability against the cluster. Binding a capability
+    // registers its IAM policy statements on the host Function; we discard the
+    // returned runtime client because this binding talks to the Data API through
+    // its own `RDSDataClient`. The capability impl layers are provided below, so
+    // the caller needs nothing extra on the Function.
+    const bindOptions = { secret: options.secret, database };
+    yield* ExecuteStatement(cluster, bindOptions);
+    yield* BatchExecuteStatement(cluster, bindOptions);
+    yield* BeginTransaction(cluster, bindOptions);
+    yield* CommitTransaction(cluster, bindOptions);
+    yield* RollbackTransaction(cluster, bindOptions);
 
     const resourceArn = yield* cluster.dbClusterArn;
     const secretArn = yield* options.secret.secretArn;
@@ -105,7 +107,21 @@ export const drizzle = <TRelations extends AnyRelations = EmptyRelations>(
         EffectPgDatabase<TRelations> & { $client: RDSDataClient }
       >,
     );
-  });
+  }).pipe(
+    // Provide the RDSData capability impl layers so binding them above attaches
+    // IAM without the caller having to wire anything onto the Function. The
+    // layers' own requirements (Credentials/Region/HttpClient) resolve from the
+    // Lambda execution environment.
+    Effect.provide(
+      Layer.mergeAll(
+        ExecuteStatementHttp,
+        BatchExecuteStatementHttp,
+        BeginTransactionHttp,
+        CommitTransactionHttp,
+        RollbackTransactionHttp,
+      ),
+    ),
+  );
 
 /** Friendly alias for {@link drizzle}. */
 export const dataApi = drizzle;

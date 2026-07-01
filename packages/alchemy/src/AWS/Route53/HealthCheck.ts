@@ -107,7 +107,7 @@ export interface HealthCheck extends Resource<
  *
  * `HealthCheck` monitors the health of an endpoint and can gate failover and
  * other routing policies on a `Record` via `record.healthCheckId`.
- *
+ * @resource
  * @section Creating a Health Check
  * @example HTTP Health Check
  * ```typescript

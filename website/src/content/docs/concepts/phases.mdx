@@ -27,10 +27,10 @@ an Effect from inside an Effect**.
 ```typescript
 Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     // ─── Init phase ───
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
     return {
       // ─── Runtime phase ───
@@ -95,34 +95,53 @@ rejects it everywhere else. See
 The current phase is exposed as the `ALCHEMY_PHASE` environment
 variable / config key:
 
-| Value     | Context                                                    |
-| --------- | ---------------------------------------------------------- |
-| `plan`    | Default. Running `alchemy deploy` or `alchemy plan`.       |
-| `dev`     | Running `alchemy dev` (local development with hot reload). |
-| `runtime` | Running inside a deployed Worker or Lambda Function.       |
+| Value     | Context                                                              |
+| --------- | ------------------------------------------------------------------- |
+| `plan`    | Default. Running `alchemy deploy`, `alchemy plan`, or `alchemy dev`. |
+| `runtime` | Running inside a deployed Worker or Lambda Function.                 |
 
 Most user code never reads this directly — but providers and
 [bindings](/concepts/binding) use it internally to behave
 differently across phases.
 
-## `Binding.Service` vs `Binding.Policy`
+## `ALCHEMY_DEV`
 
-A binding has two layers under the hood — and which one runs depends
-on the phase:
+`alchemy dev` is a plantime phase, so `ALCHEMY_PHASE` is `plan`
+during local development just like a regular deploy. To tell whether
+you're running under `alchemy dev` specifically, read the
+`ALCHEMY_DEV` config key. The CLI sets `ALCHEMY_DEV=true` on the dev
+process; every other entrypoint leaves it unset, so it defaults to
+`false`.
 
-| Layer              | Phase   | Job                                                   |
-| ------------------ | ------- | ----------------------------------------------------- |
-| `Binding.Service`  | Runtime | The lightweight typed SDK that ships with the bundle. |
-| `Binding.Policy`   | Plan    | The deploy-time logic that emits IAM / env / config.  |
+```typescript
+import { ALCHEMY_DEV } from "alchemy";
 
-At plantime the Policy layer is provided, so calling `bind()`
-records what the function will need. At runtime the Policy layer is
-absent — `bind()` returns just the Service wrapper. The runtime
-bundle stays small because none of the planning code is included.
+Effect.gen(function* () {
+  if (yield* ALCHEMY_DEV) {
+    // local-dev-only behavior
+  }
+});
+```
 
-This is also how alchemy can let you write `bucket.get(...)` inside
-a Worker without bundling AWS / Cloudflare provisioning code:
-provisioning lives in `Policy`, not `Service`.
+## The `__ALCHEMY_RUNTIME__` guard
+
+A binding is a single `Binding.Service` whose setup Effect does two
+things — and the phase decides how much of it runs:
+
+| Work                    | Phase | Job                                                      |
+| ----------------------- | ----- | -------------------------------------------------------- |
+| typed client            | both  | The lightweight typed SDK that ships with the bundle.    |
+| `host.bind(...)` wiring  | plan | Deploy-time registration of IAM / env / native bindings. |
+
+The deploy-time wiring is fenced behind `if (!globalThis.__ALCHEMY_RUNTIME__)`.
+At plantime the guard is open, so calling `bind()` records what the
+function will need. At runtime the global flag is set, so the guard is
+skipped and `bind()` returns just the typed client. The runtime bundle
+stays small because the planning branch never executes.
+
+This is also how alchemy can let you write `bucket.get(...)` inside a
+Worker without bundling AWS / Cloudflare provisioning code: the
+provisioning lives behind the guard, never on the runtime path.
 
 ## Why this matters
 
@@ -139,8 +158,8 @@ The init/runtime split lets you write code that:
 ```typescript
 Effect.gen(function* () {
   // Init: runs once per cold start
-  const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
-  const kv = yield* Cloudflare.KVNamespace.bind(KV);
+  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+  const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
   return {
     // Runtime: runs per request
@@ -153,4 +172,4 @@ Effect.gen(function* () {
 ```
 
 Continue to [Binding](/concepts/binding) for the full mechanics of
-how `.bind()` wires resources into your handler.
+how `Bind(resource)` wires resources into your handler.

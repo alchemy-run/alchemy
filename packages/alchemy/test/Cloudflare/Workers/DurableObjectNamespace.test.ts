@@ -38,7 +38,7 @@ const readinessRetries = 15;
 // Forcing `Connection: close` makes each readiness attempt open a fresh
 // connection, letting it land on an edge that has the new version (this is
 // why a brand-new `curl` sees the update immediately while a kept-alive
-// client does not). See do-rpc DurableObjectNamespace test investigation.
+// client does not). See do-rpc DurableObject test investigation.
 const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
@@ -86,6 +86,15 @@ test(
               Stream.filter((line) => line.length > 0),
               Stream.runCollect,
               Effect.map((chunk) => [...chunk]),
+              // A cold edge can answer 200 with an empty/placeholder body
+              // (the script isn't serving yet), which collects to `[]`
+              // instead of failing — fail so the readiness retry rides it out
+              // rather than asserting against an empty stream.
+              Effect.flatMap((rows) =>
+                rows.length > 0
+                  ? Effect.succeed(rows)
+                  : Effect.fail(new Error("Worker not ready: empty stream")),
+              ),
             )
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
@@ -211,7 +220,7 @@ test.provider(
             host: yield* Cloudflare.Worker("host-worker", {
               script: hostWorkerScript,
               env: {
-                Counter: Cloudflare.DurableObjectNamespace("Counter"),
+                Counter: Cloudflare.DurableObject("Counter"),
               },
             }),
           };
@@ -223,13 +232,13 @@ test.provider(
           const host = yield* Cloudflare.Worker("host-worker", {
             script: hostWorkerScript,
             env: {
-              Counter: Cloudflare.DurableObjectNamespace("Counter"),
+              Counter: Cloudflare.DurableObject("Counter"),
             },
           });
           const consumer = yield* Cloudflare.Worker("consumer-worker", {
             script: consumerWorkerScript,
             env: {
-              Counter: Cloudflare.DurableObjectNamespace("Counter", {
+              Counter: Cloudflare.DurableObject("Counter", {
                 scriptName: host.workerName,
               }),
             },
@@ -279,7 +288,7 @@ export class DO_A extends DurableObject {}
 export default { async fetch() { return new Response("v1"); } };
 `,
               env: {
-                DO_A: Cloudflare.DurableObjectNamespace("DO_A"),
+                DO_A: Cloudflare.DurableObject("DO_A"),
               },
             }),
           };
@@ -296,7 +305,7 @@ export class DO_A_v2 extends DurableObject {}
 export default { async fetch() { return new Response("v2"); } };
 `,
               env: {
-                DO_A: Cloudflare.DurableObjectNamespace("DO_A", {
+                DO_A: Cloudflare.DurableObject("DO_A", {
                   className: "DO_A_v2",
                 }),
               },
@@ -316,10 +325,10 @@ export class DO_B extends DurableObject {}
 export default { async fetch() { return new Response("v3"); } };
 `,
               env: {
-                DO_A: Cloudflare.DurableObjectNamespace("DO_A", {
+                DO_A: Cloudflare.DurableObject("DO_A", {
                   className: "DO_A_v2",
                 }),
-                DO_B: Cloudflare.DurableObjectNamespace("DO_B"),
+                DO_B: Cloudflare.DurableObject("DO_B"),
               },
             }),
           };
@@ -336,7 +345,7 @@ export class DO_B extends DurableObject {}
 export default { async fetch() { return new Response("v4"); } };
 `,
               env: {
-                DO_B: Cloudflare.DurableObjectNamespace("DO_B"),
+                DO_B: Cloudflare.DurableObject("DO_B"),
               },
             }),
           };

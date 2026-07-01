@@ -319,7 +319,7 @@ const inferProxyEngineFamily = (engine: string) => {
  *
  * The return value intentionally exposes the underlying `DB*` resources so
  * users can expand into the lower-level surface without rewriting the stack.
- *
+ * @resource
  * @example Start a Small Aurora Cluster
  * ```typescript
  * const db = yield* AWS.RDS.Aurora("AppDb", {

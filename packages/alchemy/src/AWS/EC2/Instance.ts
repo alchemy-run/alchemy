@@ -70,9 +70,10 @@ export interface InstanceProps extends PlatformProps {
    */
   securityGroupIds?: Input<SecurityGroupId>[];
   /**
-   * Optional EC2 key pair name for SSH access.
+   * Optional EC2 key pair name for SSH access. Accepts a reference such as
+   * `AWS.EC2.KeyPair(...).keyName`.
    */
-  keyName?: string;
+  keyName?: Input<string>;
   /**
    * Optional IAM instance profile name to attach at launch.
    */
@@ -270,7 +271,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
 /**
  * An EC2 instance that can either act as a low-level compute primitive or run
  * a bundled long-lived Effect program directly on the machine.
- *
+ * @resource
  * @section Launching Instances
  * @example Basic Instance
  * ```typescript
@@ -290,7 +291,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *   );
  *
  *   return {
- *     main: import.meta.filename,
+ *     main: import.meta.url,
  *     imageId,
  *     instanceType: "t3.small",
  *     subnetId: subnet.subnetId,
@@ -386,9 +387,7 @@ export const InstanceProvider = () =>
             .map((tag) => [tag.Key, tag.Value]),
         );
 
-      const toAttributes = Effect.fnUntraced(function* (
-        instance: ec2.Instance,
-      ) {
+      const toAttributes = Effect.fn(function* (instance: ec2.Instance) {
         return {
           instanceId: instance.InstanceId as InstanceId,
           instanceArn: yield* toInstanceArn(instance.InstanceId as InstanceId),
@@ -529,8 +528,10 @@ export const InstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) => error instanceof InstanceStillExists,
-            schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
+            // Termination (shutting-down -> terminated) can take a couple of
+            // minutes; the prior ~64s budget timed out intermittently.
+            schedule: Schedule.spaced("5 seconds").pipe(
+              Schedule.both(Schedule.recurs(48)),
             ),
           }),
           Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
@@ -555,7 +556,7 @@ export const InstanceProvider = () =>
             {
               imageId: news.imageId,
               instanceType: news.instanceType,
-              keyName: news.keyName,
+              keyName: news.keyName as string | undefined,
               subnetId: news.subnetId as string | undefined,
               securityGroupIds: news.securityGroupIds as string[] | undefined,
               associatePublicIpAddress: news.associatePublicIpAddress,

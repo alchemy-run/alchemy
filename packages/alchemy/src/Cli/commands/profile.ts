@@ -30,7 +30,7 @@ const showCommand = Command.make(
   instrumentCommand("profile.show", (a: { profile: string }) => ({
     "alchemy.profile": a.profile,
   }))(
-    Effect.fnUntraced(function* ({ profile, envFile }) {
+    Effect.fn(function* ({ profile, envFile }) {
       const profiles = yield* AlchemyProfile;
       const stored = yield* profiles.getProfile(profile);
       if (stored == null) {
@@ -81,7 +81,7 @@ const clearCommand = Command.make(
   instrumentCommand("profile.clear", (a: { profile: string }) => ({
     "alchemy.profile": a.profile,
   }))(
-    Effect.fnUntraced(function* ({ profile }) {
+    Effect.fn(function* ({ profile }) {
       const profiles = yield* AlchemyProfile;
       const store = yield* CredentialsStore;
       const removed = yield* profiles.deleteProfile(profile);

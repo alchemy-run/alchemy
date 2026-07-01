@@ -55,8 +55,8 @@ const waitForIndexGone = (accountId: string, indexName: string) =>
     schedule: Schedule.both(Schedule.spaced("2 seconds"), Schedule.recurs(15)),
   });
 
-describe.skipIf(!!process.env.NO_SLOW_TESTS)(
-  "Cloudflare.VectorizeMetadataIndex",
+describe.skipIf(!!process.env.FAST)(
+  "Cloudflare.Vectorize.MetadataIndex",
   () => {
     test.provider(
       "create and delete a metadata index",
@@ -68,15 +68,18 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
 
           const { index, meta } = yield* stack.deploy(
             Effect.gen(function* () {
-              const index = yield* Cloudflare.VectorizeIndex("ParentIdx", {
+              const index = yield* Cloudflare.Vectorize.Index("ParentIdx", {
                 dimensions: 32,
                 metric: "cosine",
               });
-              const meta = yield* Cloudflare.VectorizeMetadataIndex("MetaIdx", {
-                indexName: index.indexName,
-                propertyName: "category",
-                indexType: "string",
-              });
+              const meta = yield* Cloudflare.Vectorize.MetadataIndex(
+                "MetaIdx",
+                {
+                  indexName: index.indexName,
+                  propertyName: "category",
+                  indexType: "string",
+                },
+              );
               return { index, meta };
             }),
           );
@@ -121,16 +124,16 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
 
           const { index } = yield* stack.deploy(
             Effect.gen(function* () {
-              const index = yield* Cloudflare.VectorizeIndex("MultiParent", {
+              const index = yield* Cloudflare.Vectorize.Index("MultiParent", {
                 dimensions: 32,
                 metric: "cosine",
               });
-              yield* Cloudflare.VectorizeMetadataIndex("CategoryMeta", {
+              yield* Cloudflare.Vectorize.MetadataIndex("CategoryMeta", {
                 indexName: index.indexName,
                 propertyName: "category",
                 indexType: "string",
               });
-              yield* Cloudflare.VectorizeMetadataIndex("PriceMeta", {
+              yield* Cloudflare.Vectorize.MetadataIndex("PriceMeta", {
                 indexName: index.indexName,
                 propertyName: "price",
                 indexType: "number",
@@ -182,11 +185,11 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
           // Initial deploy with dimensions=32.
           const { index: oldIndex } = yield* stack.deploy(
             Effect.gen(function* () {
-              const index = yield* Cloudflare.VectorizeIndex("ReplaceParent", {
+              const index = yield* Cloudflare.Vectorize.Index("ReplaceParent", {
                 dimensions: 32,
                 metric: "cosine",
               });
-              yield* Cloudflare.VectorizeMetadataIndex("ReplaceMeta", {
+              yield* Cloudflare.Vectorize.MetadataIndex("ReplaceMeta", {
                 indexName: index.indexName,
                 propertyName: "tag",
                 indexType: "string",
@@ -206,11 +209,11 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
           // also replaces the metadata index on the new parent.
           const { index: newIndex, meta: newMeta } = yield* stack.deploy(
             Effect.gen(function* () {
-              const index = yield* Cloudflare.VectorizeIndex("ReplaceParent", {
+              const index = yield* Cloudflare.Vectorize.Index("ReplaceParent", {
                 dimensions: 64,
                 metric: "cosine",
               });
-              const meta = yield* Cloudflare.VectorizeMetadataIndex(
+              const meta = yield* Cloudflare.Vectorize.MetadataIndex(
                 "ReplaceMeta",
                 {
                   indexName: index.indexName,
@@ -260,11 +263,11 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
 
           const { index } = yield* stack.deploy(
             Effect.gen(function* () {
-              const index = yield* Cloudflare.VectorizeIndex("ListParent", {
+              const index = yield* Cloudflare.Vectorize.Index("ListParent", {
                 dimensions: 32,
                 metric: "cosine",
               });
-              yield* Cloudflare.VectorizeMetadataIndex("ListMeta", {
+              yield* Cloudflare.Vectorize.MetadataIndex("ListMeta", {
                 indexName: index.indexName,
                 propertyName: "category",
                 indexType: "string",
@@ -274,7 +277,7 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
           );
 
           const provider = yield* Provider.findProvider(
-            Cloudflare.VectorizeMetadataIndex,
+            Cloudflare.Vectorize.MetadataIndex,
           );
 
           // Cloudflare processes the create as an async mutation, so the entry
@@ -316,11 +319,11 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
 
           const { index } = yield* stack.deploy(
             Effect.gen(function* () {
-              const index = yield* Cloudflare.VectorizeIndex("OobParent", {
+              const index = yield* Cloudflare.Vectorize.Index("OobParent", {
                 dimensions: 32,
                 metric: "cosine",
               });
-              yield* Cloudflare.VectorizeMetadataIndex("OobMeta", {
+              yield* Cloudflare.Vectorize.MetadataIndex("OobMeta", {
                 indexName: index.indexName,
                 propertyName: "ns",
                 indexType: "string",

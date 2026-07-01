@@ -81,7 +81,7 @@ export interface HostedZone extends Resource<
  * `HostedZone` manages the lifecycle of a public or private hosted zone,
  * including its comment and tags. For public zones, the four authoritative
  * name servers are exposed as `nameServers`.
- *
+ * @resource
  * @section Creating a Hosted Zone
  * @example Public Hosted Zone
  * ```typescript

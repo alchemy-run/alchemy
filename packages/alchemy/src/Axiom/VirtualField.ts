@@ -22,7 +22,7 @@ export type VirtualField = Resource<
  * dashboards and monitors don't have to redefine them.
  *
  * Bound to a single `dataset`; changing the dataset triggers a replacement.
- *
+ * @resource
  * @see https://axiom.co/docs/query-data/virtual-fields
  *
  * @section Creating a Virtual Field

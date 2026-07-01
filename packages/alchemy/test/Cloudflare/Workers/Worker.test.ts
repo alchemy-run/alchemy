@@ -50,7 +50,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       const worker = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* R2.R2Bucket("Bucket", {
+          yield* R2.Bucket("Bucket", {
             storageClass: "Standard",
           });
 
@@ -924,7 +924,7 @@ describe.concurrent("Cloudflare.Worker", () => {
               crons,
               compatibility: { date: "2024-01-01" },
             });
-            yield* Cloudflare.NotificationWebhook("Hook", {
+            yield* Cloudflare.Alerting.NotificationWebhook("Hook", {
               url: Output.interpolate`${worker.url}`,
             });
           });
@@ -980,12 +980,10 @@ describe.concurrent("Cloudflare.Worker", () => {
           Effect.gen(function* () {
             const bindings: any = {};
             if (opts.dos.includes("Counter")) {
-              bindings.Counter =
-                Cloudflare.DurableObjectNamespace<Counter>("Counter");
+              bindings.Counter = Cloudflare.DurableObject<Counter>("Counter");
             }
             if (opts.dos.includes("Meter")) {
-              bindings.Meter =
-                Cloudflare.DurableObjectNamespace<Meter>("Meter");
+              bindings.Meter = Cloudflare.DurableObject<Meter>("Meter");
             }
 
             const worker = yield* Cloudflare.Worker("Upstream", {
@@ -999,7 +997,7 @@ describe.concurrent("Cloudflare.Worker", () => {
               // Embed the DO namespace id in the (real, reachable) worker URL so
               // the webhook's live URL validation passes while still depending on
               // `durableObjectNamespaces`. The worker responds 200 to any path.
-              yield* Cloudflare.NotificationWebhook("Hook", {
+              yield* Cloudflare.Alerting.NotificationWebhook("Hook", {
                 url: Output.interpolate`${worker.url}/${worker.durableObjectNamespaces.pipe(
                   Output.map((namespaces) => namespaces[opts.hookRef!]),
                 )}`,

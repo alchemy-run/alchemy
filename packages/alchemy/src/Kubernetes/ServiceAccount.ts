@@ -27,7 +27,7 @@ export interface ServiceAccountProps {
 
 /**
  * A Kubernetes service account bound to an EKS cluster.
- *
+ * @resource
  * @example Create a service account
  * ```typescript
  * const sa = yield* ServiceAccount("api", {

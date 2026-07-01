@@ -82,6 +82,11 @@ export const testSamlMetadataDocumentUpdated = `<?xml version="1.0" encoding="UT
 </EntityDescriptor>`;
 
 export const testOidcUrl = "https://example.com/alchemy-oidc";
+// A distinct issuer URL for the `list` test. The OIDC provider ARN is derived
+// deterministically from the URL, so reusing `testOidcUrl` would make the list
+// test and the federation lifecycle test provision (and tear down) the same
+// physical provider concurrently — give the list test its own resource.
+export const testOidcListUrl = "https://example.com/alchemy-oidc-list";
 export const testOidcThumbprintA = "1111111111111111111111111111111111111111";
 export const testOidcThumbprintB = "2222222222222222222222222222222222222222";
 export const testSamlProviderName = "alchemy-saml-provider";

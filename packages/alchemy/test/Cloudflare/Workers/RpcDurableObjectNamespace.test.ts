@@ -100,7 +100,7 @@ const rpcWorkerStack = beforeAll(
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RpcWorkerStack));
 
 test(
-  "RpcDurableObjectNamespace: Increment / Get round-trip via Worker",
+  "RpcDurableObject: Increment / Get round-trip via Worker",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const alpha = k("alpha");
@@ -126,7 +126,7 @@ test(
 );
 
 test(
-  "RpcDurableObjectNamespace: separate getByName(id) instances are isolated",
+  "RpcDurableObject: separate getByName(id) instances are isolated",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const betaId = k("beta");
@@ -154,7 +154,7 @@ test(
 );
 
 test(
-  "RpcDurableObjectNamespace: streaming RPC via getByName(id).CountUpTo",
+  "RpcDurableObject: streaming RPC via getByName(id).CountUpTo",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const delta = k("delta");
@@ -172,7 +172,7 @@ test(
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: Worker proxies *DO RPCs through the typed namespace",
+  "RpcWorker + RpcDurableObject: Worker proxies *DO RPCs through the typed namespace",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 
@@ -189,7 +189,7 @@ test(
 );
 
 test(
-  "RpcDurableObjectNamespace: 100 concurrent Increment calls do not hang",
+  "RpcDurableObject: 100 concurrent Increment calls do not hang",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const concurrent = k("concurrent");
@@ -226,7 +226,7 @@ test(
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: 100 concurrent unary RPCs do not hang",
+  "RpcWorker + RpcDurableObject: 100 concurrent unary RPCs do not hang",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 
@@ -257,7 +257,7 @@ test(
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: 100 concurrent *DO unary RPCs do not hang",
+  "RpcWorker + RpcDurableObject: 100 concurrent *DO unary RPCs do not hang",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 
@@ -284,7 +284,7 @@ test(
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: 100 concurrent streaming *DO RPCs do not hang",
+  "RpcWorker + RpcDurableObject: 100 concurrent streaming *DO RPCs do not hang",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 

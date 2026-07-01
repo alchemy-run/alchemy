@@ -22,15 +22,15 @@ const corsLayer = HttpRouter.cors({
   allowedHeaders: ["Content-Type"],
 });
 
-const Bucket = Cloudflare.R2Bucket("Tasks");
+const Bucket = Cloudflare.R2.Bucket("Tasks");
 
 export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWorker>()(
   "HttpApiTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     const tasksDO = yield* TasksObject;
 
     const getTaskDO = (id: string = "default") =>
@@ -94,5 +94,5 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
         HttpRouter.toHttpEffect,
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}

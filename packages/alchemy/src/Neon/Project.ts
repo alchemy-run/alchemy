@@ -166,7 +166,7 @@ type ProjectAttributes = Project["Attributes"];
  * Creating a project also provisions the project's default branch (named
  * "main" by default), an initial role, an initial database, and a
  * read-write compute endpoint, exposed as `connectionUri`.
- *
+ * @resource
  * @section Creating a Project
  * @example Basic project
  * ```typescript
@@ -236,9 +236,9 @@ export const ProjectProvider = () =>
         : yield* createProjectName(id, olds.name);
       if (
         oldName !== name ||
-        (news.region ?? DEFAULT_REGION) !==
+        (news.region ?? output?.region ?? DEFAULT_REGION) !==
           (output?.region ?? olds.region ?? DEFAULT_REGION) ||
-        (news.pgVersion ?? DEFAULT_PG_VERSION) !==
+        (news.pgVersion ?? output?.pgVersion ?? DEFAULT_PG_VERSION) !==
           (output?.pgVersion ?? olds.pgVersion ?? DEFAULT_PG_VERSION) ||
         (news.defaultBranchName ?? output?.defaultBranchName) !==
           output?.defaultBranchName

@@ -87,7 +87,7 @@ const findBundleTempRoot = (entry: string, dotAlchemy: string) =>
     return path.join(path.dirname(entry), path.basename(dotAlchemy), "tmp");
   });
 
-export const findCwdForBundle = Effect.fnUntraced(function* (entry: string) {
+export const findCwdForBundle = Effect.fn(function* (entry: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let current = path.dirname(entry);

@@ -47,6 +47,7 @@ export interface DBSubnetGroup extends Resource<
 
 /**
  * An RDS DB subnet group for Aurora clusters, instances, and proxies.
+ * @resource
  */
 export const DBSubnetGroup = Resource<DBSubnetGroup>("AWS.RDS.DBSubnetGroup");
 

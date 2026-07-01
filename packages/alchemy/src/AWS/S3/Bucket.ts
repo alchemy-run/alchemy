@@ -254,7 +254,7 @@ export interface Bucket extends Resource<
  * A bucket name is auto-generated from the app, stage, and logical ID unless
  * you provide one explicitly via `bucketName`. Enable `forceDestroy` to allow
  * Alchemy to empty the bucket before deleting it.
- *
+ * @resource
  * @section Creating a Bucket
  * @example Basic Bucket
  * ```typescript
@@ -339,8 +339,8 @@ export interface Bucket extends Resource<
  * @example Read and write objects
  * ```typescript
  * // init
- * const getObject = yield* S3.GetObject.bind(bucket);
- * const putObject = yield* S3.PutObject.bind(bucket);
+ * const getObject = yield* S3.GetObject(bucket);
+ * const putObject = yield* S3.PutObject(bucket);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -359,7 +359,7 @@ export interface Bucket extends Resource<
  * @example Delete an object
  * ```typescript
  * // init
- * const deleteObject = yield* S3.DeleteObject.bind(bucket);
+ * const deleteObject = yield* S3.DeleteObject(bucket);
  * ```
  *
  * @section Event Notifications
@@ -369,9 +369,9 @@ export interface Bucket extends Resource<
  * @example Process object creation events
  * ```typescript
  * // init
- * yield* S3.notifications(bucket, {
+ * yield* S3.consumeBucketEvents(bucket, {
  *   events: ["s3:ObjectCreated:*"],
- * }).subscribe((stream) =>
+ * }, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((event) =>
  *       Effect.log(`New object: ${event.key}`),
@@ -470,7 +470,7 @@ export const BucketProvider = () =>
         } while (keyMarker);
       });
 
-      const ensureBucketExists = Effect.fnUntraced(function* ({
+      const ensureBucketExists = Effect.fn(function* ({
         id,
         news = {},
       }: {
@@ -575,7 +575,7 @@ export const BucketProvider = () =>
           Effect.catch(() => Effect.succeed({})),
         );
 
-      const syncBucketTags = Effect.fnUntraced(function* ({
+      const syncBucketTags = Effect.fn(function* ({
         bucketName,
         oldTags,
         newTags,
@@ -634,7 +634,7 @@ export const BucketProvider = () =>
         yield* session.note(`Removed all tags from bucket: ${bucketName}`);
       });
 
-      const syncBucketPolicy = Effect.fnUntraced(function* ({
+      const syncBucketPolicy = Effect.fn(function* ({
         bucketName,
         bindings,
         explicitStatements,
@@ -699,7 +699,7 @@ export const BucketProvider = () =>
       });
 
       // Apply S3 event notification configuration declared via bindings
-      // (e.g. `S3.notifications(bucket).subscribe(...)`). Without this the
+      // (e.g. `S3.consumeBucketEvents(bucket, handler)`). Without this the
       // binding is recorded in state but never reaches the bucket, so no
       // events are ever delivered.
       // Canonical form of the Lambda targets, ignoring S3-assigned `Id`s and
@@ -715,7 +715,7 @@ export const BucketProvider = () =>
           })),
         );
 
-      const syncBucketNotifications = Effect.fnUntraced(function* ({
+      const syncBucketNotifications = Effect.fn(function* ({
         bucketName,
         bindings,
         session,
@@ -752,7 +752,7 @@ export const BucketProvider = () =>
         );
         yield* s3.putBucketNotificationConfiguration({
           Bucket: bucketName,
-          // Preserve any Topic/Queue/EventBridge config already on the bucket;
+          // Preserve any Topic/Queues/EventBridge config already on the bucket;
           // only manage the Lambda targets declared through bindings.
           NotificationConfiguration: {
             ...existing,
@@ -774,7 +774,7 @@ export const BucketProvider = () =>
       // a typed tag in distilled (see processes/AWS/catalog/S3.md), so we
       // `Effect.catchTag` it rather than inspecting status codes.
 
-      const syncBucketVersioning = Effect.fnUntraced(function* ({
+      const syncBucketVersioning = Effect.fn(function* ({
         bucketName,
         versioning,
         mfaDelete,
@@ -805,7 +805,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket versioning: ${bucketName}`);
       });
 
-      const syncBucketEncryption = Effect.fnUntraced(function* ({
+      const syncBucketEncryption = Effect.fn(function* ({
         bucketName,
         encryption,
         session,
@@ -848,7 +848,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket encryption: ${bucketName}`);
       });
 
-      const syncPublicAccessBlock = Effect.fnUntraced(function* ({
+      const syncPublicAccessBlock = Effect.fn(function* ({
         bucketName,
         publicAccessBlock,
         session,
@@ -903,7 +903,7 @@ export const BucketProvider = () =>
           })),
         );
 
-      const syncBucketCors = Effect.fnUntraced(function* ({
+      const syncBucketCors = Effect.fn(function* ({
         bucketName,
         cors,
         session,
@@ -941,7 +941,7 @@ export const BucketProvider = () =>
           ),
         );
 
-      const syncBucketLifecycle = Effect.fnUntraced(function* ({
+      const syncBucketLifecycle = Effect.fn(function* ({
         bucketName,
         lifecycleRules,
         session,
@@ -973,7 +973,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket lifecycle: ${bucketName}`);
       });
 
-      const syncBucketOwnershipControls = Effect.fnUntraced(function* ({
+      const syncBucketOwnershipControls = Effect.fn(function* ({
         bucketName,
         objectOwnership,
         session,
@@ -1004,7 +1004,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated object ownership: ${bucketName}`);
       });
 
-      const syncBucketAcl = Effect.fnUntraced(function* ({
+      const syncBucketAcl = Effect.fn(function* ({
         bucketName,
         acl,
         session,
@@ -1020,7 +1020,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket ACL: ${bucketName}`);
       });
 
-      const syncBucketLogging = Effect.fnUntraced(function* ({
+      const syncBucketLogging = Effect.fn(function* ({
         bucketName,
         logging,
         session,
@@ -1054,7 +1054,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket logging: ${bucketName}`);
       });
 
-      const syncTransferAcceleration = Effect.fnUntraced(function* ({
+      const syncTransferAcceleration = Effect.fn(function* ({
         bucketName,
         transferAcceleration,
         session,
@@ -1075,7 +1075,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated transfer acceleration: ${bucketName}`);
       });
 
-      const syncRequestPayment = Effect.fnUntraced(function* ({
+      const syncRequestPayment = Effect.fn(function* ({
         bucketName,
         requestPayer,
         session,
@@ -1096,7 +1096,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated request payment: ${bucketName}`);
       });
 
-      const syncBucketWebsite = Effect.fnUntraced(function* ({
+      const syncBucketWebsite = Effect.fn(function* ({
         bucketName,
         website,
         session,
@@ -1157,7 +1157,7 @@ export const BucketProvider = () =>
           ),
         });
 
-      const syncBucketReplication = Effect.fnUntraced(function* ({
+      const syncBucketReplication = Effect.fn(function* ({
         bucketName,
         replication,
         session,
@@ -1189,7 +1189,7 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket replication: ${bucketName}`);
       });
 
-      const syncIntelligentTiering = Effect.fnUntraced(function* ({
+      const syncIntelligentTiering = Effect.fn(function* ({
         bucketName,
         intelligentTiering,
         oldIntelligentTiering,
@@ -1261,7 +1261,7 @@ export const BucketProvider = () =>
         }
       });
 
-      const syncObjectLockRetention = Effect.fnUntraced(function* ({
+      const syncObjectLockRetention = Effect.fn(function* ({
         bucketName,
         objectLockConfiguration,
         session,

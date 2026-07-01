@@ -86,7 +86,7 @@ const getContentType = (name: string) => {
   return "application/octet-stream";
 };
 
-const maybeReadString = Effect.fnUntraced(function* (file: string) {
+const maybeReadString = Effect.fn(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
@@ -102,7 +102,7 @@ const createIgnoreMatcher = (patterns: string[]) => {
   return (file: string) => matcher.ignores(file);
 };
 
-export const readAssets = Effect.fnUntraced(function* ({
+export const readAssets = Effect.fn(function* ({
   directory,
   ...config
 }: AssetsProps) {
@@ -128,7 +128,7 @@ export const readAssets = Effect.fnUntraced(function* ({
   let count = 0;
   yield* Effect.forEach(
     files,
-    Effect.fnUntraced(function* (name) {
+    Effect.fn(function* (name) {
       if (ignores(name)) {
         return;
       }
@@ -193,7 +193,7 @@ export const readAssets = Effect.fnUntraced(function* ({
   };
 });
 
-export const uploadAssets = Effect.fnUntraced(function* (
+export const uploadAssets = Effect.fn(function* (
   accountId: string,
   workerName: string,
   assets: AssetReadResult,
@@ -228,11 +228,11 @@ export const uploadAssets = Effect.fnUntraced(function* (
   const directory = path.resolve(assets.directory);
   yield* Effect.forEach(
     session.buckets,
-    Effect.fnUntraced(function* (bucket) {
+    Effect.fn(function* (bucket) {
       const body: Record<string, File> = {};
       yield* Effect.forEach(
         bucket,
-        Effect.fnUntraced(function* (hash) {
+        Effect.fn(function* (hash) {
           const name = assetsByHash.get(hash);
           if (!name) {
             return yield* new AssetNotFoundError({

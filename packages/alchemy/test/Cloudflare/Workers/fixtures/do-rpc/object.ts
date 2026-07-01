@@ -3,14 +3,14 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
-const KV = Cloudflare.KVNamespace("DurableObjectWorkerEnvironmentKV", {
+const KV = Cloudflare.KV.Namespace("DurableObjectWorkerEnvironmentKV", {
   title: "durable-object-worker-environment-kv",
 });
 
-export class WorkerEnvironmentKVObject extends Cloudflare.DurableObjectNamespace<WorkerEnvironmentKVObject>()(
+export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEnvironmentKVObject>()(
   "WorkerEnvironmentKVObject",
   Effect.gen(function* () {
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.gen(function* () {
       return {
@@ -26,5 +26,5 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObjectNamespace
           ),
       };
     });
-  }).pipe(Effect.provide(Cloudflare.KVNamespaceBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
 ) {}

@@ -65,7 +65,7 @@ export interface Topic extends Resource<
  * available through the `attributes` prop so the full core pub/sub surface can
  * be configured without waiting on additional typed wrappers. A topic name is
  * auto-generated unless you provide one explicitly.
- *
+ * @resource
  * @section Creating Topics
  * @example Standard Topic
  * ```typescript
@@ -100,7 +100,7 @@ export interface Topic extends Resource<
  * @example Publish from a handler
  * ```typescript
  * // init
- * const publish = yield* SNS.Publish.bind(topic);
+ * const publish = yield* SNS.Publish(topic);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -122,7 +122,7 @@ export interface Topic extends Resource<
  * @example Process topic notifications
  * ```typescript
  * // init
- * yield* SNS.notifications(topic).subscribe((stream) =>
+ * yield* SNS.consumeTopicNotifications(topic, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((message) =>
  *       Effect.log(`Received: ${message.Message}`),
@@ -432,6 +432,13 @@ const readTopic = Effect.fn(function* ({
   ).pipe(
     Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
     Effect.catchTag("InvalidParameterException", () =>
+      Effect.succeed(undefined),
+    ),
+    // `list()` hydrates every topic in the account, so a topic deleted by a
+    // parallel test between enumeration and hydration surfaces here —
+    // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
+    // vanished topic as "not present" rather than failing the whole listing.
+    Effect.catchTag("ResourceNotFoundException", () =>
       Effect.succeed(undefined),
     ),
   );

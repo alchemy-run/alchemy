@@ -100,7 +100,7 @@ describe.sequential("BotManagement", () => {
           // 1. Create (adopt the singleton) with one SBFM field set.
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.BotManagement("Bots", {
+              return yield* Cloudflare.BotManagement.BotManagement("Bots", {
                 zoneId,
                 sbfmDefinitelyAutomated: target,
               });
@@ -120,7 +120,7 @@ describe.sequential("BotManagement", () => {
           //    the initial snapshot must remain sticky across updates.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.BotManagement("Bots", {
+              return yield* Cloudflare.BotManagement.BotManagement("Bots", {
                 zoneId,
                 sbfmDefinitelyAutomated: target2,
               });
@@ -165,7 +165,9 @@ describe.sequential("BotManagement", () => {
 
         const adopted = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.BotManagement("Bots", { zoneId });
+            return yield* Cloudflare.BotManagement.BotManagement("Bots", {
+              zoneId,
+            });
           }),
         );
         expect(adopted.zoneId).toEqual(zoneId);
@@ -209,7 +211,7 @@ describe.sequential("BotManagement", () => {
         yield* Effect.gen(function* () {
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.BotManagement("Bots", {
+              return yield* Cloudflare.BotManagement.BotManagement("Bots", {
                 zoneId,
                 sbfmStaticResourceProtection: toggled,
               });
@@ -247,7 +249,9 @@ describe.sequential("BotManagement", () => {
       Effect.gen(function* () {
         const zoneId = yield* resolveZoneId;
 
-        const provider = yield* Provider.findProvider(Cloudflare.BotManagement);
+        const provider = yield* Provider.findProvider(
+          Cloudflare.BotManagement.BotManagement,
+        );
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

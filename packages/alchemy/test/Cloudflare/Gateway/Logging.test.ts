@@ -47,7 +47,7 @@ test.provider(
       const flippedDnsLogAll = !(baselineDnsLogAll ?? true);
 
       const logging = yield* stack.deploy(
-        Cloudflare.GatewayLogging("Logging", {
+        Cloudflare.Gateway.Logging("Logging", {
           redactPii: flippedRedactPii,
           settingsByRuleType: {
             dns: { logAll: flippedDnsLogAll },
@@ -68,7 +68,7 @@ test.provider(
 
       // Update in place — flip redactPii back; the dns toggle stays.
       const updated = yield* stack.deploy(
-        Cloudflare.GatewayLogging("Logging", {
+        Cloudflare.Gateway.Logging("Logging", {
           redactPii: !flippedRedactPii,
           settingsByRuleType: {
             dns: { logAll: flippedDnsLogAll },
@@ -104,7 +104,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.GatewayLogging);
+      const provider = yield* Provider.findProvider(Cloudflare.Gateway.Logging);
       const all = yield* provider.list();
 
       expect(all.length).toEqual(1);

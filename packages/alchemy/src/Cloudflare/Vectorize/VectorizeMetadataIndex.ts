@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 
 export type MetadataIndexType = "string" | "number" | "boolean";
 
-export type VectorizeMetadataIndexProps = {
+export type MetadataIndexProps = {
   /**
    * Name of the parent Vectorize index. Pass `index.indexName` from a
    * `VectorizeIndex` to track the dependency. Changing the parent index
@@ -30,7 +30,7 @@ export type VectorizeMetadataIndexProps = {
   indexType: MetadataIndexType;
 };
 
-export type VectorizeMetadataIndexAttributes = {
+export type MetadataIndexAttributes = {
   propertyName: string;
   indexType: MetadataIndexType;
   indexName: string;
@@ -38,10 +38,10 @@ export type VectorizeMetadataIndexAttributes = {
   mutationId: string | undefined;
 };
 
-export type VectorizeMetadataIndex = Resource<
+export type MetadataIndex = Resource<
   "Cloudflare.VectorizeMetadataIndex",
-  VectorizeMetadataIndexProps,
-  VectorizeMetadataIndexAttributes,
+  MetadataIndexProps,
+  MetadataIndexAttributes,
   never,
   Providers
 >;
@@ -56,16 +56,18 @@ export type VectorizeMetadataIndex = Resource<
  * A metadata index is identified by its parent index and `propertyName` and
  * is immutable — changing the property name, type, or parent index triggers
  * a replacement.
- *
+ * @resource
+ * @product Vectorize
+ * @category AI
  * @section Creating a Metadata Index
  * @example Index a string metadata property
  * ```typescript
- * const index = yield* Cloudflare.VectorizeIndex("my-index", {
+ * const index = yield* Cloudflare.Vectorize.Index("my-index", {
  *   dimensions: 768,
  *   metric: "cosine",
  * });
  *
- * yield* Cloudflare.VectorizeMetadataIndex("CategoryMetaIndex", {
+ * yield* Cloudflare.Vectorize.MetadataIndex("CategoryMetaIndex", {
  *   indexName: index.indexName,
  *   propertyName: "category",
  *   indexType: "string",
@@ -74,7 +76,7 @@ export type VectorizeMetadataIndex = Resource<
  *
  * @example Index a numeric metadata property
  * ```typescript
- * yield* Cloudflare.VectorizeMetadataIndex("PriceMetaIndex", {
+ * yield* Cloudflare.Vectorize.MetadataIndex("PriceMetaIndex", {
  *   indexName: index.indexName,
  *   propertyName: "price",
  *   indexType: "number",
@@ -83,12 +85,12 @@ export type VectorizeMetadataIndex = Resource<
  *
  * @see https://developers.cloudflare.com/vectorize/reference/metadata-filtering/
  */
-export const VectorizeMetadataIndex = Resource<VectorizeMetadataIndex>(
+export const MetadataIndex = Resource<MetadataIndex>(
   "Cloudflare.VectorizeMetadataIndex",
 );
 
-export const VectorizeMetadataIndexProvider = () =>
-  Provider.succeed(VectorizeMetadataIndex, {
+export const MetadataIndexProvider = () =>
+  Provider.succeed(MetadataIndex, {
     stables: ["propertyName", "indexName", "accountId"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -202,7 +204,7 @@ export const VectorizeMetadataIndexProvider = () =>
           vectorize.listIndexMetadataIndexes({ accountId, indexName }).pipe(
             Effect.map((res) =>
               (res.metadataIndexes ?? []).flatMap(
-                (m): VectorizeMetadataIndexAttributes[] => {
+                (m): MetadataIndexAttributes[] => {
                   if (m.propertyName == null || m.indexType == null) {
                     return [];
                   }
@@ -220,7 +222,7 @@ export const VectorizeMetadataIndexProvider = () =>
             ),
             // Parent index removed between enumeration and read; skip it.
             Effect.catchTag(["NotFound", "Gone"], () =>
-              Effect.succeed<VectorizeMetadataIndexAttributes[]>([]),
+              Effect.succeed<MetadataIndexAttributes[]>([]),
             ),
           ),
         { concurrency: 10 },

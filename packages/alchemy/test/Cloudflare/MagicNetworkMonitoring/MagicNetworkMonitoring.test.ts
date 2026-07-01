@@ -84,7 +84,7 @@ describe.sequential("MagicNetworkMonitoring", () => {
         );
 
         const config = yield* stack.deploy(
-          Cloudflare.MagicNetworkMonitoringConfig("Config", {
+          Cloudflare.MagicNetworkMonitoring.Config("Config", {
             name: "alchemy-mnm-test",
             defaultSampling: 1,
           }),
@@ -105,7 +105,7 @@ describe.sequential("MagicNetworkMonitoring", () => {
         // `InvalidMnmConfig`, on this account), so only the always-available
         // fields are exercised here.
         const updated = yield* stack.deploy(
-          Cloudflare.MagicNetworkMonitoringConfig("Config", {
+          Cloudflare.MagicNetworkMonitoring.Config("Config", {
             name: "alchemy-mnm-test-v2",
             defaultSampling: 100,
           }),
@@ -121,7 +121,7 @@ describe.sequential("MagicNetworkMonitoring", () => {
 
         // Redeploying identical props is a no-op.
         const noop = yield* stack.deploy(
-          Cloudflare.MagicNetworkMonitoringConfig("Config", {
+          Cloudflare.MagicNetworkMonitoring.Config("Config", {
             name: "alchemy-mnm-test-v2",
             defaultSampling: 100,
           }),
@@ -163,7 +163,7 @@ describe.sequential("MagicNetworkMonitoring", () => {
         }) =>
           stack.deploy(
             Effect.gen(function* () {
-              const config = yield* Cloudflare.MagicNetworkMonitoringConfig(
+              const config = yield* Cloudflare.MagicNetworkMonitoring.Config(
                 "Config",
                 {
                   name: "alchemy-mnm-rule-test",
@@ -172,7 +172,7 @@ describe.sequential("MagicNetworkMonitoring", () => {
               );
               // Rules cannot exist without the account config — sequence the
               // rule after the config via its accountId output.
-              const rule = yield* Cloudflare.MagicNetworkMonitoringRule(
+              const rule = yield* Cloudflare.MagicNetworkMonitoring.Rule(
                 "Rule",
                 {
                   accountId: config.accountId,

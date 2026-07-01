@@ -6,11 +6,39 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import astroBrokenLinksChecker from "astro-broken-links-checker";
 import { defineConfig } from "astro/config";
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
+
+/**
+ * The Providers sidebar (Provider → Category → Service → Resource) is generated
+ * by `scripts/generate-api-reference.ts` from `@category` JSDoc annotations and
+ * written to `src/generated/providers-sidebar.json`. `bun run build:reference`
+ * regenerates it before every build. If it hasn't been generated yet (e.g. a
+ * fresh `astro dev` before running the generator), fall back to autogenerating
+ * from the directory tree so the docs still build.
+ */
+function providersSidebarEntry() {
+  try {
+    const json = readFileSync(
+      fileURLToPath(
+        new URL("./src/generated/providers-sidebar.json", import.meta.url),
+      ),
+      "utf8",
+    );
+    // Expanded one level deep: the Providers group shows its providers
+    // (AWS, Cloudflare, …) on load; everything below stays collapsed.
+    return { label: "Providers", collapsed: false, items: JSON.parse(json) };
+  } catch {
+    return {
+      label: "Providers",
+      collapsed: false,
+      autogenerate: { directory: "providers", collapsed: true },
+    };
+  }
+}
 
 /**
  * Copies `src/content/docs/**\/*.{md,mdx}` into the build output dir, preserving
@@ -238,10 +266,7 @@ export default defineConfig({
           label: "Guides",
           autogenerate: { directory: "guides" },
         },
-        {
-          label: "Providers",
-          autogenerate: { directory: "providers", collapsed: true },
-        },
+        providersSidebarEntry(),
       ],
       // starlight-blog feeds this many posts into the sidebar's "Recent"
       // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.

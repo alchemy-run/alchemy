@@ -11,9 +11,7 @@ import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_APIGATEWAY_TESTS === "true";
-
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "REST API proxies to Lambda (primitives)",
   (stack) =>
     Effect.gen(function* () {

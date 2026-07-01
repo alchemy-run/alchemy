@@ -29,7 +29,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.IndicatorFeedPermission,
+        Cloudflare.Intel.IndicatorFeedPermission,
       );
       const all = yield* provider.list();
       expect(all).toEqual([]);

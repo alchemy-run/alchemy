@@ -31,7 +31,7 @@ export interface ConfigMapProps {
 
 /**
  * A Kubernetes config map bound to an EKS cluster.
- *
+ * @resource
  * @example Create a config map
  * ```typescript
  * const config = yield* ConfigMap("app-config", {

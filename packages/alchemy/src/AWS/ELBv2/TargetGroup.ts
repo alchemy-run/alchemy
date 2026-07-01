@@ -84,7 +84,7 @@ export interface TargetGroup extends Resource<
  * An ELBv2 target group. A target group routes requests to one or more
  * registered targets (instances, IPs, Lambda functions, or another ALB) using
  * the configured protocol and port, and runs health checks against them.
- *
+ * @resource
  * @section Creating a Target Group
  * @example HTTP target group
  * ```typescript

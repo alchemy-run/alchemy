@@ -6,12 +6,13 @@ import {
   type HyperdriveOrigin,
   type Module,
   type Assets as RuntimeAssets,
-  type DurableObjectNamespace as RuntimeDurableObjectNamespace,
+  type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
   type RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  AiSearch,
   AnalyticsEngine,
   Artifacts,
   Assets,
@@ -39,13 +40,13 @@ import {
   WorkerLoader,
   Workflows,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
+import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as Hash from "effect/Hash";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -59,6 +60,7 @@ import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
+import { sha256 } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
@@ -70,7 +72,7 @@ import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
 type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
-  dev: Exclude<WorkerProps["dev"], false | string>;
+  dev: Extract<WorkerProps["dev"], { mode?: "worker" }>;
 };
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
@@ -102,9 +104,7 @@ export const LocalWorkerProvider = () =>
         }
       >();
 
-      const getQueueConsumers = Effect.fnUntraced(function* (
-        scriptName: string,
-      ) {
+      const getQueueConsumers = Effect.fn(function* (scriptName: string) {
         const consumers: RuntimeQueueConsumer[] = [];
         for (const consumer of MutableHashMap.values(
           localRuntimeState.queueConsumers,
@@ -199,7 +199,7 @@ export const LocalWorkerProvider = () =>
         return modules;
       });
 
-      const serveScoped = Effect.fnUntraced(function* (
+      const serveScoped = Effect.fn(function* (
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
@@ -212,9 +212,7 @@ export const LocalWorkerProvider = () =>
             compatibilityFlags: worker.compatibility.flags,
             bindings: worker.workerBindings as never,
             hyperdrives: worker.hyperdrives,
-            durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-              worker.durableObjectNamespaces,
-            ),
+            durableObjectNamespaces: worker.durableObjectNamespaces,
             queueConsumers: yield* getQueueConsumers(worker.name),
             modules: yield* toRuntimeModules(bundle),
             assets: toRuntimeAssets(worker.assets),
@@ -238,12 +236,14 @@ export const LocalWorkerProvider = () =>
         props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
+          Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
           ...Object.entries(props.env ?? {}).map(([key, value]) => {
             const unredacted = Redacted.isRedacted(value)
               ? Redacted.value(value)
@@ -254,8 +254,12 @@ export const LocalWorkerProvider = () =>
           }),
           ...(props.assets || props.vite ? [Assets.local("ASSETS")] : []),
         ];
-        const durableObjectNamespaces: Record<string, string> = {};
+        const durableObjectNamespaces: Record<
+          string,
+          RuntimeDurableObject & { uniqueKey: string }
+        > = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
+        const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
             if (
@@ -269,7 +273,11 @@ export const LocalWorkerProvider = () =>
               const namespaceId =
                 binding.namespaceId ??
                 encodeURIComponent(`${name}-${binding.className}`);
-              durableObjectNamespaces[binding.className] = namespaceId;
+              durableObjectNamespaces[binding.className] = {
+                className: binding.className,
+                uniqueKey: namespaceId,
+                sql: true,
+              };
               workerBindings.push(
                 yield* toRuntimeBinding({
                   ...binding,
@@ -295,13 +303,32 @@ export const LocalWorkerProvider = () =>
               };
             }
           }
+          if (data.containers) {
+            for (const container of data.containers) {
+              if (!container.dev) {
+                return yield* Effect.die(
+                  `Container ${container.className} has no dev image`,
+                );
+              }
+              containers[container.className] = container.dev;
+            }
+          }
+        }
+        for (const [className, dev] of Object.entries(containers)) {
+          if (!durableObjectNamespaces[className]) {
+            return yield* Effect.die(
+              `Durable Object namespace ${className} not found`,
+            );
+          }
+          durableObjectNamespaces[className].container = dev;
         }
         return {
           id,
           name,
           compatibility,
           workerBindings,
-          durableObjectNamespaces,
+          durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
           env: props.env,
           bundleOptions: {
@@ -325,7 +352,7 @@ export const LocalWorkerProvider = () =>
 
       type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
-      const runWorker = Effect.fnUntraced(function* (worker: WorkerConfig) {
+      const runWorker = Effect.fn(function* (worker: WorkerConfig) {
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
@@ -378,7 +405,7 @@ export const LocalWorkerProvider = () =>
         return proxy.url;
       });
 
-      const runVite = Effect.fnUntraced(function* (
+      const runVite = Effect.fn(function* (
         worker: WorkerConfig,
         rootDir: string | undefined,
       ) {
@@ -393,12 +420,11 @@ export const LocalWorkerProvider = () =>
           {
             compatibilityDate: worker.compatibility.date,
             compatibilityFlags: worker.compatibility.flags,
+            viteEnvironments: worker.viteEnvironments,
             worker: {
               name: worker.name,
               bindings: worker.workerBindings,
-              durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-                worker.durableObjectNamespaces,
-              ),
+              durableObjectNamespaces: worker.durableObjectNamespaces,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
               assets: toRuntimeAssets(worker.assets),
@@ -418,7 +444,7 @@ export const LocalWorkerProvider = () =>
       const instances = new Map<
         string,
         {
-          hash: number;
+          signature: string;
           fiber: Fiber.Fiber<
             Worker["Attributes"],
             Bundle.BundleError | WorkerValidationError | RuntimeError
@@ -441,10 +467,16 @@ export const LocalWorkerProvider = () =>
         return {
           workerId: config.name,
           workerName: config.name,
+          namespace: undefined,
           logpush: undefined,
           url,
           tags: [],
-          durableObjectNamespaces: config.durableObjectNamespaces,
+          durableObjectNamespaces: Object.fromEntries(
+            config.durableObjectNamespaces.map((namespace) => [
+              namespace.className,
+              namespace.uniqueKey,
+            ]),
+          ),
           domains: [url],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
@@ -471,8 +503,8 @@ export const LocalWorkerProvider = () =>
             props: news,
             bindings: newBindings,
           };
-          const hash = Hash.structure(options);
-          if (instances.get(options.id)?.hash === hash) {
+          const signature = yield* structuralSignature(options);
+          if (instances.get(options.id)?.signature === signature) {
             return { action: "noop" };
           }
           const name = yield* createWorkerName(id, news.name);
@@ -481,14 +513,52 @@ export const LocalWorkerProvider = () =>
             stables: output?.workerName === name ? ["workerName"] : undefined,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings }) {
+        precreate: Effect.fn(function* ({ id, news, bindings }) {
+          const name = yield* createWorkerName(id, news.name);
+          const durableObjectNamespaces: Record<string, string> = {};
+          for (const { data } of bindings) {
+            for (const binding of data?.bindings ?? []) {
+              if (binding.type === "durable_object_namespace") {
+                durableObjectNamespaces[binding.className] =
+                  binding.namespaceId ??
+                  encodeURIComponent(
+                    `${binding.scriptName!}-${binding.className}`,
+                  );
+              }
+            }
+          }
           const { accountId } = yield* yield* CloudflareEnvironment;
+          const url =
+            news.dev?.mode === "external"
+              ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
+                undefined
+              : yield* maybeStartProxy(id, {
+                  ...news.dev,
+                  port: news.dev?.port ?? 1337,
+                }).pipe(Effect.map((proxy) => proxy.url.toString()));
+          return {
+            workerId: name,
+            workerName: name,
+            namespace: undefined,
+            logpush: undefined,
+            url,
+            tags: [],
+            durableObjectNamespaces,
+            domains: url ? [url] : [],
+            crons: Array.from(
+              new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
+            ),
+            accountId,
+          };
+        }),
+        reconcile: Effect.fn(function* ({ id, news, bindings }) {
           // `dev: false` opts out of running a local Worker entirely —
           // typically because an external dev process (DevCommand) is
           // serving requests. Tear down any prior instance and return a
           // stub Attributes; the resource exists in state but has no
           // running workerd / proxy behind it.
-          if (news.dev === false || typeof news.dev === "string") {
+          if (news.dev?.mode === "external") {
+            const { accountId } = yield* yield* CloudflareEnvironment;
             const existing = instances.get(id);
             if (existing) {
               yield* Fiber.interrupt(existing.fiber);
@@ -499,8 +569,9 @@ export const LocalWorkerProvider = () =>
             return {
               workerId: name,
               workerName: name,
+              namespace: undefined,
               logpush: undefined,
-              url: news.dev || undefined,
+              url: news.dev.url,
               tags: [],
               durableObjectNamespaces: {},
               accountId,
@@ -509,10 +580,10 @@ export const LocalWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const options = { id, props: news as WorkerPropsWithDev, bindings };
-          const hash = Hash.structure(options);
+          const signature = yield* structuralSignature(options);
           const existing = instances.get(options.id);
           if (existing) {
-            if (existing.hash === hash) {
+            if (existing.signature === signature) {
               yield* Effect.log(
                 `[${options.id}] No changes, using existing instance`,
               );
@@ -530,7 +601,7 @@ export const LocalWorkerProvider = () =>
             Effect.forkDetach,
             Scope.provide(scope),
           );
-          instances.set(options.id, { hash, fiber, scope });
+          instances.set(options.id, { signature, fiber, scope });
           return yield* Fiber.join(fiber).pipe(
             Effect.onExit((exit) =>
               Effect.sync(() => {
@@ -553,7 +624,7 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
+export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -562,6 +633,10 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
   switch (b.type) {
     case "ai":
       return Ai.remote(b.name);
+    case "ai_search":
+      return AiSearch.remote(b.name, b.instanceName);
+    case "ai_search_namespace":
+      return AiSearch.remoteNamespace(b.name, b.namespace);
     case "analytics_engine":
       return AnalyticsEngine.local(b.name, b.dataset);
     case "artifacts":
@@ -633,7 +708,11 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
         allowedSenderAddresses: b.allowedSenderAddresses,
       });
     case "service":
-      return Service.local({ binding: b.name, scriptName: b.service });
+      return Service.local({
+        binding: b.name,
+        scriptName: b.service,
+        entrypoint: b.entrypoint,
+      });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
@@ -655,6 +734,48 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
       return yield* unsupported();
   }
 });
+
+/**
+ * Stable, collision-free structural signature used to decide whether a
+ * locally-running dev Worker needs to be torn down and restarted.
+ *
+ * We deliberately do NOT use `Hash.structure` here: Effect's structural
+ * hash folds sibling fields together with XOR, so when the *same* value
+ * change appears in two sibling subtrees the diffs cancel and the hash is
+ * unchanged. The Worker config mirrors `env` values into `bindings`
+ * (e.g. `DEV_MARKER`/an R2 bucket name appear in both `props.env` and the
+ * derived `bindings`), which is exactly the shape that collides — so an
+ * env-only or rebind change would be silently treated as "no change" and
+ * the dev Worker would never restart with the new bindings.
+ *
+ * A canonical JSON serialization (sorted keys, unwrapped `Redacted`,
+ * cycle-safe) gives an exact comparison instead of a lossy fingerprint. We
+ * hash that serialization with SHA-256 so each retained signature is a fixed
+ * 64-char digest rather than a copy of the whole props/bindings blob.
+ */
+const structuralSignature = (value: unknown): Effect.Effect<string> => {
+  const seen = new WeakSet<object>();
+  const normalize = (input: unknown): unknown => {
+    if (typeof input === "bigint") return `bigint:${input.toString()}`;
+    if (input === null || typeof input !== "object") return input;
+    if (Redacted.isRedacted(input)) {
+      return { __redacted: normalize(Redacted.value(input)) };
+    }
+    if (seen.has(input)) return "[circular]";
+    seen.add(input);
+    if (input instanceof Uint8Array) return { __bytes: Array.from(input) };
+    if (Array.isArray(input)) return input.map(normalize);
+    return Object.fromEntries(
+      Object.keys(input)
+        .sort()
+        .map((key) => [
+          key,
+          normalize((input as Record<string, unknown>)[key]),
+        ]),
+    );
+  };
+  return sha256(JSON.stringify(normalize(value)));
+};
 
 const toRuntimeAssets = (
   assets: WorkerAssetsConfig | undefined,
@@ -685,16 +806,6 @@ const toRuntimeAssets = (
     runWorkerFirst: assets.runWorkerFirst,
     serveDirectly: assets.serveDirectly,
   };
-};
-
-const toRuntimeDurableObjectNamespaces = (
-  namespaces: Record<string, string>,
-): RuntimeDurableObjectNamespace[] => {
-  return Object.entries(namespaces).map(([className, namespaceId]) => ({
-    className,
-    uniqueKey: namespaceId,
-    sql: true,
-  }));
 };
 
 const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {

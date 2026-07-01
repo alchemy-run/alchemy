@@ -92,7 +92,7 @@ export interface Policy extends Resource<
  * `Policy` owns the lifecycle of the policy metadata and its default version,
  * rotating versions on updates while keeping the current document attached to a
  * stable policy ARN.
- *
+ * @resource
  * @section Creating Policies
  * @example Managed Policy
  * ```typescript
@@ -225,7 +225,14 @@ export const PolicyProvider = () =>
                     policyDocument,
                     tags: toTagRecord(tags.Tags),
                   };
-                }),
+                }).pipe(
+                  // A peer test may delete a policy between `listPolicies` and
+                  // hydrating its tags/version — skip the vanished entry rather
+                  // than failing the whole enumeration.
+                  Effect.catchTag("NoSuchEntityException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
               { concurrency: 10 },
             );
             return rows.filter(

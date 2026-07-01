@@ -67,7 +67,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("Bucket");
+    const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 
     return {
       bucketName: bucket.bucketName,
@@ -106,11 +106,11 @@ Once you're authenticated, Alchemy shows a plan, asks for
 confirmation, and provisions the resource:
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
-[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d]
+[g]+[/g] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d]
 
 Proceed?
 ◉ Yes ○ No
-[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2Bucket)[/d] [g]created[/g]
+[g]✓[/g] [b]Bucket[/b] [d](Cloudflare.R2.Bucket)[/d] [g]created[/g]
 {
 [s2]bucketName: "myapp-bucket-a1b2c3d4e5",
 }`} />

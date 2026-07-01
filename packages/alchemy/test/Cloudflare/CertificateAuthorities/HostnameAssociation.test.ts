@@ -83,10 +83,11 @@ const waitForHostnames = (
     ),
     Effect.retry({
       while: (e) => e._tag === "HostnamesNotConverged",
-      // Bounded: 15 polls x 3s = max ~45s of waiting (the clear after a
-      // destroy was once observed to take just over 30s to converge).
+      // Bounded: 25 polls x 3s = max ~75s. PUT→GET convergence at the edge
+      // runs well past the earlier ~30s under full-suite parallel load (the
+      // API is being throttled, which stretches the propagation window).
       schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
+        Schedule.both(Schedule.recurs(25)),
       ),
     }),
   );
@@ -101,9 +102,12 @@ const waitForCertDelete = (accountId: string, mtlsCertificateId: string) =>
     Effect.catchTag("CertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      // Bounded: 10 polls x 3s = max ~30s of waiting.
+      // Bounded: 30 polls x 3s = max ~90s of waiting. The CA certificate
+      // delete only completes once the hostname-association clear (issued
+      // first by destroy) has propagated, and under full-suite load that
+      // combined window was observed to exceed the previous ~30s budget.
       schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(10)),
+        Schedule.both(Schedule.recurs(30)),
       ),
     }),
   );
@@ -120,10 +124,13 @@ describe.sequential("HostnameAssociation", () => {
         yield* clearAssociation(zoneId);
 
         const created = yield* stack.deploy(
-          Cloudflare.HostnameAssociation("ManagedCaHosts", {
-            zoneId,
-            hostnames: [`mtls.${zoneName}`],
-          }),
+          Cloudflare.CertificateAuthorities.HostnameAssociation(
+            "ManagedCaHosts",
+            {
+              zoneId,
+              hostnames: [`mtls.${zoneName}`],
+            },
+          ),
         );
 
         expect(created.zoneId).toEqual(zoneId);
@@ -134,10 +141,13 @@ describe.sequential("HostnameAssociation", () => {
 
         // In-place update — hostnames are the mutable aspect of the singleton.
         const updated = yield* stack.deploy(
-          Cloudflare.HostnameAssociation("ManagedCaHosts", {
-            zoneId,
-            hostnames: [`mtls2.${zoneName}`, `mtls.${zoneName}`],
-          }),
+          Cloudflare.CertificateAuthorities.HostnameAssociation(
+            "ManagedCaHosts",
+            {
+              zoneId,
+              hostnames: [`mtls2.${zoneName}`, `mtls.${zoneName}`],
+            },
+          ),
         );
 
         expect([...updated.hostnames].sort()).toEqual([
@@ -155,6 +165,9 @@ describe.sequential("HostnameAssociation", () => {
         // Destroy cleared the association (PUT of an empty hostname list).
         yield* waitForHostnames(zoneId, []);
       }).pipe(logLevel),
+    // Three sequential edge-convergence waits (create, update, clear), each up
+    // to ~75s under throttled full-suite load, exceed the 120s default.
+    { timeout: 300_000 },
   );
 
   test.provider(
@@ -168,15 +181,22 @@ describe.sequential("HostnameAssociation", () => {
 
         const { cert, assoc } = yield* stack.deploy(
           Effect.gen(function* () {
-            const cert = yield* Cloudflare.MtlsCertificate("CertAuthCa", {
-              ca: true,
-              certificates: CA_CERT_1,
-            });
-            const assoc = yield* Cloudflare.HostnameAssociation("CaHosts", {
-              zoneId,
-              mtlsCertificateId: cert.mtlsCertificateId,
-              hostnames: [`mtls-ca.${zoneName}`],
-            });
+            const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate(
+              "CertAuthCa",
+              {
+                ca: true,
+                certificates: CA_CERT_1,
+              },
+            );
+            const assoc =
+              yield* Cloudflare.CertificateAuthorities.HostnameAssociation(
+                "CaHosts",
+                {
+                  zoneId,
+                  mtlsCertificateId: cert.mtlsCertificateId,
+                  hostnames: [`mtls-ca.${zoneName}`],
+                },
+              );
             return { cert, assoc };
           }),
         );
@@ -211,13 +231,14 @@ describe.sequential("HostnameAssociation", () => {
 
         const first = yield* stack.deploy(
           Effect.gen(function* () {
-            const assoc = yield* Cloudflare.HostnameAssociation(
-              "ReplaceHosts",
-              {
-                zoneId,
-                hostnames: [`mtls-replace.${zoneName}`],
-              },
-            );
+            const assoc =
+              yield* Cloudflare.CertificateAuthorities.HostnameAssociation(
+                "ReplaceHosts",
+                {
+                  zoneId,
+                  hostnames: [`mtls-replace.${zoneName}`],
+                },
+              );
             return { assoc };
           }),
         );
@@ -231,18 +252,22 @@ describe.sequential("HostnameAssociation", () => {
         // deletes.
         const second = yield* stack.deploy(
           Effect.gen(function* () {
-            const cert = yield* Cloudflare.MtlsCertificate("ReplaceCa", {
-              ca: true,
-              certificates: CA_CERT_2,
-            });
-            const assoc = yield* Cloudflare.HostnameAssociation(
-              "ReplaceHosts",
+            const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate(
+              "ReplaceCa",
               {
-                zoneId,
-                mtlsCertificateId: cert.mtlsCertificateId,
-                hostnames: [`mtls-replace.${zoneName}`],
+                ca: true,
+                certificates: CA_CERT_2,
               },
             );
+            const assoc =
+              yield* Cloudflare.CertificateAuthorities.HostnameAssociation(
+                "ReplaceHosts",
+                {
+                  zoneId,
+                  mtlsCertificateId: cert.mtlsCertificateId,
+                  hostnames: [`mtls-replace.${zoneName}`],
+                },
+              );
             return { cert, assoc };
           }),
         );

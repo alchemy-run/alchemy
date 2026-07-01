@@ -70,7 +70,7 @@ export interface DeploymentProps {
 
 /**
  * A Kubernetes deployment bound to an EKS cluster.
- *
+ * @resource
  * @example Deploy a simple workload
  * ```typescript
  * const app = yield* Deployment("api", {

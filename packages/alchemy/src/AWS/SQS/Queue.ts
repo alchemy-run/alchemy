@@ -159,7 +159,7 @@ export interface Queue extends Resource<
  * `Queue` owns the lifecycle of a standard or FIFO SQS queue. A queue name
  * is auto-generated from the app, stage, and logical ID unless you provide
  * one explicitly. FIFO queues automatically append the `.fifo` suffix.
- *
+ * @resource
  * @section Creating Queues
  * @example Standard Queue
  * ```typescript
@@ -230,7 +230,7 @@ export interface Queue extends Resource<
  * @example Send a message from a handler
  * ```typescript
  * // init
- * const sendMessage = yield* SQS.SendMessage.bind(queue);
+ * const sendMessage = yield* SQS.SendMessage(queue);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -250,7 +250,7 @@ export interface Queue extends Resource<
  * @example Process queue messages
  * ```typescript
  * // init
- * yield* SQS.messages(queue).process(
+ * yield* SQS.consumeQueueMessages(queue,
  *   Effect.fn(function* (message) {
  *     yield* Effect.log(`Received: ${message.body}`);
  *   }),
@@ -282,7 +282,7 @@ export const QueueProvider = () =>
   Provider.effect(
     Queue,
     Effect.gen(function* () {
-      const createQueueName = Effect.fnUntraced(function* (
+      const createQueueName = Effect.fn(function* (
         id: string,
         props: {
           queueName?: string | undefined;
@@ -511,7 +511,7 @@ export const QueueProvider = () =>
               .createQueue({
                 QueueName: queueName,
                 Attributes: createAttrs,
-                tags: { ...internalTags, ...(news.tags ?? {}) },
+                tags: { ...internalTags, ...news.tags },
               })
               .pipe(
                 Effect.retry({
@@ -522,6 +522,17 @@ export const QueueProvider = () =>
                         `Queue was deleted recently, retrying... ${i + 1}s`,
                       ),
                     ),
+                  ),
+                }),
+                // A `RedrivePolicy` referencing a just-created dead-letter
+                // queue is transiently rejected with
+                // `InvalidParameterValueException` until that DLQ's ARN is
+                // visible to SQS. It's an eventual-consistency race, not a
+                // genuine validation failure, so retry on a bounded schedule.
+                Effect.retry({
+                  while: (e) => e._tag === "InvalidParameterValueException",
+                  schedule: Schedule.fixed(1000).pipe(
+                    Schedule.both(Schedule.recurs(30)),
                   ),
                 }),
                 Effect.catchTag("QueueNameExists", () =>

@@ -54,7 +54,7 @@ export interface OpenIDConnectProvider extends Resource<
  *
  * `OpenIDConnectProvider` registers an external OIDC issuer so IAM roles can be
  * assumed through web identity federation flows such as GitHub Actions.
- *
+ * @resource
  * @section Federating with OIDC
  * @example Create a GitHub Actions OIDC Provider
  * ```typescript
@@ -94,22 +94,30 @@ export const OpenIDConnectProviderProvider = () =>
         return response;
       });
 
-      const hydrate = Effect.fn(function* (providerArn: string) {
-        const provider = yield* readProvider(providerArn);
-        if (!provider?.Url) {
-          return undefined;
-        }
-        const tags = yield* iam.listOpenIDConnectProviderTags({
-          OpenIDConnectProviderArn: providerArn,
-        });
-        return {
-          openIDConnectProviderArn: providerArn,
-          url: provider.Url,
-          clientIDList: provider.ClientIDList ?? [],
-          thumbprintList: provider.ThumbprintList ?? [],
-          tags: toTagRecord(tags.Tags),
-        };
-      });
+      const hydrate = (providerArn: string) =>
+        Effect.gen(function* () {
+          const provider = yield* readProvider(providerArn);
+          if (!provider?.Url) {
+            return undefined;
+          }
+          const tags = yield* iam.listOpenIDConnectProviderTags({
+            OpenIDConnectProviderArn: providerArn,
+          });
+          return {
+            openIDConnectProviderArn: providerArn,
+            url: provider.Url,
+            clientIDList: provider.ClientIDList ?? [],
+            thumbprintList: provider.ThumbprintList ?? [],
+            tags: toTagRecord(tags.Tags),
+          };
+        }).pipe(
+          // A peer test may delete a provider between
+          // `listOpenIDConnectProviders` and hydrating its tags — skip the
+          // vanished entry rather than failing the whole enumeration.
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
       return {
         stables: ["openIDConnectProviderArn"],

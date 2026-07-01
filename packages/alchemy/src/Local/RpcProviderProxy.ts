@@ -26,10 +26,10 @@ export class RpcProviderProxy extends Context.Service<
 
 export const SPAWNER_URL_ENV_KEY = "ALCHEMY_RPC_SPAWNER_URL" as const;
 
-const make = Effect.fnUntraced(function* (spawnerUrl: string) {
+const make = Effect.fn(function* (spawnerUrl: string) {
   const client = yield* HttpClient.HttpClient;
 
-  const getSession = Effect.fnUntraced(
+  const getSession = Effect.fn(
     function* (serverEntryUrl: string) {
       const alchemyContext = yield* AlchemyContext;
       const stack = yield* Stack;
@@ -64,7 +64,7 @@ const make = Effect.fnUntraced(function* (spawnerUrl: string) {
   });
 
   return RpcProviderProxy.of({
-    get: Effect.fnUntraced(function* (mainUrl, providerName) {
+    get: Effect.fn(function* (mainUrl, providerName) {
       const session = yield* cache.lookup(mainUrl);
       const provider = yield* Effect.promise(
         () =>

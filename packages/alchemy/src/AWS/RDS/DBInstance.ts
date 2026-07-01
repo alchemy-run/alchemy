@@ -259,7 +259,7 @@ export interface DBInstance extends Resource<
  * observed cloud state; immutable fields (`engine`, `dbName`,
  * `masterUsername`, `availabilityZone`, `storageEncrypted`, `kmsKeyId`,
  * `dbSubnetGroupName`) force a replacement.
- *
+ * @resource
  * @section Standalone Instance
  * @example A gp3 MySQL instance
  * ```typescript

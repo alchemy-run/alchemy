@@ -1,27 +1,32 @@
+import { existsSync, readFileSync } from "node:fs";
 import path from "pathe";
-import { loadEnv } from "vite";
+import { loadEnv, type Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
 const AWS_API_GATEWAY_INCLUDE = "test/AWS/ApiGateway/**/*.test.ts";
 const PLANETSCALE_INCLUDE = "test/Planetscale/**/*.test.ts";
 
 export default defineConfig({
+  plugins: [distilledSrcResolver()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
     },
-    // Vite's default external condiitons are ["node", "module-sync"].
-    // Extend this to include Bun so `@distilled.cloud/*` packages are
-    // resolved from `src/*.ts` instead of `lib/*.js`.
-    externalConditions: ["bun", "node", "module-sync"],
   },
   test: {
     env: loadEnv("test", path.resolve(import.meta.dirname, "..", ".."), ""),
     pool: "forks",
-    maxWorkers: 32,
+    maxWorkers: 16,
     sequence: { concurrent: true },
     testTimeout: 120_000,
     hookTimeout: 120_000,
+    // These suites run against real cloud APIs at high concurrency, so a
+    // handful of tests per run hit transient network/edge-propagation flakes
+    // (read ETIMEDOUT, D1 replica lag, cert tombstone lag) that pass on a
+    // re-run. Retry the test body (deploys live in `beforeAll`, so they are
+    // not re-run) so genuine failures — which fail deterministically — still
+    // surface while flakes self-heal.
+    retry: 2,
     passWithNoTests: true,
     projects: [
       // Run most tests with the above defaults, excluding special cases.
@@ -63,3 +68,67 @@ export default defineConfig({
     ],
   },
 });
+
+/**
+ * Resolve `@distilled.cloud/*` imports to their TypeScript sources so a
+ * `bun scripts/generate.ts` regen is live in tests with no `lib` rebuild.
+ *
+ * The distilled packages expose `src/*.ts` under the `bun` export condition
+ * and built `lib/*.js` under `default`. Under `bun vitest` the externalized
+ * import would otherwise resolve `default` → stale `lib`. We can't flip the
+ * resolver to `bun` globally (that breaks other deps' subpath resolution,
+ * e.g. `@smithy/core`), so this plugin redirects ONLY `@distilled.cloud/*`
+ * by reading each package's own `exports` map and picking its `bun` target.
+ * Returning the absolute `src` path makes Vite transform it as a project
+ * file instead of externalizing the built output.
+ */
+function distilledSrcResolver(): Plugin {
+  const prefix = "@distilled.cloud/";
+  const exportsCache = new Map<string, Record<string, any> | undefined>();
+
+  const loadExports = (pkg: string) => {
+    if (exportsCache.has(pkg)) return exportsCache.get(pkg);
+    const pkgJson = path.resolve(
+      import.meta.dirname,
+      "node_modules",
+      prefix + pkg,
+      "package.json",
+    );
+    const exports = existsSync(pkgJson)
+      ? (JSON.parse(readFileSync(pkgJson, "utf8")).exports as
+          | Record<string, any>
+          | undefined)
+      : undefined;
+    exportsCache.set(pkg, exports);
+    return exports;
+  };
+
+  return {
+    name: "distilled-src-resolver",
+    enforce: "pre",
+    resolveId(source) {
+      if (!source.startsWith(prefix)) return null;
+      const [pkg, ...rest] = source.slice(prefix.length).split("/");
+      const exports = loadExports(pkg);
+      if (!exports) return null;
+      const subpath = rest.length ? `./${rest.join("/")}` : ".";
+
+      // Exact match first, then the `./*` wildcard.
+      let target = exports[subpath] as Record<string, string> | undefined;
+      let star = "";
+      if (!target && exports["./*"]) {
+        target = exports["./*"];
+        star = rest.join("/");
+      }
+      const file = target?.bun ?? target?.default;
+      if (!file) return null;
+
+      return path.resolve(
+        import.meta.dirname,
+        "node_modules",
+        prefix + pkg,
+        file.replace("*", star),
+      );
+    },
+  };
+}

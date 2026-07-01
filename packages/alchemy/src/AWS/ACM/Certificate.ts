@@ -7,13 +7,13 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   createTagsList,
   diffTags,
   hasAlchemyTags,
 } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface CertificateProps {
   /**
@@ -110,7 +110,7 @@ export interface Certificate extends Resource<
  * region required for CloudFront viewer certificates. When `hostedZoneId` is
  * provided for DNS validation, the provider creates or updates the Route 53
  * validation records and waits for the certificate to be issued.
- *
+ * @resource
  * @section Requesting Certificates
  * @example DNS-Validated Certificate
  * ```typescript
@@ -254,25 +254,6 @@ export const CertificateProvider = () =>
         );
       });
 
-      const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((response) => response.ChangeInfo),
-          Effect.flatMap((changeInfo) =>
-            changeInfo.Status === "INSYNC"
-              ? Effect.succeed(changeInfo)
-              : Effect.fail(new Error("Route53ChangePending")),
-          ),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error &&
-              error.message === "Route53ChangePending",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-          }),
-        );
-      });
-
       const upsertValidationRecords = Effect.fn(function* (
         hostedZoneId: string,
         certificate: acm.CertificateDetail,
@@ -303,7 +284,7 @@ export const CertificateProvider = () =>
           },
         });
 
-        yield* waitForChange(response.ChangeInfo.Id);
+        yield* waitForRoute53Change(response.ChangeInfo.Id);
       });
 
       return {
@@ -504,6 +485,12 @@ export const CertificateProvider = () =>
                 CertificateArn: output.certificateArn,
               })
               .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "ConflictException",
+                  schedule: Schedule.fixed("2 seconds").pipe(
+                    Schedule.both(Schedule.recurs(15)),
+                  ),
+                }),
                 Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               ),
           );
@@ -511,6 +498,29 @@ export const CertificateProvider = () =>
       };
     }),
   );
+
+/** @internal */
+export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
+  return yield* route53
+    .getChange({
+      Id: changeId.replace(/^\/change\//, ""),
+    })
+    .pipe(
+      Effect.map((response) => response.ChangeInfo),
+      Effect.flatMap((changeInfo) =>
+        changeInfo.Status === "INSYNC"
+          ? Effect.succeed(changeInfo)
+          : Effect.fail(new Error("Route53ChangePending")),
+      ),
+      Effect.retry({
+        while: (error) =>
+          error instanceof Error && error.message === "Route53ChangePending",
+        schedule: Schedule.fixed("2 seconds").pipe(
+          Schedule.both(Schedule.recurs(60)),
+        ),
+      }),
+    );
+});
 
 const ACM_REGION = "us-east-1" as const;
 const defaultValidationMethod = "DNS" as const;

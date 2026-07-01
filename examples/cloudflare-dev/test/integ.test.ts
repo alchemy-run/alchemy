@@ -9,7 +9,7 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import Stack from "../alchemy.run.ts";
-import type { QueueMessage } from "../src/AsyncWorker.ts";
+import type { Message } from "../src/AsyncWorker.ts";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -103,7 +103,7 @@ test(
     const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
-      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map(cast<Schema.Json, Array<Message>>),
       Effect.map((messages) =>
         messages.find((m) => m.body.sentAt === body.sentAt),
       ),
@@ -127,7 +127,7 @@ test(
 );
 
 /**
- * EffectWorker binds a KV namespace via `Cloudflare.KVNamespace.bind(KV)`
+ * EffectWorker binds a KV namespace via `Cloudflare.KV.ReadWriteNamespace(KV)`
  * and returns the result of `kv.list()` as JSON. A successful response
  * proves the Effect-style binding wired the runtime SDK and the
  * `WorkerEnvironment` service was provisioned for the fetch handler.
@@ -161,7 +161,7 @@ test(
     const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
-      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map(cast<Schema.Json, Array<Message>>),
       Effect.map((messages) =>
         messages.find((m) => m.body.sentAt === body.sentAt),
       ),
@@ -274,4 +274,16 @@ test(
     yield* exerciseWorkflow(effectWorker!, "effect");
   }),
   { timeout: 180_000 },
+);
+
+test(
+  "EffectWorker fetches a URL in a sandbox",
+  Effect.gen(function* () {
+    const { effectWorker } = yield* stack;
+    const url = effectWorker!;
+    const response = yield* HttpClient.get(new URL("/sandbox", url));
+    expect(response.status).toBe(200);
+    const body = (yield* response.text) as string;
+    expect(body).toBe("Hello from Sandbox container!");
+  }),
 );

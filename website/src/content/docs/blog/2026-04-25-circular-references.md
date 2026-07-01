@@ -57,7 +57,7 @@ Here's the Cloudflare `Worker` provider's `precreate`
 (abbreviated from [`Worker.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)):
 
 ```typescript
-precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+precreate: Effect.fn(function* ({ id, news, session }) {
   const name = yield* createWorkerName(id, news.name);
 
   // Upload a placeholder script. Just enough to reserve the

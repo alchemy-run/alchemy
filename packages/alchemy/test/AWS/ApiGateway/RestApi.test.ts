@@ -7,29 +7,29 @@ import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_APIGATEWAY_TESTS === "true";
+test.provider.skipIf(!!process.env.FAST)(
+  "create and delete REST API",
+  (stack) =>
+    Effect.gen(function* () {
+      const api = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AWS.ApiGateway.RestApi("AgRestApiLifecycle", {
+            endpointConfiguration: { types: ["REGIONAL"] },
+          });
+        }),
+      );
 
-test.provider.skipIf(!runLive)("create and delete REST API", (stack) =>
-  Effect.gen(function* () {
-    const api = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* AWS.ApiGateway.RestApi("AgRestApiLifecycle", {
-          endpointConfiguration: { types: ["REGIONAL"] },
-        });
-      }),
-    );
+      expect(api.restApiId).toBeDefined();
+      expect(api.rootResourceId).toBeDefined();
 
-    expect(api.restApiId).toBeDefined();
-    expect(api.rootResourceId).toBeDefined();
+      const remote = yield* ag.getRestApi({ restApiId: api.restApiId });
+      expect(remote.id).toEqual(api.restApiId);
 
-    const remote = yield* ag.getRestApi({ restApiId: api.restApiId });
-    expect(remote.id).toEqual(api.restApiId);
-
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
 );
 
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "binary media types update applies via patch",
   (stack) =>
     Effect.gen(function* () {
@@ -62,7 +62,7 @@ test.provider.skipIf(!runLive)(
     }),
 );
 
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "binary media types removal applies via patch",
   (stack) =>
     Effect.gen(function* () {
@@ -97,7 +97,7 @@ test.provider.skipIf(!runLive)(
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // real REST API, resolve the typed provider via `findProvider`, call `list()`,
 // and assert the deployed API appears in the exhaustively-paginated result.
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "list enumerates the deployed REST API",
   (stack) =>
     Effect.gen(function* () {

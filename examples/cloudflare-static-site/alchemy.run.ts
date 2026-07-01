@@ -10,7 +10,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     //fix url when no dev command present
-    const worker = yield* Cloudflare.StaticSite("Website", {
+    const worker = yield* Cloudflare.Website.StaticSite("Website", {
       command: "zola build",
       dev: {
         command: "zola serve",

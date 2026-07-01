@@ -6,6 +6,7 @@ import {
   PersistenceError,
   type BackingPersistenceStore,
 } from "effect/unstable/persistence/Persistence";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
 
 /**
@@ -26,6 +27,8 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * :::
  *
  * @binding
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Wiring it into a chat-backing DO
  * @example Persisted chat history per DO instance
@@ -40,13 +43,13 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * import { Chat, LanguageModel } from "effect/unstable/ai";
  * import { Persistence } from "effect/unstable/persistence";
  *
- * export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatBackend>()(
+ * export default class ChatBackend extends Cloudflare.DurableObject<ChatBackend>()(
  *   "ChatBackend",
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {
  *       const persistence = yield* Persistence.layerResultPersisted({
  *         storeId: "alchemy.chat",
- *       }).pipe(Layer.provide(Cloudflare.DurableObjectChatPersistence));
+ *       }).pipe(Layer.provide(Cloudflare.AI.DurableObjectChatPersistence));
  *
  *       return {
  *         send: (threadId: string, prompt: string) =>
@@ -65,11 +68,11 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * ```typescript
  * const aiPersistence = yield* Persistence.layerResultPersisted({
  *   storeId: "alchemy.chat",
- * }).pipe(Layer.provide(Cloudflare.DurableObjectChatPersistence));
+ * }).pipe(Layer.provide(Cloudflare.AI.DurableObjectChatPersistence));
  *
  * const auditPersistence = yield* Persistence.layerResultPersisted({
  *   storeId: "alchemy.audit",
- * }).pipe(Layer.provide(Cloudflare.DurableObjectChatPersistence));
+ * }).pipe(Layer.provide(Cloudflare.AI.DurableObjectChatPersistence));
  * ```
  */
 export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
@@ -91,7 +94,10 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
             get: (key) =>
               storage
                 .get<object>(prefixed(key))
-                .pipe(Effect.mapError(wrapErr("get", key))),
+                .pipe(
+                  Effect.mapError(wrapErr("get", key)),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             getMany: (keys) =>
               storage.get<object>(keys.map(prefixed)).pipe(
                 Effect.mapError(wrapErr("getMany")),
@@ -101,21 +107,32 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
                       object | undefined
                     >,
                 ),
+                Effect.provide(RuntimeContext.phantom),
               ),
             set: (key, value, _ttl) =>
               storage
                 .put(prefixed(key), value)
-                .pipe(Effect.mapError(wrapErr("set", key))),
+                .pipe(
+                  Effect.mapError(wrapErr("set", key)),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             setMany: (entries) =>
               storage
                 .put(
                   Object.fromEntries(entries.map(([k, v]) => [prefixed(k), v])),
                 )
-                .pipe(Effect.mapError(wrapErr("setMany"))),
+                .pipe(
+                  Effect.mapError(wrapErr("setMany")),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             remove: (key) =>
               storage
                 .delete(prefixed(key))
-                .pipe(Effect.asVoid, Effect.mapError(wrapErr("remove", key))),
+                .pipe(
+                  Effect.asVoid,
+                  Effect.mapError(wrapErr("remove", key)),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             clear: storage.list({ prefix: `${storeId}:` }).pipe(
               Effect.flatMap((map) => {
                 const ks = [...map.keys()];
@@ -123,6 +140,7 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
                 return Effect.asVoid(storage.delete(ks));
               }),
               Effect.mapError(wrapErr("clear")),
+              Effect.provide(RuntimeContext.phantom),
             ),
           } satisfies BackingPersistenceStore;
         }),

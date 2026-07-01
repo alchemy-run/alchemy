@@ -18,7 +18,7 @@ test.provider("list enumerates the deployed infrastructure target", (stack) =>
 
     const target = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessInfrastructureTarget("ListTarget", {
+        return yield* Cloudflare.Access.InfrastructureTarget("ListTarget", {
           hostname: "list-test.bastion.internal",
           ip: { ipv4: { ipAddr: "10.7.0.42" } },
         });
@@ -26,7 +26,7 @@ test.provider("list enumerates the deployed infrastructure target", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AccessInfrastructureTarget,
+      Cloudflare.Access.InfrastructureTarget,
     );
     const all = yield* provider.list();
 

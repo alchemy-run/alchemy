@@ -87,7 +87,7 @@ export interface Role extends Resource<
 
 /**
  * An IAM role for AWS services and runtimes.
- *
+ * @resource
  * @section Creating Roles
  * @example ECS Task Role
  * ```typescript

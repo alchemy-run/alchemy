@@ -9,9 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const SynProtectionFilterTypeId =
-  "Cloudflare.DdosProtection.SynProtectionFilter" as const;
-type SynProtectionFilterTypeId = typeof SynProtectionFilterTypeId;
+const TypeId = "Cloudflare.DdosProtection.SynProtectionFilter" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Operating mode of an Advanced TCP Protection filter: the filter applies
@@ -49,7 +48,7 @@ export interface SynProtectionFilterAttributes {
 }
 
 export type SynProtectionFilter = Resource<
-  SynProtectionFilterTypeId,
+  TypeId,
   SynProtectionFilterProps,
   SynProtectionFilterAttributes,
   never,
@@ -72,11 +71,13 @@ export type SynProtectionFilter = Resource<
  * state, `read` scans for an existing filter with the same expression and
  * reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DDoS Protection
+ * @category Network
  * @section Creating a filter
  * @example Scope SYN mitigation to HTTPS traffic
  * ```typescript
- * const filter = yield* Cloudflare.SynProtectionFilter("HttpsOnly", {
+ * const filter = yield* Cloudflare.DdosProtection.SynProtectionFilter("HttpsOnly", {
  *   expression: "tcp.dstport in {443}",
  *   mode: "enabled",
  * });
@@ -84,7 +85,7 @@ export type SynProtectionFilter = Resource<
  *
  * @example Monitor a port range without mitigating
  * ```typescript
- * yield* Cloudflare.SynProtectionFilter("WatchHighPorts", {
+ * yield* Cloudflare.DdosProtection.SynProtectionFilter("WatchHighPorts", {
  *   expression: "tcp.dstport in {8000..8999}",
  *   mode: "monitoring",
  * });
@@ -92,9 +93,7 @@ export type SynProtectionFilter = Resource<
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
  */
-export const SynProtectionFilter = Resource<SynProtectionFilter>(
-  SynProtectionFilterTypeId,
-);
+export const SynProtectionFilter = Resource<SynProtectionFilter>(TypeId);
 
 /**
  * Returns true if the given value is a SynProtectionFilter resource.
@@ -102,8 +101,7 @@ export const SynProtectionFilter = Resource<SynProtectionFilter>(
 export const isSynProtectionFilter = (
   value: unknown,
 ): value is SynProtectionFilter =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === SynProtectionFilterTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SynProtectionFilterProvider = () =>
   Provider.succeed(SynProtectionFilter, {

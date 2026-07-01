@@ -57,6 +57,6 @@ export const connectionString = (
   resource: ConnectResource,
   options: ConnectOptions,
 ) =>
-  Effect.map(Connect.bind(resource, options), (info) =>
+  Effect.map(Connect(resource, options), (info) =>
     Effect.map(info, (c) => Redacted.make(formatConnectionString(c))),
   );

@@ -50,7 +50,7 @@ const getSetting = (zoneId: string) =>
   );
 
 // Both cases mutate the same zone-level Waiting Room settings singleton; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
-describe.sequential("Settings", () => {
+describe("Settings", () => {
   test.provider(
     "pins the settings to the default baseline without touching the API",
     (stack) =>
@@ -64,7 +64,7 @@ describe.sequential("Settings", () => {
         // converges even on unentitled zones.
         const settings = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.WaitingRoomSettings("Settings", {
+            return yield* Cloudflare.WaitingRoom.Settings("Settings", {
               zoneId,
               searchEngineCrawlerBypass: false,
             });
@@ -128,7 +128,7 @@ describe.sequential("Settings", () => {
 
         const settings = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.WaitingRoomSettings("Settings", {
+            return yield* Cloudflare.WaitingRoom.Settings("Settings", {
               zoneId,
               searchEngineCrawlerBypass: true,
             });
@@ -159,7 +159,7 @@ describe.sequential("Settings", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.WaitingRoomSettings,
+        Cloudflare.WaitingRoom.Settings,
       );
       const all = yield* provider.list();
 

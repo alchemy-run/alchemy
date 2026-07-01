@@ -55,7 +55,7 @@ export interface Subscription extends Resource<
  * `Subscription` keeps the lifecycle of the subscription itself separate from the
  * topic, which lets Lambda event sources and manually managed subscriptions share
  * the same canonical resource model.
- *
+ * @resource
  * @section Creating Subscriptions
  * @example Lambda Subscription
  * ```typescript

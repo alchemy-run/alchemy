@@ -106,10 +106,10 @@ export interface Webhook extends Resource<
  * `repo` scope (admin access to the repository) to manage webhooks.
  *
  * Most users don't construct `Webhook` directly — prefer
- * {@link import("./RepositoryEventSource.ts").events | events(repository).subscribe(...)}
+ * {@link import("./RepositoryEventSource.ts").events | events(repository, handler)}
  * inside a Cloudflare Worker, which provisions the webhook, wires the
  * delivery URL to the Worker, and forwards verified events to your handler.
- *
+ * @resource
  * @section Creating a Webhook
  * @example Forward push events to a URL
  * ```typescript

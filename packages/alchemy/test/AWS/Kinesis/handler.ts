@@ -8,14 +8,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
 
 export class KinesisApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KinesisApiFunction",
-  {
-    main: import.meta.filename,
-    url: true,
-  },
 ) {}
 
 export class StreamAndConsumer extends Context.Service<
@@ -52,30 +47,32 @@ export const StreamAndConsumerLive = Layer.effect(
 );
 
 export const KinesisApiFunctionLive = KinesisApiFunction.make(
+  {
+    main: import.meta.url,
+    url: true,
+  },
   Effect.gen(function* () {
     const { stream, consumer } = yield* StreamAndConsumer;
 
     const describeAccountSettings =
-      yield* AWS.Kinesis.DescribeAccountSettings.bind();
-    const describeLimits = yield* AWS.Kinesis.DescribeLimits.bind();
-    const listStreams = yield* AWS.Kinesis.ListStreams.bind();
-    const describeStream = yield* AWS.Kinesis.DescribeStream.bind(stream);
+      yield* AWS.Kinesis.DescribeAccountSettings();
+    const describeLimits = yield* AWS.Kinesis.DescribeLimits();
+    const listStreams = yield* AWS.Kinesis.ListStreams();
+    const describeStream = yield* AWS.Kinesis.DescribeStream(stream);
     const describeStreamSummary =
-      yield* AWS.Kinesis.DescribeStreamSummary.bind(stream);
-    const listShards = yield* AWS.Kinesis.ListShards.bind(stream);
-    const getShardIterator = yield* AWS.Kinesis.GetShardIterator.bind(stream);
-    const getRecords = yield* AWS.Kinesis.GetRecords.bind(stream);
-    const getResourcePolicy = yield* AWS.Kinesis.GetResourcePolicy.bind(stream);
-    const listStreamConsumers =
-      yield* AWS.Kinesis.ListStreamConsumers.bind(stream);
+      yield* AWS.Kinesis.DescribeStreamSummary(stream);
+    const listShards = yield* AWS.Kinesis.ListShards(stream);
+    const getShardIterator = yield* AWS.Kinesis.GetShardIterator(stream);
+    const getRecords = yield* AWS.Kinesis.GetRecords(stream);
+    const getResourcePolicy = yield* AWS.Kinesis.GetResourcePolicy(stream);
+    const listStreamConsumers = yield* AWS.Kinesis.ListStreamConsumers(stream);
     const describeStreamConsumer =
-      yield* AWS.Kinesis.DescribeStreamConsumer.bind(consumer);
-    const subscribeToShard = yield* AWS.Kinesis.SubscribeToShard.bind(consumer);
-    const listTagsForResource =
-      yield* AWS.Kinesis.ListTagsForResource.bind(stream);
-    const putRecord = yield* AWS.Kinesis.PutRecord.bind(stream);
-    const putRecords = yield* AWS.Kinesis.PutRecords.bind(stream);
-    const sink = yield* AWS.Kinesis.StreamSink.bind(stream);
+      yield* AWS.Kinesis.DescribeStreamConsumer(consumer);
+    const subscribeToShard = yield* AWS.Kinesis.SubscribeToShard(consumer);
+    const listTagsForResource = yield* AWS.Kinesis.ListTagsForResource(stream);
+    const putRecord = yield* AWS.Kinesis.PutRecord(stream);
+    const putRecords = yield* AWS.Kinesis.PutRecords(stream);
+    const sink = yield* AWS.Kinesis.StreamSink(stream);
 
     return {
       fetch: Effect.gen(function* () {
@@ -281,23 +278,23 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(AWS.Kinesis.StreamSinkLive, AWS.Kinesis.PutRecordsLive),
+        Layer.mergeAll(AWS.Kinesis.StreamSinkHttp, AWS.Kinesis.PutRecordsHttp),
         Layer.mergeAll(
-          AWS.Kinesis.DescribeAccountSettingsLive,
-          AWS.Kinesis.DescribeLimitsLive,
-          AWS.Kinesis.DescribeStreamLive,
-          AWS.Kinesis.DescribeStreamConsumerLive,
-          AWS.Kinesis.DescribeStreamSummaryLive,
-          AWS.Kinesis.GetRecordsLive,
-          AWS.Kinesis.GetResourcePolicyLive,
-          AWS.Kinesis.GetShardIteratorLive,
-          AWS.Kinesis.ListShardsLive,
-          AWS.Kinesis.ListStreamConsumersLive,
-          AWS.Kinesis.ListStreamsLive,
-          AWS.Kinesis.ListTagsForResourceLive,
-          AWS.Kinesis.PutRecordLive,
-          AWS.Kinesis.PutRecordsLive,
-          AWS.Kinesis.SubscribeToShardLive,
+          AWS.Kinesis.DescribeAccountSettingsHttp,
+          AWS.Kinesis.DescribeLimitsHttp,
+          AWS.Kinesis.DescribeStreamHttp,
+          AWS.Kinesis.DescribeStreamConsumerHttp,
+          AWS.Kinesis.DescribeStreamSummaryHttp,
+          AWS.Kinesis.GetRecordsHttp,
+          AWS.Kinesis.GetResourcePolicyHttp,
+          AWS.Kinesis.GetShardIteratorHttp,
+          AWS.Kinesis.ListShardsHttp,
+          AWS.Kinesis.ListStreamConsumersHttp,
+          AWS.Kinesis.ListStreamsHttp,
+          AWS.Kinesis.ListTagsForResourceHttp,
+          AWS.Kinesis.PutRecordHttp,
+          AWS.Kinesis.PutRecordsHttp,
+          AWS.Kinesis.SubscribeToShardHttp,
           StreamAndConsumerLive,
         ),
       ),

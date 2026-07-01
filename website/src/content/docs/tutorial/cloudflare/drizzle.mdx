@@ -165,14 +165,14 @@ import { Users } from "./schema.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     compatibility: {
       // node-postgres needs Node.js APIs to run inside a Worker.
       flags: ["nodejs_compat"],
     },
   },
   Effect.gen(function* () {
-    const hd = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+    const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.postgres(hd.connectionString);
 
     return {
@@ -181,7 +181,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json(users);
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 
@@ -261,7 +261,7 @@ keyed by your table names:
 +import { relations, Users } from "./schema.ts";
 
  Effect.gen(function* () {
-   const hd = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+   const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
 -  const db = yield* Drizzle.postgres(hd.connectionString);
 +  const db = yield* Drizzle.postgres(hd.connectionString, {
 +    relations,

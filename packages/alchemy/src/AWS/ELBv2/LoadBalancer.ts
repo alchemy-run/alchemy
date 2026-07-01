@@ -91,7 +91,7 @@ export interface LoadBalancer extends Resource<
 
 /**
  * An ELBv2 (Application / Network / Gateway) load balancer.
- *
+ * @resource
  * @section Creating a Load Balancer
  * @example Internet-facing Application Load Balancer
  * ```typescript

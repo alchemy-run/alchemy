@@ -6,17 +6,17 @@ import { App } from "./app.ts";
 
 /**
  * Effect-native Worker fixture for the Cloudflare Flagship binding.
- * `FlagshipApp.bind(App)` during init attaches the binding to this Worker
+ * `Flagship.ReadFlags(App)` during init attaches the binding to this Worker
  * (registering the app resource with the stack) and resolves to the runtime
  * client.
  */
 export default class FlagshipEffectWorker extends Cloudflare.Worker<FlagshipEffectWorker>()(
   "FlagshipEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
-    const flags = yield* Cloudflare.FlagshipApp.bind(App);
+    const flags = yield* Cloudflare.Flagship.ReadFlags(App);
 
     return {
       fetch: Effect.gen(function* () {
@@ -41,5 +41,5 @@ export default class FlagshipEffectWorker extends Cloudflare.Worker<FlagshipEffe
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.FlagshipBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Flagship.ReadFlagsBinding)),
 ) {}

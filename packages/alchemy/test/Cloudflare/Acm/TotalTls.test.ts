@@ -68,7 +68,7 @@ describe.sequential("TotalTls", () => {
         // even though the zone lacks the ACM entitlement.
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.TotalTls("TotalTls", {
+            return yield* Cloudflare.Acm.TotalTls("TotalTls", {
               zoneId,
               enabled: false,
             });
@@ -127,7 +127,7 @@ describe.sequential("TotalTls", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.TotalTls("TotalTls", {
+            return yield* Cloudflare.Acm.TotalTls("TotalTls", {
               zoneId,
               enabled: true,
             });
@@ -146,7 +146,7 @@ describe.sequential("TotalTls", () => {
         // singleton's identity (zoneId) is unchanged.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.TotalTls("TotalTls", {
+            return yield* Cloudflare.Acm.TotalTls("TotalTls", {
               zoneId,
               enabled: true,
               certificateAuthority: "lets_encrypt",
@@ -174,7 +174,7 @@ describe.sequential("TotalTls", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.TotalTls);
+      const provider = yield* Provider.findProvider(Cloudflare.Acm.TotalTls);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);
