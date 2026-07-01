@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -84,7 +84,6 @@ export const createEc2HostRuntimeContext = createHostRuntimeContext;
 export const createEc2HostedSupport = ({
   stackName,
   stage,
-  fs,
   virtualEntryPlugin,
   resourceType,
 }: {
@@ -143,7 +142,7 @@ export const createEc2HostedSupport = ({
     }
 
     const handler = props.handler ?? "default";
-    const realMain = yield* fs.realPath(props.main);
+    const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
 
     const buildBundle = Effect.fn(function* (

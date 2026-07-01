@@ -1,9 +1,32 @@
 {
   "diffEditor.renderSideBySide": false,
+  // Read at runtime by the "TypeScript (Native Preview)" extension (both the
+  // `js/ts.*` and `typescript.*` variants are honored; `js/ts` takes priority).
+  // Cursor's settings validator flags it "Unknown" because the schema for this
+  // key ships with VS Code's stock TS extension, which Cursor replaces — it
+  // still works. Alternatively enable via the command "TypeScript (Native
+  // Preview): Enable".
   "js/ts.experimental.useTsgo": true,
+  // The BUILT-IN "TypeScript and JavaScript Language Features" server reads the
+  // `typescript.*` variant to decide whether to step aside. Set both so the
+  // built-in yields and you don't end up with TWO language servers running.
+  // If Cursor's built-in server ignores this and still runs, disable it for the
+  // workspace: Command Palette -> "Extensions: Show Built-in Extensions" ->
+  // "TypeScript and JavaScript Language Features" -> gear -> "Disable (Workspace)".
+  "typescript.experimental.useTsgo": true,
+  // Point the extension at THIS workspace's pinned, effect-patched tsgo binary
+  // instead of letting it download the latest nightly. (Declared by the
+  // extension, so no "Unknown" warning.)
+  //
+  // IMPORTANT: this WORKSPACE tsdk value is IGNORED until you opt in once per
+  // machine — otherwise the extension silently runs its own UNPATCHED bundled
+  // tsgo and no Effect diagnostics appear. Opt in via Command Palette ->
+  // "TypeScript (Native Preview): Select Version" -> "Use Workspace Version".
+  // (`enablePromptUseWorkspaceTsdk` below makes the extension prompt for this.)
+  "typescript.native-preview.tsdk": "node_modules/@typescript/native-preview",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.importModuleSpecifier": "relative",
-  "typescript.preferences.importModuleSpecifierEnding": "js",
+  "typescript.preferences.importModuleSpecifierEnding": "ts",
   "oxc.enable": true,
   "oxc.lint.run": "onSave",
   "json.schemaDownload.enable": true,

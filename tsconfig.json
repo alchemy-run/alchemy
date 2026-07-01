@@ -119,11 +119,16 @@
     },
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
+    },
+    {
+      "path": "./benchmark/container/tsconfig.json"
     }
   ],
   "compilerOptions": {
+    // NOTE: this is a solution config (`files: []`) and governs NO source, so a
+    // plugin here is inert for the editor and `tsgo -b`. The real Effect LS
+    // config (and its on/off toggle) lives in `packages/alchemy/tsconfig.json`.
     "plugins": [
-      // ... other LSPs (if any) and as last
       {
         "name": "@effect/language-service"
       }

@@ -1312,7 +1312,9 @@ export const BucketProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            return yield* s3.listBuckets.pages({}).pipe(
+            // S3 only includes `BucketRegion` in the response when the request
+            // carries at least one parameter — hence the explicit MaxBuckets.
+            return yield* s3.listBuckets.pages({ MaxBuckets: 1000 }).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
@@ -1320,15 +1322,21 @@ export const BucketProvider = () =>
                     .filter(
                       (b): b is s3.Bucket & { Name: string } => b.Name != null,
                     )
-                    .map((b) => ({
-                      bucketName: b.Name,
-                      bucketArn: `arn:aws:s3:::${b.Name}` as const,
-                      bucketDomainName: `${b.Name}.s3.amazonaws.com` as const,
-                      bucketRegionalDomainName:
-                        `${b.Name}.s3.${region}.amazonaws.com` as const,
-                      region,
-                      accountId,
-                    })),
+                    .map((b) => {
+                      // ListBuckets is global — record each bucket's actual
+                      // region so later operations (delete) can target it.
+                      const bucketRegion = (b.BucketRegion ??
+                        region) as RegionID;
+                      return {
+                        bucketName: b.Name,
+                        bucketArn: `arn:aws:s3:::${b.Name}` as const,
+                        bucketDomainName: `${b.Name}.s3.amazonaws.com` as const,
+                        bucketRegionalDomainName:
+                          `${b.Name}.s3.${bucketRegion}.amazonaws.com` as const,
+                        region: bucketRegion,
+                        accountId,
+                      };
+                    }),
                 ),
               ),
             );
@@ -1512,34 +1520,61 @@ export const BucketProvider = () =>
         }),
         delete: Effect.fn(function* ({ olds = {}, output, session }) {
           yield* Effect.logInfo(
-            `S3 Bucket delete: bucket=${output.bucketName} forceDestroy=${olds.forceDestroy ?? false}`,
+            `S3 Bucket delete: bucket=${output.bucketName} forceDestroy=${olds.forceDestroy ?? false} region=${output.region}`,
           );
-          // If forceDestroy is enabled, delete all objects first. The bucket
-          // may already be gone (deleted out-of-band, or a previous destroy
-          // partially succeeded) — treat NoSuchBucket as a no-op so the
-          // overall delete still converges.
-          if (olds.forceDestroy) {
-            yield* session.note(
-              `Force destroying bucket: ${output.bucketName} - deleting all objects...`,
-            );
-            yield* deleteAllObjects(output.bucketName).pipe(
-              Effect.catchTag("NoSuchBucket", () => Effect.void),
-            );
-          }
+          const run = Effect.gen(function* () {
+            // If forceDestroy is enabled, delete all objects first. The bucket
+            // may already be gone (deleted out-of-band, or a previous destroy
+            // partially succeeded) — treat NoSuchBucket as a no-op so the
+            // overall delete still converges.
+            if (olds.forceDestroy) {
+              yield* session.note(
+                `Force destroying bucket: ${output.bucketName} - deleting all objects...`,
+              );
+              yield* deleteAllObjects(output.bucketName).pipe(
+                Effect.catchTag("NoSuchBucket", () => Effect.void),
+              );
+            }
 
-          yield* s3
-            .deleteBucket({
-              Bucket: output.bucketName,
-            })
-            .pipe(
-              Effect.catchTag("NoSuchBucket", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "BucketNotEmpty",
-                schedule: Schedule.exponential(100).pipe(
-                  Schedule.both(Schedule.recurs(5)),
-                ),
-              }),
-            );
+            yield* s3
+              .deleteBucket({
+                Bucket: output.bucketName,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchBucket", () => Effect.void),
+                Effect.retry({
+                  while: (e) => e._tag === "BucketNotEmpty",
+                  schedule: Schedule.exponential(100).pipe(
+                    Schedule.both(Schedule.recurs(5)),
+                  ),
+                }),
+              );
+          });
+
+          // The bucket may live in a different region than the ambient client
+          // (list enumerates buckets from every region) — target the bucket's
+          // own region to avoid PermanentRedirect. If we still get redirected
+          // (e.g. a stale/missing region attribute), retry once in the region
+          // the redirect reports.
+          yield* (
+            output.region
+              ? run.pipe(
+                  Effect.provideService(Region, Effect.succeed(output.region)),
+                )
+              : run
+          ).pipe(
+            Effect.tapError(Effect.logInfo),
+            Effect.catchTag("PermanentRedirect", (e) =>
+              e.BucketRegion
+                ? run.pipe(
+                    Effect.provideService(
+                      Region,
+                      Effect.succeed(e.BucketRegion as RegionID),
+                    ),
+                  )
+                : Effect.fail(e),
+            ),
+          );
 
           yield* session.note(`Deleted bucket: ${output.bucketName}`);
         }),

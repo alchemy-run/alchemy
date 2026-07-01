@@ -11,9 +11,8 @@ import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
-import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -636,7 +635,7 @@ export const LiveWorkerProvider = () =>
                           isWorkerLoader(value)
                           ? undefined
                           : Effect.isEffect(value)
-                            ? yield* value as Effect.Effect<any>
+                            ? yield* value as any as Effect.Effect<any>
                             : undefined,
                   ];
                 }),
@@ -772,7 +771,7 @@ export const LiveWorkerProvider = () =>
         // uploaded into a dispatch namespace rather than a routable
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
-        const dispatchNamespace = resolveNamespaceName(news.namespace);
+        const dispatchNamespace = resolveNamespaceName(news?.namespace);
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
@@ -1141,6 +1140,7 @@ export const LiveWorkerProvider = () =>
                 files: bundle.files,
               });
             }
+            // @effect-diagnostics-next-line anyUnknownInErrorContext:off
             return Effect.fail(err as any);
           }),
         );
@@ -1881,6 +1881,7 @@ export const LiveWorkerProvider = () =>
               ),
             )}`,
           );
+
           return yield* putWorker(
             id,
             news,

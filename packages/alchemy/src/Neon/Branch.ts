@@ -592,7 +592,7 @@ const findBranchByName = (projectId: string, name: string) =>
   });
 
 const maybeResolveProjectId = (source: BranchSource): string | undefined => {
-  if ("projectId" in source && source.projectId) {
+  if (source && "projectId" in source && source.projectId) {
     return source.projectId as unknown as string;
   }
   return undefined;

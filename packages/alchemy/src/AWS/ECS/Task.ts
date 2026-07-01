@@ -5,7 +5,6 @@ import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -13,6 +12,7 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   findCwdForBundle,
   getStableContextDir,
+  resolveMainPath,
 } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
@@ -310,7 +310,6 @@ export const TaskProvider = () =>
       const docker = yield* Docker;
 
       const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
       const alchemyEnv = {
@@ -539,7 +538,7 @@ export const TaskProvider = () =>
 
       const bundleProgram = Effect.fn(function* (id: string, props: TaskProps) {
         const handler = props.handler ?? "default";
-        const realMain = yield* fs.realPath(props.main);
+        const realMain = yield* resolveMainPath(props.main);
         const cwd = yield* findCwdForBundle(realMain);
 
         const buildBundle = Effect.fn(function* (
@@ -675,7 +674,7 @@ await Effect.runPromise(program).catch((err) => {
         files: { path: string; content: Uint8Array<ArrayBufferLike> }[];
         props: TaskProps;
       }) {
-        const realMain = yield* fs.realPath(props.main);
+        const realMain = yield* resolveMainPath(props.main);
         const contextDir = yield* getStableContextDir(
           realMain,
           dotAlchemy,

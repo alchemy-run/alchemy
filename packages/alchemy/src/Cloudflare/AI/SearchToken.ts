@@ -187,7 +187,12 @@ export const SearchTokenProvider = () =>
         name,
         cfApiId: news.cfApiId as string,
         cfApiKey: Redacted.value(news.cfApiKey as Redacted.Redacted<string>),
-        legacy: news.legacy,
+        // Cloudflare defaults an omitted `legacy` to `true`, and legacy
+        // (account-level instance) tokens cannot be managed via the per-token
+        // routes — GET/DELETE `/ai-search/tokens/{id}` return 401, so they can
+        // never be read or deleted, leaking on every teardown. Force
+        // non-legacy unless the caller explicitly opts in.
+        legacy: news.legacy ?? false,
       };
 
       if (!observed) {

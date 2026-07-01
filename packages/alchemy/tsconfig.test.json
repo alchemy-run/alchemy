@@ -4,13 +4,7 @@
   "exclude": [
     "test/Local/fixtures/rpc-server-entry.ts",
     "test/Local/fixtures/rpc-spawner-parent.ts",
-    "test/Local/fixtures/rpc-spawner-devserver-parent.ts",
-    // Standalone wrangler + @cloudflare/containers control harness — it imports
-    // `cloudflare:workers` (via @cloudflare/containers) and uses Workers runtime
-    // globals that only resolve under wrangler's bundler, not plain tsc. It is
-    // deployed/run on its own (`wrangler deploy` + `bun bench.ts`), never
-    // imported by the vitest suite.
-    "test/Cloudflare/Container/fixtures/benchmark/wrangler/**"
+    "test/Local/fixtures/rpc-spawner-devserver-parent.ts"
   ],
   "compilerOptions": {
     "composite": true,

@@ -5,7 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceBinding } from "../../Resource.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -15,7 +15,7 @@ import {
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import type { PolicyDocument } from "./Policy.ts";
+import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
 import {
   parsePolicyDocument,
   stringifyPolicyDocument,
@@ -36,9 +36,11 @@ export interface RoleProps {
    */
   path?: string;
   /**
-   * IAM trust policy for the role.
+   * IAM trust policy for the role. Optional when a binding contributes the
+   * trust statements (see the `assumeRolePolicyStatements` binding field) — at
+   * least one of the two must supply a statement.
    */
-  assumeRolePolicyDocument: PolicyDocument;
+  assumeRolePolicyDocument?: PolicyDocument;
   /**
    * Managed policy ARNs to attach to the role.
    */
@@ -81,9 +83,68 @@ export interface Role extends Resource<
     permissionsBoundary: string | undefined;
     tags: Record<string, string>;
   },
-  never,
+  {
+    /**
+     * IAM policy statements contributed by bindings (e.g. a consumer granting
+     * this role access to a resource). They are folded into a managed inline
+     * policy named `alchemy-bindings` on the role.
+     */
+    policyStatements?: PolicyStatement[];
+    /**
+     * Trust-policy (assume-role) statements contributed by bindings — e.g. a
+     * consumer declaring which service principal may assume this role. They are
+     * merged into the role's `assumeRolePolicyDocument`.
+     */
+    assumeRolePolicyStatements?: PolicyStatement[];
+  },
   Providers
 > {}
+
+/**
+ * Name of the inline policy the role provider synthesizes from binding-supplied
+ * {@link PolicyStatement}s.
+ */
+const BINDINGS_POLICY_NAME = "alchemy-bindings";
+
+/**
+ * Merge the user's inline policies with a synthetic `alchemy-bindings` policy
+ * built from binding-supplied statements (deduped by JSON identity, sorted for
+ * a stable document).
+ */
+const mergeBoundInlinePolicies = (
+  inlinePolicies: Record<string, PolicyDocument> | undefined,
+  bindings: ResourceBinding<Role["Binding"]>[],
+): Record<string, PolicyDocument> => {
+  const statements = bindings
+    .filter((binding) => (binding as { action?: string }).action !== "delete")
+    .flatMap((binding) => binding.data?.policyStatements ?? []);
+  if (statements.length === 0) return inlinePolicies ?? {};
+  const deduped = Array.from(
+    new Map(statements.map((s) => [JSON.stringify(s), s])).values(),
+  ).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return {
+    ...inlinePolicies,
+    [BINDINGS_POLICY_NAME]: { Version: "2012-10-17", Statement: deduped },
+  };
+};
+
+/**
+ * Merge the user's trust policy with binding-supplied assume-role statements
+ * (deduped by JSON identity, sorted for a stable document).
+ */
+const mergeBoundAssumeRolePolicy = (
+  doc: PolicyDocument | undefined,
+  bindings: ResourceBinding<Role["Binding"]>[],
+): PolicyDocument => {
+  const bound = bindings
+    .filter((binding) => (binding as { action?: string }).action !== "delete")
+    .flatMap((binding) => binding.data?.assumeRolePolicyStatements ?? []);
+  const statements = [...(doc?.Statement ?? []), ...bound];
+  const deduped = Array.from(
+    new Map(statements.map((s) => [JSON.stringify(s), s])).values(),
+  ).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return { Version: "2012-10-17", Statement: deduped };
+};
 
 /**
  * An IAM role for AWS services and runtimes.
@@ -109,8 +170,6 @@ export const RoleProvider = () =>
   Provider.effect(
     Role,
     Effect.gen(function* () {
-      yield* AWSEnvironment;
-
       const toRoleName = (id: string, props: { roleName?: string } = {}) =>
         props.roleName
           ? Effect.succeed(props.roleName)
@@ -249,7 +308,13 @@ export const RoleProvider = () =>
             const roles = yield* iam.listRoles.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Roles ?? []),
+                Array.from(chunk)
+                  .flatMap((page) => page.Roles ?? [])
+                  // Service-linked roles are owned by AWS and cannot be
+                  // modified or deleted by us (UnmodifiableEntityException).
+                  .filter(
+                    (role) => !role.Path?.startsWith("/aws-service-role/"),
+                  ),
               ),
             );
 
@@ -297,7 +362,7 @@ export const RoleProvider = () =>
                 attrs !== undefined,
             );
           }),
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news = {} }) {
           if (!isResolved(news)) return;
           if (
             (yield* toRoleName(id, olds ?? {})) !==
@@ -305,7 +370,7 @@ export const RoleProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if ((olds?.path ?? "/") !== (news.path ?? "/")) {
+          if ((olds?.path ?? "/") !== (news?.path ?? "/")) {
             return { action: "replace" } as const;
           }
         }),
@@ -354,8 +419,29 @@ export const RoleProvider = () =>
           };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news = {},
+          output,
+          session,
+          bindings,
+        }) {
           const roleName = output?.roleName ?? (yield* toRoleName(id, news));
+          // Fold binding-supplied policy statements into the inline policies.
+          const inlinePolicies = mergeBoundInlinePolicies(
+            news.inlinePolicies,
+            bindings,
+          );
+          // Merge binding-supplied trust statements into the trust policy.
+          const assumeRolePolicyDocument = mergeBoundAssumeRolePolicy(
+            news.assumeRolePolicyDocument,
+            bindings,
+          );
+          if (assumeRolePolicyDocument.Statement.length === 0) {
+            return yield* Effect.die(
+              "Role requires a trust policy: set `assumeRolePolicyDocument` or bind `assumeRolePolicyStatements`.",
+            );
+          }
           const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
@@ -381,7 +467,7 @@ export const RoleProvider = () =>
                 Path: news.path,
                 RoleName: roleName,
                 AssumeRolePolicyDocument: stringifyPolicyDocument(
-                  news.assumeRolePolicyDocument,
+                  assumeRolePolicyDocument,
                 ),
                 Description: news.description,
                 MaxSessionDuration: news.maxSessionDuration,
@@ -408,13 +494,11 @@ export const RoleProvider = () =>
           // when the document actually differs.
           if (
             JSON.stringify(observedAssumePolicy ?? null) !==
-            JSON.stringify(news.assumeRolePolicyDocument)
+            JSON.stringify(assumeRolePolicyDocument)
           ) {
             yield* iam.updateAssumeRolePolicy({
               RoleName: roleName,
-              PolicyDocument: stringifyPolicyDocument(
-                news.assumeRolePolicyDocument,
-              ),
+              PolicyDocument: stringifyPolicyDocument(assumeRolePolicyDocument),
             });
           }
 
@@ -465,7 +549,7 @@ export const RoleProvider = () =>
           yield* syncInlinePolicies({
             roleName,
             olds: observedInlinePolicies,
-            news: news.inlinePolicies ?? {},
+            news: inlinePolicies,
           });
 
           // Sync tags against the cloud's actual tags so adoption /
@@ -501,9 +585,9 @@ export const RoleProvider = () =>
               observedRole.Role?.Path ??
               news.path ??
               "/",
-            assumeRolePolicyDocument: news.assumeRolePolicyDocument,
+            assumeRolePolicyDocument,
             managedPolicyArns: news.managedPolicyArns ?? [],
-            inlinePolicies: news.inlinePolicies ?? {},
+            inlinePolicies,
             description: liveRole.Role?.Description ?? news.description,
             maxSessionDuration:
               liveRole.Role?.MaxSessionDuration ?? news.maxSessionDuration,
@@ -538,6 +622,8 @@ export const RoleProvider = () =>
                 ),
               ),
             ),
+            // The role itself may already be gone.
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
 
           yield* iam
@@ -560,6 +646,8 @@ export const RoleProvider = () =>
                   ),
                 ),
               ),
+              // The role itself may already be gone.
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* iam

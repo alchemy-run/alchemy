@@ -174,7 +174,7 @@ export const execStack = Effect.fn(function* ({
         }
 
         if (dev) {
-          yield* Effect.never;
+          return yield* Effect.never;
         }
       }
     }).pipe(Effect.provide(stack.services));

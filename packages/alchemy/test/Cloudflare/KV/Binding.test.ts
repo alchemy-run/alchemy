@@ -254,7 +254,7 @@ const exercise = (label: string, base: string) =>
  *   the namespace: write through Write, read back through Read, delete
  *   through Write, observe gone through Read.
  */
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "KV read/write/read-write bindings over binding + http",
   (stack) =>
     Effect.gen(function* () {
