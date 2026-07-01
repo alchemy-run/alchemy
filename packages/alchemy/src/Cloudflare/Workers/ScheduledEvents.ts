@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_alchemy_scheduled_events_run_at
 
 const ensureTable = Effect.gen(function* () {
   const ctx = yield* DurableObjectState;
-  yield* ctx.storage.sql.exec(INIT_TABLE_SQL);
+  void (yield* ctx.storage.sql.exec(INIT_TABLE_SQL));
 });
 
 export interface ScheduledEvent {

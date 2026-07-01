@@ -170,8 +170,6 @@ export const RoleProvider = () =>
   Provider.effect(
     Role,
     Effect.gen(function* () {
-      yield* AWSEnvironment;
-
       const toRoleName = (id: string, props: { roleName?: string } = {}) =>
         props.roleName
           ? Effect.succeed(props.roleName)

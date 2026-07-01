@@ -23,6 +23,7 @@ export const QueueEventSource = Layer.effect(
   SQSQueueEventSource,
   // @ts-expect-error - the impl resolves plan-time services (EventSourceMapping)
   // whereas QueueEventSourceService erases the requirement channel to `never`.
+  // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
     const host = yield* Lambda.Function;
     const Mapping = yield* EventSourceMapping;

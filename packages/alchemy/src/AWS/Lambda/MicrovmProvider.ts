@@ -7,6 +7,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -401,6 +402,7 @@ export const MicrovmImageProvider = () =>
       // them down first and wait for them to disappear.
       yield* terminateRunningMicrovms(output.imageArn, session);
       yield* session.note(`Deleting MicroVM image ${output.name}...`);
+
       yield* microvms
         .deleteMicrovmImage({ imageIdentifier: output.imageArn })
         .pipe(
@@ -408,7 +410,7 @@ export const MicrovmImageProvider = () =>
           // A MicroVM caught mid-termination still blocks the delete; retry
           // briefly until the instances are fully gone.
           Effect.retry({
-            while: (e) =>
+            while: (e): e is ValidationException =>
               e._tag === "ValidationException" &&
               e.message.includes("running MicroVMs"),
             schedule: Schedule.fixed(5_000).pipe(

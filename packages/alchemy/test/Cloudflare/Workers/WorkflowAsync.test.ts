@@ -59,8 +59,18 @@ const runWorkflowToCompletion = (url: string) =>
     const lastStatus = yield* client
       .get(`${url}/workflow/status/${instanceId}`)
       .pipe(
-        Effect.flatMap((res) => res.json),
-        Effect.map((json) => json as unknown as WorkflowStatus),
+        // The status endpoint transiently returns a 500 (HTML error page, not
+        // JSON) while the freshly-deployed worker's Workflow binding is still
+        // propagating. Only decode JSON on a 200; treat any other status as a
+        // non-terminal "pending" so the poll keeps swinging instead of dying
+        // on a JSON decode error.
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.json.pipe(
+                Effect.map((json) => json as unknown as WorkflowStatus),
+              )
+            : Effect.succeed({ status: "pending" } as WorkflowStatus),
+        ),
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           until: (s) => s.status === "complete" || s.status === "errored",

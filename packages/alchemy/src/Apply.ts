@@ -353,7 +353,9 @@ const executePlan = Effect.fn(function* (
     // Aggregate every collected lifecycle failure into a single parallel Cause
     // so the apply ends with one combined error containing every distinct
     // failure / defect that occurred across the concurrent fibers.
-    yield* Effect.failCause(failures.map((f) => f.cause).reduce(Cause.combine));
+    return yield* Effect.failCause(
+      failures.map((f) => f.cause).reduce(Cause.combine),
+    );
   }
 });
 

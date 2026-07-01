@@ -1,3 +1,4 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
 import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

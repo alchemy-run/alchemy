@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
@@ -283,9 +284,14 @@ export function Resource<R extends ResourceLike>(
             : new Output.PropExpr<any, string>(Output.of(Resource), prop),
       })) as R;
       Resource.Props = Effect.isEffect(props)
-        ? yield* props.pipe(
-            Effect.provideService(Self, Resource),
-            Effect.provideService(Self(type), Resource),
+        ? // @effect-diagnostics-next-line anyUnknownInErrorContext:off
+          yield* props.pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                Layer.succeed(Self, Resource),
+                Layer.succeed(Self(type), Resource),
+              ),
+            ),
           )
         : props;
       return Resource;

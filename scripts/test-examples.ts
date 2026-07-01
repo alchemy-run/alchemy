@@ -25,8 +25,9 @@ type TaskState = {
   exitCode?: number | null;
 };
 
-const readStream = async (stream: ReadableStream<Uint8Array>): Promise<string> =>
-  new Response(stream).text();
+const readStream = async (
+  stream: ReadableStream<Uint8Array>,
+): Promise<string> => new Response(stream).text();
 
 const elapsedSeconds = (state: TaskState): string => {
   if (state.startedAt === undefined) {
@@ -117,10 +118,12 @@ const run = async (
 const runParallel = async (
   tasks: readonly { label: string; command: readonly string[] }[],
 ): Promise<readonly CommandResult[]> => {
-  const states = tasks.map((task): TaskState => ({
-    ...task,
-    status: "pending",
-  }));
+  const states = tasks.map(
+    (task): TaskState => ({
+      ...task,
+      status: "pending",
+    }),
+  );
   const renderer = makeStatusRenderer(states);
   renderer.render();
   const interval = setInterval(() => renderer.render(), 1000);

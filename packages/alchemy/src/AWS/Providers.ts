@@ -1,3 +1,4 @@
+/** @effect-diagnostics layerMergeAllWithDependencies:off */
 import {
   isRetryable,
   isThrottlingError,
@@ -47,7 +48,6 @@ import * as Lambda from "./Lambda/index.ts";
 import * as Logs from "./Logs/index.ts";
 import * as Organizations from "./Organizations/index.ts";
 import * as RDS from "./RDS/index.ts";
-import * as RDSData from "./RDSData/index.ts";
 import * as Region from "./Region.ts";
 import * as Route53 from "./Route53/index.ts";
 import * as S3 from "./S3/index.ts";
