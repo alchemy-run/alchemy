@@ -240,6 +240,44 @@ const resolveName = (id: string, name?: string) =>
     ? Effect.succeed(name)
     : createPhysicalName({ id, maxLength: 64, delimiter: "-" });
 
+// A freshly-created IAM operator role (and its inline policies) takes a few
+// seconds to propagate before the Lambda service can assume/use it. The API
+// surfaces that as an InvalidParameterValueException, so retry it briefly
+// (same pattern as Function.ts's role-propagation retry). A genuinely
+// misconfigured role still fails once the bounded retry window elapses.
+const isOperatorRolePropagationError = (e: {
+  _tag: string;
+  message?: string;
+}) =>
+  e._tag === "InvalidParameterValueException" &&
+  ((e.message?.includes(
+    "unable to assume the provided NetworkConnectorOperatorRole",
+  ) ??
+    false) ||
+    (e.message?.includes("invalid ConnectorOperatorRole permissions") ??
+      false));
+
+const retryRolePropagation =
+  (session: ScopedPlanStatusSession) =>
+  <A, E extends { _tag: string; message?: string }, R>(
+    self: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, R> =>
+    self.pipe(
+      Effect.tapError((e) =>
+        isOperatorRolePropagationError(e)
+          ? session.note(
+              "Waiting for the operator role to become assumable by Lambda...",
+            )
+          : Effect.void,
+      ),
+      Effect.retry({
+        while: (e) => isOperatorRolePropagationError(e),
+        schedule: Schedule.fixed(1_000).pipe(
+          Schedule.both(Schedule.recurs(50)), // up to ~50 seconds
+        ),
+      }),
+    );
+
 const getConnector = (identifier: string) =>
   lambdacore
     .getNetworkConnector({ Identifier: identifier })
@@ -258,7 +296,11 @@ const desiredEgress = (
   SubnetIds: props.subnetIds,
   SecurityGroupIds: props.securityGroupIds,
   NetworkProtocol: props.networkProtocol,
-  AssociatedComputeResourceTypes: props.associatedComputeResourceTypes,
+  // The API requires AssociatedComputeResourceTypes for VPC_EGRESS connectors,
+  // so apply the documented default when the prop is omitted.
+  AssociatedComputeResourceTypes: props.associatedComputeResourceTypes ?? [
+    "MicroVm",
+  ],
 });
 
 const egressEqual = (
@@ -323,6 +365,7 @@ const createConnector = Effect.fn(function* (
       Tags: { ...internalTags, ...news.tags },
     })
     .pipe(
+      retryRolePropagation(session),
       // A concurrent create with the same name is a race; fall back to reading
       // the existing connector.
       Effect.catchTag("ResourceConflictException", () =>
@@ -356,11 +399,13 @@ const syncConnector = Effect.fn(function* (
     return connector;
   }
   yield* session.note(`Updating network connector ${name}...`);
-  yield* lambdacore.updateNetworkConnector({
-    Identifier: connector.Id,
-    Configuration: { VpcEgressConfiguration: desiredEgress(news) },
-    OperatorRole: news.operatorRole,
-  });
+  yield* lambdacore
+    .updateNetworkConnector({
+      Identifier: connector.Id,
+      Configuration: { VpcEgressConfiguration: desiredEgress(news) },
+      OperatorRole: news.operatorRole,
+    })
+    .pipe(retryRolePropagation(session));
   return yield* waitForUpdate(connector.Id, session);
 });
 

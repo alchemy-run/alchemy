@@ -52,7 +52,8 @@
     "test:canary": "SMOKE_CANARY=1 bun test --only-failures ./test/smoke.test.ts",
     "test:examples": "bun scripts/test-examples.ts",
     "test": "cd ./packages/alchemy && bun vitest run",
-    "test:fast": "FAST=1 cd ./packages/alchemy && bun vitest run"
+    "test:slow": "cd ./packages/alchemy && bun vitest run",
+    "test:fast": "bun run --filter alchemy test:fast"
   },
   "workspaces": {
     "packages": [

@@ -308,7 +308,13 @@ export const RoleProvider = () =>
             const roles = yield* iam.listRoles.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Roles ?? []),
+                Array.from(chunk)
+                  .flatMap((page) => page.Roles ?? [])
+                  // Service-linked roles are owned by AWS and cannot be
+                  // modified or deleted by us (UnmodifiableEntityException).
+                  .filter(
+                    (role) => !role.Path?.startsWith("/aws-service-role/"),
+                  ),
               ),
             );
 
@@ -616,6 +622,8 @@ export const RoleProvider = () =>
                 ),
               ),
             ),
+            // The role itself may already be gone.
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
 
           yield* iam
@@ -638,6 +646,8 @@ export const RoleProvider = () =>
                   ),
                 ),
               ),
+              // The role itself may already be gone.
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* iam

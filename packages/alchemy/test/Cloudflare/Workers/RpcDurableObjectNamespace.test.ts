@@ -207,9 +207,17 @@ test(
         client.post(`${url}/counter/${concurrent}/increment`).pipe(
           Effect.flatMap((res) => res.json),
           Effect.timeout("10 seconds"),
+          // Under full-suite load the account churns through worker
+          // deploys/deletes and workers.dev routing intermittently 404s an
+          // existing worker for several seconds; `times: 3` (~3.5s) is not
+          // enough to ride out a blip when 100 requests each get 4 chances.
+          // Retry only HTTP failures (a 404/5xx never reached the DO, so the
+          // increment can't double-count); a timeout is ambiguous and stays
+          // un-retried so the final-count assertion holds.
           Effect.retry({
+            while: (e) => e._tag === "HttpClientError",
             schedule: readinessSchedule,
-            times: 3,
+            times: 10,
           }),
         ),
       { concurrency: 32 },
@@ -239,10 +247,12 @@ test(
         (i) =>
           c.Ping({ message: `m-${i}` }).pipe(
             Effect.timeout("10 seconds"),
-            Effect.retry({
-              schedule: readinessSchedule,
-              times: 3,
-            }),
+            // A cold PoP mid-propagation returns Cloudflare's HTML error
+            // page, which is not valid ndjson and surfaces as a retryable
+            // `RpcClientError` (`RpcClientDefect: Error decoding HTTP
+            // response`); `times: 3` (~6s) is not enough to ride out a
+            // multi-second blip across 100 requests. Ping is idempotent.
+            retryReadyN(8),
           ),
         { concurrency: 32 },
       );
@@ -253,7 +263,7 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
 
 test(

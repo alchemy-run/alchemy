@@ -234,7 +234,10 @@ export const NetworkAclProvider = () =>
                 Array.from(chunk).flatMap((page) =>
                   (page.NetworkAcls ?? []).filter(
                     (acl): acl is ec2.NetworkAcl & { NetworkAclId: string } =>
-                      acl.NetworkAclId != null,
+                      acl.NetworkAclId != null &&
+                      // Each VPC's default NACL is AWS-managed and cannot be
+                      // deleted (InvalidParameterValue) — don't enumerate it.
+                      acl.IsDefault !== true,
                   ),
                 ),
               ),

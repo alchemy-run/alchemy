@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import { SecurityGroup, Subnet, Vpc } from "@/AWS/EC2";
 import { Role } from "@/AWS/IAM";
+import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
@@ -15,7 +16,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // requires an account that is onboarded to the preview. Gate the live
 // lifecycle behind LAMBDA_TEST_NETWORK_CONNECTOR=1 so an entitled account runs
 // it unchanged.
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, list, delete network connector",
   (stack) =>
     Effect.gen(function* () {
@@ -28,11 +29,20 @@ test.provider(
 
       const infra = (networkProtocol: lambdacore.NetworkProtocol) =>
         Effect.gen(function* () {
-          const vpc = yield* Vpc("ConnectorVpc", { cidrBlock: "10.0.0.0/16" });
+          // The DualStack update step requires the subnet to carry an IPv6
+          // CIDR, so provision the VPC with an Amazon-provided /56 and carve
+          // the subnet the first /64 out of it.
+          const vpc = yield* Vpc("ConnectorVpc", {
+            cidrBlock: "10.0.0.0/16",
+            amazonProvidedIpv6CidrBlock: true,
+          });
           const subnet = yield* Subnet("ConnectorSubnet", {
             vpcId: vpc.vpcId,
             cidrBlock: "10.0.1.0/24",
             availabilityZone: az,
+            ipv6CidrBlock: vpc.ipv6CidrBlockAssociationSet.pipe(
+              Output.map((set) => set![0]!.ipv6CidrBlock.replace("/56", "/64")),
+            ),
           });
           const sg = yield* SecurityGroup("ConnectorSg", {
             vpcId: vpc.vpcId,
@@ -48,6 +58,29 @@ test.provider(
                   Action: ["sts:AssumeRole"],
                 },
               ],
+            },
+            // The connector service assumes this role to manage ENIs in the VPC.
+            inlinePolicies: {
+              "eni-management": {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "ec2:CreateNetworkInterface",
+                      "ec2:DescribeNetworkInterfaces",
+                      "ec2:DeleteNetworkInterface",
+                      "ec2:DescribeSubnets",
+                      "ec2:DescribeSecurityGroups",
+                      "ec2:DescribeVpcs",
+                      "ec2:AssignPrivateIpAddresses",
+                      "ec2:UnassignPrivateIpAddresses",
+                      "ec2:CreateTags",
+                    ],
+                    Resource: "*",
+                  },
+                ],
+              },
             },
           });
           const connector = yield* AWS.Lambda.NetworkConnector("Connector", {

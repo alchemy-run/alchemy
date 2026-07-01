@@ -2,9 +2,9 @@ bun alchemy unsafe nuke ./stacks/nuke.ts  \
   --exclude 'Cloudflare.Zone*' \
   --exclude 'Cloudflare.Account*' \
   --exclude 'Cloudflare.Dns*' \
-  --exclude 'Cloudflare.AccountApiToken' \
+  --exclude 'Cloudflare.ApiToken.*' \
   --exclude 'Cloudflare.Secret*' \
-  --exclude 'Cloudflare.Organization' \
+  --exclude 'Cloudflare.Organization.*' \
   --exclude 'AWS.IAM.User' \
   --exclude 'AWS.IAM.SAMLProvider' \
   --exclude 'AWS.IAM.OpenIDConnectProvider' \

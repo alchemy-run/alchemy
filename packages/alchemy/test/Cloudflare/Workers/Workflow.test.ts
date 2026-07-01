@@ -51,7 +51,11 @@ const runWorkflowToCompletion = (url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
+        // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
+        // sleep after only six attempts and blow the test timeout.
+        schedule: Schedule.exponential("500 millis").pipe(
+          Schedule.either(Schedule.spaced("3 seconds")),
+        ),
         times: 15,
       }),
     );
@@ -111,7 +115,9 @@ test(
     // returns, the body dies on the first yield and `output` is undefined.
     expect(lastStatus.output?.envBindingCount).toBeGreaterThan(0);
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  // Budget covers the full retry envelope: up to 3 attempts, each with a
+  // capped start-retry (~30s worst case) + status polling (12 × 2s).
+  { timeout: 120_000 },
 );
 
 // Canonical `list()` test (account collection): deploy the worker+workflow

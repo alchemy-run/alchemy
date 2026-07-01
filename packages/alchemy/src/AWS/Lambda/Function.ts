@@ -1690,6 +1690,8 @@ export default await Effect.runPromise(handlerEffect)
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // The role may already be gone (e.g. deleted out-of-band or by a
+          // previous partial delete) — treat every step as idempotent.
           yield* iam
             .listRolePolicies({
               RoleName: output.roleName,
@@ -1698,13 +1700,21 @@ export default await Effect.runPromise(handlerEffect)
               Effect.flatMap((policies) =>
                 Effect.all(
                   (policies.PolicyNames ?? []).map((policyName) =>
-                    iam.deleteRolePolicy({
-                      RoleName: output.roleName,
-                      PolicyName: policyName,
-                    }),
+                    iam
+                      .deleteRolePolicy({
+                        RoleName: output.roleName,
+                        PolicyName: policyName,
+                      })
+                      .pipe(
+                        Effect.catchTag(
+                          "NoSuchEntityException",
+                          () => Effect.void,
+                        ),
+                      ),
                   ),
                 ),
               ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* iam
@@ -1729,6 +1739,7 @@ export default await Effect.runPromise(handlerEffect)
                   ),
                 ),
               ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* Lambda.deleteFunction({
