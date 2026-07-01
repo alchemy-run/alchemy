@@ -24,7 +24,7 @@ The package exposes a `handler(options)` Effect that you wire into a `Cloudflare
 Two-file pattern, mirroring how `stacks/otel/Ingester.ts` is split out from `stacks/otel.ts`:
 
 ```ts
-// stacks/pr-package/Api.ts — the worker entry (main: import.meta.filename)
+// stacks/pr-package/Api.ts — the worker entry (main: import.meta.url)
 import * as PrPackage from "@alchemy.run/pr-package";
 import * as Cloudflare from "alchemy/Cloudflare";
 
@@ -41,7 +41,7 @@ const parseAliasUrl: PrPackage.ParseAliasUrl = (url) => {
 export default class Api extends Cloudflare.Worker<Api>()(
   "PrPackageWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
     domain: ["pkg.example.com"],
     compatibility: { flags: ["nodejs_compat"], date: "2026-03-17" },

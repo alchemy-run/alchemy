@@ -23,7 +23,7 @@ export const OBJECT_VAR_VALUE = { host: "localhost", flags: { beta: true } };
 export default class SecretsTestWorker extends Cloudflare.Worker<SecretsTestWorker>()(
   "SecretsTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     subdomain: { enabled: true, previewsEnabled: false },
   },
   Effect.gen(function* () {

@@ -9,7 +9,7 @@ export class SandboxContainer extends Cloudflare.Container<
 >()(
   "SandboxContainer",
   Stack.useSync((stack) => ({
-    main: import.meta.filename,
+    main: import.meta.url,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
     observability: {
       logs: {

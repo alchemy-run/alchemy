@@ -56,7 +56,7 @@ interface QueueMessageBody {
 export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
   "QueueRoundTripWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counters = yield* Counter;

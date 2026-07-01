@@ -174,7 +174,7 @@ import Counter from "./counter.ts";
 
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;
     return {
@@ -371,7 +371,7 @@ publishes for cross-script binding):
 
 -export default class Worker extends Cloudflare.Worker<Worker>()(
 -  "Worker",
--  { main: import.meta.filename },
+-  { main: import.meta.url },
 -  Effect.gen(function* () {
 -    const counters = yield* Counter;
 -    ...
@@ -395,7 +395,7 @@ actually ships in WorkerA's bundle:
 ```typescript
 // src/worker.ts
 export default WorkerA.make(
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;
     return {
@@ -436,7 +436,7 @@ import { WorkerA } from "./worker.ts";
 
 export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
   "WorkerB",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter.from(WorkerA);
     return {
@@ -472,7 +472,7 @@ export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
 ) {}
 
 export default WorkerC.make(
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter.from(WorkerC);
     // ... fetch handler ...

@@ -18,7 +18,7 @@ import RpcCounterObject from "./object.ts";
 export default class RpcCounterWorker extends Cloudflare.Worker<RpcCounterWorker>()(
   "RpcCounterWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counters = yield* RpcCounterObject;

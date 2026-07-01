@@ -293,7 +293,7 @@ const Queue = yield* AWS.SQS.Queue("Queue", {
 });
 
 const Worker = yield* Cloudflare.Worker("Worker", {
-  main: import.meta.filename,
+  main: import.meta.url,
   env: { Bucket, Sessions, Queue },
 });
 ```
@@ -364,7 +364,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 // The class is the Tag — used as a typed identifier elsewhere.
 export class MyWorker extends Cloudflare.Worker<MyWorker>()("MyWorker", {
-  main: import.meta.filename,
+  main: import.meta.url,
 }) {}
 
 // The default export is the Layer — the runtime implementation.

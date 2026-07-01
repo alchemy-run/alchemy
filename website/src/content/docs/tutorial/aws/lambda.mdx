@@ -90,7 +90,7 @@ import * as Effect from "effect/Effect";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     return {};
   }),
@@ -102,7 +102,7 @@ of ceremony — it lets TypeScript reason about `Api` as a typed
 handle that other resources can later bind against. The rest of
 your code looks completely normal.
 
-`main: import.meta.filename` tells Alchemy this same file is the
+`main: import.meta.url` tells Alchemy this same file is the
 bundle entrypoint. At deploy time it'll be bundled with Rolldown
 into a zip and uploaded as the function's code.
 
@@ -121,7 +121,7 @@ import * as Effect from "effect/Effect";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
 -    return {};
 +    return {
@@ -145,8 +145,8 @@ Gateway, no auth, just a public HTTPS endpoint:
 ```diff lang="typescript"
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
--  { main: import.meta.filename },
-+  { main: import.meta.filename, url: true },
+-  { main: import.meta.url },
++  { main: import.meta.url, url: true },
   Effect.gen(function* () {
     return {
       fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
@@ -175,9 +175,9 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
--  { main: import.meta.filename, url: true },
+-  { main: import.meta.url, url: true },
 +  Stack.useSync((stack) => ({
-+    main: import.meta.filename,
++    main: import.meta.url,
 +    url: true,
 +    memory: stack.stage === "prod" ? 1024 : 512,
 +  })),

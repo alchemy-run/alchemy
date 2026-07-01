@@ -97,7 +97,7 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  *
  * Cloudflare.Worker(
  *   "FlagsWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const flags = yield* Cloudflare.Flagship.ReadFlags(App);
  *     return {

@@ -354,7 +354,7 @@ export class DurableObjectScope extends Context.Service<
  * //                                       ^^^^^^^ declared as part of WorkerA's public contract
  * export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
  *   "WorkerA",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  * ) {}
  *
  * // WorkerA's Layer also provides the DO's Live implementation.
@@ -374,7 +374,7 @@ export class DurableObjectScope extends Context.Service<
  *
  * export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
  *   "WorkerB",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     //              ^^^^^^^^^^^^ scriptName-bound stub of WorkerA's Counter
  *     const counter = yield* Counter.from(WorkerA);
@@ -430,7 +430,7 @@ export class DurableObjectScope extends Context.Service<
  * // workerC.ts — another host of Counter, isolated from WorkerA
  * export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
  *   "WorkerC",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  * ) {}
  *
  * export default WorkerC.make(

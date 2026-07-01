@@ -34,7 +34,7 @@ export const StreamAndQueueLive = Layer.effect(
 );
 export default KinesisStreamFunction.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
   },
   Effect.gen(function* () {

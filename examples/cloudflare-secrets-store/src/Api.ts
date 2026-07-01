@@ -8,7 +8,7 @@ import { ApiKey } from "./ApiKey.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const apiKey = yield* Cloudflare.SecretsStore.ReadSecret(ApiKey);

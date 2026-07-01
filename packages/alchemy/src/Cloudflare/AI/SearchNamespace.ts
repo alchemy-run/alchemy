@@ -131,7 +131,7 @@ export type SearchNamespace = Resource<
  *
  * export default class Api extends Cloudflare.Worker<Api>()(
  *   "api",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const ns = yield* Cloudflare.AI.QuerySearchNamespace(Docs);
  *

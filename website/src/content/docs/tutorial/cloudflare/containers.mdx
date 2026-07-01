@@ -62,7 +62,7 @@ import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
 export const SandboxLive = Sandbox.make(
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     return Sandbox.of({
       // exec + fetch will go here
@@ -92,9 +92,9 @@ import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
 export const SandboxLive = Sandbox.make(
--  { main: import.meta.filename },
+-  { main: import.meta.url },
 +  Stack.useSync((stack) => ({
-+    main: import.meta.filename,
++    main: import.meta.url,
 +    instanceType: stack.stage === "prod" ? "standard-1" : "dev",
 +    observability: { logs: { enabled: true } },
 +  })),
@@ -132,7 +132,7 @@ import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
 export const SandboxLive = Sandbox.make(
-  Stack.useSync((stack) => ({ main: import.meta.filename, /* ... */ })),
+  Stack.useSync((stack) => ({ main: import.meta.url, /* ... */ })),
   Effect.gen(function* () {
 +   const cp = yield* ChildProcessSpawner;
 
@@ -189,7 +189,7 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { Sandbox } from "./Sandbox.ts";
 
 export const SandboxLive = Sandbox.make(
-  Stack.useSync((stack) => ({ main: import.meta.filename, /* ... */ })),
+  Stack.useSync((stack) => ({ main: import.meta.url, /* ... */ })),
   Effect.gen(function* () {
     const cp = yield* ChildProcessSpawner;
 
@@ -336,7 +336,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
 +    const agents = yield* Agent;
 

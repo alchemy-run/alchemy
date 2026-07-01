@@ -15,7 +15,7 @@ export class SecondaryApi extends Cloudflare.Worker<SecondaryApi, {}>()(
 
 export default SecondaryApi.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     observability: { enabled: true },
   },
   Effect.gen(function* () {

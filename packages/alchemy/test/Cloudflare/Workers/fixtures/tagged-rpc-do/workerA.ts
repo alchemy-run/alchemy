@@ -25,7 +25,7 @@ export class WorkerA extends Cloudflare.RpcWorker<WorkerA, Counter>()(
 // namespace (the `CounterLive` Layer below populates the tag).
 export default WorkerA.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counter = yield* Counter;
