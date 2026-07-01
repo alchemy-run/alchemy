@@ -147,6 +147,11 @@ export type Project = Resource<
      * when fronting Neon with another pooler like Hyperdrive.
      */
     origin: PostgresOrigin;
+    /**
+     * Parsed pooled connection components. Useful as a Hyperdrive `dev`
+     * origin when local workers bypass Hyperdrive and connect directly.
+     */
+    pooledOrigin: PostgresOrigin;
     historyRetentionSeconds: number;
     enableLogicalReplication: boolean;
     migrationsDir: string | undefined;
@@ -283,6 +288,9 @@ export const ProjectProvider = () =>
           Effect.map(({ project }) => ({
             ...output,
             projectName: project.name,
+            pooledOrigin:
+              output.pooledOrigin ??
+              parsePostgresOrigin(output.pooledConnectionUri),
             historyRetentionSeconds: project.history_retention_seconds,
             enableLogicalReplication:
               project.settings?.enable_logical_replication === true,
@@ -332,6 +340,9 @@ export const ProjectProvider = () =>
               connectionUri: output.connectionUri,
               pooledConnectionUri: output.pooledConnectionUri,
               origin: output.origin,
+              pooledOrigin:
+                output.pooledOrigin ??
+                parsePostgresOrigin(output.pooledConnectionUri),
               historyRetentionSeconds:
                 r.project.history_retention_seconds ??
                 output.historyRetentionSeconds,
@@ -381,6 +392,7 @@ export const ProjectProvider = () =>
               connectionUri: conn.uri,
               pooledConnectionUri: conn.pooled,
               origin: parsePostgresOrigin(conn.uri),
+              pooledOrigin: parsePostgresOrigin(conn.pooled),
               historyRetentionSeconds:
                 created.project.history_retention_seconds ?? 86400,
               enableLogicalReplication:
@@ -664,6 +676,7 @@ const hydrateProjectAttributes = (
       connectionUri: conn.uri,
       pooledConnectionUri: conn.pooled,
       origin: parsePostgresOrigin(conn.uri),
+      pooledOrigin: parsePostgresOrigin(conn.pooled),
       historyRetentionSeconds: project.history_retention_seconds ?? 86400,
       enableLogicalReplication:
         project.settings?.enable_logical_replication === true,

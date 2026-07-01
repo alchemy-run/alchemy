@@ -13,6 +13,21 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+const expectPooledOrigin = (branch: {
+  pooledConnectionUri: string;
+  pooledOrigin: Neon.PostgresOrigin;
+}) => {
+  const uri = new URL(branch.pooledConnectionUri);
+  expect(branch.pooledOrigin).toMatchObject({
+    scheme: uri.protocol === "postgresql:" ? "postgresql" : "postgres",
+    host: uri.hostname,
+    port: uri.port ? Number(uri.port) : 5432,
+    database: uri.pathname.replace(/^\//, ""),
+    user: decodeURIComponent(uri.username),
+  });
+  expect(branch.pooledOrigin.password).toBeDefined();
+};
+
 // Canonical `list()` test (parent fan-out): branches are scoped to a project
 // and there is no account-wide branch enumeration API, so `list()` enumerates
 // every project and lists+hydrates the branches of each. Deploy a project +
@@ -37,6 +52,8 @@ test.provider("list enumerates the deployed branch", (stack) =>
     expect(found?.projectId).toEqual(project.projectId);
     expect(found?.branchName).toEqual(branch.branchName);
     expect(found?.connectionUri).toContain("postgres");
+    expectPooledOrigin(branch);
+    expectPooledOrigin(found!);
 
     yield* stack.destroy();
   }).pipe(logLevel),
@@ -74,6 +91,7 @@ test.provider(
 
       expect(updated.branch.projectId).toEqual(updated.project.projectId);
       expect(updated.branch.branchId).toEqual(initial.branch.branchId);
+      expectPooledOrigin(updated.branch);
 
       yield* stack.destroy();
     }).pipe(logLevel),

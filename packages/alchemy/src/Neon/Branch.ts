@@ -135,6 +135,11 @@ export type Branch = Resource<
      * when fronting Neon with another pooler like Hyperdrive.
      */
     origin: PostgresOrigin;
+    /**
+     * Parsed pooled connection components. Useful as a Hyperdrive `dev`
+     * origin when local workers bypass Hyperdrive and connect directly.
+     */
+    pooledOrigin: PostgresOrigin;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
     migrationsHashes: Record<string, string>;
@@ -270,6 +275,9 @@ export const BranchProvider = () =>
             protected: branch.protected,
             default: branch.default,
             expiresAt: branch.expires_at,
+            pooledOrigin:
+              output.pooledOrigin ??
+              parsePostgresOrigin(output.pooledConnectionUri),
           })),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
@@ -311,6 +319,7 @@ export const BranchProvider = () =>
         connectionUri: conn.uri,
         pooledConnectionUri: conn.pooled,
         origin: parsePostgresOrigin(conn.uri),
+        pooledOrigin: parsePostgresOrigin(conn.pooled),
         migrationsDir: olds?.migrationsDir,
         migrationsTable: olds?.migrationsTable,
         migrationsHashes: {},
@@ -349,6 +358,9 @@ export const BranchProvider = () =>
               connectionUri: output.connectionUri,
               pooledConnectionUri: output.pooledConnectionUri,
               origin: output.origin,
+              pooledOrigin:
+                output.pooledOrigin ??
+                parsePostgresOrigin(output.pooledConnectionUri),
             })),
           )
         : yield* Effect.gen(function* () {
@@ -403,6 +415,7 @@ export const BranchProvider = () =>
               connectionUri: conn.uri,
               pooledConnectionUri: conn.pooled,
               origin: parsePostgresOrigin(conn.uri),
+              pooledOrigin: parsePostgresOrigin(conn.pooled),
             };
           });
 
@@ -542,6 +555,7 @@ const hydrateBranch = (
       connectionUri: conn.uri,
       pooledConnectionUri: conn.pooled,
       origin: parsePostgresOrigin(conn.uri),
+      pooledOrigin: parsePostgresOrigin(conn.pooled),
       migrationsDir: undefined,
       migrationsTable: undefined,
       migrationsHashes: {},
