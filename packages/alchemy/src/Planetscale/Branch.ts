@@ -14,6 +14,7 @@ import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize
 import {
   ensurePostgresProductionBranchClusterSize,
   toPostgresClusterSku,
+  waitForPendingPostgresChanges,
 } from "./Postgres/PostgresClusterSize.ts";
 import {
   DEFAULT_MIGRATIONS_TABLE,
@@ -105,6 +106,16 @@ export interface BaseBranchAttributes {
   migrationsHashes: Record<string, string>;
   /** Content hashes for the last applied import files. */
   importHashes: Record<string, string>;
+  /**
+   * Desired total replica count requested by the resource input, when known.
+   * PlanetScale's branch read API exposes only boolean HA state, so this is
+   * persisted from Alchemy state rather than observed from live provider data.
+   */
+  desiredReplicas: number | undefined;
+  /** Whether the branch currently has HA replicas. */
+  hasReplicas: boolean | undefined;
+  /** Whether the branch currently has read-only replicas. */
+  hasReadOnlyReplicas: boolean | undefined;
 }
 
 // Runtime-resolved Database/Branch references. `news.database` can be a
@@ -230,6 +241,9 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
                           migrationsTable: undefined,
                           migrationsHashes: {},
                           importHashes: {},
+                          desiredReplicas: undefined,
+                          hasReplicas: branch.has_replicas,
+                          hasReadOnlyReplicas: branch.has_read_only_replicas,
                         }) satisfies BaseBranchAttributes,
                     ),
                 ),
@@ -271,6 +285,20 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         news.region.slug !== output.region.slug
       ) {
         return { action: "replace" } as const;
+      }
+
+      if (news.replicas !== undefined) {
+        if (output?.desiredReplicas !== news.replicas) {
+          return { action: "update" } as const;
+        }
+
+        const desiredHasReplicas = news.replicas > 0;
+        if (
+          output?.hasReplicas !== undefined &&
+          output.hasReplicas !== desiredHasReplicas
+        ) {
+          return { action: "update" } as const;
+        }
       }
 
       if (news.migrationsDir) {
@@ -336,6 +364,12 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
               migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
               migrationsHashes: output?.migrationsHashes ?? {},
               importHashes: output?.importHashes ?? {},
+              desiredReplicas:
+                output?.desiredReplicas ??
+                olds?.desiredReplicas ??
+                olds?.replicas,
+              hasReplicas: data.has_replicas,
+              hasReadOnlyReplicas: data.has_read_only_replicas,
             } satisfies BaseBranchAttributes;
 
             return output ? attrs : Unowned(attrs);
@@ -493,6 +527,39 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
+      if (opts.expectedKind === "postgresql" && news.replicas !== undefined) {
+        const desiredReplicas = news.replicas;
+        const desiredHasReplicas = desiredReplicas > 0;
+        const shouldApplyReplicaChange =
+          current.has_replicas !== desiredHasReplicas ||
+          (desiredHasReplicas && output?.desiredReplicas !== desiredReplicas);
+
+        if (shouldApplyReplicaChange) {
+          yield* waitForPendingPostgresChanges(
+            organization,
+            databaseName,
+            branchName,
+          );
+          const change = yield* planetscale.updateBranchChangeRequest({
+            organization,
+            database: databaseName,
+            branch: branchName,
+            replicas: desiredReplicas,
+          });
+          yield* waitForPendingPostgresChanges(
+            organization,
+            databaseName,
+            branchName,
+            change.id,
+          );
+          current = yield* planetscale.getBranch({
+            organization,
+            database: databaseName,
+            branch: branchName,
+          });
+        }
+      }
+
       // Sync clusterSize — only meaningful on production branches.
       if (news.clusterSize) {
         if (current.kind === "postgresql") {
@@ -559,6 +626,9 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         migrationsTable: news.migrationsDir ? migrationsTable : undefined,
         migrationsHashes,
         importHashes,
+        desiredReplicas: news.replicas ?? output?.desiredReplicas,
+        hasReplicas: updated.has_replicas,
+        hasReadOnlyReplicas: updated.has_read_only_replicas,
       } satisfies BaseBranchAttributes;
     }),
 
