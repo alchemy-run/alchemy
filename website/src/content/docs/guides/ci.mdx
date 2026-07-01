@@ -221,7 +221,7 @@ By the end you'll have:
 
    export default Alchemy.Stack(
      "my-app",
-     { providers: /* ... */ },
+     { providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()) },
      Effect.gen(function* () {
        const app = yield* App;
    +   const github = yield* GitHub.GitHubEnv;
