@@ -374,7 +374,7 @@ test.provider(
   "adopts a durable object class created outside alchemy",
   (scratch) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       // Phase 1: provision a worker + `Counter` DO class straight through the
       // Cloudflare API — no Alchemy involvement, so none of our tags.
