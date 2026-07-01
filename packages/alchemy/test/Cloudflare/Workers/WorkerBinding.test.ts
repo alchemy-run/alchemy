@@ -22,9 +22,8 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // Cold-start retry — fresh `workers.dev` URLs take a few seconds to start
 // answering 200, so the very first request rides this schedule.
 const coldStartRetry = Effect.retry({
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.both(Schedule.recurs(20)),
-  ),
+  schedule: Schedule.exponential("500 millis"),
+  times: 10,
 });
 
 test(
@@ -37,7 +36,7 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello from BindingTargetWorker");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 60_000 },
 );
 
 test(

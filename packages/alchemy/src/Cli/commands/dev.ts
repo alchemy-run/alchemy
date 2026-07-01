@@ -40,7 +40,12 @@ export const devCommand = Command.make(
           : [
               "node",
               ...process.execArgv,
-              "--experimental-transform-types",
+              ...(isTransformTypesSupported()
+                ? [
+                    "--experimental-transform-types",
+                    "--no-warnings=ExperimentalWarning",
+                  ]
+                : []),
               "--watch",
               "--watch-preserve-output",
               fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
@@ -51,6 +56,7 @@ export const devCommand = Command.make(
         stderr: "inherit",
         env: {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
+          ALCHEMY_DEV: "true",
           [SPAWNER_URL_ENV_KEY]: spawner.url,
         },
         extendEnv: true,
@@ -67,3 +73,10 @@ export const devCommand = Command.make(
       )(effect),
   ),
 );
+
+const isTransformTypesSupported = (
+  version = process.versions.node,
+): boolean => {
+  const [major, minor] = version.split(".").map(Number);
+  return (major === 22 && minor >= 7) || (major >= 23 && major < 26);
+};

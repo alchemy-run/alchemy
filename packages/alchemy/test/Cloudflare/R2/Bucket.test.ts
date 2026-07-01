@@ -18,13 +18,13 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("DefaultBucket");
+        return yield* Cloudflare.R2.Bucket("DefaultBucket");
       }),
     );
 
@@ -32,10 +32,10 @@ test.provider("create and delete bucket with default props", (stack) =>
     expect(bucket.storageClass).toEqual("Standard");
     expect(bucket.jurisdiction).toEqual("default");
 
-    const actualBucket = yield* r2.getBucket({
+    const actualBucket = yield* getBucketWhenReady(
+      bucket.bucketName,
       accountId,
-      bucketName: bucket.bucketName,
-    });
+    );
     expect(actualBucket.name).toEqual(bucket.bucketName);
 
     yield* stack.destroy();
@@ -46,39 +46,39 @@ test.provider("create and delete bucket with default props", (stack) =>
 
 test.provider("create, update, delete bucket", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("TestBucket", {
+        return yield* Cloudflare.R2.Bucket("TestBucket", {
           name: "test-bucket-initial",
           storageClass: "Standard",
         });
       }),
     );
 
-    const actualBucket = yield* r2.getBucket({
+    const actualBucket = yield* getBucketWhenReady(
+      bucket.bucketName,
       accountId,
-      bucketName: bucket.bucketName,
-    });
+    );
     expect(actualBucket.name).toEqual(bucket.bucketName);
     expect(actualBucket.storageClass).toEqual("Standard");
 
     const updatedBucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("TestBucket", {
+        return yield* Cloudflare.R2.Bucket("TestBucket", {
           name: "test-bucket-initial",
           storageClass: "InfrequentAccess",
         });
       }),
     );
 
-    const actualUpdatedBucket = yield* r2.getBucket({
+    const actualUpdatedBucket = yield* getBucketWhenReady(
+      updatedBucket.bucketName,
       accountId,
-      bucketName: updatedBucket.bucketName,
-    });
+    );
     expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
     expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
 
@@ -95,7 +95,7 @@ test.provider(
   "existing bucket (matching name) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
@@ -106,7 +106,7 @@ test.provider(
       // Phase 1: deploy normally so a real R2 bucket exists.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("AdoptableBucket", {
+          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
             name: bucketName,
           });
         }),
@@ -115,7 +115,7 @@ test.provider(
 
       // Phase 2: wipe local state — the bucket stays on Cloudflare.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -128,7 +128,7 @@ test.provider(
       // plain attrs — silent adoption.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("AdoptableBucket", {
+          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
             name: bucketName,
           });
         }),
@@ -137,7 +137,7 @@ test.provider(
       expect(adopted.bucketName).toEqual(bucketName);
 
       const persisted = yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         return yield* state.get({
           stack: stack.name,
           stage: "test",
@@ -154,13 +154,13 @@ test.provider(
 
 test.provider("destroying a bucket empties its objects first", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("BucketWithObjects");
+        return yield* Cloudflare.R2.Bucket("BucketWithObjects");
       }),
     );
 
@@ -207,14 +207,14 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
 
 test.provider("lifecycle rules are added, updated, and removed", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     // Create with one rule.
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+        return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
           lifecycleRules: [
             {
               id: "expire-after-30d",
@@ -241,7 +241,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     // Update: change the prefix and add a storage class transition.
     yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+        return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
           lifecycleRules: [
             {
               id: "expire-after-30d",
@@ -277,7 +277,7 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     // Clear all rules.
     yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+        return yield* Cloudflare.R2.Bucket("LifecycleBucket", {
           lifecycleRules: [],
         });
       }),
@@ -293,6 +293,25 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
   }).pipe(logLevel),
 );
+
+// R2 bucket creates are eventually consistent — a read immediately after
+// deploy can briefly return NoSuchBucket until the bucket propagates.
+const getBucketWhenReady = Effect.fn(function* (
+  bucketName: string,
+  accountId: string,
+) {
+  return yield* r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "NoSuchBucket",
+      // Cap the backoff at 2s so we keep sampling instead of sleeping
+      // through the budget on the geometric tail.
+      schedule: Schedule.exponential("200 millis").pipe(
+        Schedule.either(Schedule.spaced("2 seconds")),
+        Schedule.both(Schedule.recurs(20)),
+      ),
+    }),
+  );
+});
 
 const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,

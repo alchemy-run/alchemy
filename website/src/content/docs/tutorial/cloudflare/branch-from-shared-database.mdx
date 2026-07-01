@@ -57,7 +57,7 @@ export const NeonDb = Effect.gen(function* () {
 
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDb;
-  return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
     origin: branch.origin,
   });
 });
@@ -176,7 +176,7 @@ export const NeonDb = Effect.gen(function* () {
 
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDb;
-  return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
     origin: branch.origin,
   });
 });
@@ -210,7 +210,7 @@ The plan is noticeably shorter:
   staging's project. No API call.
 - `Neon.Branch("app-branch")` → freshly created against the
   referenced project.
-- `Cloudflare.Hyperdrive("app-hyperdrive")` → points at the new
+- `Cloudflare.Hyperdrive.Connection("app-hyperdrive")` → points at the new
   branch's `origin`.
 - `Api` → freshly created.
 

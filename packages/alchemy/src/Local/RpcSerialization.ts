@@ -64,7 +64,7 @@ export const wrapRpcHandlers = <T extends Record<string, any>>(
         ? streamKeys?.includes(key)
           ? wrapRpcStreamHandler(value)
           : wrapRpcEffectHandler(value)
-        : typeof value === "object" && value !== null
+        : typeof value === "object" && value !== null && !Array.isArray(value)
           ? wrapRpcHandlers(value)
           : value,
     ]),
@@ -82,14 +82,14 @@ export const unwrapRpcHandlers = <T extends Record<string, any>>(
         ? streamKeys?.includes(key)
           ? unwrapRpcStreamHandler(value)
           : unwrapRpcEffectHandler(value)
-        : typeof value === "object" && value !== null
+        : typeof value === "object" && value !== null && !Array.isArray(value)
           ? unwrapRpcHandlers(value)
           : value,
     ]),
   ) as RpcUnwrapped<T>;
 };
 
-const serializeError = Schema.encodeSync(Schema.Defect);
+const serializeError = Schema.encodeSync(Schema.Defect());
 
 const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
   handler: RpcEffectHandler<Args, Success, Error>,
@@ -107,7 +107,10 @@ const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
         cause: exit.cause.reasons.map((reason): RpcSerializedCause<Error> => {
           switch (reason._tag) {
             case "Fail":
-              return { _tag: "Fail", error: serializeError(reason.error) };
+              return {
+                _tag: "Fail",
+                error: serializeError(reason.error) as Error,
+              };
             case "Die":
               return { _tag: "Die", defect: serializeError(reason.defect) };
             case "Interrupt":

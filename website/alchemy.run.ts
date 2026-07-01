@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Website>;
 
-const Website = Cloudflare.StaticSite(
+const Website = Cloudflare.Website.StaticSite(
   "Website",
   Alchemy.Stack.useSync((stack) => ({
     command: "bun run build",
@@ -34,7 +34,7 @@ const Website = Cloudflare.StaticSite(
       date: "2026-04-02",
       flags: ["nodejs_compat"],
     },
-    assetsConfig: {
+    assets: {
       runWorkerFirst: true,
     },
   })),

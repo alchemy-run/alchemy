@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { ResponseHeadersPolicy } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "@effect/vitest";
@@ -102,6 +103,41 @@ describe("AWS.CloudFront.ResponseHeadersPolicy", () => {
         yield* stack.destroy();
         yield* assertResponseHeadersPolicyDeleted(
           updated.responseHeadersPolicyId,
+        );
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!runLive)(
+    "list enumerates the deployed response headers policy",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* ResponseHeadersPolicy("ListResponseHeaders", {
+              comment: "list",
+              securityHeadersConfig: {
+                ContentTypeOptions: { Override: true },
+              },
+            });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(ResponseHeadersPolicy);
+        const all = yield* provider.list();
+
+        expect(
+          all.some(
+            (p) =>
+              p.responseHeadersPolicyId === deployed.responseHeadersPolicyId,
+          ),
+        ).toBe(true);
+
+        yield* stack.destroy();
+        yield* assertResponseHeadersPolicyDeleted(
+          deployed.responseHeadersPolicyId,
         );
       }),
     { timeout: 300_000 },

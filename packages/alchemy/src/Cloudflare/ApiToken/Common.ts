@@ -12,7 +12,7 @@ import {
  *
  * @see https://developers.cloudflare.com/fundamentals/api/reference/permissions/
  */
-export type ApiTokenResourceKey =
+export type ResourceKey =
   | `com.cloudflare.api.account.${string}`
   | `com.cloudflare.api.account.zone.${string}`
   | `com.cloudflare.edge.r2.bucket.${string}`
@@ -23,24 +23,32 @@ export type ApiTokenResourceKey =
  * name (resolved against the static catalog) or an explicit `{ id }` for
  * names that aren't in the catalog or have multiple scopes.
  */
-export type ApiTokenPermissionGroupRef =
+export type PermissionGroupRef =
   | PermissionGroupName
   | { id: string; meta?: { key?: string; value?: string } };
 
-export interface ApiTokenPolicy {
+/**
+ * Value of a resource entry in an {@link Policy}. Usually `"*"`, but
+ * account-owned tokens must nest zone resources under the account resource —
+ * e.g. `{ "com.cloudflare.api.account.<id>": { "com.cloudflare.api.account.zone.*": "*" } }`
+ * — so a nested object is also allowed.
+ */
+export type ResourceScope = string | { [K in ResourceKey]?: string };
+
+export interface Policy {
   effect: "allow" | "deny";
-  permissionGroups: ApiTokenPermissionGroupRef[];
-  resources: { [K in ApiTokenResourceKey]?: string };
+  permissionGroups: PermissionGroupRef[];
+  resources: { [K in ResourceKey]?: ResourceScope };
 }
 
-export interface ApiTokenCondition {
+export interface Condition {
   requestIp?: {
     in?: string[];
     notIn?: string[];
   };
 }
 
-export type ApiTokenProps = {
+export type Props = {
   /**
    * Token name. Defaults to a generated physical name based on the
    * resource's logical id, app name, and stage.
@@ -52,17 +60,46 @@ export type ApiTokenProps = {
    */
   accountId?: string;
   /**
-   * Access policies attached to the token. At least one policy is required
-   * by Cloudflare.
+   * Access policies attached to the token. Cloudflare requires at least one
+   * policy on a token; if you omit `policies` here, the policies must instead
+   * be contributed by bindings (see {@link ApiTokenBinding}).
    */
-  policies: ApiTokenPolicy[];
+  policies?: Policy[];
   /** ISO 8601 expiration timestamp. */
   expiresOn?: string;
   /** ISO 8601 "not before" timestamp. */
   notBefore?: string;
   /** Optional usage conditions (e.g. IP allowlist). */
-  condition?: ApiTokenCondition;
+  condition?: Condition;
 };
+
+/**
+ * Binding contract for {@link AccountApiToken} / {@link UserApiToken}.
+ *
+ * A binding contributes additional access policies to the token. This lets a
+ * downstream resource (e.g. a runtime capability that needs to call a specific
+ * Cloudflare API) create a token and attach exactly the policies it requires,
+ * without the token's owner having to enumerate them up front.
+ *
+ * Binding-contributed policies are merged with any `policies` passed directly
+ * as props; the union must contain at least one policy.
+ */
+export type ApiTokenBinding = {
+  /** Access policies to attach to the token. */
+  policies?: Policy[];
+};
+
+/**
+ * Collect the policies a token should be created with: those passed directly
+ * as props, plus those contributed by bindings.
+ */
+export const collectPolicies = (
+  props: Policy[] | undefined,
+  bindings: { data: ApiTokenBinding }[],
+): Policy[] => [
+  ...(props ?? []),
+  ...bindings.flatMap((binding) => binding.data.policies ?? []),
+];
 
 export type ResolvedPolicy = {
   effect: "allow" | "deny";
@@ -70,7 +107,7 @@ export type ResolvedPolicy = {
   resources: Record<string, unknown>;
 };
 
-export const resolvePermissionGroup = (ref: ApiTokenPermissionGroupRef) => {
+export const resolvePermissionGroup = (ref: PermissionGroupRef) => {
   if (typeof ref === "string") {
     const group = PERMISSION_GROUPS_BY_NAME[ref];
     if (!group) {
@@ -86,9 +123,9 @@ export const resolvePermissionGroup = (ref: ApiTokenPermissionGroupRef) => {
 };
 
 const resolveResources = (
-  resources: ApiTokenPolicy["resources"],
-): Record<string, string> => {
-  const out: Record<string, string> = {};
+  resources: Policy["resources"],
+): Record<string, ResourceScope> => {
+  const out: Record<string, ResourceScope> = {};
   for (const [key, value] of Object.entries(resources)) {
     if (value === undefined) continue;
     out[key] = value;
@@ -96,7 +133,7 @@ const resolveResources = (
   return out;
 };
 
-export const resolvePolicies = (policies: ApiTokenPolicy[]): ResolvedPolicy[] =>
+export const resolvePolicies = (policies: Policy[]): ResolvedPolicy[] =>
   policies.map((policy) => ({
     effect: policy.effect,
     permissionGroups: policy.permissionGroups.map(resolvePermissionGroup),
@@ -117,16 +154,14 @@ export const policyFingerprint = (policies: ResolvedPolicy[]): string =>
   );
 
 export const conditionFingerprint = (
-  condition: ApiTokenCondition | undefined,
+  condition: Condition | undefined,
 ): string =>
   JSON.stringify({
     in: [...(condition?.requestIp?.in ?? [])].sort(),
     notIn: [...(condition?.requestIp?.notIn ?? [])].sort(),
   });
 
-export const buildConditionPayload = (
-  condition: ApiTokenCondition | undefined,
-) =>
+export const buildConditionPayload = (condition: Condition | undefined) =>
   condition
     ? {
         requestIp: condition.requestIp

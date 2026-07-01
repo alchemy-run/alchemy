@@ -45,7 +45,7 @@ export const tailCommand = Command.make(
       "alchemy.main": a.main,
     }),
   )(
-    Effect.fnUntraced(function* ({ main, stage, envFile, profile, filter }) {
+    Effect.fn(function* ({ main, stage, envFile, profile, filter }) {
       const stackEffect = yield* importStack(main);
 
       const services = Layer.mergeAll(
@@ -62,7 +62,7 @@ export const tailCommand = Command.make(
         const stack = yield* stackEffect;
 
         yield* Effect.gen(function* () {
-          const state = yield* State.State;
+          const state = yield* yield* State.State;
           const filterSet = parseResourceFilter(filter);
           const availableIds = [
             ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),

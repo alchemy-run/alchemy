@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -6,25 +7,25 @@ import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_APIGATEWAY_TESTS === "true";
+test.provider.skipIf(!!process.env.FAST)(
+  "create and delete usage plan",
+  (stack) =>
+    Effect.gen(function* () {
+      const plan = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AWS.ApiGateway.UsagePlan("AgUsagePlan", {
+            description: "test plan",
+          });
+        }),
+      );
 
-test.provider.skipIf(!runLive)("create and delete usage plan", (stack) =>
-  Effect.gen(function* () {
-    const plan = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* AWS.ApiGateway.UsagePlan("AgUsagePlan", {
-          description: "test plan",
-        });
-      }),
-    );
+      expect(plan.id).toBeDefined();
 
-    expect(plan.id).toBeDefined();
-
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
 );
 
-test.provider.skipIf(!runLive)(
+test.provider.skipIf(!!process.env.FAST)(
   "usage plan throttle updates in place",
   (stack) =>
     Effect.gen(function* () {
@@ -47,6 +48,29 @@ test.provider.skipIf(!runLive)(
       const remote = yield* ag.getUsagePlan({ usagePlanId: plan.id });
       expect(remote.throttle?.burstLimit).toEqual(20);
       expect(remote.throttle?.rateLimit).toEqual(200);
+
+      yield* stack.destroy();
+    }),
+);
+
+test.provider.skipIf(!!process.env.FAST)(
+  "list enumerates the deployed usage plan",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const plan = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AWS.ApiGateway.UsagePlan("AgUsagePlanList", {
+            description: "list test plan",
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.UsagePlan);
+      const all = yield* provider.list();
+
+      expect(all.some((p) => p.id === plan.id)).toBe(true);
 
       yield* stack.destroy();
     }),

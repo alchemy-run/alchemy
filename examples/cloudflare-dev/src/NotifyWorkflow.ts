@@ -1,5 +1,5 @@
-import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { KV } from "./KV.ts";
@@ -16,24 +16,23 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     // Bind a `secret_text` on the workflow at plantime. Using a literal
     // (instead of `Config.redacted("WORKFLOW_SECRET")`) keeps the integ
     // test self-contained — no `.env` setup required.
-    const workflowSecret = yield* Alchemy.Secret(
-      "WORKFLOW_SECRET",
-      "wf-secret-abc123",
+    const secret = yield* Config.redacted("WORKFLOW_SECRET").pipe(
+      Config.withDefault(Redacted.make(WORKFLOW_SECRET_VALUE)),
     );
     // Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
     //
-    // The kv binding internally yields `Cloudflare.WorkerEnvironment` —
+    // The kv binding internally yields `Cloudflare.Workers.WorkerEnvironment` —
     // before that PR, accessing `WorkerEnvironment` inside a workflow body
     // crashed because `provideService(WorkerEnvironment, env)` was applied
     // to the outer `Effect.succeed(body)` wrapper (a no-op) instead of
     // `body` itself in `Workflow.ts`. Exercising `kv.put` / `kv.get` from
     // inside a `task` keeps the integ test catching any future regression.
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-      const stored = yield* Cloudflare.task(
+      const stored = yield* Cloudflare.Workflows.task(
         "kv-roundtrip",
         Effect.gen(function* () {
           const key = `workflow:smoke:${roomId}`;
@@ -54,10 +53,9 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       // returns `Redacted<string>`; unwrap only where the value needs to
       // leave the workflow (here, in the broadcast + the returned output
       // so the integ test can assert end-to-end propagation).
-      const secret = yield* workflowSecret;
       const secretValue = Redacted.value(secret);
 
-      const processed = yield* Cloudflare.task(
+      const processed = yield* Cloudflare.Workflows.task(
         "process",
         Effect.succeed({
           text: `Processed: ${stored}`,
@@ -67,14 +65,14 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       );
 
       // const room = rooms.getByName(roomId);
-      // yield* Cloudflare.task(
+      // yield* Cloudflare.Workflows.task(
       //   "broadcast",
       //   room.broadcast(`[workflow] ${processed.text} secret=${secretValue}`),
       // );
 
-      // yield* Cloudflare.sleep("cooldown", "2 seconds");
+      // yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
 
-      // yield* Cloudflare.task(
+      // yield* Cloudflare.Workflows.task(
       //   "finalize",
       //   room.broadcast(`[workflow] complete for ${roomId}`),
       // );

@@ -8,11 +8,8 @@ import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileLive } from "alchemy/Auth/Profile";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
-import { installLocalhostDns } from "alchemy/Util/LocalhostDns";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
-
-installLocalhostDns();
 
 import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./commands/_shared.ts";
@@ -26,6 +23,7 @@ import {
 import { devCommand } from "./commands/dev.ts";
 import { loginCommand } from "./commands/login.ts";
 import { logsCommand } from "./commands/logs.ts";
+import { unsafeCommand } from "./commands/nuke.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { stateCommand } from "./commands/state.ts";
 import { tailCommand } from "./commands/tail.ts";
@@ -44,6 +42,7 @@ const root = Command.make("alchemy", {}).pipe(
     loginCommand,
     profileCommand,
     stateCommand,
+    unsafeCommand,
   ]),
 );
 

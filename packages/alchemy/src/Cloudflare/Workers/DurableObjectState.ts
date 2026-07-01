@@ -1,11 +1,12 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
   fromDurableObjectStorage,
   type DurableObjectStorage,
 } from "./DurableObjectStorage.ts";
-import { fromWebSocket, type DurableWebSocket } from "./WebSocket.ts";
+import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 
 export class DurableObjectState extends Context.Service<
   DurableObjectState,
@@ -14,23 +15,36 @@ export class DurableObjectState extends Context.Service<
     readonly storage: DurableObjectStorage;
     container?: cf.Container;
     blockConcurrencyWhile<T>(
-      callback: () => Effect.Effect<T>,
-    ): Effect.Effect<T>;
-    acceptWebSocket(ws: DurableWebSocket, tags?: string[]): Effect.Effect<void>;
-    getWebSockets(tag?: string): Effect.Effect<DurableWebSocket[]>;
+      callback: () => Effect.Effect<T, never, RuntimeContext>,
+    ): Effect.Effect<T, never, RuntimeContext>;
+    acceptWebSocket(
+      ws: WebSocket,
+      tags?: string[],
+    ): Effect.Effect<void, never, RuntimeContext>;
+    getWebSockets(
+      tag?: string,
+    ): Effect.Effect<WebSocket[], never, RuntimeContext>;
     setWebSocketAutoResponse(
       maybeReqResp?: cf.WebSocketRequestResponsePair,
-    ): Effect.Effect<void>;
-    getWebSocketAutoResponse(): Effect.Effect<cf.WebSocketRequestResponsePair | null>;
+    ): Effect.Effect<void, never, RuntimeContext>;
+    getWebSocketAutoResponse(): Effect.Effect<
+      cf.WebSocketRequestResponsePair | null,
+      never,
+      RuntimeContext
+    >;
     getWebSocketAutoResponseTimestamp(
       ws: cf.WebSocket,
-    ): Effect.Effect<Date | null>;
+    ): Effect.Effect<Date | null, never, RuntimeContext>;
     setHibernatableWebSocketEventTimeout(
       timeoutMs?: number,
-    ): Effect.Effect<void>;
-    getHibernatableWebSocketEventTimeout(): Effect.Effect<number | null>;
-    getTags(ws: cf.WebSocket): Effect.Effect<string[]>;
-    abort(reason?: string): Effect.Effect<void>;
+    ): Effect.Effect<void, never, RuntimeContext>;
+    getHibernatableWebSocketEventTimeout(): Effect.Effect<
+      number | null,
+      never,
+      RuntimeContext
+    >;
+    getTags(ws: cf.WebSocket): Effect.Effect<string[], never, RuntimeContext>;
+    abort(reason?: string): Effect.Effect<void, never, RuntimeContext>;
   }
 >()("Cloudflare.DurableObjectState") {}
 
@@ -44,7 +58,7 @@ export const fromDurableObjectState = (
     Effect.tryPromise(() =>
       state.blockConcurrencyWhile(() => Effect.runPromise(callback())),
     ),
-  acceptWebSocket: (ws: DurableWebSocket, tags?: string[]) =>
+  acceptWebSocket: (ws: WebSocket, tags?: string[]) =>
     Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
   getWebSockets: (tag?: string) =>
     Effect.sync(() => state.getWebSockets(tag).map(fromWebSocket)),

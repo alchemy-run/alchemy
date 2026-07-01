@@ -49,7 +49,7 @@ export interface Invalidation extends Resource<
  *
  * `Invalidation` is a helper resource for website deployments that need to
  * clear selected CloudFront cache paths after asset updates.
- *
+ * @resource
  * @section Creating Invalidations
  * @example Invalidate The Entire Distribution
  * ```typescript
@@ -155,6 +155,12 @@ export const InvalidationProvider = () =>
 
       return {
         stables: ["distributionId", "version"],
+        // Non-listable: an Invalidation is an ephemeral, immutable ledger entry
+        // keyed by {distributionId, invalidationId}. It completes on its own and
+        // cannot be deleted (`delete` is a no-op), so there is no persistent
+        // "current resource" to enumerate for nuke. `listInvalidations` only
+        // exposes historical, undeletable entries per distribution.
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;

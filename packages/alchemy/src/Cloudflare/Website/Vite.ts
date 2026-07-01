@@ -1,31 +1,24 @@
 import * as Effect from "effect/Effect";
-import type { MemoOptions } from "../../Build/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import { effectClass } from "../../Util/effect.ts";
+import type { Providers } from "../Providers.ts";
+import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
+  type NormalizedBindings,
+  type ViteOptions,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerEnv,
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
-export interface ViteProps<
-  Bindings extends WorkerBindingProps = {},
-  Env extends WorkerEnv = {},
-> extends Omit<WorkerProps<Bindings, Env>, "vite" | "main"> {
+export interface ViteProps<Bindings extends WorkerBindingProps = {}>
+  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
   /**
-   * Root directory passed to Vite's `root` option.
-   * Defaults to the current working directory (`process.cwd()`).
+   * Optional configuration for static asset routing behavior.
+   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
-  rootDir?: string;
-  /**
-   * Controls which files are hashed to decide whether a rebuild is needed.
-   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
-   * lockfile. Provide explicit globs to narrow the scope.
-   *
-   * @see {@link MemoOptions}
-   */
-  memo?: MemoOptions;
+  assets?: AssetsConfig;
 }
 
 /**
@@ -40,6 +33,8 @@ export interface ViteProps<
  * unchanged projects skip the build and deploy entirely.
  *
  * @resource
+ * @product Website
+ * @category Workers & Compute
  *
  * @section Deploying a Static Site
  * For a pure static site (no SSR), a single call is all you need.
@@ -48,7 +43,7 @@ export interface ViteProps<
  *
  * @example Static Vite site
  * ```typescript
- * const site = yield* Cloudflare.Vite("Website");
+ * const site = yield* Cloudflare.Website.Vite("Website");
  * ```
  *
  * @section SSR Frameworks
@@ -57,7 +52,7 @@ export interface ViteProps<
  *
  * @example TanStack Start
  * ```typescript
- * const app = yield* Cloudflare.Vite("TanStackStart", {
+ * const app = yield* Cloudflare.Website.Vite("TanStackStart", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
@@ -66,12 +61,33 @@ export interface ViteProps<
  *
  * @example SolidStart with worker-first routing
  * ```typescript
- * const app = yield* Cloudflare.Vite("SolidStart", {
+ * const app = yield* Cloudflare.Website.Vite("SolidStart", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
  *   assets: {
  *     config: { runWorkerFirst: true },
+ *   },
+ * });
+ * ```
+ *
+ * @section React Server Components
+ * Frameworks that emit more than one server environment (e.g. React
+ * Server Components, which split into an `rsc` environment and an `ssr`
+ * environment) need `viteEnvironments` to declare which environment
+ * produces the deployed Worker entry and which additional server
+ * environments to bundle alongside it. The `client` environment is
+ * always deployed as static assets.
+ *
+ * @example React Router with RSC
+ * ```typescript
+ * const app = yield* Cloudflare.Vite("ReactRouterRSC", {
+ *   compatibility: {
+ *     flags: ["nodejs_compat"],
+ *   },
+ *   viteEnvironments: {
+ *     entry: "rsc",
+ *     children: ["ssr"],
  *   },
  * });
  * ```
@@ -82,7 +98,7 @@ export interface ViteProps<
  *
  * @example Vue SPA
  * ```typescript
- * const app = yield* Cloudflare.Vite("Vue", {
+ * const app = yield* Cloudflare.Website.Vite("Vue", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
@@ -102,34 +118,74 @@ export interface ViteProps<
  *
  * @example Narrowing the memo scope
  * ```typescript
- * const site = yield* Cloudflare.Vite("Docs", {
+ * const site = yield* Cloudflare.Website.Vite("Docs", {
  *   memo: {
  *     include: ["src/**", "content/**", "package.json"],
  *   },
  * });
  * ```
+ *
+ * @section Class Form
+ * Calling `Vite` with no arguments returns a constructor you can
+ * `extend` to declare the Worker as a named class. The class is both
+ * an `Effect` you can `yield*` to deploy and a type you can reference
+ * elsewhere — useful when other resources need to bind to this Worker.
+ *
+ * @example Declaring a Worker class
+ * ```typescript
+ * class Website extends Cloudflare.Website.Vite<Website>()("Website", {
+ *   compatibility: { flags: ["nodejs_compat"] },
+ * }) {}
+ *
+ * const site = yield* Website;
+ * ```
  */
-export const Vite = <
-  const Bindings extends WorkerBindingProps = {},
-  const Env extends WorkerEnv = {},
-  Req = never,
->(
-  id: string,
-  propsEff?:
-    | InputProps<ViteProps<Bindings, Env>>
-    | Effect.Effect<InputProps<ViteProps<Bindings, Env>>, never, Req>,
-) =>
-  Worker<Bindings, Env, WorkerAssetsConfig, Req>(
-    id,
-    Effect.map(
-      Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-      (props) => ({
-        ...props,
-        main: undefined!,
-        vite: {
-          rootDir: props?.rootDir,
-          memo: props?.memo,
-        },
-      }),
-    ),
-  );
+export const Vite: {
+  <Self>(): {
+    <const Bindings extends WorkerBindingProps = {}, Req = never>(
+      id: string,
+      propsEff?:
+        | InputProps<ViteProps<Bindings>>
+        | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
+    ): Effect.Effect<Self, never, Req | Providers> & {
+      new (): Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }>;
+    };
+  };
+  <const Bindings extends WorkerBindingProps = {}, Req = never>(
+    id: string,
+    propsEff?:
+      | InputProps<ViteProps<Bindings>>
+      | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }>,
+    never,
+    Req | Providers
+  >;
+} = ((id?: any, propsEff?: any) =>
+  id === undefined
+    ? (id: string, propsEff: any) => effectClass(Vite(id, propsEff))
+    : Worker(
+        id,
+        Effect.map(
+          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+          (props) => ({
+            ...props,
+            main: undefined!,
+            vite: {
+              rootDir: props?.rootDir,
+              memo: props?.memo,
+              viteEnvironments: props?.viteEnvironments,
+            },
+          }),
+        ),
+      )) as any;

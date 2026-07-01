@@ -1,7 +1,8 @@
-import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import { Config } from "effect";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { KV } from "./KV.ts";
 import Room from "./Room.ts";
 
@@ -9,38 +10,37 @@ import Room from "./Room.ts";
  * Hard-coded value the integ test asserts on to prove the secret was
  * bound at plantime and read at runtime through the `Redacted` accessor.
  */
-export const WORKFLOW_SECRET_VALUE = "wf-secret-abc123";
+export const WORKFLOW_SECRET_VALUE = Redacted.make("wf-secret-abc123");
 
 export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
   "Notifier",
   Effect.gen(function* () {
     const rooms = yield* Room;
-    // Bind a `secret_text` on the workflow at plantime. Using a literal
-    // (instead of `Config.redacted("WORKFLOW_SECRET")`) keeps the integ
-    // test self-contained — no `.env` setup required.
-    const workflowSecret = yield* Alchemy.Secret(
-      "WORKFLOW_SECRET",
-      WORKFLOW_SECRET_VALUE,
+
+    const secret = yield* Config.redacted("WORKFLOW_SECRET").pipe(
+      Config.withDefault(WORKFLOW_SECRET_VALUE),
     );
-    // Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
-    //
-    // The kv binding internally yields `Cloudflare.WorkerEnvironment` —
-    // before that PR, accessing `WorkerEnvironment` inside a workflow body
-    // crashed because `provideService(WorkerEnvironment, env)` was applied
-    // to the outer `Effect.succeed(body)` wrapper (a no-op) instead of
-    // `body` itself in `Workflow.ts`. Exercising `kv.put` / `kv.get` from
-    // inside a `task` keeps the integ test catching any future regression.
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
     return Effect.fn(function* (input: { roomId: string; message: string }) {
       const { roomId, message } = input;
 
-      const stored = yield* Cloudflare.task(
+      const stored = yield* Cloudflare.Workflows.task(
         "kv-roundtrip",
         Effect.gen(function* () {
           const key = `workflow:smoke:${roomId}`;
           yield* kv.put(key, message);
-          const got = yield* kv.get(key);
+          // KV is eventually consistent: a read immediately after a write can
+          // briefly miss or return stale data. Re-read until it reflects the
+          // write (bounded, so a genuine failure still surfaces below).
+          const got = yield* kv.get(key).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("500 millis"),
+              until: (value) => value === message,
+              times: 10,
+            }),
+          );
           if (got !== message) {
             return yield* Effect.die(
               new Error(
@@ -56,10 +56,9 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       // returns `Redacted<string>`; unwrap only where the value needs to
       // leave the workflow (here, in the broadcast + the returned output
       // so the integ test can assert end-to-end propagation).
-      const secret = yield* workflowSecret;
       const secretValue = Redacted.value(secret);
 
-      const processed = yield* Cloudflare.task(
+      const processed = yield* Cloudflare.Workflows.task(
         "process",
         Effect.succeed({
           text: `Processed: ${stored}`,
@@ -69,14 +68,14 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       );
 
       const room = rooms.getByName(roomId);
-      yield* Cloudflare.task(
+      yield* Cloudflare.Workflows.task(
         "broadcast",
         room.broadcast(`[workflow] ${processed.text} secret=${secretValue}`),
       );
 
-      yield* Cloudflare.sleep("cooldown", "2 seconds");
+      yield* Cloudflare.Workflows.sleep("cooldown", "2 seconds");
 
-      yield* Cloudflare.task(
+      yield* Cloudflare.Workflows.task(
         "finalize",
         room.broadcast(`[workflow] complete for ${roomId}`),
       );

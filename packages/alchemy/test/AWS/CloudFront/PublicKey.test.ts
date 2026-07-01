@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { PublicKey } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "@effect/vitest";
@@ -65,6 +66,34 @@ describe("AWS.CloudFront.PublicKey", () => {
 
         yield* stack.destroy();
         yield* assertPublicKeyDeleted(updated.publicKeyId);
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!runLive)(
+    "list enumerates the deployed public key",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* PublicKey("ListResource", {
+              encodedKey: TEST_PUBLIC_KEY,
+              comment: "list test",
+            });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(PublicKey);
+        const all = yield* provider.list();
+
+        expect(all.some((x) => x.publicKeyId === deployed.publicKeyId)).toBe(
+          true,
+        );
+
+        yield* stack.destroy();
+        yield* assertPublicKeyDeleted(deployed.publicKeyId);
       }),
     { timeout: 300_000 },
   );

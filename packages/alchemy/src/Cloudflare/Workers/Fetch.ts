@@ -11,8 +11,14 @@ import * as UrlParams from "effect/unstable/http/UrlParams";
 import * as Binding from "../../Binding.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
 
-export class Fetch extends Binding.Service<
+/**
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
+ */
+export interface Fetch extends Binding.Service<
   Fetch,
+  "Cloudflare.Workers.Fetch",
   (
     worker: Worker,
   ) => Effect.Effect<
@@ -23,16 +29,30 @@ export class Fetch extends Binding.Service<
       HttpClientError.RequestError
     >
   >
->()("Cloudflare.Fetch") {}
+> {}
 
-export const FetchLive = Layer.effect(
+export const Fetch = Binding.Service<Fetch>("Cloudflare.Workers.Fetch");
+
+export const FetchBinding = Layer.effect(
   Fetch,
   Effect.gen(function* () {
-    const Policy = yield* FetchPolicy;
     const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (worker: Worker) {
-      yield* Policy(worker);
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isWorker(host)) {
+          yield* host.bind`${host}`({
+            bindings: [
+              {
+                type: "service",
+                name: host.LogicalId,
+                service: host.workerName,
+              },
+            ],
+          });
+        }
+      }
       const fetcher = (env as Record<string, runtime.Fetcher>)[
         worker.LogicalId
       ];
@@ -115,28 +135,3 @@ const doFetch = (
       return send(undefined);
   }
 };
-
-export class FetchPolicy extends Binding.Policy<
-  FetchPolicy,
-  (worker: Worker) => Effect.Effect<void>
->()("Cloudflare.Fetch") {}
-
-export const FetchPolicyLive = FetchPolicy.layer.succeed(
-  Effect.fn(function* (host) {
-    if (isWorker(host)) {
-      yield* host.bind`${host}`({
-        bindings: [
-          {
-            type: "service",
-            name: host.LogicalId,
-            service: host.workerName,
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        new Error(`FetchPolicy does not support runtime '${host.Type}'`),
-      );
-    }
-  }),
-);

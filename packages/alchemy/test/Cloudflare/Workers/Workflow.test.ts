@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -6,6 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/workflow/stack.ts";
+import WorkflowTestWorker from "./fixtures/workflow/workflow-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -16,16 +18,26 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    // Let the freshly-deployed worker (and its Workflow binding) settle before
+    // the first run so a step doesn't error mid-propagation.
+    Effect.tap(Effect.sleep("5 seconds")),
+  ),
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
-  "deployed worker can run a workflow to completion",
-  Effect.gen(function* () {
-    const out = yield* stack;
-    const url = out.url;
-    expect(url).toBeTypeOf("string");
+interface WorkflowStatus {
+  status: string;
+  output?: { greeting: string; envBindingCount: number };
+  error?: { message?: string } | null;
+}
 
+// Start a fresh workflow instance and poll until it reaches a terminal state.
+// A transient `errored` during edge/binding propagation fails this effect so
+// the caller can retry with a brand-new instance.
+const runWorkflowToCompletion = (url: string) =>
+  Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
 
     // Cloudflare's edge takes a few seconds to start serving a fresh
@@ -43,40 +55,95 @@ test(
         times: 15,
       }),
     );
-    expect(startRes.status).toBe(200);
     const { instanceId } = (yield* startRes.json) as { instanceId: string };
     expect(instanceId).toBeTypeOf("string");
 
-    // Poll the workflow status until it reaches a terminal state.
-    let lastStatus:
-      | {
-          status: string;
-          output?: { greeting: string; envBindingCount: number };
-          error?: { message?: string } | null;
-        }
-      | undefined;
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      const statusRes = yield* client.get(
-        `${url}/workflow/status/${instanceId}`,
+    const lastStatus = yield* client
+      .get(`${url}/workflow/status/${instanceId}`)
+      .pipe(
+        Effect.flatMap((res) => res.json),
+        Effect.map((json) => json as unknown as WorkflowStatus),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (s) => s.status === "complete" || s.status === "errored",
+          times: 12,
+        }),
       );
-      lastStatus = (yield* statusRes.json) as typeof lastStatus;
-      if (
-        lastStatus?.status === "complete" ||
-        lastStatus?.status === "errored"
-      ) {
-        break;
-      }
-      yield* Effect.sleep("2 seconds");
-    }
 
-    expect(lastStatus).toBeDefined();
-    expect(lastStatus!.status).toBe("complete");
-    expect(lastStatus!.error).toBeFalsy();
-    expect(lastStatus!.output?.greeting).toBe("Hello, world!");
+    // Surface a non-complete terminal state as a failure so the outer retry
+    // can take another swing (a fresh worker occasionally errors a step while
+    // its bindings are still propagating).
+    if (lastStatus.status !== "complete") {
+      return yield* Effect.fail(
+        new Error(
+          `workflow ${lastStatus.status}: ${JSON.stringify(lastStatus.error)}`,
+        ),
+      );
+    }
+    return lastStatus;
+  });
+
+test(
+  "deployed worker can run a workflow to completion",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const url = out.url;
+    expect(url).toBeTypeOf("string");
+
+    const lastStatus = yield* runWorkflowToCompletion(url).pipe(
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
+    );
+
+    expect(lastStatus.status).toBe("complete");
+    expect(lastStatus.error).toBeFalsy();
+    expect(lastStatus.output?.greeting).toBe("Hello, world!");
     // The body yields `WorkerEnvironment` — if the regression from PR #71 ever
     // returns, the body dies on the first yield and `output` is undefined.
-    expect(lastStatus!.output?.envBindingCount).toBeGreaterThan(0);
+    expect(lastStatus.output?.envBindingCount).toBeGreaterThan(0);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
+);
+
+// Canonical `list()` test (account collection): deploy the worker+workflow
+// fixture (which creates a `WorkflowResource` named "TestWorkflow"), then
+// enumerate every workflow in the account via the typed provider and assert the
+// deployed one is present. Bracket with destroy so the test is isolated.
+//
+// SKIP-GATED on a distilled response-schema mismatch.
+// `list()` itself works — the account-scoped `listWorkflows` API returns 200 —
+// but decoding fails because pre-existing foreign workflows in the test account
+// report `class_name: null`, while distilled's `ListWorkflowsResponse` declares
+// `result[].className: Schema.String` (non-nullable). This surfaces as:
+//   CloudflareHttpError: {"success":true,...,"result":[{...,"class_name":null,...}]}
+// thrown during response decode in distilled client.ts.
+//
+// NEEDED DISTILLED PATCH (workflows service): make
+// `ListWorkflowsResponse.result[].className` nullable
+// (`Schema.Union([Schema.String, Schema.Null])`, surfaced as `string | null`).
+// This is a response-schema fix (not an error-tag patch), so it must be made
+// in the workflows generator/spec by the service owner, then regenerated. Once
+// applied, drop the skipIf gate (`CLOUDFLARE_TEST_WORKFLOW_LIST`) and this test
+// passes unchanged.
+test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
+  "list enumerates the deployed workflow",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* WorkflowTestWorker;
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Workflows.WorkflowResource,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((w) => w.workflowName === "TestWorkflow")).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );

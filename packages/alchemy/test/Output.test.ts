@@ -7,6 +7,8 @@ import { inMemoryState } from "@/State/InMemoryState";
 import type { ResourceState } from "@/State/ResourceState";
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -101,6 +103,71 @@ describe("Output.evaluate", () => {
     );
   });
 
+  describe("Config", () => {
+    it.effect("resolves a Config value at the top level", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(Config.succeed(1337), {});
+          expect(result).toBe(1337);
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config value nested inside an object", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            { port: Config.succeed(8080), host: "localhost" },
+            {},
+          );
+          expect(result).toEqual({ port: 8080, host: "localhost" });
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config value nested inside an array", () =>
+      provideState(
+        Effect.gen(function* () {
+          const [result] = yield* Output.evaluate([Config.succeed(42)], {});
+          expect(result).toBe(42);
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config against the ConfigProvider environment", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            { port: Config.number("PORT").pipe(Config.withDefault(1337)) },
+            {},
+          ).pipe(
+            Effect.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { PORT: "8080" } }),
+              ),
+            ),
+          );
+          expect(result).toEqual({ port: 8080 });
+        }),
+      ),
+    );
+
+    it.effect("a Config resolving to a Redacted keeps it wrapped", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            Config.succeed(Redacted.make("hunter2")),
+            {},
+          );
+          expect(Redacted.isRedacted(result)).toBe(true);
+          expect(
+            Redacted.value(result as unknown as Redacted.Redacted<string>),
+          ).toBe("hunter2");
+        }),
+      ),
+    );
+  });
+
   describe("LiteralExpr", () => {
     it.effect("evaluates Output.literal(value)", () =>
       provideState(
@@ -174,6 +241,14 @@ describe("Output.evaluate", () => {
         }),
       ),
     );
+
+    it("classifies resource expressions when a stable kind shadows the discriminator", () => {
+      const src = fakeResource("Test.Database", "Database");
+      const expr = new Output.ResourceExpr(src, { kind: "postgresql" });
+
+      expect((expr as any).kind).toBe("postgresql");
+      expect(Output.isResourceExpr(expr)).toBe(true);
+    });
   });
 
   describe("PropExpr", () => {
@@ -278,6 +353,161 @@ describe("Output.evaluate", () => {
             Output.mapEffect((s) => Effect.succeed(s + "c")),
           );
           expect(yield* Output.evaluate(expr, {})).toBe("abc");
+        }),
+      ),
+    );
+  });
+
+  describe("FlatMapExpr (flatMap)", () => {
+    it.effect("flattens an Output returned from the function", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.literal(5).pipe(
+            Output.flatMap((n: number) => Output.literal(n * 2)),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe(10);
+        }),
+      ),
+    );
+
+    it.effect("supports the data-first form", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.flatMap(Output.literal("a"), (s: string) =>
+            Output.literal(s + "b"),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe("ab");
+        }),
+      ),
+    );
+
+    it.effect("chains multiple flatMaps", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.literal(1).pipe(
+            Output.flatMap((n: number) => Output.literal(n + 1)),
+            Output.flatMap((n: number) => Output.literal(n * 10)),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe(20);
+        }),
+      ),
+    );
+
+    it.effect("flatMaps into another resource's output", () =>
+      provideState(
+        Effect.gen(function* () {
+          const a = fakeResource("Test.A", "FA");
+          const b = fakeResource("Test.B", "FB");
+          const expr = (Output.of(a) as any).name.pipe(
+            Output.flatMap(() => (Output.of(b) as any).name),
+          );
+          const result = yield* Output.evaluate(expr, {
+            FA: { name: "a-name" },
+            FB: { name: "b-name" },
+          });
+          expect(result).toBe("b-name");
+        }),
+      ),
+    );
+
+    it.effect("can flatMap into a non-Output literal value", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.literal(3).pipe(
+            Output.flatMap((n: number) => Output.asOutput(n + 1)),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe(4);
+        }),
+      ),
+    );
+
+    it("tracks only the source expression as upstream", () => {
+      const a = fakeResource("Test.A", "UA");
+      const expr = (Output.of(a) as any).name.pipe(
+        Output.flatMap((s: string) => Output.literal(s)),
+      );
+      expect(Object.keys(Output.upstream(expr))).toEqual(["UA"]);
+    });
+  });
+
+  describe("method-style combinators on a proxied Output", () => {
+    // Resource outputs are Proxies, so `.map(fn)` / `.mapEffect(fn)` /
+    // `.flatMap(fn)` / `.apply(fn)` / `.effect(fn)` must be callable as
+    // methods (not just via `Output.map(output, fn)` / `.pipe(...)`).
+    const resourceOutput = () => {
+      const src = fakeResource<"Test.Bucket", { name: string }>(
+        "Test.Bucket",
+        "M",
+      );
+      return (Output.of(src) as any).name as Output.Output<string>;
+    };
+
+    it.effect(".map(fn) builds an ApplyExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).map((s: string) =>
+            s.toUpperCase(),
+          );
+          expect(Output.isApplyExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "ABC",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".apply(fn) builds an ApplyExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).apply((s: string) =>
+            s.toUpperCase(),
+          );
+          expect(Output.isApplyExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "ABC",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".mapEffect(fn) builds an EffectExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).mapEffect((s: string) =>
+            Effect.succeed(s + "!"),
+          );
+          expect(Output.isEffectExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "abc!",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".effect(fn) builds an EffectExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).effect((s: string) =>
+            Effect.succeed(s + "!"),
+          );
+          expect(Output.isEffectExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "abc!",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".flatMap(fn) builds a FlatMapExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).flatMap((s: string) =>
+            Output.literal(s + "?"),
+          );
+          expect(Output.isFlatMapExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "abc?",
+          );
         }),
       ),
     );
@@ -608,6 +838,56 @@ describe("Output coercion guard", () => {
       /Output\.(interpolate|map)/,
     );
   });
+});
+
+describe("Redacted stack-output serialization (regression #598)", () => {
+  // A resource whose attribute is a `Redacted<string>` — e.g. `Random.text`,
+  // which pr-package's AuthTokenValue exposes. When such an attribute flows
+  // into a Stack output it is JSON-serialized for persistence to state /
+  // Doppler / GH secrets. `JSON.stringify(Redacted)` returns the literal
+  // string "<redacted>", so a publisher reading the output would send
+  // `Bearer <redacted>` instead of the real token. The fix is to unwrap with
+  // `Output.map(Redacted.value)` before returning it from the stack.
+  const SECRET = "1486c434bd35732a185d1712c587ddfafd9e1c8d7a94fb15cf6ece51128";
+  const redactedResource = () => {
+    const src = fakeResource<
+      "Alchemy.Random",
+      { text: Redacted.Redacted<string> }
+    >("Alchemy.Random", "AuthTokenValue");
+    return (Output.of(src) as any).text as Output.Output<
+      Redacted.Redacted<string>
+    >;
+  };
+  const env = { AuthTokenValue: { text: Redacted.make(SECRET) } };
+
+  it.effect(
+    'a raw Redacted output serializes to the literal "<redacted>" (the bug)',
+    () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(redactedResource(), env);
+          // The evaluated value is still a Redacted, and persisting it as a
+          // stack output (JSON) loses the real token.
+          expect(Redacted.isRedacted(result)).toBe(true);
+          expect(JSON.stringify({ authToken: result })).toBe(
+            '{"authToken":"<redacted>"}',
+          );
+        }),
+      ),
+  );
+
+  it.effect("Output.map(Redacted.value) emits the real token (the fix)", () =>
+    provideState(
+      Effect.gen(function* () {
+        const expr = redactedResource().pipe(Output.map(Redacted.value));
+        const result = yield* Output.evaluate(expr, env);
+        expect(result).toBe(SECRET);
+        expect(JSON.stringify({ authToken: result })).toBe(
+          `{"authToken":"${SECRET}"}`,
+        );
+      }),
+    ),
+  );
 });
 
 describe("Output.isOutput / isExpr", () => {

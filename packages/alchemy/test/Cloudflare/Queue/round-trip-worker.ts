@@ -11,7 +11,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * worker's `GET /count?name=...` route. Persists in DO storage so
  * the count survives DO hibernation.
  */
-export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
+export class Counter extends Cloudflare.DurableObject<Counter>()(
   "Counter",
   Effect.gen(function* () {
     return Effect.gen(function* () {
@@ -42,12 +42,12 @@ export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
  * waits for the consumer to push them through to the Counter DO,
  * and polls `GET /count?name=K` until the count matches.
  *
- * `Cloudflare.messages(...).subscribe(...)` (in QueueWorker below)
- * auto-creates the matching `Cloudflare.QueueConsumer` resource at
+ * `Cloudflare.Queues.consumeQueueMessages(...)` (in QueueWorker below)
+ * auto-creates the matching `Cloudflare.Queues.Consumer` resource at
  * deploy time, so this fixture has no separate consumer wiring.
  */
-export const RoundTripQueue = Cloudflare.Queue("RoundTripQueue");
-export const SecondaryRoundTripQueue = Cloudflare.Queue(
+export const RoundTripQueue = Cloudflare.Queues.Queue("RoundTripQueue");
+export const SecondaryRoundTripQueue = Cloudflare.Queues.Queue(
   "SecondaryRoundTripQueue",
 );
 
@@ -59,16 +59,14 @@ interface QueueMessageBody {
 export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
   "QueueRoundTripWorker",
   {
-    main: import.meta.filename,
-    subdomain: { enabled: true },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counters = yield* Counter;
     const queueResource = yield* RoundTripQueue;
-    const queue = yield* Cloudflare.QueueBinding.bind(queueResource);
+    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
     const secondaryQueueResource = yield* SecondaryRoundTripQueue;
-    const secondaryQueue = yield* Cloudflare.QueueBinding.bind(
+    const secondaryQueue = yield* Cloudflare.Queues.WriteQueue(
       secondaryQueueResource,
     );
 
@@ -79,32 +77,38 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     // Mixed `Duration.Input` forms are intentional: the e2e test
     // exercises that a `Duration` value (`maxWaitTime`) and a
     // string (`retryDelay: "1 second"`) both type-check at the
-    // `Cloudflare.messages(...)` call site and survive the convert-
-    // and-forward path into Cloudflare's QueueConsumer settings.
+    // `Cloudflare.Queues.consumeQueueMessages(...)` call site and survive the convert-
+    // and-forward path into Cloudflare's Consumer settings.
     // Values are kept small so the round-trip latency stays well
     // under the test's 240s timeout.
-    yield* Cloudflare.messages<QueueMessageBody>(queueResource, {
-      batchSize: 10,
-      maxRetries: 3,
-      maxWaitTime: Duration.millis(500),
-      retryDelay: "1 second",
-    }).subscribe((stream) =>
-      Stream.runForEach(stream, (msg) =>
-        counters.getByName(msg.body.name).record(msg.body.text),
-      ),
+    yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
+      queueResource,
+      {
+        batchSize: 10,
+        maxRetries: 3,
+        maxWaitTime: Duration.millis(500),
+        retryDelay: "1 second",
+      },
+      (stream) =>
+        Stream.runForEach(stream, (msg) =>
+          counters.getByName(msg.body.name).record(msg.body.text),
+        ),
     );
 
     // A second queue subscription on the same Worker verifies that
     // dispatch reaches every listener for the `queue` event. Each
     // listener still scopes itself by queue name internally.
-    yield* Cloudflare.messages<QueueMessageBody>(secondaryQueueResource, {
-      batchSize: 1,
-      maxRetries: 2,
-      retryDelay: "2 seconds",
-    }).subscribe((stream) =>
-      Stream.runForEach(stream, (msg) =>
-        counters.getByName(msg.body.name).record(msg.body.text),
-      ),
+    yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
+      secondaryQueueResource,
+      {
+        batchSize: 1,
+        maxRetries: 2,
+        retryDelay: "2 seconds",
+      },
+      (stream) =>
+        Stream.runForEach(stream, (msg) =>
+          counters.getByName(msg.body.name).record(msg.body.text),
+        ),
     );
 
     return {
@@ -145,7 +149,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
       }),
     };
   }).pipe(
-    Effect.provide(Cloudflare.QueueBindingLive),
-    Effect.provide(Cloudflare.QueueEventSourceLive),
+    Effect.provide(Cloudflare.Queues.WriteQueueBinding),
+    Effect.provide(Cloudflare.Queues.EventSourceLive),
   ),
 ) {}

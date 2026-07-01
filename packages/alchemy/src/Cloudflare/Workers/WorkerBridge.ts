@@ -17,6 +17,9 @@ import { ExecutionContext } from "../../ExecutionContext.ts";
 import { makeEntrypointLayer } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import cloudflare_workers from "./cloudflare_workers.ts";
+import { isScopeEjected } from "./HttpServer.ts";
 import {
   ErrorTag,
   type RpcErrorEnvelope,
@@ -31,7 +34,6 @@ import {
   WorkerExecutionContext,
 } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
-import cloudflare_workers from "./cloudflare_workers.ts";
 
 /**
  * Makes the WorkerEntrypoint class and bridges to Effect fetch and RPC calls.
@@ -88,9 +90,11 @@ export const makeWorkerBridge = (
         Effect.runPromiseExit,
       )
       .finally(() =>
-        Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-          ctx.waitUntil(promise),
-        ),
+        isScopeEjected(scope)
+          ? undefined
+          : Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
+              ctx.waitUntil(promise),
+            ),
       );
   };
   class WorkerBridge extends Base {
@@ -138,8 +142,19 @@ export const makeWorkerBridge = (
                       ),
                     );
                   }
+                  const result = dispatcher(...args);
+                  // Effects (including nested-RPC values built by
+                  // `asEffectOrStream`, which are Effects *branded* as Streams)
+                  // must be run as effects — their resolved value may itself be
+                  // a `Stream`, which `handleRpcExit` then encodes. Only a
+                  // *genuine* `Stream` (not an Effect) is lifted into the
+                  // success channel so `handleRpcExit` encodes it directly.
                   return Effect.succeed([
-                    dispatcher(...args) as Effect.Effect<any>,
+                    Effect.isEffect(result)
+                      ? (result as Effect.Effect<any>)
+                      : Stream.isStream(result)
+                        ? Effect.succeed(result)
+                        : (result as Effect.Effect<any>),
                     Context.empty(),
                   ] as const);
                 }),
@@ -231,6 +246,16 @@ export const getWorkerExport = <Export = any>({
           Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
           Layer.provideMerge(
             Layer.succeed(
+              CloudflareEnvironment,
+              // TODO(sam): fix this with maybe a CloudflareAccountId Effect service
+              // @ts-expect-error - this is hacky, but we only need and have this property
+              Effect.succeed({
+                account: (env as any).ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
+              }),
+            ),
+          ),
+          Layer.provideMerge(
+            Layer.succeed(
               MinimumLogLevel,
               (env as any).DEBUG ? "Debug" : "Info",
             ),
@@ -271,7 +296,18 @@ export const makeRpcProxy = (
                   ),
                 );
               }
-              return dispatcher(...args) as Effect.Effect<any>;
+              const result = dispatcher(...args);
+              // Effects (including nested-RPC values built by
+              // `asEffectOrStream`, which are Effects *branded* as Streams)
+              // must be run as effects — their resolved value may itself be a
+              // `Stream`, which `handleRpcExit` then encodes. Only a *genuine*
+              // `Stream` (not an Effect) is lifted into the success channel so
+              // `handleRpcExit` encodes it directly.
+              return Effect.isEffect(result)
+                ? (result as Effect.Effect<any>)
+                : Stream.isStream(result)
+                  ? Effect.succeed(result)
+                  : (result as Effect.Effect<any>);
             }),
             processEvent,
           )

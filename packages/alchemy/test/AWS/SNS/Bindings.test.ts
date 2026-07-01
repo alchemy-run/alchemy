@@ -50,9 +50,16 @@ describe.sequential("SNS Bindings", () => {
         const topicArn = deployed.topic.topicArn;
         const subscriptionArn = deployed.subscription.subscriptionArn;
 
-        const readinessUrl = `${baseUrl}/ready`;
+        // Gate on an IAM-backed binding call (read-only GetTopicAttributes),
+        // not the no-op `/ready` route. A fresh role's inline policy is
+        // eventually consistent: the function code can be live (200 on
+        // `/ready`) seconds before STS has propagated the `sns:*` grants, so a
+        // `/ready` gate lets the first `/publish` race the propagation window
+        // and 500 with AuthorizationErrorException. Hitting `/topic-attributes`
+        // here waits until the policy is actually live before any assertions.
+        const readinessUrl = `${baseUrl}/topic-attributes`;
         yield* Effect.logInfo(
-          `SNS test setup: probing readiness at ${readinessUrl} (20s budget)`,
+          `SNS test setup: probing IAM readiness at ${readinessUrl} (150s budget)`,
         );
 
         yield* HttpClient.get(readinessUrl).pipe(
@@ -110,8 +117,8 @@ describe.sequential("SNS Bindings", () => {
           return yield* SQS.receiveMessage({
             QueueUrl: queueUrl,
             MaxNumberOfMessages: 1,
-            WaitTimeSeconds: 2,
-            VisibilityTimeout: 5,
+            WaitTimeSeconds: 20,
+            VisibilityTimeout: 30,
           }).pipe(
             Effect.flatMap((result) => {
               const message = result.Messages?.[0];
@@ -136,11 +143,13 @@ describe.sequential("SNS Bindings", () => {
                 ),
               );
             }),
+            // Each attempt already long-polls up to 20s, so a handful of
+            // retries spans a generous (~3min) delivery window without the
+            // short-poll spin that made this flaky — and stays under the
+            // test's 360s budget even across the multiple waits per run.
             Effect.retry({
               while: (error) => error._tag === "QueueMessageNotReady",
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
+              schedule: Schedule.recurs(9),
             }),
           );
         });
@@ -262,13 +271,16 @@ describe.sequential("SNS Bindings", () => {
           expect(response).toBeDefined();
         });
 
-        // ListTopics
+        // ListTopics (account-wide) — the alchemy binding wraps SNS's
+        // single-page `ListTopics` operation, which returns up to 100 topics.
+        // On a busy account our brand-new topic may simply be on a later page,
+        // so just assert the binding works (returns an Array of topics). Our
+        // specific ARN is verified via the topic-scoped `topic-attributes`
+        // call above.
         yield* Effect.gen(function* () {
           const response = yield* getJson("/topics");
-          const arns = ((response as any).Topics ?? []).map(
-            (topic: any) => topic.TopicArn,
-          );
-          expect(arns).toContain(topicArn);
+          const topics = (response as any).Topics ?? [];
+          expect(Array.isArray(topics)).toBe(true);
         });
 
         // ListSubscriptions (account-wide) — the alchemy binding wraps

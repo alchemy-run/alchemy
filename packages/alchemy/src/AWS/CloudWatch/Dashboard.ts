@@ -1,10 +1,11 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { createName, retryConcurrent } from "./common.ts";
 
 export type DashboardName = string;
@@ -137,7 +138,7 @@ export interface Dashboard extends Resource<
 
 /**
  * An Amazon CloudWatch dashboard.
- *
+ * @resource
  * @section Creating Dashboards
  * @example Basic Dashboard
  * ```typescript
@@ -163,13 +164,16 @@ export const DashboardProvider = () =>
   Provider.effect(
     Dashboard,
     Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment;
-
       const createDashboardName = (id: string, props: { name?: string } = {}) =>
         createName(id, props.name, 255);
 
       const dashboardArn = (dashboardName: string) =>
-        `arn:aws:cloudwatch::${accountId}:dashboard/${dashboardName}` as DashboardArn;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            (env) =>
+              `arn:aws:cloudwatch::${env.accountId}:dashboard/${dashboardName}` as DashboardArn,
+          ),
+        );
 
       const readDashboard = Effect.fn(function* (dashboardName: string) {
         const output = yield* cloudwatch
@@ -188,7 +192,7 @@ export const DashboardProvider = () =>
 
         return {
           dashboardName: output.DashboardName,
-          dashboardArn: dashboardArn(output.DashboardName),
+          dashboardArn: yield* dashboardArn(output.DashboardName),
           dashboardBody: parseDashboardBody(output.DashboardBody),
           tags: {},
         };
@@ -232,7 +236,7 @@ export const DashboardProvider = () =>
             }),
           );
 
-          yield* session.note(dashboardArn(name));
+          yield* session.note(yield* dashboardArn(name));
 
           const state = yield* readDashboard(name);
           if (!state) {
@@ -249,12 +253,42 @@ export const DashboardProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // `DeleteDashboards` is idempotent: AWS returns success (not
+          // `DashboardNotFoundError`) for names that don't exist, so a
+          // re-delete after a state-persistence failure is a safe no-op.
           yield* retryConcurrent(
             cloudwatch.deleteDashboards({
               DashboardNames: [output.dashboardName],
             }),
-          ).pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.void));
+          );
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // `listDashboards` only returns entry metadata (name/arn/size),
+            // not the body, so we re-read each dashboard to produce the full
+            // Attributes shape `read` returns.
+            const names = yield* cloudwatch.listDashboards.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.DashboardEntries ?? [])
+                    .map((entry) => entry.DashboardName)
+                    .filter((name): name is string => name != null),
+                ),
+              ),
+            );
+
+            const states = yield* Effect.forEach(
+              names,
+              (name) => readDashboard(name),
+              { concurrency: 10 },
+            );
+
+            return states.filter(
+              (state): state is NonNullable<typeof state> =>
+                state !== undefined,
+            );
+          }),
       };
     }),
   );

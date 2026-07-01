@@ -2,6 +2,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -15,9 +16,17 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   // dev: true,
 });
 
-const stack = beforeAll(deploy(Stack));
+// This stack deploys a Container (Sandbox) whose image build + push can take
+// well over the default 120s hook budget, so give deploy/destroy more room.
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: 600_000,
+});
+
+// A fresh `workers.dev` URL transiently 404s/5xxs while the route propagates;
+// `HttpClient.execute` resolves on those, so retry until the worker answers.
+const { executeWhenReady } = Test;
 
 test(
   "integ",
@@ -34,7 +43,7 @@ test(
  * The stack now includes two Workers (`Api` and `SecondaryApi`) that both
  * bind the same `Agent` Durable Object, which in turn binds the `Sandbox`
  * Container. Each `yield* Agent` runs the DO's outer init, calling
- * `Cloudflare.Container.bind(Sandbox)` once per Worker, so the Sandbox
+ * `Cloudflare.Container(Sandbox)` once per Worker, so the Sandbox
  * ContainerApplication receives two bindings sharing one `namespaceId`.
  *
  * Before the dedupe fix, `getDurableObjects` counted those as two distinct
@@ -59,11 +68,11 @@ test(
 /**
  * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
  *
- * `NotifyWorkflow` accesses `Cloudflare.WorkerEnvironment` inside its body and
+ * `NotifyWorkflow` accesses `Cloudflare.Workers.WorkerEnvironment` inside its body and
  * performs a KV roundtrip via `env.KV.put` / `env.KV.get`. If the fix from #71
  * is ever reverted, the body Effect loses the `WorkerEnvironment` service and
  * dies with `Service not found: Cloudflare.Workers.WorkerEnvironment` on the
- * first `yield* Cloudflare.WorkerEnvironment` — the workflow instance never
+ * first `yield* Cloudflare.Workers.WorkerEnvironment` — the workflow instance never
  * reaches `complete`, and this test times out or surfaces the `errored` status.
  */
 test(
@@ -126,14 +135,14 @@ test(
     // unwraps `Redacted.value(secret)` and embeds it in the returned
     // `processed` payload.
     const output = lastStatus!.output as { secret?: string } | undefined;
-    expect(output?.secret).toBe(WORKFLOW_SECRET_VALUE);
+    expect(output?.secret).toBe(Redacted.value(WORKFLOW_SECRET_VALUE));
   }),
   { timeout: 120_000 },
 );
 
 /**
  * Queue producer→consumer round-trip via the Effect-style
- * `Cloudflare.messages(Queue).subscribe(...)` API.
+ * `Cloudflare.Queues.consumeQueueMessages(Queue, handler)` API.
  *
  * Producer: `POST /queue/send` returns `{ sent: { id, text, sentAt } }`
  * after enqueuing a message.
@@ -144,12 +153,12 @@ test(
  * dispatch is async and best-effort, so we poll for up to 60s.
  */
 test(
-  "queue producer→consumer round-trip via messages().subscribe()",
+  "queue producer→consumer round-trip via consumeQueueMessages()",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
 
-    const sendResponse = yield* HttpClient.execute(
+    const sendResponse = yield* executeWhenReady(
       HttpClientRequest.post(`${url}/queue/send`).pipe(
         HttpClientRequest.setBody(HttpBody.text(text)),
       ),

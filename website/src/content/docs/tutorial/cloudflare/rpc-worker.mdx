@@ -76,7 +76,7 @@ import { TaskRpcs } from "./rpcs.ts";
 
 export default class Worker extends Cloudflare.RpcWorker<Worker>()(
   "Worker",
-  { main: import.meta.filename, schema: TaskRpcs },
+  { main: import.meta.url, schema: TaskRpcs },
   Effect.gen(function* () {
     return Effect.succeed(undefined as never);
   }),
@@ -96,7 +96,7 @@ which carries the `RpcGroup`.
 
  export default class Worker extends Cloudflare.RpcWorker<Worker>()(
    "Worker",
-   { main: import.meta.filename, schema: TaskRpcs },
+   { main: import.meta.url, schema: TaskRpcs },
    Effect.gen(function* () {
 -    return Effect.succeed(undefined as never);
 +    const handlers = TaskRpcs.toLayer({
@@ -121,7 +121,7 @@ and return type.
 
  export default class Worker extends Cloudflare.RpcWorker<Worker>()(
    "Worker",
-   { main: import.meta.filename, schema: TaskRpcs },
+   { main: import.meta.url, schema: TaskRpcs },
    Effect.gen(function* () {
      const handlers = TaskRpcs.toLayer({
        getTask: ({ id }) => Effect.succeed(`task-${id}`),
@@ -304,7 +304,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class Caller extends Cloudflare.Worker<Caller>()(
   "Caller",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     return {
       fetch: Effect.gen(function* () {
@@ -327,7 +327,7 @@ A regular Worker — same shape as any other `Cloudflare.Worker`.
 
  export default class Caller extends Cloudflare.Worker<Caller>()(
    "Caller",
-   { main: import.meta.filename },
+   { main: import.meta.url },
    Effect.gen(function* () {
 +    const tasks = yield* Cloudflare.RpcWorker.bind(TaskWorker);
 +
@@ -381,7 +381,7 @@ runtime via `static make(impl)`:
 // src/worker.ts
 export class Worker extends Cloudflare.RpcWorker<Worker>()(
   "Worker",
-  { main: import.meta.filename, schema: TaskRpcs },
+  { main: import.meta.url, schema: TaskRpcs },
 ) {}
 
 export default Worker.make(
@@ -412,7 +412,7 @@ publishes for cross-script binding:
 -export class Worker extends Cloudflare.RpcWorker<Worker>()(
 +export class Worker extends Cloudflare.RpcWorker<Worker, Counter>()(
    "Worker",
-   { main: import.meta.filename, schema: TaskRpcs },
+   { main: import.meta.url, schema: TaskRpcs },
  ) {}
 ```
 

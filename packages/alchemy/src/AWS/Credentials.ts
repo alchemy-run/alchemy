@@ -1,8 +1,15 @@
 import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AWSEnvironment } from "./Environment.ts";
 
 export { Credentials } from "@distilled.cloud/aws/Credentials";
+
+declare module "@distilled.cloud/aws/Credentials" {
+  interface Credentials {
+    readonly kind: "Credentials";
+  }
+}
 
 /**
  * Lazy `Credentials` layer derived from the surrounding {@link AWSEnvironment}.
@@ -11,5 +18,7 @@ export { Credentials } from "@distilled.cloud/aws/Credentials";
  */
 export const fromEnvironment = Layer.effect(
   Credentials,
-  AWSEnvironment.useSync((env) => env.credentials),
+  Effect.gen(function* () {
+    return Effect.flatMap(yield* AWSEnvironment, (env) => env.credentials);
+  }),
 );

@@ -1,3 +1,4 @@
+import type { Config } from "effect/Config";
 import type { Effect } from "effect/Effect";
 import type * as S from "effect/Schema";
 import type { Primitive } from ".//Util/data.ts";
@@ -10,6 +11,7 @@ type PolicyLike = { kind: "alchemy/Policy" };
 export type Input<T> =
   | T
   | Output<T>
+  | Config<T>
   // TODO(sam): extract Requirements in Resource
   | Effect<T, any, any>
   | (T extends S.Schema<any>

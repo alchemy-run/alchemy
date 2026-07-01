@@ -6,17 +6,18 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 
 import { HttpServerResponse } from "effect/unstable/http";
 import type {
   DurableObjectExport,
   DurableObjectShape,
-} from "./DurableObjectNamespace.ts";
+} from "./DurableObject.ts";
 import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { makeRequestEffect } from "./HttpServer.ts";
+import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
@@ -63,17 +64,19 @@ export const makeDurableObjectBridge =
 
         this.#instance = state.blockConcurrencyWhile(() =>
           this.#exported.pipe(
-            Effect.flatMap(({ constructor, services }) =>
-              constructor.pipe(
-                Effect.provide(
-                  Layer.succeed(
-                    DurableObjectState,
-                    fromDurableObjectState(this.#state),
-                  ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+            Effect.flatMap(({ constructor, services }) => {
+              const context = Layer.succeed(
+                DurableObjectState,
+                fromDurableObjectState(this.#state),
+              ).pipe(Layer.provideMerge(Layer.succeedContext(services)));
+              return constructor.pipe(
+                Effect.provide(context),
+                Effect.flatMap((instance) =>
+                  instance.pipe(Effect.provide(context)),
                 ),
                 Effect.map((instance) => ({ instance, services })),
-              ),
-            ),
+              );
+            }),
             Effect.provide(this.#globalContext),
             Effect.runPromise,
           ),
@@ -89,7 +92,18 @@ export const makeDurableObjectBridge =
               this.#execute((instance) => {
                 const method = instance[prop as keyof DurableObjectShape];
                 if (typeof method === "function") {
-                  return (method as any)(...args);
+                  const result = (method as any)(...args);
+                  // Effects (including nested-RPC values built by
+                  // `asEffectOrStream`, which are Effects *branded* as Streams)
+                  // must be run as effects — their resolved value may itself be
+                  // a `Stream`, which `handleRpcExit` then encodes. Only a
+                  // *genuine* `Stream` (not an Effect) is lifted into the
+                  // success channel so `handleRpcExit` encodes it directly.
+                  return Effect.isEffect(result)
+                    ? result
+                    : Stream.isStream(result)
+                      ? Effect.succeed(result)
+                      : result;
                 } else if (Effect.isEffect(method)) {
                   return method;
                 } else {
@@ -130,9 +144,12 @@ export const makeDurableObjectBridge =
                   : Promise.reject(Cause.squash(exit.cause))),
           )
           .finally(() =>
-            Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-              this.#state.waitUntil(promise),
-            ),
+            isScopeEjected(scope)
+              ? undefined
+              : Scope.close(scope, Exit.void).pipe(
+                  Effect.runPromise,
+                  (promise) => this.ctx.waitUntil(promise),
+                ),
           );
       }
 

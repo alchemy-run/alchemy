@@ -72,7 +72,7 @@ const UnownedTag: unique symbol = Symbol("alchemy/Unowned");
  * was *not* created by this stack/stage/logical-id:
  *
  * ```ts
- * read: Effect.fnUntraced(function* ({ id, output, olds }) {
+ * read: Effect.fn(function* ({ id, output, olds }) {
  *   const settings = yield* getScriptSettings({ ... }).pipe(
  *     Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
  *   );
@@ -139,7 +139,7 @@ export const adopt: {
   ): <A, E, R2 = never>(
     effect: Effect.Effect<A, E, R2>,
   ) => Effect.Effect<A, E, R1 | R2>;
-} = ((enabled: boolean | Effect.Effect<boolean, never, any>) =>
+} = ((enabled: boolean | Effect.Effect<boolean, never, any> = true) =>
   (eff: Effect.Effect<any, any, any>) =>
     eff.pipe(
       typeof enabled === "boolean"

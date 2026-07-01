@@ -1,3 +1,4 @@
+import { Redacted } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -12,8 +13,8 @@ import {
   StateApi,
   StateAuthLive,
 } from "../../State/HttpStateApi.ts";
-import * as Secret from "../SecretsStore/Secret.ts";
-import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
+import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
+import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
 import Store from "./Store.ts";
 import { AuthToken } from "./Token.ts";
@@ -29,7 +30,7 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 5 as const;
+export const STATE_STORE_VERSION = 7 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -100,7 +101,7 @@ export default Worker(
   "Api",
   {
     name: STATE_STORE_SCRIPT_NAME,
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
     compatibility: {
       flags: ["nodejs_compat"],
@@ -108,22 +109,21 @@ export default Worker(
     },
   },
   Effect.gen(function* () {
-    const secret = yield* Secret.Secret.bind(AuthToken);
+    const remoteSecret = yield* ReadSecret(AuthToken);
     const store = yield* Store;
 
-    const bearerTokenValidator = Layer.effect(
+    const bearerTokenValidator = Layer.succeed(
       BearerTokenValidator,
-      secret.get().pipe(
-        Effect.map((expected) =>
-          BearerTokenValidator.of({
-            validate: (token) =>
-              !!expected && timingSafeEqual(token, expected)
-                ? Effect.void
-                : Effect.fail(new HttpApiError.Unauthorized()),
-          }),
-        ),
-        Effect.orDie,
-      ),
+      BearerTokenValidator.of({
+        // @ts-expect-error - TODO(sam): fix RuntimeContext color here
+        validate: Effect.fn(function* (token) {
+          const expected = yield* remoteSecret.get();
+          return !!expected &&
+            timingSafeEqual(token.trim(), Redacted.value(expected).trim())
+            ? yield* Effect.void
+            : yield* Effect.fail(new HttpApiError.Unauthorized());
+        }),
+      }),
     );
 
     const versionApi = HttpApiBuilder.group(StateApi, "version", (handlers) =>
@@ -319,7 +319,7 @@ export default Worker(
         // Effect.provide(TelemetryLive),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(SecretBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(ReadSecretBinding))),
 );
 
 /**

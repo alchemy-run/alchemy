@@ -3,15 +3,18 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import Backend, { Bucket } from "./src/backend.ts";
 
-export const Website = Cloudflare.Vite("Website", {
+export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
   compatibility: {
     flags: ["nodejs_compat"],
   },
-  bindings: {
+  env: {
     BUCKET: Bucket,
     BACKEND: Backend,
   },
-});
+  assets: {
+    runWorkerFirst: true,
+  },
+}) {}
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 
@@ -24,6 +27,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const backend = yield* Backend;
     const website = yield* Website;
+
     return {
       backendUrl: backend.url.as<string>(),
       websiteUrl: website.url.as<string>(),

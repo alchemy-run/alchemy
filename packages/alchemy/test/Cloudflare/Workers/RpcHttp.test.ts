@@ -1,6 +1,6 @@
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Test from "alchemy/Test/Vitest";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -22,7 +22,30 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    // Ping the Worker to ensure it's ready.
+    // Subsequent calls should succeed without retries.
+    Effect.tap(({ url }) =>
+      Effect.gen(function* () {
+        const client = yield* RpcClient.make(WorkerRpcs);
+        const result = yield* client.Ping({ message: "warmup" }).pipe(
+          Effect.tapError(Console.log),
+          Effect.retry({
+            schedule: Schedule.exponential("500 millis").pipe(
+              Schedule.either(Schedule.spaced("3 seconds")),
+            ),
+            times: 12,
+          }),
+        );
+        expect(result.echo).toBe("warmup");
+        expect(result.n).toBeGreaterThan(0);
+      }).pipe(Effect.scoped, Effect.provide(clientLayer(url))),
+    ),
+    // Let edge propagation settle before the (mostly un-retried) bodies run.
+    Effect.tap(() => Effect.sleep("5 seconds")),
+  ),
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // The Cloudflare Worker fetch adapter (`workersHttpHandler`) currently
@@ -54,11 +77,17 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
+      // Even after the warmup gate, a fresh request can land on a PoP that
+      // hasn't resolved the script yet and get Cloudflare's HTML error page,
+      // which is not valid ndjson (`RpcClientDefect`). `Ping` is idempotent,
+      // so retry through a bounded schedule.
       const result = yield* client.Ping({ message: "hello" }).pipe(
         Effect.tapError(Console.log),
         Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.either(Schedule.spaced("2 seconds")),
+          ),
+          times: 10,
         }),
       );
       expect(result.echo).toBe("hello");
@@ -75,11 +104,13 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
+      // First streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
       const values = yield* client.Count({ upto: 5 }).pipe(
         Stream.runCollect,
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
-          times: 5,
+          times: 10,
         }),
       );
       expect(values).toEqual([1, 2, 3, 4, 5]);
@@ -96,11 +127,13 @@ test(
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
       const messages = ["a", "b", "c", "d"];
+      // First streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
       const values = yield* client.Echo({ messages }).pipe(
         Stream.runCollect,
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
-          times: 5,
+          times: 10,
         }),
       );
       expect(values).toEqual(
@@ -157,9 +190,17 @@ test(
           client.Count({ upto: 3 + (i % 3) }).pipe(
             Stream.runCollect,
             Effect.timeout("5 seconds"),
+            // 64 concurrent first-streams all race cold-start: a PoP that
+            // hasn't resolved the script yet returns Cloudflare's HTML error
+            // page, which is not valid ndjson and surfaces as an
+            // `RpcClientDefect` ("Error decoding HTTP response"). Match the
+            // single-stream tests' generosity (capped backoff, ~10 attempts)
+            // so the whole fan-out rides out propagation.
             Effect.retry({
-              schedule: Schedule.exponential("500 millis"),
-              times: 3,
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.either(Schedule.spaced("2 seconds")),
+              ),
+              times: 10,
             }),
           ),
         { concurrency: N },
@@ -173,7 +214,7 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
 
 // === Durable Object pathway ===
@@ -187,11 +228,13 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
+      // First DO call can race edge propagation and hit a Cloudflare HTML
+      // error page; retry through a bounded schedule.
       const result = yield* client.PingDO({ message: "hello-do" }).pipe(
         Effect.tapError(Console.log),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
-          times: 5,
+          times: 10,
         }),
       );
       expect(result.echo).toBe("hello-do");
@@ -208,11 +251,13 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
+      // First DO streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
       const values = yield* client.CountDO({ upto: 5 }).pipe(
         Stream.runCollect,
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
-          times: 5,
+          times: 10,
         }),
       );
       expect(values).toEqual([1, 2, 3, 4, 5]);
@@ -229,11 +274,13 @@ test(
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
       const messages = ["a", "b", "c", "d"];
+      // First streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
       const values = yield* client.EchoDO({ messages }).pipe(
         Stream.runCollect,
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
-          times: 5,
+          times: 10,
         }),
       );
       expect(values).toEqual(

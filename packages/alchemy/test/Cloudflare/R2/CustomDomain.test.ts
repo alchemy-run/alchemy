@@ -8,7 +8,10 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -17,22 +20,31 @@ const logLevel = Effect.provideService(
 
 const zoneName =
   process.env.CLOUDFLARE_TEST_R2_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
+const suffix = process.env.PULL_REQUEST ?? process.env.USER;
+// A custom-domain hostname maps one-to-one to a bucket at the Cloudflare zone
+// level, so it is a *global* resource. These suites run concurrently
+// (`sequence.concurrent`), so every test must claim a hostname no other test
+// uses — otherwise the tests race to attach the same hostname to different
+// buckets and lose with `Conflict: Domain already in use`.
 const domain = zoneName
-  ? `alchemy-r2-test-${process.env.PULL_REQUEST ?? process.env.USER}.${zoneName}`
+  ? `alchemy-r2-test-single-${suffix}.${zoneName}`
   : undefined;
 const domain2 = zoneName
-  ? `alchemy-r2-test-2-${process.env.PULL_REQUEST ?? process.env.USER}.${zoneName}`
+  ? `alchemy-r2-test-multi-a-${suffix}.${zoneName}`
+  : undefined;
+const domain3 = zoneName
+  ? `alchemy-r2-test-multi-b-${suffix}.${zoneName}`
   : undefined;
 
 test.provider("creates, updates, and deletes a bucket custom domain", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("DomainBucket", {
+        return yield* Cloudflare.R2.Bucket("DomainBucket", {
           domains: [{ name: domain! }],
         });
       }),
@@ -52,7 +64,7 @@ test.provider("creates, updates, and deletes a bucket custom domain", (stack) =>
 
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.R2Bucket("DomainBucket", {
+        return yield* Cloudflare.R2.Bucket("DomainBucket", {
           domains: [{ name: domain!, enabled: false }],
         });
       }),
@@ -84,24 +96,24 @@ test.provider(
   "creates, updates, and deletes a bucket with multiple custom domains",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("MultiDomainBucket", {
-            domains: [{ name: domain! }, { name: domain2! }],
+          return yield* Cloudflare.R2.Bucket("MultiDomainBucket", {
+            domains: [{ name: domain2! }, { name: domain3! }],
           });
         }),
       );
 
       expect(bucket.domains).toHaveLength(2);
       const domainNames = bucket.domains.map((d) => d.domain).sort();
-      expect(domainNames).toEqual([domain, domain2].sort());
+      expect(domainNames).toEqual([domain2, domain3].sort());
       expect(bucket.domains.every((d) => d.enabled)).toEqual(true);
 
-      for (const name of [domain!, domain2!]) {
+      for (const name of [domain2!, domain3!]) {
         const actual = yield* r2.getBucketDomainCustom({
           accountId,
           bucketName: bucket.bucketName,
@@ -113,8 +125,8 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("MultiDomainBucket", {
-            domains: [{ name: domain!, enabled: false }, { name: domain2! }],
+          return yield* Cloudflare.R2.Bucket("MultiDomainBucket", {
+            domains: [{ name: domain3!, enabled: false }, { name: domain2! }],
           });
         }),
       );
@@ -122,12 +134,12 @@ test.provider(
       const updatedByName = Object.fromEntries(
         updated.domains.map((d) => [d.domain, d]),
       );
-      expect(updatedByName[domain!]?.enabled).toEqual(false);
+      expect(updatedByName[domain3!]?.enabled).toEqual(false);
       expect(updatedByName[domain2!]?.enabled).toEqual(true);
 
       const removed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.R2Bucket("MultiDomainBucket", {
+          return yield* Cloudflare.R2.Bucket("MultiDomainBucket", {
             domains: [{ name: domain2! }],
           });
         }),
@@ -140,7 +152,7 @@ test.provider(
         .getBucketDomainCustom({
           accountId,
           bucketName: bucket.bucketName,
-          domain: domain!,
+          domain: domain3!,
           jurisdiction: bucket.jurisdiction,
         })
         .pipe(
@@ -151,7 +163,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      for (const name of [domain!, domain2!]) {
+      for (const name of [domain2!, domain3!]) {
         const deleted = yield* r2
           .getBucketDomainCustom({
             accountId,

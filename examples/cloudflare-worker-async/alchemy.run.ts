@@ -1,25 +1,30 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import { Config } from "effect";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { Counter as CounterClass } from "./src/worker.ts";
 
-export const DB = Cloudflare.D1Database("DB");
+export const DB = Cloudflare.D1.Database("DB");
 
-export const Bucket = Cloudflare.R2Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
 
 // Queue producer + consumer wiring (both sides exercised by the same worker).
 // The Worker sends a message via `env.QUEUE.send(...)` from POST /queue/send,
 // then receives and persists it via its `queue(batch)` handler — end-to-end
-// regression guard for the Queue, QueueBinding, and QueueConsumer resources.
-export const Queue = Cloudflare.Queue("Queue");
+// regression guard for the Queue, QueueWrite, and Consumer resources.
+export const Queue = Cloudflare.Queues.Queue("Queue");
 
-export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
-  "Counter",
-  {
-    className: "Counter",
-  },
-);
+export const Counter = Cloudflare.DurableObject<CounterClass>("Counter", {
+  className: "Counter",
+});
+
+export const ClaudeCode = Cloudflare.Container("ClaudeCode", {
+  dockerfile: `
+    FROM alpine:latest
+    RUN curl -fsSL https://claude.ai/install.sh | bash
+  `,
+  context: ".",
+});
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
@@ -29,9 +34,11 @@ export const Worker = Cloudflare.Worker("Worker", {
     directory: "./public",
   },
   env: {
-    API_KEY: Redacted.make("SOME_API_KEY"),
-  },
-  bindings: {
+    // Self-contained default so the example deploys without external secrets;
+    // the integ test asserts this value round-trips through env.API_KEY.
+    API_KEY: Config.redacted("SOME_API_KEY").pipe(
+      Config.withDefault("SOME_API_KEY"),
+    ),
     DB,
     Bucket,
     Queue,
@@ -48,10 +55,12 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const queue = yield* Queue;
     const worker = yield* Worker;
+    // create a random resource to test redacted storage
+    yield* Alchemy.Random("Random");
 
     // Register the same worker script as a consumer of Queue. The worker's
     // `queue(batch)` handler (see src/worker.ts) receives each message batch.
-    yield* Cloudflare.QueueConsumer("QueueConsumer", {
+    yield* Cloudflare.Queues.Consumer("Consumer", {
       queueId: queue.queueId,
       scriptName: worker.workerName,
       settings: {
@@ -61,6 +70,6 @@ export default Alchemy.Stack(
       },
     });
 
-    return worker.url;
+    return { url: worker.url.as<string>() };
   }),
 );

@@ -30,7 +30,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
   Stack.useSync((stack) => ({
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
     memory: stack.stage === "prod" ? 1024 : 512,
   })),
@@ -63,8 +63,8 @@ Bind them in the outer init, alongside the bucket:
 ```diff lang="typescript"
 Effect.gen(function* () {
   const bucket = yield* S3.Bucket("Blobs");
-+  const putObject = yield* S3.PutObject.bind(bucket);
-+  const getObject = yield* S3.GetObject.bind(bucket);
++  const putObject = yield* S3.PutObject(bucket);
++  const getObject = yield* S3.GetObject(bucket);
 
   return {
     fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
@@ -72,25 +72,25 @@ Effect.gen(function* () {
 });
 ```
 
-Both `bind(bucket)` calls return a callable Effect: `putObject`
+Both capability calls return a callable Effect: `putObject`
 takes a `PutObjectRequest` (the AWS SDK shape, minus the `Bucket`
 field Alchemy fills in for you) and `getObject` takes a
 `GetObjectRequest`.
 
 ### One binding, one IAM statement
 
-Each `.bind(...)` call is **1:1 with an IAM policy statement**
+Each `S3.PutObject(bucket)`-style capability call is **1:1 with an IAM policy statement**
 attached to your function's execution role. The mapping is
 deterministic:
 
 | Code                              | IAM `Action`     | IAM `Resource`           |
 | --------------------------------- | ---------------- | ------------------------ |
-| `S3.PutObject.bind(bucket)`       | `s3:PutObject`   | `bucket.bucketArn`       |
-| `S3.GetObject.bind(bucket)`       | `s3:GetObject`   | `bucket.bucketArn/*`     |
-| `DynamoDB.PutItem.bind(table)`    | `dynamodb:PutItem` | `table.tableArn`       |
-| `SQS.SendMessage.bind(queue)`     | `sqs:SendMessage` | `queue.queueArn`        |
+| `S3.PutObject(bucket)`       | `s3:PutObject`   | `bucket.bucketArn`       |
+| `S3.GetObject(bucket)`       | `s3:GetObject`   | `bucket.bucketArn/*`     |
+| `DynamoDB.PutItem(table)`    | `dynamodb:PutItem` | `table.tableArn`       |
+| `SQS.SendMessage(queue)`     | `sqs:SendMessage` | `queue.queueArn`        |
 
-So the two `bind` calls above produce exactly two statements on
+So the two capability calls above produce exactly two statements on
 the role:
 
 ```json
@@ -111,7 +111,7 @@ the role:
 ```
 
 The role is generated, never `"*"`-scoped, and regenerated from
-the call sites on every deploy — delete a `bind` call and the
+the call sites on every deploy — delete a capability call and the
 matching statement disappears next deploy. **The code is the
 policy.**
 
@@ -214,7 +214,7 @@ explicitly are the ones you actually have a recovery for
 ## Provide the runtime layers
 
 Bindings declare a capability; **runtime layers** implement it.
-For S3 those are `S3.PutObjectLive` and `S3.GetObjectLive` — both
+For S3 those are `S3.PutObjectHttp` and `S3.GetObjectHttp` — both
 ship in `alchemy/AWS/S3` and depend only on the AWS SDK and the
 ambient credentials. Provide them at the bottom of the function:
 
@@ -229,7 +229,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
     /* ... bindings + fetch ... */
 -  }),
 +  }).pipe(
-+    Effect.provide(Layer.mergeAll(S3.PutObjectLive, S3.GetObjectLive)),
++    Effect.provide(Layer.mergeAll(S3.PutObjectHttp, S3.GetObjectHttp)),
 +  ),
 ) {}
 ```
@@ -252,7 +252,6 @@ redeploys the function bundle.
 
 ```typescript
 // test/integ.test.ts
-import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
@@ -263,7 +262,7 @@ import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({
   providers: AWS.providers(),
-  state: Alchemy.localState(),
+  state: AWS.state(),
 });
 
 const stack = beforeAll(deploy(Stack));

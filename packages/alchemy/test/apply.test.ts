@@ -1,6 +1,7 @@
 import { Cli } from "@/Cli/Cli";
-import * as Construct from "@/Construct";
+import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
   type ReplacedResourceState,
@@ -17,9 +18,12 @@ import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
   BindingTarget,
+  CollisionRegistry,
+  DeleteFirstResource,
   DeletedBindingRegressionTarget,
   DurationResource,
   Function,
+  KindStablesResource,
   PhasedTarget,
   StaticStablesResource,
   TestLayers,
@@ -31,7 +35,7 @@ import {
 const { test } = Test.make({ providers: TestLayers() });
 
 const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return (yield* state.get({
     stack: stk.name,
@@ -40,7 +44,7 @@ const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
   })) as S;
 });
 const listState = Effect.fn(function* () {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return yield* state.list({ stack: stk.name, stage: stk.stage });
 });
@@ -213,33 +217,75 @@ describe("basic operations", () => {
           return B.string;
         }).pipe(stack.deploy),
       ).toEqual("TEST-STRING-NEW");
+
+      expect(
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", {
+            string: "test-string",
+            stringArray: ["test-string-array"],
+          });
+          const B = yield* TestResource("B", {
+            string: A.string.pipe(
+              Output.flatMap((string) =>
+                Output.literal(string.toUpperCase() + "-FLAT"),
+              ),
+            ),
+          });
+          return B.string;
+        }).pipe(stack.deploy),
+      ).toEqual("TEST-STRING-FLAT");
     }),
+  );
+
+  test.provider(
+    "should apply downstream resources when a stable kind shadows an output discriminator",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* KindStablesResource("Database", {
+          value: "v1",
+        }).pipe(stack.deploy);
+
+        const output = yield* Effect.gen(function* () {
+          const database = yield* KindStablesResource("Database", {
+            value: "v2",
+          });
+          const role = yield* KindStablesResource("Role", {
+            value: "role",
+            upstream: database,
+          });
+          return { database, role };
+        }).pipe(stack.deploy);
+
+        expect(output.database.value).toBe("v2");
+        expect(output.role.upstreamKind).toBe("postgresql");
+      }),
   );
 
   test.provider(
     "should resolve bindings inside constructs using namespaced resources",
     (stack) =>
       Effect.gen(function* () {
-        const Site = Construct.fn(function* (_id: string, _props: {}) {
-          const bucket = yield* BindingTarget("Bucket", {
-            string: "bucket-value",
-          });
-          const distribution = yield* BindingTarget("Distribution", {
-            string: "distribution-value",
-          });
+        const Site = (id: string, _props: {}) =>
+          Effect.gen(function* () {
+            const bucket = yield* BindingTarget("Bucket", {
+              string: "bucket-value",
+            });
+            const distribution = yield* BindingTarget("Distribution", {
+              string: "distribution-value",
+            });
 
-          yield* bucket.bind("Policy", {
-            env: {
-              BUCKET: bucket.string,
-              DISTRIBUTION: distribution.string,
-            },
-          });
+            yield* bucket.bind("Policy", {
+              env: {
+                BUCKET: bucket.string,
+                DISTRIBUTION: distribution.string,
+              },
+            });
 
-          return {
-            bucket,
-            distribution,
-          };
-        });
+            return {
+              bucket,
+              distribution,
+            };
+          }).pipe(Namespace.push(id));
 
         const output = yield* Site("MarketingSite", {}).pipe(stack.deploy);
 
@@ -361,6 +407,74 @@ describe("basic operations", () => {
   );
 });
 
+// Regression: a logical ID may legitimately contain the FQN separator ("/").
+// The GitHub event source registers a webhook keyed by `${owner}/${repository}`
+// (e.g. "alchemy-run/alchemy-effect"). During destroy the deletion path used to
+// recompute the state key via `toFqn(namespace, logicalId)`, but `logicalId`
+// came from `parseFqn` which splits on "/" and keeps only the last segment
+// ("alchemy-effect"). The recomputed key missed the real state row, so the
+// resource was deleted from the cloud yet never removed from state — resurfacing
+// as an orphan deletion on every subsequent destroy, forever.
+describe("FQN separator in logical ID", () => {
+  test.provider(
+    "destroy clears state for a top-level logical ID containing '/'",
+    (stack) =>
+      Effect.gen(function* () {
+        const fqn = "alchemy-run/alchemy-effect";
+
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* TestResource(fqn, { string: "v1" });
+          }),
+        );
+
+        // The row is persisted under the full FQN (separator and all).
+        expect((yield* getState(fqn))?.status).toEqual("created");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id: string) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        // provider.delete ran exactly once, AND the state row was removed
+        // (the pre-fix bug deleted the cloud resource but missed the row).
+        expect(deleted).toHaveLength(1);
+        expect(yield* getState(fqn)).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "destroy clears state for a namespaced logical ID containing '/'",
+    (stack) =>
+      Effect.gen(function* () {
+        // Mirrors the GitHub webhook: a host construct (the Worker) whose
+        // child resource's logical ID is "owner/repo".
+        const fqn = "ReleaseService/alchemy-run/alchemy-effect";
+
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* TestResource("alchemy-run/alchemy-effect", {
+              string: "v1",
+            });
+          }).pipe(Namespace.push("ReleaseService")),
+        );
+
+        expect((yield* getState(fqn))?.status).toEqual("created");
+
+        yield* stack.destroy();
+
+        expect(yield* getState(fqn)).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
 describe("linear update propagation", () => {
   // Regression: in a linear chain (A -> B with no cycle), an update to A
   // followed by an update to B must let B see A's *post-update* attr, never
@@ -406,6 +520,137 @@ describe("linear update propagation", () => {
         // sequence as long as no stale value leaked through.
         expect(sawByB.length).toBeGreaterThan(0);
         expect(sawByB.every((v) => v === "v2")).toBe(true);
+      }),
+  );
+});
+
+// Regression: `deleteFirst` on a `replace` diff was plumbed from the provider
+// all the way into persisted state but never *read* — every replacement was
+// create-first, with the old generation reclaimed afterwards by Phase-2 GC.
+// That silently broke any resource whose replacement can't coexist with the
+// original (fixed physical name, singleton): the create collided with the
+// not-yet-deleted original. These tests pin both orderings.
+describe("deleteFirst replacements", () => {
+  test.provider(
+    "deletes the old generation BEFORE creating the replacement",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* DeleteFirstResource("R", { replaceString: "v1" });
+          }),
+        );
+
+        const order: string[] = [];
+        const recordHooks = {
+          create: () =>
+            Effect.sync(() => {
+              order.push("create");
+            }),
+          update: () => Effect.succeed(undefined),
+          delete: () =>
+            Effect.sync(() => {
+              order.push("delete");
+            }),
+        };
+
+        yield* Effect.gen(function* () {
+          return yield* DeleteFirstResource("R", { replaceString: "v2" });
+        }).pipe(stack.deploy, hook(recordHooks));
+
+        // The whole point: delete-old precedes create-new.
+        expect(order).toEqual(["delete", "create"]);
+
+        // The resource collapses straight to a terminal `created` state with
+        // no leftover replacement chain for GC to drain.
+        const state = yield* getState("R");
+        expect(state?.status).toEqual("created");
+        expect((state as { old?: unknown }).old).toBeUndefined();
+        expect(yield* listState()).toHaveLength(1);
+      }),
+  );
+
+  test.provider(
+    "default (non-deleteFirst) replacement still creates BEFORE deleting",
+    (stack) =>
+      Effect.gen(function* () {
+        // `TestResource` returns a plain `{ action: "replace" }` (deleteFirst
+        // defaults to false), so the engine must stay create-first.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* TestResource("R", { replaceString: "v1" });
+          }),
+        );
+
+        const order: string[] = [];
+        yield* Effect.gen(function* () {
+          return yield* TestResource("R", { replaceString: "v2" });
+        }).pipe(
+          stack.deploy,
+          hook({
+            create: () =>
+              Effect.sync(() => {
+                order.push("create");
+              }),
+            update: () => Effect.succeed(undefined),
+            delete: () =>
+              Effect.sync(() => {
+                order.push("delete");
+              }),
+          }),
+        );
+
+        expect(order).toEqual(["create", "delete"]);
+      }),
+  );
+
+  test.provider(
+    "lets a same-identity replacement succeed where create-first would collide",
+    (stack) =>
+      Effect.gen(function* () {
+        // A shared registry of live physical names. The provider's create
+        // fails if the (fixed) name is still live — exactly the failure mode
+        // of a real fixed-name resource (Docker network "already exists",
+        // no-op `volume create`) when create runs before the old is deleted.
+        const registry = { live: new Set<string>() };
+        const withRegistry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+          effect.pipe(
+            Effect.provide(Layer.succeed(CollisionRegistry, registry)),
+          );
+
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* DeleteFirstResource("R", {
+                name: "singleton",
+                replaceString: "v1",
+              });
+            }),
+          )
+          .pipe(withRegistry);
+        expect(registry.live.has("singleton")).toBe(true);
+
+        // Before the fix this deploy died with a CollisionError because the
+        // create of the new "singleton" ran while the old one was still live.
+        const result = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* DeleteFirstResource("R", {
+                name: "singleton",
+                replaceString: "v2",
+              });
+            }),
+          )
+          .pipe(withRegistry);
+
+        expect(result.name).toEqual("singleton");
+        expect(result.replaceString).toEqual("v2");
+        // Exactly one live instance remains (old torn down, new created).
+        expect(registry.live.size).toBe(1);
+        expect(registry.live.has("singleton")).toBe(true);
+
+        const state = yield* getState("R");
+        expect(state?.status).toEqual("created");
       }),
   );
 });
@@ -1087,6 +1332,80 @@ describe("prop-flow convergence", () => {
         expect(terminal("B")).toEqual(["updated"]);
       }),
   );
+
+  // Regression: a resource with `precreate` (e.g. Cloudflare Worker) resolves
+  // its early `ready` signal before its real `reconcile` runs. A non-cyclic
+  // downstream must still wait for the upstream's TERMINAL output, so that an
+  // upstream `reconcile` failure interrupts the downstream instead of letting
+  // it proceed off the precreate stub. Before the fix the downstream raced
+  // ahead on the precreate identifier and fully created itself even though the
+  // upstream failed.
+  test.provider(
+    "precreate upstream reconcile failure interrupts non-cyclic downstream (stable id dep)",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const A = yield* PhasedTarget("A", {
+            desired: "a-value",
+            replaceKey: "v1",
+          });
+          // B depends on A.stableId — a value already available from A's
+          // precreate stub — yet must still be gated on A's reconcile.
+          const B = yield* TestResource("B", {
+            string: A.stableId,
+          });
+          return { A, B };
+        });
+
+        yield* program.pipe(stack.deploy, hook(failOn("A", "create")));
+
+        // A's reconcile failed after committing "creating".
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        // B must NOT have reached its own reconcile. It may have committed an
+        // intermediate "creating" while waiting on deps, but it must never be
+        // "created" — that would mean the upstream failure was ignored.
+        expect((yield* getState("B"))?.status).not.toEqual("created");
+
+        // Recovery deploy converges both.
+        const output = yield* program.pipe(stack.deploy);
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expect(output.B.string).toEqual("stable:v1");
+      }),
+  );
+
+  test.provider(
+    "precreate upstream reconcile failure interrupts non-cyclic downstream (value dep)",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const A = yield* PhasedTarget("A", {
+            desired: "a-value",
+            replaceKey: "v1",
+          });
+          const B = yield* TestResource("B", {
+            string: A.value,
+          });
+          const C = yield* TestResource("C", {
+            string: B.string,
+          });
+          return { A, B, C };
+        });
+
+        yield* program.pipe(stack.deploy, hook(failOn("A", "create")));
+
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("B"))?.status).not.toEqual("created");
+        // Transitive downstream never starts either.
+        expectNotStarted(yield* getState("C"));
+
+        const output = yield* program.pipe(stack.deploy);
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expectConvergedStatus((yield* getState("C"))?.status);
+        expect(output.C.string).toEqual("a-value");
+      }),
+  );
 });
 
 describe("from created state", () => {
@@ -1715,6 +2034,166 @@ describe("from replaced state", () => {
         }).pipe(stack.deploy);
         expectConvergedStatus((yield* getState("A"))?.status);
         expect(output).toEqual("another-replacement");
+      }),
+  );
+});
+
+describe("retain removal policy on replace", () => {
+  test.provider(
+    "replace with retain does not delete the old generation",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        // 1. Create initial resource with a retain removal policy.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+
+        const before = yield* getState("A");
+        expect(before?.status).toEqual("created");
+        const oldInstanceId = before?.instanceId;
+
+        // 2. Trigger a replacement (replaceString change). The old generation
+        //    must NOT be deleted because the resource is retained.
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { replaceString: "v2" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+          return A.replaceString;
+        }).pipe(
+          stack.deploy,
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(output).toEqual("v2");
+        // provider.delete must never fire for the retained old generation.
+        expect(deleted).not.toContain("A");
+
+        const after = yield* getState("A");
+        // Resource was genuinely replaced (fresh instance id) and the old
+        // chain drained back to a terminal `created` state.
+        expect(after?.status).toEqual("created");
+        expect(after?.instanceId).not.toEqual(oldInstanceId);
+      }),
+  );
+
+  test.provider(
+    "replace without retain deletes the old generation exactly once",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        // 1. Create initial resource with the default (destroy) policy.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // 2. Trigger a replacement. The old generation must be deleted since
+        //    the resource is not retained — guards the retain patch against
+        //    disabling normal replacement GC.
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { replaceString: "v2" });
+          return A.replaceString;
+        }).pipe(
+          stack.deploy,
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(output).toEqual("v2");
+        expect(deleted.filter((id) => id === "A")).toHaveLength(1);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }),
+  );
+
+  test.provider(
+    "nested replacement chain with retain never deletes old generations",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        // 1. Create with retain.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // 2. Trigger a replacement but fail mid-create so a replacement chain
+        //    forms (replacing, with old=created still live).
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(
+          stack.deploy,
+          hook({ create: () => Effect.fail(new ResourceFailure()) }),
+        );
+        expect((yield* getState("A"))?.status).toEqual("replacing");
+
+        // 3. Replace again — converges and drains the entire old chain. Every
+        //    old generation must be retained (no provider.delete calls).
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { replaceString: "v3" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+          return A.replaceString;
+        }).pipe(
+          stack.deploy,
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(output).toEqual("v3");
+        expect(deleted).not.toContain("A");
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }),
+  );
+
+  test.provider(
+    "orphan delete still honors retain (regression guard)",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // Destroy removes the resource from the stack (orphan delete). Retain
+        // (persisted in state) must skip provider.delete and just drop state.
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(deleted).not.toContain("A");
+        expect(yield* getState("A")).toBeUndefined();
       }),
   );
 });
@@ -3829,12 +4308,10 @@ describe("artifacts", () => {
     "isolates artifact bags by FQN for namespaced resources with the same leaf logical ID",
     (stack) =>
       Effect.gen(function* () {
-        const Site = Construct.fn(function* (
-          _id: string,
-          props: { value: string },
-        ) {
-          return yield* ArtifactProbe("Shared", { value: props.value });
-        });
+        const Site = (id: string, props: { value: string }) =>
+          Effect.gen(function* () {
+            return yield* ArtifactProbe("Shared", { value: props.value });
+          }).pipe(Namespace.push(id));
 
         yield* Effect.gen(function* () {
           yield* Site("Left", { value: "left-v1" });
@@ -4233,7 +4710,7 @@ describe("Redacted props/outputs survive deploy", () => {
 describe("stack output persistence", () => {
   const getStackOutput = (stack: string, stage: string) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       return yield* state.getOutput({ stack, stage });
     });
 

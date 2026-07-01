@@ -121,7 +121,7 @@ export const GitHubAuth = AuthProviderLayer<
         ),
       );
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const token = yield* Clank.password({
         message:
           "GitHub Personal Access Token (needs `repo` scope; `workflow` for Actions)",
@@ -185,7 +185,7 @@ export const GitHubAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when(
           { method: "env" },
-          Effect.fnUntraced(function* () {
+          Effect.fn(function* () {
             const access = yield* getEnvRedacted("GITHUB_ACCESS_TOKEN");
             if (access) {
               return {

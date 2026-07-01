@@ -62,7 +62,7 @@ export const logsCommand = Command.make(
       "alchemy.limit": a.limit,
     }),
   )(
-    Effect.fnUntraced(function* ({
+    Effect.fn(function* ({
       main,
       stage,
       envFile,
@@ -89,7 +89,7 @@ export const logsCommand = Command.make(
         const stack = yield* stackEffect;
 
         yield* Effect.gen(function* () {
-          const state = yield* State.State;
+          const state = yield* yield* State.State;
           const filterSet = parseResourceFilter(filter);
           const availableIds = [
             ...new Set(Object.values(stack.resources).map((r) => r.LogicalId)),

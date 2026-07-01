@@ -1,6 +1,7 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -104,6 +105,7 @@ export interface AutoScalingGroup extends Resource<
  * An EC2 Auto Scaling Group that manages a fleet of instances from a launch
  * template and can register that fleet with one or more load balancer target
  * groups.
+ * @resource
  */
 export const AutoScalingGroup = Resource<AutoScalingGroup>(
   "AWS.AutoScaling.AutoScalingGroup",
@@ -261,6 +263,17 @@ export const AutoScalingGroupProvider = () =>
 
       return {
         stables: ["autoScalingGroupArn", "autoScalingGroupName"],
+        list: () =>
+          // `describeAutoScalingGroups` is paginated; collect every page and
+          // flatten the `AutoScalingGroups` array into full `Attributes`.
+          autoscaling.describeAutoScalingGroups.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.AutoScalingGroups ?? []).map(toAttributes),
+              ),
+            ),
+          ),
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
