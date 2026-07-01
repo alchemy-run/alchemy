@@ -14,8 +14,18 @@ import HyperdriveWorker from "./fixtures/hyperdrive-worker.ts";
 import type { Widget } from "./fixtures/schema.ts";
 import { Hyperdrive, PlanetscaleDb } from "./fixtures/Stack.ts";
 
+const providers = Layer.mergeAll(
+  Cloudflare.providers(),
+  Planetscale.providers(),
+);
+
 const { test } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), Planetscale.providers()),
+  providers,
+});
+
+const { test: devTest } = Test.make({
+  providers,
+  dev: true,
 });
 
 const logLevel = Effect.provideService(
@@ -28,7 +38,62 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   body: string;
 }> {}
 
-describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("Hyperdrive", () => {
+const fetchReady = (req: Effect.Effect<any, any, any>) =>
+  req.pipe(
+    Effect.flatMap((res: any) =>
+      res.status >= 200 && res.status < 300
+        ? res.text.pipe(Effect.as(res))
+        : res.text.pipe(
+            Effect.flatMap((body: string) =>
+              Effect.fail(new WorkerNotReady({ status: res.status, body })),
+            ),
+          ),
+    ),
+    Effect.retry({
+      while: (e: unknown): e is WorkerNotReady =>
+        e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
+      schedule: Schedule.exponential("500 millis").pipe(
+        Schedule.both(Schedule.recurs(20)),
+      ),
+    }),
+  ) as Effect.Effect<HttpClientResponse>;
+
+const expectWidgetRoundTrip = (baseUrl: string, widget: Widget) =>
+  Effect.gen(function* () {
+    const initial = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
+    expect(initial.status).toBe(200);
+    const initialBody = (yield* initial.json) as { widgets: Widget[] };
+    expect(Array.isArray(initialBody.widgets)).toBe(true);
+
+    const insertRes = yield* fetchReady(
+      HttpClient.execute(
+        HttpClientRequest.post(`${baseUrl}/widgets`).pipe(
+          HttpClientRequest.bodyJsonUnsafe(widget),
+        ),
+      ),
+    );
+    expect(insertRes.status).toBe(200);
+    const insertBody = (yield* insertRes.json) as { widget: Widget };
+    expect(insertBody.widget).toMatchObject(widget);
+
+    const after = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
+    expect(after.status).toBe(200);
+    const afterBody = (yield* after.json) as { widgets: Widget[] };
+    expect(afterBody.widgets.some((w) => w.id === widget.id)).toBe(true);
+
+    const deleteRes = yield* fetchReady(
+      HttpClient.execute(
+        HttpClientRequest.delete(`${baseUrl}/widgets/${widget.id}`),
+      ),
+    );
+    expect(deleteRes.status).toBe(200);
+
+    const final = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
+    const finalBody = (yield* final.json) as { widgets: Widget[] };
+    expect(finalBody.widgets.some((w) => w.id === widget.id)).toBe(false);
+  });
+
+describe.skipIf(!process.env.PLANETSCALE_TEST).sequential("Hyperdrive", () => {
   /**
    * End-to-end: deploy a {@link Planetscale.PostgresDatabase} + branch +
    * role, point a {@link Cloudflare.Hyperdrive.Connection} at the role's origin, and
@@ -46,74 +111,73 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("Hyperdrive", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const { worker } = yield* stack.deploy(
+        const { hyperdrive, worker } = yield* stack.deploy(
           Effect.gen(function* () {
             yield* PlanetscaleDb;
-            yield* Hyperdrive;
+            const hyperdrive = yield* Hyperdrive;
             const worker = yield* HyperdriveWorker;
-            return { worker };
+            return { hyperdrive, worker };
           }),
         );
 
         expect(worker.url).toBeTypeOf("string");
+        expect(hyperdrive.origin).toMatchObject({ port: 5432 });
+        expect(hyperdrive.dev).toMatchObject({ port: 6432 });
         const baseUrl = (worker.url as string).replace(/\/+$/, "");
+        yield* expectWidgetRoundTrip(baseUrl, { id: 1, name: "alpha" });
 
-        // workers.dev edge takes a few seconds to start serving; retry any
-        // request until we get a 2xx. Edge routing can flip mid-test as
-        // different POPs warm up, so apply to every call, not just the first.
-        const fetchReady = (req: Effect.Effect<any, any, any>) =>
-          req.pipe(
-            Effect.flatMap((res: any) =>
-              res.status >= 200 && res.status < 300
-                ? res.text.pipe(Effect.as(res))
-                : res.text.pipe(
-                    Effect.flatMap((body: string) =>
-                      Effect.fail(
-                        new WorkerNotReady({ status: res.status, body }),
-                      ),
-                    ),
-                  ),
-            ),
-            Effect.retry({
-              while: (e: unknown): e is WorkerNotReady =>
-                e instanceof WorkerNotReady &&
-                e.status >= 400 &&
-                e.status < 600,
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(20)),
-              ),
-            }),
-          ) as Effect.Effect<HttpClientResponse>;
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 600_000 },
+  );
 
-        const initial = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
-        expect(initial.status).toBe(200);
-        const initialBody = (yield* initial.json) as { widgets: Widget[] };
-        expect(Array.isArray(initialBody.widgets)).toBe(true);
+  /**
+   * End-to-end: deploy the same fixture in local-dev mode. Hyperdrive is
+   * bypassed in local dev, so `role.pooledOrigin` must provide a working
+   * direct connection for the Worker runtime binding.
+   */
+  devTest.provider(
+    "PostgresRole pooledOrigin works as the Hyperdrive dev origin",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-        const insertRes = yield* fetchReady(
-          HttpClient.execute(
-            HttpClientRequest.post(`${baseUrl}/widgets`).pipe(
-              HttpClientRequest.bodyJsonUnsafe({ id: 1, name: "alpha" }),
-            ),
-          ),
+        const { hyperdrive, role, worker } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const { role } = yield* PlanetscaleDb;
+            const hyperdrive = yield* Hyperdrive;
+            const worker = yield* HyperdriveWorker;
+            return { hyperdrive, role, worker };
+          }),
         );
-        expect(insertRes.status).toBe(200);
-        const insertBody = (yield* insertRes.json) as { widget: Widget };
-        expect(insertBody.widget).toMatchObject({ id: 1, name: "alpha" });
 
-        const after = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
-        expect(after.status).toBe(200);
-        const afterBody = (yield* after.json) as { widgets: Widget[] };
-        expect(afterBody.widgets.some((w) => w.id === 1)).toBe(true);
+        expect(worker.url).toBeTypeOf("string");
+        expect(hyperdrive.origin).toMatchObject({ port: 5432 });
+        expect(hyperdrive.dev).toMatchObject({
+          host: role.pooledOrigin.host,
+          port: 6432,
+          database: role.pooledOrigin.database,
+          user: role.pooledOrigin.user,
+        });
 
-        const deleteRes = yield* fetchReady(
-          HttpClient.execute(HttpClientRequest.delete(`${baseUrl}/widgets/1`)),
+        const baseUrl = (worker.url as string).replace(/\/+$/, "");
+        const metadataRes = yield* fetchReady(
+          HttpClient.get(`${baseUrl}/hyperdrive`),
         );
-        expect(deleteRes.status).toBe(200);
+        const metadata = (yield* metadataRes.json) as {
+          host: string;
+          port: number;
+          database: string;
+          user: string;
+        };
+        expect(metadata).toMatchObject({
+          host: role.pooledOrigin.host,
+          port: 6432,
+          database: role.pooledOrigin.database,
+          user: role.pooledOrigin.user,
+        });
 
-        const final = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
-        const finalBody = (yield* final.json) as { widgets: Widget[] };
-        expect(finalBody.widgets.some((w) => w.id === 1)).toBe(false);
+        yield* expectWidgetRoundTrip(baseUrl, { id: 2, name: "beta" });
 
         yield* stack.destroy();
       }).pipe(logLevel),

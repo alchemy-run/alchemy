@@ -29,6 +29,15 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
 
+        if (request.method === "GET" && url.pathname === "/hyperdrive") {
+          return yield* HttpServerResponse.json({
+            host: yield* conn.host,
+            port: yield* conn.port,
+            user: yield* conn.user,
+            database: yield* conn.database,
+          });
+        }
+
         if (request.method === "GET" && url.pathname === "/widgets") {
           const widgets = yield* db.select().from(Widgets);
           return yield* HttpServerResponse.json({ widgets });
