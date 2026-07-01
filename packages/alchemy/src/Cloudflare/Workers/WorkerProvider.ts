@@ -995,8 +995,28 @@ export const LiveWorkerProvider = () =>
         const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
         for (const binding of currentDoBindings) {
-          const previousClassName =
+          let previousClassName: string | undefined =
             oldDoClassNameByLogicalId[binding.logicalId];
+          if (!previousClassName) {
+            // No `alchemy:do:` tag maps this logical id to a class — the
+            // worker was created outside Alchemy (raw API / Wrangler) or
+            // before these tags existed. Fall back to matching the observed
+            // cloud binding by binding name so adoption reuses the existing
+            // class instead of asking Cloudflare to create one that already
+            // exists (which fails the migration). This is the "first deploy
+            // must match the existing class name" path; once we write the
+            // `alchemy:do:` tag, subsequent renames are driven by logical id.
+            const observed = oldBindings.find(
+              (old) =>
+                old.type === "durable_object_namespace" &&
+                "className" in old &&
+                old.className &&
+                old.name === binding.bindingName,
+            );
+            if (observed && "className" in observed && observed.className) {
+              previousClassName = observed.className;
+            }
+          }
           if (!previousClassName) {
             // Default all new Durable Object classes to SQLite. Cloudflare
             // recommends SQLite for new namespaces, and container-backed
