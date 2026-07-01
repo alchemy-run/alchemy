@@ -9,13 +9,14 @@ import * as S from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
+import { pathToFileURL } from "node:url";
 
 import {
   type AuthProvider,
   AuthError,
   AuthProviders,
 } from "../../Auth/AuthProvider.ts";
-import type { AlchemyProfile } from "../../Auth/Profile.ts";
+import type { AlchemyProfileProviders } from "../../Auth/Profile.ts";
 import type * as Stack from "../../Stack.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../Util/Clank.ts";
@@ -269,7 +270,7 @@ export const instrumentCommand =
  */
 export const printProfile = Effect.fn(function* (
   profile: string,
-  stored: AlchemyProfile,
+  stored: AlchemyProfileProviders,
   registry: AuthProviders["Service"],
 ) {
   yield* Console.log(`Profile: ${profile}`);
@@ -301,7 +302,12 @@ export const printProfile = Effect.fn(function* (
 
 export const importStack = Effect.fn(function* (main: string) {
   const path = yield* Path.Path;
-  const url = import.meta.resolve(path.resolve(main));
+  // Build a `file://` URL from the absolute path. `import.meta.resolve` expects a
+  // module specifier / URL, not a raw filesystem path: on Windows an absolute
+  // path like `D:\stack.ts` is not a valid specifier and fails to resolve, so the
+  // CLI cannot load the user's stack. `pathToFileURL` produces a valid URL on
+  // every platform.
+  const url = pathToFileURL(path.resolve(main)).href;
   const module = yield* Effect.promise(() => import(url));
   const stackEffect = module.default as ReturnType<
     ReturnType<typeof Stack.make>

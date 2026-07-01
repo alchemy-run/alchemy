@@ -2,6 +2,7 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -82,7 +83,7 @@ export interface Addon extends Resource<
  * `Addon` is intended for optional managed add-ons. On Auto Mode clusters, many
  * core components are already provided by AWS and do not need to be modeled as
  * explicit add-on resources.
- *
+ * @resource
  * @section Managing Add-ons
  * @example Install Metrics Server
  * ```typescript
@@ -166,6 +167,44 @@ export const AddonProvider = () =>
 
       return {
         stables: ["addonArn"],
+        // Add-ons are keyed by (clusterName, addonName) and `listAddons`
+        // requires a cluster. Enumerate every cluster, list its add-ons,
+        // then hydrate each via `describeAddon` to produce full Attributes.
+        list: () =>
+          Effect.gen(function* () {
+            const clusterNames = yield* eks.listClusters.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.clusters ?? []),
+              ),
+            );
+
+            const perCluster = yield* Effect.forEach(
+              clusterNames,
+              (clusterName) =>
+                eks.listAddons.pages({ clusterName }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) => page.addons ?? []),
+                  ),
+                  Effect.flatMap((addonNames) =>
+                    Effect.forEach(
+                      addonNames,
+                      (addonName) => readAddon({ clusterName, addonName }),
+                      { concurrency: 5 },
+                    ),
+                  ),
+                ),
+              { concurrency: 5 },
+            );
+
+            return perCluster
+              .flat()
+              .filter(
+                (addon): addon is NonNullable<typeof addon> =>
+                  addon !== undefined,
+              );
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (olds.clusterName !== news.clusterName) {

@@ -43,7 +43,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: AWS.providers(),
-    state: Alchemy.localState(),
+    state: AWS.state(),
   },
   Effect.gen(function* () {
     return {};
@@ -60,9 +60,13 @@ IAM policy binding that ships with Alchemy, and resolves
 credentials from the ambient `AWS_PROFILE` (defaulting to
 `default`).
 
-`state: Alchemy.localState()` stores deploy state under
-`.alchemy/` next to your code — good enough for local iteration;
-remote state for CI is covered later.
+`state: AWS.state()` stores deploy state in an account-regional
+S3 bucket (`alchemy-state-{accountId}-{region}-an`), created
+lazily on the first deploy. Because the state lives in your AWS
+account rather than on disk, the same configuration works
+locally and in CI. (For purely local iteration you can use
+`Alchemy.localState()` instead, which writes state under
+`.alchemy/` next to your code.)
 
 The trailing `Effect.gen` block is where you'll declare the
 resources to deploy. It's empty for now.
@@ -86,7 +90,7 @@ import * as Effect from "effect/Effect";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     return {};
   }),
@@ -98,7 +102,7 @@ of ceremony — it lets TypeScript reason about `Api` as a typed
 handle that other resources can later bind against. The rest of
 your code looks completely normal.
 
-`main: import.meta.filename` tells Alchemy this same file is the
+`main: import.meta.url` tells Alchemy this same file is the
 bundle entrypoint. At deploy time it'll be bundled with Rolldown
 into a zip and uploaded as the function's code.
 
@@ -117,7 +121,7 @@ import * as Effect from "effect/Effect";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
 -    return {};
 +    return {
@@ -141,8 +145,8 @@ Gateway, no auth, just a public HTTPS endpoint:
 ```diff lang="typescript"
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
--  { main: import.meta.filename },
-+  { main: import.meta.filename, url: true },
+-  { main: import.meta.url },
++  { main: import.meta.url, url: true },
   Effect.gen(function* () {
     return {
       fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
@@ -171,9 +175,9 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
--  { main: import.meta.filename, url: true },
+-  { main: import.meta.url, url: true },
 +  Stack.useSync((stack) => ({
-+    main: import.meta.filename,
++    main: import.meta.url,
 +    url: true,
 +    memory: stack.stage === "prod" ? 1024 : 512,
 +  })),
@@ -207,7 +211,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: AWS.providers(),
-    state: Alchemy.localState(),
+    state: AWS.state(),
   },
   Effect.gen(function* () {
 +    const api = yield* Api;
@@ -240,7 +244,6 @@ checks the body:
 
 ```typescript
 // test/integ.test.ts
-import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
@@ -250,7 +253,7 @@ import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({
   providers: AWS.providers(),
-  state: Alchemy.localState(),
+  state: AWS.state(),
 });
 
 const stack = beforeAll(deploy(Stack));

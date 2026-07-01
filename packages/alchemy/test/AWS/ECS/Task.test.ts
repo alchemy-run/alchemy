@@ -1,0 +1,192 @@
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { Task } from "@/AWS/ECS/Task.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Vitest";
+import * as ecs from "@distilled.cloud/aws/ecs";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+
+const { test } = Test.make({ providers: AWS.providers() });
+
+// Deploying a full `Task` requires a Docker build + ECR push, which is far too
+// heavy for a `list()` test. Instead we register a task definition out-of-band
+// in the exact shape the provider produces (single container whose image is an
+// ECR `<repoUri>:<hash>`, task/execution role ARNs, an awslogs log group), then
+// assert `list()` reconstructs the full Attributes and includes it, and finally
+// deregister it. This live-verifies the listTaskDefinitions -> describe ->
+// Attributes reconstruction path without the container build overhead.
+test.provider(
+  "list enumerates registered task definitions",
+  () =>
+    Effect.gen(function* () {
+      const { accountId, region } = yield* AWSEnvironment.current;
+
+      const family = "alchemy-test-ecs-task-list";
+      const repositoryName = "alchemy-test-ecs-task-list-repo";
+      const repositoryUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${repositoryName}`;
+      const hash = "listtest";
+      const imageUri = `${repositoryUri}:${hash}`;
+      const logGroupName = "/alchemy/test/ecs-task-list";
+      const taskRoleName = "alchemy-test-ecs-task-list-task-role";
+      const executionRoleName = "alchemy-test-ecs-task-list-execution-role";
+
+      const registered = yield* ecs.registerTaskDefinition({
+        family,
+        taskRoleArn: `arn:aws:iam::${accountId}:role/${taskRoleName}`,
+        executionRoleArn: `arn:aws:iam::${accountId}:role/${executionRoleName}`,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "256",
+        memory: "512",
+        containerDefinitions: [
+          {
+            name: family,
+            image: imageUri,
+            essential: true,
+            portMappings: [
+              { containerPort: 3000, hostPort: 3000, protocol: "tcp" },
+            ],
+            logConfiguration: {
+              logDriver: "awslogs",
+              options: {
+                "awslogs-group": logGroupName,
+                "awslogs-region": region,
+                "awslogs-stream-prefix": family,
+              },
+            },
+          },
+        ],
+      });
+      const arn = registered.taskDefinition?.taskDefinitionArn;
+      expect(arn).toBeDefined();
+      // Safety net: deregister the out-of-band task definition on scope close
+      // even if the assertions below fail.
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({ taskDefinition: arn! })
+          .pipe(Effect.ignore),
+      );
+
+      const provider = yield* Provider.findProvider(Task);
+      const all = yield* provider.list();
+
+      const found = all.find((t) => t.taskDefinitionArn === arn);
+      expect(found).toBeDefined();
+      expect(found?.taskFamily).toBe(family);
+      expect(found?.containerName).toBe(family);
+      expect(found?.port).toBe(3000);
+      expect(found?.imageUri).toBe(imageUri);
+      expect(found?.repositoryName).toBe(repositoryName);
+      expect(found?.repositoryUri).toBe(repositoryUri);
+      expect(found?.code.hash).toBe(hash);
+      expect(found?.logGroupName).toBe(logGroupName);
+      expect(found?.logGroupArn).toBe(
+        `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
+      );
+      expect(found?.taskRoleName).toBe(taskRoleName);
+      expect(found?.executionRoleName).toBe(executionRoleName);
+
+      yield* ecs
+        .deregisterTaskDefinition({ taskDefinition: arn! })
+        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+    }),
+  { timeout: 240_000 },
+);
+
+// Multi-container + task-level props round-trip. Registering a task definition
+// is cheap (no Docker build), so we exercise the full typed surface
+// out-of-band: a 2-container task (app + sidecar with dependsOn/portMappings/
+// logConfiguration), task-level ephemeralStorage, runtimePlatform (ARM64), and
+// an EFS-less host volume, then describe it back and assert the shapes
+// survived, then deregister. This validates that the distilled
+// registerTaskDefinition surface we wire in `Task` is correct.
+test.provider(
+  "multi-container task definition round-trips task-level props",
+  () =>
+    Effect.gen(function* () {
+      const family = "alchemy-test-ecs-task-multicontainer";
+
+      const registered = yield* ecs.registerTaskDefinition({
+        family,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "256",
+        memory: "512",
+        runtimePlatform: {
+          cpuArchitecture: "ARM64",
+          operatingSystemFamily: "LINUX",
+        },
+        ephemeralStorage: { sizeInGiB: 25 },
+        volumes: [{ name: "scratch", host: {} }],
+        containerDefinitions: [
+          {
+            name: "app",
+            image: "public.ecr.aws/nginx/nginx:stable",
+            essential: true,
+            portMappings: [{ containerPort: 80, protocol: "tcp" }],
+            mountPoints: [
+              { sourceVolume: "scratch", containerPath: "/scratch" },
+            ],
+            dependsOn: [{ containerName: "sidecar", condition: "START" }],
+          },
+          {
+            name: "sidecar",
+            image: "public.ecr.aws/docker/library/busybox:latest",
+            essential: false,
+            command: ["sh", "-c", "while true; do sleep 30; done"],
+          },
+        ],
+      });
+      const td = registered.taskDefinition;
+      const arn = td?.taskDefinitionArn;
+      expect(arn).toBeDefined();
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({ taskDefinition: arn! })
+          .pipe(Effect.ignore),
+      );
+
+      const described = yield* ecs.describeTaskDefinition({
+        taskDefinition: arn!,
+      });
+      const def = described.taskDefinition;
+      expect(def?.containerDefinitions?.length).toBe(2);
+      expect(def?.containerDefinitions?.map((c) => c.name)).toEqual([
+        "app",
+        "sidecar",
+      ]);
+      expect(
+        def?.containerDefinitions?.[0]?.dependsOn?.[0]?.containerName,
+      ).toBe("sidecar");
+      expect(def?.runtimePlatform?.cpuArchitecture).toBe("ARM64");
+      expect(def?.ephemeralStorage?.sizeInGiB).toBe(25);
+      expect(def?.volumes?.[0]?.name).toBe("scratch");
+
+      // Update one container (new image) → new revision number.
+      const updated = yield* ecs.registerTaskDefinition({
+        family,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "256",
+        memory: "512",
+        containerDefinitions: [
+          {
+            name: "app",
+            image: "public.ecr.aws/nginx/nginx:latest",
+            essential: true,
+            portMappings: [{ containerPort: 80, protocol: "tcp" }],
+          },
+        ],
+      });
+      expect(updated.taskDefinition?.revision).toBeGreaterThan(td!.revision!);
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({
+            taskDefinition: updated.taskDefinition!.taskDefinitionArn!,
+          })
+          .pipe(Effect.ignore),
+      );
+    }),
+  { timeout: 120_000 },
+);

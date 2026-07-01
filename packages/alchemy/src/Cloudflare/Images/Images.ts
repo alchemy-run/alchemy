@@ -1,83 +1,50 @@
+import type * as cf from "@cloudflare/workers-types";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { ImagesBinding } from "./ImagesBinding.ts";
+import * as Stream from "effect/Stream";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import * as Binding from "../Workers/Binding.ts";
+import type { ImagesBinding } from "./ImagesBinding.ts";
 
-type ImagesTypeId = typeof ImagesTypeId;
-const ImagesTypeId = "Cloudflare.Images" as const;
+const TypeId = "Cloudflare.Images.Images" as const;
+type TypeId = typeof TypeId;
 
-export type ImagesProps = {
-  /**
-   * Binding name used when `Cloudflare.Images.bind(images)` attaches Images
-   * from inside a Worker init phase. When Images is passed through
-   * `Worker({ bindings: { ... } })`, the object key remains the binding name.
-   *
-   * @default "IMAGES"
-   */
-  name?: string;
-};
+export class ImagesError extends Data.TaggedError("ImagesError")<{
+  message: string;
+  code?: number;
+  cause: unknown;
+}> {}
 
 /**
- * Marker for a Cloudflare Images binding.
+ * A Cloudflare Images binding for image transformation inside Workers — a
+ * Worker-only binding with no backing cloud resource.
  *
- * Images bindings are configured directly on Workers and do not have a
- * standalone provisioning API. The Worker provider sees this object in
- * `bindings: { ... }` and emits the corresponding `{ type: "images" }`
- * metadata binding to the script.
- */
-export type Images = {
-  kind: ImagesTypeId;
-  name: string;
-};
-
-export const isImages = (value: unknown): value is Images =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value &&
-  (value as Images).kind === ImagesTypeId;
-
-/**
- * A Cloudflare Images binding for image transformation and manipulation inside
- * Workers.
+ * `Images` is a single value that is at once the `Binding.Service` tag, the
+ * callable that produces an {@link ImagesBinding}, and the type. Declare it on a
+ * Worker's `env` (it flows through `InferEnv` → `cf.ImagesBinding`) or `yield*`
+ * it inside an Effect-native Worker to attach the binding and obtain the
+ * {@link ImagesClient}.
  *
- * The Effect-native interface (`Cloudflare.Images.bind(...)`) returns an
- * `ImagesClient` whose methods take Effect `Stream.Stream<Uint8Array>`
- * inputs and return `Effect`s — `info`, `input(...).transform(...)
- * .draw(...).output(...)`. The runtime conversion to Cloudflare's
- * `ReadableStream` is handled internally.
- *
- * @section Declaring Images
- * @example
- * ```typescript
- * const Pipeline = yield* Cloudflare.Images({ name: "PIPELINE" });
- * ```
- *
+ * @binding
+ * @product Images
+ * @category Media
  * @section Effect-style Worker (recommended)
  * @example Read image format and dimensions from the request body
  * ```typescript
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  *
- * Cloudflare.Worker("ImageWorker", { main: import.meta.filename },
+ * Cloudflare.Worker("ImageWorker", { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const pipeline = yield* Pipeline;
- *     const images = yield* Cloudflare.Images.bind(pipeline);
+ *     const images = yield* Cloudflare.Images.Images("PIPELINE");
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
- *         // request.stream is Stream.Stream<Uint8Array>
  *         const info = yield* images.info(request.stream);
  *         return yield* HttpServerResponse.json(info);
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.ImagesBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.Images.ImagesBinding)),
  * );
- * ```
- *
- * @example Transform an image — chainable pipeline, single Effect at the end
- * ```typescript
- * const result = yield* (yield* images.input(request.stream))
- *   .transform({ width: 128 })
- *   .output({ format: "image/jpeg" });
- *
- * const response = yield* result.response;
  * ```
  *
  * @section Binding to a Worker (declarative)
@@ -85,37 +52,83 @@ export const isImages = (value: unknown): value is Images =>
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
- *   bindings: { MEDIA: Pipeline },
+ *   env: { MEDIA: Cloudflare.Images.Images("PIPELINE") },
  * });
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
  * //   { MEDIA: ImagesBinding }
  * ```
  *
- * Inside the Worker, the raw Cloudflare runtime binding is reachable via
- * `client.raw` if you need to call `info()` / `input()` directly with
- * `async`/`await`. The Effect-native interface is preferred — it returns
- * tagged `ImagesError`s, threads `WorkerEnvironment`, and lets you stream
- * Effect `Stream<Uint8Array>` sources without manual conversion.
- *
  * @see https://developers.cloudflare.com/images/transform-images/bindings/
  */
-export const Images: {
-  (props?: ImagesProps): Effect.Effect<Images>;
+export interface Images extends Binding.Service<Images, TypeId, ImagesClient> {
   /**
-   * Bind Cloudflare Images to the surrounding Worker, returning an
-   * Effect-native client with access to the native Workers runtime binding.
+   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @default "IMAGES"
    */
-  bind: typeof ImagesBinding.bind;
-} = Object.assign(
-  Effect.fn(function* (props?: ImagesProps) {
-    return {
-      kind: ImagesTypeId,
-      name: props?.name ?? "IMAGES",
-    } satisfies Images;
-  }),
-  {
-    bind: (...args: Parameters<typeof ImagesBinding.bind>) =>
-      ImagesBinding.bind(...args),
-  },
-);
+  (name?: string): ImagesBinding;
+}
+
+export const Images = Binding.Service<Images>({
+  id: TypeId,
+  defaultName: "IMAGES",
+  toWorkerBinding: (binding) => ({ type: "images", name: binding.name }),
+});
+
+export const isImages = (value: unknown): value is ImagesBinding =>
+  Binding.isBinding(value) && value.kind === TypeId;
+
+/**
+ * Effect-native client for a Cloudflare Images binding. Wraps the runtime
+ * {@link cf.ImagesBinding} so each method returns an Effect tagged with
+ * {@link ImagesError}.
+ */
+export interface ImagesClient {
+  /** Effect resolving to the raw Cloudflare runtime binding. */
+  raw: Effect.Effect<cf.ImagesBinding, never, RuntimeContext>;
+  /**
+   * Read image format and dimensions from a stream of bytes. Fails with
+   * {@link ImagesError} (code 9412) if the input is not a recognized image.
+   */
+  info<E = never, R = never>(
+    stream: Stream.Stream<Uint8Array, E, R>,
+    options?: cf.ImageInputOptions,
+  ): Effect.Effect<cf.ImageInfoResponse, ImagesError, RuntimeContext | R>;
+  /**
+   * Begin a transformation pipeline. Subsequent `.transform()` / `.draw()`
+   * calls are pure; `.output(opts)` runs the pipeline.
+   */
+  input<E = never, R = never>(
+    stream: Stream.Stream<Uint8Array, E, R>,
+    options?: cf.ImageInputOptions,
+  ): Effect.Effect<ImageTransformer, never, RuntimeContext | R>;
+}
+
+/**
+ * Effect-native handle to the result of `input(...).output(...)`. Mirrors the
+ * runtime `ImageTransformationResult` but exposes side effects as sync effects.
+ */
+export interface ImageTransformationResult {
+  raw: cf.ImageTransformationResult;
+  response: Effect.Effect<cf.Response>;
+  contentType: Effect.Effect<string>;
+  image(
+    options?: cf.ImageTransformationOutputOptions,
+  ): Effect.Effect<cf.ReadableStream<Uint8Array>>;
+}
+
+/**
+ * Effect-native chainable transformer. `transform`/`draw` are pure; `output` is
+ * the only step that crosses into Cloudflare's runtime and returns an Effect.
+ */
+export interface ImageTransformer {
+  raw: cf.ImageTransformer;
+  transform(transform: cf.ImageTransform): ImageTransformer;
+  draw<E = never, R = never>(
+    image: Stream.Stream<Uint8Array, E, R> | ImageTransformer,
+    options?: cf.ImageDrawOptions,
+  ): Effect.Effect<ImageTransformer, never, R>;
+  output(
+    options: cf.ImageOutputOptions,
+  ): Effect.Effect<ImageTransformationResult, ImagesError>;
+}

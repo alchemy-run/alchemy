@@ -6,6 +6,11 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
+// A fresh workers.dev URL transiently 404s/5xxs while the edge converges.
+// `Test.getWhenReady` / `Test.executeWhenReady` retry through that window and
+// return the first non-cold-start response to assert on.
+const { getWhenReady, executeWhenReady } = Test;
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -17,8 +22,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 test(
   "deploys and exposes a url",
   Effect.gen(function* () {
-    const out = (yield* stack) as unknown;
-    const url = typeof out === "string" ? out : (out as { url: string }).url;
+    const { url } = yield* stack;
     expect(url).toBeString();
   }),
 );
@@ -26,10 +30,9 @@ test(
 test(
   "echoes env.API_KEY",
   Effect.gen(function* () {
-    const out = (yield* stack) as unknown;
-    const url = typeof out === "string" ? out : (out as { url: string }).url;
+    const { url } = yield* stack;
 
-    const response = yield* HttpClient.get(`${url}/api-key`);
+    const response = yield* getWhenReady(`${url}/api-key`);
     expect(response.status).toBe(200);
     const body = yield* response.text;
     expect(body).toBe("SOME_API_KEY");
@@ -43,17 +46,16 @@ test(
  * GET /<path> reads from R2, so we read /queue/<id> back.
  *
  * Pairs with the cloudflare-worker example, which exercises the
- * Effect-style `Cloudflare.messages(Queue).subscribe(...)` path
+ * Effect-style `Cloudflare.Queues.consumeQueueMessages(Queue, handler)` path
  * against the same producer/consumer round-trip.
  */
 test(
   "native queue() handler round-trip",
   Effect.gen(function* () {
-    const out = (yield* stack) as unknown;
-    const url = typeof out === "string" ? out : (out as { url: string }).url;
+    const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
 
-    const sendResponse = yield* HttpClient.execute(
+    const sendResponse = yield* executeWhenReady(
       HttpClientRequest.post(
         `${url}/queue/send?text=${encodeURIComponent(text)}`,
       ),

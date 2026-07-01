@@ -51,7 +51,9 @@ export const sanitizeKey = (key: string): string =>
 export class RuntimeContext extends Context.Service<
   RuntimeContext,
   BaseRuntimeContext
->()("RuntimeContext") {}
+>()("RuntimeContext") {
+  static phantom = Layer.empty as Layer.Layer<RuntimeContext>;
+}
 
 export const CurrentRuntimeContext = Effect.serviceOption(RuntimeContext).pipe(
   Effect.map(Option.getOrUndefined),

@@ -21,6 +21,7 @@ import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
+import { RandomProvider } from "../../Random.ts";
 import * as Alchemy from "../../Stack.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
@@ -152,8 +153,9 @@ export const state = () =>
         if (credentials) {
           return yield* ensureLatest(credentials);
         }
-        const workerExists = yield* isStateStoreAvailable(scriptName);
-        if (workerExists) {
+        const { accountId } =
+          yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+        if (yield* isStateStoreServing(accountId)) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false),
           );
@@ -232,9 +234,9 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         ),
       );
     }
-
-    const workerExists = yield* isStateStoreAvailable(scriptName);
-    if (workerExists) {
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    if (yield* isStateStoreServing(accountId)) {
       // this is a regular update, let's check if it needs an update and refresh credentials
       if (!force) {
         yield* Clank.info(
@@ -282,7 +284,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         return httpState;
       }
     } else {
-      // fresh deploy - deploy from local for the first time
       yield* Clank.info(`Deploying Cloudflare State Store '${scriptName}'...`);
       return yield* deployWithLocalState({
         scriptName,
@@ -325,7 +326,7 @@ const deployStateStore = ({
       stack: Alchemy.Stack(
         "CloudflareStateStore",
         {
-          providers: Cloudflare.providers(),
+          providers: Layer.mergeAll(Cloudflare.providers(), RandomProvider()),
           state: stateLayer,
         },
         Effect.gen(function* () {
@@ -446,7 +447,7 @@ const hasLocalStack = (stage: string) =>
  * store, and removing entries that happen to be missing locally would
  * be catastrophic.
  */
-const hoistBootstrapStack = Effect.fnUntraced(function* ({
+const hoistBootstrapStack = Effect.fn(function* ({
   source,
   destination,
 }: {
@@ -468,7 +469,7 @@ const hoistBootstrapStack = Effect.fnUntraced(function* ({
   });
   yield* Effect.forEach(
     fqns,
-    Effect.fnUntraced(function* (fqn) {
+    Effect.fn(function* (fqn) {
       const value = yield* source.state.get({
         stack,
         stage: source.stage,
@@ -517,7 +518,8 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
   Effect.gen(function* () {
     const credStore = yield* CredentialsStore;
     const isCI = yield* CI;
-    const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
 
     if (!force) {
       // try and read from the cached credentials first if not forcing (force will always refresh)
@@ -608,14 +610,36 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
 const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
   Effect.gen(function* () {
     // otherwise, the remote one might exist
-    const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
     return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
       Effect.map((setting) => setting !== undefined),
       Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
+      Effect.catchTag("InvalidRoute", () => Effect.succeed(false)),
     );
   });
 
-const makeCloudflareStateStore = Effect.fnUntraced(function* ({
+/**
+ * Does this account have a *functioning* state-store worker,
+ * verified by checking the /version endpoint
+ *
+ */
+const isStateStoreServing = (accountId: string) =>
+  Effect.gen(function* () {
+    const url = yield* workers.getSubdomain({ accountId }).pipe(
+      Effect.map(({ subdomain }) =>
+        subdomain
+          ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`
+          : undefined,
+      ),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (url === undefined) return false;
+    const { observed } = yield* checkStateStoreVersion(url);
+    return observed !== undefined;
+  });
+
+const makeCloudflareStateStore = Effect.fn(function* ({
   url,
   authToken,
 }: {
@@ -861,6 +885,6 @@ const annotateAccountHash = (noTrack?: boolean) =>
       CloudflareEnvironment.CloudflareEnvironment,
     );
     if (env._tag !== "Some") return;
-    const hash = yield* hashAccountId(env.value.accountId);
+    const hash = yield* hashAccountId((yield* env.value).accountId);
     yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
   }).pipe(Effect.catch(() => Effect.void));

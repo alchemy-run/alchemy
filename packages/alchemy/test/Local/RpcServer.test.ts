@@ -77,7 +77,11 @@ for (const runtime of runtimes()) {
             // Drive a real RPC call through a session websocket. capnweb's
             // surface is Promise-based, so we wrap exactly at the boundary
             // and let everything above and below stay in Effect.
-            const stub = newWebSocketRpcSession(url) as RpcStub<RpcProxyApi>;
+
+            // TODO(sam): tsgo vomits here, so we cast to any.
+            const stub = (newWebSocketRpcSession as any)(
+              url,
+            ) as RpcStub<RpcProxyApi>;
             const result = yield* Effect.promise(async () => {
               const provider = await stub.getProvider("Test.Echo");
               const handlers = unwrapRpcHandlers(provider as any) as {

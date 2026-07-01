@@ -1,14 +1,15 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
+import { AWSEnvironment } from "../Environment.ts";
 import { restApiArn, retryOnApiStatusUpdating, syncTags } from "./common.ts";
 
 export interface RestApiProps {
@@ -98,7 +99,7 @@ export interface RestApi extends Resource<
  * stack is the `RestApi` value itself: child resources accept `restApi: api`
  * and register themselves back onto the API so that deployments and stages
  * wait for them without any user-authored dependency lists.
- *
+ * @resource
  * @section Getting started
  * A minimal API Gateway stack is four pieces: the `RestApi`, one or more
  * `Method`s, a `Deployment` that snapshots those methods, and a `Stage` that
@@ -299,8 +300,6 @@ export const RestApiProvider = () =>
   Provider.effect(
     RestApi,
     Effect.gen(function* () {
-      const awsRegion = yield* Region;
-
       return {
         stables: ["restApiId", "rootResourceId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
@@ -326,6 +325,23 @@ export const RestApiProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        // Enumerate every REST API in the account/region. `getRestApis` is a
+        // paginated collection op (items field "items"); collect every page and
+        // map each item through the same snapshot helper `read` uses so each
+        // element is a complete `Attributes` shape.
+        list: () =>
+          ag.getRestApis.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.items ?? [])
+                  .filter(
+                    (api): api is ag.RestApi & { id: string } => api.id != null,
+                  )
+                  .map((api) => snapshotFromApi(api)),
+              ),
+            ),
+          ),
         read: Effect.fn(function* ({ output }) {
           if (!output?.restApiId) return undefined;
           const api = yield* ag
@@ -355,7 +371,7 @@ export const RestApiProvider = () =>
           const news = newsIn as RestApiProps;
           const name = yield* generatedName(id, news);
           const internalTags = yield* createInternalTags(id);
-          const allTags = { ...(news.tags ?? {}), ...internalTags };
+          const allTags = { ...news.tags, ...internalTags };
           const created = yield* retryOnApiStatusUpdating(
             ag.createRestApi({
               name,
@@ -383,6 +399,7 @@ export const RestApiProvider = () =>
           return snapshotFromApi(full);
         }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
+          const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {
             return yield* Effect.die("RestApi props were not resolved");
           }
@@ -434,7 +451,7 @@ export const RestApiProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           if (!deepEqual(observedSnapshot.tags, desiredTags)) {
-            const arn = restApiArn(awsRegion, output.restApiId);
+            const arn = restApiArn(region, output.restApiId);
             yield* syncTags({
               resourceArn: arn,
               oldTags: observedSnapshot.tags,

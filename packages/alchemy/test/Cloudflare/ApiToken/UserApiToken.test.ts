@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { describe, expect } from "@effect/vitest";
@@ -7,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -18,13 +20,13 @@ const logLevel = Effect.provideService(
 describe.skip("UserApiToken", () => {
   test.provider("create and delete user token with default props", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
       const token = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UserApiToken("DefaultUserToken", {
+          return yield* Cloudflare.ApiToken.UserApiToken("DefaultUserToken", {
             policies: [
               {
                 effect: "allow",
@@ -55,13 +57,13 @@ describe.skip("UserApiToken", () => {
 
   test.provider("create, update, delete user token", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
       const token = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UserApiToken("UpdateUserToken", {
+          return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
             name: "alchemy-test-user-update-initial",
             policies: [
               {
@@ -81,7 +83,7 @@ describe.skip("UserApiToken", () => {
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UserApiToken("UpdateUserToken", {
+          return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
             name: "alchemy-test-user-update-renamed",
             policies: [
               {
@@ -132,4 +134,57 @@ describe.skip("UserApiToken", () => {
     );
   });
 });
+
+describe("UserApiToken list", () => {
+  // Read-only: `GET /user/tokens` requires the authenticated *user's* identity.
+  // The standing testing profile authenticates with a scoped API token that
+  // lacks the `API Tokens > Read` user permission, so the live call rejects
+  // with the typed error:
+  //   Unauthorized: Unauthorized to access requested resource  (_tag: "Unauthorized")
+  // The `list()` impl is correct (it propagates the typed error rather than
+  // masking it as []), so we gate the live assertion behind an env var an
+  // entitled (user-API-key) credential can set. The test only asserts the
+  // provider exhaustively enumerates into the read-shaped Attributes.
+  test.provider.skipIf(!process.env.CLOUDFLARE_TEST_USER_TOKENS)(
+    "list enumerates user tokens",
+    () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ApiToken.UserApiToken,
+        );
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const token of all) {
+          expect(typeof token.tokenId).toBe("string");
+          expect(typeof token.name).toBe("string");
+          expect(["active", "disabled", "expired"]).toContain(token.status);
+          // List never returns the plaintext value; read shape is preserved
+          // with an empty Redacted secret.
+          expect(typeof Redacted.value(token.value)).toBe("string");
+        }
+      }).pipe(logLevel),
+  );
+});
+
+// Ungated probe: the standing scoped-token testing profile must surface the
+// auth gap as the typed `Unauthorized` tag (not an UnknownCloudflareError),
+// proving the error is in the typed union and the gating above is correct.
+describe("UserApiToken list probe", () => {
+  test.provider("list rejects with typed Unauthorized under scoped token", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ApiToken.UserApiToken,
+      );
+      const result = yield* Effect.result(provider.list());
+      if (Result.isSuccess(result)) {
+        // An entitled credential can list — that's fine, nothing to assert.
+        expect(Array.isArray(result.success)).toBe(true);
+        return;
+      }
+      expect(result.failure._tag).toBe("Unauthorized");
+    }).pipe(logLevel),
+  );
+});
+
 class TokenStillExists extends Data.TaggedError("TokenStillExists") {}

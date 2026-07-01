@@ -9,6 +9,13 @@ import type { CompiledStack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
 import * as Core from "./Core.ts";
 
+export {
+  executeWhenReady,
+  getWhenReady,
+  WorkerNotReady,
+  type WhenReadyOptions,
+} from "./Http.ts";
+
 export type MakeOptions<ROut = any> = Core.MakeOptions<ROut>;
 export type ScratchStack = Core.ScratchStack;
 export type TestEffect<A, R = never> = Core.TestEffect<A, R>;

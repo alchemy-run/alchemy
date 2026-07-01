@@ -25,19 +25,20 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * });
  * ```
  *
- * Behind the scenes the actual connect work is wrapped in `Effect.cached`,
- * so the pool is built at most once per JS realm. Yielding the
- * connection string is also deferred until first query, so deploy /
- * plan-time invocations (where `WorkerEnvironment` isn't provided)
- * never trigger a real connection attempt.
+ * The connect work is deferred until the first query and memoized on the
+ * current `ExecutionContext` (`ctx.cache`), so the pool is built at most
+ * once per execution — a Worker `fetch`/`queue`/`scheduled` event or a
+ * Workflow run — and reused across every query and `task` step in that
+ * execution. Yielding the connection string is likewise deferred, so
+ * deploy / plan-time invocations (where `WorkerEnvironment` isn't
+ * provided) never trigger a real connection attempt.
  *
- * The PgClient pool is built against an isolated, never-closing `Scope`
- * so it outlives whatever scope this helper is yielded under. In a
- * Cloudflare Worker the surrounding `Cloudflare.Worker` runs init
- * inside `Effect.scoped`, which closes after returning the exports
- * object — without an isolated scope, the pool's `end` finalizer
- * would fire there and every subsequent request would see "Cannot
- * use a pool after end".
+ * The pool is built against the execution's `Scope` (`ctx.scope`), so its
+ * `end` finalizer fires when that scope closes — when the request / run
+ * settles, not when the `Cloudflare.Worker` init scope closes. Init runs
+ * inside `Effect.scoped` and closes after returning the exports object;
+ * building lazily against `ctx.scope` (rather than that init scope) is
+ * what keeps later requests from seeing "Cannot use a pool after end".
  *
  * @binding
  */

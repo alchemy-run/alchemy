@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
+describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("MySQLBranch", () => {
   test.provider(
     "adopts existing branch when adopt is true",
     (stack) =>

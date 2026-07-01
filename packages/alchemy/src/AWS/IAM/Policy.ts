@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -91,7 +92,7 @@ export interface Policy extends Resource<
  * `Policy` owns the lifecycle of the policy metadata and its default version,
  * rotating versions on updates while keeping the current document attached to a
  * stable policy ARN.
- *
+ * @resource
  * @section Creating Policies
  * @example Managed Policy
  * ```typescript
@@ -113,14 +114,13 @@ export const PolicyProvider = () =>
   Provider.effect(
     Policy,
     Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment;
-
       const toPolicyName = (id: string, props: PolicyProps) =>
         props.policyName
           ? Effect.succeed(props.policyName)
           : createPhysicalName({ id, maxLength: 128 });
 
       const toPolicyArn = Effect.fn(function* (id: string, props: PolicyProps) {
+        const { accountId } = yield* AWSEnvironment.current;
         const policyName = yield* toPolicyName(id, props);
         return policyArnFromParts({
           accountId,
@@ -182,6 +182,63 @@ export const PolicyProvider = () =>
 
       return {
         stables: ["policyArn", "policyName", "policyId"],
+        list: () =>
+          Effect.gen(function* () {
+            // IAM is global; enumerate only customer-managed ("Local")
+            // policies, paginating exhaustively.
+            const policies = yield* iam.listPolicies
+              .pages({ Scope: "Local" })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) => page.Policies ?? []),
+                ),
+              );
+            const rows = yield* Effect.forEach(
+              policies,
+              (policy) =>
+                Effect.gen(function* () {
+                  if (!policy.Arn || !policy.PolicyName) {
+                    return undefined;
+                  }
+                  const tags = yield* iam.listPolicyTags({
+                    PolicyArn: policy.Arn,
+                  });
+                  const policyDocument = yield* readPolicyDocument({
+                    policyArn: policy.Arn,
+                    versionId: policy.DefaultVersionId,
+                  });
+                  if (!policyDocument) {
+                    return undefined;
+                  }
+                  return {
+                    policyArn: policy.Arn as PolicyArn,
+                    policyName: policy.PolicyName,
+                    policyId: policy.PolicyId,
+                    path: policy.Path,
+                    defaultVersionId: policy.DefaultVersionId,
+                    attachmentCount: policy.AttachmentCount,
+                    permissionsBoundaryUsageCount:
+                      policy.PermissionsBoundaryUsageCount,
+                    isAttachable: policy.IsAttachable,
+                    description: policy.Description,
+                    policyDocument,
+                    tags: toTagRecord(tags.Tags),
+                  };
+                }).pipe(
+                  // A peer test may delete a policy between `listPolicies` and
+                  // hydrating its tags/version — skip the vanished entry rather
+                  // than failing the whole enumeration.
+                  Effect.catchTag("NoSuchEntityException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is NonNullable<typeof row> => row !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

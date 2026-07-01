@@ -7,7 +7,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import QueueWorker, { Counter, RoundTripQueue } from "./round-trip-worker.ts";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import QueueWorker, { RoundTripQueue } from "./round-trip-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -23,22 +24,22 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
 
 /**
  * End-to-end Cloudflare Queue round-trip via
- * `Cloudflare.messages(queue).subscribe(...)`.
+ * `Cloudflare.Queues.consumeQueueMessages(queue, handler)`.
  *
  * Stack:
  *
  * - `Counter` Durable Object (per-key count + last-bodies tail).
- * - `RoundTripQueue` (Cloudflare.Queue).
+ * - `RoundTripQueue` (Cloudflare.Queues.Queue).
  * - `QueueRoundTripWorker` — exposes:
  *     - `POST /send?name=K`  →  enqueues a message via the
- *       `Cloudflare.QueueBinding` producer.
+ *       `Cloudflare.Queues.WriteQueue` producer.
  *     - subscribe handler    →  increments the named Counter DO
  *       and stores the body, via
- *       `Cloudflare.messages(RoundTripQueue).subscribe(...)`.
+ *       `Cloudflare.Queues.consumeQueueMessages(RoundTripQueue, handler)`.
  *     - `GET /count?name=K`  →  reads the DO snapshot.
- * - `Cloudflare.QueueConsumer` is auto-created by the policy
- *   side of `messages().subscribe(...)` — there is no explicit
- *   `QueueConsumer(...)` yield in the stack.
+ * - `Cloudflare.Queues.Consumer` is auto-created by the policy
+ *   side of `consumeQueueMessages(...)` — there is no explicit
+ *   `Consumer(...)` yield in the stack.
  *
  * The test sends N messages, then polls `/count?name=K` with
  * exponential backoff until the DO reports `count >= N`. The
@@ -58,7 +59,7 @@ test.provider(
           // The Worker's init body yields Counter and
           // RoundTripQueue internally — yielding QueueWorker is
           // enough to bring the whole stack (Queue +
-          // QueueConsumer + Counter DO + Worker) into the plan.
+          // Consumer + Counter DO + Worker) into the plan.
           const worker = yield* QueueWorker;
           return { url: worker.url };
         }),
@@ -104,9 +105,16 @@ test.provider(
       // exponential schedule + recurs cap gives Cloudflare ~60s to
       // dispatch and ack — comfortably above the typical 1–5s
       // dispatch latency we saw in practice without flaking.
+      //
+      // GET /count is idempotent, so we retry on *any* failure — not
+      // just CountMismatch. A fresh/hibernating DO can briefly return a
+      // 500 ("Internal Server Error", which isn't valid JSON and would
+      // otherwise surface as a decode error), and edge propagation can
+      // 404 the first calls; both are transient and must be retried.
       const snapshot = yield* HttpClient.get(
         `${baseUrl}/count?name=${encodeURIComponent(name)}`,
       ).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
         Effect.flatMap((res) => res.json),
         Effect.flatMap((body) => {
           const snap = body as { count: number; lastBodies: string[] };
@@ -120,18 +128,24 @@ test.provider(
               );
         }),
         Effect.retry({
-          while: (e): e is CountMismatch => e instanceof CountMismatch,
           schedule: Schedule.exponential("500 millis").pipe(
             Schedule.both(Schedule.recurs(40)),
           ),
         }),
       );
 
-      // The DO observed every message. The order is best-effort
-      // (Cloudflare may dispatch batches in parallel) so we
-      // compare as a multiset.
+      // The DO observed every message. Cloudflare Queues are
+      // *at-least-once*: a message can be delivered (and thus recorded)
+      // more than once, so `lastBodies` may legitimately contain
+      // duplicates and `count` may exceed `messages.length`. Order is
+      // also best-effort (batches dispatch in parallel). So assert every
+      // expected message was observed at least once (set containment),
+      // not exact multiset equality — the latter flakes whenever
+      // Cloudflare redelivers a message.
       expect(snapshot.count).toBeGreaterThanOrEqual(messages.length);
-      expect([...snapshot.lastBodies].sort()).toEqual([...messages].sort());
+      expect([...new Set(snapshot.lastBodies)].sort()).toEqual(
+        [...messages].sort(),
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),

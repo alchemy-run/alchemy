@@ -98,7 +98,7 @@ const resource = (
   attr,
 });
 
-const listStage = Effect.fnUntraced(function* (
+const listStage = Effect.fn(function* (
   state: StateService,
   stack: string,
   stage: string,
@@ -106,14 +106,14 @@ const listStage = Effect.fnUntraced(function* (
   const fqns = yield* state.list({ stack, stage });
   const entries = yield* Effect.forEach(
     fqns,
-    Effect.fnUntraced(function* (fqn) {
+    Effect.fn(function* (fqn) {
       return [fqn, yield* state.get({ stack, stage, fqn })] as const;
     }),
   );
   return Object.fromEntries(entries);
 });
 
-const expectStage = Effect.fnUntraced(function* (
+const expectStage = Effect.fn(function* (
   state: StateService,
   stack: string,
   stage: string,

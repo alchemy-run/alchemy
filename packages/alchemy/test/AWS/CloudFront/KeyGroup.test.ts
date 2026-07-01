@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { KeyGroup, PublicKey } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "@effect/vitest";
@@ -97,6 +98,39 @@ describe("AWS.CloudFront.KeyGroup", () => {
 
         yield* stack.destroy();
         yield* assertKeyGroupDeleted(updated.group.keyGroupId);
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!runLive)(
+    "list enumerates the deployed key group",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const primary = yield* PublicKey("PrimarySigningKey", {
+              encodedKey: PRIMARY_PUBLIC_KEY,
+              comment: "primary",
+            });
+            const group = yield* KeyGroup("ListKeyGroup", {
+              comment: "list",
+              items: [primary.publicKeyId],
+            });
+            return { group };
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(KeyGroup);
+        const all = yield* provider.list();
+
+        expect(
+          all.some((g) => g.keyGroupId === deployed.group.keyGroupId),
+        ).toBe(true);
+
+        yield* stack.destroy();
+        yield* assertKeyGroupDeleted(deployed.group.keyGroupId);
       }),
     { timeout: 300_000 },
   );

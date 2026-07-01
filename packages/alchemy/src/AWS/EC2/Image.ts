@@ -12,7 +12,7 @@ export interface FindImageOptions {
   virtualizationType?: "hvm" | "paravirtual";
 }
 
-const findLatestImage = Effect.fnUntraced(function* ({
+const findLatestImage = Effect.fn(function* ({
   owners,
   name,
   architecture = "x86_64",
@@ -46,7 +46,7 @@ const findLatestImage = Effect.fnUntraced(function* ({
   return latest.ImageId;
 });
 
-const findFirstImage = Effect.fnUntraced(function* <Req = never>(
+const findFirstImage = Effect.fn(function* <Req = never>(
   lookups: ReadonlyArray<Effect.Effect<string | undefined, never, Req>>,
   errorMessage: string,
 ) {
@@ -66,7 +66,10 @@ export const amazonLinux2023 = (options?: {
 }) =>
   findLatestImage({
     owners: ["amazon"],
-    name: ["al2023-ami-*-*"],
+    // `al2023-ami-2023.*` selects the standard image. The broader
+    // `al2023-ami-*` also matches `al2023-ami-minimal-*`, which ships without
+    // the SSM agent and a stripped toolset and frequently sorts newest.
+    name: ["al2023-ami-2023.*"],
     architecture: options?.architecture,
     description: "Amazon Linux 2023",
   });

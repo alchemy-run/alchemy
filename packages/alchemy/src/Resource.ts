@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
-import { pipeArguments, type Pipeable } from "effect/Pipeable";
-import { SingleShotGen } from "effect/Utils";
+import type { Pipeable } from "effect/Pipeable";
+import { AdoptPolicy } from "./AdoptPolicy.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
@@ -38,6 +39,26 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   ): Effect.Effect<R, never, PropsReq | Req>;
 };
 
+export interface ResourceClassLike<R extends ResourceLike> {
+  Type: R["Type"];
+  Props: R["Props"];
+  Self: Self<R>;
+  Provider: Provider<R>;
+}
+
+export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
+  R,
+  R["Providers"] extends undefined ? Provider<R> : R["Providers"]
+> &
+  Effect.Effect<ResourceConstructor<R>> & {
+    Self: Self<R>;
+    Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
+  };
+
 export type ResourceClassWithMethods<
   R extends ResourceLike,
   Methods extends { [key: string]: any },
@@ -53,19 +74,6 @@ export type ResourceClassWithMethods<
       options?: { stage?: string; stack?: string },
     ): Effect.Effect<R>;
   } & Methods;
-
-export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
-  R,
-  R["Providers"] extends undefined ? Provider<R> : R["Providers"]
-> &
-  Effect.Effect<ResourceConstructor<R>> & {
-    Self: Self<R>;
-    Provider: Provider<R>;
-    ref(
-      id: string,
-      options?: { stage?: string; stack?: string },
-    ): Effect.Effect<R>;
-  };
 
 export type LogicalId = string;
 
@@ -106,6 +114,12 @@ export interface ResourceLike<
    * Removal Policy of the Resource.
    */
   RemovalPolicy: RemovalPolicy["Service"];
+  /**
+   * Per-resource adoption policy captured from the ambient {@link AdoptPolicy}
+   * at registration time (e.g. via `.pipe(adopt(true))`). `undefined` means no
+   * resource-scoped override — the planner falls back to the stack/CLI default.
+   */
+  Adopt: boolean | undefined;
   /** @internal phantom */
   Attributes: Attributes;
   /** @internal phantom */
@@ -126,7 +140,7 @@ export type Resource<
   Providers = undefined,
 > = Pipeable &
   ResourceLike<Type, Props, Attributes, Binding, Providers> & {
-    bind(sid: string, binding: Input<Binding>): Effect.Effect<void>;
+    bind(sid: Input<string>, binding: Input<Binding>): Effect.Effect<void>;
     bind(
       template: TemplateStringsArray,
       ...args: any[]
@@ -134,6 +148,20 @@ export type Resource<
   } & {
     [attr in keyof Attributes]-?: Output.Output<Attributes[attr], never>;
   };
+
+export interface ResourceOptions {
+  /**
+   * Default removal policy for this resource type when the caller has not
+   * explicitly provided one via `RemovalPolicy` / `destroy()` / `retain()`.
+   *
+   * Useful for resources that wrap unrecoverable real-world identifiers
+   * (DNS zones, customer accounts, etc.) where the safe default is to
+   * leave the cloud object alone on stack destroy.
+   *
+   * @default "destroy"
+   */
+  defaultRemovalPolicy?: RemovalPolicy["Service"];
+}
 
 /**
  * Creates a resource constructor for a concrete resource type.
@@ -145,7 +173,9 @@ export type Resource<
  */
 export function Resource<R extends ResourceLike>(
   type: R["Type"],
+  options?: ResourceOptions,
 ): ResourceClass<R> {
+  const defaultRemovalPolicy = options?.defaultRemovalPolicy ?? "destroy";
   type Props = Input<R["Props"]>;
   const self = Self<R>(type);
   const constructor = (
@@ -228,7 +258,10 @@ export function Resource<R extends ResourceLike>(
         Props: props,
         Provider: ProviderTag as Provider<any>,
         RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
-          Effect.map(Option.getOrElse(() => "destroy" as const)),
+          Effect.map(Option.getOrElse(() => defaultRemovalPolicy)),
+        ),
+        Adopt: yield* Effect.serviceOption(AdoptPolicy).pipe(
+          Effect.map(Option.getOrUndefined),
         ),
         bind,
         toString(this: typeof target) {
@@ -261,17 +294,6 @@ export function Resource<R extends ResourceLike>(
   const ProviderTag = Provider(type);
 
   const Service = {
-    [Symbol.iterator]() {
-      return new SingleShotGen(this.asEffect());
-    },
-    pipe() {
-      return pipeArguments(this, arguments);
-    },
-    asEffect() {
-      return Effect.succeed((id: string, props: R["Props"]) =>
-        constructor(id, props),
-      );
-    },
     /**
      * Build a typed reference to a deployed instance of this resource
      * — in the current stack/stage by default, or in another via
@@ -285,6 +307,7 @@ export function Resource<R extends ResourceLike>(
       options?: { stage?: string; stack?: string },
     ): Effect.Effect<R> =>
       Effect.succeed(Output.of(makeRef<R>(id, options)) as unknown as R),
+
     Type: type,
     Provider: ProviderTag,
     Self: self,
@@ -296,6 +319,16 @@ export function Resource<R extends ResourceLike>(
         ? Object.assign(ResourceClass, args[0])
         : constructor(...(args as [string, R["Props"]])),
     Service,
+    // Make the constructor itself a real Effect: `yield* MyResource` resolves
+    // to the constructor function (same as the old `asEffect()`), and
+    // `Effect.isEffect(MyResource)` is now true so `Effect.all`/`forEach` work.
+    Effectable.Prototype({
+      label: `Resource<${type}>`,
+      evaluate: () =>
+        Effect.succeed((id: string, props: R["Props"]) =>
+          constructor(id, props),
+        ),
+    }),
   ) as any;
 
   return ResourceClass;

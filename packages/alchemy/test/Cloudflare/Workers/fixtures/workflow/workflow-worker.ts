@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -7,9 +7,7 @@ import TestWorkflow from "./test-workflow.ts";
 export default class WorkflowTestWorker extends Cloudflare.Worker<WorkflowTestWorker>()(
   "WorkflowTestWorker",
   {
-    main: import.meta.filename,
-    subdomain: { enabled: true, previewsEnabled: false },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const workflow = yield* TestWorkflow;

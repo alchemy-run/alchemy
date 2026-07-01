@@ -32,9 +32,8 @@ export interface AssetReadResult {
   hash: string;
 }
 
-export interface AssetsProps {
+export interface AssetsProps extends AssetsConfig {
   directory: string;
-  config?: AssetsConfig;
 }
 
 export type ValidationError =
@@ -87,7 +86,7 @@ const getContentType = (name: string) => {
   return "application/octet-stream";
 };
 
-const maybeReadString = Effect.fnUntraced(function* (file: string) {
+const maybeReadString = Effect.fn(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
@@ -103,10 +102,13 @@ const createIgnoreMatcher = (patterns: string[]) => {
   return (file: string) => matcher.ignores(file);
 };
 
-export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
+export const readAssets = Effect.fn(function* ({
+  directory,
+  ...config
+}: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const resolvedDirectory = path.resolve(props.directory);
+  const resolvedDirectory = path.resolve(directory);
   const [files, ignore, _headers, _redirects] = yield* Effect.all([
     fs.readDirectory(resolvedDirectory, { recursive: true }),
     maybeReadString(path.join(resolvedDirectory, ".assetsignore")),
@@ -126,7 +128,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
   let count = 0;
   yield* Effect.forEach(
     files,
-    Effect.fnUntraced(function* (name) {
+    Effect.fn(function* (name) {
       if (ignores(name)) {
         return;
       }
@@ -151,7 +153,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
       if (count > MAX_ASSET_COUNT) {
         return yield* new TooManyAssetsError({
           message: `Too many assets (the maximum count is ${MAX_ASSET_COUNT}; this directory has ${count} assets)`,
-          directory: props.directory,
+          directory,
           count,
         });
       }
@@ -176,14 +178,14 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
   // causes both unnecessary re-uploads and `NotFound` failures when
   // the previously-recorded path is gone.
   const hash = yield* sha256Object({
-    config: props.config,
+    config,
     manifest: sortedManifest,
     _headers,
     _redirects,
   });
   return {
-    directory: props.directory,
-    config: props.config,
+    directory,
+    config,
     manifest: sortedManifest,
     _headers,
     _redirects,
@@ -191,7 +193,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
   };
 });
 
-export const uploadAssets = Effect.fnUntraced(function* (
+export const uploadAssets = Effect.fn(function* (
   accountId: string,
   workerName: string,
   assets: AssetReadResult,
@@ -226,11 +228,11 @@ export const uploadAssets = Effect.fnUntraced(function* (
   const directory = path.resolve(assets.directory);
   yield* Effect.forEach(
     session.buckets,
-    Effect.fnUntraced(function* (bucket) {
+    Effect.fn(function* (bucket) {
       const body: Record<string, File> = {};
       yield* Effect.forEach(
         bucket,
-        Effect.fnUntraced(function* (hash) {
+        Effect.fn(function* (hash) {
           const name = assetsByHash.get(hash);
           if (!name) {
             return yield* new AssetNotFoundError({

@@ -7,14 +7,16 @@ import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Layer from "effect/Layer";
 import DynamoDBStreamFunctionLive, {
   DynamoDBStreamFunction,
   TableAndQueue,
+  TableAndQueueLive,
 } from "./stream-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-describe.sequential("AWS.DynamoDB.Stream", () => {
+describe.skipIf(!!process.env.FAST).sequential("AWS.DynamoDB.Stream", () => {
   test.provider(
     "processes real DynamoDB stream records through Lambda",
     (stack) =>
@@ -32,7 +34,11 @@ describe.sequential("AWS.DynamoDB.Stream", () => {
             const func = yield* DynamoDBStreamFunction;
 
             return { table, queue, streamFunction: func };
-          }).pipe(Effect.provide(DynamoDBStreamFunctionLive)),
+          }).pipe(
+            Effect.provide(
+              Layer.mergeAll(DynamoDBStreamFunctionLive, TableAndQueueLive),
+            ),
+          ),
         );
 
         const streamState = yield* waitForTableStreamSpecification(

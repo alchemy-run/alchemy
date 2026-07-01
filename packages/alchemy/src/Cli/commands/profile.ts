@@ -7,7 +7,7 @@ import { Command } from "effect/unstable/cli";
 
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
-import { Profile, withProfileOverride } from "../../Auth/Profile.ts";
+import { AlchemyProfile, withProfileOverride } from "../../Auth/Profile.ts";
 import { AwsAuth } from "../../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
@@ -30,8 +30,8 @@ const showCommand = Command.make(
   instrumentCommand("profile.show", (a: { profile: string }) => ({
     "alchemy.profile": a.profile,
   }))(
-    Effect.fnUntraced(function* ({ profile, envFile }) {
-      const profiles = yield* Profile;
+    Effect.fn(function* ({ profile, envFile }) {
+      const profiles = yield* AlchemyProfile;
       const stored = yield* profiles.getProfile(profile);
       if (stored == null) {
         const config = yield* profiles.readConfig;
@@ -81,8 +81,8 @@ const clearCommand = Command.make(
   instrumentCommand("profile.clear", (a: { profile: string }) => ({
     "alchemy.profile": a.profile,
   }))(
-    Effect.fnUntraced(function* ({ profile }) {
-      const profiles = yield* Profile;
+    Effect.fn(function* ({ profile }) {
+      const profiles = yield* AlchemyProfile;
       const store = yield* CredentialsStore;
       const removed = yield* profiles.deleteProfile(profile);
       yield* store.deleteProfile(profile);

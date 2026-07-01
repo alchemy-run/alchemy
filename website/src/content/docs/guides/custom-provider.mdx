@@ -270,7 +270,7 @@ For the Stripe product, the SDK gives us `retrieve`, `create`, and
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
 -  reconcile: () => Effect.die("not implemented"),
-+  reconcile: Effect.fnUntraced(function* ({ news, output }) {
++  reconcile: Effect.fn(function* ({ news, output }) {
 +    // Observe — fetch live state if we have a cached id.
 +    let product = output?.productId
 +      ? yield* Effect.tryPromise(() =>
@@ -334,9 +334,9 @@ being written. Catch "not found" errors and return `Effect.void`.
 
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
-   reconcile: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
+   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
 -  delete: () => Effect.die("not implemented"),
-+  delete: Effect.fnUntraced(function* ({ output }) {
++  delete: Effect.fn(function* ({ output }) {
 +    yield* Effect.tryPromise(() =>
 +      stripe.products.del(output.productId),
 +    ).pipe(
@@ -379,15 +379,15 @@ path when you can't decide.
 // ...
 
 return StripeProduct.Provider.of({
-+  diff: Effect.fnUntraced(function* ({ news, olds }) {
++  diff: Effect.fn(function* ({ news, olds }) {
 +    if (!isResolved(news)) return undefined;
 +    if (news.description !== olds.description) {
 +      return { action: "replace" } as const;
 +    }
 +    return undefined;
 +  }),
-   reconcile: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
-   delete: Effect.fnUntraced(function* ({ output }) { /* ... */ }),
+   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
+   delete: Effect.fn(function* ({ output }) { /* ... */ }),
  });
 ```
 
@@ -398,7 +398,7 @@ the Stripe `productId`, an ARN), declare them in
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
 +  stables: ["productId"],
-   diff: Effect.fnUntraced(function* ({ news, olds }) { /* ... */ }),
+   diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
    // ...
  });
 ```
@@ -413,8 +413,8 @@ Alchemy the resource doesn't exist and should be created.
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
    stables: ["productId"],
-   diff: Effect.fnUntraced(function* ({ news, olds }) { /* ... */ }),
-+  read: Effect.fnUntraced(function* ({ output }) {
+   diff: Effect.fn(function* ({ news, olds }) { /* ... */ }),
++  read: Effect.fn(function* ({ output }) {
 +    if (!output?.productId) return undefined;
 +    const product = yield* Effect.tryPromise(() =>
 +      stripe.products.retrieve(output.productId),
@@ -424,8 +424,8 @@ return StripeProduct.Provider.of({
 +    if (!product) return undefined;
 +    return { productId: product.id, created: product.created };
 +  }),
-   reconcile: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
-   delete: Effect.fnUntraced(function* ({ output }) { /* ... */ }),
+   reconcile: Effect.fn(function* ({ news, output }) { /* ... */ }),
+   delete: Effect.fn(function* ({ output }) { /* ... */ }),
  });
 ```
 
@@ -441,7 +441,7 @@ belong to someone else:
 ```typescript
 import { Unowned } from "alchemy/AdoptPolicy";
 
-read: Effect.fnUntraced(function* ({ id, olds }) {
+read: Effect.fn(function* ({ id, olds }) {
   const live = yield* lookupByName(olds.name);
   if (!live) return undefined;
   const attrs = { productId: live.id, created: live.created };
@@ -588,7 +588,7 @@ non-interactive default (almost always `{ method: "env" }`).
 +    ),
 +  );
 +
-+const loginStored = Effect.fnUntraced(function* (profileName: string) {
++const loginStored = Effect.fn(function* (profileName: string) {
 +  const apiKey = yield* Clank.password({
 +    message: "Stripe API Key",
 +    validate: (v) =>
