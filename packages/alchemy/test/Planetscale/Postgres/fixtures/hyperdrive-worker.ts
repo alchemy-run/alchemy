@@ -18,7 +18,7 @@ import { relations, Widgets } from "./schema.ts";
 export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker>()(
   "PlanetscaleHyperdriveWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);

@@ -315,7 +315,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  *
  * export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
  *   "WorkerA",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  * ) {}
  *
  * export default WorkerA.make(
@@ -328,7 +328,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * // consumer worker (binds via .from)
  * export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
  *   "WorkerB",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const counters = yield* Counter.from(WorkerA);
  *     return {
@@ -351,7 +351,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * ```typescript
  * export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
  *   "WorkerC",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  * ) {}
  *
  * export default WorkerC.make(

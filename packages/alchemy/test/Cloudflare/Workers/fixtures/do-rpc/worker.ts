@@ -8,7 +8,7 @@ import { WorkerEnvironmentKVObject } from "./object.ts";
 export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Worker<DurableObjectWorkerEnvironmentWorker>()(
   "DurableObjectWorkerEnvironmentWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const objects = yield* WorkerEnvironmentKVObject;

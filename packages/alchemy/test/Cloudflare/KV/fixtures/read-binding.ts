@@ -8,7 +8,7 @@ import { readRoutes } from "./read-routes.ts";
 /** Read-only access via the native Worker binding (`ReadNamespaceBinding`). */
 export default class KVReadBindingWorker extends Cloudflare.Worker<KVReadBindingWorker>()(
   "KVReadBindingWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const namespace = yield* TestNamespace;
     const kv = yield* Cloudflare.KV.ReadNamespace(namespace);

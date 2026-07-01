@@ -89,7 +89,7 @@ export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
  * {@link main} and bakes it in as the container's entrypoint.
  */
 export interface EffectfulContainerProps extends ContainerApplicationProps {
-  /** Entrypoint file for the Effect program, typically `import.meta.filename`. */
+  /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
 }
 /**
@@ -193,7 +193,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```typescript
  * // src/Sandbox.runtime.ts — props are the first argument to `.make()`
  * export default Sandbox.make(
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const cp = yield* ChildProcessSpawner;
  *
@@ -241,7 +241,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * >()("Sandbox") {}
  *
  * export default Sandbox.make(
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     return Sandbox.of({
  *       ping: () => Effect.succeed("pong"),
@@ -304,7 +304,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```typescript
  * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
- *     main: import.meta.filename,
+ *     main: import.meta.url,
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
  *   })),

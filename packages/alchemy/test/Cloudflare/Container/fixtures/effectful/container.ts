@@ -18,7 +18,7 @@ export class MyContainer extends Cloudflare.Container<
 
 export default MyContainer.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     dockerfile: "FROM oven/bun:latest",
   },
   Effect.gen(function* () {

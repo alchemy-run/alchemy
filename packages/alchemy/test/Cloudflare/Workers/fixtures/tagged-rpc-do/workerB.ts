@@ -13,7 +13,7 @@ import { WorkerA } from "./workerA.ts";
 export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
   "WorkerB",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counter = yield* Counter.from(WorkerA);

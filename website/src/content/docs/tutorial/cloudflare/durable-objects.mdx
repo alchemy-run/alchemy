@@ -118,7 +118,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
 +    const counters = yield* Counter;
 
@@ -150,7 +150,7 @@ import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;
 
@@ -282,7 +282,7 @@ import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;
 

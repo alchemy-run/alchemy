@@ -136,7 +136,7 @@ export interface BrowserClient {
  *
  * Cloudflare.Worker(
  *   "BrowserWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const browser = yield* Cloudflare.Browser("BROWSER");
  *

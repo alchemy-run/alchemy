@@ -21,7 +21,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>()(
   "EnvEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     env: {
       STR: "hello",
       NUM: 42,

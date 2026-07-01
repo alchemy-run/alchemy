@@ -7,7 +7,7 @@ import { RemoteContainerObject } from "./object.ts";
 export default class RemoteContainerWorker extends Cloudflare.Worker<RemoteContainerWorker>()(
   "RemoteContainerWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const objects = yield* RemoteContainerObject;

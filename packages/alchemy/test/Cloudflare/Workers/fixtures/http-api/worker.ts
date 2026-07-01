@@ -27,7 +27,7 @@ const Bucket = Cloudflare.R2.Bucket("Tasks");
 export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWorker>()(
   "HttpApiTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2.ReadWriteBucket(Bucket);

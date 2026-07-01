@@ -37,7 +37,7 @@ export const TableAndQueueLive = Layer.effect(
 
 export default DynamoDBStreamFunction.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const { table, queue } = yield* TableAndQueue;

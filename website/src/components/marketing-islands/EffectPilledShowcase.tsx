@@ -88,7 +88,7 @@ const CONTAINER_CODE = `export class Sandbox extends Cloudflare.Container<Sandbo
 
 export const SandboxLive = Sandbox.make(
   Stack.useSync((stack) => ({
-    main: import.meta.filename,
+    main: import.meta.url,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
   })),
   Effect.gen(function* () {

@@ -508,7 +508,7 @@ export type SearchInstance = Resource<
  *
  * export default class Api extends Cloudflare.Worker<Api>()(
  *   "api",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const bucket = yield* Cloudflare.R2.Bucket("docs", {});
  *     const instance = yield* Cloudflare.AI.SearchInstance("docs-search", {

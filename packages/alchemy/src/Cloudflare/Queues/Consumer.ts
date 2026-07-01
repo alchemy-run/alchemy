@@ -98,7 +98,7 @@ export type Consumer = Resource<
  *
  * yield* Cloudflare.Queues.Consumer("MyConsumer", {
  *   queueId: queue.queueId,
- *   scriptName: "my-worker",
+ *   scriptName: worker.workerName,
  * });
  * ```
  *
@@ -106,7 +106,7 @@ export type Consumer = Resource<
  * ```typescript
  * yield* Cloudflare.Queues.Consumer("MyConsumer", {
  *   queueId: queue.queueId,
- *   scriptName: "my-worker",
+ *   scriptName: worker.workerName,
  *   settings: {
  *     batchSize: 50,
  *     maxRetries: 5,

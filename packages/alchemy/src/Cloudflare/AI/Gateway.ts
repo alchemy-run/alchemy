@@ -360,7 +360,7 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  *
  * export default class Api extends Cloudflare.Worker<Api>()(
  *   "Api",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
  *

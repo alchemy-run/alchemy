@@ -21,6 +21,7 @@ import { isQueue } from "../Queues/Queue.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
+import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
@@ -206,6 +207,12 @@ const toBinding = (
       type: "queue",
       name: bindingName,
       queueName: binding.queueName,
+    };
+  } else if (isDispatchNamespace(binding)) {
+    return {
+      type: "dispatch_namespace",
+      name: bindingName,
+      namespace: binding.name,
     };
   } else if (isAiGateway(binding)) {
     return {

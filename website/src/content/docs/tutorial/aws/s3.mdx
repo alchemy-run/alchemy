@@ -30,7 +30,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
   Stack.useSync((stack) => ({
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
     memory: stack.stage === "prod" ? 1024 : 512,
   })),

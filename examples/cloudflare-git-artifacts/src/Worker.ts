@@ -29,7 +29,7 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     observability: { enabled: true },
     compatibility: {
       flags: ["nodejs_compat"],

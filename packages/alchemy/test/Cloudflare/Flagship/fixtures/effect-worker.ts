@@ -13,7 +13,7 @@ import { App } from "./app.ts";
 export default class FlagshipEffectWorker extends Cloudflare.Worker<FlagshipEffectWorker>()(
   "FlagshipEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const flags = yield* Cloudflare.Flagship.ReadFlags(App);

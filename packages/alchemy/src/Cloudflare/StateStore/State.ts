@@ -153,8 +153,9 @@ export const state = () =>
         if (credentials) {
           return yield* ensureLatest(credentials);
         }
-        const workerExists = yield* isStateStoreAvailable(scriptName);
-        if (workerExists) {
+        const { accountId } =
+          yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+        if (yield* isStateStoreServing(accountId)) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false),
           );
@@ -233,9 +234,9 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         ),
       );
     }
-
-    const workerExists = yield* isStateStoreAvailable(scriptName);
-    if (workerExists) {
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    if (yield* isStateStoreServing(accountId)) {
       // this is a regular update, let's check if it needs an update and refresh credentials
       if (!force) {
         yield* Clank.info(
@@ -283,7 +284,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         return httpState;
       }
     } else {
-      // fresh deploy - deploy from local for the first time
       yield* Clank.info(`Deploying Cloudflare State Store '${scriptName}'...`);
       return yield* deployWithLocalState({
         scriptName,
@@ -617,6 +617,26 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
       Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
       Effect.catchTag("InvalidRoute", () => Effect.succeed(false)),
     );
+  });
+
+/**
+ * Does this account have a *functioning* state-store worker,
+ * verified by checking the /version endpoint
+ *
+ */
+const isStateStoreServing = (accountId: string) =>
+  Effect.gen(function* () {
+    const url = yield* workers.getSubdomain({ accountId }).pipe(
+      Effect.map(({ subdomain }) =>
+        subdomain
+          ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`
+          : undefined,
+      ),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (url === undefined) return false;
+    const { observed } = yield* checkStateStoreVersion(url);
+    return observed !== undefined;
   });
 
 const makeCloudflareStateStore = Effect.fn(function* ({

@@ -15,7 +15,7 @@ let counter = 0;
 export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWorker>()(
   "RpcHttpTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const rpcDO = yield* RpcHttpTestObject;

@@ -467,6 +467,7 @@ export const LocalWorkerProvider = () =>
         return {
           workerId: config.name,
           workerName: config.name,
+          namespace: undefined,
           logpush: undefined,
           url,
           tags: [],
@@ -538,6 +539,7 @@ export const LocalWorkerProvider = () =>
           return {
             workerId: name,
             workerName: name,
+            namespace: undefined,
             logpush: undefined,
             url,
             tags: [],
@@ -567,6 +569,7 @@ export const LocalWorkerProvider = () =>
             return {
               workerId: name,
               workerName: name,
+              namespace: undefined,
               logpush: undefined,
               url: news.dev.url,
               tags: [],

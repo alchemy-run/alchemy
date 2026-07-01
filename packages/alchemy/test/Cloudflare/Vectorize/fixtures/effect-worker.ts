@@ -21,7 +21,7 @@ const LABEL = "effect";
 export default class VectorizeEffectWorker extends Cloudflare.Worker<VectorizeEffectWorker>()(
   "VectorizeEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const index = yield* TestIndex;

@@ -8,7 +8,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Write-only access via a scoped HTTP API token (`WriteBucketHttp`). */
 export default class R2WriteHttpWorker extends Cloudflare.Worker<R2WriteHttpWorker>()(
   "R2WriteHttpWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* TestBucket;
     const r2 = yield* Cloudflare.R2.WriteBucket(bucket);

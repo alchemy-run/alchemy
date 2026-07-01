@@ -94,7 +94,7 @@ import * as Effect from "effect/Effect";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     return {};
   }),
@@ -126,7 +126,7 @@ export const Tasks = Cloudflare.R2.Bucket("Tasks");
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
 +   const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
@@ -229,7 +229,7 @@ import { TaskRpcs } from "./rpcs.ts";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
@@ -478,7 +478,7 @@ whole Worker — the R2-backed handlers are unchanged, the new
 // src/worker.ts
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
     const tasksDO = yield* TasksObject;
@@ -577,7 +577,7 @@ import { TaskRpcs } from "./rpcs.ts";
 
 export default class Worker extends Cloudflare.RpcWorker<Worker>()(
   "Worker",
-  { main: import.meta.filename, schema: TaskRpcs },
+  { main: import.meta.url, schema: TaskRpcs },
   Effect.gen(function* () {
     const handlers = TaskRpcs.toLayer({ getTask: /* ... */ });
     return RpcServer.toHttpEffect(TaskRpcs).pipe(
@@ -615,7 +615,7 @@ the host's runtime:
 // Modular: class declaration carries no impl.
 export class TaskWorker extends Cloudflare.RpcWorker<TaskWorker>()(
   "TaskWorker",
-  { main: import.meta.filename, schema: TaskRpcs },
+  { main: import.meta.url, schema: TaskRpcs },
 ) {}
 
 // Runtime lives in a separate Layer — only the host script imports it.

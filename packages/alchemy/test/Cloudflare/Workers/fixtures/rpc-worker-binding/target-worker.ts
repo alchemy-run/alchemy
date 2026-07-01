@@ -13,7 +13,7 @@ import { TargetRpcs } from "./group.ts";
  */
 export default class BindingTargetRpcWorker extends Cloudflare.RpcWorker<BindingTargetRpcWorker>()(
   "BindingTargetRpcWorker",
-  { main: import.meta.filename, schema: TargetRpcs },
+  { main: import.meta.url, schema: TargetRpcs },
   Effect.gen(function* () {
     const handlers = TargetRpcs.toLayer({
       Greet: ({ name }) => Effect.succeed({ greeting: `hello ${name}` }),

@@ -17,7 +17,7 @@ const byteLength = <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
 export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffectWorker>()(
   "BrowserEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const browser = yield* Cloudflare.Browser("BROWSER");
