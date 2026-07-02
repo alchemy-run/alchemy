@@ -124,6 +124,18 @@ export const isZoneTransferOutgoing = (
 
 export const ZoneTransferOutgoingProvider = () =>
   Provider.succeed(ZoneTransferOutgoing, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          // token: CATALOG GAP — no Secondary DNS permission group exists in
+          // the static PERMISSION_GROUPS catalog yet; "Zone Read" is
+          // additionally required by list's zone fan-out
+        },
+      },
+    },
+
     stables: ["zoneId", "id", "createdTime"],
 
     list: Effect.fn(function* () {

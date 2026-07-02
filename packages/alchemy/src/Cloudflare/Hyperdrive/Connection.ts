@@ -165,6 +165,30 @@ export const isHyperdriveConnection = (value: unknown): value is Connection =>
 
 export const ConnectionProvider = () =>
   Provider.succeed(Connection, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["query_cache:write"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "721b2f51fba74871bd361de65aeb7e03",
+                name: "Hyperdrive Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "4d62ccf834df44808bc9283d65c4e4e9",
+                name: "Hyperdrive Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     // The `hyperdriveId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
     stables: ["accountId"],
     list: Effect.fn(function* () {

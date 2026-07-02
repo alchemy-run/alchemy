@@ -329,6 +329,40 @@ export const LaunchTemplateProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateLaunchTemplate",
+                "ec2:CreateLaunchTemplateVersion",
+                "ec2:ModifyLaunchTemplate",
+                "ec2:DeleteLaunchTemplate",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                // hosted mode (props.main set): managed instance role/profile
+                "iam:CreateRole",
+                "iam:GetRole",
+                "iam:ListAttachedRolePolicies",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:CreateInstanceProfile",
+                "iam:GetInstanceProfile",
+                "iam:AddRoleToInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:DeleteInstanceProfile",
+                "iam:DeleteRole",
+                // hosted mode: bundle assets in the shared Assets bucket
+                "s3:PutObject",
+                "s3:DeleteObject",
+              ],
+              readActions: ["ec2:DescribeLaunchTemplates"],
+              notes:
+                "All iam:* and s3:* actions apply only in hosted mode (props.main set), where the provider manages an instance role + instance profile and uploads the bundled program to the shared Assets S3 bucket (s3:CopyObject is covered by s3:PutObject on the destination + s3:GetObject on the source key). The launch-template data embeds an IamInstanceProfile, so consumers launching instances from it (ASG, RunInstances) need iam:PassRole on the managed role.",
+            },
+          },
+        },
         stables: [
           "launchTemplateId",
           "launchTemplateArn",

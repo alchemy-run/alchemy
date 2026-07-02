@@ -1,7 +1,12 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
-import { Node, Project, type SourceFile } from "ts-morph";
+import {
+  Node,
+  type ObjectLiteralExpression,
+  Project,
+  type SourceFile,
+} from "ts-morph";
 
 const websiteRoot = path.join(import.meta.dir, "../website");
 
@@ -32,6 +37,8 @@ interface PageDoc {
   relativePath: string;
   summary: string;
   sections: ExampleSection[];
+  /** Rendered "Required permissions" markdown (from provider `metadata`). */
+  permissions?: string;
 }
 
 const normalizeSlashes = (value: string) => value.split(path.sep).join("/");
@@ -319,6 +326,264 @@ function findTaggedPrimary(sourceFile: SourceFile): Primary | undefined {
   return undefined;
 }
 
+// ---------------------------------------------------------------------------
+// Required permissions — statically extracted from the provider's `metadata`
+// declaration (see AlchemyProviderMetadata in packages/alchemy/src/Provider.ts).
+// ---------------------------------------------------------------------------
+
+/** The cloud keys `AlchemyProviderMetadata` is augmented with. */
+const METADATA_CLOUD_KEYS = new Set(["aws", "cloudflare"]);
+
+interface ParsedPermissionGroup {
+  id?: string;
+  name?: string;
+}
+
+interface ParsedProviderMetadata {
+  aws?: {
+    iam?: { actions?: string[]; readActions?: string[]; notes?: string };
+  };
+  cloudflare?: {
+    scope?: string;
+    auth?: {
+      oauth?: { supported?: boolean; scopes?: string[]; readScopes?: string[] };
+      token?: {
+        permissionGroups?: ParsedPermissionGroup[];
+        readPermissionGroups?: ParsedPermissionGroup[];
+      };
+    };
+  };
+}
+
+/**
+ * Statically evaluate a plain-literal expression into data. Provider metadata
+ * is documented as "plain literals — no `Output`s, Effects, or environment
+ * reads", so anything else throws (and the resource is reported, not guessed).
+ */
+function literalToData(node: Node): unknown {
+  if (
+    Node.isParenthesizedExpression(node) ||
+    Node.isAsExpression(node) ||
+    Node.isSatisfiesExpression(node)
+  ) {
+    return literalToData(node.getExpression());
+  }
+  if (Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)) {
+    return node.getLiteralValue();
+  }
+  if (Node.isNumericLiteral(node)) return node.getLiteralValue();
+  if (Node.isTrueLiteral(node)) return true;
+  if (Node.isFalseLiteral(node)) return false;
+  if (Node.isNullLiteral(node)) return null;
+  if (Node.isArrayLiteralExpression(node)) {
+    return node.getElements().map(literalToData);
+  }
+  if (Node.isObjectLiteralExpression(node)) {
+    const out: Record<string, unknown> = {};
+    for (const prop of node.getProperties()) {
+      if (!Node.isPropertyAssignment(prop)) {
+        throw new Error(`non-literal property: ${prop.getText().slice(0, 60)}`);
+      }
+      const key = prop.getName().replace(/^["']|["']$/g, "");
+      out[key] = literalToData(prop.getInitializerOrThrow());
+    }
+    return out;
+  }
+  throw new Error(`non-literal expression: ${node.getText().slice(0, 60)}`);
+}
+
+/**
+ * Find `metadata: { ... }` object literals that look like provider metadata:
+ * a `metadata` property whose object-literal value has only cloud keys
+ * (`aws` / `cloudflare`) — or is empty (`metadata: {}` = local-only). The key
+ * filter rejects the many other `metadata:` properties in provider code
+ * (Worker script metadata, Kubernetes object metadata, …).
+ */
+function findMetadataCandidates(
+  sourceFile: SourceFile,
+): ObjectLiteralExpression[] {
+  const results: ObjectLiteralExpression[] = [];
+  sourceFile.forEachDescendant((node) => {
+    if (!Node.isPropertyAssignment(node)) return;
+    if (node.getName() !== "metadata") return;
+    const init = node.getInitializer();
+    if (!init || !Node.isObjectLiteralExpression(init)) return;
+    const names = init.getProperties().map((p) =>
+      Node.isPropertyAssignment(p) || Node.isShorthandPropertyAssignment(p)
+        ? p.getName().replace(/^["']|["']$/g, "")
+        : undefined,
+    );
+    if (names.some((n) => n === undefined || !METADATA_CLOUD_KEYS.has(n))) {
+      return;
+    }
+    results.push(init);
+  });
+  return results;
+}
+
+/**
+ * True when the metadata literal sits inside the provider registration for
+ * `resourceName` — `Provider.succeed(Name, {...})` or `Name.Provider.of({...})`.
+ * Used to attribute metadata found in a sibling `*Provider.ts` file.
+ */
+function belongsToProvider(
+  meta: ObjectLiteralExpression,
+  resourceName: string,
+): boolean {
+  let current: Node | undefined = meta;
+  while (current) {
+    if (Node.isCallExpression(current)) {
+      const callee = current.getExpression().getText();
+      if (callee === `${resourceName}.Provider.of`) return true;
+      if (callee === "Provider.succeed" || callee.endsWith(".Provider.succeed")) {
+        if (current.getArguments()[0]?.getText() === resourceName) return true;
+      }
+    }
+    current = current.getParent();
+  }
+  return false;
+}
+
+/**
+ * Locate the provider `metadata` declaration for a resource: first in the
+ * resource's own file, then in sibling `*Provider.ts` files (e.g.
+ * Workers/Worker.ts's provider lives in Workers/WorkerProvider.ts). Returns
+ * the rendered section, or undefined for local-only (`metadata: {}`) and
+ * un-annotated providers. Parse failures are pushed onto `issues`.
+ */
+async function extractPermissionsSection(
+  project: Project,
+  sourceFile: SourceFile,
+  entry: FileEntry,
+  resourceName: string,
+  issues: string[],
+): Promise<string | undefined> {
+  const candidates = findMetadataCandidates(sourceFile);
+
+  if (candidates.length === 0) {
+    const dir = path.dirname(entry.absolutePath);
+    let siblings: string[] = [];
+    try {
+      siblings = await fs.readdir(dir);
+    } catch {
+      // ignore
+    }
+    for (const sibling of siblings) {
+      if (!sibling.endsWith("Provider.ts")) continue;
+      const siblingPath = path.join(dir, sibling);
+      if (siblingPath === entry.absolutePath) continue;
+      const siblingFile = project.getSourceFile(siblingPath);
+      if (!siblingFile) continue;
+      candidates.push(
+        ...findMetadataCandidates(siblingFile).filter((c) =>
+          belongsToProvider(c, resourceName),
+        ),
+      );
+    }
+  }
+
+  if (candidates.length === 0) return undefined;
+
+  // Prefer the cloud provider's metadata over a local provider's `metadata: {}`.
+  const nonEmpty = candidates.filter((c) => c.getProperties().length > 0);
+  if (nonEmpty.length === 0) return undefined; // local-only
+  let pick = nonEmpty;
+  if (pick.length > 1) {
+    const owned = pick.filter((c) => belongsToProvider(c, resourceName));
+    if (owned.length > 0) pick = owned;
+    if (pick.length > 1) {
+      console.warn(
+        `  multiple metadata declarations for ${resourceName} (${entry.relativePath}); using the first`,
+      );
+    }
+  }
+
+  try {
+    const meta = literalToData(pick[0]) as ParsedProviderMetadata;
+    return renderPermissionsSection(meta);
+  } catch (error) {
+    issues.push(
+      `${entry.relativePath} (${resourceName}): ${(error as Error).message}`,
+    );
+    return undefined;
+  }
+}
+
+const inlineCodes = (values: string[]) =>
+  values.map((v) => `\`${v}\``).join(", ");
+
+const permissionGroupItem = (pg: ParsedPermissionGroup) =>
+  `- ${pg.name ?? "Unknown"} (\`${pg.id ?? "?"}\`)`;
+
+function renderPermissionsSection(
+  meta: ParsedProviderMetadata,
+): string | undefined {
+  const parts: string[] = [];
+
+  const cf = meta.cloudflare;
+  if (cf) {
+    if (cf.scope) {
+      parts.push(`Scope: **${cf.scope}**`);
+    }
+    const oauth = cf.auth?.oauth;
+    if (oauth) {
+      if (oauth.supported === false) {
+        parts.push(
+          "**OAuth:** not manageable via OAuth user tokens — use an API token.",
+        );
+      } else if (oauth.scopes && oauth.scopes.length > 0) {
+        parts.push(`**OAuth scopes:** ${inlineCodes(oauth.scopes)}`);
+      }
+      if (oauth.readScopes && oauth.readScopes.length > 0) {
+        parts.push(
+          `**Plan-only (read) OAuth scopes:** ${inlineCodes(oauth.readScopes)}`,
+        );
+      }
+    }
+    const token = cf.auth?.token;
+    if (token?.permissionGroups && token.permissionGroups.length > 0) {
+      parts.push(
+        [
+          "**API token permission groups:**",
+          "",
+          ...token.permissionGroups.map(permissionGroupItem),
+        ].join("\n"),
+      );
+    }
+    if (token?.readPermissionGroups && token.readPermissionGroups.length > 0) {
+      parts.push(
+        [
+          "**Plan-only (read) permission groups:**",
+          "",
+          ...token.readPermissionGroups.map(permissionGroupItem),
+        ].join("\n"),
+      );
+    }
+  }
+
+  const iam = meta.aws?.iam;
+  if (iam) {
+    if (iam.actions && iam.actions.length > 0) {
+      parts.push(
+        ["**IAM actions:**", "", ...iam.actions.map((a) => `- \`${a}\``)].join(
+          "\n",
+        ),
+      );
+    }
+    if (iam.readActions && iam.readActions.length > 0) {
+      parts.push(
+        `**Plan-only (read) IAM actions:** ${inlineCodes(iam.readActions)}`,
+      );
+    }
+    if (iam.notes) {
+      parts.push(iam.notes);
+    }
+  }
+
+  if (parts.length === 0) return undefined;
+  return ["## Required permissions", ...parts].join("\n\n");
+}
+
 function yamlString(value: string): string {
   if (/[\n:"{}[\],&*?|>!%@`#]/.test(value) || value.trim() !== value) {
     return JSON.stringify(value);
@@ -351,6 +616,10 @@ function renderPageBody(doc: PageDoc): string {
       secParts.push(example.body);
     }
     parts.push(secParts.join("\n\n"));
+  }
+
+  if (doc.permissions) {
+    parts.push(doc.permissions);
   }
 
   return parts.join("\n\n");
@@ -492,6 +761,7 @@ async function main() {
 
   const seen = new Map<string, string>();
   const pageEntries: PageEntry[] = [];
+  const metadataIssues: string[] = [];
   let written = 0;
   let skipped = 0;
 
@@ -534,6 +804,13 @@ async function main() {
       relativePath: entry.relativePath,
       summary: primary.doc.summary,
       sections: primary.doc.sections,
+      permissions: await extractPermissionsSection(
+        project,
+        sourceFile,
+        entry,
+        primary.name,
+        metadataIssues,
+      ),
     };
 
     const outputPath = path.join(config.outRoot, outputRelative);
@@ -565,6 +842,15 @@ async function main() {
     `${JSON.stringify(sidebar, null, 2)}\n`,
     "utf8",
   );
+
+  if (metadataIssues.length > 0) {
+    console.warn(
+      `Provider metadata could not be statically parsed for ${metadataIssues.length} resource(s):`,
+    );
+    for (const issue of metadataIssues) {
+      console.warn(`  ${issue}`);
+    }
+  }
 
   console.log(
     `Done. Wrote ${written} resource pages (skipped ${skipped} untagged) to ${normalizeSlashes(

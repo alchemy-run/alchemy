@@ -114,6 +114,30 @@ export const isSettings = (value: unknown): value is Settings =>
 
 export const SettingsProvider = () =>
   Provider.succeed(Settings, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "f0235726de25444a84f704b7c93afadf",
+                name: "Domain API Gateway",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              {
+                id: "6ced5d0d69b1422396909a62c38ab41b",
+                name: "Domain API Gateway Read",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: [
       "zoneId",

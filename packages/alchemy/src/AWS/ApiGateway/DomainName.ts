@@ -76,6 +76,24 @@ export const DomainNameProvider = () =>
     DomainNameResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:PUT",
+                "apigateway:DELETE",
+                "apigateway:AddCertificateToDomain",
+                "apigateway:RemoveCertificateFromDomain",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createDomainName (POST), updateDomainName (PATCH), deleteDomainName (DELETE), tagResource (PUT) / untagResource (DELETE), get* reads (GET). apigateway:AddCertificateToDomain / RemoveCertificateFromDomain are permission-only actions evaluated when certificateArn/regionalCertificateArn is attached, changed, or removed. iam:CreateServiceLinkedRole (ops.apigateway.amazonaws.com) may fire on the account's first custom domain.",
+            },
+          },
+        },
         stables: ["domainName"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

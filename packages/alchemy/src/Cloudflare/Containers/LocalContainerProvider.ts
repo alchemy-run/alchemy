@@ -156,6 +156,7 @@ export const LocalContainerProvider = () =>
       });
 
       return {
+        metadata: {},
         // No HMR for containers (yet): bundle once on first reconcile, then
         // treat the resource as a no-op so subsequent reconciles don't
         // re-bundle on every change.

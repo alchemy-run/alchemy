@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/unstable/cli";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -16,11 +17,14 @@ import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CloudflareAccess from "../../Cloudflare/Access.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import { collectCloudflareRequirements } from "../../Cloudflare/Auth/Requirements.ts";
 import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment.ts";
 import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
 import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import { bootstrap as bootstrapCloudflare } from "../../Cloudflare/StateStore/State.ts";
+import * as Provider from "../../Provider.ts";
+import { Stage } from "../../Stage.ts";
 import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
@@ -28,6 +32,7 @@ import { fileLogger } from "../../Util/FileLogger.ts";
 import {
   envFile,
   formatLocalTimestamp,
+  importStack,
   instrumentCommand,
   parseSince,
   profile,
@@ -238,6 +243,16 @@ const tokenNameFlag = Flag.string("name").pipe(
   Flag.map(Option.getOrUndefined),
 );
 
+const fromStackFlag = Flag.string("from-stack").pipe(
+  Flag.withDescription(
+    "Derive the permission groups from a stack file's resources (via provider " +
+      "metadata) instead of prompting — e.g. --from-stack alchemy.run.ts. " +
+      "Mints a least-privilege token covering exactly what the stack manages.",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
 const tokenAccountIdFlag = Flag.string("account-id").pipe(
   Flag.withDescription(
     "Cloudflare account ID(s) to scope the token to (comma-separated for " +
@@ -283,19 +298,73 @@ const createTokenCommand = Command.make(
     allPermissions: allPermissionsFlag,
     name: tokenNameFlag,
     accountId: tokenAccountIdFlag,
+    fromStack: fromStackFlag,
   },
   instrumentCommand(
     "cloudflare.create-token",
-    (a: { allPermissions: boolean }) => ({
+    (a: { allPermissions: boolean; fromStack: string | undefined }) => ({
       "alchemy.all_permissions": a.allPermissions,
+      "alchemy.from_stack": a.fromStack ?? "",
     }),
   )(
-    Effect.fn(function* ({ envFile, allPermissions, name, accountId }) {
+    Effect.fn(function* ({
+      envFile,
+      allPermissions,
+      name,
+      accountId,
+      fromStack,
+    }) {
       const configProvider = ConfigProvider.layer(
         yield* loadConfigProvider(envFile),
       );
 
       yield* Effect.gen(function* () {
+        // --from-stack: compile the stack (no cloud calls — resource
+        // constructors only register nodes) and derive the required
+        // permission groups from the providers' metadata. Fail fast, before
+        // prompting for the Global API Key.
+        let requiredGroups:
+          | Map<string, { name: string; resourceTypes: string[] }>
+          | undefined;
+        if (fromStack !== undefined) {
+          if (allPermissions) {
+            return yield* Effect.die(
+              "--from-stack and --all-permissions are mutually exclusive.",
+            );
+          }
+          const stackEffect = yield* importStack(fromStack);
+          const compiled = yield* stackEffect.pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                Layer.succeed(AuthProviders, {}),
+                Layer.succeed(Stage, "placeholder"),
+              ),
+            ),
+            Effect.result,
+          );
+          if (Result.isFailure(compiled)) {
+            return yield* Effect.die(
+              `Could not compile stack "${fromStack}" to derive its permission requirements:\n${compiled.failure}`,
+            );
+          }
+          const stack = compiled.success;
+          const metadata = Provider.collectProviderMetadata(
+            stack.services,
+            Object.values(stack.resources).map((r: { Type: string }) => r.Type),
+          );
+          const requirements = collectCloudflareRequirements(metadata);
+          if (requirements.permissionGroups.size === 0) {
+            return yield* Effect.die(
+              `Stack "${fromStack}" declares no Cloudflare resources with token requirements; nothing to mint.`,
+            );
+          }
+          requiredGroups = requirements.permissionGroups;
+          yield* Clank.info(
+            `Derived ${requiredGroups.size} permission group(s) from ${
+              metadata.used?.size ?? 0
+            } resource type(s) in ${fromStack}.`,
+          );
+        }
         // The Global API Key is a dashboard-only secret — there is no API to
         // fetch it — so read it from the environment or prompt for it. It is
         // used only to create the token and is never stored.
@@ -379,6 +448,33 @@ const createTokenCommand = Command.make(
         let selected: typeof liveGroups;
         if (allPermissions) {
           selected = liveGroups;
+        } else if (requiredGroups !== undefined) {
+          // Resolve the stack's required groups against the live list —
+          // Cloudflare silently ignores unknown permission-group ids, so a
+          // stale catalog id must not produce a token that's quietly missing
+          // a grant. Match by id first, then fall back to the (unique) name.
+          const byId = new Map(liveGroups.map((g) => [g.id, g]));
+          const byName = new Map(liveGroups.map((g) => [g.name, g]));
+          selected = [];
+          const missing: string[] = [];
+          for (const [id, info] of requiredGroups) {
+            const live = byId.get(id) ?? byName.get(info.name);
+            if (live) {
+              selected.push(live);
+            } else {
+              missing.push(
+                `${info.name} (${id}) — needed by ${info.resourceTypes.join(", ")}`,
+              );
+            }
+          }
+          if (missing.length > 0) {
+            yield* Clank.warn(
+              "Some permission groups from the stack's metadata are not available " +
+                `to this credential and will be omitted:\n${missing
+                  .map((m) => `  - ${m}`)
+                  .join("\n")}`,
+            );
+          }
         } else {
           // Only groups whose scope maps to one of the three policy buckets
           // can actually become a policy (see `buildTokenPolicies`); offering

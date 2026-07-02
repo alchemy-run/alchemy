@@ -112,6 +112,21 @@ export const ApiKeyProvider = () =>
     ApiKeyResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:PUT",
+                "apigateway:DELETE",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createApiKey (POST), updateApiKey (PATCH), deleteApiKey (DELETE), tagResource (PUT) / untagResource (DELETE), getApiKey/getApiKeys reads (GET). Key values are never read back (includeValue(s): false throughout).",
+            },
+          },
+        },
         stables: ["id"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

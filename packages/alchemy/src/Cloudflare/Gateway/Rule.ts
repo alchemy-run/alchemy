@@ -254,6 +254,31 @@ export const RuleProvider = () =>
         });
 
       return {
+        metadata: {
+          cloudflare: {
+            scope: "account",
+            auth: {
+              oauth: {
+                scopes: ["teams:write"],
+                readScopes: ["teams:read"],
+              },
+              token: {
+                permissionGroups: [
+                  {
+                    id: "b33f02c6f7284e05a6f20741c0bb0567",
+                    name: "Zero Trust Write",
+                  },
+                ],
+                readPermissionGroups: [
+                  {
+                    id: "3f376c8e6f764a938b848bd01c8995c4",
+                    name: "Zero Trust Read",
+                  },
+                ],
+              },
+            },
+          },
+        },
         stables: ["ruleId", "action", "accountId"],
 
         // Account collection (pattern b): Gateway rules are account-scoped

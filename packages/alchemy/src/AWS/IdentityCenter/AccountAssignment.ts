@@ -75,6 +75,26 @@ export const AccountAssignmentProvider = () =>
     AccountAssignment,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "sso:CreateAccountAssignment",
+                "sso:DeleteAccountAssignment",
+                "sso:DescribeAccountAssignmentCreationStatus",
+                "sso:DescribeAccountAssignmentDeletionStatus",
+              ],
+              readActions: [
+                "sso:ListInstances",
+                "sso:ListPermissionSets",
+                "sso:ListAccountsForProvisionedPermissionSet",
+                "sso:ListAccountAssignments",
+              ],
+              notes:
+                "The two Describe*Status actions are only used by reconcile/delete async polling, so they are classified as full-lifecycle actions. Creating an assignment causes Identity Center to provision the permission set into the target account via its own service-linked role; no extra IAM actions are needed on the deploying principal.",
+            },
+          },
+        },
         stables: [
           "instanceArn",
           "permissionSetArn",

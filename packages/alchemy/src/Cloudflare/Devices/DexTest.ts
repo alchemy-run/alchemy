@@ -142,6 +142,31 @@ export const isDeviceDexTest = (value: unknown): value is DeviceDexTest =>
 
 export const DeviceDexTestProvider = () =>
   Provider.succeed(DeviceDexTest, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["dex:write"],
+            readScopes: ["dex:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "92c8dcd551cc42a6a57a54e8f8d3f3e3",
+                name: "Cloudflare DEX Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "3b376e0aa52c41cbb6afc9cab945afa8",
+                name: "Cloudflare DEX Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["testId", "accountId"],
 
     // Account-scoped collection: paginate the DEX tests list and hydrate each

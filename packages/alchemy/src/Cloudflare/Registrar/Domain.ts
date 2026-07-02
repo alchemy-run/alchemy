@@ -169,6 +169,22 @@ export const isDomain = (value: unknown): value is Domain =>
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            readPermissionGroups: [
+              {
+                id: "9bb90620717647a39679e1d951f140d6",
+                name: "Registrar Domains Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     // `delete` never releases the registration (it only restores settings), so
     // a domain can never be removed by teardown and would re-appear on every
     // `nuke` scan. Skip it in account-wide teardown.

@@ -249,6 +249,39 @@ export const isLoadBalancer = (value: unknown): value is LoadBalancer =>
 
 export const LoadBalancerProvider = () =>
   Provider.succeed(LoadBalancer, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: {
+            scopes: ["lb:edit"],
+            readScopes: ["lb:read", "zone:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "6d7f2f5f5b1d4a0e9081fdc98d432fd1",
+                name: "Load Balancers Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "e9a975f628014f1d85b723993116f7d5",
+                name: "Load Balancers Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["loadBalancerId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {

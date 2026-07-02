@@ -143,6 +143,14 @@ export const isShareResource = (value: unknown): value is ShareResource =>
 
 export const ShareResourceProvider = () =>
   Provider.succeed(ShareResource, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: [
       "shareResourceId",
       "accountId",

@@ -101,6 +101,17 @@ export const isZoneTransferTsig = (value: unknown): value is ZoneTransferTsig =>
 
 export const ZoneTransferTsigProvider = () =>
   Provider.succeed(ZoneTransferTsig, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          // token: CATALOG GAP — no Secondary DNS permission group exists in
+          // the static PERMISSION_GROUPS catalog yet
+        },
+      },
+    },
+
     stables: ["tsigId", "accountId"],
 
     diff: Effect.fn(function* ({ output }) {

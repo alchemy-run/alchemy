@@ -129,6 +129,17 @@ export const isZoneTransferPeer = (value: unknown): value is ZoneTransferPeer =>
 
 export const ZoneTransferPeerProvider = () =>
   Provider.succeed(ZoneTransferPeer, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          // token: CATALOG GAP — no Secondary DNS permission group exists in
+          // the static PERMISSION_GROUPS catalog yet
+        },
+      },
+    },
+
     stables: ["peerId", "accountId"],
 
     list: Effect.fn(function* () {

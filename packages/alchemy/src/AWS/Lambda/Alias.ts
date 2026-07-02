@@ -163,6 +163,22 @@ export const AliasProvider = () =>
       };
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "lambda:CreateAlias",
+                "lambda:UpdateAlias",
+                "lambda:DeleteAlias",
+              ],
+              readActions: [
+                "lambda:GetAlias",
+                "lambda:ListAliases",
+                "lambda:ListFunctions",
+              ],
+            },
+          },
+        },
         stables: ["aliasArn", "aliasName", "functionName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

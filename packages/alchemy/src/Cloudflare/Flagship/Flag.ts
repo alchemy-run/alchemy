@@ -302,6 +302,16 @@ export const isFlag = (value: unknown): value is Flag =>
 
 export const FlagProvider = () =>
   Provider.succeed(Flag, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            supported: false,
+          },
+        },
+      },
+    },
     stables: ["appId", "accountId", "key"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

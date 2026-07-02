@@ -117,6 +117,31 @@ export const isScanConfig = (value: unknown): value is ScanConfig =>
 
 export const ScanConfigProvider = () =>
   Provider.succeed(ScanConfig, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["cfone:write"],
+            readScopes: ["cfone:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "677767156f294485b497a8f103172e7d",
+                name: "Cloudforce One Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "cf9353ed7978436e8fb20c03fce26449",
+                name: "Cloudforce One Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["configId", "accountId"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

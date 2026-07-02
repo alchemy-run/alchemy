@@ -144,6 +144,18 @@ export const RouteTableAssociationProvider = () =>
     RouteTableAssociation,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:AssociateRouteTable",
+                "ec2:ReplaceRouteTableAssociation",
+                "ec2:DisassociateRouteTable",
+              ],
+              readActions: ["ec2:DescribeRouteTables"],
+            },
+          },
+        },
         stables: ["associationId", "subnetId", "gatewayId"],
 
         // Associations are embedded in describeRouteTables — each RouteTable

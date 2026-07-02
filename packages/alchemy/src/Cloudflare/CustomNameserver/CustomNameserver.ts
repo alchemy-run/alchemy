@@ -142,6 +142,17 @@ export const isCustomNameserver = (value: unknown): value is CustomNameserver =>
 
 export const CustomNameserverProvider = () =>
   Provider.succeed(CustomNameserver, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          // token: CATALOG GAP — no account custom-nameservers permission
+          // group exists in the static PERMISSION_GROUPS catalog yet
+        },
+      },
+    },
+
     stables: ["nsName", "accountId", "nsSet", "zoneTag"],
 
     list: Effect.fn(function* () {

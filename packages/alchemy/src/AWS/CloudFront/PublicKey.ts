@@ -135,6 +135,21 @@ export const PublicKeyProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreatePublicKey",
+                "cloudfront:UpdatePublicKey",
+                "cloudfront:DeletePublicKey",
+              ],
+              readActions: [
+                "cloudfront:GetPublicKeyConfig",
+                "cloudfront:ListPublicKeys",
+              ],
+            },
+          },
+        },
         stables: ["publicKeyId", "callerReference"],
         list: () =>
           Effect.gen(function* () {

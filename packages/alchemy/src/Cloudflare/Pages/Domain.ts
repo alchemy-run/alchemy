@@ -148,6 +148,25 @@ export const isDomain = (value: unknown): value is Domain =>
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["pages:write"],
+            readScopes: ["pages:read"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "8d28297797f24fb8a0c332fe0866ec89", name: "Pages Write" },
+            ],
+            readPermissionGroups: [
+              { id: "e247aedd66bd41cc9193af0213416666", name: "Pages Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: [
       "domainId",
       "accountId",

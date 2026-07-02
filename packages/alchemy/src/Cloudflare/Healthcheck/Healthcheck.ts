@@ -303,6 +303,36 @@ export const isHealthcheck = (value: unknown): value is Healthcheck =>
 
 export const HealthcheckProvider = () =>
   Provider.succeed(Healthcheck, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "e0dc25a0fbdf4286b1ea100e3256b0e3",
+                name: "Health Checks Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "fac65912d42144aa86b7dd33281bf79e",
+                name: "Health Checks Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["healthcheckId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {

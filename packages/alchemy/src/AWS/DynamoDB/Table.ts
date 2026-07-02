@@ -945,6 +945,30 @@ export const TableProvider = () =>
       };
 
       return Table.Provider.of({
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "dynamodb:CreateTable",
+                "dynamodb:UpdateTable",
+                "dynamodb:DeleteTable",
+                "dynamodb:UpdateTimeToLive",
+                "dynamodb:UpdateContinuousBackups",
+                "dynamodb:TagResource",
+                "dynamodb:UntagResource",
+              ],
+              readActions: [
+                "dynamodb:ListTables",
+                "dynamodb:DescribeTable",
+                "dynamodb:ListTagsOfResource",
+                "dynamodb:DescribeContinuousBackups",
+                "dynamodb:DescribeTimeToLive",
+              ],
+              notes:
+                "CreateTable with Tags additionally authorizes dynamodb:TagResource. When sseSpecification uses a customer-managed KMS key, the caller and the table need the usual kms:* grants on that key (not issued by this provider directly).",
+            },
+          },
+        },
         stables: ["tableName", "tableId", "tableArn"],
         // Enumerate every table in the ambient account/region. `listTables`
         // returns only names, so each is hydrated to the full Attributes shape

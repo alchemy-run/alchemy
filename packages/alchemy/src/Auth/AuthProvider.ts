@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import type { StackProviderMetadata } from "../Provider.ts";
 import { withLock } from "./Lock.ts";
 
 /**
@@ -55,6 +56,29 @@ export interface ConfigureContext {
    * `{ method: "env" }`) so unattended runs work.
    */
   readonly ci: boolean;
+  /**
+   * Metadata of the resource providers registered by the stack being
+   * configured. Core passes this through opaquely — each auth provider runs
+   * its own cloud-specific analysis (e.g. Cloudflare derives the OAuth
+   * scopes to request from `metadata.cloudflare` across the used resources).
+   * Undefined when the stack couldn't be compiled at configure time.
+   */
+  readonly providerMetadata?: StackProviderMetadata;
+}
+
+/**
+ * A single required-vs-granted mismatch reported by
+ * {@link AuthProviderImpl.preflight}. Core renders findings before a
+ * deploy/plan runs; it never interprets them.
+ */
+export interface PreflightFinding {
+  readonly severity: "error" | "warning";
+  /** What is missing, e.g. `queues:write` or `Vectorize Write (9247…)`. */
+  readonly missing: string;
+  /** Resource types that require the missing grant. */
+  readonly resourceTypes: readonly string[];
+  /** How to fix it, e.g. "Run `alchemy login --configure`". */
+  readonly remediation: string;
 }
 
 export interface AuthProviderImpl<
@@ -90,6 +114,21 @@ export interface AuthProviderImpl<
     profileName: string,
     config: Config,
   ): Effect.Effect<Credentials, AuthError, ReadReq>;
+
+  /**
+   * Compare what the stack requires (from provider metadata) against what
+   * this profile's credentials grant, returning renderable findings. Core
+   * prints them before deploy/plan; Clank consumes them for guided
+   * remediation. Optional — providers with no grant model omit it.
+   *
+   * Shares `ReadReq` with {@link read}: preflight inspects the same stored
+   * credentials/config that `read` resolves.
+   */
+  preflight?(
+    profileName: string,
+    config: Config,
+    metadata: StackProviderMetadata,
+  ): Effect.Effect<PreflightFinding[], AuthError, ReadReq>;
 }
 
 export interface AuthProvider<

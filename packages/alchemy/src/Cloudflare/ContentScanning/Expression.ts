@@ -111,6 +111,27 @@ export class ExpressionCreateAnomaly extends Data.TaggedError(
 
 export const ExpressionProvider = () =>
   Provider.succeed(Expression, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "fb6778dc191143babbfaa57993f1d275",
+                name: "Zone WAF Write",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              { id: "dbc512b354774852af2b5a5f4ba3d470", name: "Zone WAF Read" },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["expressionId", "zoneId", "payload"],
 
     // Custom scan expressions are a zone-scoped Content Scanning feature. Fan

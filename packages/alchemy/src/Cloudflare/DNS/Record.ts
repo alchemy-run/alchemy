@@ -167,6 +167,28 @@ export const Record = Resource<Record>("Cloudflare.DNS.Record");
 
 export const RecordProvider = () =>
   Provider.succeed(Record, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: {
+            scopes: ["dns_records:edit", "zone:read"],
+            readScopes: ["dns_records:read", "zone:read"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "4755a26eedb94da69e1066d98aa820be", name: "DNS Write" },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              { id: "82e64a83756745bbbb1c9c2701bf816b", name: "DNS Read" },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["recordId", "zoneId", "type", "name"],
 
     // Zone-scoped collection: DNS records live under `/zones/{id}/dns_records`

@@ -291,6 +291,31 @@ export const isDirectoryService = (value: unknown): value is DirectoryService =>
 
 export const DirectoryServiceProvider = () =>
   Provider.succeed(DirectoryService, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["connectivity:admin"],
+            readScopes: ["connectivity:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "77efc2c0724d4c4eb94bfd9656247130",
+                name: "Connectivity Directory Admin",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "8764961c1edb4274be129d630b0b2671",
+                name: "Connectivity Directory Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["serviceId", "accountId", "createdAt"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

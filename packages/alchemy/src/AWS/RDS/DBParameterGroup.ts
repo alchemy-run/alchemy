@@ -72,6 +72,19 @@ export const DBParameterGroupProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBParameterGroup",
+                "rds:DeleteDBParameterGroup",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+              ],
+              readActions: ["rds:DescribeDBParameterGroups"],
+            },
+          },
+        },
         stables: ["dbParameterGroupArn", "dbParameterGroupName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;

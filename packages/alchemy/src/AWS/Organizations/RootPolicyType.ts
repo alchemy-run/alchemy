@@ -43,6 +43,17 @@ export const RootPolicyTypeProvider = () =>
     RootPolicyType,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:EnablePolicyType",
+                "organizations:DisablePolicyType",
+              ],
+              readActions: ["organizations:ListRoots"],
+            },
+          },
+        },
         stables: ["rootId", "rootArn", "policyType"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;

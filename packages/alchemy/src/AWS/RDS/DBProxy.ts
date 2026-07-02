@@ -147,6 +147,23 @@ export const DBProxyProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBProxy",
+                "rds:ModifyDBProxy",
+                "rds:DeleteDBProxy",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+                "iam:PassRole",
+              ],
+              readActions: ["rds:DescribeDBProxies", "rds:ListTagsForResource"],
+              notes:
+                "iam:PassRole is required on the proxy auth role (props.roleArn) passed as RoleArn to CreateDBProxy/ModifyDBProxy.",
+            },
+          },
+        },
         stables: ["dbProxyArn", "dbProxyName"],
         // Enumerate every DB proxy in the account/region via the paginated
         // `describeDBProxies`, then hydrate each proxy's tags via

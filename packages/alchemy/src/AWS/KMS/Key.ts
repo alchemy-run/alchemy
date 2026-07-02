@@ -132,6 +132,34 @@ const defaultDeletionWindowInDays = 30;
 
 export const KeyProvider = () =>
   Provider.succeed(Key, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "kms:CreateKey",
+            "kms:CancelKeyDeletion",
+            "kms:UpdateKeyDescription",
+            "kms:EnableKey",
+            "kms:DisableKey",
+            "kms:PutKeyPolicy",
+            "kms:EnableKeyRotation",
+            "kms:DisableKeyRotation",
+            "kms:TagResource",
+            "kms:UntagResource",
+            "kms:ScheduleKeyDeletion",
+          ],
+          readActions: [
+            "kms:ListKeys",
+            "kms:DescribeKey",
+            "kms:ListResourceTags",
+            "kms:GetKeyRotationStatus",
+            "kms:GetKeyPolicy",
+          ],
+          notes:
+            "Delete only schedules deletion (ScheduleKeyDeletion with the configured waiting period); the key is not destroyed immediately. PutKeyPolicy with bypassPolicyLockoutSafetyCheck can lock the caller out — the default key policy path needs no extra actions.",
+        },
+      },
+    },
     stables: ["keyId", "keyArn"],
     list: () =>
       Effect.gen(function* () {

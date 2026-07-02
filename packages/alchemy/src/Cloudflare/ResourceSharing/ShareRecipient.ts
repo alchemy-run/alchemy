@@ -120,6 +120,14 @@ export const isShareRecipient = (value: unknown): value is ShareRecipient =>
 
 export const ShareRecipientProvider = () =>
   Provider.succeed(ShareRecipient, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: [
       "recipientId",
       "accountId",

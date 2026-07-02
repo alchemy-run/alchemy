@@ -111,6 +111,30 @@ export const isCustomTopics = (value: unknown): value is CustomTopics =>
 
 export const CustomTopicsProvider = () =>
   Provider.succeed(CustomTopics, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "5af6a2f284144e95a89840408439adef",
+                name: "Firewall for AI Write",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              {
+                id: "a2c61201f92a4e06a901f156795388a9",
+                name: "Firewall for AI Read",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["zoneId", "initialTopics"],
 
     list: Effect.fn(function* () {

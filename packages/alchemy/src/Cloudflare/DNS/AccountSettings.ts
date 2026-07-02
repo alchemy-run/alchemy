@@ -240,6 +240,32 @@ export const isAccountDnsSettings = (
 
 export const AccountDnsSettingsProvider = () =>
   Provider.succeed(AccountDnsSettings, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            supported: false,
+            readScopes: ["dns_settings:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "dc44f27f48ab405392a5f69fe822bd01",
+                name: "Account DNS Settings Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "cfa964bcdafc4ab39704e7476154e41b",
+                name: "Account DNS Settings Read",
+              },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["accountId", "initialSettings", "managedKeys"],
 
     // Account singleton — the DNS settings object always exists for the

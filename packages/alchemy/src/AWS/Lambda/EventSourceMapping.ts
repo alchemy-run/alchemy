@@ -576,6 +576,26 @@ export const EventSourceMappingProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "lambda:CreateEventSourceMapping",
+                "lambda:UpdateEventSourceMapping",
+                "lambda:DeleteEventSourceMapping",
+                "lambda:TagResource",
+                "lambda:UntagResource",
+              ],
+              readActions: [
+                "lambda:GetEventSourceMapping",
+                "lambda:ListEventSourceMappings",
+                "lambda:ListTags",
+              ],
+              notes:
+                "Read access to the event source (SQS/Kinesis/DynamoDB Streams) is granted to the function's execution role, not the deployer. The provider retries IAM-propagation errors until the role can poll the source.",
+            },
+          },
+        },
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;

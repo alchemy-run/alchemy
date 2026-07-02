@@ -300,6 +300,34 @@ const retryTransientAccessError = <A, E extends { _tag: string }, R>(
 
 export const ApplicationProvider = () =>
   Provider.succeed(Application, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            // "Access: Apps and Policies Write" exists at account AND zone scope —
+            // account id form (this resource is account-scoped).
+            permissionGroups: [
+              {
+                id: "1e13c5124ca64b72b1969a67e8829049",
+                name: "Access: Apps and Policies Write",
+              },
+            ],
+            // "Access: Apps and Policies Read" (account form).
+            readPermissionGroups: [
+              {
+                id: "7ea222f6d5064cfa89ea366d7c1fee89",
+                name: "Access: Apps and Policies Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["applicationId", "aud", "type", "accountId"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {

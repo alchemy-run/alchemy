@@ -142,6 +142,36 @@ export const isUaRule = (value: unknown): value is UaRule =>
 
 export const UaRuleProvider = () =>
   Provider.succeed(UaRule, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "43137f8d07884d3198dc0ee77ca6e79b",
+                name: "Firewall Services Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "4ec32dfcb35641c5bb32d5ef1ab963b4",
+                name: "Firewall Services Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["uaRuleId", "zoneId"],
 
     list: Effect.fn(function* () {

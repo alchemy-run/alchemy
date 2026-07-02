@@ -77,6 +77,33 @@ export const isTag = (value: unknown): value is Tag =>
 
 export const TagProvider = () =>
   Provider.succeed(Tag, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            // Tags live under /access/tags and attach to Access applications —
+            // governed by the account-scoped Apps and Policies groups.
+            permissionGroups: [
+              {
+                id: "1e13c5124ca64b72b1969a67e8829049",
+                name: "Access: Apps and Policies Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "7ea222f6d5064cfa89ea366d7c1fee89",
+                name: "Access: Apps and Policies Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["name", "accountId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

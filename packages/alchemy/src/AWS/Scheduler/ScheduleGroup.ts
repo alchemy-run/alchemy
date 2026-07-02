@@ -66,6 +66,23 @@ export const ScheduleGroupProvider = () =>
           : createPhysicalName({ id, maxLength: 64 });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "scheduler:CreateScheduleGroup",
+                "scheduler:TagResource",
+                "scheduler:UntagResource",
+                "scheduler:DeleteScheduleGroup",
+              ],
+              readActions: [
+                "scheduler:GetScheduleGroup",
+                "scheduler:ListScheduleGroups",
+                "scheduler:ListTagsForResource",
+              ],
+            },
+          },
+        },
         stables: ["scheduleGroupArn", "scheduleGroupName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;

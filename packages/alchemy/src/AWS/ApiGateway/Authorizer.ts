@@ -100,6 +100,21 @@ export const AuthorizerProvider = () =>
     AuthorizerResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:DELETE",
+                "iam:PassRole",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createAuthorizer (POST), updateAuthorizer (PATCH), deleteAuthorizer (DELETE), get* reads (GET). iam:PassRole is required on the invocation role only when `authorizerCredentials` carries an IAM role ARN (create and the /authorizerCredentials PATCH path).",
+            },
+          },
+        },
         stables: ["authorizerId", "restApiId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

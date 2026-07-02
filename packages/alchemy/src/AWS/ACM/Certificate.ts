@@ -288,6 +288,27 @@ export const CertificateProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "acm:RequestCertificate",
+                "acm:DeleteCertificate",
+                "acm:AddTagsToCertificate",
+                "acm:RemoveTagsFromCertificate",
+                "route53:ChangeResourceRecordSets",
+                "route53:GetChange",
+              ],
+              readActions: [
+                "acm:ListCertificates",
+                "acm:DescribeCertificate",
+                "acm:ListTagsForCertificate",
+              ],
+              notes:
+                "ACM calls are pinned to us-east-1. route53:ChangeResourceRecordSets/GetChange are needed only when hostedZoneId is set for automatic DNS validation. RequestCertificate with inline Tags requires acm:AddTagsToCertificate.",
+            },
+          },
+        },
         stables: ["certificateArn"],
         list: () =>
           Effect.gen(function* () {

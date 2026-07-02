@@ -110,6 +110,14 @@ type UserApiTokenAttributes = UserApiToken["Attributes"];
 
 export const UserApiTokenProvider = () =>
   Provider.succeed(UserApiToken, {
+    metadata: {
+      cloudflare: {
+        scope: "user",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["tokenId"],
     diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
       if (!isResolved(news)) return undefined;

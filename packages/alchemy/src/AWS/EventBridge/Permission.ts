@@ -74,6 +74,14 @@ export const PermissionProvider = () =>
       type PermissionAttrs = { statementId: string; eventBusName: string };
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["events:PutPermission", "events:RemovePermission"],
+              readActions: ["events:ListEventBuses", "events:DescribeEventBus"],
+            },
+          },
+        },
         stables: ["statementId", "eventBusName"],
         list: () =>
           Effect.gen(function* () {

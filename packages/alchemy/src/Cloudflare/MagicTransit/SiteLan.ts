@@ -191,6 +191,28 @@ export const isMagicSiteLan = (value: unknown): value is MagicSiteLan =>
 
 export const MagicSiteLanProvider = () =>
   Provider.succeed(MagicSiteLan, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "a1a7389ba7e441dba95852e10970fcc3",
+                name: "Magic WAN Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "17fc856c4ebe49d4bb70f8e4744398cf",
+                name: "Magic WAN Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["lanId", "siteId", "accountId"],
 
     diff: Effect.fn(function* ({ olds, news }) {

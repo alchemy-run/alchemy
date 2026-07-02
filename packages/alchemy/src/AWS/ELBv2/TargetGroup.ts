@@ -133,6 +133,24 @@ export const TargetGroupProvider = () =>
           : createPhysicalName({ id, maxLength: 32, lowercase: true });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "elasticloadbalancing:CreateTargetGroup",
+                "elasticloadbalancing:ModifyTargetGroup",
+                "elasticloadbalancing:ModifyTargetGroupAttributes",
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:RemoveTags",
+                "elasticloadbalancing:DeleteTargetGroup",
+              ],
+              readActions: [
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeTags",
+              ],
+            },
+          },
+        },
         stables: ["targetGroupArn", "targetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

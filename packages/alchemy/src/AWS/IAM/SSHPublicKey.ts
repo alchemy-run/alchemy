@@ -60,6 +60,22 @@ export const SSHPublicKey = Resource<SSHPublicKey>("AWS.IAM.SSHPublicKey");
 
 export const SSHPublicKeyProvider = () =>
   Provider.succeed(SSHPublicKey, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "iam:UploadSSHPublicKey",
+            "iam:UpdateSSHPublicKey",
+            "iam:DeleteSSHPublicKey",
+          ],
+          readActions: [
+            "iam:GetSSHPublicKey",
+            "iam:ListSSHPublicKeys",
+            "iam:ListUsers",
+          ],
+        },
+      },
+    },
     stables: ["sshPublicKeyId"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

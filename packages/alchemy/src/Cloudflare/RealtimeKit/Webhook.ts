@@ -153,6 +153,25 @@ export const isWebhook = (value: unknown): value is Webhook =>
 
 export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "ba6ce7d23a9544ccad0816691ba38e21",
+                name: "Realtime Admin",
+              },
+            ],
+            readPermissionGroups: [
+              { id: "de62b15d79cc4d8d9c7b443c656eadbd", name: "Realtime" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["webhookId", "accountId", "appId", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

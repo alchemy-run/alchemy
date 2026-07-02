@@ -168,6 +168,32 @@ export const Policy = Resource<Policy>("Cloudflare.Access.Policy");
 
 export const PolicyProvider = () =>
   Provider.succeed(Policy, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            // Account-scoped "Access: Apps and Policies Write" (name collides with zone form).
+            permissionGroups: [
+              {
+                id: "1e13c5124ca64b72b1969a67e8829049",
+                name: "Access: Apps and Policies Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "7ea222f6d5064cfa89ea366d7c1fee89",
+                name: "Access: Apps and Policies Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["policyId", "accountId", "decision"],
     diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

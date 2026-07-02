@@ -123,6 +123,36 @@ export const isSendingSubdomain = (value: unknown): value is SendingSubdomain =>
 
 export const SendingSubdomainProvider = () =>
   Provider.succeed(SendingSubdomain, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "5df633d6b41c42bcaf5b4a62b9d14b64",
+                name: "Email Sending Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "2d5b4b1f6c89487bb7184c2c1dcd3bf1",
+                name: "Email Sending Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     // No update API exists — every attribute is stable across updates.
     stables: [
       "subdomainId",

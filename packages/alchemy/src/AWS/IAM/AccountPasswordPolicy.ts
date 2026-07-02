@@ -40,6 +40,17 @@ export const AccountPasswordPolicy = Resource<AccountPasswordPolicy>(
 
 export const AccountPasswordPolicyProvider = () =>
   Provider.succeed(AccountPasswordPolicy, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "iam:UpdateAccountPasswordPolicy",
+            "iam:DeleteAccountPasswordPolicy",
+          ],
+          readActions: ["iam:GetAccountPasswordPolicy"],
+        },
+      },
+    },
     read: Effect.fn(function* () {
       const response = yield* iam
         .getAccountPasswordPolicy({})

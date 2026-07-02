@@ -97,6 +97,29 @@ export const AccessEntry = Resource<AccessEntry>("AWS.EKS.AccessEntry");
 
 export const AccessEntryProvider = () =>
   Provider.succeed(AccessEntry, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "eks:CreateAccessEntry",
+            "eks:UpdateAccessEntry",
+            "eks:DeleteAccessEntry",
+            "eks:AssociateAccessPolicy",
+            "eks:DisassociateAccessPolicy",
+            "eks:TagResource",
+            "eks:UntagResource",
+          ],
+          readActions: [
+            "eks:DescribeAccessEntry",
+            "eks:ListAccessEntries",
+            "eks:ListAssociatedAccessPolicies",
+            "eks:ListClusters",
+          ],
+          notes:
+            "The principalArn is referenced (not assumed or passed as an execution role), so no iam:PassRole is needed. This resource grants Kubernetes access — treat write actions as privilege-escalating.",
+        },
+      },
+    },
     stables: ["accessEntryArn"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

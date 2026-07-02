@@ -559,6 +559,20 @@ export const RecordProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "route53:ChangeResourceRecordSets",
+                "route53:GetChange",
+              ],
+              readActions: [
+                "route53:ListResourceRecordSets",
+                "route53:ListHostedZones",
+              ],
+            },
+          },
+        },
         stables: ["hostedZoneId", "name", "type", "setIdentifier"],
         list: () =>
           Effect.gen(function* () {

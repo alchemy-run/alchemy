@@ -104,6 +104,14 @@ export const NetworkAclAssociationProvider = () =>
           );
 
       return NetworkAclAssociation.Provider.of({
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["ec2:ReplaceNetworkAclAssociation"],
+              readActions: ["ec2:DescribeNetworkAcls", "ec2:DescribeSubnets"],
+            },
+          },
+        },
         stables: ["subnetId"],
 
         // NACL associations are embedded in describeNetworkAcls. Each NetworkAcl

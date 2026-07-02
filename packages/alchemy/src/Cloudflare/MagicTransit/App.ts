@@ -98,6 +98,28 @@ export const isMagicApp = (value: unknown): value is MagicApp =>
 
 export const MagicAppProvider = () =>
   Provider.succeed(MagicApp, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "a1a7389ba7e441dba95852e10970fcc3",
+                name: "Magic WAN Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "17fc856c4ebe49d4bb70f8e4744398cf",
+                name: "Magic WAN Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["appId", "accountId"],
 
     read: Effect.fn(function* ({ output, olds }) {

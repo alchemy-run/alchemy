@@ -148,6 +148,28 @@ export const MetricStreamProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudwatch:PutMetricStream",
+                "cloudwatch:StartMetricStreams",
+                "cloudwatch:StopMetricStreams",
+                "cloudwatch:DeleteMetricStream",
+                "cloudwatch:TagResource",
+                "cloudwatch:UntagResource",
+                "iam:PassRole",
+              ],
+              readActions: [
+                "cloudwatch:GetMetricStream",
+                "cloudwatch:ListMetricStreams",
+                "cloudwatch:ListTagsForResource",
+              ],
+              notes:
+                "iam:PassRole on the Firehose delivery role passed as RoleArn to PutMetricStream.",
+            },
+          },
+        },
         stables: ["metricStreamName", "metricStreamArn"],
         diff: Effect.fn(function* ({
           id,

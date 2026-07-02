@@ -64,6 +64,22 @@ export const GroupProvider = () =>
     Group,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "identitystore:CreateGroup",
+                "identitystore:UpdateGroup",
+                "identitystore:DeleteGroup",
+              ],
+              readActions: [
+                "sso:ListInstances",
+                "identitystore:ListGroups",
+                "identitystore:DescribeGroup",
+              ],
+            },
+          },
+        },
         stables: ["identityStoreId", "groupId"],
         list: () =>
           Effect.gen(function* () {

@@ -12,6 +12,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  type PreflightFinding,
 } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../../Auth/Credentials.ts";
 import {
@@ -20,8 +21,13 @@ import {
   getEnvRequired,
   retryOnce,
 } from "../../Auth/Env.ts";
+import type { StackProviderMetadata } from "../../Provider.ts";
 import * as Clank from "../../Util/Clank.ts";
 import * as OAuthClient from "./OAuthClient.ts";
+import {
+  collectCloudflareRequirements,
+  suggestOAuthScopes,
+} from "./Requirements.ts";
 
 const options: Array<{
   value: CloudflareAuthConfig["method"];
@@ -137,29 +143,57 @@ const promptAccountId = () =>
     ),
   );
 
-const promptOAuthScopes = () =>
-  Clank.confirm({
-    message: "Customize OAuth scopes? (default covers typical use cases)",
-    initialValue: false,
-  }).pipe(
-    retryOnce,
-    Effect.flatMap((customize) => {
-      if (!customize) return Effect.succeed([...DEFAULT_SCOPES]);
-      return Clank.multiselect({
-        message: "Select OAuth scopes",
-        initialValues: DEFAULT_SCOPES as string[],
-        options: Object.entries(ALL_SCOPES).map(([value, hint]) => ({
-          value: value as string,
-          label: value,
-          hint,
-        })),
-        required: true,
-      }).pipe(
-        Effect.map((s) => s as string[]),
-        retryOnce,
+const promptOAuthScopes = (ctx: ConfigureContext) =>
+  Effect.gen(function* () {
+    // Only trust the analysis in exact mode (the stack compiled and we know
+    // which resource types it uses) — the whole-cloud fallback would suggest
+    // nearly every scope in the catalog.
+    const requirements =
+      ctx.providerMetadata?.used !== undefined
+        ? collectCloudflareRequirements(ctx.providerMetadata)
+        : undefined;
+    const suggested: string[] = requirements
+      ? suggestOAuthScopes(requirements)
+      : [...DEFAULT_SCOPES];
+
+    if (requirements && requirements.oauthUnsupported.length > 0) {
+      const list = requirements.oauthUnsupported;
+      const shown = list
+        .slice(0, 8)
+        .map((t) => `  - ${t}`)
+        .join("\n");
+      const more = list.length > 8 ? `\n  … and ${list.length - 8} more` : "";
+      yield* Clank.warn(
+        `Cloudflare: ${list.length} resource type(s) in this stack cannot be fully managed with an OAuth user token:\n${shown}${more}\n` +
+          "Consider API Token auth instead, or mint a scoped token with: alchemy cloudflare create-token --from-stack",
       );
-    }),
-  );
+    }
+
+    return yield* Clank.confirm({
+      message: requirements
+        ? `Customize OAuth scopes? (default: ${suggested.length} scopes derived from this stack's resources)`
+        : "Customize OAuth scopes? (default covers typical use cases)",
+      initialValue: false,
+    }).pipe(
+      retryOnce,
+      Effect.flatMap((customize) => {
+        if (!customize) return Effect.succeed(suggested);
+        return Clank.multiselect({
+          message: "Select OAuth scopes",
+          initialValues: suggested,
+          options: Object.entries(ALL_SCOPES).map(([value, hint]) => ({
+            value: value as string,
+            label: value,
+            hint,
+          })),
+          required: true,
+        }).pipe(
+          Effect.map((s) => s as string[]),
+          retryOnce,
+        );
+      }),
+    );
+  });
 
 /**
  * Layer that registers the Cloudflare {@link AuthProvider} into the
@@ -263,8 +297,11 @@ export const CloudflareAuth = AuthProviderLayer<
       );
     });
 
-    const configureOAuth = Effect.fn(function* (profileName: string) {
-      const scopes = yield* promptOAuthScopes();
+    const configureOAuth = Effect.fn(function* (
+      profileName: string,
+      ctx: ConfigureContext,
+    ) {
+      const scopes = yield* promptOAuthScopes(ctx);
 
       const oauthCreds = yield* oauthLogin(profileName, scopes);
 
@@ -285,7 +322,7 @@ export const CloudflareAuth = AuthProviderLayer<
       };
     });
 
-    const configureInteractive = (profileName: string) =>
+    const configureInteractive = (profileName: string, ctx: ConfigureContext) =>
       Clank.select({
         message: "Cloudflare authentication method",
         options,
@@ -293,7 +330,7 @@ export const CloudflareAuth = AuthProviderLayer<
         Effect.flatMap((method) =>
           Match.value(method).pipe(
             Match.when("env", () => Effect.succeed({ method: "env" as const })),
-            Match.when("oauth", () => configureOAuth(profileName)),
+            Match.when("oauth", () => configureOAuth(profileName, ctx)),
             Match.when("stored", () => loginStored(profileName)),
             Match.exhaustive,
           ),
@@ -305,7 +342,7 @@ export const CloudflareAuth = AuthProviderLayer<
         if (ctx.ci) {
           return { method: "env" as const };
         }
-        return yield* configureInteractive(profileName);
+        return yield* configureInteractive(profileName, ctx);
       }).pipe(
         Effect.mapError(
           (e) =>
@@ -563,15 +600,62 @@ export const CloudflareAuth = AuthProviderLayer<
         ),
       );
 
+    const preflight = (
+      _profileName: string,
+      config: CloudflareAuthConfig,
+      metadata: StackProviderMetadata,
+    ) =>
+      Effect.sync(() => {
+        const findings: PreflightFinding[] = [];
+        // Only exact mode is actionable — the whole-cloud fallback would
+        // flag a grant for every resource type alchemy supports.
+        if (metadata.used === undefined) return findings;
+        const requirements = collectCloudflareRequirements(metadata);
+        if (config.method === "oauth") {
+          const granted = new Set(config.scopes);
+          for (const [scope, resourceTypes] of requirements.oauthScopes) {
+            if (!granted.has(scope)) {
+              findings.push({
+                severity: "warning",
+                missing: scope,
+                resourceTypes,
+                remediation:
+                  "Run `alchemy login --configure` to re-authorize with the missing scopes",
+              });
+            }
+          }
+          for (const resourceType of requirements.oauthUnsupported) {
+            findings.push({
+              severity: "warning",
+              missing: "no OAuth scope exists for this product",
+              resourceTypes: [resourceType],
+              remediation:
+                "Use an API token: alchemy cloudflare create-token --from-stack",
+            });
+          }
+        }
+        // Token/env methods: we don't know the token's grants (until
+        // create-token --from-stack records them), so nothing to diff yet.
+        return findings;
+      });
+
     return {
       configure: configureCredentials,
       logout,
       login,
       prettyPrint,
       read: resolveCredentials,
+      preflight,
     };
   }),
 );
+
+/**
+ * An OAuth scope Cloudflare's dashboard OAuth flow can grant — the keys of
+ * {@link ALL_SCOPES}. Used by provider metadata to declare which scopes a
+ * resource's lifecycle requires.
+ */
+export type OAuthScope = keyof typeof ALL_SCOPES;
 
 export const ALL_SCOPES = {
   "access:read":

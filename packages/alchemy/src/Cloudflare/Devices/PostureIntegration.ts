@@ -183,6 +183,31 @@ export const isDevicePostureIntegration = (
 
 export const DevicePostureIntegrationProvider = () =>
   Provider.succeed(DevicePostureIntegration, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "2fc1072ee6b743828db668fcb3f9dee7",
+                name: "Access: Device Posture Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "0f4841f80adb4bada5a09493300e7f8d",
+                name: "Access: Device Posture Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["integrationId", "accountId", "type"],
 
     // Account collection — enumerate every posture integration in the

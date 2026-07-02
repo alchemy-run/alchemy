@@ -88,6 +88,31 @@ export const isSubdomain = (value: unknown): value is Subdomain =>
 
 export const SubdomainProvider = () =>
   Provider.succeed(Subdomain, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["workers_scripts:write"],
+            readScopes: ["workers:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "e086da7e2179491d91ee5f35b3ca210a",
+                name: "Workers Scripts Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "1a71c399035b4950a1bd1466bbe4f420",
+                name: "Workers Scripts Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: ["accountId", "initialSubdomain"],
 

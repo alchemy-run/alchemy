@@ -60,6 +60,20 @@ export const BasePathMappingProvider = () =>
     BasePathMappingResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:DELETE",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createBasePathMapping (POST), updateBasePathMapping (PATCH), deleteBasePathMapping (DELETE), get* reads (GET). No tagging surface.",
+            },
+          },
+        },
         stables: ["domainName", "domainNameId", "basePath"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

@@ -107,6 +107,23 @@ export const ServerCertificateProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:UploadServerCertificate",
+                "iam:TagServerCertificate",
+                "iam:UntagServerCertificate",
+                "iam:DeleteServerCertificate",
+              ],
+              readActions: [
+                "iam:GetServerCertificate",
+                "iam:ListServerCertificates",
+                "iam:ListServerCertificateTags",
+              ],
+            },
+          },
+        },
         stables: [
           "serverCertificateArn",
           "serverCertificateName",

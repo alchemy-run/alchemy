@@ -119,6 +119,31 @@ export const isVirtualNetwork = (value: unknown): value is VirtualNetwork =>
 
 export const VirtualNetworkProvider = () =>
   Provider.succeed(VirtualNetwork, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["teams:write"],
+            readScopes: ["teams:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "e2980d9241cf4939bbbd74fdc43b9651",
+                name: "Cloudflare One Networks Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "4f1276d1e7e34c32a5012bbe02ece86d",
+                name: "Cloudflare One Networks Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["virtualNetworkId", "accountId", "createdAt"],
 
     diff: Effect.fn(function* ({ output }) {

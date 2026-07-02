@@ -283,6 +283,30 @@ export const RuleProvider = () =>
       };
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "events:PutRule",
+                "events:PutTargets",
+                "events:RemoveTargets",
+                "events:TagResource",
+                "events:UntagResource",
+                "events:DeleteRule",
+                "iam:PassRole",
+              ],
+              readActions: [
+                "events:DescribeRule",
+                "events:ListRules",
+                "events:ListEventBuses",
+                "events:ListTargetsByRule",
+                "events:ListTagsForResource",
+              ],
+              notes:
+                "iam:PassRole is needed when props.roleArn is set on the rule or when any target specifies RoleArn (e.g. ECS task targets); pattern-matched Lambda/SQS targets that authorize via resource policy don't need it.",
+            },
+          },
+        },
         stables: ["ruleName", "ruleArn", "eventBusName"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;

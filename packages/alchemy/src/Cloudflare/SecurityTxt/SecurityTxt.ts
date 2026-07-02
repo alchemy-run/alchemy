@@ -160,6 +160,14 @@ export const isSecurityTxt = (value: unknown): value is SecurityTxt =>
 
 export const SecurityTxtProvider = () =>
   Provider.succeed(SecurityTxt, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["zoneId"],
 
     list: Effect.fn(function* () {

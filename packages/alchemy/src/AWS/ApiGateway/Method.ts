@@ -365,6 +365,21 @@ export const MethodProvider = () =>
     MethodResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:PUT",
+                "apigateway:PATCH",
+                "apigateway:DELETE",
+                "iam:PassRole",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "PUT covers putMethod/putIntegration; PATCH covers updateMethod; DELETE covers deleteMethod/deleteIntegration (reconcile recreates by delete+put when non-patchable fields drift). iam:PassRole is required on the integration credentials role only when `integration.credentials` carries an IAM role ARN.",
+            },
+          },
+        },
         stables: ["restApiId", "resourceId", "httpMethod"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

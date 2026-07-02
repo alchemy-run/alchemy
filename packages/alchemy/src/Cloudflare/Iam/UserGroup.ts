@@ -146,6 +146,14 @@ export const isUserGroup = (value: unknown): value is UserGroup =>
 
 export const UserGroupProvider = () =>
   Provider.succeed(UserGroup, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["userGroupId", "accountId", "createdOn"],
 
     // Account-scoped collection: exhaustively paginate the account's

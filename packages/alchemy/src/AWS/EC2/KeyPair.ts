@@ -133,6 +133,20 @@ export const KeyPairProvider = () =>
         );
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateKeyPair",
+                "ec2:ImportKeyPair",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteKeyPair",
+              ],
+              readActions: ["ec2:DescribeKeyPairs"],
+            },
+          },
+        },
         stables: ["keyPairId", "keyName", "keyType"],
 
         // Generated key pairs are immutable except for tags. A changed name /

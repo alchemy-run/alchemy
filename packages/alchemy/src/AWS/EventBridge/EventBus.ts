@@ -132,6 +132,26 @@ export const EventBusProvider = () =>
         });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "events:CreateEventBus",
+                "events:UpdateEventBus",
+                "events:TagResource",
+                "events:UntagResource",
+                "events:DeleteEventBus",
+              ],
+              readActions: [
+                "events:DescribeEventBus",
+                "events:ListEventBuses",
+                "events:ListTagsForResource",
+              ],
+              notes:
+                "events:UpdateEventBus runs on every reconcile (unconditional full-PUT sync). When kmsKeyIdentifier is set, the caller needs kms:DescribeKey (and the key policy must allow EventBridge) per AWS docs — not called directly by this provider.",
+            },
+          },
+        },
         stables: ["eventBusName", "eventBusArn"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;

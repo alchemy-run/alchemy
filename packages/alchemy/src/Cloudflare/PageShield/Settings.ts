@@ -158,6 +158,30 @@ const desiredSettings = (props: SettingsProps): DesiredSettings => ({
 
 export const SettingsProvider = () =>
   Provider.succeed(Settings, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "6134079371904d8ebd77931c8ca07e50",
+                name: "Domain Page Shield",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              {
+                id: "945315185a8f40518bf3e9e6d0bee126",
+                name: "Domain Page Shield Read",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: [
       "zoneId",

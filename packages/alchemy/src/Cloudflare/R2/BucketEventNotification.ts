@@ -204,6 +204,39 @@ export const isBucketEventNotification = (
 
 export const BucketEventNotificationProvider = () =>
   Provider.succeed(BucketEventNotification, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["workers:write", "queues:write"],
+            readScopes: ["workers:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "bf7481a1826f439697cb59a20b22293e",
+                name: "Workers R2 Storage Write",
+              },
+              {
+                id: "366f57075ffc42689627bcf8242a1b6d",
+                name: "Queues Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "b4992e1108244f5d8bfbd5744320c2e1",
+                name: "Workers R2 Storage Read",
+              },
+              {
+                id: "84a7755d54c646ca87cd50682a34bf7c",
+                name: "Queues Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["bucketName", "queueId", "accountId", "jurisdiction"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {

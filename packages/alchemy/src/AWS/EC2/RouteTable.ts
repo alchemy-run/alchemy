@@ -249,6 +249,19 @@ export const RouteTableProvider = () =>
     RouteTable,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateRouteTable",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteRouteTable",
+              ],
+              readActions: ["ec2:DescribeRouteTables"],
+            },
+          },
+        },
         stables: ["routeTableId", "ownerId", "routeTableArn", "vpcId"],
 
         list: () =>

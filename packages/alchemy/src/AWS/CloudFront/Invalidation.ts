@@ -154,6 +154,16 @@ export const InvalidationProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["cloudfront:CreateInvalidation"],
+              readActions: ["cloudfront:GetInvalidation"],
+              notes:
+                "delete is a no-op — invalidations are immutable ledger entries. GetInvalidation is only used for the optional wait-for-completion poll inside reconcile, but it is purely descriptive so it sits in readActions.",
+            },
+          },
+        },
         stables: ["distributionId", "version"],
         // Non-listable: an Invalidation is an ephemeral, immutable ledger entry
         // keyed by {distributionId, invalidationId}. It completes on its own and

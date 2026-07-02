@@ -102,6 +102,22 @@ export const isApp = (value: unknown): value is App =>
 
 export const AppProvider = () =>
   Provider.succeed(App, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "b711942448db4b0aace44d1312f9fdb0", name: "Calls Write" },
+            ],
+            readPermissionGroups: [
+              { id: "686ab9a8b3854f25a1474f302d14b68d", name: "Calls Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["appId", "accountId", "secret", "created"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

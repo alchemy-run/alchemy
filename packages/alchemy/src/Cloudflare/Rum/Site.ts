@@ -157,6 +157,14 @@ export const isSite = (value: unknown): value is Site =>
 
 export const SiteProvider = () =>
   Provider.succeed(Site, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["siteTag", "siteToken", "accountId", "rulesetId", "created"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {

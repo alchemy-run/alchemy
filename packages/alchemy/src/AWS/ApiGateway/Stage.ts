@@ -529,6 +529,22 @@ export const StageProvider = () =>
     StageResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:PUT",
+                "apigateway:DELETE",
+                "apigateway:SetWebACL",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createStage (POST), updateStage (PATCH), deleteStage (DELETE), tagResource (PUT) / untagResource (DELETE), get* reads (GET). apigateway:SetWebACL is additionally evaluated only when the `webAclArn` prop drives an updateStage PATCH on /webAclArn. Stage access logging requires the account-level CloudWatch role (see AWS.ApiGateway.Account), not extra caller permissions.",
+            },
+          },
+        },
         stables: ["restApiId", "stageName"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

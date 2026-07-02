@@ -51,6 +51,31 @@ export const Store = Resource<Store>("Cloudflare.SecretsStore");
 
 export const SecretsStoreProvider = () =>
   Provider.succeed(Store, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["secrets_store:write"],
+            readScopes: ["secrets_store:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "adc8fa2bc6124928a8b3314dc63a1235",
+                name: "Secrets Store Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "5e33b7d77788455c9fdf18cbd38ee5a0",
+                name: "Secrets Store Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["storeId", "storeName", "accountId"],
     // The engine calls `read` whenever there's no prior state. Cloudflare
     // allows exactly one Secrets Store per account, so any account that's

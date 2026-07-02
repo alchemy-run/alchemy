@@ -142,6 +142,21 @@ export const InternetGatewayProvider = () =>
     InternetGateway,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateInternetGateway",
+                "ec2:AttachInternetGateway",
+                "ec2:DetachInternetGateway",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteInternetGateway",
+              ],
+              readActions: ["ec2:DescribeInternetGateways"],
+            },
+          },
+        },
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
 
         list: () =>

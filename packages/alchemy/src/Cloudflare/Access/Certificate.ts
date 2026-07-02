@@ -107,6 +107,31 @@ export const isCertificate = (value: unknown): value is Certificate =>
 
 export const CertificateProvider = () =>
   Provider.succeed(Certificate, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "29d3afbfd4054af9accdd1118815ed05",
+                name: "Access: Mutual TLS Certificates Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "4f3196a5c95747b6ad82e34e1d0a694f",
+                name: "Access: Mutual TLS Certificates Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["certificateId", "accountId", "fingerprint"],
     // Account-scoped collection (pattern b). Cloudflare never returns the
     // certificate PEM body, so the persisted `certificate` field is empty for

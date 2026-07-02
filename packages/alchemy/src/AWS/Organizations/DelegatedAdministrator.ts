@@ -45,6 +45,20 @@ export const DelegatedAdministratorProvider = () =>
     DelegatedAdministrator,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:RegisterDelegatedAdministrator",
+                "organizations:DeregisterDelegatedAdministrator",
+              ],
+              readActions: [
+                "organizations:ListDelegatedAdministrators",
+                "organizations:ListDelegatedServicesForAccount",
+              ],
+            },
+          },
+        },
         stables: ["accountId", "servicePrincipal"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;

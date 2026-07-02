@@ -124,6 +124,25 @@ export const VirtualMFADeviceProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:CreateVirtualMFADevice",
+                "iam:EnableMFADevice",
+                "iam:DeactivateMFADevice",
+                "iam:TagMFADevice",
+                "iam:UntagMFADevice",
+                "iam:DeleteVirtualMFADevice",
+              ],
+              readActions: [
+                "iam:GetMFADevice",
+                "iam:ListVirtualMFADevices",
+                "iam:ListMFADeviceTags",
+              ],
+            },
+          },
+        },
         stables: ["serialNumber"],
         list: () =>
           Effect.gen(function* () {

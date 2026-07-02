@@ -179,6 +179,17 @@ export const isCloudIntegration = (value: unknown): value is CloudIntegration =>
 
 export const CloudIntegrationProvider = () =>
   Provider.succeed(CloudIntegration, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          // No Magic Cloud Networking permission group exists in the static
+          // token catalog — resolve by { id } against the live
+          // GET /user/tokens/permission_groups list at implementation time.
+        },
+      },
+    },
     stables: ["integrationId", "accountId", "cloudType"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {

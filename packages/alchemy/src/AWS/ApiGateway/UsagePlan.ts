@@ -237,6 +237,21 @@ export const UsagePlanProvider = () =>
     UsagePlanResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:PUT",
+                "apigateway:DELETE",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createUsagePlan (POST), updateUsagePlan (PATCH), deleteUsagePlan (DELETE), tagResource (PUT) / untagResource (DELETE), get* reads (GET). Attaching apiStages authorizes as PATCH on the usage plan; no extra per-stage action.",
+            },
+          },
+        },
         stables: ["id"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

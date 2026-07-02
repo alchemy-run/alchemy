@@ -223,6 +223,23 @@ export const HealthCheckProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "route53:CreateHealthCheck",
+                "route53:UpdateHealthCheck",
+                "route53:DeleteHealthCheck",
+                "route53:ListTagsForResource",
+                "route53:ChangeTagsForResource",
+              ],
+              readActions: [
+                "route53:GetHealthCheck",
+                "route53:ListHealthChecks",
+              ],
+            },
+          },
+        },
         stables: ["id", "healthCheckId"],
         list: () =>
           route53.listHealthChecks.pages({}).pipe(

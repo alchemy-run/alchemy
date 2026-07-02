@@ -312,6 +312,19 @@ export const NatGatewayProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateNatGateway",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteNatGateway",
+              ],
+              readActions: ["ec2:DescribeNatGateways", "ec2:DescribeTags"],
+            },
+          },
+        },
         stables: ["natGatewayId", "natGatewayArn", "vpcId"],
 
         read: Effect.fn(function* ({ id, output }) {

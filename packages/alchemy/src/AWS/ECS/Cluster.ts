@@ -115,6 +115,24 @@ export const ClusterProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ecs:CreateCluster",
+                "ecs:UpdateCluster",
+                "ecs:PutClusterCapacityProviders",
+                "ecs:TagResource",
+                "ecs:UntagResource",
+                "ecs:DeleteCluster",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: ["ecs:DescribeClusters", "ecs:ListClusters"],
+              notes:
+                "iam:CreateServiceLinkedRole is required the first time ecs:CreateCluster runs in an account (AWS auto-creates AWSServiceRoleForECS).",
+            },
+          },
+        },
         stables: ["clusterArn", "clusterName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

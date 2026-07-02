@@ -93,6 +93,33 @@ export const isCustomPage = (value: unknown): value is CustomPage =>
 
 export const CustomPageProvider = () =>
   Provider.succeed(CustomPage, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            // "Access: Custom Pages …" — distinct from the account-level
+            // "Account Custom Pages …" groups; unique names, account scope.
+            permissionGroups: [
+              {
+                id: "4e5fd8ac327b4a358e48c66fcbeb856d",
+                name: "Access: Custom Pages Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "08e61dabe81a422dab0dea6fdef1a98a",
+                name: "Access: Custom Pages Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["customPageId", "accountId", "type"],
     // Account-scoped collection (pattern b). The list response items already
     // carry every Attribute field (uid/name/type) — read's Attributes don't

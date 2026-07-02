@@ -148,6 +148,31 @@ export const isHostnameContentList = (
 
 export const HostnameContentListProvider = () =>
   Provider.succeed(HostnameContentList, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "5ea6da42edb34811a78d1b007557c0ca",
+                name: "Web3 Hostnames Write",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              {
+                id: "8e31f574901c42e8ad89140b28d42112",
+                name: "Web3 Hostnames Read",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["zoneId", "hostnameId"],
 
     list: Effect.fn(function* () {
@@ -332,6 +357,8 @@ const sameContentList = (
 
 const serializeEntries = (entries: ContentListEntry[]) =>
   entries
-    .map((entry) => `${entry.type} ${entry.content} ${entry.description ?? ""}`)
+    .map(
+      (entry) => `${entry.type}\0${entry.content}\0${entry.description ?? ""}`,
+    )
     .sort()
     .join("");

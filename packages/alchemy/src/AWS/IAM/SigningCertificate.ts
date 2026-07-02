@@ -61,6 +61,18 @@ export const SigningCertificate = Resource<SigningCertificate>(
 
 export const SigningCertificateProvider = () =>
   Provider.succeed(SigningCertificate, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "iam:UploadSigningCertificate",
+            "iam:UpdateSigningCertificate",
+            "iam:DeleteSigningCertificate",
+          ],
+          readActions: ["iam:ListSigningCertificates", "iam:ListUsers"],
+        },
+      },
+    },
     stables: ["certificateId"],
     // IAM is a global service. `listSigningCertificates` requires a `UserName`,
     // so we enumerate every IAM user first (paginated) and then list each

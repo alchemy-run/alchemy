@@ -195,6 +195,22 @@ export const KvEntriesProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront-keyvaluestore:DescribeKeyValueStore",
+                "cloudfront-keyvaluestore:ListKeys",
+                "cloudfront-keyvaluestore:UpdateKeys",
+                "cloudfront-keyvaluestore:PutKey",
+                "cloudfront-keyvaluestore:DeleteKey",
+              ],
+              readActions: [],
+              notes:
+                "UpdateKeys has dependent actions cloudfront-keyvaluestore:PutKey and cloudfront-keyvaluestore:DeleteKey (batch writes are authorized per key). read/list make no cloud calls, hence empty readActions. Data-plane requests are signed for us-east-1.",
+            },
+          },
+        },
         // Non-listable: a KvEntries resource is a logical group of key/value
         // data keyed entirely by its parent store ARN + namespace (both chosen
         // by the user). There is no account-wide API to enumerate these groups,

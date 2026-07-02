@@ -138,6 +138,28 @@ export const isConfig = (value: unknown): value is Config =>
 
 export const ConfigProvider = () =>
   Provider.succeed(Config, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "8e6ed1ef6e864ad0ae477ceffa5aa5eb",
+                name: "Magic Network Monitoring Admin",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "3d85e9514f944bb4912c5871d92e5af5",
+                name: "Magic Network Monitoring Config Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["accountId"],
 
     diff: Effect.fn(function* ({ output }) {

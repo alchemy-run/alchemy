@@ -127,6 +127,27 @@ export const InstanceProfileProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:CreateInstanceProfile",
+                "iam:AddRoleToInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:TagInstanceProfile",
+                "iam:UntagInstanceProfile",
+                "iam:DeleteInstanceProfile",
+                "iam:PassRole",
+              ],
+              readActions: [
+                "iam:GetInstanceProfile",
+                "iam:ListInstanceProfiles",
+              ],
+              notes:
+                "iam:PassRole on the attached role is required by AddRoleToInstanceProfile (the API reference states the caller must hold PassRole on the role).",
+            },
+          },
+        },
         stables: [
           "instanceProfileArn",
           "instanceProfileName",

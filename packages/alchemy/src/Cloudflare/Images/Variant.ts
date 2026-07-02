@@ -154,6 +154,22 @@ export const isVariant = (value: unknown): value is Variant =>
 
 export const VariantProvider = () =>
   Provider.succeed(Variant, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "618ec6c64a3a42f8b08bdcb147ded4e4", name: "Images Write" },
+            ],
+            readPermissionGroups: [
+              { id: "0cf6473ad41449e7b7b743d14fc20c60", name: "Images Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["variantName", "accountId"],
 
     list: Effect.fn(function* () {

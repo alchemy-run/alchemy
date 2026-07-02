@@ -192,6 +192,28 @@ export const GroupProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:CreateGroup",
+                "iam:AttachGroupPolicy",
+                "iam:DetachGroupPolicy",
+                "iam:PutGroupPolicy",
+                "iam:DeleteGroupPolicy",
+                "iam:RemoveUserFromGroup",
+                "iam:DeleteGroup",
+              ],
+              readActions: [
+                "iam:GetGroup",
+                "iam:ListGroups",
+                "iam:ListGroupPolicies",
+                "iam:GetGroupPolicy",
+                "iam:ListAttachedGroupPolicies",
+              ],
+            },
+          },
+        },
         stables: ["groupArn", "groupName", "groupId"],
         // IAM is global (no region). Enumerate every group via the paginated
         // `listGroups`, then hydrate each into the full `read` Attributes shape

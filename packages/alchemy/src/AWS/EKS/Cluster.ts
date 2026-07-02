@@ -399,6 +399,30 @@ export const ClusterProvider = () =>
           );
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "eks:CreateCluster",
+                "eks:UpdateClusterConfig",
+                "eks:UpdateClusterVersion",
+                "eks:DescribeUpdate",
+                "eks:TagResource",
+                "eks:UntagResource",
+                "eks:DeleteCluster",
+                "iam:PassRole",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: [
+                "eks:DescribeCluster",
+                "eks:ListClusters",
+                "eks:ListTagsForResource",
+              ],
+              notes:
+                "iam:PassRole is required on the cluster role (roleArn) and, for Auto Mode, the node role (computeConfig.nodeRoleArn). iam:CreateServiceLinkedRole covers the AWSServiceRoleForAmazonEKS SLR auto-created on first CreateCluster. Kubernetes-object bindings are applied over the cluster's Kubernetes API using an STS-presigned GetCallerIdentity token (sts:GetCallerIdentity is implicitly allowed for any principal) — the *deploying* principal must additionally have Kubernetes RBAC on the cluster (e.g. via an AccessEntry or bootstrapClusterCreatorAdminPermissions), which is not an IAM action. eks:DescribeUpdate is listed under actions (not readActions) because it is only exercised by reconcile/delete update-polling.",
+            },
+          },
+        },
         stables: ["clusterArn", "clusterName"],
         // Enumerate every cluster in the ambient account/region. `listClusters`
         // returns only names, so we paginate it exhaustively then hydrate each

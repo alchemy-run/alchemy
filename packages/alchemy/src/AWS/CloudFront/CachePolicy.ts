@@ -175,6 +175,21 @@ export const CachePolicyProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateCachePolicy",
+                "cloudfront:UpdateCachePolicy",
+                "cloudfront:DeleteCachePolicy",
+              ],
+              readActions: [
+                "cloudfront:GetCachePolicyConfig",
+                "cloudfront:ListCachePolicies",
+              ],
+            },
+          },
+        },
         stables: ["cachePolicyId"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;

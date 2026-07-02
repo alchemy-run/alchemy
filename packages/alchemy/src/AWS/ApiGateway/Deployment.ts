@@ -205,6 +205,20 @@ export const DeploymentProvider = () =>
     DeploymentResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:DELETE",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createDeployment (POST), updateDeployment (PATCH), deleteDeployment (DELETE), get* reads (GET). createDeployment with stageName can implicitly create/update a stage; still authorized as POST on /restapis/{id}/deployments.",
+            },
+          },
+        },
         stables: ["deploymentId", "restApiId"] as const,
         // Deployments are sub-resources keyed by `restApiId`. Enumerate every
         // RestApi in the account/region, then page every deployment under each

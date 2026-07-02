@@ -883,6 +883,49 @@ await Effect.runPromise(program).catch((err) => {
       };
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ecs:RegisterTaskDefinition",
+                "ecs:DeregisterTaskDefinition",
+                "ecs:TagResource",
+                "ecs:UntagResource",
+                "ecr:CreateRepository",
+                "ecr:DeleteRepository",
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:InitiateLayerUpload",
+                "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload",
+                "ecr:PutImage",
+                "ecr:BatchGetImage",
+                "logs:CreateLogGroup",
+                "logs:TagResource",
+                "logs:DeleteLogGroup",
+                "iam:CreateRole",
+                "iam:TagRole",
+                "iam:GetRole",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:DeleteRole",
+                "iam:PassRole",
+              ],
+              readActions: [
+                "ecs:DescribeTaskDefinition",
+                "ecs:ListTaskDefinitions",
+                "ecs:ListTagsForResource",
+                "ecr:DescribeRepositories",
+              ],
+              notes:
+                "Bundling and the Docker image build are local-only; the push to ECR is authorized by ecr:GetAuthorizationToken plus the layer-upload/PutImage actions (the token inherits the caller's IAM permissions). iam:TagRole is needed because createRole is called with Tags; logs:TagResource because createLogGroup is called with tags. iam:PassRole on the created task/execution roles is required for ecs:RegisterTaskDefinition consumers (RunTask/CreateService) and is commonly enforced at registration by org policies — grant it on the roles this provider creates. iam:ListRolePolicies/ListAttachedRolePolicies are List* but are used only by delete, so they stay in actions.",
+            },
+          },
+        },
         stables: [
           "repositoryName",
           "repositoryUri",

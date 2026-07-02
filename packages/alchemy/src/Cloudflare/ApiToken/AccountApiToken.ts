@@ -144,6 +144,28 @@ const buildAttributes = (
 
 export const AccountApiTokenProvider = () =>
   Provider.succeed(AccountApiToken, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "5bc3f8b21c554832afc660159ab75fa4",
+                name: "Account API Tokens Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "eb56a6953c034b9d97dd838155666f06",
+                name: "Account API Tokens Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["tokenId", "accountId"],
     diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
       if (!isResolved(news)) return undefined;

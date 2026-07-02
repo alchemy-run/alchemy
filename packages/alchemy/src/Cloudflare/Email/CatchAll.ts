@@ -134,6 +134,36 @@ export const isCatchAll = (value: unknown): value is CatchAll =>
 
 export const CatchAllProvider = () =>
   Provider.succeed(CatchAll, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "79b3ec0d10ce4148a8f8bdc0cc5f97f2",
+                name: "Email Routing Rules Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "1b600d9d8062443e986a973f097e728a",
+                name: "Email Routing Rules Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: [
       "ruleId",

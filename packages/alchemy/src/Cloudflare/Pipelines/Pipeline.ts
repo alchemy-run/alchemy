@@ -108,6 +108,31 @@ export const isPipeline = (value: unknown): value is Pipeline =>
 
 export const PipelineProvider = () =>
   Provider.succeed(Pipeline, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["pipelines:write"],
+            readScopes: ["pipelines:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "e34111af393449539859485aa5ddd5bd",
+                name: "Pipelines Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "14b9cf2f410f4c0c9a16bb10a81c0e0b",
+                name: "Pipelines Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["pipelineId", "accountId", "name", "createdAt"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {

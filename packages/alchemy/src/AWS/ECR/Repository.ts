@@ -87,6 +87,26 @@ export const RepositoryProvider = () =>
             });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ecr:CreateRepository",
+                "ecr:PutLifecyclePolicy",
+                "ecr:TagResource",
+                "ecr:UntagResource",
+                "ecr:DeleteRepository",
+              ],
+              readActions: [
+                "ecr:DescribeRepositories",
+                "ecr:ListTagsForResource",
+                "ecr:GetLifecyclePolicy",
+              ],
+              notes:
+                "delete uses force:true, which removes all images in the repository via ecr:DeleteRepository alone (no per-image ecr:BatchDeleteImage needed).",
+            },
+          },
+        },
         stables: [
           "repositoryArn",
           "repositoryName",

@@ -256,6 +256,36 @@ type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
 export const BotManagementProvider = () =>
   Provider.succeed(BotManagement, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "3b94c49258ec4573b06d51d99b6416c0",
+                name: "Bot Management Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "07bea2220b2343fa9fae15656c0d8e88",
+                name: "Bot Management Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: ["zoneId", "initialSettings"],
 

@@ -67,6 +67,26 @@ export const OrganizationalUnitProvider = () =>
     OrganizationalUnit,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:CreateOrganizationalUnit",
+                "organizations:UpdateOrganizationalUnit",
+                "organizations:DeleteOrganizationalUnit",
+                "organizations:TagResource",
+                "organizations:UntagResource",
+              ],
+              readActions: [
+                "organizations:DescribeOrganizationalUnit",
+                "organizations:ListOrganizationalUnitsForParent",
+                "organizations:ListRoots",
+                "organizations:ListParents",
+                "organizations:ListTagsForResource",
+              ],
+            },
+          },
+        },
         stables: ["ouId", "ouArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

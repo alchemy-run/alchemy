@@ -184,6 +184,19 @@ export const EIPProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:AllocateAddress",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:ReleaseAddress",
+              ],
+              readActions: ["ec2:DescribeAddresses"],
+            },
+          },
+        },
         stables: ["allocationId", "eipArn", "publicIp"],
 
         list: () =>

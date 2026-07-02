@@ -116,6 +116,31 @@ export const isSilence = (value: unknown): value is Silence =>
 
 export const SilenceProvider = () =>
   Provider.succeed(Silence, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["notification:write"],
+            readScopes: ["notification:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "c3c847c5802d4ce3ba00e3e97b3c8555",
+                name: "Notifications Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "ce18edbdcebf465e9d6d1d2fc80ffd42",
+                name: "Notifications Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["silenceId", "accountId", "policyId", "createdAt"],
 
     // Silences are account-scoped; listSilences enumerates every silence in

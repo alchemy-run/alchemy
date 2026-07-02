@@ -69,6 +69,22 @@ export const PermissionSetProvider = () =>
     PermissionSet,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "sso:CreatePermissionSet",
+                "sso:UpdatePermissionSet",
+                "sso:DeletePermissionSet",
+              ],
+              readActions: [
+                "sso:ListInstances",
+                "sso:ListPermissionSets",
+                "sso:DescribePermissionSet",
+              ],
+            },
+          },
+        },
         stables: ["permissionSetArn", "instanceArn"],
         list: () =>
           Effect.gen(function* () {

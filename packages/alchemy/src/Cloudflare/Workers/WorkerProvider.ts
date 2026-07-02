@@ -1314,6 +1314,51 @@ export const LiveWorkerProvider = () =>
       });
 
       return Worker.Provider.of({
+        metadata: {
+          cloudflare: {
+            scope: "account",
+            auth: {
+              oauth: {
+                // zone:read is only exercised when the `domain` prop triggers
+                // zone inference; observability/tail scopes only by logs/tail.
+                scopes: [
+                  "workers:write",
+                  "workers_scripts:write",
+                  "zone:read",
+                  "workers_observability:read",
+                  "workers_tail:read",
+                ],
+                readScopes: ["workers:read"],
+              },
+              token: {
+                permissionGroups: [
+                  {
+                    id: "e086da7e2179491d91ee5f35b3ca210a",
+                    name: "Workers Scripts Write",
+                  },
+                  {
+                    id: "c8fed203ed3043cba015a93ad1616f1f",
+                    name: "Zone Read",
+                  },
+                  {
+                    id: "66c1ed49f4ed46098b75696a6d4ee3c9",
+                    name: "Workers Observability Read",
+                  },
+                  {
+                    id: "05880cd1bdc24d8bae0be2136972816b",
+                    name: "Workers Tail Read",
+                  },
+                ],
+                readPermissionGroups: [
+                  {
+                    id: "1a71c399035b4950a1bd1466bbe4f420",
+                    name: "Workers Scripts Read",
+                  },
+                ],
+              },
+            },
+          },
+        },
         stables: ["workerId", "workerName"],
         list: () =>
           Effect.gen(function* () {

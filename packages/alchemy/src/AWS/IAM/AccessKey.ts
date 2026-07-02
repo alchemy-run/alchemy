@@ -61,6 +61,22 @@ export const AccessKey = Resource<AccessKey>("AWS.IAM.AccessKey");
 
 export const AccessKeyProvider = () =>
   Provider.succeed(AccessKey, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "iam:CreateAccessKey",
+            "iam:UpdateAccessKey",
+            "iam:DeleteAccessKey",
+          ],
+          readActions: [
+            "iam:ListAccessKeys",
+            "iam:GetAccessKeyLastUsed",
+            "iam:ListUsers",
+          ],
+        },
+      },
+    },
     stables: ["accessKeyId"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

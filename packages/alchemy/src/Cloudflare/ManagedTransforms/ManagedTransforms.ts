@@ -184,6 +184,36 @@ export const isManagedTransforms = (
 
 export const ManagedTransformsProvider = () =>
   Provider.succeed(ManagedTransforms, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "0ac90a90249747bca6b047d97f0803e9",
+                name: "Zone Transform Rules Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "211a4c0feb3e43b3a2d41f1443a433e7",
+                name: "Zone Transform Rules Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: ["zoneId", "initialRequestHeaders", "initialResponseHeaders"],
 

@@ -222,6 +222,24 @@ const desiredMutualAuth = (
 
 export const ListenerProvider = () =>
   Provider.succeed(Listener, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "elasticloadbalancing:CreateListener",
+            "elasticloadbalancing:ModifyListener",
+            "elasticloadbalancing:AddListenerCertificates",
+            "elasticloadbalancing:RemoveListenerCertificates",
+            "elasticloadbalancing:DeleteListener",
+          ],
+          readActions: [
+            "elasticloadbalancing:DescribeListeners",
+            "elasticloadbalancing:DescribeLoadBalancers",
+            "elasticloadbalancing:DescribeListenerCertificates",
+          ],
+        },
+      },
+    },
     stables: ["listenerArn", "loadBalancerArn"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

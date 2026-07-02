@@ -129,6 +129,19 @@ export const ScalingPolicyProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "autoscaling:PutScalingPolicy",
+                "autoscaling:DeletePolicy",
+              ],
+              readActions: ["autoscaling:DescribePolicies"],
+              notes:
+                "Target-tracking policies have their CloudWatch alarms created and deleted by the Auto Scaling service itself — no cloudwatch:* actions are needed by the caller.",
+            },
+          },
+        },
         stables: ["policyArn", "policyName", "autoScalingGroupName"],
         // `describePolicies` enumerates every scaling policy across all Auto
         // Scaling Groups in the account/region when no AutoScalingGroupName

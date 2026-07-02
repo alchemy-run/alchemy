@@ -174,6 +174,31 @@ export const isNotificationPolicy = (
 
 export const NotificationPolicyProvider = () =>
   Provider.succeed(NotificationPolicy, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["notification:write"],
+            readScopes: ["notification:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "c3c847c5802d4ce3ba00e3e97b3c8555",
+                name: "Notifications Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "ce18edbdcebf465e9d6d1d2fc80ffd42",
+                name: "Notifications Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["policyId", "accountId", "alertType"],
 
     // Account-scoped collection: exhaustively paginate the account's

@@ -545,6 +545,35 @@ export const ServiceProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ecs:CreateService",
+                "ecs:UpdateService",
+                "ecs:DeleteService",
+                "ecs:TagResource",
+                "ecs:UntagResource",
+                "elasticloadbalancing:CreateLoadBalancer",
+                "elasticloadbalancing:CreateTargetGroup",
+                "elasticloadbalancing:CreateListener",
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:DeleteListener",
+                "elasticloadbalancing:DeleteTargetGroup",
+                "elasticloadbalancing:DeleteLoadBalancer",
+                "iam:CreateServiceLinkedRole",
+                "iam:PassRole",
+              ],
+              readActions: [
+                "ecs:DescribeServices",
+                "ecs:ListServices",
+                "ecs:ListClusters",
+              ],
+              notes:
+                "elasticloadbalancing:* actions are only exercised when `public: true` (Alchemy-managed ALB); elasticloadbalancing:AddTags is required because CreateLoadBalancer/CreateTargetGroup are called with Tags. iam:CreateServiceLinkedRole covers both AWSServiceRoleForECS and AWSServiceRoleForElasticLoadBalancing on first use. iam:PassRole is required on the task/execution roles referenced by the deployed task definition (checked by ecs:CreateService/UpdateService) and on the `role` prop when set (CLB path).",
+            },
+          },
+        },
         stables: ["serviceArn", "serviceName", "clusterArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

@@ -305,6 +305,18 @@ export const RouteProvider = () =>
     Route,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateRoute",
+                "ec2:ReplaceRoute",
+                "ec2:DeleteRoute",
+              ],
+              readActions: ["ec2:DescribeRouteTables"],
+            },
+          },
+        },
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           // Route table change requires replacement

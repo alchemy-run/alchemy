@@ -117,6 +117,32 @@ export const isMcpPortal = (value: unknown): value is McpPortal =>
 
 export const McpPortalProvider = () =>
   Provider.succeed(McpPortal, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            // No OAuth scope covers AI Controls MCP portals (not in ALL_SCOPES,
+            // and outside access:read/write's described surface).
+            supported: false,
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "db3d398df73946acb755c05b69edfc30",
+                name: "MCP Portals Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "b84a912ebb4a418888fec65f65c8ff3b",
+                name: "MCP Portals Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["portalId", "accountId", "createdAt"],
 
     list: Effect.fn(function* () {

@@ -300,6 +300,36 @@ export const isWaitingRoom = (value: unknown): value is WaitingRoom =>
 
 export const WaitingRoomProvider = () =>
   Provider.succeed(WaitingRoom, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "24fc124dc8254e0db468e60bf410c800",
+                name: "Waiting Rooms Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "cab5202d07ef47beae788e6bc95cb6fe",
+                name: "Waiting Rooms Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["waitingRoomId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {

@@ -147,6 +147,14 @@ export const isRule = (value: unknown): value is Rule =>
 
 export const RuleProvider = () =>
   Provider.succeed(Rule, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["id", "rulesetId", "accountId", "created"],
 
     list: Effect.fn(function* () {

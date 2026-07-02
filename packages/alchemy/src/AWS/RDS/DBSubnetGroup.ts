@@ -74,6 +74,20 @@ export const DBSubnetGroupProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBSubnetGroup",
+                "rds:ModifyDBSubnetGroup",
+                "rds:DeleteDBSubnetGroup",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+              ],
+              readActions: ["rds:DescribeDBSubnetGroups"],
+            },
+          },
+        },
         stables: ["dbSubnetGroupArn", "dbSubnetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;

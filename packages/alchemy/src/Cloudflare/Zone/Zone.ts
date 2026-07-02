@@ -202,6 +202,25 @@ export const ZoneProvider = () =>
       // const del = yield* zones.deleteZone;
 
       return {
+        metadata: {
+          cloudflare: {
+            scope: "account",
+            auth: {
+              oauth: { supported: false, readScopes: ["zone:read"] },
+              token: {
+                permissionGroups: [
+                  {
+                    id: "e6d2666161e84845a636613608cee8d5",
+                    name: "Zone Write",
+                  },
+                ],
+                readPermissionGroups: [
+                  { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+                ],
+              },
+            },
+          },
+        },
         stables: ["name", "zoneId", "accountId"],
         diff: Effect.fn(function* ({ news, output }) {
           if (!output) return undefined;

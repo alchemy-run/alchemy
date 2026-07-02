@@ -215,6 +215,28 @@ export const isGreTunnel = (value: unknown): value is GreTunnel =>
 
 export const GreTunnelProvider = () =>
   Provider.succeed(GreTunnel, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "0bc09a3cd4b54605990df4e307f138e1",
+                name: "Magic Transit Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "967ecf860a244dd1911a0331a0af582a",
+                name: "Magic Transit Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["tunnelId", "accountId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {

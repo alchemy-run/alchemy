@@ -453,6 +453,22 @@ export const DBInstanceProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBInstance",
+                "rds:ModifyDBInstance",
+                "rds:DeleteDBInstance",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+              ],
+              readActions: ["rds:DescribeDBInstances"],
+              notes:
+                "iam:PassRole on monitoringRoleArn when enhanced monitoring is configured. First instance in an account may require iam:CreateServiceLinkedRole (AWSServiceRoleForRDS). KMS grants come from the key policy when kmsKeyId / performanceInsightsKMSKeyId / masterUserSecretKmsKeyId are set.",
+            },
+          },
+        },
         stables: ["dbInstanceArn", "dbInstanceIdentifier"],
         // Pattern (a) AWS account/region collection: `describeDBInstances` is
         // paginated (items: "DBInstances") and returns each instance's

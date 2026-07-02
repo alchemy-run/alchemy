@@ -37,6 +37,21 @@ export const TrustedServiceAccessProvider = () =>
     TrustedServiceAccess,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:EnableAWSServiceAccess",
+                "organizations:DisableAWSServiceAccess",
+              ],
+              readActions: [
+                "organizations:ListAWSServiceAccessForOrganization",
+              ],
+              notes:
+                "For some AWS services, enabling trusted access causes the service to create service-linked roles in member accounts; AWS may require iam:CreateServiceLinkedRole on the caller depending on the service principal.",
+            },
+          },
+        },
         stables: ["servicePrincipal"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;

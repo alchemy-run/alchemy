@@ -84,6 +84,22 @@ export const isIndicatorFeedPermission = (
 
 export const IndicatorFeedPermissionProvider = () =>
   Provider.succeed(IndicatorFeedPermission, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            supported: false,
+          },
+          token: {
+            permissionGroups: [
+              { id: "92209474242d459690e2cdb1985eaa6c", name: "Intel Write" },
+            ],
+            readPermissionGroups: [],
+          },
+        },
+      },
+    },
     stables: ["feedId", "accountTag", "accountId"],
 
     // Non-listable: a grant is keyed by {feedId, accountTag} from the

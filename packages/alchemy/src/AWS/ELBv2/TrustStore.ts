@@ -99,6 +99,26 @@ export const TrustStoreProvider = () =>
         });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "elasticloadbalancing:CreateTrustStore",
+                "elasticloadbalancing:ModifyTrustStore",
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:RemoveTags",
+                "elasticloadbalancing:DeleteTrustStore",
+                "s3:GetObject",
+              ],
+              readActions: [
+                "elasticloadbalancing:DescribeTrustStores",
+                "elasticloadbalancing:DescribeTags",
+              ],
+              notes:
+                "CreateTrustStore/ModifyTrustStore read the CA bundle from S3 using the caller's permissions: s3:GetObject on the bundle object (plus s3:GetObjectVersion when caCertificatesBundleS3ObjectVersion is set).",
+            },
+          },
+        },
         stables: ["trustStoreArn", "name"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

@@ -154,6 +154,16 @@ export const isApp = (value: unknown): value is App =>
 
 export const AppProvider = () =>
   Provider.succeed(App, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            supported: false,
+          },
+        },
+      },
+    },
     stables: ["appId", "accountId", "createdAt"],
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

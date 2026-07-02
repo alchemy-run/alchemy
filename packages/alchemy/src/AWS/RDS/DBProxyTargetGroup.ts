@@ -139,6 +139,22 @@ export const DBProxyTargetGroupProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:ModifyDBProxyTargetGroup",
+                "rds:RegisterDBProxyTargets",
+                "rds:DeregisterDBProxyTargets",
+              ],
+              readActions: [
+                "rds:DescribeDBProxyTargetGroups",
+                "rds:DescribeDBProxyTargets",
+                "rds:DescribeDBProxies",
+              ],
+            },
+          },
+        },
         stables: ["dbProxyName", "targetGroupArn", "targetGroupName"],
         // Target groups are proxy-scoped: `describeDBProxyTargetGroups`
         // requires a `DBProxyName`, so there is no account-wide enumeration.

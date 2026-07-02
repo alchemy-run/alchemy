@@ -119,6 +119,31 @@ export const isGroup = (value: unknown): value is Group =>
 
 export const GroupProvider = () =>
   Provider.succeed(Group, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "bfe0d8686a584fa680f4c53b5eb0de6d",
+                name: "Access: Organizations, Identity Providers, and Groups Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "26bc23f853634eb4bff59983b9064fde",
+                name: "Access: Organizations, Identity Providers, and Groups Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["groupId", "accountId"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

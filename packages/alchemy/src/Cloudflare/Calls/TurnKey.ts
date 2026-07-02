@@ -109,6 +109,22 @@ export const isTurnKey = (value: unknown): value is TurnKey =>
 
 export const TurnKeyProvider = () =>
   Provider.succeed(TurnKey, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "b711942448db4b0aace44d1312f9fdb0", name: "Calls Write" },
+            ],
+            readPermissionGroups: [
+              { id: "686ab9a8b3854f25a1474f302d14b68d", name: "Calls Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["keyId", "accountId", "key", "created"],
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

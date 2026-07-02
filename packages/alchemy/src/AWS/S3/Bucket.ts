@@ -1304,6 +1304,57 @@ export const BucketProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "s3:CreateBucket",
+                "s3:DeleteBucket",
+                "s3:GetBucketTagging",
+                "s3:PutBucketTagging",
+                "s3:GetBucketOwnershipControls",
+                "s3:PutBucketOwnershipControls",
+                "s3:GetBucketPublicAccessBlock",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:GetBucketVersioning",
+                "s3:PutBucketVersioning",
+                "s3:GetEncryptionConfiguration",
+                "s3:PutEncryptionConfiguration",
+                "s3:GetBucketCORS",
+                "s3:PutBucketCORS",
+                "s3:GetLifecycleConfiguration",
+                "s3:PutLifecycleConfiguration",
+                "s3:GetBucketLogging",
+                "s3:PutBucketLogging",
+                "s3:GetAccelerateConfiguration",
+                "s3:PutAccelerateConfiguration",
+                "s3:GetBucketRequestPayment",
+                "s3:PutBucketRequestPayment",
+                "s3:GetBucketWebsite",
+                "s3:PutBucketWebsite",
+                "s3:GetReplicationConfiguration",
+                "s3:PutReplicationConfiguration",
+                "s3:GetIntelligentTieringConfiguration",
+                "s3:PutIntelligentTieringConfiguration",
+                "s3:GetBucketObjectLockConfiguration",
+                "s3:PutBucketObjectLockConfiguration",
+                "s3:PutBucketAcl",
+                "s3:GetBucketPolicy",
+                "s3:PutBucketPolicy",
+                "s3:DeleteBucketPolicy",
+                "s3:GetBucketNotification",
+                "s3:PutBucketNotification",
+                "s3:ListBucketVersions",
+                "s3:DeleteObject",
+                "s3:DeleteObjectVersion",
+                "iam:PassRole",
+              ],
+              readActions: ["s3:ListAllMyBuckets", "s3:ListBucket"],
+              notes:
+                "headBucket authorizes as s3:ListBucket. ListBucketVersions/DeleteObject/DeleteObjectVersion are needed only for forceDestroy. iam:PassRole on the replication role is required only when props.replication is set. Creating with objectLockEnabled also requires s3:PutBucketObjectLockConfiguration and s3:PutBucketVersioning (already listed).",
+            },
+          },
+        },
         stables: ["bucketName", "bucketArn", "region", "accountId"],
         // S3 bucket names are globally unique. `headBucket` succeeds only when
         // the bucket exists in our account, so a successful response is itself

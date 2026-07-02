@@ -2,6 +2,7 @@ export * from "./Arn.ts";
 export * from "./Assets.ts";
 export * from "./Bootstrap.ts";
 export * from "./Environment.ts";
+export type { AwsProviderMetadata } from "./ProviderMetadata.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
 

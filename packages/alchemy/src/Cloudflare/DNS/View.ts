@@ -93,6 +93,26 @@ export const isView = (value: unknown): value is View =>
 
 export const ViewProvider = () =>
   Provider.succeed(View, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "5b7aedd821a548b9bf5a2acabbce98c7",
+                name: "DNS View Write",
+              },
+            ],
+            readPermissionGroups: [
+              { id: "95d69e8d6d5144bfb0923667355d9f11", name: "DNS View Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["viewId", "accountId", "createdTime"],
 
     // Account collection — internal DNS views are enumerated per account

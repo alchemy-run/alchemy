@@ -633,6 +633,31 @@ export const WorkflowProvider = () =>
       const ctx = yield* AlchemyContext;
 
       return WorkflowResource.Provider.of({
+        metadata: {
+          cloudflare: {
+            scope: "account",
+            auth: {
+              oauth: {
+                scopes: ["workers:write", "workers_scripts:write"],
+                readScopes: ["workers:read"],
+              },
+              token: {
+                permissionGroups: [
+                  {
+                    id: "e086da7e2179491d91ee5f35b3ca210a",
+                    name: "Workers Scripts Write",
+                  },
+                ],
+                readPermissionGroups: [
+                  {
+                    id: "1a71c399035b4950a1bd1466bbe4f420",
+                    name: "Workers Scripts Read",
+                  },
+                ],
+              },
+            },
+          },
+        },
         // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
         stables: ["accountId"],
         // Workflows are account-scoped. Enumerate every workflow in the account

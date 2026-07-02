@@ -203,6 +203,24 @@ export const isSubscription = (value: unknown): value is Subscription =>
 
 export const SubscriptionProvider = () =>
   Provider.succeed(Subscription, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["queues:write"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "366f57075ffc42689627bcf8242a1b6d", name: "Queues Write" },
+            ],
+            readPermissionGroups: [
+              { id: "84a7755d54c646ca87cd50682a34bf7c", name: "Queues Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["subscriptionId", "accountId", "source", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

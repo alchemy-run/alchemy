@@ -200,6 +200,25 @@ export const issec = (value: unknown): value is Dnssec =>
 
 export const DnssecProvider = () =>
   Provider.succeed(Dnssec, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "4755a26eedb94da69e1066d98aa820be", name: "DNS Write" },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              { id: "82e64a83756745bbbb1c9c2701bf816b", name: "DNS Read" },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: [
       "zoneId",
       "initialStatus",

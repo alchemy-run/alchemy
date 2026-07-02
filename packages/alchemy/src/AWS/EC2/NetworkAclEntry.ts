@@ -251,6 +251,18 @@ export const NetworkAclEntryProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateNetworkAclEntry",
+                "ec2:ReplaceNetworkAclEntry",
+                "ec2:DeleteNetworkAclEntry",
+              ],
+              readActions: ["ec2:DescribeNetworkAcls"],
+            },
+          },
+        },
         stables: [],
 
         // Entries are embedded in describeNetworkAcls (each NetworkAcl owns an

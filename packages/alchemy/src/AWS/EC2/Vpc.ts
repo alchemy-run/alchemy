@@ -370,6 +370,20 @@ export const VpcProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateVpc",
+                "ec2:ModifyVpcAttribute",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteVpc",
+              ],
+              readActions: ["ec2:DescribeVpcs", "ec2:DescribeVpcAttribute"],
+            },
+          },
+        },
         stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;

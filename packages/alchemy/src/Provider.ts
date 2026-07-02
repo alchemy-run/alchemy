@@ -75,6 +75,24 @@ type Props<Res extends ResourceLike> = keyof Res["Props"] extends never
   ? Res["Props"] | undefined
   : Res["Props"];
 
+/**
+ * Metadata a resource provider declares about itself — most importantly the
+ * credentials/permissions its lifecycle operations require.
+ *
+ * This interface is intentionally empty in core. Each cloud package augments
+ * it with its own optional namespace via declaration merging (see
+ * `Cloudflare/ProviderMetadata.ts`, `AWS/ProviderMetadata.ts`), so third-party
+ * providers can contribute their own namespaces without touching core. Core
+ * never interprets the contents — cloud-specific analyses (e.g. computing the
+ * OAuth scopes an `alchemy login` should request) live with each cloud's auth
+ * provider.
+ *
+ * Values must be plain literals: no `Output`s, no Effects, no environment
+ * reads. Metadata is read by the CLI without running any lifecycle code and
+ * may be serialized into profiles.
+ */
+export interface AlchemyProviderMetadata {}
+
 export interface LogLine {
   timestamp: Date;
   message: string;
@@ -126,6 +144,14 @@ export interface ProviderService<
      */
     skip?: boolean;
   };
+  /**
+   * Declarative metadata about this provider — most importantly the
+   * credentials/permissions its lifecycle operations require (see
+   * {@link AlchemyProviderMetadata}). Local-only providers that make no cloud
+   * API calls declare an empty object (`metadata: {}`) to signal "annotated,
+   * nothing required" as distinct from "not yet annotated".
+   */
+  metadata?: AlchemyProviderMetadata;
   /**
    * Enumerates every existing resource of this type in the ambient scope
    * (account / region / zone resolved from the environment services), and
@@ -396,6 +422,63 @@ const isProviderCollectionService = (
     "kind" in value &&
     value.kind === "ProviderCollection"
   );
+};
+
+/**
+ * Provider metadata keyed by resource type (e.g. `"Cloudflare.Worker"`).
+ */
+export type ProviderMetadataIndex = ReadonlyMap<
+  string,
+  AlchemyProviderMetadata
+>;
+
+/**
+ * The provider metadata visible to a stack. Core only aggregates this —
+ * interpreting the per-cloud namespaces is the job of each cloud's auth
+ * provider (e.g. `Cloudflare/Auth/Requirements.ts`).
+ */
+export interface StackProviderMetadata {
+  /** Metadata of every provider registered in the stack's services. */
+  all: ProviderMetadataIndex;
+  /**
+   * Subset for the resource types the stack program actually declares
+   * (exact mode). Undefined when the stack couldn't be compiled — consumers
+   * should then fall back to {@link all} (whole-cloud mode, which over-asks).
+   */
+  used?: ProviderMetadataIndex;
+}
+
+/**
+ * Collect provider metadata from a built services context by walking every
+ * registered {@link ProviderCollection}. Pass the resource types a stack
+ * declares (`Object.values(stack.resources).map((r) => r.Type)`) to also get
+ * the exact-mode `used` subset.
+ */
+export const collectProviderMetadata = (
+  context: Context.Context<any>,
+  usedTypes?: Iterable<string>,
+): StackProviderMetadata => {
+  const all = new Map<string, AlchemyProviderMetadata>();
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      for (const [type, provider] of Object.entries(value.providers)) {
+        if (provider?.metadata !== undefined) {
+          all.set(type, provider.metadata);
+        }
+      }
+    }
+  }
+  if (usedTypes === undefined) {
+    return { all };
+  }
+  const used = new Map<string, AlchemyProviderMetadata>();
+  for (const type of usedTypes) {
+    const metadata = all.get(type);
+    if (metadata !== undefined) {
+      used.set(type, metadata);
+    }
+  }
+  return { all, used };
 };
 
 export const findProviderByType: {

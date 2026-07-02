@@ -170,6 +170,23 @@ export const isLiveInput = (value: unknown): value is LiveInput =>
 
 export const LiveInputProvider = () =>
   Provider.succeed(LiveInput, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "714f9c13a5684c2885a793f5edb36f59", name: "Stream Write" },
+            ],
+            readPermissionGroups: [
+              { id: "de21485a24744b76a004aa153898f7fe", name: "Stream Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["liveInputId", "accountId", "created"],
 
     diff: Effect.fn(function* ({ output }) {

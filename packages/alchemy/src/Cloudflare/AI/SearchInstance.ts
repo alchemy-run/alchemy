@@ -567,6 +567,32 @@ export const isSearchInstance = (value: unknown): value is SearchInstance =>
 
 export const SearchInstanceProvider = () =>
   Provider.succeed(SearchInstance, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["ai-search:write", "ai-search:run"],
+            readScopes: ["ai-search:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "7fb8d27511b34d02994d005b520b679f",
+                name: "Auto Rag Write",
+              },
+              {
+                id: "234108c786084936a381bb19b7f4ea65",
+                name: "Auto Rag Write Run Engine",
+              },
+            ],
+            readPermissionGroups: [
+              { id: "d7887c7a417e4cf2a69f1d01c1a1dc3b", name: "Auto Rag Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: [
       "instanceId",
       "accountId",

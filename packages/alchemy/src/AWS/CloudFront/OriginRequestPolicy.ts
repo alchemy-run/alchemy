@@ -154,6 +154,21 @@ export const OriginRequestPolicyProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateOriginRequestPolicy",
+                "cloudfront:UpdateOriginRequestPolicy",
+                "cloudfront:DeleteOriginRequestPolicy",
+              ],
+              readActions: [
+                "cloudfront:GetOriginRequestPolicyConfig",
+                "cloudfront:ListOriginRequestPolicies",
+              ],
+            },
+          },
+        },
         stables: ["originRequestPolicyId"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;

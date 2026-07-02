@@ -166,6 +166,36 @@ const normalizeUrl = (url: string): string => {
 
 export const TestScheduleProvider = () =>
   Provider.succeed(TestSchedule, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "3030687196b94b638145a3953da2b699",
+                name: "Zone Settings Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "517b21aee92c4d89936c976ba6e4be55",
+                name: "Zone Settings Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["zoneId", "url", "region"],
 
     list: Effect.fn(function* () {

@@ -218,6 +218,19 @@ export const NetworkAclProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateNetworkAcl",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteNetworkAcl",
+              ],
+              readActions: ["ec2:DescribeNetworkAcls"],
+            },
+          },
+        },
         stables: ["networkAclId", "networkAclArn", "ownerId", "isDefault"],
 
         read: Effect.fn(function* ({ output }) {

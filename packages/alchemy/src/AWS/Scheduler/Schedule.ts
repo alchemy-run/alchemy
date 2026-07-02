@@ -127,6 +127,21 @@ export const ScheduleProvider = () =>
           : createPhysicalName({ id, maxLength: 64 });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "scheduler:CreateSchedule",
+                "scheduler:UpdateSchedule",
+                "scheduler:DeleteSchedule",
+                "iam:PassRole",
+              ],
+              readActions: ["scheduler:GetSchedule", "scheduler:ListSchedules"],
+              notes:
+                "iam:PassRole on the Target.RoleArn (every schedule target requires a role Scheduler assumes to invoke it). Schedules are not taggable (only schedule groups are), so ownership cannot be tag-verified.",
+            },
+          },
+        },
         stables: ["scheduleArn", "scheduleName", "groupName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;

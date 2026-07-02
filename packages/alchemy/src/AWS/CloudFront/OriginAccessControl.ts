@@ -142,6 +142,21 @@ export const OriginAccessControlProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateOriginAccessControl",
+                "cloudfront:UpdateOriginAccessControl",
+                "cloudfront:DeleteOriginAccessControl",
+              ],
+              readActions: [
+                "cloudfront:GetOriginAccessControlConfig",
+                "cloudfront:ListOriginAccessControls",
+              ],
+            },
+          },
+        },
         stables: ["originAccessControlId"],
         list: () =>
           Effect.gen(function* () {

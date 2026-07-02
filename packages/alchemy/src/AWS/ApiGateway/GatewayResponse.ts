@@ -53,6 +53,16 @@ export const GatewayResponseProvider = () =>
     GatewayResponseResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["apigateway:PUT", "apigateway:DELETE"],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: putGatewayResponse is a pure upsert (PUT), deleteGatewayResponse (DELETE), get* reads (GET). Reconcile performs no GET — the PUT is unconditional.",
+            },
+          },
+        },
         stables: ["restApiId", "responseType"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

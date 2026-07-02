@@ -166,6 +166,27 @@ export const AddonProvider = () =>
         });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "eks:CreateAddon",
+                "eks:UpdateAddon",
+                "eks:DeleteAddon",
+                "eks:TagResource",
+                "eks:UntagResource",
+                "iam:PassRole",
+              ],
+              readActions: [
+                "eks:DescribeAddon",
+                "eks:ListAddons",
+                "eks:ListClusters",
+              ],
+              notes:
+                "iam:PassRole is only exercised when serviceAccountRoleArn (IRSA) or podIdentityAssociations (which pass role ARNs) are set on create/update.",
+            },
+          },
+        },
         stables: ["addonArn"],
         // Add-ons are keyed by (clusterName, addonName) and `listAddons`
         // requires a cluster. Enumerate every cluster, list its add-ons,

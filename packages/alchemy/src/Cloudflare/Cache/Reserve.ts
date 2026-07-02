@@ -124,6 +124,36 @@ const desiredValue = (props: ReserveProps): "on" | "off" =>
 
 export const ReserveProvider = () =>
   Provider.succeed(Reserve, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "9ff81cbbe65c400b97d92c3c1033cab6",
+                name: "Cache Settings Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "3245da1cf36c45c3847bb9b483c62f97",
+                name: "Cache Settings Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {

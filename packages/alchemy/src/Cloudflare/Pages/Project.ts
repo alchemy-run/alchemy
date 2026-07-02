@@ -255,6 +255,25 @@ export const isProject = (value: unknown): value is Project =>
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["pages:write"],
+            readScopes: ["pages:read"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "8d28297797f24fb8a0c332fe0866ec89", name: "Pages Write" },
+            ],
+            readPermissionGroups: [
+              { id: "e247aedd66bd41cc9193af0213416666", name: "Pages Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["projectId", "accountId", "name", "subdomain", "createdOn"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

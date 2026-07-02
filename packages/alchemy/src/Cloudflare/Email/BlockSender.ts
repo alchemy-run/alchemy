@@ -115,6 +115,28 @@ export const isBlockSender = (value: unknown): value is BlockSender =>
 
 export const BlockSenderProvider = () =>
   Provider.succeed(BlockSender, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "a3567c13e074447fb101babac3463566",
+                name: "Cloud Email Security: Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "9e5a9912439940fca5898b5b8dc6d1a5",
+                name: "Cloud Email Security: Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["blockSenderId", "accountId", "createdAt"],
 
     read: Effect.fn(function* ({ output, olds }) {

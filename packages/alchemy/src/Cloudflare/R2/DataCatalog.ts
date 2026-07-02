@@ -207,6 +207,30 @@ export const isDataCatalog = (value: unknown): value is DataCatalog =>
 
 export const DataCatalogProvider = () =>
   Provider.succeed(DataCatalog, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["r2_catalog:write"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "d229766a2f7f4d299f20eaa8c9b1fde9",
+                name: "Workers R2 Data Catalog Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "45db74139a62490b9b60eb7c4f34994b",
+                name: "Workers R2 Data Catalog Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["catalogId", "name", "accountId", "bucketName", "catalogUri"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -180,6 +180,36 @@ export const isPageRule = (value: unknown): value is PageRule =>
 
 export const PageRuleProvider = () =>
   Provider.succeed(PageRule, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "ed07f6c337da4195b4e72a1fb2c6bcae",
+                name: "Page Rules Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "b415b70a4fd1412886f164451f20405c",
+                name: "Page Rules Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["pageRuleId", "zoneId", "createdOn"],
 
     list: Effect.fn(function* () {

@@ -95,6 +95,21 @@ export const KeyValueStoreProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateKeyValueStore",
+                "cloudfront:UpdateKeyValueStore",
+                "cloudfront:DeleteKeyValueStore",
+              ],
+              readActions: [
+                "cloudfront:DescribeKeyValueStore",
+                "cloudfront:ListKeyValueStores",
+              ],
+            },
+          },
+        },
         stables: ["keyValueStoreId", "keyValueStoreArn", "keyValueStoreName"],
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;

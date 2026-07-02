@@ -251,6 +251,24 @@ export const Database = Resource<Database>("Cloudflare.D1Database");
 
 export const DatabaseProvider = () =>
   Provider.succeed(Database, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["d1:write"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "09b2857d1c31407795e75e3fed8617a1", name: "D1 Write" },
+            ],
+            readPermissionGroups: [
+              { id: "192192df92ee43ac90f2aeeffce67e35", name: "D1 Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["databaseId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -102,6 +102,36 @@ export const isSetting = (value: unknown): value is Setting =>
 
 export const SettingProvider = () =>
   Provider.succeed(Setting, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "c03055bc037c4ea9afb9a9f104b7b721",
+                name: "SSL and Certificates Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "7b7216b327b04b8fbc8f524e1f9b7531",
+                name: "SSL and Certificates Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled"],
 

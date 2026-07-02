@@ -196,6 +196,28 @@ export const isWidget = (value: unknown): value is Widget =>
 
 export const WidgetProvider = () =>
   Provider.succeed(Widget, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "755c05aa014b4f9ab263aa80b8167bd8",
+                name: "Turnstile Sites Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "5d78fd7895974fd0bdbbbb079482721b",
+                name: "Turnstile Sites Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["sitekey", "accountId", "region", "createdOn"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

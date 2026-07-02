@@ -180,6 +180,28 @@ export const isMember = (value: unknown): value is Member =>
 
 export const MemberProvider = () =>
   Provider.succeed(Member, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false, readScopes: ["account:read"] },
+          token: {
+            permissionGroups: [
+              {
+                id: "1af1fa2adc104452b74a9a3364202f20",
+                name: "Account Settings Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "c1fde68c7bcc44588cbb6ddbc16d6480",
+                name: "Account Settings Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["memberId", "accountId", "email", "userId"],
 
     list: Effect.fn(function* () {

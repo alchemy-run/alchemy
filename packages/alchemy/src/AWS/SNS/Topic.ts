@@ -135,6 +135,28 @@ export const Topic = Resource<Topic>("AWS.SNS.Topic");
 
 export const TopicProvider = () =>
   Provider.succeed(Topic, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "sns:CreateTopic",
+            "sns:SetTopicAttributes",
+            "sns:TagResource",
+            "sns:UntagResource",
+            "sns:PutDataProtectionPolicy",
+            "sns:DeleteTopic",
+          ],
+          readActions: [
+            "sns:ListTopics",
+            "sns:GetTopicAttributes",
+            "sns:ListTagsForResource",
+            "sns:GetDataProtectionPolicy",
+          ],
+          notes:
+            "sns:CreateTopic is required on every deploy (reconcile uses idempotent createTopic as the observe/ensure step). KMS-encrypted topics (KmsMasterKeyId attribute) need kms grants on the key for publishers, not the deployer.",
+        },
+      },
+    },
     // AWS account/region collection: `listTopics` enumerates every topic ARN
     // in the ambient account+region (paginated, ARN-only), then each ARN is
     // hydrated via `readTopic` into the exact `read` Attributes shape

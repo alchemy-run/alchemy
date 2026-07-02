@@ -181,6 +181,32 @@ type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
 export const DetectionSettingsProvider = () =>
   Provider.succeed(DetectionSettings, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: {
+            supported: false,
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "685f9605fd4e44ec937b6a0db658e629",
+                name: "Fraud Detection Write",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              {
+                id: "0d24e472a9654642a97df736e8b0d980",
+                name: "Fraud Detection Read",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: ["zoneId", "initialSettings"],
 

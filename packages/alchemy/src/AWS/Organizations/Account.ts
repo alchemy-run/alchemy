@@ -75,6 +75,29 @@ export const AccountProvider = () =>
     Account,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:CreateAccount",
+                "organizations:DescribeCreateAccountStatus",
+                "organizations:MoveAccount",
+                "organizations:RemoveAccountFromOrganization",
+                "organizations:TagResource",
+                "organizations:UntagResource",
+                "account:PutAccountName",
+              ],
+              readActions: [
+                "organizations:DescribeAccount",
+                "organizations:ListAccounts",
+                "organizations:ListParents",
+                "organizations:ListTagsForResource",
+              ],
+              notes:
+                "Account name sync uses the AWS Account Management API (account:PutAccountName), not Organizations. DescribeCreateAccountStatus is only invoked from reconcile's async-create poll, so it is classified as a full-lifecycle action.",
+            },
+          },
+        },
         stables: ["accountId", "accountArn", "joinedMethod", "joinedTimestamp"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;

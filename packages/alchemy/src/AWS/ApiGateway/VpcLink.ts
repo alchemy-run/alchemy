@@ -99,6 +99,22 @@ export const VpcLinkProvider = () =>
     VpcLinkResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:PUT",
+                "apigateway:DELETE",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createVpcLink (POST), updateVpcLink (PATCH), deleteVpcLink (DELETE), tagResource (PUT) / untagResource (DELETE), get* reads (GET). iam:CreateServiceLinkedRole (ops.apigateway.amazonaws.com) may fire on the account's first VPC link — API Gateway manages the NLB attachment through its service-linked role, so no elasticloadbalancing:* caller permission is needed.",
+            },
+          },
+        },
         stables: ["vpcLinkId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

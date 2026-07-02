@@ -251,6 +251,17 @@ export const isOnRamp = (value: unknown): value is OnRamp =>
 
 export const OnRampProvider = () =>
   Provider.succeed(OnRamp, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          // No Magic Cloud Networking permission group exists in the static
+          // token catalog — resolve by { id } against the live
+          // GET /user/tokens/permission_groups list at implementation time.
+        },
+      },
+    },
     stables: [
       "onRampId",
       "accountId",

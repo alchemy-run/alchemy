@@ -168,6 +168,22 @@ export const InsightRuleProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudwatch:PutInsightRule",
+                "cloudwatch:DeleteInsightRules",
+                "cloudwatch:TagResource",
+                "cloudwatch:UntagResource",
+              ],
+              readActions: [
+                "cloudwatch:DescribeInsightRules",
+                "cloudwatch:ListTagsForResource",
+              ],
+            },
+          },
+        },
         stables: ["ruleName", "ruleArn"],
         diff: Effect.fn(function* ({
           id,

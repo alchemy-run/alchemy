@@ -84,6 +84,20 @@ export const InstanceProvider = () =>
     Instance,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "sso:CreateInstance",
+                "sso:DeleteInstance",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: ["sso:ListInstances"],
+              notes:
+                "CreateInstance/DeleteInstance are only invoked in mode: 'account'; mode: 'existing' (the default) is adopt-only and needs just sso:ListInstances. Enabling an Identity Center instance implicitly creates the AWSServiceRoleForSSO service-linked role (iam:CreateServiceLinkedRole for sso.amazonaws.com). Organization instances cannot be created via API and must be enabled manually in the management account.",
+            },
+          },
+        },
         stables: ["instanceArn", "identityStoreId", "ownerAccountId", "mode"],
         // Enumerate every Identity Center instance visible to the calling
         // account (organization + account instances). `ListInstances` is

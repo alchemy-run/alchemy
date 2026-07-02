@@ -572,6 +572,43 @@ export const InstanceProvider = () =>
       };
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:RunInstances",
+                "ec2:ModifyInstanceAttribute",
+                "ec2:StopInstances",
+                "ec2:StartInstances",
+                "ec2:RebootInstances",
+                "ec2:TerminateInstances",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                // host mode (props.main set) — managed role/profile + asset upload
+                "iam:CreateRole",
+                "iam:GetRole",
+                "iam:DeleteRole",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:CreateInstanceProfile",
+                "iam:GetInstanceProfile",
+                "iam:DeleteInstanceProfile",
+                "iam:AddRoleToInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:PassRole",
+                "s3:PutObject",
+                "s3:CopyObject",
+                "s3:DeleteObject",
+              ],
+              readActions: ["ec2:DescribeInstances", "ec2:DescribeImages"],
+              notes:
+                "iam:PassRole is required because RunInstances launches with an instance profile in host mode. iam:*/s3:* actions apply only when `main` is set (hosted runtime); s3 objects live under the alchemy Assets bucket prefix `ec2/{unit}/*`. ec2:DescribeImages is used by the Image.ts AMI-lookup helpers (amazonLinux2023() etc.) commonly passed as `imageId`.",
+            },
+          },
+        },
         stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
         list: () =>
           Effect.gen(function* () {

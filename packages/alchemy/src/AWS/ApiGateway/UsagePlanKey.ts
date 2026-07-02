@@ -53,6 +53,16 @@ export const UsagePlanKeyProvider = () =>
     UsagePlanKeyResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["apigateway:POST", "apigateway:DELETE"],
+              readActions: ["apigateway:GET"],
+              notes:
+                "Verb-based: createUsagePlanKey (POST), deleteUsagePlanKey (DELETE), get* reads (GET). Pure association — no PATCH/PUT paths.",
+            },
+          },
+        },
         stables: ["usagePlanId", "keyId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

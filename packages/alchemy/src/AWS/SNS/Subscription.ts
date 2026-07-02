@@ -70,6 +70,24 @@ export const Subscription = Resource<Subscription>("AWS.SNS.Subscription");
 
 export const SubscriptionProvider = () =>
   Provider.succeed(Subscription, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "sns:Subscribe",
+            "sns:SetSubscriptionAttributes",
+            "sns:Unsubscribe",
+          ],
+          readActions: [
+            "sns:ListSubscriptions",
+            "sns:ListSubscriptionsByTopic",
+            "sns:GetSubscriptionAttributes",
+          ],
+          notes:
+            "SNS subscriptions are not taggable; ownership cannot be tag-verified. Lambda-protocol subscriptions additionally need a Lambda Permission (lambda:AddPermission via AWS.Lambda.Permission) so SNS can invoke the function — handled by the separate Permission resource, not this provider.",
+        },
+      },
+    },
     read: Effect.fn(function* ({ olds, output }) {
       return yield* readSubscription({
         subscriptionArn: output?.subscriptionArn,

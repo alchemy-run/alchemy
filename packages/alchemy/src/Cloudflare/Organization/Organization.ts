@@ -193,6 +193,14 @@ export const isOrganization = (value: unknown): value is Organization =>
 
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["organizationId", "createTime"],
 
     // Enumerate every organization reachable by the credentials. Cloudflare's

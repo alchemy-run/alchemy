@@ -130,6 +130,14 @@ export const PermissionProvider = () =>
       type PermissionAttrs = { statementId: string; functionName: string };
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["lambda:AddPermission", "lambda:RemovePermission"],
+              readActions: ["lambda:ListFunctions", "lambda:GetPolicy"],
+            },
+          },
+        },
         stables: ["statementId", "functionName"],
         list: () =>
           Effect.gen(function* () {

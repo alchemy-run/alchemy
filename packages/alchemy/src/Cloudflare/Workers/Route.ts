@@ -115,6 +115,39 @@ export const isWorkerRoute = (value: unknown): value is WorkerRoute =>
 
 export const WorkerRouteProvider = () =>
   Provider.succeed(WorkerRoute, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: {
+            scopes: ["workers_routes:write", "zone:read"],
+            readScopes: ["workers:read", "zone:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "28f4b596e7d643029c524985477ae49a",
+                name: "Workers Routes Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "2072033d694d415a936eaeb94e6405b8",
+                name: "Workers Routes Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["routeId", "zoneId"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {

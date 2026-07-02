@@ -120,6 +120,26 @@ export const OpenIDConnectProviderProvider = () =>
         );
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:CreateOpenIDConnectProvider",
+                "iam:AddClientIDToOpenIDConnectProvider",
+                "iam:RemoveClientIDFromOpenIDConnectProvider",
+                "iam:UpdateOpenIDConnectProviderThumbprint",
+                "iam:TagOpenIDConnectProvider",
+                "iam:UntagOpenIDConnectProvider",
+                "iam:DeleteOpenIDConnectProvider",
+              ],
+              readActions: [
+                "iam:GetOpenIDConnectProvider",
+                "iam:ListOpenIDConnectProviders",
+                "iam:ListOpenIDConnectProviderTags",
+              ],
+            },
+          },
+        },
         stables: ["openIDConnectProviderArn"],
         // IAM is global; `listOpenIDConnectProviders` returns ARNs only, so
         // hydrate each into the full Attributes shape `read` produces.

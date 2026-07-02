@@ -1425,6 +1425,50 @@ export default await Effect.runPromise(handlerEffect)
         }`;
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "lambda:CreateFunction",
+                "lambda:UpdateFunctionCode",
+                "lambda:UpdateFunctionConfiguration",
+                "lambda:DeleteFunction",
+                "lambda:TagResource",
+                "lambda:CreateFunctionUrlConfig",
+                "lambda:UpdateFunctionUrlConfig",
+                "lambda:DeleteFunctionUrlConfig",
+                "lambda:AddPermission",
+                "lambda:RemovePermission",
+                "lambda:PutFunctionConcurrency",
+                "lambda:DeleteFunctionConcurrency",
+                "iam:CreateRole",
+                "iam:TagRole",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:DeleteRole",
+                "iam:PassRole",
+                "s3:GetObject",
+                "s3:PutObject",
+              ],
+              readActions: [
+                "lambda:GetFunction",
+                "lambda:ListFunctions",
+                "lambda:ListTags",
+                "lambda:GetFunctionUrlConfig",
+                "lambda:GetFunctionConcurrency",
+                "iam:GetRole",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "logs:StartLiveTail",
+                "logs:FilterLogEvents",
+              ],
+              notes:
+                "Creates/owns the execution role: requires iam:PassRole on the generated role. s3:GetObject/PutObject are only used to upload the code archive when the Assets bucket service is provided (falls back to inline ZipFile otherwise). CreateFunction with Tags additionally authorizes lambda:TagResource.",
+            },
+          },
+        },
         stables: ["functionArn", "functionName", "roleName"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;

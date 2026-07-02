@@ -139,6 +139,14 @@ export const isResourceGroup = (value: unknown): value is ResourceGroup =>
 
 export const ResourceGroupProvider = () =>
   Provider.succeed(ResourceGroup, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["resourceGroupId", "accountId"],
 
     read: Effect.fn(function* ({ id, output, olds }) {

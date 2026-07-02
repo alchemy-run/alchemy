@@ -140,6 +140,28 @@ export const LoadBalancerProvider = () =>
           : createPhysicalName({ id, maxLength: 32, lowercase: true });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "elasticloadbalancing:CreateLoadBalancer",
+                "elasticloadbalancing:SetSubnets",
+                "elasticloadbalancing:SetSecurityGroups",
+                "elasticloadbalancing:SetIpAddressType",
+                "elasticloadbalancing:ModifyLoadBalancerAttributes",
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:RemoveTags",
+                "elasticloadbalancing:DeleteLoadBalancer",
+              ],
+              readActions: [
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeTags",
+              ],
+              notes:
+                "First load balancer in an account requires iam:CreateServiceLinkedRole (AWSServiceRoleForElasticLoadBalancing).",
+            },
+          },
+        },
         stables: [
           "loadBalancerArn",
           "loadBalancerName",

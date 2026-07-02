@@ -169,6 +169,23 @@ export const isWatermark = (value: unknown): value is Watermark =>
 
 export const WatermarkProvider = () =>
   Provider.succeed(Watermark, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "714f9c13a5684c2885a793f5edb36f59", name: "Stream Write" },
+            ],
+            readPermissionGroups: [
+              { id: "de21485a24744b76a004aa153898f7fe", name: "Stream Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: [
       "watermarkId",
       "accountId",

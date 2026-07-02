@@ -217,6 +217,31 @@ export const isLegacyPipeline = (value: unknown): value is LegacyPipeline =>
 
 export const LegacyPipelineProvider = () =>
   Provider.succeed(LegacyPipeline, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["pipelines:write"],
+            readScopes: ["pipelines:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "e34111af393449539859485aa5ddd5bd",
+                name: "Pipelines Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "14b9cf2f410f4c0c9a16bb10a81c0e0b",
+                name: "Pipelines Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["pipelineId", "accountId", "name", "endpoint"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {

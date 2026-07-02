@@ -618,6 +618,51 @@ export const LiveContainerProvider = () =>
       };
 
       return ContainerPlatform.Provider.of({
+        metadata: {
+          cloudflare: {
+            scope: "account",
+            auth: {
+              oauth: {
+                scopes: [
+                  "containers:write",
+                  "cloudchamber:write",
+                  "workers_observability:read",
+                  "workers_tail:read",
+                ],
+              },
+              token: {
+                permissionGroups: [
+                  {
+                    id: "bdbcd690c763475a985e8641dddc09f7",
+                    name: "Workers Containers Write",
+                  },
+                  {
+                    id: "26ce6c7d18a346528e7b905d5e269866",
+                    name: "Cloudchamber Write",
+                  },
+                  {
+                    id: "66c1ed49f4ed46098b75696a6d4ee3c9",
+                    name: "Workers Observability Read",
+                  },
+                  {
+                    id: "05880cd1bdc24d8bae0be2136972816b",
+                    name: "Workers Tail Read",
+                  },
+                ],
+                readPermissionGroups: [
+                  {
+                    id: "cfd39eebc07c4e3ea849e4b3d2644637",
+                    name: "Workers Containers Read",
+                  },
+                  {
+                    id: "65ec50cbde3d4c838bbe7500024d5745",
+                    name: "Cloudchamber Read",
+                  },
+                ],
+              },
+            },
+          },
+        },
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({
           id,

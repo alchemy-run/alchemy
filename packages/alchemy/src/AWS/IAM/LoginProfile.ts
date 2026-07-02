@@ -59,6 +59,18 @@ export const LoginProfile = Resource<LoginProfile>("AWS.IAM.LoginProfile");
 
 export const LoginProfileProvider = () =>
   Provider.succeed(LoginProfile, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "iam:CreateLoginProfile",
+            "iam:UpdateLoginProfile",
+            "iam:DeleteLoginProfile",
+          ],
+          readActions: ["iam:GetLoginProfile", "iam:ListUsers"],
+        },
+      },
+    },
     stables: ["userName"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

@@ -177,6 +177,30 @@ export const isMtlsCertificate = (value: unknown): value is MtlsCertificate =>
 
 export const MtlsCertificateProvider = () =>
   Provider.succeed(MtlsCertificate, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["ssl_certs:write"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "db37e5f1cb1a4e1aabaef8deaea43575",
+                name: "Account: SSL and Certificates Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "a7a233f9604845c787d4c8c39ac09c21",
+                name: "Account: SSL and Certificates Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["mtlsCertificateId", "accountId"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

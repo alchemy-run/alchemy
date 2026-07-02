@@ -121,6 +121,36 @@ export const isSnippetRules = (value: unknown): value is SnippetRules =>
 
 export const SnippetRulesProvider = () =>
   Provider.succeed(SnippetRules, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "dadeaf3abdf14126a77a35e0c92fc36e",
+                name: "Snippets Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "74c654eb4aac40e28d6c6caa4c5aeb3d",
+                name: "Snippets Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["zoneId"],
 
     list: Effect.fn(function* () {

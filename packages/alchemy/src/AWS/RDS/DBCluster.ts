@@ -480,6 +480,23 @@ export const DBClusterProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBCluster",
+                "rds:ModifyDBCluster",
+                "rds:DeleteDBCluster",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+                "secretsmanager:GetSecretValue",
+              ],
+              readActions: ["rds:DescribeDBClusters"],
+              notes:
+                "secretsmanager:GetSecretValue only when masterUserSecretArn is set. iam:PassRole on monitoringRoleArn when enhanced monitoring is configured. First cluster in an account may require iam:CreateServiceLinkedRole (AWSServiceRoleForRDS). kms:* grants are delegated to the key policy when kmsKeyId / performanceInsightsKMSKeyId / masterUserSecretKmsKeyId are set.",
+            },
+          },
+        },
         stables: ["dbClusterArn", "dbClusterIdentifier"],
         // AWS account/region collection (pattern a): exhaustively paginate
         // `describeDBClusters` and map each cluster to the exact `read`

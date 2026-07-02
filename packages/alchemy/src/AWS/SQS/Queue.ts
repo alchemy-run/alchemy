@@ -384,6 +384,27 @@ export const QueueProvider = () =>
         return baseAttributes;
       };
       return Queue.Provider.of({
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "sqs:CreateQueue",
+                "sqs:SetQueueAttributes",
+                "sqs:TagQueue",
+                "sqs:UntagQueue",
+                "sqs:DeleteQueue",
+              ],
+              readActions: [
+                "sqs:ListQueues",
+                "sqs:GetQueueUrl",
+                "sqs:GetQueueAttributes",
+                "sqs:ListQueueTags",
+              ],
+              notes:
+                "CreateQueue with the tags parameter additionally authorizes sqs:TagQueue. SSE with a customer-managed KMS key (kmsMasterKeyId) needs the usual kms grants on that key for producers/consumers, not the deployer.",
+            },
+          },
+        },
         stables: ["queueName", "queueUrl", "queueArn"],
         // Enumerate every queue in the ambient account/region. `listQueues`
         // returns queue URLs (paginated), which we hydrate into the exact `read`

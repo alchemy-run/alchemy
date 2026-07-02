@@ -152,6 +152,14 @@ export const isAccountResourceTags = (
 
 export const AccountResourceTagsProvider = () =>
   Provider.succeed(AccountResourceTags, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["accountId", "resourceType", "resourceId", "workerId"],
 
     // Account-wide enumeration: `GET /accounts/{id}/tags/resources` returns

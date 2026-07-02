@@ -127,6 +127,31 @@ export const isServiceToken = (value: unknown): value is ServiceToken =>
 
 export const ServiceTokenProvider = () =>
   Provider.succeed(ServiceToken, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "a1c0fec57cf94af79479a6d827fa518c",
+                name: "Access: Service Tokens Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "91f7ce32fa614d73b7e1fc8f0e78582b",
+                name: "Access: Service Tokens Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["serviceTokenId", "accountId", "clientId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

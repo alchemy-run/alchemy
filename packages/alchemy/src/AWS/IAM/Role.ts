@@ -298,6 +298,34 @@ export const RoleProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:CreateRole",
+                "iam:UpdateRole",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:PutRolePermissionsBoundary",
+                "iam:DeleteRolePermissionsBoundary",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:DeleteRole",
+              ],
+              readActions: [
+                "iam:GetRole",
+                "iam:ListRoles",
+                "iam:ListRolePolicies",
+                "iam:GetRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRoleTags",
+              ],
+            },
+          },
+        },
         stables: ["roleArn", "roleName"],
         list: () =>
           Effect.gen(function* () {

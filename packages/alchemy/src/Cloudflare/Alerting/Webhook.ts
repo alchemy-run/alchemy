@@ -129,6 +129,31 @@ export const isNotificationWebhook = (
 
 export const NotificationWebhookProvider = () =>
   Provider.succeed(NotificationWebhook, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["notification:write"],
+            readScopes: ["notification:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "c3c847c5802d4ce3ba00e3e97b3c8555",
+                name: "Notifications Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "ce18edbdcebf465e9d6d1d2fc80ffd42",
+                name: "Notifications Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["webhookId", "accountId"],
 
     // Account collection (pattern b): enumerate every webhook destination in

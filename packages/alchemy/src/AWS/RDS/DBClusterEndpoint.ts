@@ -104,6 +104,20 @@ export const DBClusterEndpointProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBClusterEndpoint",
+                "rds:ModifyDBClusterEndpoint",
+                "rds:DeleteDBClusterEndpoint",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+              ],
+              readActions: ["rds:DescribeDBClusterEndpoints"],
+            },
+          },
+        },
         stables: ["dbClusterEndpointArn", "dbClusterEndpointIdentifier"],
         // Enumerate every custom cluster endpoint in the account/region.
         // `describeDBClusterEndpoints` with no filter returns custom endpoints

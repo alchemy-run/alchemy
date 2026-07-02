@@ -235,6 +235,24 @@ const waitForConsumerDeleted = (consumerArn: string) =>
 
 export const StreamConsumerProvider = () =>
   Provider.succeed(StreamConsumer, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "kinesis:RegisterStreamConsumer",
+            "kinesis:DeregisterStreamConsumer",
+            "kinesis:TagResource",
+            "kinesis:UntagResource",
+          ],
+          readActions: [
+            "kinesis:DescribeStreamConsumer",
+            "kinesis:ListStreamConsumers",
+            "kinesis:ListStreams",
+            "kinesis:ListTagsForResource",
+          ],
+        },
+      },
+    },
     stables: ["consumerArn", "consumerName"],
     read: Effect.fn(function* ({ id, olds, output }) {
       const consumerName =

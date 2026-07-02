@@ -103,6 +103,23 @@ export const AlarmMuteRuleProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudwatch:PutAlarmMuteRule",
+                "cloudwatch:DeleteAlarmMuteRule",
+                "cloudwatch:TagResource",
+              ],
+              readActions: [
+                "cloudwatch:GetAlarmMuteRule",
+                "cloudwatch:ListAlarmMuteRules",
+              ],
+              notes:
+                "Tags are passed inline on PutAlarmMuteRule; CloudWatch authorizes tag-on-create as cloudwatch:TagResource.",
+            },
+          },
+        },
         stables: ["alarmMuteRuleName", "alarmMuteRuleArn"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
           if (!isResolved(news)) return undefined;

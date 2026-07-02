@@ -158,6 +158,23 @@ export const CapacityProviderProvider = () =>
           );
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ecs:CreateCapacityProvider",
+                "ecs:UpdateCapacityProvider",
+                "ecs:TagResource",
+                "ecs:UntagResource",
+                "ecs:DeleteCapacityProvider",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: ["ecs:DescribeCapacityProviders"],
+              notes:
+                "The referenced Auto Scaling Group is user-supplied (autoScalingGroupArn prop) — no autoscaling:* actions are called by this provider. iam:CreateServiceLinkedRole covers the AWSServiceRoleForECS SLR that createCapacityProvider requires on first use.",
+            },
+          },
+        },
         stables: ["capacityProviderArn", "name"],
 
         diff: Effect.fn(function* ({ id, news, olds }) {

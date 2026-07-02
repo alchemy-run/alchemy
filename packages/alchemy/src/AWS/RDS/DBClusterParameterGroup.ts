@@ -72,6 +72,19 @@ export const DBClusterParameterGroupProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBClusterParameterGroup",
+                "rds:DeleteDBClusterParameterGroup",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+              ],
+              readActions: ["rds:DescribeDBClusterParameterGroups"],
+            },
+          },
+        },
         stables: ["dbClusterParameterGroupArn", "dbClusterParameterGroupName"],
         list: () =>
           // AWS account/region collection (pattern (a)): exhaustively paginate

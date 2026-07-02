@@ -93,6 +93,28 @@ export const isServiceBinding = (value: unknown): value is ServiceBinding =>
 
 export const ServiceBindingProvider = () =>
   Provider.succeed(ServiceBinding, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "92b8234e99f64e05bbbc59e1dc0f76b6",
+                name: "IP Prefixes: Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "27beb7f8333b41e2b946f0e23cd8091e",
+                name: "IP Prefixes: Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["bindingId", "prefixId", "accountId", "cidr", "serviceId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {

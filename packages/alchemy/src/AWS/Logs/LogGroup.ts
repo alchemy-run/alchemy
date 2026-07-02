@@ -91,6 +91,29 @@ export const LogGroupProvider = () =>
       ): LogGroupClass => props.logGroupClass ?? "STANDARD";
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "logs:CreateLogGroup",
+                "logs:DeleteLogGroup",
+                "logs:PutRetentionPolicy",
+                "logs:DeleteRetentionPolicy",
+                "logs:AssociateKmsKey",
+                "logs:DisassociateKmsKey",
+                "logs:PutLogGroupDeletionProtection",
+                "logs:TagResource",
+                "logs:UntagResource",
+              ],
+              readActions: [
+                "logs:DescribeLogGroups",
+                "logs:ListTagsForResource",
+              ],
+              notes:
+                "createLogGroup with tags requires logs:TagResource. Using kmsKeyId additionally requires the KMS key policy to grant CloudWatch Logs use of the key (kms:Encrypt*/Decrypt* via the key policy, not caller IAM).",
+            },
+          },
+        },
         stables: ["logGroupArn", "logGroupName"],
         // AWS account/region collection: paginate `describeLogGroups`
         // exhaustively, then hydrate each group's tags via

@@ -375,6 +375,20 @@ export const VpcEndpointProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateVpcEndpoint",
+                "ec2:ModifyVpcEndpoint",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteVpcEndpoints",
+              ],
+              readActions: ["ec2:DescribeVpcEndpoints"],
+            },
+          },
+        },
         stables: ["vpcEndpointId", "vpcEndpointArn", "ownerId"],
 
         read: Effect.fn(function* ({ output }) {

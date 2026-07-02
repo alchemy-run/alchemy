@@ -226,6 +226,22 @@ export const KvRoutesUpdateProvider = () =>
         );
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront-keyvaluestore:DescribeKeyValueStore",
+                "cloudfront-keyvaluestore:GetKey",
+                "cloudfront-keyvaluestore:UpdateKeys",
+                "cloudfront-keyvaluestore:PutKey",
+                "cloudfront-keyvaluestore:DeleteKey",
+              ],
+              readActions: [],
+              notes:
+                "UpdateKeys has dependent actions PutKey and DeleteKey. GetKey/DescribeKeyValueStore are only invoked from reconcile/delete (read/list make no cloud calls). Data-plane requests are signed for us-east-1.",
+            },
+          },
+        },
         // Non-listable: this resource is an update operation that manages a
         // single route entry inside a JSON array stored at a KV store key. It is
         // keyed entirely by {store, namespace, key, entry}; there is no API that

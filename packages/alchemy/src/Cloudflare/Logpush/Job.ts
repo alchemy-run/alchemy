@@ -270,6 +270,33 @@ export const isJob = (value: unknown): value is Job =>
 
 export const JobProvider = () =>
   Provider.succeed(Job, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["logpush:write", "zone:read"],
+            readScopes: ["logpush:read", "zone:read"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "96163bd1b0784f62b3e44ed8c2ab1eb6", name: "Logs Write" },
+              // Logs Write (account)
+              { id: "3e0b5820118e47f3922f7c989e673882", name: "Logs Write" },
+              // Logs Write (zone)
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              { id: "6a315a56f18441e59ed03352369ae956", name: "Logs Read" },
+              // Logs Read (account)
+              { id: "c4a30cd58c5d42619c86a3c36c441e2d", name: "Logs Read" },
+              // Logs Read (zone)
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["jobId", "accountId", "zoneId", "dataset", "kind"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {

@@ -88,6 +88,14 @@ export const isUserGroupMembership = (
 
 export const UserGroupMembershipProvider = () =>
   Provider.succeed(UserGroupMembership, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["userGroupId", "memberId", "accountId"],
 
     // Parent fan-out: memberships are keyed by (user group, member) and

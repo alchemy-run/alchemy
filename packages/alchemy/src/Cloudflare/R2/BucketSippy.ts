@@ -224,6 +224,31 @@ export const isBucketSippy = (value: unknown): value is BucketSippy =>
 
 export const BucketSippyProvider = () =>
   Provider.succeed(BucketSippy, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["workers:write"],
+            readScopes: ["workers:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "bf7481a1826f439697cb59a20b22293e",
+                name: "Workers R2 Storage Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "b4992e1108244f5d8bfbd5744320c2e1",
+                name: "Workers R2 Storage Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["bucketName", "accountId", "jurisdiction"],
 
     diff: Effect.fn(function* ({ olds, news }) {

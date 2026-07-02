@@ -127,6 +127,36 @@ export const isBgpPrefix = (value: unknown): value is BgpPrefix =>
 
 export const BgpPrefixProvider = () =>
   Provider.succeed(BgpPrefix, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "2ae23e4939d54074b7d252d27ce75a77",
+                name: "IP Prefixes: BGP On Demand Write",
+              },
+              {
+                id: "27beb7f8333b41e2b946f0e23cd8091e",
+                name: "IP Prefixes: Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "e763fae6ee95443b8f56f19213c5f2a5",
+                name: "IP Prefixes: BGP On Demand Read",
+              },
+              {
+                id: "27beb7f8333b41e2b946f0e23cd8091e",
+                name: "IP Prefixes: Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["bgpPrefixId", "prefixId", "accountId", "cidr", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {

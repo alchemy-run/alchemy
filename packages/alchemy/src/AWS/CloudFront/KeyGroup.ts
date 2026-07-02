@@ -131,6 +131,21 @@ export const KeyGroupProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateKeyGroup",
+                "cloudfront:UpdateKeyGroup",
+                "cloudfront:DeleteKeyGroup",
+              ],
+              readActions: [
+                "cloudfront:GetKeyGroupConfig",
+                "cloudfront:ListKeyGroups",
+              ],
+            },
+          },
+        },
         stables: ["keyGroupId"],
         list: () =>
           Effect.gen(function* () {

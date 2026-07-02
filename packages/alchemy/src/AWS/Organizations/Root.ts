@@ -59,6 +59,22 @@ export const RootProvider = () =>
     Root,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:TagResource",
+                "organizations:UntagResource",
+              ],
+              readActions: [
+                "organizations:ListRoots",
+                "organizations:ListTagsForResource",
+              ],
+              notes:
+                "Import-style resource: the root is created/deleted by AWS with the organization; Alchemy only discovers it and reconciles tags. delete is a no-op.",
+            },
+          },
+        },
         stables: ["rootId", "rootArn"],
         // Enumerate every organization root via `listRoots` (paginated) and
         // hydrate each into the exact `read` Attributes shape, fetching tags

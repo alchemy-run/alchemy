@@ -70,6 +70,24 @@ export const PolicyProvider = () =>
     Policy,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:CreatePolicy",
+                "organizations:UpdatePolicy",
+                "organizations:DeletePolicy",
+                "organizations:TagResource",
+                "organizations:UntagResource",
+              ],
+              readActions: [
+                "organizations:DescribePolicy",
+                "organizations:ListPolicies",
+                "organizations:ListTagsForResource",
+              ],
+            },
+          },
+        },
         stables: ["policyId", "policyArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

@@ -212,6 +212,32 @@ export const UserProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:CreateUser",
+                "iam:PutUserPermissionsBoundary",
+                "iam:DeleteUserPermissionsBoundary",
+                "iam:AttachUserPolicy",
+                "iam:DetachUserPolicy",
+                "iam:PutUserPolicy",
+                "iam:DeleteUserPolicy",
+                "iam:TagUser",
+                "iam:UntagUser",
+                "iam:DeleteUser",
+              ],
+              readActions: [
+                "iam:GetUser",
+                "iam:ListUsers",
+                "iam:ListUserPolicies",
+                "iam:GetUserPolicy",
+                "iam:ListAttachedUserPolicies",
+                "iam:ListUserTags",
+              ],
+            },
+          },
+        },
         stables: ["userArn", "userName", "userId"],
         list: () =>
           Effect.gen(function* () {

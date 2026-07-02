@@ -273,6 +273,28 @@ export const isApplication = (value: unknown): value is Application =>
 
 export const ApplicationProvider = () =>
   Provider.succeed(Application, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["appId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {

@@ -99,6 +99,27 @@ export const PodIdentityAssociationProvider = () =>
         });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "eks:CreatePodIdentityAssociation",
+                "eks:UpdatePodIdentityAssociation",
+                "eks:DeletePodIdentityAssociation",
+                "eks:TagResource",
+                "eks:UntagResource",
+                "iam:PassRole",
+              ],
+              readActions: [
+                "eks:DescribePodIdentityAssociation",
+                "eks:ListPodIdentityAssociations",
+                "eks:ListClusters",
+              ],
+              notes:
+                "iam:PassRole is required on roleArn (and targetRoleArn when set) for Create/UpdatePodIdentityAssociation. The role's trust policy must allow pods.eks.amazonaws.com, but establishing that trust is the role resource's concern, not this provider's.",
+            },
+          },
+        },
         stables: ["associationArn", "associationId"],
         // `list()` enumerates every pod identity association across the
         // account/region. The list op is cluster-scoped, so first enumerate all

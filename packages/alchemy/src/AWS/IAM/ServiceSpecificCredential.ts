@@ -74,6 +74,18 @@ export const ServiceSpecificCredential = Resource<ServiceSpecificCredential>(
 
 export const ServiceSpecificCredentialProvider = () =>
   Provider.succeed(ServiceSpecificCredential, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "iam:CreateServiceSpecificCredential",
+            "iam:UpdateServiceSpecificCredential",
+            "iam:DeleteServiceSpecificCredential",
+          ],
+          readActions: ["iam:ListServiceSpecificCredentials", "iam:ListUsers"],
+        },
+      },
+    },
     stables: ["serviceSpecificCredentialId"],
     list: Effect.fn(function* () {
       // Service-specific credentials are owned per IAM user and IAM is a

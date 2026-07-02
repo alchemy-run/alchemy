@@ -58,6 +58,17 @@ export const OrganizationResourcePolicyProvider = () =>
     OrganizationResourcePolicy,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:PutResourcePolicy",
+                "organizations:DeleteResourcePolicy",
+              ],
+              readActions: ["organizations:DescribeResourcePolicy"],
+            },
+          },
+        },
         stables: ["resourcePolicyId", "resourcePolicyArn"],
         diff: Effect.fn(function* () {}),
         read: Effect.fn(function* () {

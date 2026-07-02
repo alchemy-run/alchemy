@@ -163,6 +163,24 @@ export const isIndicatorFeed = (value: unknown): value is IndicatorFeed =>
 
 export const IndicatorFeedProvider = () =>
   Provider.succeed(IndicatorFeed, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            supported: false,
+          },
+          token: {
+            permissionGroups: [
+              { id: "92209474242d459690e2cdb1985eaa6c", name: "Intel Write" },
+            ],
+            readPermissionGroups: [
+              { id: "df1577df30ee46268f9470952d7b0cdf", name: "Intel Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["feedId", "accountId", "createdOn"],
 
     // Account collection — enumerate every indicator feed owned by the

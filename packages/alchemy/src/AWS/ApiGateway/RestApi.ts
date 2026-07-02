@@ -301,6 +301,23 @@ export const RestApiProvider = () =>
     RestApi,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:PUT",
+                "apigateway:DELETE",
+                "apigateway:UpdateRestApiPolicy",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "API Gateway IAM is verb-based (GET/POST/PATCH/PUT/DELETE on apigateway ARNs), not per-operation. apigateway:UpdateRestApiPolicy is additionally evaluated whenever the `policy` prop is set (createRestApi with a policy, or a PATCH touching /policy). iam:CreateServiceLinkedRole (ops.apigateway.amazonaws.com) may fire on the account's first API. PUT/DELETE cover tagResource/untagResource.",
+            },
+          },
+        },
         stables: ["restApiId", "rootResourceId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

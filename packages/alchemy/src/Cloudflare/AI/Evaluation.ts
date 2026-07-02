@@ -144,6 +144,31 @@ export const listEvaluationTypes = (accountId: string) =>
 
 export const EvaluationProvider = () =>
   Provider.succeed(Evaluation, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["aig:write"],
+            readScopes: ["aig:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "6c8a3737f07f46369c1ea1f22138daaf",
+                name: "AI Gateway Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "4dc8917b4b40457d88d3035d5dadb054",
+                name: "AI Gateway Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["evaluationId", "accountId", "gatewayId", "createdAt"],
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return undefined;

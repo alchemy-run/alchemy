@@ -84,6 +84,23 @@ export const isSigningKey = (value: unknown): value is SigningKey =>
 
 export const SigningKeyProvider = () =>
   Provider.succeed(SigningKey, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "714f9c13a5684c2885a793f5edb36f59", name: "Stream Write" },
+            ],
+            readPermissionGroups: [
+              { id: "de21485a24744b76a004aa153898f7fe", name: "Stream Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["keyId", "accountId", "created", "pem", "jwk"],
 
     list: Effect.fn(function* () {

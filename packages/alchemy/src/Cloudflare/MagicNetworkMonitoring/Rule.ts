@@ -196,6 +196,28 @@ export const isRule = (value: unknown): value is Rule =>
 
 export const RuleProvider = () =>
   Provider.succeed(Rule, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "09c77baecb6341a2b1ca2c62b658d290",
+                name: "Magic Network Monitoring Config Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "3d85e9514f944bb4912c5871d92e5af5",
+                name: "Magic Network Monitoring Config Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["ruleId", "accountId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {

@@ -257,6 +257,27 @@ export const VpcOriginProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateVpcOrigin",
+                "cloudfront:UpdateVpcOrigin",
+                "cloudfront:DeleteVpcOrigin",
+                "cloudfront:TagResource",
+                "cloudfront:UntagResource",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: [
+                "cloudfront:GetVpcOrigin",
+                "cloudfront:ListVpcOrigins",
+                "cloudfront:ListTagsForResource",
+              ],
+              notes:
+                "First CreateVpcOrigin in an account auto-creates the AWSServiceRoleForCloudFrontVPCOrigin service-linked role (iam:CreateServiceLinkedRole). CloudFront's SLR then manages the ENIs in the target VPC; the caller does not need ec2:* directly from this provider's code.",
+            },
+          },
+        },
         stables: ["vpcOriginId", "vpcOriginArn"],
         list: () =>
           Effect.gen(function* () {

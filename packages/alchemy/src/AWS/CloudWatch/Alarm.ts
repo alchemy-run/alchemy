@@ -114,6 +114,22 @@ export const AlarmProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudwatch:PutMetricAlarm",
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:TagResource",
+                "cloudwatch:UntagResource",
+              ],
+              readActions: [
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:ListTagsForResource",
+              ],
+            },
+          },
+        },
         stables: ["alarmName", "alarmArn"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {} }) {
           if (!isResolved(news)) return undefined;

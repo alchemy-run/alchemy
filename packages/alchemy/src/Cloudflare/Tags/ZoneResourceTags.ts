@@ -161,6 +161,14 @@ export const isZoneResourceTags = (value: unknown): value is ZoneResourceTags =>
 
 export const ZoneResourceTagsProvider = () =>
   Provider.succeed(ZoneResourceTags, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["zoneId", "resourceType", "resourceId", "accessApplicationId"],
 
     list: Effect.fn(function* () {

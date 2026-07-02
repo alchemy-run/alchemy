@@ -355,6 +355,20 @@ export const SubnetProvider = () =>
     Subnet,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateSubnet",
+                "ec2:ModifySubnetAttribute",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteSubnet",
+              ],
+              readActions: ["ec2:DescribeSubnets"],
+            },
+          },
+        },
         stables: ["subnetId", "subnetArn", "ownerId", "vpcId"],
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;

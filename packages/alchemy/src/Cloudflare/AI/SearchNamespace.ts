@@ -186,6 +186,28 @@ export const isSearchNamespace = (value: unknown): value is SearchNamespace =>
 
 export const SearchNamespaceProvider = () =>
   Provider.succeed(SearchNamespace, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["ai-search:write"],
+            readScopes: ["ai-search:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "7fb8d27511b34d02994d005b520b679f",
+                name: "Auto Rag Write",
+              },
+            ],
+            readPermissionGroups: [
+              { id: "d7887c7a417e4cf2a69f1d01c1a1dc3b", name: "Auto Rag Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["name", "accountId", "createdAt"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

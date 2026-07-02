@@ -155,6 +155,28 @@ export const isAllowPolicy = (value: unknown): value is AllowPolicy =>
 
 export const AllowPolicyProvider = () =>
   Provider.succeed(AllowPolicy, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "a3567c13e074447fb101babac3463566",
+                name: "Cloud Email Security: Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "9e5a9912439940fca5898b5b8dc6d1a5",
+                name: "Cloud Email Security: Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["policyId", "accountId", "createdAt"],
 
     list: Effect.fn(function* () {

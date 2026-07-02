@@ -72,6 +72,31 @@ export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace");
 
 export const NamespaceProvider = () =>
   Provider.succeed(Namespace, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["workers_kv:write"],
+            readScopes: ["workers:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "f7f0eda5697f475c90846e879bab8666",
+                name: "Workers KV Storage Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "8b47d2786a534c08a1f94ee8f9f599ef",
+                name: "Workers KV Storage Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["namespaceId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

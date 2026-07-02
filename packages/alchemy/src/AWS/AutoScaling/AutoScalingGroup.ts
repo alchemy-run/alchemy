@@ -262,6 +262,24 @@ export const AutoScalingGroupProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "autoscaling:CreateAutoScalingGroup",
+                "autoscaling:UpdateAutoScalingGroup",
+                "autoscaling:DeleteAutoScalingGroup",
+                "autoscaling:AttachLoadBalancerTargetGroups",
+                "autoscaling:DetachLoadBalancerTargetGroups",
+                "autoscaling:CreateOrUpdateTags",
+                "autoscaling:DeleteTags",
+              ],
+              readActions: ["autoscaling:DescribeAutoScalingGroups"],
+              notes:
+                "First ASG in an account requires iam:CreateServiceLinkedRole (AWSServiceRoleForAutoScaling). When the referenced launch template specifies an instance profile (always true for hosted LaunchTemplates), CreateAutoScalingGroup/UpdateAutoScalingGroup validation additionally requires iam:PassRole on the instance role and ec2:RunInstances on the template.",
+            },
+          },
+        },
         stables: ["autoScalingGroupArn", "autoScalingGroupName"],
         list: () =>
           // `describeAutoScalingGroups` is paginated; collect every page and

@@ -199,6 +199,20 @@ export const DashboardProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudwatch:PutDashboard",
+                "cloudwatch:DeleteDashboards",
+              ],
+              readActions: [
+                "cloudwatch:GetDashboard",
+                "cloudwatch:ListDashboards",
+              ],
+            },
+          },
+        },
         stables: ["dashboardName", "dashboardArn"],
         diff: Effect.fn(function* ({
           id,

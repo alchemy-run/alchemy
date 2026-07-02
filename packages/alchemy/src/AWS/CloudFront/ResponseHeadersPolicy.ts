@@ -200,6 +200,21 @@ export const ResponseHeadersPolicyProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateResponseHeadersPolicy",
+                "cloudfront:UpdateResponseHeadersPolicy",
+                "cloudfront:DeleteResponseHeadersPolicy",
+              ],
+              readActions: [
+                "cloudfront:GetResponseHeadersPolicyConfig",
+                "cloudfront:ListResponseHeadersPolicies",
+              ],
+            },
+          },
+        },
         stables: ["responseHeadersPolicyId"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;

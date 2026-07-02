@@ -152,6 +152,17 @@ export const isCatalogSync = (value: unknown): value is CatalogSync =>
 
 export const CatalogSyncProvider = () =>
   Provider.succeed(CatalogSync, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          // No Magic Cloud Networking permission group exists in the static
+          // token catalog — resolve by { id } against the live
+          // GET /user/tokens/permission_groups list at implementation time.
+        },
+      },
+    },
     stables: ["syncId", "accountId", "destinationType", "destinationId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {

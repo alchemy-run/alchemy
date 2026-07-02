@@ -94,6 +94,31 @@ export const isHostnameRoute = (value: unknown): value is HostnameRoute =>
 
 export const HostnameRouteProvider = () =>
   Provider.succeed(HostnameRoute, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["teams:write"],
+            readScopes: ["teams:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "e2980d9241cf4939bbbd74fdc43b9651",
+                name: "Cloudflare One Networks Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "4f1276d1e7e34c32a5012bbe02ece86d",
+                name: "Cloudflare One Networks Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["hostnameRouteId", "accountId"],
 
     read: Effect.fn(function* ({ output, olds }) {

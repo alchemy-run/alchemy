@@ -58,6 +58,21 @@ export const OrganizationProvider = () =>
     Organization,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:CreateOrganization",
+                "organizations:EnableAllFeatures",
+                "organizations:DeleteOrganization",
+                "iam:CreateServiceLinkedRole",
+              ],
+              readActions: ["organizations:DescribeOrganization"],
+              notes:
+                "CreateOrganization implicitly creates the AWSServiceRoleForOrganizations service-linked role, so the caller needs iam:CreateServiceLinkedRole for organizations.amazonaws.com. Must run in the management account.",
+            },
+          },
+        },
         stables: ["organizationId", "organizationArn", "managementAccountId"],
         diff: Effect.fn(function* () {}),
         read: Effect.fn(function* () {

@@ -225,6 +225,30 @@ export const HostedZoneProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "route53:CreateHostedZone",
+                "route53:DeleteHostedZone",
+                "route53:UpdateHostedZoneComment",
+                "route53:ListTagsForResource",
+                "route53:ChangeTagsForResource",
+                "route53:ListResourceRecordSets",
+                "route53:ChangeResourceRecordSets",
+                "route53:GetChange",
+                "ec2:DescribeVpcs",
+              ],
+              readActions: [
+                "route53:ListHostedZones",
+                "route53:ListHostedZonesByName",
+                "route53:GetHostedZone",
+              ],
+              notes:
+                "ListResourceRecordSets/ChangeResourceRecordSets/GetChange are needed only for forceDestroy record purge. ec2:DescribeVpcs is required by AWS only when creating a private hosted zone (props.vpc); public-zone-only stacks can drop it.",
+            },
+          },
+        },
         stables: ["id", "name"],
         list: () =>
           route53.listHostedZones.pages({}).pipe(

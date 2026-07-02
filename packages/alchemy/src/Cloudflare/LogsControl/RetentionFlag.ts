@@ -95,6 +95,26 @@ export const isLogsRetentionFlag = (
 
 export const LogsRetentionFlagProvider = () =>
   Provider.succeed(LogsRetentionFlag, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "3e0b5820118e47f3922f7c989e673882", name: "Logs Write" },
+              // Logs Write (zone)
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              { id: "c4a30cd58c5d42619c86a3c36c441e2d", name: "Logs Read" },
+              // Logs Read (zone)
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     stables: ["zoneId", "initialFlag"],
 
     list: Effect.fn(function* () {

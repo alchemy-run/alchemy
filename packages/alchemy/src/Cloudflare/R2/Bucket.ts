@@ -658,6 +658,35 @@ export const BucketProvider = () =>
         });
 
       return {
+        metadata: {
+          cloudflare: {
+            scope: "account",
+            auth: {
+              oauth: {
+                scopes: ["workers:write", "zone:read"],
+                readScopes: ["workers:read"],
+              },
+              token: {
+                permissionGroups: [
+                  {
+                    id: "bf7481a1826f439697cb59a20b22293e",
+                    name: "Workers R2 Storage Write",
+                  },
+                  {
+                    id: "c8fed203ed3043cba015a93ad1616f1f",
+                    name: "Zone Read",
+                  },
+                ],
+                readPermissionGroups: [
+                  {
+                    id: "b4992e1108244f5d8bfbd5744320c2e1",
+                    name: "Workers R2 Storage Read",
+                  },
+                ],
+              },
+            },
+          },
+        },
         stables: ["bucketName", "accountId"],
         list: () =>
           Effect.gen(function* () {

@@ -137,6 +137,24 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
 
 export const ConsumerProviderLive = () =>
   Provider.succeed(Consumer, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["queues:write"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "366f57075ffc42689627bcf8242a1b6d", name: "Queues Write" },
+            ],
+            readPermissionGroups: [
+              { id: "84a7755d54c646ca87cd50682a34bf7c", name: "Queues Read" },
+            ],
+          },
+        },
+      },
+    },
     // The `consumerId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
     stables: ["accountId"],
     // Queue consumers are sub-resources of a queue with no account-wide
@@ -570,6 +588,7 @@ export const ConsumerProviderLocal = () =>
     Effect.gen(function* () {
       const localRuntimeState = yield* LocalRuntimeState;
       return {
+        metadata: {},
         list: () =>
           Effect.sync(() =>
             Array.from(MutableHashMap.values(localRuntimeState.queueConsumers)),

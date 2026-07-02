@@ -93,6 +93,28 @@ const findByEmail = (accountId: string, email: string) =>
 
 export const AddressProvider = () =>
   Provider.succeed(Address, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "e4589eb09e63436686cd64252a3aebeb",
+                name: "Email Routing Addresses Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "5272e56105d04b5897466995b9bd4643",
+                name: "Email Routing Addresses Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["addressId", "accountId", "email"],
     // Account collection: destination addresses are enumerable account-wide.
     list: Effect.fn(function* () {

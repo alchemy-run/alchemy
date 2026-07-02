@@ -199,6 +199,24 @@ export const Config = Object.assign(
 
 export const ConfigProvider = () =>
   Provider.succeed(Config, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "cdeb15b336e640a2965df8c65052f1e0", name: "Zaraz Admin" },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              { id: "5bdbde7e76144204a244274eac3eb0eb", name: "Zaraz Read" },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
     nuke: { singleton: true },
     stables: ["zoneId"],
     list: Effect.fn(function* () {

@@ -94,6 +94,17 @@ export const isZoneTransferAcl = (value: unknown): value is ZoneTransferAcl =>
 
 export const ZoneTransferAclProvider = () =>
   Provider.succeed(ZoneTransferAcl, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          // token: CATALOG GAP — no Secondary DNS permission group exists in
+          // the static PERMISSION_GROUPS catalog yet
+        },
+      },
+    },
+
     stables: ["aclId", "accountId"],
 
     // Account-scoped collection: enumerate every ACL in the ambient

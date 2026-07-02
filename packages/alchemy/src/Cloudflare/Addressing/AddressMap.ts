@@ -152,6 +152,28 @@ export const isAddressMap = (value: unknown): value is AddressMap =>
 
 export const AddressMapProvider = () =>
   Provider.succeed(AddressMap, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "6ffe7f4299db4d4cb54f64e0eb12a456",
+                name: "Address Maps Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "d07270cea5484b08ad6440c985af2148",
+                name: "Address Maps Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: [
       "addressMapId",
       "accountId",

@@ -44,6 +44,20 @@ export const PolicyAttachmentProvider = () =>
     PolicyAttachment,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "organizations:AttachPolicy",
+                "organizations:DetachPolicy",
+              ],
+              readActions: [
+                "organizations:ListPolicies",
+                "organizations:ListTargetsForPolicy",
+              ],
+            },
+          },
+        },
         stables: ["policyId", "targetId"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;

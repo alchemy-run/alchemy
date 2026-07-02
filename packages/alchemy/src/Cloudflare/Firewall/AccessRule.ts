@@ -180,6 +180,44 @@ export const isAccessRule = (value: unknown): value is AccessRule =>
 
 export const AccessRuleProvider = () =>
   Provider.succeed(AccessRule, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "a416acf9ef5a4af19fb11ed3b96b1fe6",
+                name: "Account Firewall Access Rules Write",
+              },
+              {
+                id: "43137f8d07884d3198dc0ee77ca6e79b",
+                name: "Firewall Services Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "de7a688cc47d43bd9ea700b467a09c96",
+                name: "Account Firewall Access Rules Read",
+              },
+              {
+                id: "4ec32dfcb35641c5bb32d5ef1ab963b4",
+                name: "Firewall Services Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["ruleId", "zoneId", "accountId", "allowedModes", "createdOn"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {

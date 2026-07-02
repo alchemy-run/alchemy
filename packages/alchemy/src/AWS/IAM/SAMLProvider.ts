@@ -83,6 +83,24 @@ const isTransientWriteError = (error: {
 
 export const SAMLProviderProvider = () =>
   Provider.succeed(SAMLProvider, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "iam:CreateSAMLProvider",
+            "iam:UpdateSAMLProvider",
+            "iam:TagSAMLProvider",
+            "iam:UntagSAMLProvider",
+            "iam:DeleteSAMLProvider",
+          ],
+          readActions: [
+            "iam:GetSAMLProvider",
+            "iam:ListSAMLProviders",
+            "iam:ListSAMLProviderTags",
+          ],
+        },
+      },
+    },
     stables: ["samlProviderArn"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

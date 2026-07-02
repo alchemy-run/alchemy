@@ -194,6 +194,31 @@ export const isMonitor = (value: unknown): value is Monitor =>
 
 export const MonitorProvider = () =>
   Provider.succeed(Monitor, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["lb:edit"],
+            readScopes: ["lb:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "d2a1802cc9a34e30852f8b33869b2f3c",
+                name: "Load Balancing: Monitors and Pools Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "9d24387c6e8544e2bc4024a03991339f",
+                name: "Load Balancing: Monitors and Pools Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["monitorId", "accountId", "createdOn"],
 
     // Account-scoped collection: monitors are enumerated by the account-wide

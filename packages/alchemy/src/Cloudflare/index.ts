@@ -2,6 +2,10 @@
 export * from "./CloudflareEnvironment.ts";
 export * from "./EdgeSession.ts";
 export * from "./Fetcher.ts";
+export type {
+  CloudflareProviderMetadata,
+  PermissionGroupRequirement,
+} from "./ProviderMetadata.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
 export * from "./Workers/RpcAsync.ts";

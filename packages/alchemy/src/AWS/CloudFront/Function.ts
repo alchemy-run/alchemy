@@ -152,6 +152,22 @@ export const FunctionProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateFunction",
+                "cloudfront:UpdateFunction",
+                "cloudfront:PublishFunction",
+                "cloudfront:DeleteFunction",
+              ],
+              readActions: [
+                "cloudfront:DescribeFunction",
+                "cloudfront:ListFunctions",
+              ],
+            },
+          },
+        },
         stables: ["functionArn", "functionName"],
         // CloudFront is global; listFunctions enumerates every function in the
         // account. It is non-paginated in distilled but uses Marker/NextMarker,

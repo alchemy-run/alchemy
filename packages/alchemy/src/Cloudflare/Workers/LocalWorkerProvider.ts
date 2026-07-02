@@ -486,6 +486,7 @@ export const LocalWorkerProvider = () =>
       });
 
       return {
+        metadata: {},
         // Local dev provider: there is no cloud enumeration API. The set of
         // locally running Workers is the in-memory `instances` map; each
         // instance's fiber resolves to the Worker Attributes once it has

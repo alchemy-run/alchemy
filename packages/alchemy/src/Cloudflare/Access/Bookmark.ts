@@ -107,6 +107,33 @@ export const isBookmark = (value: unknown): value is Bookmark =>
 
 export const BookmarkProvider = () =>
   Provider.succeed(Bookmark, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["access:write"],
+            readScopes: ["access:read"],
+          },
+          token: {
+            // Bookmarks are legacy bookmark-type Access applications — governed by
+            // the account-scoped Apps and Policies groups.
+            permissionGroups: [
+              {
+                id: "1e13c5124ca64b72b1969a67e8829049",
+                name: "Access: Apps and Policies Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "7ea222f6d5064cfa89ea366d7c1fee89",
+                name: "Access: Apps and Policies Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["bookmarkId", "accountId"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

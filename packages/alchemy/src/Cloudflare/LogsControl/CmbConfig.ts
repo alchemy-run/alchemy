@@ -101,6 +101,22 @@ export const isCmbConfig = (value: unknown): value is CmbConfig =>
 
 export const CmbConfigProvider = () =>
   Provider.succeed(CmbConfig, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              { id: "96163bd1b0784f62b3e44ed8c2ab1eb6", name: "Logs Write" },
+            ], // Logs Write (account)
+            readPermissionGroups: [
+              { id: "6a315a56f18441e59ed03352369ae956", name: "Logs Read" },
+            ], // Logs Read (account)
+          },
+        },
+      },
+    },
     stables: ["accountId"],
 
     diff: Effect.fn(function* ({ news, output }) {

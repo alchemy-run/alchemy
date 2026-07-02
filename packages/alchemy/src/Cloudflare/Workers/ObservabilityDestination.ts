@@ -181,6 +181,31 @@ export const isObservabilityDestination = (
 
 export const ObservabilityDestinationProvider = () =>
   Provider.succeed(ObservabilityDestination, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["workers_observability:write"],
+            readScopes: ["workers_observability:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "82c075da3f4647a2a03becd0fe240f8a",
+                name: "Workers Observability Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "66c1ed49f4ed46098b75696a6d4ee3c9",
+                name: "Workers Observability Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["slug", "accountId", "name", "logpushDataset"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {

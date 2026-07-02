@@ -170,6 +170,26 @@ export const SecretProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "secretsmanager:CreateSecret",
+                "secretsmanager:UpdateSecret",
+                "secretsmanager:DeleteSecret",
+                "secretsmanager:TagResource",
+                "secretsmanager:UntagResource",
+                "secretsmanager:GetRandomPassword",
+              ],
+              readActions: [
+                "secretsmanager:DescribeSecret",
+                "secretsmanager:ListSecrets",
+              ],
+              notes:
+                "GetRandomPassword is only called when props.generateSecretString is set. When props.kmsKeyId points at a customer managed KMS key, AWS additionally requires kms:GenerateDataKey and kms:Decrypt on that key for CreateSecret/UpdateSecret (not needed for the default aws/secretsmanager key). Delete uses ForceDeleteWithoutRecovery (no recovery window).",
+            },
+          },
+        },
         stables: ["secretArn", "secretName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;

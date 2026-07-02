@@ -289,6 +289,31 @@ export const ConfigurationProvider = () =>
         });
 
       return {
+        metadata: {
+          cloudflare: {
+            scope: "account",
+            auth: {
+              oauth: {
+                scopes: ["teams:write"],
+                readScopes: ["teams:read"],
+              },
+              token: {
+                permissionGroups: [
+                  {
+                    id: "c07321b023e944ff818fec44d8203567",
+                    name: "Cloudflare Tunnel Write",
+                  },
+                ],
+                readPermissionGroups: [
+                  {
+                    id: "efea2ab8357b47888938f101ae5e053f",
+                    name: "Cloudflare Tunnel Read",
+                  },
+                ],
+              },
+            },
+          },
+        },
         stables: ["tunnelId", "accountId"],
 
         diff: Effect.fn(function* ({ olds = {}, news }) {

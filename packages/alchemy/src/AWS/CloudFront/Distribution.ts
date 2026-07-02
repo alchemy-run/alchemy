@@ -609,6 +609,28 @@ export const DistributionProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "cloudfront:CreateDistributionWithTags",
+                "cloudfront:CreateDistribution",
+                "cloudfront:UpdateDistribution",
+                "cloudfront:DeleteDistribution",
+                "cloudfront:TagResource",
+                "cloudfront:UntagResource",
+              ],
+              readActions: [
+                "cloudfront:GetDistribution",
+                "cloudfront:GetDistributionConfig",
+                "cloudfront:ListDistributions",
+                "cloudfront:ListTagsForResource",
+              ],
+              notes:
+                "CreateDistributionWithTags requires cloudfront:TagResource as a dependent action; the provider falls back to CreateDistribution + TagResource when the WithTags call is AccessDenied, so grant all three.",
+            },
+          },
+        },
         stables: [
           "distributionId",
           "distributionArn",

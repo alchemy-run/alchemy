@@ -62,6 +62,14 @@ export const GroupMembership = Resource<GroupMembership>(
 
 export const GroupMembershipProvider = () =>
   Provider.succeed(GroupMembership, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: ["iam:AddUserToGroup", "iam:RemoveUserFromGroup"],
+          readActions: ["iam:GetGroup", "iam:ListGroups"],
+        },
+      },
+    },
     stables: ["groupName"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

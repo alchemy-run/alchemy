@@ -299,6 +299,28 @@ export class ListBulkOperationError extends Data.TaggedError(
 
 export const ListProvider = () =>
   Provider.succeed(List, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "2edbf20661fd4661b0fe10e9e12f485c",
+                name: "Account Rule Lists Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "4f1071168de8466e9808de86febfc516",
+                name: "Account Rule Lists Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["listId", "accountId", "name", "kind", "createdOn"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

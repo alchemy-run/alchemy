@@ -57,6 +57,21 @@ export const Alias = Resource<Alias>("AWS.KMS.Alias");
 
 export const AliasProvider = () =>
   Provider.succeed(Alias, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "kms:CreateAlias",
+            "kms:UpdateAlias",
+            "kms:DeleteAlias",
+            "kms:DescribeKey",
+          ],
+          readActions: ["kms:ListAliases"],
+          notes:
+            "kms:DescribeKey is called during reconcile to canonicalize the target key ID, so it is classified as a full-lifecycle action. CreateAlias/UpdateAlias/DeleteAlias must be allowed on BOTH the alias and the target KMS key resource in ARN-scoped policies.",
+        },
+      },
+    },
     stables: ["aliasName", "aliasArn"],
     list: () =>
       Effect.gen(function* () {

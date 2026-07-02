@@ -181,6 +181,28 @@ export const PolicyProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "iam:CreatePolicy",
+                "iam:CreatePolicyVersion",
+                "iam:DeletePolicyVersion",
+                "iam:SetDefaultPolicyVersion",
+                "iam:TagPolicy",
+                "iam:UntagPolicy",
+                "iam:DeletePolicy",
+              ],
+              readActions: [
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion",
+                "iam:ListPolicies",
+                "iam:ListPolicyVersions",
+                "iam:ListPolicyTags",
+              ],
+            },
+          },
+        },
         stables: ["policyArn", "policyName", "policyId"],
         list: () =>
           Effect.gen(function* () {

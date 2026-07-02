@@ -338,6 +338,22 @@ export const SecurityGroupRuleProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:AuthorizeSecurityGroupEgress",
+                "ec2:ModifySecurityGroupRules",
+                "ec2:RevokeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+              ],
+              readActions: ["ec2:DescribeSecurityGroupRules"],
+            },
+          },
+        },
         stables: ["securityGroupRuleId", "groupOwnerId"],
 
         read: Effect.fn(function* ({ output }) {

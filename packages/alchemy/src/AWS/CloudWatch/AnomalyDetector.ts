@@ -143,6 +143,17 @@ const describeDetector = Effect.fn(function* (
 
 export const AnomalyDetectorProvider = () =>
   Provider.succeed(AnomalyDetector, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "cloudwatch:PutAnomalyDetector",
+            "cloudwatch:DeleteAnomalyDetector",
+          ],
+          readActions: ["cloudwatch:DescribeAnomalyDetectors"],
+        },
+      },
+    },
     stables: ["detectorId"],
     list: () =>
       // `describeAnomalyDetectors` is paginated and account/region-scoped;

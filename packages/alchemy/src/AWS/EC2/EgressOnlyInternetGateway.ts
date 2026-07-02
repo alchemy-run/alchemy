@@ -180,6 +180,22 @@ export const EgressOnlyInternetGatewayProvider = () =>
         );
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "ec2:CreateEgressOnlyInternetGateway",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:DeleteEgressOnlyInternetGateway",
+              ],
+              readActions: [
+                "ec2:DescribeEgressOnlyInternetGateways",
+                "ec2:DescribeTags",
+              ],
+            },
+          },
+        },
         stables: [
           "egressOnlyInternetGatewayId",
           "egressOnlyInternetGatewayArn",

@@ -262,6 +262,34 @@ export const isZoneDnsSettings = (value: unknown): value is ZoneDnsSettings =>
 
 export const ZoneDnsSettingsProvider = () =>
   Provider.succeed(ZoneDnsSettings, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: {
+            supported: false,
+            readScopes: ["dns_settings:read", "zone:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "c4df38be41c247b3b4b7702e76eadae0",
+                name: "Zone DNS Settings Write",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+            readPermissionGroups: [
+              {
+                id: "0a6cfe8cd3ed445e918579e2fb13087b",
+                name: "Zone DNS Settings Read",
+              },
+              { id: "c8fed203ed3043cba015a93ad1616f1f", name: "Zone Read" },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["zoneId", "initialSettings", "managedKeys"],
 
     list: Effect.fn(function* () {

@@ -248,6 +248,29 @@ export const isFirewall = (value: unknown): value is Firewall =>
 
 export const FirewallProvider = () =>
   Provider.succeed(Firewall, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "da6d2d6f2ec8442eaadda60d13f42bca",
+                name: "DNS Firewall Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "5f48a472240a4b489a21d43bd19a06e1",
+                name: "DNS Firewall Read",
+              },
+            ],
+          },
+        },
+      },
+    },
+
     stables: ["dnsFirewallId", "accountId", "dnsFirewallIps"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

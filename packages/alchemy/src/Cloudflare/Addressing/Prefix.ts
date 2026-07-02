@@ -133,6 +133,28 @@ export const isPrefix = (value: unknown): value is Prefix =>
 
 export const PrefixProvider = () =>
   Provider.succeed(Prefix, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "92b8234e99f64e05bbbc59e1dc0f76b6",
+                name: "IP Prefixes: Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "27beb7f8333b41e2b946f0e23cd8091e",
+                name: "IP Prefixes: Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: [
       "prefixId",
       "accountId",

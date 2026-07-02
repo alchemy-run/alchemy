@@ -105,6 +105,31 @@ export const isWarpConnector = (value: unknown): value is WarpConnector =>
 
 export const WarpConnectorProvider = () =>
   Provider.succeed(WarpConnector, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["teams:write"],
+            readScopes: ["teams:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "5b5c774a5d174ca88d046c8889648b3f",
+                name: "Cloudflare One Connector: WARP Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "1cd960c063a0448481343372c963d8c7",
+                name: "Cloudflare One Connector: WARP Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["tunnelId", "accountId", "createdAt"],
 
     diff: Effect.fn(function* ({ output }) {

@@ -135,6 +135,28 @@ export const isAccountEntrypoint = (
 
 export const AccountEntrypointProvider = () =>
   Provider.succeed(AccountEntrypoint, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "56907406c3d548ed902070ec4df0e328",
+                name: "Account Rulesets Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "fb39996ee9044d2a8725921e02744b39",
+                name: "Account Rulesets Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["rulesetId", "accountId", "kind", "phase"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {

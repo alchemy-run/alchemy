@@ -135,6 +135,28 @@ export const isHostnameAssociation = (
 
 export const HostnameAssociationProvider = () =>
   Provider.succeed(HostnameAssociation, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "c03055bc037c4ea9afb9a9f104b7b721",
+                name: "SSL and Certificates Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "7b7216b327b04b8fbc8f524e1f9b7531",
+                name: "SSL and Certificates Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["zoneId", "hostname"],
 
     // Non-listable: an association is keyed entirely by {zoneId, hostname}

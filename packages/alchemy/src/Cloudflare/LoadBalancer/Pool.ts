@@ -239,6 +239,31 @@ export const isPool = (value: unknown): value is Pool =>
 
 export const PoolProvider = () =>
   Provider.succeed(Pool, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["lb:edit"],
+            readScopes: ["lb:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "d2a1802cc9a34e30852f8b33869b2f3c",
+                name: "Load Balancing: Monitors and Pools Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "9d24387c6e8544e2bc4024a03991339f",
+                name: "Load Balancing: Monitors and Pools Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["poolId", "accountId", "createdOn"],
 
     diff: Effect.fn(function* ({ output }) {

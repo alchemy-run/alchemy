@@ -194,6 +194,14 @@ export const isShare = (value: unknown): value is Share =>
 
 export const ShareProvider = () =>
   Provider.succeed(Share, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: { supported: false },
+        },
+      },
+    },
     stables: ["shareId", "accountId", "organizationId", "created"],
     // Account collection — enumerate every share this account sends
     // (the ones we own and can delete), exhaustively paginated, mapped

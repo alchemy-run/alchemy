@@ -14,6 +14,7 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import { apply } from "../../Apply.ts";
 import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { preflightStack } from "../../Auth/Preflight.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CLI from "../../Cli/Cli.ts";
 import * as Plan from "../../Plan.ts";
@@ -118,6 +119,10 @@ export const execStack = Effect.fn(function* ({
     const stack = yield* stackEffect;
 
     yield* Effect.gen(function* () {
+      // Warn (never block) when the active profile is missing grants the
+      // stack's resources declare via provider metadata.
+      yield* preflightStack(stack);
+
       const updatePlan = yield* Plan.make(
         destroy
           ? {

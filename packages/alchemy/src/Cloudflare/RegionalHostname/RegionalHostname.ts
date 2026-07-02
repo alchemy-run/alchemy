@@ -105,6 +105,18 @@ export const isRegionalHostname = (value: unknown): value is RegionalHostname =>
 
 export const RegionalHostnameProvider = () =>
   Provider.succeed(RegionalHostname, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          // token: CATALOG GAP — no zone-scoped regional-hostnames permission
+          // group exists in the static PERMISSION_GROUPS catalog yet; "Zone
+          // Read" is additionally required by list's zone fan-out
+        },
+      },
+    },
+
     stables: ["zoneId", "hostname", "createdOn"],
 
     list: Effect.fn(function* () {

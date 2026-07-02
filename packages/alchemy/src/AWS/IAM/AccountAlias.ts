@@ -45,6 +45,14 @@ const readAccountAlias = Effect.gen(function* () {
 
 export const AccountAliasProvider = () =>
   Provider.succeed(AccountAlias, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: ["iam:CreateAccountAlias", "iam:DeleteAccountAlias"],
+          readActions: ["iam:ListAccountAliases"],
+        },
+      },
+    },
     stables: ["accountAlias"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

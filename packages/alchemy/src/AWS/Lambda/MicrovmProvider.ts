@@ -313,6 +313,33 @@ const syncTags = Effect.fn(function* (
 
 export const MicrovmImageProvider = () =>
   Provider.succeed(MicrovmImage, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "lambda:CreateMicrovmImage",
+            "lambda:UpdateMicrovmImage",
+            "lambda:DeleteMicrovmImage",
+            "lambda:TagResource",
+            "lambda:UntagResource",
+            "lambda:TerminateMicrovm",
+            "iam:PassRole",
+            "s3:GetObject",
+            "s3:PutObject",
+          ],
+          readActions: [
+            "lambda:GetMicrovmImage",
+            "lambda:ListMicrovmImages",
+            "lambda:ListManagedMicrovmImages",
+            "lambda:GetMicrovmImageVersion",
+            "lambda:ListMicrovmImageBuilds",
+            "lambda:ListMicrovms",
+          ],
+          notes:
+            "iam:PassRole on the buildRole ARN (required for create/update builds). The code artifact is uploaded to the Assets S3 bucket (HeadObject + PutObject), which is mandatory for main/context-based images. MicroVM IAM action names assumed to mirror the new API operation names under the lambda: prefix.",
+        },
+      },
+    },
     stables: ["imageArn", "name"],
 
     diff: Effect.fn(function* ({ id, olds, news }) {

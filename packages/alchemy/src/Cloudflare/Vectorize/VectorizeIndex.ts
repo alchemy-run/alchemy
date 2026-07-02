@@ -141,6 +141,30 @@ export const isIndex = (value: unknown): value is Index =>
 
 export const IndexProvider = () =>
   Provider.succeed(Index, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["vectorize:write"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "64156ba5be47441096c83c7fc17c488b",
+                name: "Vectorize Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "1799edaae5db489294430e20d9b519e0",
+                name: "Vectorize Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["indexName", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

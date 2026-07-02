@@ -137,6 +137,23 @@ export const DBProxyEndpointProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "rds:CreateDBProxyEndpoint",
+                "rds:ModifyDBProxyEndpoint",
+                "rds:DeleteDBProxyEndpoint",
+                "rds:AddTagsToResource",
+                "rds:RemoveTagsFromResource",
+              ],
+              readActions: [
+                "rds:DescribeDBProxyEndpoints",
+                "rds:DescribeDBProxies",
+              ],
+            },
+          },
+        },
         stables: ["dbProxyEndpointArn", "dbProxyEndpointName"],
         list: () =>
           Effect.gen(function* () {

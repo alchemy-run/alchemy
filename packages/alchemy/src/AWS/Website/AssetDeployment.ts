@@ -174,6 +174,16 @@ export const AssetDeploymentProvider = () =>
       });
 
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["s3:ListBucket", "s3:PutObject", "s3:DeleteObject"],
+              readActions: [],
+              notes:
+                "Object-level actions on the destination bucket only (listObjectsV2 authorizes as s3:ListBucket). read/list/diff make no AWS calls, hence readActions: []. s3:DeleteObject is needed only when purge: true.",
+            },
+          },
+        },
         // Non-listable: an AssetDeployment is an action (uploading a local
         // directory into a bucket under a prefix), keyed by {bucketName,
         // prefix}, not a standalone cloud resource. There is no AWS API that

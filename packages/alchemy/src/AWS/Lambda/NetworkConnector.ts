@@ -166,6 +166,24 @@ export const NetworkConnector = Resource<NetworkConnector>(
 
 export const NetworkConnectorProvider = () =>
   Provider.succeed(NetworkConnector, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "lambda:CreateNetworkConnector",
+            "lambda:UpdateNetworkConnector",
+            "lambda:DeleteNetworkConnector",
+            "iam:PassRole",
+          ],
+          readActions: [
+            "lambda:GetNetworkConnector",
+            "lambda:ListNetworkConnectors",
+          ],
+          notes:
+            "iam:PassRole on the operatorRole ARN when one is configured (Lambda assumes it to manage ENIs). Tags are only settable at creation (the API exposes no tagging operations). IAM action names assumed to mirror the new NetworkConnector API operation names under the lambda: prefix.",
+        },
+      },
+    },
     stables: ["networkConnectorArn", "networkConnectorId", "name"],
 
     diff: Effect.fn(function* ({ id, olds, news }) {

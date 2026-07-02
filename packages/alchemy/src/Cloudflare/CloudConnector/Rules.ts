@@ -168,6 +168,36 @@ export const isRules = (value: unknown): value is Rules =>
 
 export const RulesProvider = () =>
   Provider.succeed(Rules, {
+    metadata: {
+      cloudflare: {
+        scope: "zone",
+        auth: {
+          oauth: { supported: false },
+          token: {
+            permissionGroups: [
+              {
+                id: "eafd71286d0e4fdca404a7b4d203c5c9",
+                name: "Cloud Connector Write",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "0661ff47aa3a4786beab3b8128e0cd24",
+                name: "Cloud Connector Read",
+              },
+              {
+                id: "c8fed203ed3043cba015a93ad1616f1f",
+                name: "Zone Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["zoneId"],
 
     list: Effect.fn(function* () {

@@ -128,6 +128,20 @@ export const ResourceProvider = () =>
     GatewayResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:DELETE",
+              ],
+              readActions: ["apigateway:GET"],
+              notes:
+                "API Gateway IAM is verb-based; these map to createResource (POST), updateResource (PATCH), deleteResource (DELETE), and get* reads (GET). No tagging API for path resources.",
+            },
+          },
+        },
         stables: ["resourceId", "restApiId", "parentId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;

@@ -108,6 +108,24 @@ export const Queue = Resource<Queue>("Cloudflare.Queues.Queue");
 
 export const ProviderLive = () =>
   Provider.succeed(Queue, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["queues:write"],
+          },
+          token: {
+            permissionGroups: [
+              { id: "366f57075ffc42689627bcf8242a1b6d", name: "Queues Write" },
+            ],
+            readPermissionGroups: [
+              { id: "84a7755d54c646ca87cd50682a34bf7c", name: "Queues Read" },
+            ],
+          },
+        },
+      },
+    },
     // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
     stables: ["accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
@@ -294,6 +312,7 @@ export const ProviderLocal = () =>
     Effect.gen(function* () {
       const localRuntimeState = yield* LocalRuntimeState;
       return {
+        metadata: {},
         stables: ["accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;

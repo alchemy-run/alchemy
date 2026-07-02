@@ -50,6 +50,16 @@ export const AccountProvider = () =>
     AccountResource,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: ["apigateway:PATCH", "iam:PassRole"],
+              readActions: ["apigateway:GET"],
+              notes:
+                "updateAccount authorizes as apigateway:PATCH on arn:aws:apigateway:{region}::/account. iam:PassRole is required on the CloudWatch logging role whenever `cloudwatchRoleArn` is set (API Gateway assumes that role to push logs). Delete also PATCHes (removes the role) when the stack managed it.",
+            },
+          },
+        },
         diff: Effect.fn(function* ({ news: newsIn, olds, output }) {
           if (!isResolved(newsIn)) return;
           const news = newsIn as AccountProps;

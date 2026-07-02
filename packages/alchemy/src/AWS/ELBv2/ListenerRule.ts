@@ -98,6 +98,26 @@ export const ListenerRule = Resource<ListenerRule>("AWS.ELBv2.ListenerRule");
 
 export const ListenerRuleProvider = () =>
   Provider.succeed(ListenerRule, {
+    metadata: {
+      aws: {
+        iam: {
+          actions: [
+            "elasticloadbalancing:CreateRule",
+            "elasticloadbalancing:ModifyRule",
+            "elasticloadbalancing:SetRulePriorities",
+            "elasticloadbalancing:AddTags",
+            "elasticloadbalancing:RemoveTags",
+            "elasticloadbalancing:DeleteRule",
+          ],
+          readActions: [
+            "elasticloadbalancing:DescribeRules",
+            "elasticloadbalancing:DescribeListeners",
+            "elasticloadbalancing:DescribeLoadBalancers",
+            "elasticloadbalancing:DescribeTags",
+          ],
+        },
+      },
+    },
     stables: ["ruleArn", "listenerArn"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;

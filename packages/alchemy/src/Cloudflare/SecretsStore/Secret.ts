@@ -98,6 +98,31 @@ export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret");
 
 export const StoreSecretProvider = () =>
   Provider.succeed(Secret, {
+    metadata: {
+      cloudflare: {
+        scope: "account",
+        auth: {
+          oauth: {
+            scopes: ["secrets_store:write"],
+            readScopes: ["secrets_store:read"],
+          },
+          token: {
+            permissionGroups: [
+              {
+                id: "adc8fa2bc6124928a8b3314dc63a1235",
+                name: "Secrets Store Write",
+              },
+            ],
+            readPermissionGroups: [
+              {
+                id: "5e33b7d77788455c9fdf18cbd38ee5a0",
+                name: "Secrets Store Read",
+              },
+            ],
+          },
+        },
+      },
+    },
     stables: ["secretId", "secretName", "storeId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {} as any, news, output }) {
       if (!isResolved(news)) return undefined;

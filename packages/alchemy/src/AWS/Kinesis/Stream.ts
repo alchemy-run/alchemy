@@ -442,6 +442,38 @@ export const StreamProvider = () =>
     Stream,
     Effect.gen(function* () {
       return {
+        metadata: {
+          aws: {
+            iam: {
+              actions: [
+                "kinesis:CreateStream",
+                "kinesis:UpdateStreamMode",
+                "kinesis:UpdateShardCount",
+                "kinesis:IncreaseStreamRetentionPeriod",
+                "kinesis:DecreaseStreamRetentionPeriod",
+                "kinesis:StartStreamEncryption",
+                "kinesis:StopStreamEncryption",
+                "kinesis:EnableEnhancedMonitoring",
+                "kinesis:DisableEnhancedMonitoring",
+                "kinesis:UpdateStreamWarmThroughput",
+                "kinesis:UpdateMaxRecordSize",
+                "kinesis:AddTagsToStream",
+                "kinesis:RemoveTagsFromStream",
+                "kinesis:PutResourcePolicy",
+                "kinesis:DeleteResourcePolicy",
+                "kinesis:DeleteStream",
+              ],
+              readActions: [
+                "kinesis:ListStreams",
+                "kinesis:DescribeStreamSummary",
+                "kinesis:ListTagsForResource",
+                "kinesis:GetResourcePolicy",
+              ],
+              notes:
+                "StartStreamEncryption defaults to alias/aws/kinesis; a customer-managed key additionally requires kms grants (kms:DescribeKey, kms:CreateGrant on the key) for the caller per AWS docs. deleteStream sets EnforceConsumerDeletion, which also tears down registered consumers.",
+            },
+          },
+        },
         stables: ["streamName", "streamArn"],
         // Enumerate every stream in the ambient account/region. `listStreams`
         // is paginated; collect every page exhaustively, then hydrate each
