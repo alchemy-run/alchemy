@@ -14,6 +14,7 @@ const b = (name: string): string | undefined => brands.icons[name]?.body;
 /** Tab bar icons, keyed by tab label (see docs-tabs.ts). */
 export const TAB_ICONS: Record<string, string | undefined> = {
   Docs: l("book-open"),
+  CLI: l("square-terminal"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),
   PlanetScale: b("planetscale"),
@@ -27,6 +28,11 @@ export const TAB_ICONS: Record<string, string | undefined> = {
 /** Sidebar group-heading icons, keyed by (normalized) group label. */
 const GROUP_ICONS: Record<string, string | undefined> = {
   Tutorial: l("graduation-cap"),
+  Deploy: l("rocket"),
+  Develop: l("refresh-cw"),
+  Auth: l("key-round"),
+  State: l("hard-drive"),
+  Providers: l("plug"),
   "Infrastructure as Code": l("code"),
   "Infrastructure as Effects": l("layers"),
   "State Store": l("hard-drive"),

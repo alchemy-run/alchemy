@@ -13,7 +13,7 @@ provider implements a single `reconcile` function that converges the
 cloud's actual state to what's declared — whether that's the first
 provisioning, a routine update, or an adoption takeover. For the CLI
 flags that drive these operations, see the
-[CLI reference](/guides/cli).
+[CLI reference](/cli).
 
 ## The lifecycle, end-to-end
 
@@ -173,7 +173,7 @@ the `Unowned(attrs)` brand. The engine routes:
 | `Unowned(attrs)`    | fail `OwnedBySomeoneElse` | take over (silently)  |
 
 See [Provider › read](/concepts/provider#read) for the implementation
-contract and [CLI › Adoption](/guides/cli#adoption) for the CLI flag.
+contract and [Adopting Resources](/cli/adopting-resources) for the CLI flag.
 
 ## Errors
 
@@ -194,7 +194,7 @@ The same engine powers all of these commands:
 | `alchemy destroy`  | Plan with everything marked deleted, apply    |
 | `alchemy dev`      | Plan + apply continuously on file changes     |
 
-See the [CLI reference](/guides/cli) for the full set of flags
+See the [CLI reference](/cli) for the full set of flags
 (`--yes`, `--force`, `--dry-run`, `--stage`, `--profile`, ...).
 
 Every lifecycle operation on this page is implemented per resource
@@ -204,7 +204,7 @@ type by a [Provider](/concepts/provider).
 
 - [Providers](/concepts/provider) — the object that implements
   `reconcile`, `delete`, `diff`, and `read` for a resource type.
-- [CLI](/guides/cli) — the commands and flags that drive the
+- [CLI](/cli) — the commands and flags that drive the
   lifecycle.
 - [State Store](/concepts/state-store) — where the persisted state
   behind the plan lives.

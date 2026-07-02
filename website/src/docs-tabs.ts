@@ -29,6 +29,7 @@ export interface DocsTab {
 
 export const DOCS_TABS: DocsTab[] = [
   { label: "Docs", href: "/getting-started", prefixes: [], slot: "primary" },
+  { label: "CLI", href: "/cli", prefixes: ["/cli"], slot: "primary" },
   {
     label: "Cloudflare",
     href: "/cloudflare",

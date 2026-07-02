@@ -76,6 +76,8 @@ const REDIRECTS: Record<string, string> = {
   // Absorbed into the Security & secrets block pages.
   "/guides/secrets": "/cloudflare/secrets-env",
   "/guides/stack-references": "/concepts/references",
+  // The CLI reference became its own hub tab.
+  "/guides/cli": "/cli",
   "/aws/guides/secrets": "/aws/secrets-env",
   // The Integrations tab was replaced by per-provider hubs (PlanetScale and
   // Neon promoted to top-level tabs; Axiom and GitHub in the More menu).

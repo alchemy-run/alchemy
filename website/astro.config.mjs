@@ -271,7 +271,6 @@ export default defineConfig({
             { label: "What is Alchemy?", link: "/what-is-alchemy" },
             { label: "Getting started", link: "/getting-started" },
             { label: "Migrating from v1", link: "/guides/migrating-from-v1" },
-            { label: "CLI", link: "/guides/cli" },
             {
               label: "Infrastructure as Code",
               items: [
@@ -357,6 +356,57 @@ export default defineConfig({
                 },
                 { label: "Test harness", link: "/concepts/test-harness" },
                 { label: "Observability", link: "/concepts/observability" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "CLI",
+          items: [
+            { label: "Overview", link: "/cli" },
+            {
+              label: "Deploy",
+              items: [
+                { label: "deploy", link: "/cli/deploy" },
+                { label: "plan", link: "/cli/plan" },
+                { label: "destroy", link: "/cli/destroy" },
+                { label: "nuke", link: "/cli/nuke" },
+                {
+                  label: "Adopting Resources",
+                  link: "/cli/adopting-resources",
+                },
+              ],
+            },
+            {
+              label: "Develop",
+              items: [
+                { label: "dev", link: "/cli/dev" },
+                { label: "tail", link: "/cli/tail" },
+                { label: "logs", link: "/cli/logs" },
+              ],
+            },
+            {
+              label: "Auth",
+              items: [
+                { label: "login", link: "/cli/login" },
+                { label: "profile", link: "/cli/profile" },
+              ],
+            },
+            {
+              label: "State",
+              items: [
+                { label: "state", link: "/cli/state" },
+                {
+                  label: "Inspecting State",
+                  link: "/cli/inspecting-state",
+                },
+              ],
+            },
+            {
+              label: "Providers",
+              items: [
+                { label: "aws", link: "/cli/aws" },
+                { label: "cloudflare", link: "/cli/cloudflare" },
               ],
             },
           ],

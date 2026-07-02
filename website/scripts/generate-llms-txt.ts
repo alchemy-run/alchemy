@@ -48,11 +48,30 @@ const SECTIONS: Section[] = [
   {
     heading: "Start here",
     pages: {
+      slugs: ["what-is-alchemy", "getting-started", "guides/migrating-from-v1"],
+    },
+  },
+  {
+    heading: "CLI",
+    intro:
+      "Every command runs through your package manager: bun alchemy <command>. Command pages by role, plus the Adopting Resources and Inspecting State guides.",
+    pages: {
       slugs: [
-        "what-is-alchemy",
-        "getting-started",
-        "guides/migrating-from-v1",
-        "guides/cli",
+        "cli/index",
+        "cli/deploy",
+        "cli/plan",
+        "cli/destroy",
+        "cli/nuke",
+        "cli/adopting-resources",
+        "cli/dev",
+        "cli/tail",
+        "cli/logs",
+        "cli/login",
+        "cli/profile",
+        "cli/state",
+        "cli/inspecting-state",
+        "cli/aws",
+        "cli/cloudflare",
       ],
     },
   },
