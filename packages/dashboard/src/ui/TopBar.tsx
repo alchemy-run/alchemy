@@ -2,11 +2,14 @@ import { FlaskConical, Search } from "lucide-react";
 import { planSummary } from "../plan.ts";
 import { PLAN_COLORS, PLAN_LABELS } from "../theme.ts";
 import type { DashboardMeta, DashboardPlan } from "../types.ts";
+import { StageSelect } from "./StageSelect.tsx";
 
 export type View = "canvas" | "list";
 
 export function TopBar({
   meta,
+  stage,
+  onStage,
   plan,
   view,
   onView,
@@ -14,6 +17,8 @@ export function TopBar({
   onQuery,
 }: {
   meta: DashboardMeta;
+  stage: string;
+  onStage: (stage: string) => void;
   plan?: DashboardPlan;
   view: View;
   onView: (view: View) => void;
@@ -27,9 +32,10 @@ export function TopBar({
       <span className="text-[13px] font-medium text-zinc-100">
         {meta.stack}
       </span>
-      <span className="rounded-full border border-[#2a2a35] px-2.5 py-0.5 text-[11px] text-zinc-400">
-        {meta.stage}
-      </span>
+      <StageSelect stage={stage} stages={meta.stages} onSelect={onStage} />
+      {plan === undefined && (
+        <span className="text-[11px] text-zinc-600">planning…</span>
+      )}
       {plan?.available &&
         (summary.length === 0 ? (
           <span className="rounded-full border border-[#2a2a35] px-2.5 py-0.5 text-[11px] text-emerald-400">

@@ -41,12 +41,12 @@ export interface DashboardServerOptions {
   stack: string;
   stage: string;
   /**
-   * Computes the current plan (diff of the stack file against state).
-   * Already provided with the stack's services; failures are expected
-   * (e.g. missing credentials) and must be surfaced as an unavailable
-   * plan rather than an error.
+   * Computes the plan for a stage (diff of the stack file, re-evaluated
+   * under that stage, against state). Fully provided by the caller;
+   * failures are expected (e.g. missing credentials) and must be surfaced
+   * as an unavailable plan rather than an error.
    */
-  plan?: Effect.Effect<DashboardPlan>;
+  plan?: (stage: string) => Effect.Effect<DashboardPlan>;
 }
 
 /**
@@ -216,7 +216,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           cycleMembers: [],
         });
       }
-      return yield* HttpServerResponse.json(yield* plan);
+      return yield* HttpServerResponse.json(yield* plan(stg));
     }
     if (route === "/api/outputs") {
       const output = yield* state

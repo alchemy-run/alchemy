@@ -15,7 +15,10 @@ export const fetchGraph = (stage?: string) =>
     stage ? `/api/graph?stage=${encodeURIComponent(stage)}` : "/api/graph",
   );
 
-export const fetchPlan = () => get<DashboardPlan>("/api/plan");
+export const fetchPlan = (stage?: string) =>
+  get<DashboardPlan>(
+    stage ? `/api/plan?stage=${encodeURIComponent(stage)}` : "/api/plan",
+  );
 
 export const fetchOutputs = (stage?: string) =>
   get<unknown>(
