@@ -1,7 +1,6 @@
 ---
 title: Benchmarking Cloudflare Containers vs AWS MicroVMs
 date: 2026-07-01
-draft: true
 excerpt: We benchmarked AWS Lambda MicroVMs against Cloudflare Containers — 700 isolated cold boots, timed to first successful request. Every MicroVM boots in 2 to 4.5 seconds regardless of what's inside, because the workload's startup is paid once at image build and snapshotted. Opencode on Cloudflare Containers takes 10.5 seconds at the median, and the worst boots push a minute.
 ---
 
