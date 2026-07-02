@@ -342,23 +342,23 @@ export default defineConfig({
               ],
             },
             {
-              label: "RPC",
+              label: "APIs",
               items: [
                 {
                   label: "Overview",
-                  link: "/rpc",
+                  link: "/apis",
                 },
                 {
                   label: "Schemaless RPC",
-                  link: "/rpc/schemaless",
+                  link: "/apis/schemaless",
                 },
                 {
                   label: "Effect RPC",
-                  link: "/rpc/effect-rpc",
+                  link: "/apis/effect-rpc",
                 },
                 {
                   label: "Effect HTTP",
-                  link: "/rpc/effect-http",
+                  link: "/apis/effect-http",
                 },
               ],
             },
@@ -531,10 +531,14 @@ export default defineConfig({
               label: "APIs",
               items: [
                 {
-                  label: "Effect HTTP API",
-                  link: "/cloudflare/apis/effect-http-api",
+                  label: "Schemaless RPC",
+                  link: "/cloudflare/apis/schemaless-rpc",
                 },
                 { label: "Effect RPC", link: "/cloudflare/apis/effect-rpc" },
+                {
+                  label: "Effect HTTP",
+                  link: "/cloudflare/apis/effect-http-api",
+                },
               ],
             },
             {
@@ -670,12 +674,16 @@ export default defineConfig({
             {
               label: "APIs",
               items: [
-                { label: "API Gateway", link: "/aws/apis/api-gateway" },
                 {
-                  label: "Effect HTTP API",
-                  link: "/aws/apis/effect-http-api",
+                  label: "Schemaless RPC",
+                  link: "/aws/apis/schemaless-rpc",
                 },
                 { label: "Effect RPC", link: "/aws/apis/effect-rpc" },
+                {
+                  label: "Effect HTTP",
+                  link: "/aws/apis/effect-http-api",
+                },
+                { label: "API Gateway", link: "/aws/apis/api-gateway" },
               ],
             },
             {

@@ -36,7 +36,7 @@ orchestrator imports; the default-exported `.make()` is what gets bundled into
 the image. The shape can expose both a typed **RPC method** (`hello`) and a
 raw **`fetch`** route — the in-VM runtime serves RPC over an internal
 `/__rpc__/*` protocol and falls through to `fetch` for everything else. The
-`{ fetch, ...rpcs }` shape is [Schemaless RPC](/rpc/schemaless) — the same
+`{ fetch, ...rpcs }` shape is [Schemaless RPC](/apis/schemaless) — the same
 contract every Function and Server returns:
 
 ```typescript
@@ -156,7 +156,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
 ) {}
 ```
 
-The stub is [Schemaless RPC](/rpc/schemaless) — the same typed client you get
+The stub is [Schemaless RPC](/apis/schemaless) — the same typed client you get
 binding a Durable Object or Container into a Worker, here a MicroVM into a
 Lambda Function.
 

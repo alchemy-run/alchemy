@@ -1,0 +1,78 @@
+---
+title: Schemaless RPC
+description: Typed RPC from a Lambda Function into a MicroVM with no schema — declare the image's Shape, connect, get the client.
+sidebar:
+  order: 2
+---
+
+On AWS, schemaless calls ride the fetch transport: each call is a
+`POST https://<endpoint>/__rpc__/{name}` with a JSON args array, authenticated
+by a MicroVM auth token. The contract, serialization model, and limits live at
+[Schemaless RPC](/apis/schemaless); this page routes you to the wiring for each
+pairing.
+
+The one typed pairing on AWS today is **Lambda → MicroVM**. The image declares
+its Shape as a type parameter; `connectMicrovm` returns a stub typed as that
+Shape:
+
+```typescript
+// sandbox.ts — the MicroVM image declares its Shape
+export class Sandbox extends AWS.Lambda.MicrovmImage<
+  Sandbox,
+  {
+    hello: (message: string) => Effect.Effect<string>;
+  }
+>()("MicrovmSandbox") {}
+
+// inside the Lambda — connect to a RUNNING instance, get the typed stub
+const sandbox = yield* AWS.Lambda.connectMicrovm(Sandbox, {
+  endpoint: vm.endpoint,
+  authToken,
+});
+const reply = yield* sandbox.hello("world"); // "hello, world!"
+```
+
+## Lambda → MicroVM
+
+The image's init Effect returns `{ fetch, ...rpcs }` — the in-VM runtime serves
+the RPC methods over `/__rpc__/*` and falls through to `fetch` for everything
+else. The Lambda binds the lifecycle operations (`RunMicrovm`, `GetMicrovm`,
+`CreateAuthToken`, `TerminateMicrovm`), waits for `RUNNING`, mints a token, and
+connects. Full lifecycle — launch, suspend, auth, terminate-on-ensuring — is in
+[MicroVMs](/aws/compute/microvms#launch-and-drive-microvms-from-a-lambda). The
+raw `fetch` route on the same image is reachable with `microvmAuthHeaders` and
+plain HTTPS — see
+[Call the fetch route directly](/aws/compute/microvms#call-the-fetch-route-directly).
+
+## Lambda → Lambda
+
+There is no schemaless stub between Lambda Functions today. Internal
+Lambda-to-Lambda calls go through
+[Effect RPC](/aws/apis/effect-rpc) over a Function URL — same typed-client
+ergonomics, schema-validated — or through direct invocation with the
+`AWS.Lambda.InvokeFunction` binding, which grants `lambda:InvokeFunction` on
+the target and returns a typed invocation callable (see
+[Lambda](/aws/compute/lambda)).
+
+## ECS Tasks
+
+An [ECS Task](/aws/compute/ecs) returns the same `{ fetch, ...rpcs }` Shape,
+but there is no typed connector for Tasks yet — no `connectMicrovm` equivalent.
+Reach a Task over plain HTTP through its load balancer, or serve
+[Effect RPC](/aws/apis/effect-rpc) or
+[Effect HTTP](/aws/apis/effect-http-api) from its `fetch` handler.
+
+## When you need schemas
+
+Schemaless RPC does no runtime validation — at a trust boundary, or when class
+identity must survive the hop, use [Effect RPC](/aws/apis/effect-rpc). The
+decision guide lives at [RPC](/apis).
+
+## Where next
+
+- [Schemaless RPC concept](/apis/schemaless) — the contract, serialization
+  model, and limits
+- [MicroVMs](/aws/compute/microvms) — build images, drive instances, both call
+  surfaces
+- [Effect RPC](/aws/apis/effect-rpc) — schema-first RPC on Lambda
+- [Effect HTTP](/aws/apis/effect-http-api) — schema-validated REST endpoints

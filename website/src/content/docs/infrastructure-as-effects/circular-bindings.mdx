@@ -105,7 +105,7 @@ own `work` RPC method so B can call back into it.
 ```
 
 The `import { B }` line pulls in B's Tag only. `bindWorker(B)`
-returns a [typed RPC stub](/rpc/schemaless) — at plan time it
+returns a [typed RPC stub](/apis/schemaless) — at plan time it
 registers the service binding; at runtime `b.work()` round-trips to
 B's deployed Worker as a native RPC call.
 

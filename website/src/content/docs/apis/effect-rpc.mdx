@@ -1,0 +1,345 @@
+---
+title: Effect RPC
+description: Schema-first RPC for trust boundaries — define a schema, serve it as an HttpEffect from any Function or Worker, and build clients from the schema plus a Fetcher.
+sidebar:
+  order: 2
+---
+
+Effect RPC is schema-first: every procedure declares `payload`,
+`success`, and `error` Schemas, and every request and response is
+validated against them. Use it when data crosses a **trust
+boundary** — a web app or an external service calling into your
+stack. That validation has a per-request price (a frame parse, a
+Schema decode of the payload, a Schema encode of the result —
+mirrored on the client), so for internal service-to-service calls it
+is **discouraged**: [Schemaless RPC](/apis/schemaless) gives you the
+same typed client with no schema, no runtime checking, and no
+per-request validation cost.
+
+## The layout
+
+An RPC API is five small files. Everything above `ApiService.ts` is
+host-agnostic:
+
+```sh
+.
+├── alchemy.run.ts     # the Stack — deploys ApiService
+└── src/
+    ├── Task.ts        # domain model + tagged errors — imported by server AND client
+    ├── ApiSchema.ts   # one Rpc.make per procedure, collected into an RpcGroup
+    ├── ApiHandlers.ts # RpcGroup.toLayer handlers + the HttpEffect — host-agnostic
+    ├── ApiService.ts  # the host: a Lambda Function (or Worker) serving the HttpEffect
+    └── ApiClient.ts   # a typed client — the same schema + a Fetcher
+```
+
+The schema files are plain values with no runtime concerns, so both
+the server and every client import them directly. Only
+`ApiService.ts` names a cloud — swap it from Lambda to a Cloudflare
+Worker and nothing else changes.
+
+## `src/Task.ts` — domain types
+
+Domain model and error types — pure schemas:
+
+```typescript
+// src/Task.ts
+import * as Schema from "effect/Schema";
+
+export class Task extends Schema.Class<Task>("Task")({
+  id: Schema.String,
+  title: Schema.String,
+  completed: Schema.Boolean,
+}) {}
+
+export class TaskNotFound extends Schema.TaggedClass<TaskNotFound>()(
+  "TaskNotFound",
+  { id: Schema.String },
+) {}
+
+export class CreateTaskFailed extends Schema.TaggedClass<CreateTaskFailed>()(
+  "CreateTaskFailed",
+  { message: Schema.String },
+) {}
+```
+
+RPC errors are schema-backed tagged classes — the client receives
+them as typed values it can `catchTag` on, not raw HTTP status codes.
+
+## `src/ApiSchema.ts` — the procedures
+
+Each `Rpc.make` declares one procedure; `RpcGroup.make` collects them
+into the single value the server and the client will share:
+
+```typescript
+// src/ApiSchema.ts
+import * as Schema from "effect/Schema";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { CreateTaskFailed, Task, TaskNotFound } from "./Task.ts";
+
+const getTask = Rpc.make("getTask", {
+  payload: { id: Schema.String },
+  success: Task,
+  error: TaskNotFound,
+});
+
+const createTask = Rpc.make("createTask", {
+  payload: { title: Schema.String },
+  success: Task,
+  error: CreateTaskFailed,
+});
+
+export class TaskRpcs extends RpcGroup.make(getTask, createTask) {}
+```
+
+`TaskRpcs` is a value-level description — nothing executes yet.
+
+## `src/ApiHandlers.ts` — the handlers
+
+`TaskRpcs.toLayer` takes one handler per procedure and produces a
+`Layer`:
+
+```typescript
+// src/ApiHandlers.ts
+import * as Effect from "effect/Effect";
+import { TaskRpcs } from "./ApiSchema.ts";
+import { Task, TaskNotFound } from "./Task.ts";
+
+export const TaskRpcsLive = TaskRpcs.toLayer({
+  // stubs — the per-cloud guides back these with real storage Bindings
+  getTask: ({ id }) => Effect.fail(new TaskNotFound({ id })),
+  createTask: ({ title }) =>
+    Effect.succeed(
+      new Task({ id: crypto.randomUUID(), title, completed: false }),
+    ),
+});
+```
+
+`toLayer` is pure construction — it builds a value and never runs
+the server, so it is safe inside a host's Init phase (which also
+executes at plan time). Each handler receives the decoded payload
+and returns an `Effect` that succeeds or fails with the declared
+schemas; the storage-backed bodies live in the per-cloud guides —
+R2 in [Effect RPC on Workers](/cloudflare/apis/effect-rpc), DynamoDB
+in [Effect RPC on Lambda](/aws/apis/effect-rpc).
+
+### Compile the group to an `HttpEffect`
+
+`RpcServer.toHttpEffect` turns the group into the `fetch` shape
+every host expects. It needs exactly two layers — the handlers and a
+serialization:
+
+```diff lang="typescript"
+ import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
++import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+ import { TaskRpcs } from "./ApiSchema.ts";
+ import { Task, TaskNotFound } from "./Task.ts";
+
+ export const TaskRpcsLive = TaskRpcs.toLayer({
+   // ...
+ });
+
++export const ApiHttpEffect = RpcServer.toHttpEffect(TaskRpcs).pipe(
++  Effect.provide(Layer.mergeAll(TaskRpcsLive, RpcSerialization.layerJson)),
++);
+```
+
+This file still imports nothing cloud-specific — the same
+`ApiHttpEffect` deploys to any host below.
+
+### JSON or NDJSON
+
+When the group outgrows plain request/response, the serialization
+layer is the one line that changes:
+
+```diff lang="typescript"
+ export const ApiHttpEffect = RpcServer.toHttpEffect(TaskRpcs).pipe(
+-  Effect.provide(Layer.mergeAll(TaskRpcsLive, RpcSerialization.layerJson)),
++  Effect.provide(Layer.mergeAll(TaskRpcsLive, RpcSerialization.layerNdjson)),
+ );
+```
+
+`layerJson` buffers one JSON body per request and is fine for a
+plain request/response group served over HTTP — nothing here
+streams, so this page stays on it. NDJSON (one frame per line) is
+required as soon as any rpc streams, and it is what
+`Cloudflare.RpcWorker.bind`'s built-in client speaks — it hardcodes
+ndjson — so groups served to bound consumers use `layerNdjson` (as
+the `RpcWorker` section below does). Whichever you pick, the
+client's serialization layer must match.
+
+## `src/ApiService.ts` — the host
+
+The host maps the `HttpEffect` into the `{ fetch }` interface it
+expects — here a Lambda Function with a public URL:
+
+```typescript
+// src/ApiService.ts
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import { ApiHttpEffect } from "./ApiHandlers.ts";
+
+export default class ApiService extends AWS.Lambda.Function<ApiService>()(
+  "ApiService",
+  { main: import.meta.url, url: true },
+  ApiHttpEffect.pipe(Effect.map((fetch) => ({ fetch }))),
+) {}
+```
+
+This is the only cloud-specific file — swap the host for a
+Cloudflare Worker and nothing above it changes. When the handlers
+use real storage Bindings, the host is also where their
+implementation Layers are provided (e.g.
+`Effect.provide(Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp))`
+on Lambda) — the provided Layers satisfy the handlers' Bindings.
+
+## `alchemy.run.ts` — deploy it
+
+The Stack yields the host and returns its URL:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import ApiService from "./src/ApiService.ts";
+
+export default Alchemy.Stack(
+  "TaskApi",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const api = yield* ApiService;
+    return { url: api.functionUrl };
+  }),
+);
+```
+
+Yielding `ApiService` deploys the function and everything it
+declared inside Init; `bun alchemy deploy` prints the URL.
+
+## `src/ApiClient.ts` — a typed client
+
+A client is the schema combined with a **Fetcher** — a plain URL for
+external consumers, or a Binding when the caller lives in the same
+account (see `RpcWorker.bind` below). Here is the URL form:
+
+```typescript
+// src/ApiClient.ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { TaskRpcs } from "./ApiSchema.ts";
+
+const program = Effect.gen(function* () {
+  const client = yield* RpcClient.make(TaskRpcs);
+
+  const task = yield* client.createTask({ title: "Write the docs" }).pipe(
+    Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 5 }),
+  );
+
+  const fetched = yield* client.getTask({ id: task.id });
+  console.log(fetched.title);
+});
+
+Effect.runPromise(
+  program.pipe(
+    Effect.scoped,
+    Effect.provide(
+      RpcClient.layerProtocolHttp({ url: process.env.TASK_API_URL! }).pipe(
+        Layer.provide(FetchHttpClient.layer),
+        Layer.provide(RpcSerialization.layerJson),
+      ),
+    ),
+  ),
+);
+```
+
+`RpcClient.make(TaskRpcs)` derives the whole client from the same
+group value — no codegen — with typed errors
+(`client.getTask` returns `Effect<Task, TaskNotFound>`); it runs
+inside `Effect.scoped`, the serialization layer matches the
+server's, and the first call retries through fresh-URL propagation.
+
+## Cloudflare sugar: `RpcWorker`
+
+On Cloudflare, `Cloudflare.RpcWorker` collapses the host file: the
+schema goes in the props and the impl returns the piped
+`RpcServer.toHttpEffect(schema)` directly — no `{ fetch }` wrapper:
+
+```typescript
+// src/ApiService.ts — Cloudflare flavor
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { TaskRpcsLive } from "./ApiHandlers.ts";
+import { TaskRpcs } from "./ApiSchema.ts";
+
+export default class ApiService extends Cloudflare.RpcWorker<ApiService>()(
+  "ApiService",
+  { main: import.meta.url, schema: TaskRpcs },
+  Effect.gen(function* () {
+    return RpcServer.toHttpEffect(TaskRpcs).pipe(
+      Effect.provide(
+        Layer.mergeAll(TaskRpcsLive, RpcSerialization.layerNdjson),
+      ),
+    );
+  }),
+) {}
+```
+
+`props.schema` is what makes the next step possible: other Workers
+can bind a typed client from the class alone. Note the
+`layerNdjson` — bound clients speak ndjson.
+
+### Bind it from another Worker
+
+Inside another Worker, the Fetcher is the service binding —
+`Cloudflare.RpcWorker.bind` returns the typed `RpcClient` with zero
+client wiring:
+
+```typescript
+// INIT phase of another Worker: register the binding, get the client
+const tasks = yield* Cloudflare.RpcWorker.bind(ApiService);
+
+// PER-REQUEST: call procedures on the typed RpcClient
+proxyGetTask: ({ id }) => tasks.getTask({ id }),
+```
+
+The client is typed by `ApiService`'s declared schema and the
+transport never leaves the isolate — calls go over the in-account
+service binding, not the public internet; a `Proxy` defers each
+call's underlying `RpcClient` construction so Cloudflare's "no
+cross-request I/O" rule is satisfied transparently. If you ever need
+to hand-wire a transport, `Cloudflare.toHttpClient` turns anything
+with an Effect-typed `fetch` into an `HttpClient` — but the
+built-ins make that unnecessary. Full mechanics — the modular
+class/`.make` form, streaming rpcs, Binding wiring, and deploy —
+live in [Effect RPC on Workers](/cloudflare/apis/effect-rpc).
+
+## `RpcDurableObject` (niche)
+
+You rarely need runtime checking internally, so this is not the
+default path for Durable Object method calls — schemaless
+`getByName` already covers typed methods and streaming. Its niche is
+when an external client connects to a Durable Object and speaks RPC
+over a WebSocket connection, or when values crossing the DO boundary
+are `Schema.Class` instances that must survive with class identity:
+the schemaless bridge `JSON.stringify`s each return value and loses
+class identity, while `RpcDurableObject.getByName(id)` returns an
+`RpcClient` that round-trips through the shared `RpcSerialization`
+codec. Mechanics are in
+[Effect RPC on Workers](/cloudflare/apis/effect-rpc).
+
+## Where next
+
+- [Effect HTTP](/apis/effect-http) — the same idea as real HTTP
+  endpoints (URLs, path params, status codes), better when consumers
+  are non-Effect or non-TypeScript.
+- [Effect RPC on Workers](/cloudflare/apis/effect-rpc) and
+  [Effect RPC on Lambda](/aws/apis/effect-rpc) — full per-cloud
+  wiring.
+- [Schemaless RPC](/apis/schemaless) — the default for internal
+  calls.

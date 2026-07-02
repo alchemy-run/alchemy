@@ -35,7 +35,7 @@ This is the **Effectful Constructor** — one simple, repeatable
 pattern you'll use everywhere across alchemy:
 
 - A **Worker** or **Lambda Function** returns its handlers (`fetch`).
-- A **Durable Object** returns its [RPC methods](/rpc/schemaless).
+- A **Durable Object** returns its [RPC methods](/apis/schemaless).
 - A **Workflow** returns its run function.
 - A [**Layer**](/infrastructure-as-effects/layers) returns a service
   interface.
@@ -43,7 +43,62 @@ pattern you'll use everywhere across alchemy:
 Bind what you need, return what you expose. Learn it once and every
 runtime in alchemy is a variation on it.
 
+## Fetch
+
+`fetch` is the interface member that serves HTTP — a per-request
+Effect. Yield `HttpServerRequest` to read the request; return an
+`HttpServerResponse`:
+
+```typescript
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+Effect.gen(function* () {
+  return {
+    fetch: Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      return HttpServerResponse.text(`hello from ${request.url}`);
+    }),
+  };
+});
+```
+
+Every Worker and Lambda Function serves HTTP through this member —
+it runs per request, inside the deployed Function
+([Phases](/infrastructure-as-effects/phases) covers exactly when).
+
+## RPC
+
+The interface isn't limited to `fetch` — add methods returning
+`Effect` or `Stream`, and any resource that binds this Worker calls
+them through a typed client:
+
+```typescript
+export default class Greeter extends Cloudflare.Worker<Greeter>()(
+  "Greeter",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      greet: (name: string) => Effect.succeed(`hello ${name}`),
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }),
+) {}
+```
+
+No schema, no runtime validation — serialization is automatic and
+the client type is inferred from the class. This is
+[Schemaless RPC](/apis/schemaless), the default for internal calls;
+the [APIs](/apis) section covers it plus the schema'd surfaces
+([Effect RPC](/apis/effect-rpc), [Effect HTTP](/apis/effect-http))
+for trust boundaries.
+
 ## A Worker, end to end
+
+Cloud configuration, a Binding, and a `fetch` handler together:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -227,7 +282,7 @@ code.
 - [Bindings](/infrastructure-as-effects/binding) — the deploy-time
   mechanics behind `yield* ReadWriteBucket(Bucket)`: IAM, env
   injection, typed SDKs.
-- [RPC](/rpc) — how bound resources call the methods you return.
+- [RPC](/apis) — how bound resources call the methods you return.
 - [Phases](/infrastructure-as-effects/phases) — when the constructor
   runs vs the interface it returns, and why.
 - [Custom Runtime](/infrastructure-as-effects/custom-runtime) —

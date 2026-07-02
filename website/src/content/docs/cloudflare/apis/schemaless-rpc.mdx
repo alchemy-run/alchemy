@@ -1,0 +1,69 @@
+---
+title: Schemaless RPC
+description: Typed RPC between Workers, Durable Objects, and Containers with no schema — bind the class, get the client.
+sidebar:
+  order: 2
+---
+
+On Cloudflare, schemaless calls ride native JSRPC over service bindings — Worker → Worker and Worker → Durable Object never touch the public internet — while Containers use the fetch transport. The serialization model, limits, and error codec live at [Schemaless RPC](/apis/schemaless); this page routes you to the wiring for each pairing.
+
+Bind the class, get the client — `target.greet(name)` is typed end-to-end from the callee's Shape:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+// BindingTargetWorker's init Effect returns { greet: (name: string) => Effect<string>, fetch }
+import BindingTargetWorker from "./binding-target-worker.ts";
+
+export default class BindingEffectCaller extends Cloudflare.Worker<BindingEffectCaller>()(
+  "BindingEffectCaller",
+  {
+    main: import.meta.url,
+  },
+  Effect.gen(function* () {
+    const target = yield* Cloudflare.Workers.bindWorker(BindingTargetWorker);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const name =
+          new URL(request.url, "http://x").searchParams.get("name") ?? "world";
+        const greeting = yield* target.greet(name);
+        return HttpServerResponse.text(String(greeting));
+      }),
+    };
+  }),
+) {}
+```
+
+## Worker → Worker
+
+`bindWorker(TargetWorker)` registers a service Binding at plan time and returns a proxy typed as the target's Shape. See [Workers](/cloudflare/compute/workers#schemaless-rpc).
+
+## Worker → Durable Object
+
+Yield the DO class, call `getByName(name)`, and get a stub mirroring the Shape — value methods `yield*` as Effects, streaming methods pipe as Streams. See [Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc).
+
+## Another script's Durable Object
+
+`Counter.from(WorkerA)` binds a DO published by a different Worker script, same typed stub. See [Cross-Worker Durable Objects](/cloudflare/compute/cross-worker-durable-object).
+
+## Containers
+
+A Container declares its Shape as a type parameter and the hosting Durable Object calls it over the fetch transport. See [Containers](/cloudflare/compute/containers).
+
+## Async (non-Effect) consumers
+
+`Cloudflare.toRpcAsync<Backend>(env.BACKEND)` decodes the wire envelopes into a plain `Promise` API for async Workers and frontend server routes. See [Vite SPA](/cloudflare/frontend/vite-spa#wrap-the-binding-for-typed-rpc).
+
+## When you need schemas
+
+Schemaless RPC does no runtime validation — at a trust boundary, or when class identity must survive the hop, use [Effect RPC](/cloudflare/apis/effect-rpc). The decision guide lives at [RPC](/apis).
+
+## Where next
+
+- [Schemaless RPC concept](/apis/schemaless) — the contract, serialization model, and limits
+- [Effect RPC](/cloudflare/apis/effect-rpc) — schema-first RPC on Workers and Durable Objects
+- [Effect HTTP](/cloudflare/apis/effect-http-api) — schema-validated REST endpoints

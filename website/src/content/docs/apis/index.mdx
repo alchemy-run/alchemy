@@ -1,5 +1,5 @@
 ---
-title: RPC
+title: APIs
 description: Every Function and Server returns { fetch, ...rpcs } — schemaless typed calls are the default for internal communication; Effect RPC and Effect HTTP add schemas where data crosses a trust boundary.
 ---
 
@@ -45,9 +45,9 @@ service, anything you don't deploy yourself.
 
 | Modality                            | Schema     | Per-request cost                                                                                                   | Use when                                                                                                          | Clients                                                                                     |
 | ----------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [Schemaless RPC](/rpc/schemaless)   | None       | Proxy dispatch + structured clone (native Bindings) or JSON args (fetch transport) + an envelope-tag check — zero validation | Internal service-to-service: Worker → Worker, Worker → Durable Object, Durable Object → Container, Lambda → MicroVM | Any resource that binds the class (MicroVMs connect explicitly via `connectMicrovm`)          |
-| [Effect RPC](/rpc/effect-rpc)       | `RpcGroup` | Wire-frame parse + Schema decode of the payload + handler + Schema encode of the result — mirrored on the client    | Data needs sanitizing or crosses a trust boundary (web app, external service) and consumers are Effect/TypeScript  | The schema + a reference to the Fetcher — a Binding or just a URL                             |
-| [Effect HTTP](/rpc/effect-http)     | `HttpApi`  | Same profile as Effect RPC                                                                                          | Same trust-boundary case, but consumers are non-Effect / non-TypeScript                                            | Plain HTTP — real URLs, path params, query strings, headers, content types, `curl`            |
+| [Schemaless RPC](/apis/schemaless)   | None       | Proxy dispatch + structured clone (native Bindings) or JSON args (fetch transport) + an envelope-tag check — zero validation | Internal service-to-service: Worker → Worker, Worker → Durable Object, Durable Object → Container, Lambda → MicroVM | Any resource that binds the class (MicroVMs connect explicitly via `connectMicrovm`)          |
+| [Effect RPC](/apis/effect-rpc)       | `RpcGroup` | Wire-frame parse + Schema decode of the payload + handler + Schema encode of the result — mirrored on the client    | Data needs sanitizing or crosses a trust boundary (web app, external service) and consumers are Effect/TypeScript  | The schema + a reference to the Fetcher — a Binding or just a URL                             |
+| [Effect HTTP](/apis/effect-http)     | `HttpApi`  | Same profile as Effect RPC                                                                                          | Same trust-boundary case, but consumers are non-Effect / non-TypeScript                                            | Plain HTTP — real URLs, path params, query strings, headers, content types, `curl`            |
 
 ## Choosing
 
@@ -64,9 +64,9 @@ outside your deploy.
 
 Between the two schema'd modalities the choice is about the **external
 consumer**: an Effect/TypeScript client combines your schema with a Fetcher
-and gets a typed RPC client — use [Effect RPC](/rpc/effect-rpc); anyone else
+and gets a typed RPC client — use [Effect RPC](/apis/effect-rpc); anyone else
 wants a real HTTP surface they can hit with a plain HTTP client — use
-[Effect HTTP](/rpc/effect-http).
+[Effect HTTP](/apis/effect-http).
 
 The three interoperate on one host: the schema'd modalities build an
 `HttpEffect` returned from `fetch`, so a single Worker or Function can serve
@@ -74,9 +74,9 @@ schemaless methods internally **and** a schema'd surface externally.
 
 ## Where next
 
-1. [Schemaless RPC](/rpc/schemaless) — the internal default: typed clients, Streams, and error propagation with no schema.
-2. [Effect RPC](/rpc/effect-rpc) — `RpcGroup` schemas, handler Layers, and clients built from the schema + a Fetcher.
-3. [Effect HTTP](/rpc/effect-http) — the same idea as real REST endpoints for non-Effect consumers.
+1. [Schemaless RPC](/apis/schemaless) — the internal default: typed clients, Streams, and error propagation with no schema.
+2. [Effect RPC](/apis/effect-rpc) — `RpcGroup` schemas, handler Layers, and clients built from the schema + a Fetcher.
+3. [Effect HTTP](/apis/effect-http) — the same idea as real REST endpoints for non-Effect consumers.
 
 Then see it wired up in the hubs:
 

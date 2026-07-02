@@ -8,8 +8,8 @@ sidebar:
 Effect RPC exposes a typed, schema-validated surface across a
 **trust boundary** — a web app or an external service calling into
 your Worker. For internal Worker-to-Worker or Worker-to-DO calls,
-use [Schemaless RPC](/rpc/schemaless) instead; for choosing between
-the modalities, see [RPC](/rpc).
+use [Schemaless RPC](/apis/schemaless) instead; for choosing between
+the modalities, see [RPC](/apis).
 
 The [HTTP API guide](/cloudflare/apis/effect-http-api) showed how to build
 REST-style endpoints with schema validation. Effect RPC takes a
@@ -511,7 +511,7 @@ method return values cross a `Schema.Class` boundary — the built-in bridge
 `JSON.stringify`s each value and loses class identity, while the RPC
 namespace round-trips through the shared `RpcSerialization` codec.
 The concept home for this trade-off is
-[Effect RPC](/rpc/effect-rpc).
+[Effect RPC](/apis/effect-rpc).
 
 Like `RpcWorker`, the RPC DO supports a **modular form** that
 separates the class from its runtime so consumer Workers can bind
@@ -707,11 +707,11 @@ still hit R2. One `TaskRpcs` value, one client, two storage backends.
 ## Choosing a modality
 
 - **Internal calls** (Worker-to-Worker, Worker-to-DO) —
-  [Schemaless RPC](/rpc/schemaless): typed clients with no schema
+  [Schemaless RPC](/apis/schemaless): typed clients with no schema
   and no per-request validation cost.
 - **External Effect/TypeScript consumers** — this page.
 - **External plain-HTTP consumers** —
   [Effect HTTP](/cloudflare/apis/effect-http-api): the same typed
   interface over real REST endpoints.
 
-The full decision guide lives at [RPC](/rpc).
+The full decision guide lives at [RPC](/apis).

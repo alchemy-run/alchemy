@@ -58,14 +58,14 @@ How app code and infrastructure compose: Functions & Servers, Bindings, the init
 - [Circular Bindings](https://v2.alchemy.run/infrastructure-as-effects/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
 - [Custom Runtime](https://v2.alchemy.run/infrastructure-as-effects/custom-runtime) — Implement your own Function/Server resource on the Platform type — a Provider that provisions the compute and bundles the runtime Effect.
 
-## RPC
+## APIs
 
 Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.
 
-- [RPC](https://v2.alchemy.run/rpc) — Every Function and Server returns { fetch, ...rpcs } — schemaless typed calls are the default for internal communication; Effect RPC and Effect HTTP add schemas where data crosses a trust boundary.
-- [Schemaless RPC](https://v2.alchemy.run/rpc/schemaless) — Typed RPC between Functions & Servers with no schema — bind the class, get the client; serialization is automatic.
-- [Effect RPC](https://v2.alchemy.run/rpc/effect-rpc) — Schema-first RPC for trust boundaries — define a schema, serve it as an HttpEffect from any Function or Worker, and build clients from the schema plus a Fetcher.
-- [Effect HTTP](https://v2.alchemy.run/rpc/effect-http) — Schema-validated REST endpoints with an rpc-like typed interface — for trust boundaries where consumers want a plain HTTP client.
+- [APIs](https://v2.alchemy.run/apis) — Every Function and Server returns { fetch, ...rpcs } — schemaless typed calls are the default for internal communication; Effect RPC and Effect HTTP add schemas where data crosses a trust boundary.
+- [Schemaless RPC](https://v2.alchemy.run/apis/schemaless) — Typed RPC between Functions & Servers with no schema — bind the class, get the client; serialization is automatic.
+- [Effect RPC](https://v2.alchemy.run/apis/effect-rpc) — Schema-first RPC for trust boundaries — define a schema, serve it as an HttpEffect from any Function or Worker, and build clients from the schema plus a Fetcher.
+- [Effect HTTP](https://v2.alchemy.run/apis/effect-http) — Schema-validated REST endpoints with an rpc-like typed interface — for trust boundaries where consumers want a plain HTTP client.
 
 ## Environments — the same app in many places
 
@@ -138,6 +138,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 
 ## Cloudflare — APIs
 
+- [Schemaless RPC](https://v2.alchemy.run/cloudflare/apis/schemaless-rpc) — Typed RPC between Workers, Durable Objects, and Containers with no schema — bind the class, get the client.
 - [Effect HTTP API](https://v2.alchemy.run/cloudflare/apis/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as a Cloudflare Worker.
 - [Effect RPC](https://v2.alchemy.run/cloudflare/apis/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as a Cloudflare Worker.
 
@@ -222,6 +223,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 ## AWS — APIs
 
+- [Schemaless RPC](https://v2.alchemy.run/aws/apis/schemaless-rpc) — Typed RPC from a Lambda Function into a MicroVM with no schema — declare the image's Shape, connect, get the client.
 - [Effect HTTP API on Lambda](https://v2.alchemy.run/aws/apis/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as an AWS Lambda Function behind a Function URL.
 - [Effect RPC on Lambda](https://v2.alchemy.run/aws/apis/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as an AWS Lambda Function behind a Function URL.
 - [REST API (API Gateway v1)](https://v2.alchemy.run/aws/apis/api-gateway) — Expose a Lambda with a regional Amazon API Gateway REST API using RestApi, Resource, Method, Deployment, and Stage primitives.

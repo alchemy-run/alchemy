@@ -166,6 +166,10 @@ const REDIRECTS: Record<string, string> = {
   "/concepts/platform": "/infrastructure-as-effects/functions-and-servers",
   "/infrastructure-as-effects/platform":
     "/infrastructure-as-effects/functions-and-servers",
+  "/rpc": "/apis",
+  "/rpc/schemaless": "/apis/schemaless",
+  "/rpc/effect-rpc": "/apis/effect-rpc",
+  "/rpc/effect-http": "/apis/effect-http",
   "/concepts/profiles": "/environments/profiles",
   "/concepts/provider": "/infrastructure-as-code/provider",
   "/concepts/references": "/infrastructure-as-code/references",

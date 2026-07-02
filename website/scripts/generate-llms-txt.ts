@@ -112,15 +112,15 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "RPC",
+    heading: "APIs",
     intro:
       "Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.",
     pages: {
       slugs: [
-        "rpc/index",
-        "rpc/schemaless",
-        "rpc/effect-rpc",
-        "rpc/effect-http",
+        "apis/index",
+        "apis/schemaless",
+        "apis/effect-rpc",
+        "apis/effect-http",
       ],
     },
   },

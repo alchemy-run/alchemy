@@ -249,11 +249,11 @@ Values must survive the wire codec:
 - **Class identity is always stripped** — a `Schema.Class` instance arrives as a plain struct.
 - **Functions and callbacks don't serialize** — every property access on the stub is a remote method call, nothing more.
 
-There is no runtime validation of arguments or results anywhere. That is the point — no schema to maintain, no per-request decode cost — and the trade-off: nothing sanitizes what arrives. When data crosses a trust boundary — exposed to a web app or an external service — or when class identity must survive the hop, reach for [Effect RPC](/rpc/effect-rpc).
+There is no runtime validation of arguments or results anywhere. That is the point — no schema to maintain, no per-request decode cost — and the trade-off: nothing sanitizes what arrives. When data crosses a trust boundary — exposed to a web app or an external service — or when class identity must survive the hop, reach for [Effect RPC](/apis/effect-rpc).
 
 ## Where next
 
-- [Effect RPC](/rpc/effect-rpc) — schema-first RPC for trust boundaries
+- [Effect RPC](/apis/effect-rpc) — schema-first RPC for trust boundaries
 - [Workers](/cloudflare/compute/workers#schemaless-rpc) — Worker → Worker wiring
 - [Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc) — Worker → DO wiring
 - [Cross-Worker Durable Objects](/cloudflare/compute/cross-worker-durable-object) — bind another script's DO

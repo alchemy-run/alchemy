@@ -8,16 +8,16 @@ sidebar:
 Effect RPC is a trust-boundary tool: schemas validate every request,
 so reach for it when data needs sanitizing on its way in — a web app
 or an external service calling your Lambda. Internal calls use
-[Schemaless RPC](/rpc/schemaless) instead (on AWS, a Lambda Function
+[Schemaless RPC](/apis/schemaless) instead (on AWS, a Lambda Function
 driving a [MicroVM](/aws/compute/microvms)); the
-[RPC overview](/rpc) has the full decision.
+[RPC overview](/apis) has the full decision.
 
 The [HTTP API guide](/aws/apis/effect-http-api) showed how to
 build REST-style endpoints with schema validation. Effect RPC takes
 a different angle — you define **procedures** instead of HTTP
 endpoints, and you get a fully typed client for free with no URL
 construction or manual serialization.
-[Effect RPC](/rpc/effect-rpc) covers the host-agnostic core; this
+[Effect RPC](/apis/effect-rpc) covers the host-agnostic core; this
 page covers the Lambda side — a public Function URL via `url: true`,
 and binding implementations provided with
 `Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp)`.
@@ -397,8 +397,8 @@ explicitly.
 - **External plain-HTTP consumers** (curl, non-TypeScript clients) —
   [Effect HTTP API on Lambda](/aws/apis/effect-http-api).
 - **Internal service-to-service calls** —
-  [Schemaless RPC](/rpc/schemaless).
-- **The full decision** — [RPC overview](/rpc).
+  [Schemaless RPC](/apis/schemaless).
+- **The full decision** — [RPC overview](/apis).
 
 ## Go further
 

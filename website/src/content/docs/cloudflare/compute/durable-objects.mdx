@@ -373,7 +373,7 @@ const value = yield* counter.increment(); // Effect<number>
 ```
 
 This schemaless, typed-stub pattern — the DO shape of
-[Schemaless RPC](/rpc/schemaless) — is the recommended way to talk
+[Schemaless RPC](/apis/schemaless) — is the recommended way to talk
 to a Durable Object. The types flow from the implementation — add a
 method, and every caller sees it immediately; change a return type,
 and every caller that mismatches fails to compile. The same
