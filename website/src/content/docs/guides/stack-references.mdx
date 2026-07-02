@@ -4,22 +4,12 @@ description: Read the deployed outputs of another stage or Stack — Resource.re
 ---
 
 A reference reads an already-deployed Resource or Stack from the
-state store at plan time. Three forms, smallest first.
-
-## `Resource.ref` by Logical ID
-
-Reference a Resource in this stack by its Logical ID:
-
-```typescript
-const project = yield* Neon.Project.ref("app-db");
-```
-
-Same type as `yield* Neon.Project("app-db", { … })` — pass it
-anywhere the real thing is accepted.
+state store at plan time.
 
 ## Reference another stage
 
-Pass `stage` to read a different stage of the same stack:
+`Resource.ref` takes a Logical ID; pass `stage` to read that
+Resource from a different stage of this stack:
 
 ```typescript
 const { stage } = yield* Alchemy.Stack;
@@ -29,8 +19,12 @@ const project = stage.startsWith("pr-")
   : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
 ```
 
-`staging` owns the database; `pr-*` stages borrow it. Destroying
-a borrower never touches the Resources it references.
+The ref has the same type as `yield* Neon.Project("app-db", { … })`
+— pass it anywhere the real thing is accepted. Here `staging` owns
+the database and `pr-*` stages borrow it; destroying a borrower
+never touches the Resources it references.
+
+## Reference another Stack
 
 Pass `stack` too for a Resource in a different Stack:
 
