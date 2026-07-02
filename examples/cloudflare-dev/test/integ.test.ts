@@ -8,6 +8,7 @@ import * as Schema from "effect/Schema";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import assert from "node:assert";
 import Stack from "../alchemy.run.ts";
 import type { Message } from "../src/AsyncWorker.ts";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
@@ -18,7 +19,27 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    Effect.flatMap(
+      Effect.fn(function* ({ asyncWorker, effectWorker }) {
+        assert(typeof asyncWorker === "string");
+        assert(typeof effectWorker === "string");
+        yield* Effect.forEach([asyncWorker, effectWorker], (url) =>
+          HttpClient.get(url).pipe(
+            Effect.flatMap(HttpClientResponse.filterStatusOk),
+            Effect.retry({
+              schedule: Schedule.spaced("250 millis").pipe(
+                Schedule.both(Schedule.recurs(25)),
+              ),
+            }),
+          ),
+        );
+        return { asyncWorker, effectWorker };
+      }),
+    ),
+  ),
+);
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
@@ -289,4 +310,5 @@ test(
     // and via `ctx.container.start({ env })` in local dev).
     expect(body).toBe("Hello from Sandbox container! GREETING=hello-from-env");
   }),
+  { timeout: 180_000 },
 );
