@@ -371,4 +371,4 @@ Both platforms sit behind the same abstraction: the same Effect
 program deploys as a Cloudflare Container or an AWS MicroVM,
 the same binding call works from a Lambda or a Worker, and the
 cross-cloud IAM wiring is generated from the code that uses it.
-Picking the latency shape you want is a one-line change.
+Picking the latency shape you want is a couple of lines.
