@@ -21,6 +21,7 @@ export function App() {
   const [selected, setSelected] = useState<string>();
   const [view, setView] = useState<View>("canvas");
   const [query, setQuery] = useState("");
+  const [planStale, setPlanStale] = useState(false);
 
   const stage = stageOverride ?? meta?.stage;
 
@@ -43,8 +44,15 @@ export function App() {
     fetchGraph(stage)
       .then(setGraph)
       .catch((e) => setError(String(e)));
+    // the plan refetch re-evaluates the whole stack and can take seconds;
+    // planStale keeps the live session's plan rendered until it lands so
+    // badges don't flash back to the pre-deploy plan
+    setPlanStale(true);
     fetchPlan(stage)
-      .then(setPlan)
+      .then((p) => {
+        setPlan(p);
+        setPlanStale(false);
+      })
       .catch(() => undefined);
   }, [stage]);
 
@@ -60,7 +68,10 @@ export function App() {
   // settled state + plan are refetched
   const live = useApplyStream(refresh);
 
-  const effectivePlan = live && !live.done ? live.plan : plan;
+  // the live session's plan stays authoritative until the post-apply
+  // refetch actually lands — never fall back to a stale pre-deploy plan
+  const effectivePlan =
+    live && (!live.done || planStale || plan === undefined) ? live.plan : plan;
 
   const merged = useMemo(() => {
     // during a live apply, don't gate the canvas on the (possibly slow)
@@ -149,17 +160,11 @@ export function App() {
       />
       <div className="relative flex min-h-0 flex-1">
         {live && <ActivityFeed live={live} />}
-        <main className="min-w-0 flex-1">
-          {filtered.nodes.length === 0 ? (
-            <Center>
-              <p className="text-sm text-zinc-500">
-                No resources in {meta.stack}/{stage}
-              </p>
-              <p className="mt-2 text-[12px] text-zinc-600">
-                Deploy the stack first: <code>bun alchemy deploy</code>
-              </p>
-            </Center>
-          ) : view === "canvas" ? (
+        <main className="relative min-w-0 flex-1">
+          {/* keep the canvas mounted even when the node list is transiently
+              empty (plan/graph/live handoffs) — unmount/remount pops the
+              whole scene in and out */}
+          {view === "canvas" ? (
             <Canvas
               graph={filtered}
               registry={registry}
@@ -175,6 +180,16 @@ export function App() {
               selected={selected}
               onSelect={setSelected}
             />
+          )}
+          {filtered.nodes.length === 0 && (
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <p className="text-sm text-zinc-500">
+                No resources in {meta.stack}/{stage}
+              </p>
+              <p className="mt-2 text-[12px] text-zinc-600">
+                Deploy the stack first: <code>bun alchemy deploy</code>
+              </p>
+            </div>
           )}
         </main>
         {selectedNode && (
