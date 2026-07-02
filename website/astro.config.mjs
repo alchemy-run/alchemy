@@ -322,7 +322,7 @@ export default defineConfig({
               autogenerate: { directory: "aws/tutorial" },
             },
             {
-              label: "Compute — pick one",
+              label: "Compute",
               items: [
                 {
                   label: "Choosing a runtime",

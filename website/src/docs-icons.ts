@@ -46,7 +46,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
 
 /**
  * Resolve a sidebar group label to an icon body. Qualified labels like
- * "Compute — pick one" resolve via their base name.
+ * "Compute — advanced" resolve via their base name.
  */
 export function sidebarGroupIcon(label: string): string | undefined {
   return GROUP_ICONS[label] ?? GROUP_ICONS[label.split("—")[0].trim()];
