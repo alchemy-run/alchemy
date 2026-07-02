@@ -20,7 +20,7 @@ import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
  * fresh `astro dev` before running the generator), fall back to autogenerating
  * from the directory tree so the docs still build.
  */
-function providersSidebarEntry() {
+function providersSidebar() {
   try {
     const json = readFileSync(
       fileURLToPath(
@@ -28,16 +28,39 @@ function providersSidebarEntry() {
       ),
       "utf8",
     );
-    // Expanded one level deep: the Reference tab shows its providers
-    // (AWS, Cloudflare, …) on load; everything below stays collapsed.
-    return { label: "Reference", collapsed: false, items: JSON.parse(json) };
+    return JSON.parse(json);
   } catch {
-    return {
-      label: "Reference",
-      collapsed: false,
-      autogenerate: { directory: "providers", collapsed: true },
-    };
+    return undefined;
   }
+}
+
+function providersSidebarEntry() {
+  const providers = providersSidebar();
+  // Expanded one level deep: the Reference tab shows its providers
+  // (AWS, Cloudflare, …) on load; everything below stays collapsed.
+  if (providers)
+    return { label: "Reference", collapsed: false, items: providers };
+  return {
+    label: "Reference",
+    collapsed: false,
+    autogenerate: { directory: "providers", collapsed: true },
+  };
+}
+
+/**
+ * A cloud hub's "Resources" section: that provider's slice of the generated
+ * reference tree, collapsed below Guides so each hub is self-sufficient.
+ *
+ * @param {string} provider Provider label / directory name (e.g. "Cloudflare")
+ */
+function providerResourcesEntry(provider) {
+  const group = providersSidebar()?.find((p) => p.label === provider);
+  if (group) return { label: "Resources", collapsed: true, items: group.items };
+  return {
+    label: "Resources",
+    collapsed: true,
+    autogenerate: { directory: `providers/${provider}`, collapsed: true },
+  };
 }
 
 /**
@@ -284,6 +307,7 @@ export default defineConfig({
               label: "Guides",
               autogenerate: { directory: "cloudflare/guides" },
             },
+            providerResourcesEntry("Cloudflare"),
           ],
         },
         {
@@ -326,6 +350,7 @@ export default defineConfig({
               items: [{ label: "VPC & networking", link: "/aws/networking" }],
             },
             { label: "Guides", autogenerate: { directory: "aws/guides" } },
+            providerResourcesEntry("AWS"),
           ],
         },
         {
