@@ -29,9 +29,17 @@
 }
 
 @media (min-width: 50rem) {
-  /* Shift Starlight's fixed sidebar off the viewport edge by the gutter… */
+  /* Shift Starlight's fixed sidebar off the viewport edge by the gutter,
+     and give it a faint accent wash fading into the page background —
+     the divider is the hairline, not a contrasting panel color. */
   .sidebar-pane {
     inset-inline-start: var(--alc-shell-gutter);
+    background: linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--alc-accent) 5%, transparent),
+        transparent 16rem
+      )
+      var(--sl-color-bg-sidebar);
   }
   /* …offset the main column to match (Starlight derives the content inset
      from this var)… */
@@ -88,7 +96,9 @@ starlight-menu-button button {
   /* Page surfaces */
   --sl-color-bg: var(--alc-bg);
   --sl-color-bg-nav: var(--alc-bg-nav);
-  --sl-color-bg-sidebar: var(--alc-bg-nav);
+  /* Sidebar shares the page background (bun.com-style: division comes from
+     the hairline + a faint gradient wash, not a contrasting panel). */
+  --sl-color-bg-sidebar: var(--alc-bg);
   --sl-color-bg-inline-code: var(--alc-bg-sunk);
   --sl-color-bg-accent: var(--alc-accent);
 
@@ -912,7 +922,9 @@ starlight-tabs [role="tablist"] > li:nth-child(4) [role="tab"] > svg {
    !important repaints that titlebar in cream parchment instead of the
    intended dark walnut, leaving an ugly cream strip above shell snippets. */
 header.header {
-  background: color-mix(in srgb, var(--alc-bg-nav) 92%, transparent) !important;
+  /* Same surface as the page + sidebar (bun.com-style — hairlines divide,
+     not contrasting panels), translucent for the blur under scroll. */
+  background: color-mix(in srgb, var(--alc-bg) 92%, transparent) !important;
   backdrop-filter: saturate(140%) blur(8px);
   border-bottom: 1px solid var(--alc-hairline) !important;
 }
