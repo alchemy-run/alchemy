@@ -155,7 +155,7 @@ const sandbox = yield* Cloudflare.Container("Sandbox", {
 The decision lives next to the Resource it affects, not in
 `alchemy.run.ts`. The most common case — `pr-*` stages borrowing
 staging's database via `.ref` — is covered in
-[Stack References](/guides/stack-references).
+[References](/concepts/references).
 
 ## alchemy.run.ts is the composition root
 
@@ -226,7 +226,7 @@ shape step by step ([Part 2](/cloudflare/tutorial/part-2)).
 
 - [Monorepo](/guides/monorepo) — the workspace-level version of
   this question: one Stack or one per package.
-- [Stack References](/guides/stack-references) — when the split
+- [References](/concepts/references) — when the split
   crosses Stack boundaries.
 - [Building with Layers](/guides/infrastructure-layers) — promote
   a multi-Resource unit into a swappable Layer.

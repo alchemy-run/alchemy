@@ -95,7 +95,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Project structure",
     intro:
-      "Scaling the codebase: file conventions for one stack, monorepos for many, Stack References to wire them together.",
+      "Scaling the codebase: file conventions for one stack, monorepos for many — single Stack or one per package.",
     pages: {
       slugs: [
         "guides/file-layout",

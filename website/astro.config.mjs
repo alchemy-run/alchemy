@@ -328,10 +328,6 @@ export default defineConfig({
                   label: "Multiple Stacks",
                   link: "/guides/monorepo-multi-stack",
                 },
-                {
-                  label: "Stack References",
-                  link: "/guides/stack-references",
-                },
               ],
             },
             {

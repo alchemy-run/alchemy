@@ -1,49 +1,35 @@
 ---
 title: References
-description: Read values out of another stack or stage at plan time — typed, lazy, and resolved from persisted state.
+description: Read an already-deployed Resource or Stack at plan time — Resource.ref by Logical ID with optional stack/stage props, or import a Stack tag and depend on its outputs.
 ---
 
-Stacks and stages deploy independently; a **reference** lets one
-deployment read another.
+A reference reads something **already deployed** — a different
+stage, a different Stack, or both — from the persisted
+[state store](/concepts/state-store) at plan time. References are
+lazy and don't drift: every plan re-reads the upstream's state, so
+downstream always sees whatever was actually last deployed.
 
-A **reference** points at something **already deployed**
-somewhere else — a different stage, a different stack, or both —
-and resolves to that thing's live attributes at plan time by
-reading the persisted [state store](/concepts/state-store).
+## Reference another stage
 
-References are lazy. They don't hit any cloud API at declaration
-time, and they don't drift — every plan re-reads the upstream's
-persisted state, so what flows into your downstream resources is
-always whatever was actually last deployed.
-
-For the project-structuring patterns built on references —
-long-lived staging stages feeding ephemeral `pr-*` previews,
-infra/app stack splits, monorepo wiring — see
-[Stack References](/guides/stack-references).
-
-## Reference a resource — `Resource.ref`
-
-The most common case: read one resource from another stage of
-the same stack.
+`Resource.ref` takes a Logical ID; pass `stage` to read that
+Resource from a different stage of this stack:
 
 ```typescript
-const db = yield* Neon.Project.ref("app-db", { stage: "staging" });
+const { stage } = yield* Alchemy.Stack;
 
-db.connectionString; // Output<Redacted<string>>
+const project = stage.startsWith("pr-")
+  ? yield* Neon.Project.ref("app-db", { stage: "staging" })
+  : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
 ```
 
-`Neon.Project.ref("app-db", …)` returns a `Neon.Project` — the
-same shape you'd get from `yield* Neon.Project("app-db", { … })`.
-You can pass it anywhere a `Neon.Project` is accepted; the rest
-of the graph doesn't know (or care) that it's a reference.
+The ref has the same type as `yield* Neon.Project("app-db", { … })`
+— pass it anywhere the real thing is accepted. Here `staging` owns
+the database and `pr-*` stages borrow it; destroying a borrower
+never touches the Resources it references.
 
-If `app-db` hasn't been deployed in `staging` yet, the plan
-fails fast with `InvalidReferenceError` — there is no
-"deploy-and-hope" path.
+## Reference another Stack
 
-## Cross a stack boundary
-
-Pass `stack` to read from a completely different stack:
+Pass `stack` too for a Resource in a different Stack:
 
 ```typescript
 const sharedBucket = yield* Storage.Bucket.ref("Assets", {
@@ -52,17 +38,15 @@ const sharedBucket = yield* Storage.Bucket.ref("Assets", {
 });
 ```
 
-`{ stack, stage, id }` is the full address. Anything you omit
-defaults to the current stack/stage, so `MyResource.ref("foo")`
-with no options is "the `foo` in this same stack and stage" —
-useful for adopting a resource that another part of the program
-already declared.
+`{ stack, stage, id }` is the full address; anything you omit
+defaults to the current stack/stage. Pin `stage` when the stacks'
+stages don't line up — `pr-147` has no counterpart in
+`shared-infra`.
 
-## Reference a whole stack — `yield* MyStack`
+## Depend on a Stack's outputs
 
-Sometimes one resource isn't the right unit — you want the
-**outputs** the upstream stack chose to expose. Declare a typed
-stack handle and `yield*` it:
+When the unit you consume is a whole Stack, import its tag and
+yield it:
 
 ```typescript
 // backend/src/Stack.ts
@@ -79,125 +63,60 @@ const b = yield* Backend.stage.prod;     // pinned to "prod"
 const c = yield* Backend.stage["pr-42"]; // any stage name
 ```
 
-`yield* Backend` resolves at the current stage;
-`Backend.stage.<name>` pins to a named one. Which to use when:
-[Stack References](/guides/stack-references#depend-on-a-stacks-outputs).
+Every successful `apply` persists what the Stack's effect returned
+as a per-stage output record; `yield* Backend` reads it back as a
+proxy of typed Outputs, so `(yield* Backend).url` is
+`Output<string>`. Full two-package walkthrough:
+[Multiple Stacks](/guides/monorepo-multi-stack).
 
-At the end of every successful `apply`, Alchemy persists
-whatever the stack's effect returned as a per-stack-per-stage
-**stack output** record. `yield* Backend` reads that record and
-returns a proxy that turns property access into typed Outputs,
-so `(yield* Backend).url` is `Output<string>`.
+## Escape hatches
 
-See [Monorepo](/guides/monorepo) for the full walkthrough.
-
-## Escape hatches — `Output.ref` and `Output.stackRef`
-
-When the resource constructor isn't in scope (e.g. inside a
-generic helper), use the underlying `Output.ref` primitive:
+When the Resource constructor isn't in scope, `Output.ref` is the
+same lookup:
 
 ```typescript
-import * as Output from "alchemy/Output";
-
 const bucket = Output.ref<typeof Bucket>("Bucket", {
   stack: "shared-infra",
   stage: "prod",
 });
-
-bucket.bucketName; // Output<string>
 ```
 
-Same `{ stack, stage, id }` lookup, same `InvalidReferenceError`
-failure mode. Prefer `Resource.ref` whenever you can — the
-proxied attribute access is identical, and the type erases to
-the resource interface instead of a bare `Output`.
-
-Similarly, when a typed stack handle isn't in scope, `Output.stackRef`
-reads the stack-output record directly:
+When a typed Stack handle isn't in scope, `Output.stackRef` reads
+the output record directly:
 
 ```typescript
 const backend = yield* Output.stackRef<{ url: string }>("Backend", {
   stage: "prod",
 });
-
-backend.url; // Output<string>
 ```
 
-Prefer `yield* MyStack` whenever you can — it's the same lookup
-with a real type binding instead of an inline shape.
+Prefer `Resource.ref` and `yield* MyStack` — same lookups, real
+type bindings.
 
-## How resolution works
+## Deploy order
 
-Every reference — resource or stack — carries a
-`{ stack, stage, id }` triple:
+The upstream must already be deployed to the exact
+`{ stack, stage }` the reference names, or the plan fails fast
+with a typed `InvalidReferenceError` — there is no
+deploy-and-hope path:
 
-| Field | Default when omitted |
-| ----- | -------------------- |
-| `stack` | The current stack's name |
-| `stage` | The current stage |
-| `id` | required for resource refs; equals the stack name for stack refs |
-
-At plan time Alchemy:
-
-1. Reads the upstream's persisted state under that triple
-   (`state.get` for resource refs, `state.getOutput` for stack
-   refs).
-2. Substitutes the resolved attributes into downstream resource
-   props.
-3. Hands the result to the provider.
-
-This is the same flow as an in-stack Output, with one
-difference: an in-stack Output's upstream is reconciled in this
-same plan; a reference's upstream was reconciled by a previous
-deploy and only its persisted attributes participate now.
-
-Per-resource state and per-stack outputs are stored separately —
-`state.set({ stack, stage, fqn })` for resources,
-`state.setOutput({ stack, stage })` for stack outputs. The
-separation keeps `O(1)` stack-output lookups and means destroying
-a stage clears both. See [State Store](/concepts/state-store) for
-the contract.
-
-## When a reference misses
-
-If the upstream hasn't been deployed, evaluation fails with:
-
-```ts
-class InvalidReferenceError extends Data.TaggedError(
-  "InvalidReferenceError",
-)<{
-  message: string;
-  stack: string;
-  stage: string;
-  resourceId: string;
-}> {}
+```sh
+alchemy deploy --stage staging   # creates app-db
+alchemy deploy --stage pr-147    # borrows staging's app-db
 ```
 
-For resource refs, this propagates as a typed failure through
-`Output.evaluate`. For stack refs and the `Plan.make` call path
-it becomes a defect (`Effect.die`) — the call site can't
-reasonably recover mid-deploy.
+Destroy in reverse order. Resolution itself is the in-stack
+[Output](/concepts/outputs) flow with one difference: a reference's
+upstream was reconciled by a previous deploy, so only its persisted
+attributes participate in this plan.
 
-The fix is always the same: deploy the upstream first.
+## Where next
 
-## Selection cheatsheet
-
-| Goal | Use |
-| --- | --- |
-| Reference a resource in the current stack/stage (create OR adopt) | `MyResource.ref(id)` |
-| Reference a resource in a different stage of the current stack | `MyResource.ref(id, { stage })` |
-| Reference a resource in a different stack | `MyResource.ref(id, { stack, stage })` |
-| Reference a single resource without the constructor in scope | `Output.ref<R>(id, opts?)` |
-| Reference a whole stack's outputs at the matching stage | `yield* MyStack` |
-| Reference a whole stack's outputs at a pinned stage | `MyStack.stage[name]` |
-| Reference a whole stack's outputs without a typed handle | `Output.stackRef<A>(name, opts?)` |
-
-## Related
-
-- [Stack References](/guides/stack-references) — structuring
-  projects with refs: shared staging databases, infra/app splits,
-  monorepo wiring.
-- [Inputs & Outputs](/concepts/outputs) — the broader Output
-  model that references plug into.
-- [State Store](/concepts/state-store) — where persisted state
-  lives and how it's read.
+- [Multiple Stacks](/guides/monorepo-multi-stack) — typed Stack
+  handles wiring a monorepo.
+- [Shared database across stages](/cloudflare/guides/shared-database) —
+  the owner/borrower pattern end to end.
+- [Inputs & Outputs](/concepts/outputs) — the Output model
+  references plug into.
+- [State Store](/concepts/state-store) — where the persisted state
+  that refs read lives.

@@ -32,7 +32,7 @@ entry — are identical to the
 covers what changes: two Stacks wired by a typed reference,
 resolved at plan time against the state store. When to reach for
 this shape is covered in
-[Stack References](/guides/stack-references).
+[References](/concepts/references).
 
 ## Declare the typed Stack handle
 
@@ -158,14 +158,14 @@ backend — pin with `Backend.stage.<name>`:
 `Backend.stage` is a proxy keyed by stage name — any string
 works (`Backend.stage.staging`, `Backend.stage["pr-42"]`). Which
 form to use when:
-[Stack References](/guides/stack-references#depend-on-a-stacks-outputs).
+[References](/concepts/references#depend-on-a-stacks-outputs).
 
 ## Where next
 
 - [Monorepo](/guides/monorepo) — the high-level chooser.
 - [Single Stack](/guides/monorepo-single-stack) — the shared
   package layout and the one-Stack alternative.
-- [Stack References](/guides/stack-references) — when to split
+- [References](/concepts/references) — when to split
   Stacks, stage pinning, and the pattern → tool table.
 - [References](/concepts/references) — how a reference resolves:
   typing, plan-time state reads, `InvalidReferenceError`.
