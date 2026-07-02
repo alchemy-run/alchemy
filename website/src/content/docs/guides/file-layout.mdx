@@ -3,11 +3,23 @@ title: File layout
 description: How to organize an Alchemy project — one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
 ---
 
-Resources are plain TypeScript values, so file layout is just
-module design. Three rules cover it: one file per Resource or
-Layer, group Resources that travel together, and keep
-`alchemy.run.ts` as the composition root. This page walks a
-project from one file to that shape.
+A typical alchemy app ([`examples/cloudflare-neon-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-neon-drizzle)):
+
+```sh
+.
+├── alchemy.run.ts       # composition root — export default the Stack
+├── src/
+│   ├── Api.ts           # the Worker (Function/Server + its runtime code)
+│   ├── Db.ts            # Database + Branch + Hyperdrive — one concern
+│   └── schema.ts        # Drizzle schema shared by Db.ts and Api.ts
+└── test/
+    └── integ.test.ts    # deploys the Stack, hits the live URL
+```
+
+Three rules produce this shape: one file per Resource or Layer,
+group Resources that travel together, and keep `alchemy.run.ts`
+as the composition root. This page walks a project from one file
+to that shape.
 
 ## Start with one file
 
