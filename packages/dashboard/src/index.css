@@ -1,0 +1,44 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #0b0b10;
+  color: #e4e4ea;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+/* xyflow dark overrides */
+.react-flow {
+  --xy-background-color: #0b0b10;
+  --xy-edge-stroke-default: #3f3f4a;
+  --xy-edge-stroke-width-default: 1.5;
+  --xy-attribution-background-color-default: transparent;
+}
+
+.react-flow__attribution {
+  color: #3f3f4a;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.status-pulse {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}

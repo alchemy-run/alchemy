@@ -15,6 +15,7 @@ import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./commands/_shared.ts";
 import { awsCommand } from "./commands/aws.ts";
 import { cloudflareCommand } from "./commands/cloudflare.ts";
+import { dashboardCommand } from "./commands/dashboard.ts";
 import {
   deployCommand,
   destroyCommand,
@@ -33,6 +34,7 @@ const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([
     awsCommand,
     cloudflareCommand,
+    dashboardCommand,
     deployCommand,
     devCommand,
     destroyCommand,
