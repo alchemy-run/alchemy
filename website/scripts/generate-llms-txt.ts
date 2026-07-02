@@ -20,9 +20,9 @@ const outFile = path.resolve(here, "../public/llms.txt");
 const siteUrl = "https://v2.alchemy.run";
 
 interface Page {
-  /** URL path, e.g. "/concepts/binding" */
+  /** URL path, e.g. "/infrastructure-as-effects/binding" */
   href: string;
-  /** Path relative to docs dir without extension, e.g. "concepts/binding" */
+  /** Path relative to docs dir without extension, e.g. "infrastructure-as-effects/binding" */
   slug: string;
   title: string;
   description: string;
@@ -48,7 +48,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Start here",
     pages: {
-      slugs: ["what-is-alchemy", "getting-started", "guides/migrating-from-v1"],
+      slugs: ["what-is-alchemy", "getting-started", "migrating-from-v1"],
     },
   },
   {
@@ -81,14 +81,14 @@ const SECTIONS: Section[] = [
       "The noun graph and its semantics: Stacks of Resources and Actions, data flow via Inputs & Outputs and References, deploy behavior via the Resource lifecycle and Providers.",
     pages: {
       slugs: [
-        "concepts/stack",
-        "concepts/resource",
-        "concepts/action",
-        "concepts/outputs",
-        "concepts/references",
-        "concepts/resource-lifecycle",
-        "concepts/provider",
-        "guides/custom-provider",
+        "infrastructure-as-code/stack",
+        "infrastructure-as-code/resource",
+        "infrastructure-as-code/action",
+        "infrastructure-as-code/outputs",
+        "infrastructure-as-code/references",
+        "infrastructure-as-code/resource-lifecycle",
+        "infrastructure-as-code/provider",
+        "infrastructure-as-code/custom-provider",
       ],
     },
   },
@@ -98,29 +98,25 @@ const SECTIONS: Section[] = [
       "How app code and infrastructure compose: Bindings, Layers, Functions & Servers, and the init/runtime Phases.",
     pages: {
       slugs: [
-        "concepts/binding",
-        "guides/circular-bindings",
-        "concepts/layers",
-        "guides/infrastructure-layers",
-        "concepts/platform",
-        "concepts/phases",
+        "infrastructure-as-effects/binding",
+        "infrastructure-as-effects/circular-bindings",
+        "infrastructure-as-effects/layers",
+        "infrastructure-as-effects/infrastructure-layers",
+        "infrastructure-as-effects/platform",
+        "infrastructure-as-effects/phases",
       ],
     },
   },
   {
     heading: "State Store",
-    pages: { slugs: ["concepts/state-store", "guides/custom-state-store"] },
+    pages: { slugs: ["state-store/index", "state-store/custom-state-store"] },
   },
   {
     heading: "Project structure",
     intro:
       "Scaling the codebase: file conventions for one stack, monorepos for many — single Stack or one per package.",
     pages: {
-      slugs: [
-        "guides/file-layout",
-        "guides/monorepo",
-        "guides/stack-references",
-      ],
+      slugs: ["project-structure/file-layout", "project-structure/monorepo"],
     },
   },
   {
@@ -129,11 +125,11 @@ const SECTIONS: Section[] = [
       "Stages, credential profiles, secrets and config, local development, and CI.",
     pages: {
       slugs: [
-        "concepts/stages",
-        "concepts/profiles",
-        "concepts/secrets",
-        "concepts/local-development",
-        "guides/ci",
+        "environments/stages",
+        "environments/profiles",
+        "environments/secrets",
+        "environments/local-development",
+        "environments/ci",
       ],
     },
   },
@@ -143,11 +139,11 @@ const SECTIONS: Section[] = [
       "Tests run against real clouds: the model, the end-to-end walkthrough, provider-lifecycle testing, and the harness reference.",
     pages: {
       slugs: [
-        "concepts/testing",
-        "guides/testing-a-stack",
-        "guides/testing-providers",
-        "concepts/test-harness",
-        "concepts/observability",
+        "testing/index",
+        "testing/testing-a-stack",
+        "testing/testing-providers",
+        "testing/test-harness",
+        "testing/observability",
       ],
     },
   },
@@ -172,37 +168,52 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "Cloudflare — primary resources",
-    intro:
-      "The primary resources you build Cloudflare apps with. Each page covers what it is, a minimal deploy, bindings, recommended patterns (e.g. schemaless RPC on Workers and Durable Objects), and where to go next.",
-    pages: {
-      slugs: [
-        "cloudflare/workers",
-        "cloudflare/durable-objects",
-        "cloudflare/containers",
-        "cloudflare/d1",
-        "cloudflare/kv",
-        "cloudflare/r2",
-        "cloudflare/queues",
-        "cloudflare/hyperdrive",
-        "cloudflare/domains",
-        "cloudflare/workflows",
-        "cloudflare/email",
-        "cloudflare/secrets-env",
-      ],
-    },
+    heading: "Cloudflare — Compute",
+    pages: { directory: "cloudflare/compute" },
   },
   {
-    heading: "Cloudflare — guides",
-    intro:
-      "Task-oriented Cloudflare how-tos. Each solves a specific problem; read in any order.",
-    pages: { directory: "cloudflare/guides" },
+    heading: "Cloudflare — Frontend",
+    pages: { directory: "cloudflare/frontend" },
+  },
+  {
+    heading: "Cloudflare — APIs",
+    pages: { directory: "cloudflare/apis" },
+  },
+  {
+    heading: "Cloudflare — Data",
+    pages: { directory: "cloudflare/data" },
+  },
+  {
+    heading: "Cloudflare — Messaging & events",
+    pages: { directory: "cloudflare/messaging" },
+  },
+  {
+    heading: "Cloudflare — Email",
+    pages: { directory: "cloudflare/email" },
+  },
+  {
+    heading: "Cloudflare — AI",
+    pages: { directory: "cloudflare/ai" },
+  },
+  {
+    heading: "Cloudflare — Security & secrets",
+    pages: { directory: "cloudflare/security" },
+  },
+  {
+    heading: "Cloudflare — Observability",
+    pages: { directory: "cloudflare/observability" },
+  },
+  {
+    heading: "Cloudflare — Networking",
+    pages: { directory: "cloudflare/networking" },
   },
   {
     heading: "AWS — start here",
     intro:
       "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
-    pages: { slugs: ["aws/index", "aws/setup", "aws/choosing-a-runtime"] },
+    pages: {
+      slugs: ["aws/index", "aws/setup", "aws/compute/choosing-a-runtime"],
+    },
   },
   {
     heading: "AWS — tutorial",
@@ -219,34 +230,36 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "AWS — primary resources",
-    intro:
-      "The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda. ECS and EC2 are the long-running alternatives to Lambda; the networking page covers the VPC primitives that support them.",
-    pages: {
-      slugs: [
-        "aws/lambda",
-        "aws/ecs",
-        "aws/ec2",
-        "aws/eks",
-        "aws/dynamodb",
-        "aws/s3",
-        "aws/sqs",
-        "aws/kinesis",
-        "aws/sns",
-        "aws/eventbridge",
-        "aws/rds",
-        "aws/cloudwatch",
-        "aws/websites",
-        "aws/networking",
-        "aws/secrets-env",
-      ],
-    },
+    heading: "AWS — Compute",
+    pages: { directory: "aws/compute" },
   },
   {
-    heading: "AWS — guides",
-    intro:
-      "Task-oriented AWS how-tos. Each solves a specific problem; read in any order.",
-    pages: { directory: "aws/guides" },
+    heading: "AWS — Frontend",
+    pages: { directory: "aws/frontend" },
+  },
+  {
+    heading: "AWS — APIs",
+    pages: { directory: "aws/apis" },
+  },
+  {
+    heading: "AWS — Data",
+    pages: { directory: "aws/data" },
+  },
+  {
+    heading: "AWS — Messaging & events",
+    pages: { directory: "aws/messaging" },
+  },
+  {
+    heading: "AWS — Security & secrets",
+    pages: { directory: "aws/security" },
+  },
+  {
+    heading: "AWS — Observability",
+    pages: { directory: "aws/observability" },
+  },
+  {
+    heading: "AWS — Networking",
+    pages: { directory: "aws/networking" },
   },
   {
     heading: "PlanetScale",
@@ -256,11 +269,11 @@ const SECTIONS: Section[] = [
       slugs: [
         "planetscale/index",
         "planetscale/setup",
-        "planetscale/postgres",
-        "planetscale/mysql",
-        "planetscale/migrations",
-        "planetscale/credentials",
-        "planetscale/backups",
+        "planetscale/data/postgres",
+        "planetscale/data/mysql",
+        "planetscale/data/migrations",
+        "planetscale/data/credentials",
+        "planetscale/data/backups",
         "planetscale/guides/preview-branches",
         "planetscale/guides/drizzle",
       ],
@@ -274,9 +287,9 @@ const SECTIONS: Section[] = [
       slugs: [
         "neon/index",
         "neon/setup",
-        "neon/branching",
-        "neon/connections",
-        "neon/migrations",
+        "neon/data/branching",
+        "neon/data/connections",
+        "neon/data/migrations",
         "neon/guides/preview-branches",
         "neon/guides/drizzle",
       ],
@@ -290,7 +303,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "axiom/index",
         "axiom/setup",
-        "axiom/ingest",
+        "axiom/data/ingest",
         "axiom/guides/alerting",
         "axiom/guides/dashboards",
         "axiom/guides/annotations",

@@ -155,7 +155,7 @@ Both capability calls return a callable Effect: `putObject` takes a
 Alchemy fills in for you) and `getObject` takes a `GetObjectRequest`.
 Each call is 1:1 with an IAM statement on the execution role — delete
 a capability call and the matching statement disappears next deploy.
-See [S3 → One binding, one IAM statement](/aws/s3#one-binding-one-iam-statement)
+See [S3 → One binding, one IAM statement](/aws/data/s3#one-binding-one-iam-statement)
 for the exact mapping.
 
 ## Write objects with `PUT /:key`
@@ -410,8 +410,8 @@ that deploy the stack and drive it over HTTP.
 
 :::tip[Want to start building now?]
 You have a deployed function — that's enough to skip ahead to
-[DynamoDB](/aws/dynamodb), [SQS](/aws/sqs), or
-[Kinesis](/aws/kinesis) if you'd rather build something interesting
+[DynamoDB](/aws/data/dynamodb), [SQS](/aws/messaging/sqs), or
+[Kinesis](/aws/messaging/kinesis) if you'd rather build something interesting
 first and circle back to testing, stages, and CI/CD when you need
 them.
 :::

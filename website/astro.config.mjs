@@ -270,92 +270,116 @@ export default defineConfig({
           items: [
             { label: "What is Alchemy?", link: "/what-is-alchemy" },
             { label: "Getting started", link: "/getting-started" },
-            { label: "Migrating from v1", link: "/guides/migrating-from-v1" },
+            { label: "Migrating from v1", link: "/migrating-from-v1" },
             {
               label: "Infrastructure as Code",
               items: [
-                { label: "Stacks", link: "/concepts/stack" },
-                { label: "Resources", link: "/concepts/resource" },
-                { label: "Actions", link: "/concepts/action" },
-                { label: "Inputs & Outputs", link: "/concepts/outputs" },
-                { label: "References", link: "/concepts/references" },
+                { label: "Stacks", link: "/infrastructure-as-code/stack" },
+                {
+                  label: "Resources",
+                  link: "/infrastructure-as-code/resource",
+                },
+                { label: "Actions", link: "/infrastructure-as-code/action" },
+                {
+                  label: "Inputs & Outputs",
+                  link: "/infrastructure-as-code/outputs",
+                },
+                {
+                  label: "References",
+                  link: "/infrastructure-as-code/references",
+                },
                 {
                   label: "Resource lifecycle",
-                  link: "/concepts/resource-lifecycle",
+                  link: "/infrastructure-as-code/resource-lifecycle",
                 },
-                { label: "Providers", link: "/concepts/provider" },
-                { label: "Custom Provider", link: "/guides/custom-provider" },
+                {
+                  label: "Providers",
+                  link: "/infrastructure-as-code/provider",
+                },
+                {
+                  label: "Custom Provider",
+                  link: "/infrastructure-as-code/custom-provider",
+                },
               ],
             },
             {
               label: "Infrastructure as Effects",
               items: [
-                { label: "Bindings", link: "/concepts/binding" },
+                {
+                  label: "Bindings",
+                  link: "/infrastructure-as-effects/binding",
+                },
                 {
                   label: "Circular Bindings",
-                  link: "/guides/circular-bindings",
+                  link: "/infrastructure-as-effects/circular-bindings",
                 },
-                { label: "Layers", link: "/concepts/layers" },
+                { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Building with Layers",
-                  link: "/guides/infrastructure-layers",
+                  link: "/infrastructure-as-effects/infrastructure-layers",
                 },
-                { label: "Functions & Servers", link: "/concepts/platform" },
-                { label: "Phases", link: "/concepts/phases" },
+                {
+                  label: "Functions & Servers",
+                  link: "/infrastructure-as-effects/platform",
+                },
+                { label: "Phases", link: "/infrastructure-as-effects/phases" },
               ],
             },
             {
               label: "State Store",
               items: [
-                { label: "State Store", link: "/concepts/state-store" },
+                { label: "State Store", link: "/state-store" },
                 {
                   label: "Custom State Store",
-                  link: "/guides/custom-state-store",
+                  link: "/state-store/custom-state-store",
                 },
               ],
             },
             {
               label: "Project structure",
               items: [
-                { label: "File layout", link: "/guides/file-layout" },
-                { label: "Monorepo", link: "/guides/monorepo" },
+                {
+                  label: "File layout",
+                  link: "/project-structure/file-layout",
+                },
+                { label: "Monorepo", link: "/project-structure/monorepo" },
                 {
                   label: "Single Stack",
-                  link: "/guides/monorepo-single-stack",
+                  link: "/project-structure/monorepo-single-stack",
                 },
                 {
                   label: "Multiple Stacks",
-                  link: "/guides/monorepo-multi-stack",
+                  link: "/project-structure/monorepo-multi-stack",
                 },
               ],
             },
             {
               label: "Environments",
               items: [
-                { label: "Stages", link: "/concepts/stages" },
-                { label: "Profiles", link: "/concepts/profiles" },
-                { label: "Secrets & Config", link: "/concepts/secrets" },
+                { label: "Stages", link: "/environments/stages" },
+                { label: "Profiles", link: "/environments/profiles" },
+                { label: "Secrets & Config", link: "/environments/secrets" },
                 {
                   label: "Local development",
-                  link: "/concepts/local-development",
+                  link: "/environments/local-development",
                 },
-                { label: "CI", link: "/guides/ci" },
+                { label: "CI", link: "/environments/ci" },
               ],
             },
             {
               label: "Testing & observability",
               items: [
-                { label: "Testing", link: "/concepts/testing" },
+                { label: "Testing", link: "/testing" },
                 {
                   label: "Testing a Stack",
-                  link: "/guides/testing-a-stack",
+                  link: "/testing/testing-a-stack",
                 },
                 {
                   label: "Testing Providers",
-                  link: "/guides/testing-providers",
+                  link: "/testing/testing-providers",
                 },
-                { label: "Test harness", link: "/concepts/test-harness" },
-                { label: "Observability", link: "/concepts/observability" },
+                { label: "Test harness", link: "/testing/test-harness" },
+                { label: "Observability", link: "/testing/observability" },
               ],
             },
           ],
@@ -423,28 +447,28 @@ export default defineConfig({
             {
               label: "Compute",
               items: [
-                { label: "Workers", link: "/cloudflare/workers" },
+                { label: "Workers", link: "/cloudflare/compute/workers" },
                 {
                   label: "Durable Objects",
-                  link: "/cloudflare/durable-objects",
+                  link: "/cloudflare/compute/durable-objects",
                 },
-                { label: "Containers", link: "/cloudflare/containers" },
-                { label: "Workflows", link: "/cloudflare/workflows" },
+                { label: "Containers", link: "/cloudflare/compute/containers" },
+                { label: "Workflows", link: "/cloudflare/compute/workflows" },
                 {
                   label: "Cross-worker DOs",
-                  link: "/cloudflare/guides/cross-worker-durable-object",
+                  link: "/cloudflare/compute/cross-worker-durable-object",
                 },
                 {
                   label: "WebSockets",
-                  link: "/cloudflare/guides/hibernatable-websockets",
+                  link: "/cloudflare/compute/hibernatable-websockets",
                 },
                 {
                   label: "Workers for Platforms",
-                  link: "/cloudflare/guides/workers-for-platforms",
+                  link: "/cloudflare/compute/workers-for-platforms",
                 },
                 {
                   label: "Browser rendering",
-                  link: "/cloudflare/guides/browser-rendering",
+                  link: "/cloudflare/compute/browser-rendering",
                 },
               ],
             },
@@ -453,9 +477,9 @@ export default defineConfig({
               items: [
                 {
                   label: "Frontend frameworks",
-                  link: "/cloudflare/guides/frontends",
+                  link: "/cloudflare/frontend/frontends",
                 },
-                { label: "Vite SPA", link: "/cloudflare/guides/vite-spa" },
+                { label: "Vite SPA", link: "/cloudflare/frontend/vite-spa" },
               ],
             },
             {
@@ -463,38 +487,38 @@ export default defineConfig({
               items: [
                 {
                   label: "Effect HTTP API",
-                  link: "/cloudflare/guides/effect-http-api",
+                  link: "/cloudflare/apis/effect-http-api",
                 },
-                { label: "Effect RPC", link: "/cloudflare/guides/effect-rpc" },
+                { label: "Effect RPC", link: "/cloudflare/apis/effect-rpc" },
               ],
             },
             {
               label: "Data",
               items: [
-                { label: "D1", link: "/cloudflare/d1" },
-                { label: "KV", link: "/cloudflare/kv" },
-                { label: "R2", link: "/cloudflare/r2" },
-                { label: "Hyperdrive", link: "/cloudflare/hyperdrive" },
-                { label: "Drizzle ORM", link: "/cloudflare/guides/drizzle" },
+                { label: "D1", link: "/cloudflare/data/d1" },
+                { label: "KV", link: "/cloudflare/data/kv" },
+                { label: "R2", link: "/cloudflare/data/r2" },
+                { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 {
                   label: "Shared database",
-                  link: "/cloudflare/guides/shared-database",
+                  link: "/cloudflare/data/shared-database",
                 },
                 {
                   label: "Branch from a shared database",
-                  link: "/cloudflare/guides/branch-from-shared-database",
+                  link: "/cloudflare/data/branch-from-shared-database",
                 },
-                { label: "Artifacts", link: "/cloudflare/guides/artifacts" },
+                { label: "Artifacts", link: "/cloudflare/data/artifacts" },
               ],
             },
             {
               label: "Messaging & events",
               items: [
-                { label: "Queues", link: "/cloudflare/queues" },
-                { label: "Cron triggers", link: "/cloudflare/guides/cron" },
+                { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
                 {
                   label: "GitHub events",
-                  link: "/cloudflare/guides/github-events",
+                  link: "/cloudflare/messaging/github-events",
                 },
               ],
             },
@@ -504,35 +528,38 @@ export default defineConfig({
                 { label: "Email", link: "/cloudflare/email" },
                 {
                   label: "Send & receive email",
-                  link: "/cloudflare/guides/email",
+                  link: "/cloudflare/email/send-and-receive",
                 },
               ],
             },
             {
               label: "AI",
               items: [
-                { label: "AI Gateway", link: "/cloudflare/guides/ai-gateway" },
+                { label: "AI Gateway", link: "/cloudflare/ai/ai-gateway" },
                 {
                   label: "AI Search (AutoRAG)",
-                  link: "/cloudflare/guides/ai-search",
+                  link: "/cloudflare/ai/ai-search",
                 },
-                { label: "Effect AI", link: "/cloudflare/guides/effect-ai" },
-                { label: "Vectorize", link: "/cloudflare/guides/vectorize" },
+                { label: "Effect AI", link: "/cloudflare/ai/effect-ai" },
+                { label: "Vectorize", link: "/cloudflare/ai/vectorize" },
                 {
                   label: "Release agent",
-                  link: "/cloudflare/guides/release-agent",
+                  link: "/cloudflare/ai/release-agent",
                 },
               ],
             },
             {
               label: "Security & secrets",
               items: [
-                { label: "Secrets & env", link: "/cloudflare/secrets-env" },
+                {
+                  label: "Secrets & env",
+                  link: "/cloudflare/security/secrets-env",
+                },
                 {
                   label: "Secrets Store",
-                  link: "/cloudflare/guides/secrets-store",
+                  link: "/cloudflare/security/secrets-store",
                 },
-                { label: "Turnstile", link: "/cloudflare/guides/turnstile" },
+                { label: "Turnstile", link: "/cloudflare/security/turnstile" },
               ],
             },
             {
@@ -540,23 +567,26 @@ export default defineConfig({
               items: [
                 {
                   label: "Axiom telemetry",
-                  link: "/cloudflare/guides/axiom-observability",
+                  link: "/cloudflare/observability/axiom-observability",
                 },
                 {
                   label: "Analytics Engine",
-                  link: "/cloudflare/guides/analytics-engine",
+                  link: "/cloudflare/observability/analytics-engine",
                 },
               ],
             },
             {
               label: "Networking",
               items: [
-                { label: "Domains & DNS", link: "/cloudflare/domains" },
+                {
+                  label: "Domains & DNS",
+                  link: "/cloudflare/networking/domains",
+                },
                 {
                   label: "Custom domains & routes",
-                  link: "/cloudflare/guides/custom-domains",
+                  link: "/cloudflare/networking/custom-domains",
                 },
-                { label: "Tunnel", link: "/cloudflare/guides/tunnel" },
+                { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
               ],
             },
             providerResourcesEntry("Cloudflare"),
@@ -576,65 +606,69 @@ export default defineConfig({
               items: [
                 {
                   label: "Choosing a runtime",
-                  link: "/aws/choosing-a-runtime",
+                  link: "/aws/compute/choosing-a-runtime",
                 },
-                { label: "Lambda", link: "/aws/lambda" },
-                { label: "ECS", link: "/aws/ecs" },
-                { label: "EC2", link: "/aws/ec2" },
-                { label: "EKS", link: "/aws/eks" },
-                { label: "Lambda MicroVMs", link: "/aws/guides/microvms" },
+                { label: "Lambda", link: "/aws/compute/lambda" },
+                { label: "ECS", link: "/aws/compute/ecs" },
+                { label: "EC2", link: "/aws/compute/ec2" },
+                { label: "EKS", link: "/aws/compute/eks" },
+                { label: "Lambda MicroVMs", link: "/aws/compute/microvms" },
               ],
             },
             {
               label: "Frontend",
               items: [
-                { label: "Websites", link: "/aws/websites" },
-                { label: "Static site", link: "/aws/guides/static-site" },
+                { label: "Websites", link: "/aws/frontend/websites" },
+                { label: "Static site", link: "/aws/frontend/static-site" },
               ],
             },
             {
               label: "APIs",
               items: [
-                { label: "API Gateway", link: "/aws/guides/api-gateway" },
+                { label: "API Gateway", link: "/aws/apis/api-gateway" },
                 {
                   label: "Effect HTTP API",
-                  link: "/aws/guides/effect-http-api",
+                  link: "/aws/apis/effect-http-api",
                 },
-                { label: "Effect RPC", link: "/aws/guides/effect-rpc" },
+                { label: "Effect RPC", link: "/aws/apis/effect-rpc" },
               ],
             },
             {
               label: "Data",
               items: [
-                { label: "DynamoDB", link: "/aws/dynamodb" },
-                { label: "S3", link: "/aws/s3" },
-                { label: "RDS & Aurora", link: "/aws/rds" },
+                { label: "DynamoDB", link: "/aws/data/dynamodb" },
+                { label: "S3", link: "/aws/data/s3" },
+                { label: "RDS & Aurora", link: "/aws/data/rds" },
               ],
             },
             {
               label: "Messaging & events",
               items: [
-                { label: "SQS", link: "/aws/sqs" },
-                { label: "SNS", link: "/aws/sns" },
-                { label: "Kinesis", link: "/aws/kinesis" },
+                { label: "SQS", link: "/aws/messaging/sqs" },
+                { label: "SNS", link: "/aws/messaging/sns" },
+                { label: "Kinesis", link: "/aws/messaging/kinesis" },
                 {
                   label: "EventBridge & Scheduler",
-                  link: "/aws/eventbridge",
+                  link: "/aws/messaging/eventbridge",
                 },
                 {
                   label: "DynamoDB Streams",
-                  link: "/aws/guides/dynamodb-streams",
+                  link: "/aws/messaging/dynamodb-streams",
                 },
-                { label: "S3 events", link: "/aws/guides/s3-events" },
+                { label: "S3 events", link: "/aws/messaging/s3-events" },
               ],
             },
             {
               label: "Security & secrets",
-              items: [{ label: "Secrets & env", link: "/aws/secrets-env" }],
+              items: [
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+              ],
             },
             {
               label: "Observability",
-              items: [{ label: "CloudWatch", link: "/aws/cloudwatch" }],
+              items: [
+                { label: "CloudWatch", link: "/aws/observability/cloudwatch" },
+              ],
             },
             {
               label: "Networking",
@@ -642,7 +676,7 @@ export default defineConfig({
                 { label: "VPC & networking", link: "/aws/networking" },
                 {
                   label: "Custom domains",
-                  link: "/aws/guides/custom-domains",
+                  link: "/aws/networking/custom-domains",
                 },
               ],
             },
@@ -657,11 +691,11 @@ export default defineConfig({
             {
               label: "Data",
               items: [
-                { label: "Postgres", link: "/planetscale/postgres" },
-                { label: "MySQL", link: "/planetscale/mysql" },
-                { label: "Migrations", link: "/planetscale/migrations" },
-                { label: "Credentials", link: "/planetscale/credentials" },
-                { label: "Backups", link: "/planetscale/backups" },
+                { label: "Postgres", link: "/planetscale/data/postgres" },
+                { label: "MySQL", link: "/planetscale/data/mysql" },
+                { label: "Migrations", link: "/planetscale/data/migrations" },
+                { label: "Credentials", link: "/planetscale/data/credentials" },
+                { label: "Backups", link: "/planetscale/data/backups" },
               ],
             },
             {
@@ -688,9 +722,9 @@ export default defineConfig({
             {
               label: "Data",
               items: [
-                { label: "Branching", link: "/neon/branching" },
-                { label: "Connections", link: "/neon/connections" },
-                { label: "Migrations", link: "/neon/migrations" },
+                { label: "Branching", link: "/neon/data/branching" },
+                { label: "Connections", link: "/neon/data/connections" },
+                { label: "Migrations", link: "/neon/data/migrations" },
               ],
             },
             {
@@ -713,7 +747,9 @@ export default defineConfig({
             { label: "Setup", link: "/axiom/setup" },
             {
               label: "Data",
-              items: [{ label: "Datasets & ingest", link: "/axiom/ingest" }],
+              items: [
+                { label: "Datasets & ingest", link: "/axiom/data/ingest" },
+              ],
             },
             {
               label: "Guides",

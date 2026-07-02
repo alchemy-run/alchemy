@@ -147,7 +147,7 @@ Bindings also enable **circular references** between resources —
 Worker A can hold a typed client to Worker B and vice versa — which
 plain props, a directed acyclic graph, can't express.
 
-See [Bindings](/concepts/binding) for event sources, sinks, and the
+See [Bindings](/infrastructure-as-effects/binding) for event sources, sinks, and the
 deploy-time mechanics.
 
 ## Stacks and stages
@@ -176,8 +176,8 @@ every resource is a provider implementing four lifecycle operations:
 
 The engine drives these in a **plan → apply** loop: `read` and
 `diff` build the plan, then `reconcile` and `delete` apply it in
-dependency order. See [Providers](/concepts/provider) and
-[Resource lifecycle](/concepts/resource-lifecycle).
+dependency order. See [Providers](/infrastructure-as-code/provider) and
+[Resource lifecycle](/infrastructure-as-code/resource-lifecycle).
 
 Providers are Effect Layers, wired into a Stack with
 `Cloudflare.providers()` or `AWS.providers()`:
@@ -193,7 +193,7 @@ The type system checks the wiring — using a Cloudflare resource
 without `Cloudflare.providers()`, or providing the wrong cloud's
 providers, is a compile-time error. To support a new cloud or
 third-party API, see [Writing a Custom Resource
-Provider](/guides/custom-provider).
+Provider](/infrastructure-as-code/custom-provider).
 
 ## Two styles: Effect and async
 
@@ -250,5 +250,5 @@ and the same deployment pipeline. Choose whichever fits your team.
 
 - [Getting started](/getting-started) — install and deploy in two minutes
 - Pick your provider: [Cloudflare](/cloudflare) or [AWS](/aws)
-- [Migrating from v1](/guides/migrating-from-v1) — upgrade from
+- [Migrating from v1](/migrating-from-v1) — upgrade from
   Alchemy v1

@@ -53,7 +53,7 @@ yield* GitHub.Variables({
 `consumeRepositoryEvents` subscribes a host (e.g. a Cloudflare
 Worker) to repository webhooks with typed payloads — see
 [Webhooks & events](/github/events) and
-[React to GitHub events from a Worker](/cloudflare/guides/github-events):
+[React to GitHub events from a Worker](/cloudflare/messaging/github-events):
 
 ```typescript
 yield* GitHub.consumeRepositoryEvents(
@@ -92,7 +92,7 @@ if (process.env.PULL_REQUEST) {
 ```
 
 The body is dedented automatically, so indented template literals
-render as clean Markdown. [CI](/guides/ci) walks through the full
+render as clean Markdown. [CI](/environments/ci) walks through the full
 workflow: a `pr-{n}` stage per pull request, with this comment
 tracking its preview URL on each push.
 
@@ -103,7 +103,7 @@ credential and stores it as an Actions secret, so CI deploys with a
 credential that was itself provisioned as code. Walk through it in
 [Part 5: CI/CD (Cloudflare)](/cloudflare/tutorial/part-5) or
 [Part 5: CI/CD (AWS)](/aws/tutorial/part-5), and see
-[CI](/guides/ci) for the general GitHub Actions setup.
+[CI](/environments/ci) for the general GitHub Actions setup.
 
 ## Reference
 

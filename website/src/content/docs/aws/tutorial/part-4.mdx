@@ -142,13 +142,13 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 ```
 
-See [Test harness → stage](/concepts/test-harness#stage) for the per-call form
+See [Test harness → stage](/testing/test-harness#stage) for the per-call form
 (`deploy(Stack, { stage: "ci-pr-42" })`).
 
 ## Stage vs profile
 
 Stages isolate **what** is deployed (state, physical names).
-[Profiles](/concepts/profiles) isolate **how** Alchemy authenticates
+[Profiles](/environments/profiles) isolate **how** Alchemy authenticates
 to AWS. They're orthogonal — you can pair a `prod` stage with a
 `prod` profile that points at a separate AWS account, or use the same
 credentials across many stages:

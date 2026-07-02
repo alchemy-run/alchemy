@@ -11,7 +11,7 @@ Inspect and manage the state store — the record of which resources
 alchemy thinks exist for each stack/stage. Reads from whatever state
 layer the stack file configures (e.g. `Cloudflare.state(...)`), or
 from the on-disk `.alchemy/state` directory with `--local`. See
-[State Store](/concepts/state-store).
+[State Store](/state-store).
 
 The stack file is imported only to resolve its configured state layer
 — pass it via the standard `[file]` positional (defaults to
@@ -112,4 +112,4 @@ is needed.
 
 - [Inspecting State](/cli/inspecting-state) — debugging and recovery workflows
 - [Adopting Resources](/cli/adopting-resources) — how deploy reclaims existing infrastructure
-- [State Store](/concepts/state-store) — where resource state lives
+- [State Store](/state-store) — where resource state lives

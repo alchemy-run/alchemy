@@ -126,13 +126,13 @@ your Cloudflare account. It looks like this:
 This is a one-time event — the state-store Worker, its Durable
 Object, and the Secrets Store entries holding its auth token and
 encryption key are reused across every stack and stage on this
-Cloudflare account. See [State Store](/concepts/state-store) for
+Cloudflare account. See [State Store](/state-store) for
 the full picture.
 
 :::note[Other state stores]
 Don't want to deploy a Worker just for state? Swap `Cloudflare.state()`
 for `State.localState()` from `alchemy/State` to keep state on disk
-under `.alchemy/`, or [write your own](/concepts/state-store).
+under `.alchemy/`, or [write your own](/state-store).
 :::
 
 ## Add a Resource
@@ -243,7 +243,7 @@ Run `alchemy deploy` to create the Bucket on Cloudflare:
 
 The first time you deploy, Alchemy walks each provider in your stack
 through an interactive login and saves the credentials to your
-**`default`** [profile](/concepts/profiles) at
+**`default`** [profile](/environments/profiles) at
 `~/.alchemy/profiles.json`. For Cloudflare you can sign in with
 OAuth in the browser or paste an API token — no environment
 variables or `wrangler login` required.

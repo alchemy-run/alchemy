@@ -405,7 +405,7 @@ If OIDC isn't an option (some sandbox accounts disallow creating
 identity providers), fall back to IAM access keys stored as repo
 secrets and exposed to the deploy step as `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` environment variables. The
-[CI guide](/guides/ci#aws-with-access-keys) has the complete recipe,
+[CI guide](/environments/ci#aws-with-access-keys) has the complete recipe,
 including a `stacks/github.ts` that pushes the keys into the repo as
 `GitHub.Secret`s.
 
@@ -425,17 +425,17 @@ You've completed the tutorial. You now know how to:
 ## What's next
 
 - Go deeper on AWS — grow this app with
-  [DynamoDB](/aws/dynamodb), [SQS](/aws/sqs),
-  [Kinesis](/aws/kinesis), and event-driven wiring like
-  [S3 events](/aws/guides/s3-events) and
-  [DynamoDB Streams](/aws/guides/dynamodb-streams)
-- Put an [API Gateway REST API](/aws/guides/api-gateway) with
+  [DynamoDB](/aws/data/dynamodb), [SQS](/aws/messaging/sqs),
+  [Kinesis](/aws/messaging/kinesis), and event-driven wiring like
+  [S3 events](/aws/messaging/s3-events) and
+  [DynamoDB Streams](/aws/messaging/dynamodb-streams)
+- Put an [API Gateway REST API](/aws/apis/api-gateway) with
   stages and custom domains in front of your function
-- Read [Choosing a runtime](/aws/choosing-a-runtime) for when ECS
+- Read [Choosing a runtime](/aws/compute/choosing-a-runtime) for when ECS
   or EC2 fits better than Lambda
-- Explore the [CI guide](/guides/ci) for more workflow patterns,
+- Explore the [CI guide](/environments/ci) for more workflow patterns,
   including the Cloudflare equivalents
-- Check out the [Testing a Stack](/guides/testing-a-stack) guide for
+- Check out the [Testing a Stack](/testing/testing-a-stack) guide for
   more advanced testing patterns
 - Browse the [Providers](/providers) reference for all available
   resources

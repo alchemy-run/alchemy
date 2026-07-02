@@ -57,7 +57,7 @@ yes to pick exactly which ones to grant at a multiselect prompt (the
 default set covers typical use).
 
 Either way the result is saved to your **`default`**
-[profile](/concepts/profiles) at `~/.alchemy/profiles.json` — no
+[profile](/environments/profiles) at `~/.alchemy/profiles.json` — no
 environment variables and no `wrangler login` required.
 
 To run the flow explicitly, or re-run it later:
@@ -94,13 +94,13 @@ Inspect what's stored (credentials are redacted) with:
 alchemy profile show
 ```
 
-See [Profiles](/concepts/profiles) for the full picture.
+See [Profiles](/environments/profiles) for the full picture.
 
 :::note[Running in CI?]
 CI environments can't do interactive logins. There, alchemy reads
 credentials from the environment instead: `CLOUDFLARE_ACCOUNT_ID`
 plus either `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_API_KEY` +
-`CLOUDFLARE_EMAIL`. See the [CI guide](/guides/ci) for the full
+`CLOUDFLARE_EMAIL`. See the [CI guide](/environments/ci) for the full
 GitHub Actions setup.
 :::
 
@@ -110,6 +110,6 @@ GitHub Actions setup.
   deploy your first resource.
 - [Cloudflare overview](/cloudflare) — the map of resources and
   guides.
-- [Secrets & env](/cloudflare/secrets-env) — wire `.env` values and
+- [Secrets & env](/cloudflare/security/secrets-env) — wire `.env` values and
   secrets into your Workers (deploy credentials live in your profile;
   app secrets are bindings).

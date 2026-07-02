@@ -23,7 +23,7 @@ return value drives one of three paths:
 
 "Owned" means the provider can prove the resource was created by *this* stack/stage/logical-id — typically by inspecting tags or a naming convention.
 
-The same table drives the provider-side contract: see [Adoption in Resource Lifecycle](/concepts/resource-lifecycle#adoption) for the engine's routing and [the `read` operation](/concepts/provider#read) for how a provider returns `Unowned(attrs)`.
+The same table drives the provider-side contract: see [Adoption in Resource Lifecycle](/infrastructure-as-code/resource-lifecycle#adoption) for the engine's routing and [the `read` operation](/infrastructure-as-code/provider#read) for how a provider returns `Unowned(attrs)`.
 
 ## Recovery is the default
 
@@ -86,5 +86,5 @@ For the full lost-state-store recovery walkthrough (state tree → state clear �
 
 - [deploy](/cli/deploy) — the command that carries `--adopt`
 - [Inspecting State](/cli/inspecting-state) — recover a lost or wiped state store
-- [Resource Lifecycle](/concepts/resource-lifecycle) — where adoption sits in the engine
-- [Providers](/concepts/provider) — implementing `read` and `Unowned`
+- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle) — where adoption sits in the engine
+- [Providers](/infrastructure-as-code/provider) — implementing `read` and `Unowned`

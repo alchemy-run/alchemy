@@ -96,7 +96,7 @@ when AWS asks for physical resource names.
 
 `providers: AWS.providers()` registers every AWS resource and IAM
 policy binding that ships with Alchemy, and resolves credentials from
-your Alchemy [profile](/concepts/profiles) — SSO, environment
+your Alchemy [profile](/environments/profiles) — SSO, environment
 variables, or stored access keys. You'll pick one interactively the
 first time you deploy; see [Setup](/aws/setup) for the details of
 each method.
@@ -112,7 +112,7 @@ extra setup.
 :::note[Other state stores]
 For purely local iteration you can use `Alchemy.localState()`
 instead, which writes state under `.alchemy/` next to your code — or
-[write your own](/concepts/state-store).
+[write your own](/state-store).
 :::
 
 ## Add a Resource
@@ -187,7 +187,7 @@ Run `alchemy deploy` to create the Bucket on AWS:
 The first time you deploy, Alchemy prompts you to pick an AWS
 authentication method — **SSO** (recommended), **environment
 variables**, or **stored access keys** — and saves the choice to your
-**`default`** [profile](/concepts/profiles). The region and account
+**`default`** [profile](/environments/profiles). The region and account
 come from whichever method you pick. See [Setup](/aws/setup) for a
 walkthrough of all three.
 

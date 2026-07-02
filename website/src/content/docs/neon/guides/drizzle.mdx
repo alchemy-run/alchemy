@@ -74,7 +74,7 @@ first, then `Neon.Branch` scans the directory and applies any new
 files transactionally, recording each in the `neon_migrations`
 tracking table so it runs exactly once. The same prop works on
 `Neon.Project` if you migrate the default branch directly — see
-[Migrations](/neon/migrations) for the tracking and hashing
+[Migrations](/neon/data/migrations) for the tracking and hashing
 details.
 
 ## Iterate
@@ -94,7 +94,7 @@ Neon resource isn't touched.
 
 The branch's outputs carry everything a client needs:
 `connectionUri` / `pooledConnectionUri` plus the parsed `origin` /
-`pooledOrigin` shapes (see [Connections](/neon/connections)). On
+`pooledOrigin` shapes (see [Connections](/neon/data/connections)). On
 Cloudflare, front the **direct** origin with Hyperdrive and keep
 the pooled one for local dev:
 
@@ -107,7 +107,7 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 
 Inside the Worker, `Drizzle.postgres(conn.connectionString)`
 returns a typed `EffectPgDatabase` whose queries you `yield*`
-directly — the [Add Drizzle ORM](/cloudflare/guides/drizzle) guide
+directly — the [Add Drizzle ORM](/cloudflare/data/drizzle) guide
 walks through the whole Worker side: binding the connection,
 relations for typed `db.query`, and the `nodejs_compat` flag.
 
@@ -115,16 +115,16 @@ relations for typed `db.query`, and the `nodejs_compat` flag.
 
 Guides:
 
-- [Add Drizzle ORM](/cloudflare/guides/drizzle) — the full
+- [Add Drizzle ORM](/cloudflare/data/drizzle) — the full
   Cloudflare Worker walkthrough on top of this pipeline.
 - [Preview branches per PR](/neon/guides/preview-branches) — fork a
   migrated branch per PR stage off a shared project.
 
 Related:
 
-- [Migrations](/neon/migrations) — how Neon orders, hashes, and
+- [Migrations](/neon/data/migrations) — how Neon orders, hashes, and
   tracks the generated files.
-- [Connections](/neon/connections) — direct vs pooled origins.
+- [Connections](/neon/data/connections) — direct vs pooled origins.
 
 Reference:
 

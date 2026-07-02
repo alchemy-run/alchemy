@@ -7,7 +7,7 @@ description: Every alchemy command at a glance — the command map, common optio
 bun alchemy <command> [file] [options]
 ```
 
-Every command operates on an `alchemy.run.ts` stack file (or a custom entrypoint passed as the positional `[file]`, which must exist) and targets a [stage](/concepts/stages).
+Every command operates on an `alchemy.run.ts` stack file (or a custom entrypoint passed as the positional `[file]`, which must exist) and targets a [stage](/environments/stages).
 
 ## Command map
 
@@ -61,7 +61,7 @@ The TUI module is lazily imported only when selected, so plain runs never pay th
 
 Plain mode never prompts — it prints the plan, makes no changes, and reports: `Non-interactive terminal detected. Pass --yes to approve, or set ALCHEMY_TUI=1 for the interactive UI.` In CI, always pass `--yes`.
 
-Running these commands in a pipeline? See [CI](/guides/ci).
+Running these commands in a pipeline? See [CI](/environments/ci).
 
 ## Where next
 
@@ -69,5 +69,5 @@ Running these commands in a pipeline? See [CI](/guides/ci).
 - [dev](/cli/dev) — hot-reloading development loop
 - [login](/cli/login) — authenticate your stack's providers
 - [state](/cli/state) — inspect and manage the state store
-- [Stages](/concepts/stages) — how environments are isolated
-- [CI](/guides/ci) — run the CLI in pipelines
+- [Stages](/environments/stages) — how environments are isolated
+- [CI](/environments/ci) — run the CLI in pipelines

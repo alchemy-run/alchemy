@@ -31,7 +31,7 @@ yield* GitHub.Webhook("ci-webhook", {
 
 `events` defaults to `["push"]`; pass `["*"]` to receive every event
 GitHub emits. The `secret` (a `Redacted` string, e.g. from
-`Config.redacted` — see [Secrets & env](/cloudflare/secrets-env))
+`Config.redacted` — see [Secrets & env](/cloudflare/security/secrets-env))
 makes GitHub sign each delivery with `HMAC-SHA256` in the
 `X-Hub-Signature-256` header so your receiver can verify the payload
 came from GitHub.
@@ -107,7 +107,7 @@ exhaustively. The stack provides both clouds' providers:
 
 For the full walkthrough — runtime layer, secret verification,
 deploy, and a release-blogging agent built on this event source —
-see [React to GitHub events from a Worker](/cloudflare/guides/github-events).
+see [React to GitHub events from a Worker](/cloudflare/messaging/github-events).
 
 ## Cloudflare-only today
 
@@ -119,7 +119,7 @@ but routing and signature verification are yours to implement.
 
 ## Where next
 
-- [React to GitHub events from a Worker](/cloudflare/guides/github-events)
+- [React to GitHub events from a Worker](/cloudflare/messaging/github-events)
   — the goal-oriented guide.
 - [Repositories](/github/repository) — create and converge the repos
   these webhooks attach to.

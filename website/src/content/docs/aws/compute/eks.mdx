@@ -1,0 +1,155 @@
+---
+title: EKS
+description: Stand up an EKS Auto Mode cluster on a Network and declare Kubernetes workloads in TypeScript — deployments, load-balanced services, and Pod Identity, with no YAML and no kubectl.
+---
+
+**EKS** is managed Kubernetes. Alchemy targets **Auto Mode**, where
+AWS manages the nodes, storage, and load-balancer integration for
+you: [`AutoCluster`](/providers/aws/eks/autocluster) stands up the
+control plane from a VPC, and higher-level workload helpers apply
+Kubernetes objects straight from your Stack — the deployments and
+services live in the same TypeScript program as the cluster, with no
+YAML manifests and no `kubectl apply` step.
+
+## Create an Auto Mode cluster
+
+`AutoCluster` composes IAM roles and the canonical
+[`Cluster`](/providers/aws/eks/cluster) resource on top of a
+[`Network`](/providers/aws/ec2/network):
+
+```typescript
+// alchemy.run.ts
+import * as AWS from "alchemy/AWS";
+
+const network = yield* AWS.EC2.Network("Network", {
+  cidrBlock: "10.42.0.0/16",
+  availabilityZones: 2,
+  nat: "single",
+});
+
+const cluster = yield* AWS.EKS.AutoCluster("Cluster", {
+  network,
+});
+```
+
+This creates the cluster and node IAM roles with the Auto Mode
+managed policies, then provisions the control plane with Auto Mode
+compute (`system` and `general-purpose` node pools), block storage,
+and load balancing enabled — placed in the network's private subnets.
+Budget for the create: an EKS control plane takes ~10 minutes to
+provision.
+
+## Grant access and install add-ons
+
+`AutoCluster` provisions with `authenticationMode: "API"`, so cluster
+access is granted through
+[`AccessEntry`](/providers/aws/eks/accessentry) resources rather than
+the `aws-auth` ConfigMap, and
+[`Addon`](/providers/aws/eks/addon) installs EKS add-ons (EKS picks
+the default compatible version when you don't pin one):
+
+```typescript
+const admin = yield* AWS.EKS.AccessEntry("ClusterAdmin", {
+  clusterName: cluster.cluster.clusterName,
+  principalArn: "arn:aws:iam::123456789012:role/YourAdminRole",
+  accessPolicies: [
+    {
+      policyArn:
+        "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy",
+      accessScope: { type: "cluster" },
+    },
+  ],
+});
+
+const metricsServer = yield* AWS.EKS.Addon("MetricsServer", {
+  clusterName: cluster.cluster.clusterName,
+  addonName: "metrics-server",
+});
+```
+
+The deploying principal is bootstrapped as cluster admin, so these
+are for everyone (and everything) else that needs in.
+
+## Kubernetes workloads in TypeScript
+
+Workloads are resources in the same Stack.
+[`LoadBalancedWorkload`](/providers/aws/eks/loadbalancedworkload)
+bundles a Deployment with an internet-facing `LoadBalancer` Service:
+
+```typescript
+import * as Kubernetes from "alchemy/Kubernetes";
+
+const namespace = yield* Kubernetes.Namespace("Demo", {
+  cluster: cluster.cluster,
+  name: "demo",
+});
+
+const echo = yield* AWS.EKS.LoadBalancedWorkload("EchoServer", {
+  cluster: cluster.cluster,
+  namespace,
+  name: "echo-server",
+  replicas: 2,
+  containers: [
+    {
+      name: "echo-server",
+      image: "registry.k8s.io/echoserver:1.10",
+      ports: [{ containerPort: 8080, name: "http" }],
+    },
+  ],
+  ports: [{ name: "http", port: 80, targetPort: 8080 }],
+});
+```
+
+There is no kubeconfig step: Alchemy authenticates to the cluster's
+API with your AWS credentials (a presigned STS token) and applies
+objects via **server-side apply** under the `alchemy` field manager,
+so deploys converge the live objects the same way the rest of your
+Stack converges cloud resources. Underneath the helpers sit plain
+Kubernetes primitives —
+[`Namespace`](/providers/kubernetes/namespace),
+[`Deployment`](/providers/kubernetes/deployment),
+[`Service`](/providers/kubernetes/service),
+[`ConfigMap`](/providers/kubernetes/configmap), and
+[`Job`](/providers/kubernetes/job) — plus
+[`Workload`](/providers/aws/eks/workload) when you want a Deployment
+without the public load balancer.
+
+## Give pods AWS credentials with Pod Identity
+
+[`PodIdentityWorkload`](/providers/aws/eks/podidentityworkload) wires
+an IAM role (trusting `pods.eks.amazonaws.com`), a Kubernetes
+`ServiceAccount`, the
+[`PodIdentityAssociation`](/providers/aws/eks/podidentityassociation),
+and the Deployment together in one call:
+
+```typescript
+const worker = yield* AWS.EKS.PodIdentityWorkload("Worker", {
+  cluster: cluster.cluster,
+  namespace,
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"],
+  containers: [
+    {
+      name: "worker",
+      image: "public.ecr.aws/aws-cli/aws-cli:2.17.37",
+      command: ["/bin/sh", "-lc"],
+      args: ["aws sts get-caller-identity && sleep infinity"],
+    },
+  ],
+});
+```
+
+Pods running under the service account receive the role's credentials
+through EKS Pod Identity — no OIDC provider or IRSA annotation
+ceremony. Pass `roleArn` instead of `managedPolicyArns` /
+`inlinePolicies` to use an existing role.
+
+## Where next
+
+- [VPC & networking](/aws/networking) — what the `Network` helper
+  builds under the cluster.
+- [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda or ECS
+  is the better fit than running your own Kubernetes workloads.
+- [`AutoCluster` reference](/providers/aws/eks/autocluster),
+  [`PodIdentityWorkload` reference](/providers/aws/eks/podidentityworkload),
+  [`Workload` reference](/providers/aws/eks/workload) — every prop
+  and attribute.

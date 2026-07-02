@@ -20,7 +20,7 @@ bun alchemy state tree
    └─ Worker`} />
 
 This is the record the next plan diffs against — not the live cloud
-(see [State Store](/concepts/state-store)). Full flag reference:
+(see [State Store](/state-store)). Full flag reference:
 [state](/cli/state).
 
 Drill down one level at a time:
@@ -64,7 +64,7 @@ state.
 resource in a console or another tool. `state get` shows what alchemy
 last persisted; the reconciler converges observed cloud state to the
 desired state on the next deploy (see
-[Resource Lifecycle](/concepts/resource-lifecycle)).
+[Resource Lifecycle](/infrastructure-as-code/resource-lifecycle)).
 
 **Stale state from a partially-failed deploy.** If a deploy crashed
 after mutating the cloud but before persisting, the record lags
@@ -119,4 +119,4 @@ See [cloudflare](/cli/cloudflare) for bootstrap repair.
 - [state](/cli/state) — full subcommand and flag reference
 - [Adopting Resources](/cli/adopting-resources) — ownership and `--adopt`
 - [cloudflare](/cli/cloudflare) — state-store bootstrap
-- [State Store](/concepts/state-store) — where resource state lives
+- [State Store](/state-store) — where resource state lives

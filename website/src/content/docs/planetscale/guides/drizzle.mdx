@@ -87,7 +87,7 @@ Because the branch depends on `schema.out`, alchemy orders
 `Drizzle.Schema` first: it regenerates pending SQL, then the branch
 scans the directory and applies new files transactionally, recording
 each in the `__alchemy_migrations` tracking table. Details in
-[Migrations](/planetscale/migrations).
+[Migrations](/planetscale/data/migrations).
 
 ## Connect via `origin` / `pooledOrigin`
 
@@ -111,7 +111,7 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 consumer pools for you, like Hyperdrive. `role.pooledOrigin` goes
 through PSBouncer (port 6432) — use it where each request would open
 a fresh connection, like Hyperdrive's local-dev origin. See
-[Postgres](/planetscale/postgres) for the full role model.
+[Postgres](/planetscale/data/postgres) for the full role model.
 
 ## MySQL: generate and check in migrations
 
@@ -164,14 +164,14 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 variant on this engine. When applying Drizzle-generated files,
 alchemy splits them on Drizzle's `--> statement-breakpoint` marker
 (Vitess rejects the token) and runs each statement individually; see
-the engine differences in [Migrations](/planetscale/migrations).
+the engine differences in [Migrations](/planetscale/data/migrations).
 
 ## Wire it into your runtime
 
 Everything above runs at deploy time. Querying from your application
 — `Drizzle.postgres` over Hyperdrive's connection string, or the
 `mysql2` client on the MySQL side — is covered step by step in the
-[Add Drizzle ORM](/cloudflare/guides/drizzle) walkthrough.
+[Add Drizzle ORM](/cloudflare/data/drizzle) walkthrough.
 
 Complete working projects:
 [`cloudflare-planetscale-postgres-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-planetscale-postgres-drizzle)
@@ -182,7 +182,7 @@ and
 
 - [Preview branches per PR](/planetscale/guides/preview-branches) —
   fork a migrated branch per pull request off a shared database.
-- [Migrations](/planetscale/migrations) — ordering, hashing, the
+- [Migrations](/planetscale/data/migrations) — ordering, hashing, the
   tracking table, and seed data.
-- [Postgres](/planetscale/postgres) and [MySQL](/planetscale/mysql)
+- [Postgres](/planetscale/data/postgres) and [MySQL](/planetscale/data/mysql)
   — the resource families behind these snippets.

@@ -25,7 +25,7 @@ const metrics = yield* Axiom.Dataset("metrics", { name: "app-metrics", kind: "ot
 :::caution
 Renaming a dataset or changing its `kind` is a **replacement** — the
 old dataset and all its events are deleted. See
-[Datasets & Ingest](/axiom/ingest) for details.
+[Datasets & Ingest](/axiom/data/ingest) for details.
 :::
 
 An `ApiToken` mints a least-privilege ingest credential for your
@@ -72,7 +72,7 @@ your charts — see [Dashboards as Code](/axiom/guides/dashboards).
 Wire the dataset's OTLP endpoints and the ingest token into your
 Worker or Lambda's environment, and Effect's OpenTelemetry output
 flows into Axiom with no code changes — see
-[Observability](/concepts/observability) for the exporter-as-a-Layer
+[Observability](/testing/observability) for the exporter-as-a-Layer
 pattern:
 
 ```typescript
@@ -84,7 +84,7 @@ vars: {
 
 For a full end-to-end walkthrough — dataset, token, Worker wiring,
 and a monitor on top — follow
-[Observability with Axiom](/cloudflare/guides/axiom-observability).
+[Observability with Axiom](/cloudflare/observability/axiom-observability).
 
 ## Reference
 
