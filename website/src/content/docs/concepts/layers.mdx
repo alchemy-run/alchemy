@@ -1,12 +1,11 @@
 ---
 title: Layers
 description: A Layer encapsulates a slice of infrastructure (resources, bindings, runtime logic) behind a typed service interface. Code that depends on the interface stays cloud-agnostic; swapping the implementation swaps the underlying infrastructure.
-sidebar:
-  order: 9
 ---
 
 A [Binding](/concepts/binding) connects one [Resource](/concepts/resource)
-to a [Platform](/concepts/platform). A **Layer** is the next abstraction
+to a Worker or Lambda ([Functions & Servers](/concepts/platform)).
+A **Layer** is the next abstraction
 up: a unit of *encapsulated infrastructure*. It owns whatever resources
 and bindings it needs, returns a typed implementation of a service
 interface, and hides everything behind that interface.
@@ -181,12 +180,12 @@ The Worker that consumes `ReadWriteNamespaceBinding` satisfies
 ```
 
 The Cloudflare Worker can't satisfy `AWS.FunctionEnvironment`, so
-the program won't type-check. Platforms and Layers fit together by
+the program won't type-check. Functions and Layers fit together by
 type, not by convention.
 
 ## Runtime as a colored function
 
-A Platform program has two [phases](/concepts/phases): the **init**
+A Worker or Lambda program has two [Phases](/concepts/phases): the **init**
 closure (outer) runs at both plantime and cold start, and the
 **runtime** closure (inner) runs only inside the deployed handler.
 Bindings live in init; the actual cloud calls live in runtime:
@@ -259,7 +258,7 @@ of the underlying primitives.
 For the deploy-time mechanics that make Layers possible — typed
 clients, IAM, env injection — see [Binding](/concepts/binding). For
 the step-by-step of building one yourself, see
-[Building Infrastructure Layers](/guides/infrastructure-layers).
+[Building with Layers](/guides/infrastructure-layers).
 
 ## Why this matters
 

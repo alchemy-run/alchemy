@@ -1,15 +1,10 @@
 ---
 title: References
 description: Read values out of another stack or stage at plan time — typed, lazy, and resolved from persisted state.
-sidebar:
-  order: 3
 ---
 
-Stacks deploy independently. A PR-preview stage wants to share
-`staging`'s expensive database instead of provisioning its own.
-A frontend stack needs the URL of a backend that lives in a
-different repo. A tools script wants to read prod's bucket name
-without re-running prod's plan.
+Stacks and stages deploy independently; a **reference** lets one
+deployment read another.
 
 A **reference** points at something **already deployed**
 somewhere else — a different stage, a different stack, or both —
@@ -20,6 +15,11 @@ References are lazy. They don't hit any cloud API at declaration
 time, and they don't drift — every plan re-reads the upstream's
 persisted state, so what flows into your downstream resources is
 always whatever was actually last deployed.
+
+For the project-structuring patterns built on references —
+long-lived staging stages feeding ephemeral `pr-*` previews,
+infra/app stack splits, monorepo wiring — see
+[Stack References](/guides/stack-references).
 
 ## Reference a resource — `Resource.ref`
 
@@ -40,11 +40,6 @@ of the graph doesn't know (or care) that it's a reference.
 If `app-db` hasn't been deployed in `staging` yet, the plan
 fails fast with `InvalidReferenceError` — there is no
 "deploy-and-hope" path.
-
-A common pattern is long-lived `staging` / `prod` stages owning
-the expensive resources while ephemeral `pr-*` stages reference
-them. See [Shared database across stages](/cloudflare/guides/shared-database)
-for the full walkthrough.
 
 ## Cross a stack boundary
 
@@ -84,12 +79,9 @@ const b = yield* Backend.stage.prod;     // pinned to "prod"
 const c = yield* Backend.stage["pr-42"]; // any stage name
 ```
 
-- `yield* Backend` defaults to the current stage — `sam`
-  frontend reads `sam` backend, `pr-42` reads `pr-42`. Use this
-  when stages line up across stacks.
-- `Backend.stage.<name>` pins to a specific stage. Use it when
-  you need to **break** stage symmetry — e.g. a feature-branch
-  frontend that must always read `prod`'s backend.
+`yield* Backend` resolves at the current stage;
+`Backend.stage.<name>` pins to a named one. Which to use when:
+[Stack References](/guides/stack-references#wire-a-monorepos-stacks-together).
 
 At the end of every successful `apply`, Alchemy persists
 whatever the stack's effect returned as a per-stack-per-stage
@@ -97,7 +89,7 @@ whatever the stack's effect returned as a per-stack-per-stage
 returns a proxy that turns property access into typed Outputs,
 so `(yield* Backend).url` is `Output<string>`.
 
-See [Monorepos](/guides/monorepo) for the full walkthrough.
+See [Monorepo](/guides/monorepo) for the full walkthrough.
 
 ## Escape hatches — `Output.ref` and `Output.stackRef`
 
@@ -202,12 +194,10 @@ The fix is always the same: deploy the upstream first.
 
 ## Related
 
-- [Monorepos](/guides/monorepo) — `Stack.stage` / `yield* Stack`
-  in practice.
-- [Shared database across stages](/cloudflare/guides/shared-database) —
-  `Resource.ref` for sharing expensive cloud resources between
-  PR-preview and long-lived stages.
-- [Inputs and Outputs](/concepts/outputs) — the broader Output
+- [Stack References](/guides/stack-references) — structuring
+  projects with refs: shared staging databases, infra/app splits,
+  monorepo wiring.
+- [Inputs & Outputs](/concepts/outputs) — the broader Output
   model that references plug into.
 - [State Store](/concepts/state-store) — where persisted state
   lives and how it's read.

@@ -57,37 +57,50 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "Stacks — write your program",
+    heading: "Infrastructure as Code",
     intro:
-      "The authoring model, in reading order: a Stack of Resources wired by Bindings, composed with Layers, deployed onto Platforms.",
+      "The noun graph and its semantics: Stacks of Resources and Actions, data flow via Inputs & Outputs and References, deploy behavior via the Resource lifecycle and Providers.",
     pages: {
       slugs: [
         "concepts/stack",
         "concepts/resource",
-        "concepts/binding",
-        "guides/circular-bindings",
+        "concepts/action",
         "concepts/outputs",
-        "concepts/layers",
-        "guides/infrastructure-layers",
-        "concepts/platform",
-        "concepts/phases",
-        "guides/monorepo",
+        "concepts/references",
+        "concepts/resource-lifecycle",
+        "concepts/provider",
+        "guides/custom-provider",
       ],
     },
   },
   {
-    heading: "Deploys — the engine",
+    heading: "Infrastructure as Effects",
     intro:
-      "What happens when you run alchemy deploy: lifecycle, providers, actions, cross-stack references, and persisted state.",
+      "How app code and infrastructure compose: Bindings, Layers, Functions & Servers, and the init/runtime Phases.",
     pages: {
       slugs: [
-        "concepts/resource-lifecycle",
-        "concepts/provider",
-        "guides/custom-provider",
-        "concepts/action",
-        "concepts/references",
-        "concepts/state-store",
-        "guides/custom-state-store",
+        "concepts/binding",
+        "guides/circular-bindings",
+        "concepts/layers",
+        "guides/infrastructure-layers",
+        "concepts/platform",
+        "concepts/phases",
+      ],
+    },
+  },
+  {
+    heading: "State Store",
+    pages: { slugs: ["concepts/state-store", "guides/custom-state-store"] },
+  },
+  {
+    heading: "Project structure",
+    intro:
+      "Scaling the codebase: file conventions for one stack, monorepos for many, Stack References to wire them together.",
+    pages: {
+      slugs: [
+        "guides/file-layout",
+        "guides/monorepo",
+        "guides/stack-references",
       ],
     },
   },

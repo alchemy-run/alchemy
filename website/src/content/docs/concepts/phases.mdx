@@ -1,12 +1,12 @@
 ---
 title: Phases
-description: Alchemy programs run in two phases — plantime/init drives the deploy, runtime handles requests. Knowing which is which is the key to using Platforms.
+description: Alchemy programs run in two phases — plantime/init drives the deploy, runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
 :::tip
-Read this after [Platform](/concepts/platform). The init/runtime
+Read this after [Functions & Servers](/concepts/platform). The init/runtime
 pattern shown there is what this page explains in depth.
 :::
 
@@ -17,8 +17,8 @@ Every alchemy program operates in two distinct phases:
 - **Runtime** — the deployed handler. Runs inside a Worker or Lambda
   Function whenever a request comes in.
 
-Platform resources express both in a single program by **returning
-an Effect from inside an Effect**.
+Function resources — Workers, Lambdas, Containers — express both in
+a single program by **returning an Effect from inside an Effect**.
 
 ## Init vs runtime
 
@@ -170,11 +170,11 @@ Effect.gen(function* () {
 ```
 
 The `bind()` mechanics behind the guard are covered in
-[Bindings](/concepts/binding). To close out the stack model,
-continue to [Monorepo](/guides/monorepo).
+[Bindings](/concepts/binding). Next: where all of this is
+persisted — [State Store](/concepts/state-store).
 
 ## Where next
 
-- [Monorepo](/guides/monorepo) — structuring stacks across packages.
+- [State Store](/concepts/state-store) — where deploy results persist between runs.
 - [Bindings](/concepts/binding) — what `bind(resource)` records at plantime.
 - [Layers](/concepts/layers) — runtime as a colored function.

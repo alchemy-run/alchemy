@@ -4,14 +4,15 @@ description: A binding connects a resource to a Worker or Lambda. It generates I
 ---
 
 A **Binding** connects a [Resource](/concepts/resource) to a
-[Platform](/concepts/platform) — a Worker, a Lambda Function, a
-Container. One `bind()` call generates the IAM policies, the
+Worker, Lambda Function, or Container (see
+[Functions & Servers](/concepts/platform)).
+One `bind()` call generates the IAM policies, the
 environment variables, **and** the typed SDK wrapper your handler
 uses. You don't write any of that by hand.
 
 This page covers the mechanics. For the bigger picture of how
-bindings fit into a Platform's runtime, see
-[Platform › Bindings in action](/concepts/platform#bindings-in-action).
+bindings fit into a Function's runtime, see
+[Functions & Servers › Bindings in action](/concepts/platform#bindings-in-action).
 
 ## A binding in one line
 
@@ -28,7 +29,7 @@ the SDK.
 
 ## Effect style vs async style
 
-Bindings work in both handler styles a Platform supports. Pick
+Bindings work in both handler styles Workers and Lambdas support. Pick
 whichever your Worker / Lambda is using.
 
 **Effect style** — `bind()` inside the init Effect, returns a typed
@@ -248,11 +249,11 @@ const sendWithRetry = enqueue({ MessageBody: msg }).pipe(
 Because every binding is an Effect with the same shape, you can
 hide them behind a service interface and swap implementations
 without touching handler code — that's what
-[Layers](/concepts/layers) covers. When two platforms bind each
-other, see [Circular bindings](/guides/circular-bindings).
+[Layers](/concepts/layers) covers. When two Workers bind each
+other, see [Circular Bindings](/guides/circular-bindings).
 
 ## Where next
 
-- [Circular bindings](/guides/circular-bindings) — two Workers that bind each other.
+- [Circular Bindings](/guides/circular-bindings) — two Workers that bind each other.
 - [Layers](/concepts/layers) — hide bindings behind a service interface.
 - [Phases](/concepts/phases) — when the deploy-time wiring runs vs the runtime client.

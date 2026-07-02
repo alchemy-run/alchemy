@@ -273,41 +273,56 @@ export default defineConfig({
             { label: "Migrating from v1", link: "/guides/migrating-from-v1" },
             { label: "CLI", link: "/guides/cli" },
             {
-              label: "Stacks",
+              label: "Infrastructure as Code",
               items: [
                 { label: "Stacks", link: "/concepts/stack" },
                 { label: "Resources", link: "/concepts/resource" },
-                { label: "Bindings", link: "/concepts/binding" },
-                {
-                  label: "Circular bindings",
-                  link: "/guides/circular-bindings",
-                },
-                { label: "Inputs & outputs", link: "/concepts/outputs" },
-                { label: "Layers", link: "/concepts/layers" },
-                {
-                  label: "Infrastructure layers",
-                  link: "/guides/infrastructure-layers",
-                },
-                { label: "Platforms", link: "/concepts/platform" },
-                { label: "Phases", link: "/concepts/phases" },
-                { label: "Monorepo", link: "/guides/monorepo" },
-              ],
-            },
-            {
-              label: "Deploys",
-              items: [
+                { label: "Actions", link: "/concepts/action" },
+                { label: "Inputs & Outputs", link: "/concepts/outputs" },
+                { label: "References", link: "/concepts/references" },
                 {
                   label: "Resource lifecycle",
                   link: "/concepts/resource-lifecycle",
                 },
                 { label: "Providers", link: "/concepts/provider" },
-                { label: "Custom provider", link: "/guides/custom-provider" },
-                { label: "Actions", link: "/concepts/action" },
-                { label: "References", link: "/concepts/references" },
-                { label: "State store", link: "/concepts/state-store" },
+                { label: "Custom Provider", link: "/guides/custom-provider" },
+              ],
+            },
+            {
+              label: "Infrastructure as Effects",
+              items: [
+                { label: "Bindings", link: "/concepts/binding" },
                 {
-                  label: "Custom state store",
+                  label: "Circular Bindings",
+                  link: "/guides/circular-bindings",
+                },
+                { label: "Layers", link: "/concepts/layers" },
+                {
+                  label: "Building with Layers",
+                  link: "/guides/infrastructure-layers",
+                },
+                { label: "Functions & Servers", link: "/concepts/platform" },
+                { label: "Phases", link: "/concepts/phases" },
+              ],
+            },
+            {
+              label: "State Store",
+              items: [
+                { label: "State Store", link: "/concepts/state-store" },
+                {
+                  label: "Custom State Store",
                   link: "/guides/custom-state-store",
+                },
+              ],
+            },
+            {
+              label: "Project structure",
+              items: [
+                { label: "File layout", link: "/guides/file-layout" },
+                { label: "Monorepo", link: "/guides/monorepo" },
+                {
+                  label: "Stack References",
+                  link: "/guides/stack-references",
                 },
               ],
             },
@@ -316,7 +331,7 @@ export default defineConfig({
               items: [
                 { label: "Stages", link: "/concepts/stages" },
                 { label: "Profiles", link: "/concepts/profiles" },
-                { label: "Secrets & config", link: "/concepts/secrets" },
+                { label: "Secrets & Config", link: "/concepts/secrets" },
                 {
                   label: "Local development",
                   link: "/concepts/local-development",

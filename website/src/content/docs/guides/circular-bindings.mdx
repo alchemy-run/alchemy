@@ -1,5 +1,5 @@
 ---
-title: Circular bindings
+title: Circular Bindings
 description: How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
 ---
 
@@ -195,8 +195,8 @@ Under the hood, alchemy plans the cycle in two passes:
    because Outputs are typed.
 
 The same pattern works for Lambda↔Lambda, Worker↔Container, or any
-mix of platforms — the Tag/Layer split is a property of every
-[Platform](/concepts/platform) resource, not just Workers.
+mix — the Tag/Layer split is a property of every Function resource
+([Functions & Servers](/concepts/platform)), not just Workers.
 
 ## When you don't need this
 
@@ -218,10 +218,10 @@ reference the Worker before its implementation is in scope. For
 non-circular reuse across files, see [Layers](/concepts/layers).
 
 The deferred `Output` mechanism behind the two-phase plan is covered
-in [Inputs & outputs](/concepts/outputs).
+in [Inputs & Outputs](/concepts/outputs).
 
 ## Where next
 
-- [Inputs & outputs](/concepts/outputs) — the deferred references that make the cycle resolvable.
+- [Inputs & Outputs](/concepts/outputs) — the deferred references that make the cycle resolvable.
 - [Layers](/concepts/layers) — package resources behind service interfaces.
-- [Provider](/concepts/provider) — the `precreate` hook that reserves resources up front.
+- [Providers](/concepts/provider) — the `precreate` hook that reserves resources up front.

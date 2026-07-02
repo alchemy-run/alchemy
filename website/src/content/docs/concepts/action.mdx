@@ -1,8 +1,6 @@
 ---
-title: Action
+title: Actions
 description: A node in the dependency graph that runs an Effect during apply when its inputs change.
-sidebar:
-  order: 2
 ---
 
 An **Action** is a node in the stack's dependency graph that runs an
@@ -74,7 +72,8 @@ const hourly  = yield* Sync("hourly",  { table: eventsBucket.name });
 
 When you want to split the contract from the implementation — e.g. for
 testing or to keep stack code declarative — use the class form. It
-mirrors [Platform](/concepts/platform):
+mirrors the class form used by Workers and Lambdas
+([Functions & Servers](/concepts/platform)):
 
 ```typescript
 export class Sync extends Action<Sync, { table: string }, { rows: number }>()("Sync") {}
@@ -138,7 +137,7 @@ Cycles are rejected at plan time just like resource cycles.
 - **Not a Resource.** No `diff`/`read`/`reconcile`/`delete`. If you
   need lifecycle management of a cloud entity, model it as a Resource.
 - **Not a runtime function.** An Action runs at deploy time. To call code
-  from a deployed Worker/Lambda, use a [Platform](/concepts/platform).
+  from a deployed Worker or Lambda, see [Functions & Servers](/concepts/platform).
 - **Not idempotent for free.** The engine guarantees the body runs
   only when inputs change, but the body itself must tolerate retries
   on apply restart (its `running` state is persisted but not its

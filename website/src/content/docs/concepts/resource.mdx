@@ -42,7 +42,7 @@ const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 bucket.bucketName; // Output<string>
 ```
 
-See [Inputs & outputs](/concepts/outputs) for the full set of
+See [Inputs & Outputs](/concepts/outputs) for the full set of
 operators (`map`, `mapEffect`, `all`, `interpolate`, `ref`).
 
 These are lazy references that resolve after the resource is created.
@@ -325,13 +325,13 @@ It then deploys in topological order:
 Outputs draw the edges. [Bindings](/concepts/binding) attach
 resources to Workers and Lambdas — and when bindings form a cycle,
 alchemy handles it with a two-phase plan; see
-[Circular bindings](/guides/circular-bindings).
+[Circular Bindings](/guides/circular-bindings).
 
 ## Circular references
 
 Real systems have cycles — two Workers that call each other, a
 Lambda that invokes another Lambda. Alchemy resolves them by
-splitting each [Platform](/concepts/platform) resource into a
+splitting each Function resource ([Functions & Servers](/concepts/platform)) into a
 **class** that acts as the Tag (the identity) and a **`.make(...)`**
 Layer that supplies the runtime implementation — so the class can be
 referenced before its implementation exists:
@@ -347,11 +347,11 @@ referenced before its implementation exists:
   ]}
 />
 
-See [Circular bindings](/guides/circular-bindings) for the full A↔B
+See [Circular Bindings](/guides/circular-bindings) for the full A↔B
 build-up and how alchemy plans the two-phase create-then-wire deploy.
 
 ## Where next
 
-- [Bindings](/concepts/binding) — connect resources to Workers and Lambdas.
-- [Inputs & outputs](/concepts/outputs) — the lazy references that draw the graph.
+- [Actions](/concepts/action) — deploy-time work without a lifecycle.
+- [Inputs & Outputs](/concepts/outputs) — the lazy references that draw the graph.
 - [Resource lifecycle](/concepts/resource-lifecycle) — what happens on deploy.

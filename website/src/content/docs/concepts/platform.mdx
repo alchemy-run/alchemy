@@ -1,14 +1,11 @@
 ---
-title: Platform
-description: A Platform bundles infrastructure with the runtime code that runs on it — Workers, Lambda Functions, Containers — so your handler ships with its bindings.
-sidebar:
-  order: 5
+title: Functions & Servers
+description: Workers, Lambda Functions, and Containers ship runtime code along with their infrastructure — your handler deploys with its bindings.
 ---
 
-A **Platform** is a special kind of [Resource](/concepts/resource)
-that ships **runtime code along with its infrastructure**. Cloudflare
-Workers, AWS Lambda Functions, and Cloudflare Containers are all
-platforms. When you declare a platform you describe both:
+Cloudflare Workers, AWS Lambda Functions, ECS Tasks, and Containers
+are [Resources](/concepts/resource) that ship **runtime code along
+with their infrastructure**. When you declare one you describe both:
 
 - The cloud configuration (memory, region, compatibility flags…)
 - The Effect that runs inside it
@@ -52,7 +49,7 @@ injection, typed wrappers) see [Binding](/concepts/binding).
 
 ## Bindings in action
 
-A binding is what connects a resource to the platform's runtime. The
+A binding is what connects a resource to the Function's runtime. The
 syntax `yield* ReadSomeResource(target)` does three things at once:
 
 1. Records the binding on the platform's deploy plan
@@ -108,10 +105,11 @@ generated policy enumerates each ARN explicitly rather than
 falling back to `Resource: "*"`. On Cloudflare, the same call
 records a Worker binding instead — the runtime API stays identical.
 
-## Writing your own platform
+## Writing your own runtime
 
-A platform is a [Provider](/concepts/provider) that builds
-infrastructure **and** bundles a runtime Effect. Most users won't
+Internally every Function resource is built on the **`Platform`**
+type — a [Provider](/concepts/provider) that builds infrastructure
+and bundles a runtime Effect. Most users won't
 need to write one — Worker, Lambda, and Container cover the common
 cases — but the surface is open.
 
@@ -130,7 +128,8 @@ hook fires.
 
 ## Effect handlers vs async handlers
 
-Platforms support two styles for the runtime code. Both deploy
+Workers and Lambda Functions support two styles for the runtime
+code. Both deploy
 through the same provider and produce the same artifact.
 
 **Effect style** — handlers are Effects, with typed errors,

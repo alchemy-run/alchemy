@@ -1,5 +1,5 @@
 ---
-title: State store
+title: State Store
 description: How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
 ---
 
@@ -159,13 +159,13 @@ handles state setup automatically.
 
 A state store is just an Effect `Layer` that provides the `State`
 service — back it with Postgres, S3, Redis, DynamoDB, or any other
-backend. See [Custom state store](/guides/custom-state-store) for
+backend. See [Custom State Store](/guides/custom-state-store) for
 the full walkthrough.
 
 ## Where next
 
-- [Custom state store](/guides/custom-state-store) — implement the
+- [Custom State Store](/guides/custom-state-store) — implement the
   `StateService` interface end-to-end.
 - [Testing](/concepts/testing) — the in-memory store in practice.
-- [References](/concepts/references) — reading another stack's
-  state.
+- [Stack References](/guides/stack-references) — reading another
+  stack's outputs.

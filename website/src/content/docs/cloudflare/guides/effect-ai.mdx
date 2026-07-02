@@ -13,7 +13,8 @@ every model provider (OpenAI, Anthropic, Workers AI, …) ships as a
 provider-agnostic.
 
 This guide is about the *Alchemy* side of that picture: how to build
-the `LanguageModel` layer inside a [Platform](/concepts/platform)
+the `LanguageModel` layer inside a Worker or Lambda
+([Functions & Servers](/concepts/platform))
 (`Cloudflare.Worker`, `AWS.Lambda.Function`), where to read the API
 key from, and how to plug `Chat.Persistence` into a backing store
 that matches the platform. For the AI calls themselves —

@@ -325,6 +325,10 @@ the backend's deployed outputs through a **cross-stack
 reference** (`yield* Backend`), resolved at plan time against the
 state store. Each package can deploy and destroy independently.
 
+When to reach for this shape — and the stage-pinning decision — is
+covered in [Stack References](/guides/stack-references); this
+section applies it to the two-package app.
+
 You pay for that with two extra moving parts:
 
 - A typed `Backend` stack handle declared in `backend/src/Stack.ts`.
@@ -474,11 +478,8 @@ const backend = yield* Backend.stage.staging;
 const backend = yield* Backend.stage["pr-42"];
 ```
 
-| You want…                                                | Use                          |
-| -------------------------------------------------------- | ---------------------------- |
-| Frontend's stage maps 1:1 to the backend's stage         | `yield* Backend`             |
-| Always pin to a specific backend stage                   | `yield* Backend.stage.prod`  |
-| Branch on the current stage (e.g. PR previews → staging) | a conditional, see [Shared database across stages](/cloudflare/guides/shared-database) |
+Which form to use when:
+[Stack References](/guides/stack-references#wire-a-monorepos-stacks-together).
 
 ## Comparison
 
@@ -493,7 +494,8 @@ const backend = yield* Backend.stage["pr-42"];
 
 ## Where next
 
+- [File layout](/guides/file-layout) — the single-package layout this builds on.
+- [Stack References](/guides/stack-references) — when to split stacks and how to pin stages.
 - [Resource lifecycle](/concepts/resource-lifecycle) — what happens when you run `deploy`.
 - [Stacks](/concepts/stack) — defining stacks and stack outputs.
 - [Stages](/concepts/stages) — naming and isolating per-environment deploys.
-- [References](/concepts/references) — the underlying `Output.stackRef` and `Output.ref` operators.
