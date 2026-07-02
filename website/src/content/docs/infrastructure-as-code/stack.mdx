@@ -99,11 +99,12 @@ metadata via the `Stack` service:
 
 ```typescript
 import { Stack } from "alchemy/Stack";
+import * as Console from "effect/Console";
 
 Effect.gen(function* () {
   const stack = yield* Stack;
-  console.log(stack.name); // "MyApp"
-  console.log(stack.stage); // "dev_sam"
+  yield* Console.log(stack.name); // "MyApp"
+  yield* Console.log(stack.stage); // "dev_sam"
 
   const queue = yield* SQS.Queue("Jobs").pipe(
     RemovalPolicy.retain(stack.stage === "prod"),
