@@ -31,7 +31,7 @@ its spec doesn't admit to.**
 
 ![Cumulative patched operations in the distilled Cloudflare SDK, June 11-19 — a step line that jumps from 369 to 1,075 in the first 24 hours as PR #601 lands, then climbs slowly to 1,093 through the beta.56 and beta.57 releases](/blog/resource-factory/patches.svg)
 
-## The rule that makes it work
+## A software development flywheel
 
 Alchemy's resources are built on
 [distilled](https://github.com/alchemy-run/distilled), our
@@ -57,6 +57,12 @@ status codes, swallowing errors that deserved to propagate.
 Under this rule the agent can't do any of that, because the
 only way to make its code typecheck is to first make the SDK
 tell the truth.
+
+The rule is the mechanism; the flywheel is what it produces.
+Every red test either fixes a resource or improves the SDK —
+and a better SDK makes the next resource, the next test, and
+the next agent faster and more correct. Work doesn't just get
+done; it compounds.
 
 ## One turn of the flywheel
 
