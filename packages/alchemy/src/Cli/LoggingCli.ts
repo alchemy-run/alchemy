@@ -112,6 +112,11 @@ export const LoggingCli = Layer.succeed(
         return {
           emit: (event: ApplyEvent) =>
             Effect.sync(() => {
+              if (event.kind === "log") {
+                // captured Effect.log* lines already reach the terminal via
+                // the merged default logger — don't double-print
+                return;
+              }
               if (event.kind === "annotate") {
                 console.log(`${tag(event.id)} ${blue(event.message)}`);
                 return;

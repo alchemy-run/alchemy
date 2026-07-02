@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
 import {
@@ -110,11 +111,13 @@ const instrumentLifecycle =
     resourceType: string,
     logicalId: string,
     instanceId: string,
+    session?: PlanStatusSession,
   ) =>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
     effect.pipe(
+      session ? Effect.provide(resourceLogs(logicalId, session)) : (e) => e,
       provideLifecycleScope(fqn, instanceId),
       recordResourceOp(resourceType, op),
       Effect.withSpan(`provider.${op}`, {
@@ -127,6 +130,39 @@ const instrumentLifecycle =
         },
       }),
     );
+
+/**
+ * Capture `Effect.log*` emitted during a resource's lifecycle operation and
+ * route it through the apply session as a `log` event tagged with the
+ * resource's logical id, so UIs (the dashboard) can attribute logs to the
+ * resource being applied. Merged with existing loggers — terminal and file
+ * logging are unchanged.
+ */
+const resourceLogs = (logicalId: string, session: PlanStatusSession) =>
+  Logger.layer(
+    [
+      Logger.make(({ logLevel, message }) => {
+        try {
+          const text = (Array.isArray(message) ? message : [message])
+            .map((m) =>
+              typeof m === "string" ? m : (JSON.stringify(m) ?? String(m)),
+            )
+            .join(" ");
+          Effect.runSync(
+            session.emit({
+              kind: "log",
+              id: logicalId,
+              level: logLevel,
+              message: text,
+            }),
+          );
+        } catch {
+          // log capture must never break an apply
+        }
+      }),
+    ],
+    { mergeWithExisting: true },
+  );
 
 export const apply = <P extends Plan>(
   plan: P,
@@ -590,6 +626,7 @@ const executeNode = (
                 node.resource.Type,
                 logicalId,
                 instanceId,
+                session,
               ),
             );
           yield* commit<CreatingResourceState>({
@@ -651,6 +688,7 @@ const executeNode = (
               node.resource.Type,
               logicalId,
               instanceId,
+              session,
             ),
           );
 
@@ -773,6 +811,7 @@ const executeNode = (
               node.resource.Type,
               logicalId,
               instanceId,
+              session,
             ),
           );
 
@@ -894,6 +933,7 @@ const executeNode = (
                     node.resource.Type,
                     logicalId,
                     old.instanceId,
+                    session,
                   ),
                 );
             }
@@ -939,6 +979,7 @@ const executeNode = (
                 node.resource.Type,
                 logicalId,
                 instanceId,
+                session,
               ),
             );
           yield* commit<ReplacingResourceState>({
@@ -1001,6 +1042,7 @@ const executeNode = (
               node.resource.Type,
               logicalId,
               instanceId,
+              session,
             ),
           );
 
@@ -1354,6 +1396,7 @@ const converge = Effect.fn(function* (
             node.resource.Type,
             logicalId,
             instanceId,
+            session,
           ),
         );
 
@@ -1655,6 +1698,7 @@ const collectGarbage = Effect.fn(function* (
                     resourceType,
                     logicalId,
                     instanceId,
+                    session,
                   ),
                 );
             }

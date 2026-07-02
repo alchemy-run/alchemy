@@ -12,6 +12,10 @@ export interface DashboardNode {
   downstream: string[];
   /** client-side annotation from the plan (absent for noop) */
   planAction?: PlanAction;
+  /** client-side: latest annotate note from the live apply */
+  note?: string;
+  /** client-side: captured Effect.log* lines from the live apply */
+  logs?: { key: number; level: string; message: string }[];
 }
 
 export interface DashboardEdge {

@@ -63,18 +63,32 @@ export function App() {
   const effectivePlan = live && !live.done ? live.plan : plan;
 
   const merged = useMemo(() => {
-    if (!graph) {
+    // during a live apply, don't gate the canvas on the (possibly slow)
+    // graph fetch — the session's plan alone can synthesize every node
+    const base = graph ?? (live ? { nodes: [], edges: [] } : undefined);
+    if (!base) {
       return undefined;
     }
-    const withPlan = mergePlan(graph, effectivePlan);
-    if (!live || live.statuses.size === 0) {
+    const withPlan = mergePlan(base, effectivePlan);
+    if (!live) {
       return withPlan;
     }
     return {
       ...withPlan,
       nodes: withPlan.nodes.map((node) => {
         const status = live.statuses.get(node.logicalId);
-        return status ? { ...node, status: status.status } : node;
+        const note =
+          live.notes.get(node.logicalId) ?? status?.message ?? undefined;
+        const logs = live.logs.get(node.logicalId);
+        if (!status && note === undefined && logs === undefined) {
+          return node;
+        }
+        return {
+          ...node,
+          status: status?.status ?? node.status,
+          note,
+          logs,
+        };
       }),
     };
   }, [graph, effectivePlan, live]);
