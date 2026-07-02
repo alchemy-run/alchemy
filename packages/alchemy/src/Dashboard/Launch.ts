@@ -21,6 +21,7 @@ import { fileLogger } from "../Util/FileLogger.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import * as Discovery from "./Discovery.ts";
 import { toPlanJson, unavailablePlan, type DashboardPlan } from "./PlanJson.ts";
+import type { StackStructure } from "./Scene.ts";
 import * as Server from "./Server.ts";
 
 /** The default export of a user's stack file, as loaded by `importStack`. */
@@ -181,6 +182,38 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
       Effect.provideContext(ambient),
     ) as Effect.Effect<DashboardPlan>;
 
+  /**
+   * The stack's SHAPE only: evaluate the stack file (register resources +
+   * bindings) without planning — no cloud calls, so it completes in
+   * seconds and works without credentials. Feeds the canvas's "defined
+   * but not deployed" ghosts.
+   */
+  const structureForStage = (stg: string) =>
+    Effect.gen(function* () {
+      const stk = yield* stackEffect;
+      const resources = Object.entries(
+        stk.resources as Record<string, { LogicalId: string; Type: string }>,
+      ).map(([fqn, r]) => ({
+        fqn,
+        logicalId: r.LogicalId,
+        type: r.Type,
+        bindingSids: (
+          ((stk.bindings as Record<string, { sid: unknown }[]>)[fqn] ?? []) as {
+            sid: unknown;
+          }[]
+        )
+          .map((b) => b.sid)
+          .filter((sid): sid is string => typeof sid === "string"),
+      }));
+      return { resources } satisfies StackStructure;
+    }).pipe(
+      Effect.provide(servicesFor(stg)),
+      Effect.catchCause(() =>
+        Effect.succeed({ resources: [] } satisfies StackStructure),
+      ),
+      Effect.provideContext(ambient),
+    ) as Effect.Effect<StackStructure>;
+
   yield* Effect.gen(function* () {
     const stack = yield* stackEffect;
     yield* Effect.gen(function* () {
@@ -191,6 +224,7 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
         stack: stackEffect.stackName,
         stage,
         plan: planForStage,
+        structure: structureForStage,
       });
 
       const url = address.replace("0.0.0.0", "127.0.0.1");

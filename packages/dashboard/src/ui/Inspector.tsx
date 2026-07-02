@@ -259,6 +259,10 @@ const logLevelColor = (level: string): string => {
     case "debug":
     case "trace":
       return "#52525b";
+    case "status":
+      return "#34d399";
+    case "note":
+      return "#818cf8";
     default:
       return "#71717a";
   }
