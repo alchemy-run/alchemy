@@ -40,7 +40,6 @@ Standalone how-to pages that apply on any cloud (CI, monorepos, custom providers
 - [CLI Reference](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, aws, cloudflare, login, profile, and state.
 - [Continuous Integration](https://v2.alchemy.run/guides/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 - [Monorepos](https://v2.alchemy.run/guides/monorepo) — Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
-- [Secrets and env vars](https://v2.alchemy.run/guides/secrets) — Wire OPENAI_API_KEY from .env into a Cloudflare Worker as a secret_text binding.
 - [Circular Bindings](https://v2.alchemy.run/guides/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
 - [Building Infrastructure Layers](https://v2.alchemy.run/guides/infrastructure-layers) — Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
 - [Writing a Custom State Store](https://v2.alchemy.run/guides/custom-state-store) — Build a Postgres-backed Alchemy state store step by step — implement the StateService interface, plug it into a stack, and test it end-to-end.
@@ -76,6 +75,9 @@ The primary resources you build Cloudflare apps with. Each page covers what it i
 - [Queues](https://v2.alchemy.run/cloudflare/queues) — Cloudflare Queues give you reliable, at-least-once message delivery between Workers — a WriteQueue producer binding on one side and an Effect-style consumeQueueMessages handler with automatic ack/retry on the other.
 - [Hyperdrive](https://v2.alchemy.run/cloudflare/hyperdrive) — Cloudflare Hyperdrive pools connections to your external Postgres or MySQL database at the edge — provision a database (Neon or PlanetScale), front it with Hyperdrive, and bind the connection into your Worker.
 - [Domains & DNS](https://v2.alchemy.run/cloudflare/domains) — Manage Cloudflare zones, DNS records, DNSSEC, and zone settings as resources — and safely adopt the domains you already have.
+- [Workflows](https://v2.alchemy.run/cloudflare/workflows) — Cloudflare Workflows run durable multi-step jobs — define a typed workflow class, checkpoint steps with task and sleep, trigger instances from a Worker, and poll status until completion.
+- [Email](https://v2.alchemy.run/cloudflare/email) — Cloudflare Email Routing turns a zone into a mail endpoint — enable routing, verify destinations, forward with rules and a catch-all, hand mail to a Worker, and send from Workers with the send_email binding.
+- [Secrets & env](https://v2.alchemy.run/cloudflare/secrets-env) — Bind env vars and secrets to Workers with effect/Config, generate stable tokens with Alchemy.Random, and graduate to Secrets Store when secrets are shared across Workers.
 
 ## Cloudflare — guides
 
@@ -146,6 +148,7 @@ The primary resources you build AWS apps with. Read the Lambda page first; the o
 - [CloudWatch](https://v2.alchemy.run/aws/cloudwatch) — Declare CloudWatch dashboards as structured widget documents and metric alarms that fire SNS topics — versioned next to the Lambda functions and queues they observe.
 - [Websites](https://v2.alchemy.run/aws/websites) — Deploy static sites and Vite apps to S3 and CloudFront as a single StaticSite resource.
 - [VPC & networking](https://v2.alchemy.run/aws/networking) — The Network helper for a production-shaped VPC in one call, and the full set of EC2 networking primitives — VPCs, subnets, gateways, routes, security groups, and endpoints — for explicit control.
+- [Secrets & env](https://v2.alchemy.run/aws/secrets-env) — Deliver API keys from .env to a Lambda with effect/Config, and graduate to AWS Secrets Manager when the secret is a shared, generated, or rotated cloud resource.
 
 ## AWS — guides
 
@@ -158,7 +161,6 @@ Task-oriented AWS how-tos. Each solves a specific problem; read in any order.
 - [Custom domains with Route53 + ACM](https://v2.alchemy.run/aws/guides/custom-domains) — Serve your site or API from your own domain — DNS-validated ACM certificates, Route 53 alias records, and the domain prop on Website resources.
 - [Effect RPC on Lambda](https://v2.alchemy.run/aws/guides/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as an AWS Lambda Function behind a Function URL.
 - [Lambda MicroVMs](https://v2.alchemy.run/aws/guides/microvms) — Build a Firecracker MicroVM image from TypeScript or a Dockerfile, then launch and drive isolated stateful instances from a Lambda Function with typed lifecycle bindings and RPC.
-- [Secrets on AWS](https://v2.alchemy.run/aws/guides/secrets) — Store secrets in AWS Secrets Manager and read them from a Lambda through an IAM-scoped GetSecretValue binding.
 - [REST API (API Gateway v1)](https://v2.alchemy.run/aws/guides/api-gateway) — Expose a Lambda with a regional Amazon API Gateway REST API using RestApi, Resource, Method, Deployment, and Stage primitives.
 
 ## PlanetScale

@@ -292,6 +292,43 @@ export default defineConfig({
                   link: "/cloudflare/durable-objects",
                 },
                 { label: "Containers", link: "/cloudflare/containers" },
+                { label: "Workflows", link: "/cloudflare/workflows" },
+                {
+                  label: "Cross-worker DOs",
+                  link: "/cloudflare/guides/cross-worker-durable-object",
+                },
+                {
+                  label: "WebSockets",
+                  link: "/cloudflare/guides/hibernatable-websockets",
+                },
+                {
+                  label: "Workers for Platforms",
+                  link: "/cloudflare/guides/workers-for-platforms",
+                },
+                {
+                  label: "Browser rendering",
+                  link: "/cloudflare/guides/browser-rendering",
+                },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Frontend frameworks",
+                  link: "/cloudflare/guides/frontends",
+                },
+                { label: "Vite SPA", link: "/cloudflare/guides/vite-spa" },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [
+                {
+                  label: "Effect HTTP API",
+                  link: "/cloudflare/guides/effect-http-api",
+                },
+                { label: "Effect RPC", link: "/cloudflare/guides/effect-rpc" },
               ],
             },
             {
@@ -301,19 +338,89 @@ export default defineConfig({
                 { label: "KV", link: "/cloudflare/kv" },
                 { label: "R2", link: "/cloudflare/r2" },
                 { label: "Hyperdrive", link: "/cloudflare/hyperdrive" },
+                { label: "Drizzle ORM", link: "/cloudflare/guides/drizzle" },
+                {
+                  label: "Shared database",
+                  link: "/cloudflare/guides/shared-database",
+                },
+                {
+                  label: "Branch from a shared database",
+                  link: "/cloudflare/guides/branch-from-shared-database",
+                },
+                { label: "Artifacts", link: "/cloudflare/guides/artifacts" },
               ],
             },
             {
-              label: "Messaging",
-              items: [{ label: "Queues", link: "/cloudflare/queues" }],
+              label: "Messaging & events",
+              items: [
+                { label: "Queues", link: "/cloudflare/queues" },
+                { label: "Cron triggers", link: "/cloudflare/guides/cron" },
+                {
+                  label: "GitHub events",
+                  link: "/cloudflare/guides/github-events",
+                },
+              ],
+            },
+            {
+              label: "Email",
+              items: [
+                { label: "Email", link: "/cloudflare/email" },
+                {
+                  label: "Send & receive email",
+                  link: "/cloudflare/guides/email",
+                },
+              ],
+            },
+            {
+              label: "AI",
+              items: [
+                { label: "AI Gateway", link: "/cloudflare/guides/ai-gateway" },
+                {
+                  label: "AI Search (AutoRAG)",
+                  link: "/cloudflare/guides/ai-search",
+                },
+                { label: "Effect AI", link: "/cloudflare/guides/effect-ai" },
+                { label: "Vectorize", link: "/cloudflare/guides/vectorize" },
+                {
+                  label: "Release agent",
+                  link: "/cloudflare/guides/release-agent",
+                },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [
+                { label: "Secrets & env", link: "/cloudflare/secrets-env" },
+                {
+                  label: "Secrets Store",
+                  link: "/cloudflare/guides/secrets-store",
+                },
+                { label: "Turnstile", link: "/cloudflare/guides/turnstile" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                {
+                  label: "Axiom telemetry",
+                  link: "/cloudflare/guides/axiom-observability",
+                },
+                {
+                  label: "Analytics Engine",
+                  link: "/cloudflare/guides/analytics-engine",
+                },
+              ],
             },
             {
               label: "Networking",
-              items: [{ label: "Domains & DNS", link: "/cloudflare/domains" }],
-            },
-            {
-              label: "Guides",
-              autogenerate: { directory: "cloudflare/guides" },
+              items: [
+                { label: "Domains & DNS", link: "/cloudflare/domains" },
+                {
+                  label: "Custom domains & routes",
+                  link: "/cloudflare/guides/custom-domains",
+                },
+                { label: "Tunnel", link: "/cloudflare/guides/tunnel" },
+              ],
             },
             providerResourcesEntry("Cloudflare"),
           ],
@@ -338,6 +445,25 @@ export default defineConfig({
                 { label: "ECS", link: "/aws/ecs" },
                 { label: "EC2", link: "/aws/ec2" },
                 { label: "EKS", link: "/aws/eks" },
+                { label: "Lambda MicroVMs", link: "/aws/guides/microvms" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Websites", link: "/aws/websites" },
+                { label: "Static site", link: "/aws/guides/static-site" },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [
+                { label: "API Gateway", link: "/aws/guides/api-gateway" },
+                {
+                  label: "Effect HTTP API",
+                  link: "/aws/guides/effect-http-api",
+                },
+                { label: "Effect RPC", link: "/aws/guides/effect-rpc" },
               ],
             },
             {
@@ -349,17 +475,25 @@ export default defineConfig({
               ],
             },
             {
-              label: "Messaging & Events",
+              label: "Messaging & events",
               items: [
                 { label: "SQS", link: "/aws/sqs" },
                 { label: "SNS", link: "/aws/sns" },
                 { label: "Kinesis", link: "/aws/kinesis" },
-                { label: "EventBridge & Scheduler", link: "/aws/eventbridge" },
+                {
+                  label: "EventBridge & Scheduler",
+                  link: "/aws/eventbridge",
+                },
+                {
+                  label: "DynamoDB Streams",
+                  link: "/aws/guides/dynamodb-streams",
+                },
+                { label: "S3 events", link: "/aws/guides/s3-events" },
               ],
             },
             {
-              label: "Frontend",
-              items: [{ label: "Websites", link: "/aws/websites" }],
+              label: "Security & secrets",
+              items: [{ label: "Secrets & env", link: "/aws/secrets-env" }],
             },
             {
               label: "Observability",
@@ -367,9 +501,14 @@ export default defineConfig({
             },
             {
               label: "Networking",
-              items: [{ label: "VPC & networking", link: "/aws/networking" }],
+              items: [
+                { label: "VPC & networking", link: "/aws/networking" },
+                {
+                  label: "Custom domains",
+                  link: "/aws/guides/custom-domains",
+                },
+              ],
             },
-            { label: "Guides", autogenerate: { directory: "aws/guides" } },
             providerResourcesEntry("AWS"),
           ],
         },

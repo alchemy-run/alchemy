@@ -73,6 +73,9 @@ const REDIRECTS: Record<string, string> = {
   "/guides/effect-ai": "/cloudflare/guides/effect-ai",
   "/guides/frontends": "/cloudflare/guides/frontends",
   "/guides/shared-database": "/cloudflare/guides/shared-database",
+  // Absorbed into the Security & secrets block pages.
+  "/guides/secrets": "/cloudflare/secrets-env",
+  "/aws/guides/secrets": "/aws/secrets-env",
   // The Integrations tab was replaced by per-provider hubs (PlanetScale and
   // Neon promoted to top-level tabs; Axiom and GitHub in the More menu).
   "/integrations": "/providers",

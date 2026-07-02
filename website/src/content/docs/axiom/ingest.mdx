@@ -118,7 +118,7 @@ it in resource state — otherwise later deploys couldn't rewire it
 into consumers. Treat your state store as sensitive: anyone with
 read access can recover the bearer. Pass `ingest.token` to secret
 sinks (a Worker env var becomes a `secret_text` binding; or a
-[secrets store](/guides/secrets)) rather than ever unwrapping it
+[secrets store](/cloudflare/secrets-env)) rather than ever unwrapping it
 yourself.
 :::
 

@@ -9,7 +9,9 @@ Cloudflare Email Routing turns a zone you own into a mail endpoint:
 inbound mail to any address on the domain is matched by rules and
 forwarded, dropped, or handed to a Worker — and once routing is
 enabled, Workers can also *send* mail from that domain through a
-`send_email` binding. This guide wires up both directions.
+`send_email` binding. This guide wires up both directions. For the
+full Email surface — sending subdomains, Email Security — see
+[Email](/cloudflare/email).
 
 You need a zone on Cloudflare first — see
 [Custom domains & routes](/cloudflare/guides/custom-domains) for
@@ -220,6 +222,7 @@ is clicked, sends fail with a `SendEmailError`.
 
 ## Where next
 
+- [Email](/cloudflare/email) — the concept map for the category.
 - [Custom domains & routes](/cloudflare/guides/custom-domains) — get
   the zone the mail routes through.
 - [Domains](/cloudflare/domains) — zones and DNS records.

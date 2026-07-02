@@ -5,39 +5,16 @@ sidebar:
   order: 10
 ---
 
-The `Sandbox` container handles long-lived compute, but sometimes
-you need to coordinate **many** steps that should outlive any single
-request — a checkout flow, a multi-stage data pipeline, a "send a
-reminder in 24 hours" job. That's what **Cloudflare Workflows** are
-for: durable, retryable, replayable task sequences with at-least-once
-delivery semantics. The example below broadcasts each task's
-progress back to the chat `Room` you built two parts ago.
+This guide builds a Workflow end to end: a durable multi-step job
+that writes to KV and broadcasts each task's progress back to a chat
+`Room` Durable Object. For the concept, start at
+[Workflows](/cloudflare/workflows).
 
 ## How a Workflow looks
 
-The shape mirrors what you've seen for Workers and Durable Objects.
-The outer `Effect.gen` resolves shared dependencies; the returned
-`Effect.fn` is the workflow body — a typed function from an `input`
-payload to an Effect that the Cloudflare Workflows runtime steps
-through:
-
-```typescript
-Effect.gen(function* () {
-  // Phase 1: init — runs at deploy and once per workflow instance.
-  const room = yield* Room;
-
-  return Effect.fn(function* (input: { orderId: string }) {
-    // Phase 2: workflow body — runs as durable steps.
-    const result = yield* Cloudflare.Workflows.task("process", doWork(input.orderId));
-    yield* Cloudflare.Workflows.sleep("cooldown", "10 seconds");
-    return result;
-  });
-});
-```
-
-Each `task` call is a checkpoint. If the worker crashes mid-task,
-Cloudflare replays the workflow from the last completed task — your
-code is _not_ retried, the persisted result is.
+The two-phase shape — an init `Effect.gen` that returns an
+`Effect.fn` body — plus `task`, `sleep`, and the replay caution are
+covered on [Workflows](/cloudflare/workflows).
 
 ## Create the workflow file
 
