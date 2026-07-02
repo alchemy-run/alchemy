@@ -1,7 +1,7 @@
 ---
 title: Generating 200+ Cloudflare Resources with AI
 date: 2026-07-02
-excerpt: In six days, fleets of AI agents grew Alchemy's Cloudflare provider from 22 resources to 230 — each one live-tested against the real Cloudflare API. The mechanism that made it work is a flywheel — every API surprise a test hit became a patch to our generated SDK's type system, 720 of them, compiling Cloudflare's actual behavior into typed unions for every future consumer.
+excerpt: Fleets of AI agents grew Alchemy's Cloudflare provider from 22 resources to 230 — the bulk of it in a single 22-hour run — each one live-tested against the real Cloudflare API. The mechanism that made it work is a flywheel — every API surprise a test hit became a patch to our generated SDK's type system, 720 of them, compiling Cloudflare's actual behavior into typed unions for every future consumer.
 ---
 
 Between June 11 and June 17, Alchemy's Cloudflare provider grew
@@ -24,7 +24,7 @@ about. Generated code inherits every one of those lies, and
 in infrastructure-as-code the lie surfaces at the worst
 possible moment: mid-deploy, in your account.
 
-So the interesting number from that week isn't 230 resources.
+So the interesting number from that run isn't 230 resources.
 It's this one: **720 patches to our SDK's type system, each
 one a place where a live test caught the API doing something
 its spec doesn't admit to.**
@@ -42,7 +42,7 @@ as truthful as its source, so distilled has a patch layer: a
 JSON file per operation that corrects the spec where reality
 disagrees with it.
 
-The rule the whole week ran on: **agents never handle an
+The rule the whole run operated on: **agents never handle an
 unknown error in their own code.** When a test hits an
 unmatched error — an `UnknownCloudflareError`, or a temptation
 to check `status === 404` — the fix is not a catch-block in
@@ -300,7 +300,7 @@ checked against what Cloudflare actually reports.
 
 ## What broke at scale
 
-Some of the week's most useful output was the damage. Fleet
+Some of the run's most useful output was the damage. Fleet
 work finds structural limits that no single-resource
 development ever would.
 
@@ -334,7 +334,8 @@ to 1.8s
 ([#618](https://github.com/alchemy-run/alchemy-effect/pull/618)).
 
 Even the patch chart carries scars if you look closely: the
-corpus *shrinks* a few times mid-week (1,083 → 1,080) where
+corpus *shrinks* a few times during the hardening tail
+(1,083 → 1,080) where
 review consolidated duplicate patches — and one agent left its
 scratch probe, `.ai-workspace/web3-probe.ts`, sitting in the
 merged PR. Shipped fast, cleaned up after.
@@ -395,7 +396,7 @@ test against, and a doctrine that forbids handling unknown
 errors locally. Nothing about that is Cloudflare-specific —
 AWS, Neon, PlanetScale, and Stripe sit in distilled behind
 the same generator-plus-patches architecture. The Cloudflare
-week was the proof; the same flywheel is how every provider
+run was the proof; the same flywheel is how every provider
 gets built from here.
 
 - [2.0.0-beta.56 — the release these resources shipped in](/blog/2026-06-17-beta-56)
