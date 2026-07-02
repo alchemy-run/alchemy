@@ -1,41 +1,25 @@
 ---
 title: Stack References
-description: Structure a project around References — long-lived stages that own expensive Resources, ephemeral pr-* stages that borrow them, infra/app stack splits, and monorepo wiring.
+description: Read the deployed outputs of another stage or Stack — Resource.ref by Logical ID, with optional stack/stage props, or import a Stack tag and depend on its outputs.
 ---
 
-Stacks deploy independently, but real projects lean on each other:
-a PR-preview stage borrows `staging`'s expensive database instead
-of provisioning its own, a frontend stack reads the URL of a
-backend in another repo, a tools script reads prod's bucket name
-without re-running prod's plan. References cross those boundaries
-along two axes — a different **stage** of the same stack, or a
-different **stack** entirely.
+A reference reads an already-deployed Resource or Stack from the
+state store at plan time. Three forms, smallest first.
 
-This page is the patterns. For how a reference resolves — typing,
-plan-time state reads, `InvalidReferenceError` — see
-[References](/concepts/references).
+## `Resource.ref` by Logical ID
 
-## One stack or many?
+Reference a Resource in this stack by its Logical ID:
 
-Three rules of thumb:
+```typescript
+const project = yield* Neon.Project.ref("app-db");
+```
 
-- **Split on deploy cadence and ownership.** Different teams or CI
-  pipelines shipping on different schedules want different stacks.
-- **Split for destroy blast radius.** If you need to `destroy` the
-  app without touching the database, the database belongs in
-  another stack.
-- **Otherwise, share one stack.** Inside a stack, Outputs flow in
-  memory — no reference needed.
+Same type as `yield* Neon.Project("app-db", { … })` — pass it
+anywhere the real thing is accepted.
 
-[Monorepo](/guides/monorepo#how-to-choose) has the full
-trade-off table. And stages are free — reach for a new stage
-before a new stack.
+## Reference another stage
 
-## Share expensive Resources across stages
-
-The most common pattern: long-lived `staging` / `prod` stages own
-the expensive Resources while ephemeral `pr-*` stages reference
-them. One conditional decides who creates and who borrows:
+Pass `stage` to read a different stage of the same stack:
 
 ```typescript
 const { stage } = yield* Alchemy.Stack;
@@ -45,102 +29,72 @@ const project = stage.startsWith("pr-")
   : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
 ```
 
-Same logical ID, same type — downstream code can't tell a ref from
-the real thing. A per-stage `Neon.Branch` still creates against
-the shared project, so every PR gets its own data without its own
-cluster.
+`staging` owns the database; `pr-*` stages borrow it. Destroying
+a borrower never touches the Resources it references.
 
-Deploy the owner first, then the borrowers:
-
-```sh
-alchemy deploy --stage staging   # creates app-db
-alchemy deploy --stage pr-147    # borrows staging's app-db
-```
-
-Destroying `pr-147` removes only what it created — the referenced
-project is untouched.
-
-The PlanetScale example varies this by targeting
-`staging-${stage}` instead of one global `staging`, so each PR
-references its own parallel owner stage.
-
-Full walkthroughs:
-[Shared database across stages](/cloudflare/guides/shared-database)
-and
-[Branch from a shared database](/cloudflare/guides/branch-from-shared-database).
-
-## Split infra from app stacks
-
-Give the expensive Resources their own stack:
+Pass `stack` too for a Resource in a different Stack:
 
 ```typescript
-// infra/alchemy.run.ts
-export default Alchemy.Stack(
-  "SharedInfra",
-  { providers: Neon.providers(), state: Alchemy.localState() },
-  Effect.gen(function* () {
-    const db = yield* Neon.Project("app-db", { region: "aws-us-east-1" });
-    return { projectId: db.projectId };
-  }),
-);
-```
-
-App stacks reference it by full address:
-
-```typescript
-// app/alchemy.run.ts — any stage
 const db = yield* Neon.Project.ref("app-db", {
   stack: "SharedInfra",
   stage: "prod",
 });
 ```
 
-Pin `stage` explicitly — app stages like `pr-147` or `sam` have no
-counterpart in the infra stack, so the default current-stage
-lookup would miss. Each stack keeps its own cadence: infra deploys
-rarely, the app on every push.
+Anything you omit defaults to the current stack/stage. Pin `stage`
+when the stacks' stages don't line up — `pr-147` has no counterpart
+in `SharedInfra`.
 
-## Wire a monorepo's stacks together
+## Depend on a Stack's outputs
 
-When the unit you consume is a whole stack rather than one
-Resource, declare a typed stack handle and read its outputs —
-`yield* Backend` for the matching stage, `Backend.stage.prod` to
-pin one. Choosing between them:
+When the unit you consume is a whole Stack, import its tag and
+yield it:
 
-| Situation                                   | Use                                                |
-| ------------------------------------------- | -------------------------------------------------- |
-| Stages line up 1:1 across stacks            | `yield* Backend`                                   |
-| Always read one stage                       | `Backend.stage.prod`                               |
-| `pr-*` reads staging, everything else owns  | branch on `Alchemy.Stack`'s stage, as in the sharing section above |
+```typescript
+// backend/src/Stack.ts
+export class Backend extends Alchemy.Stack<
+  Backend,
+  {
+    url: string;
+  }
+>()("Backend") {}
+```
 
-Handle declaration, the `./Client` subpath, and the full
-two-package walkthrough: [Multiple Stacks](/guides/monorepo-multi-stack).
+```typescript
+// frontend/alchemy.run.ts
+import { Backend } from "backend";
+
+const backend = yield* Backend; // outputs of the matching stage
+
+const website = yield* Cloudflare.Website.Vite("Website", {
+  env: { VITE_API_URL: backend.url },
+});
+```
+
+`yield* Backend` reads the matching stage; `Backend.stage.prod`
+pins one. Full two-package walkthrough:
+[Multiple Stacks](/guides/monorepo-multi-stack).
 
 ## Deploy order
 
-One rule covers all three patterns: the upstream must already be
-deployed — to the exact `{ stack, stage }` the reference names —
-or the downstream plan fails fast with `InvalidReferenceError`
-([when a reference misses](/concepts/references#when-a-reference-misses)).
-Destroy in reverse order; a downstream destroy never touches the
-Resources it references.
+The upstream must already be deployed to the exact
+`{ stack, stage }` the reference names, or the plan fails fast
+with `InvalidReferenceError`:
 
-## Pattern → tool
+```sh
+alchemy deploy --stage staging   # creates app-db
+alchemy deploy --stage pr-147    # borrows staging's app-db
+```
 
-| Pattern                                | Tool                                                   |
-| -------------------------------------- | ------------------------------------------------------ |
-| Borrow from a long-lived stage         | `Resource.ref(id, { stage })`                          |
-| Bind to an infra stack                 | `Resource.ref(id, { stack, stage })`                   |
-| Consume a stack's output contract      | typed handle + `yield* Backend` / `Backend.stage[name]` |
-| No constructor or handle in scope      | [`Output.ref` / `Output.stackRef`](/concepts/references#escape-hatches--outputref-and-outputstackref) |
+Destroy in reverse order.
 
 ## Where next
 
 - [References](/concepts/references) — how refs resolve: typing,
   plan-time state reads, `InvalidReferenceError`.
-- [Monorepo](/guides/monorepo) — single-stack vs multi-stack
-  layouts and the full typed-handle walkthrough.
 - [Shared database across stages](/cloudflare/guides/shared-database) —
-  the Neon/PlanetScale sharing pattern end to end.
-- [State Store](/concepts/state-store) — where the persisted state
-  that refs read actually lives.
+  the owner/borrower pattern end to end.
+- [Multiple Stacks](/guides/monorepo-multi-stack) — typed Stack
+  handles in a monorepo.
+- [State Store](/concepts/state-store) — where the state that refs
+  read lives.

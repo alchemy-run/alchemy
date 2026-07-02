@@ -81,7 +81,7 @@ const c = yield* Backend.stage["pr-42"]; // any stage name
 
 `yield* Backend` resolves at the current stage;
 `Backend.stage.<name>` pins to a named one. Which to use when:
-[Stack References](/guides/stack-references#wire-a-monorepos-stacks-together).
+[Stack References](/guides/stack-references#depend-on-a-stacks-outputs).
 
 At the end of every successful `apply`, Alchemy persists
 whatever the stack's effect returned as a per-stack-per-stage

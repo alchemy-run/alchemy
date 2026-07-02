@@ -46,7 +46,7 @@ Scaling the codebase: file conventions for one stack, monorepos for many, Stack 
 
 - [File layout](https://v2.alchemy.run/guides/file-layout) — How to organize an Alchemy project — one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
 - [Monorepo](https://v2.alchemy.run/guides/monorepo) — Two ways to organize an Alchemy monorepo — one Stack at the workspace root, or one Stack per package wired with typed references.
-- [Stack References](https://v2.alchemy.run/guides/stack-references) — Structure a project around References — long-lived stages that own expensive Resources, ephemeral pr-* stages that borrow them, infra/app stack splits, and monorepo wiring.
+- [Stack References](https://v2.alchemy.run/guides/stack-references) — Read the deployed outputs of another stage or Stack — Resource.ref by Logical ID, with optional stack/stage props, or import a Stack tag and depend on its outputs.
 
 ## Environments — the same app in many places
 
