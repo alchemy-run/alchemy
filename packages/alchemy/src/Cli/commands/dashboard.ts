@@ -73,52 +73,71 @@ export const dashboardCommand = Command.make(
     Effect.fn(function* ({ main, stage, envFile, profile, port, noOpen }) {
       const stackEffect = yield* importStack(main);
 
-      // Same service layers as `alchemy plan` (execStack with dryRun) so
-      // Plan.make behaves identically to the CLI plan.
-      const services = Layer.mergeAll(
-        Layer.effect(
-          AlchemyContext,
-          AlchemyContext.pipe(
-            Effect.map((ctx) => ({ ...ctx, dev: false, adopt: false })),
-          ),
-        ),
-        Layer.succeed(AdoptPolicy, false),
-        Layer.succeed(ArtifactStore, createArtifactStore()),
-        Layer.succeed(
-          AuthProviders,
-          yield* Effect.serviceOption(AuthProviders).pipe(
-            Effect.map(Option.getOrElse(() => ({}))),
-          ),
-        ),
-        ConfigProvider.layer(
-          withProfileOverride(yield* loadConfigProvider(envFile), profile),
-        ),
-        Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-        Layer.succeed(Stage, stage),
+      const configProvider = withProfileOverride(
+        yield* loadConfigProvider(envFile),
+        profile,
       );
+      const authProviders = yield* Effect.serviceOption(AuthProviders).pipe(
+        Effect.map(Option.getOrElse(() => ({}))),
+      );
+      // The CLI's ambient context (platform services, base AlchemyContext,
+      // credentials, ...) captured once so per-stage plan evaluation can be
+      // run from inside HTTP request handlers.
+      const ambient = yield* Effect.context<never>();
+
+      // Same service layers as `alchemy plan` (execStack with dryRun) so
+      // Plan.make behaves identically to the CLI plan — parameterized by
+      // stage so the dashboard can re-evaluate the stack for any stage.
+      const servicesFor = (stg: string) =>
+        Layer.mergeAll(
+          Layer.effect(
+            AlchemyContext,
+            AlchemyContext.pipe(
+              Effect.map((ctx) => ({ ...ctx, dev: false, adopt: false })),
+            ),
+          ),
+          Layer.succeed(AdoptPolicy, false),
+          Layer.succeed(ArtifactStore, createArtifactStore()),
+          Layer.succeed(AuthProviders, authProviders),
+          ConfigProvider.layer(configProvider),
+          Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+          Layer.succeed(Stage, stg),
+        );
+
+      /**
+       * Re-run the user's stack effect under `Stage = stg` and plan it.
+       * Physical names, providers, and the compiled graph are functions of
+       * the stage, so a stage switch is a full re-evaluation — this is what
+       * lets the dashboard preview a stage that has never been deployed.
+       */
+      const planForStage = (stg: string) =>
+        Effect.gen(function* () {
+          const stk = yield* stackEffect;
+          return yield* Plan.make(stk, { force: false }).pipe(
+            Effect.map(toPlanJson),
+            Effect.provide(stk.services),
+          );
+        }).pipe(
+          Effect.provide(servicesFor(stg)),
+          Effect.catchCause((cause) =>
+            Effect.succeed(unavailablePlan(Cause.pretty(cause))),
+          ),
+          // ambient is Context<never> type-wise but carries the CLI's full
+          // service map at runtime; the remaining requirements are all
+          // satisfied from it.
+          Effect.provideContext(ambient),
+        ) as Effect.Effect<import("../../Dashboard/PlanJson.ts").DashboardPlan>;
 
       yield* Effect.gen(function* () {
         const stack = yield* stackEffect;
         yield* Effect.gen(function* () {
           const state = yield* yield* State.State;
 
-          // Provided with the current context, so the server can run it
-          // per-request without re-threading services.
-          const computePlan = Effect.gen(function* () {
-            const plan = yield* Plan.make(stack, { force: false });
-            return toPlanJson(plan);
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.succeed(unavailablePlan(Cause.pretty(cause))),
-            ),
-            Effect.provideContext(yield* Effect.context<State.State>()),
-          );
-
           const address = yield* Dashboard.serve({
             state,
             stack: stackEffect.stackName,
             stage,
-            plan: computePlan,
+            plan: planForStage,
           });
 
           const url = address.replace("0.0.0.0", "127.0.0.1");
@@ -140,7 +159,7 @@ export const dashboardCommand = Command.make(
           Effect.provide(stack.services),
           Effect.provide(httpServer(port)),
         );
-      }).pipe(Effect.provide(services), Effect.scoped);
+      }).pipe(Effect.provide(servicesFor(stage)), Effect.scoped);
     }),
   ),
 );

@@ -13,6 +13,7 @@ import { TopBar, type View } from "./ui/TopBar.tsx";
 
 export function App() {
   const [meta, setMeta] = useState<DashboardMeta>();
+  const [stageOverride, setStageOverride] = useState<string>();
   const [graph, setGraph] = useState<DashboardGraph>();
   const [plan, setPlan] = useState<DashboardPlan>();
   const [registry, setRegistry] = useState<UIRegistry>();
@@ -21,32 +22,42 @@ export function App() {
   const [view, setView] = useState<View>("canvas");
   const [query, setQuery] = useState("");
 
+  const stage = stageOverride ?? meta?.stage;
+
   useEffect(() => {
-    Promise.all([fetchMeta(), fetchGraph(), loadRegistry()])
-      .then(([meta, graph, registry]) => {
+    Promise.all([fetchMeta(), loadRegistry()])
+      .then(([meta, registry]) => {
         setMeta(meta);
-        setGraph(graph);
         setRegistry(registry);
       })
       .catch((e) => setError(String(e)));
-    // the plan can take a while (it diffs the whole stack) and can be
-    // unavailable (no credentials) — load it independently, best-effort
-    fetchPlan()
+  }, []);
+
+  // graph + plan follow the selected stage; the plan is loaded
+  // independently and best-effort (it can take a while — the server
+  // re-evaluates the whole stack for the stage — and can be unavailable)
+  const refresh = useCallback(() => {
+    if (!stage) {
+      return;
+    }
+    fetchGraph(stage)
+      .then(setGraph)
+      .catch((e) => setError(String(e)));
+    fetchPlan(stage)
       .then(setPlan)
       .catch(() => undefined);
-  }, []);
+  }, [stage]);
+
+  useEffect(() => {
+    setGraph(undefined);
+    setPlan(undefined);
+    setSelected(undefined);
+    refresh();
+  }, [refresh]);
 
   // live apply stream: while a deploy is running, its plan drives the
   // annotations and node statuses update in real time; on completion the
   // settled state + plan are refetched
-  const refresh = useCallback(() => {
-    fetchGraph()
-      .then(setGraph)
-      .catch(() => undefined);
-    fetchPlan()
-      .then(setPlan)
-      .catch(() => undefined);
-  }, []);
   const live = useApplyStream(refresh);
 
   const effectivePlan = live && !live.done ? live.plan : plan;
@@ -99,7 +110,7 @@ export function App() {
       </Center>
     );
   }
-  if (!meta || !filtered || !registry) {
+  if (!meta || !filtered || !registry || !stage) {
     return (
       <Center>
         <p className="text-sm text-zinc-500">Loading stack…</p>
@@ -107,12 +118,15 @@ export function App() {
     );
   }
 
+  const effectiveMeta = { ...meta, stage };
   const selectedNode = filtered.nodes.find((n) => n.fqn === selected);
 
   return (
     <div className="flex h-screen flex-col">
       <TopBar
-        meta={meta}
+        meta={effectiveMeta}
+        stage={stage}
+        onStage={setStageOverride}
         plan={plan}
         view={view}
         onView={setView}
@@ -125,7 +139,7 @@ export function App() {
           {filtered.nodes.length === 0 ? (
             <Center>
               <p className="text-sm text-zinc-500">
-                No resources in {meta.stack}/{meta.stage}
+                No resources in {meta.stack}/{stage}
               </p>
               <p className="mt-2 text-[12px] text-zinc-600">
                 Deploy the stack first: <code>bun alchemy deploy</code>
@@ -135,7 +149,7 @@ export function App() {
             <Canvas
               graph={filtered}
               registry={registry}
-              meta={meta}
+              meta={effectiveMeta}
               selected={selected}
               onSelect={setSelected}
             />
@@ -143,7 +157,7 @@ export function App() {
             <ListView
               nodes={filtered.nodes}
               registry={registry}
-              meta={meta}
+              meta={effectiveMeta}
               selected={selected}
               onSelect={setSelected}
             />
@@ -153,7 +167,7 @@ export function App() {
           <Inspector
             node={selectedNode}
             registry={registry}
-            meta={meta}
+            meta={effectiveMeta}
             onClose={() => setSelected(undefined)}
           />
         )}
