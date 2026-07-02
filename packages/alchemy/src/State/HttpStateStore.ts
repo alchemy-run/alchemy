@@ -4,7 +4,19 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import { StateApi } from "./HttpStateApi.ts";
+import {
+  DeploymentInProgress,
+  DeploymentNotFound,
+  DeploymentTokenInvalid,
+  type DeploymentEvent,
+  type DeploymentRecord,
+  type DeploymentStore,
+} from "./Deployment.ts";
+import {
+  StateApi,
+  type DeploymentEventWire,
+  type DeploymentRecordWire,
+} from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
@@ -187,9 +199,308 @@ export const makeHttpStateStore = ({
             Effect.map(() => request.value),
             mapStateStoreError,
           ),
+      getAll: (request) =>
+        state
+          .getAllStates({
+            params: { stack: request.stack, stage: request.stage },
+          })
+          .pipe(
+            Effect.map((all) => {
+              const map = new Map<string, PersistedState>();
+              for (const [fqn, value] of Object.entries(
+                (all ?? {}) as Record<string, unknown>,
+              )) {
+                map.set(fqn, reviveStateRecursive(value) as ResourceState);
+              }
+              return map as ReadonlyMap<string, PersistedState>;
+            }),
+            mapStateStoreError,
+          ),
+      // Deployment history. Every op goes through `retryTransient`, which
+      // blindly retries transport errors, 404s (worker route propagation)
+      // and 5xx. That blanket policy is safe here ONLY because:
+      //   - `appendEvents` is seq-idempotent server-side (INSERT OR
+      //     IGNORE), so a replayed batch never double-appends;
+      //   - `end` / `heartbeat` are idempotent by contract;
+      //   - `begin` failing DeploymentInProgress decodes to a *typed*
+      //     (non-HttpClientError) failure, so `isTransient` never retries
+      //     it — it passes through to the engine untouched;
+      //   - a real DeploymentNotFound travels as 410 (not 404), so it is
+      //     never mistaken for a propagation blip.
+      deployments: {
+        begin: (request) =>
+          state
+            .beginDeployment({
+              params: { stack: request.stack, stage: request.stage },
+              payload: { meta: request.meta, ttlMillis: request.ttlMillis },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((r) => ({ version: r.version, token: r.token })),
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentInProgress | StateStoreError
+                > =>
+                  error._tag === "DeploymentInProgress"
+                    ? Effect.fail(
+                        new DeploymentInProgress({
+                          stack: request.stack,
+                          stage: request.stage,
+                          holder: reviveDeploymentRecord(error.holder),
+                        }),
+                      )
+                    : failStateStore(error),
+              ),
+            ),
+        appendEvents: (request) =>
+          state
+            .appendDeploymentEvents({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              payload: { token: request.token, events: request.events },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((r) => ({ ackedSeq: r.ackedSeq })),
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentTokenInvalid | DeploymentNotFound | StateStoreError
+                > =>
+                  error._tag === "DeploymentTokenInvalid"
+                    ? Effect.fail(
+                        new DeploymentTokenInvalid({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : error._tag === "DeploymentNotFound"
+                      ? Effect.fail(
+                          new DeploymentNotFound({
+                            stack: error.stack,
+                            stage: error.stage,
+                            version: error.version,
+                          }),
+                        )
+                      : failStateStore(error),
+              ),
+            ),
+        heartbeat: (request) =>
+          state
+            .heartbeatDeployment({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              payload: { token: request.token },
+            })
+            .pipe(
+              retryTransient,
+              Effect.asVoid,
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentTokenInvalid | DeploymentNotFound | StateStoreError
+                > =>
+                  error._tag === "DeploymentTokenInvalid"
+                    ? Effect.fail(
+                        new DeploymentTokenInvalid({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : error._tag === "DeploymentNotFound"
+                      ? Effect.fail(
+                          new DeploymentNotFound({
+                            stack: error.stack,
+                            stage: error.stage,
+                            version: error.version,
+                          }),
+                        )
+                      : failStateStore(error),
+              ),
+            ),
+        end: (request) =>
+          state
+            .endDeployment({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              payload: {
+                token: request.token,
+                outcome: request.outcome,
+                summary: request.summary,
+              },
+            })
+            .pipe(
+              retryTransient,
+              Effect.asVoid,
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentTokenInvalid | DeploymentNotFound | StateStoreError
+                > =>
+                  error._tag === "DeploymentTokenInvalid"
+                    ? Effect.fail(
+                        new DeploymentTokenInvalid({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : error._tag === "DeploymentNotFound"
+                      ? Effect.fail(
+                          new DeploymentNotFound({
+                            stack: error.stack,
+                            stage: error.stage,
+                            version: error.version,
+                          }),
+                        )
+                      : failStateStore(error),
+              ),
+            ),
+        list: (request) =>
+          state
+            .listDeployments({
+              params: { stack: request.stack, stage: request.stage },
+              query: { before: request.before, limit: request.limit },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((records) => records.map(reviveDeploymentRecord)),
+              Effect.catch((error) => failStateStore(error)),
+            ),
+        get: (request) =>
+          state
+            .getDeployment({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((record) =>
+                record == null ? undefined : reviveDeploymentRecord(record),
+              ),
+              Effect.catch((error) => failStateStore(error)),
+            ),
+        readEvents: (request) =>
+          state
+            .readDeploymentEvents({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              query: { fromSeq: request.fromSeq },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((events) => events.map(reviveDeploymentEvent)),
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<never, DeploymentNotFound | StateStoreError> =>
+                  error._tag === "DeploymentNotFound"
+                    ? Effect.fail(
+                        new DeploymentNotFound({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : failStateStore(error),
+              ),
+            ),
+      } satisfies DeploymentStore,
     };
     return service;
   });
+
+/** Fold any residual client failure into a {@link StateStoreError}. */
+const failStateStore = (e: unknown) =>
+  Effect.fail(
+    new StateStoreError({
+      message:
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e !== null && "_tag" in e
+            ? `${(e as { _tag: string })._tag}${
+                "message" in e ? `: ${(e as { message: unknown }).message}` : ""
+              }`
+            : String(e),
+      cause: e instanceof Error ? e : undefined,
+    }),
+  );
+
+/** Rebuild a mutable {@link DeploymentRecord} from its wire shape. */
+const reviveDeploymentRecord = (
+  wire: typeof DeploymentRecordWire.Type,
+): DeploymentRecord => {
+  const record: DeploymentRecord = {
+    stack: wire.stack,
+    stage: wire.stage,
+    version: wire.version,
+    meta: {
+      command: wire.meta.command,
+    },
+    startedAt: wire.startedAt,
+    heartbeatAt: wire.heartbeatAt,
+  };
+  if (wire.meta.initiator !== undefined) {
+    record.meta.initiator = { ...wire.meta.initiator };
+  }
+  if (wire.meta.alchemyVersion !== undefined) {
+    record.meta.alchemyVersion = wire.meta.alchemyVersion;
+  }
+  if (wire.meta.gitCommit !== undefined) {
+    record.meta.gitCommit = wire.meta.gitCommit;
+  }
+  if (wire.endedAt !== undefined) record.endedAt = wire.endedAt;
+  if (wire.outcome !== undefined) record.outcome = wire.outcome;
+  if (wire.summary !== undefined) {
+    record.summary = {};
+    if (wire.summary.counts !== undefined) {
+      record.summary.counts = { ...wire.summary.counts };
+    }
+    if (wire.summary.error !== undefined) {
+      record.summary.error = wire.summary.error;
+    }
+  }
+  return record;
+};
+
+/** Rebuild a mutable {@link DeploymentEvent} from its wire shape. */
+const reviveDeploymentEvent = (
+  wire: typeof DeploymentEventWire.Type,
+): DeploymentEvent => {
+  const event: DeploymentEvent = {
+    seq: wire.seq,
+    ts: wire.ts,
+    payload: wire.payload,
+  };
+  if (wire.fqn !== undefined) event.fqn = wire.fqn;
+  return event;
+};
 
 /**
  * Predicate over an `HttpClientError`-shaped failure that returns `true`

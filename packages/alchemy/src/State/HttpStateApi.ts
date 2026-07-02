@@ -174,6 +174,231 @@ export const SetStackOutput = HttpApiEndpoint.put(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Deployment history (DeploymentStore) wire contract
+// ---------------------------------------------------------------------------
+
+/** Wire shape of {@link DeploymentMeta}. */
+export const DeploymentMetaWire = Schema.Struct({
+  command: Schema.Literals(["deploy", "destroy"]),
+  initiator: Schema.optional(
+    Schema.Struct({
+      user: Schema.optional(Schema.String),
+      host: Schema.optional(Schema.String),
+      pid: Schema.optional(Schema.Number),
+    }),
+  ),
+  alchemyVersion: Schema.optional(Schema.String),
+  gitCommit: Schema.optional(Schema.String),
+});
+
+/** Wire shape of {@link DeploymentSummary}. */
+export const DeploymentSummaryWire = Schema.Struct({
+  counts: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
+  error: Schema.optional(Schema.String),
+});
+
+/**
+ * Wire shape of {@link DeploymentRecord}. Deliberately excludes the bearer
+ * token: records returned by list/get/read (and the `holder` carried by
+ * `DeploymentInProgress`) must never expose another deploy's capability.
+ */
+export const DeploymentRecordWire = Schema.Struct({
+  stack: Schema.String,
+  stage: Schema.String,
+  version: Schema.Number,
+  meta: DeploymentMetaWire,
+  startedAt: Schema.Number,
+  heartbeatAt: Schema.Number,
+  endedAt: Schema.optional(Schema.Number),
+  outcome: Schema.optional(
+    Schema.Literals([
+      "succeeded",
+      "failed",
+      "interrupted",
+      "abandoned",
+      "completed-late",
+    ]),
+  ),
+  summary: Schema.optional(DeploymentSummaryWire),
+});
+
+/** Wire shape of {@link DeploymentEvent} — the payload travels verbatim. */
+export const DeploymentEventWire = Schema.Struct({
+  seq: Schema.Number,
+  ts: Schema.Number,
+  fqn: Schema.optional(Schema.String),
+  payload: Schema.Unknown,
+});
+
+/**
+ * `begin` conflict: a live deployment already holds `(stack, stage)`.
+ * 409 Conflict — decoded by the client into the typed
+ * `DeploymentInProgress` error and passed through untouched (it must never
+ * be retried as if it were a transport blip).
+ */
+export const DeploymentInProgressWire = Schema.TaggedStruct(
+  "DeploymentInProgress",
+  {
+    stack: Schema.String,
+    stage: Schema.String,
+    holder: DeploymentRecordWire,
+  },
+).pipe(HttpApiSchema.status(409));
+
+/** The supplied token does not match the deployment's open token. 403. */
+export const DeploymentTokenInvalidWire = Schema.TaggedStruct(
+  "DeploymentTokenInvalid",
+  {
+    stack: Schema.String,
+    stage: Schema.String,
+    version: Schema.Number,
+  },
+).pipe(HttpApiSchema.status(403));
+
+/**
+ * The referenced deployment version does not exist. 410 Gone — deliberately
+ * NOT 404, so a real missing-version error can never be confused with the
+ * transient 404s a freshly-deployed worker serves while its route
+ * propagates (those must stay retryable at the transport layer).
+ */
+export const DeploymentNotFoundWire = Schema.TaggedStruct(
+  "DeploymentNotFound",
+  {
+    stack: Schema.String,
+    stage: Schema.String,
+    version: Schema.Number,
+  },
+).pipe(HttpApiSchema.status(410));
+
+/**
+ * Deployment data at rest failed decryption or its integrity check.
+ * 422 (not 5xx) so corrupt-at-rest data fails fast instead of being
+ * retried as a transient server error; the client folds it into
+ * `StateStoreError`.
+ */
+export const DeploymentCorruptWire = Schema.TaggedStruct("DeploymentCorrupt", {
+  message: Schema.String,
+}).pipe(HttpApiSchema.status(422));
+
+/** `(stack, stage, version)` path segments for a single deployment. */
+const DeploymentKey = Schema.Struct({
+  stack: Schema.String,
+  stage: Schema.String,
+  version: Schema.Number,
+});
+
+export const BeginDeployment = HttpApiEndpoint.post(
+  "beginDeployment",
+  "/state/stacks/:stack/stages/:stage/deployments",
+  {
+    params: StackStage,
+    payload: Schema.Struct({
+      meta: DeploymentMetaWire,
+      ttlMillis: Schema.optional(Schema.Number),
+    }).pipe(HttpApiSchema.asJson()),
+    success: Schema.Struct({
+      version: Schema.Number,
+      token: Schema.String,
+    }),
+    error: [DeploymentInProgressWire, DeploymentCorruptWire],
+  },
+);
+
+export const AppendDeploymentEvents = HttpApiEndpoint.post(
+  "appendDeploymentEvents",
+  "/state/stacks/:stack/stages/:stage/deployments/:version/events",
+  {
+    params: DeploymentKey,
+    payload: Schema.Struct({
+      token: Schema.String,
+      events: Schema.Array(DeploymentEventWire),
+    }).pipe(HttpApiSchema.asJson()),
+    success: Schema.Struct({ ackedSeq: Schema.Number }),
+    error: [DeploymentTokenInvalidWire, DeploymentNotFoundWire],
+  },
+);
+
+export const HeartbeatDeployment = HttpApiEndpoint.post(
+  "heartbeatDeployment",
+  "/state/stacks/:stack/stages/:stage/deployments/:version/heartbeat",
+  {
+    params: DeploymentKey,
+    payload: Schema.Struct({ token: Schema.String }).pipe(
+      HttpApiSchema.asJson(),
+    ),
+    success: HttpApiSchema.NoContent,
+    error: [DeploymentTokenInvalidWire, DeploymentNotFoundWire],
+  },
+);
+
+export const EndDeployment = HttpApiEndpoint.post(
+  "endDeployment",
+  "/state/stacks/:stack/stages/:stage/deployments/:version/end",
+  {
+    params: DeploymentKey,
+    payload: Schema.Struct({
+      token: Schema.String,
+      outcome: Schema.Literals(["succeeded", "failed", "interrupted"]),
+      summary: Schema.optional(DeploymentSummaryWire),
+    }).pipe(HttpApiSchema.asJson()),
+    success: HttpApiSchema.NoContent,
+    error: [DeploymentTokenInvalidWire, DeploymentNotFoundWire],
+  },
+);
+
+export const ListDeployments = HttpApiEndpoint.get(
+  "listDeployments",
+  "/state/stacks/:stack/stages/:stage/deployments",
+  {
+    params: StackStage,
+    query: Schema.Struct({
+      before: Schema.optional(Schema.Number),
+      limit: Schema.optional(Schema.Number),
+    }),
+    success: Schema.Array(DeploymentRecordWire),
+    error: DeploymentCorruptWire,
+  },
+);
+
+export const GetDeployment = HttpApiEndpoint.get(
+  "getDeployment",
+  "/state/stacks/:stack/stages/:stage/deployments/:version",
+  {
+    params: DeploymentKey,
+    success: Schema.UndefinedOr(DeploymentRecordWire),
+    error: DeploymentCorruptWire,
+  },
+);
+
+export const ReadDeploymentEvents = HttpApiEndpoint.get(
+  "readDeploymentEvents",
+  "/state/stacks/:stack/stages/:stage/deployments/:version/events",
+  {
+    params: DeploymentKey,
+    query: Schema.Struct({
+      fromSeq: Schema.optional(Schema.Number),
+    }),
+    success: Schema.Array(DeploymentEventWire),
+    error: [DeploymentNotFoundWire, DeploymentCorruptWire],
+  },
+);
+
+/**
+ * Batch read of every resource in a stage — `fqn -> PersistedState`.
+ * Kills the N+1 `list` + per-fqn `get` pattern for dashboard readers.
+ * Lives under `/all` (not `/resources/:fqn`) so it can never be shadowed
+ * by an fqn literally named "all".
+ */
+export const GetAllStates = HttpApiEndpoint.get(
+  "getAllStates",
+  "/state/stacks/:stack/stages/:stage/all",
+  {
+    params: StackStage,
+    success: ResourceStateSchema,
+  },
+);
+
 /**
  * Version of the State Store wire / behavioural contract.
  *
@@ -211,6 +436,14 @@ export class StateGroup extends HttpApiGroup.make("state")
   .add(DeleteStack)
   .add(GetStackOutput)
   .add(SetStackOutput)
+  .add(GetAllStates)
+  .add(BeginDeployment)
+  .add(AppendDeploymentEvents)
+  .add(HeartbeatDeployment)
+  .add(EndDeployment)
+  .add(ListDeployments)
+  .add(GetDeployment)
+  .add(ReadDeploymentEvents)
   .middleware(StateAuth) {}
 
 export class VersionGroup extends HttpApiGroup.make("version").add(

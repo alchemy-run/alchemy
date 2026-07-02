@@ -17,6 +17,7 @@ import {
 } from "../../State/State.ts";
 import { encodeState, reviveState } from "../../State/StateEncoding.ts";
 import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
+import { makeS3DeploymentStore } from "./Deployments.ts";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
 import * as Endpoint from "../Endpoint.ts";
@@ -35,6 +36,26 @@ const OUTPUT_FILE = "__stack_output__.json";
 
 /** Maximum number of keys S3 accepts in a single DeleteObjects call. */
 const DELETE_BATCH_SIZE = 1000;
+
+/**
+ * Reduce raw stage-prefixed keys to committed resource state files.
+ * Excludes:
+ *  - the `__stack_output__.json` bookkeeping file — `decodeFqn` replaces
+ *    `__` with `/`, which would turn the literal name `__stack_output__`
+ *    into `/stack_output/` and slip past a bare-name filter, leaving the
+ *    engine to look up a non-existent resource;
+ *  - anything in a subdirectory — resource objects live flat under the
+ *    stage prefix, so any `/` marks bookkeeping such as the reserved
+ *    `.deployments/` history tree;
+ *  - any non-`.json` key.
+ */
+const resourceFiles = (keys: readonly string[], keyPrefix: string): string[] =>
+  keys
+    .map((key) => key.slice(keyPrefix.length))
+    .filter(
+      (file) =>
+        file !== OUTPUT_FILE && file.endsWith(".json") && !file.includes("/"),
+    );
 
 export interface S3StateOptions {
   /**
@@ -321,17 +342,39 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       list: (request) =>
         run((bucket) => listKeys(bucket, stagePrefix(request))).pipe(
           Effect.map((keys) =>
-            keys
-              .map((key) => key.slice(stagePrefix(request).length))
-              // Filter the bookkeeping file before decoding — `decodeFqn`
-              // replaces `__` with `/`, which would turn the literal name
-              // `__stack_output__` into `/stack_output/` and slip past
-              // the filter, leaving the engine to look up a non-existent
-              // resource.
-              .filter((file) => file !== OUTPUT_FILE && file.endsWith(".json"))
-              .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
+            resourceFiles(keys, stagePrefix(request)).map((file) =>
+              decodeFqn(file.replace(/\.json$/, "")),
+            ),
           ),
         ),
+      getAll: (request) =>
+        run((bucket) =>
+          Effect.gen(function* () {
+            const keyPrefix = stagePrefix(request);
+            const files = resourceFiles(
+              yield* listKeys(bucket, keyPrefix),
+              keyPrefix,
+            );
+            const entries = yield* Effect.all(
+              files.map((file) =>
+                readJson<PersistedState>(bucket, `${keyPrefix}${file}`).pipe(
+                  Effect.map(
+                    (value) =>
+                      [decodeFqn(file.replace(/\.json$/, "")), value] as const,
+                  ),
+                ),
+              ),
+              { concurrency: 8 },
+            );
+            return new Map(
+              entries.filter(
+                (entry): entry is [string, PersistedState] =>
+                  entry[1] !== undefined,
+              ),
+            ) as ReadonlyMap<string, PersistedState>;
+          }),
+        ),
+      deployments: makeS3DeploymentStore({ bucket, context, stagePrefix }),
       getOutput: (request) =>
         run((bucket) => readJson(bucket, outputKey(request))),
       setOutput: (request) =>

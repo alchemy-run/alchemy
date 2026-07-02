@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { ActionState } from "./ActionState.ts";
+import type { DeploymentStore } from "./Deployment.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 
 /**
@@ -132,4 +133,28 @@ export interface StateService {
     stage: string;
     value: unknown;
   }): Effect.Effect<unknown, StateStoreError, never>;
+  /**
+   * Read every resource in a stack/stage in one call.
+   *
+   * Optional (feature-detected): the dashboard and other batch readers use
+   * this to avoid the N+1 `list` + per-fqn `get` pattern; when absent,
+   * callers fall back to that pattern. All in-repo backends implement it.
+   */
+  getAll?(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<
+    ReadonlyMap<string, PersistedState>,
+    StateStoreError,
+    never
+  >;
+  /**
+   * Deployment history (versioned journal of every deploy/destroy).
+   *
+   * Optional (feature-detected): older or third-party state stores may not
+   * implement it, in which case the engine skips journaling and the
+   * dashboard's history views are unavailable. See {@link DeploymentStore}
+   * for the semantics every implementation must uphold.
+   */
+  deployments?: DeploymentStore;
 }
