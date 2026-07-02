@@ -10,7 +10,7 @@ import {
   type Edge,
 } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardGraph, DashboardMeta } from "../types.ts";
 import {
   NODE_HEIGHT,
@@ -130,29 +130,63 @@ function CanvasInner({
 
   const visualEdges = useMemo(() => mergeEdges(graph), [graph]);
 
+  // Layout (and later, viewport fitting) must react to STRUCTURE changes
+  // only. During a live apply every status/note event produces a new graph
+  // object; re-running ELK + fitView per event makes the whole scene
+  // flicker and jump. The structure key captures the node/edge sets.
+  const structureKey = useMemo(
+    () =>
+      [
+        graph.nodes
+          .map((n) => n.fqn)
+          .sort()
+          .join(","),
+        visualEdges
+          .map((e) => `${e.source}>${e.target}:${e.binding ? "b" : "d"}`)
+          .sort()
+          .join(","),
+      ].join("|"),
+    [graph, visualEdges],
+  );
+
+  const latest = useRef({ graph, visualEdges });
+  latest.current = { graph, visualEdges };
+
   useEffect(() => {
     let cancelled = false;
-    layout(graph, visualEdges).then((p) => {
+    layout(latest.current.graph, latest.current.visualEdges).then((p) => {
       if (!cancelled) {
-        setPositions(p);
+        // keep previous coordinates for nodes ELK didn't place (shouldn't
+        // happen, but never blank out a node that was already on screen)
+        setPositions((prev) => {
+          const next = new Map(prev);
+          for (const [fqn, xy] of p) {
+            next.set(fqn, xy);
+          }
+          return next;
+        });
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [graph, visualEdges]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structureKey]);
 
-  // fitView on mount sees every node at (0,0) — ELK positions arrive async,
-  // so re-fit once the real layout lands (and on subsequent re-layouts).
+  // Fit the viewport once per structure — when the layout for a new node
+  // set lands — never on data-only updates (statuses, notes, badges).
+  const fittedKey = useRef<string>();
   useEffect(() => {
-    if (positions.size > 0) {
-      // next frame, after React Flow has measured the repositioned nodes
-      const frame = requestAnimationFrame(() => {
-        void fitView(FIT_VIEW);
-      });
-      return () => cancelAnimationFrame(frame);
+    if (positions.size === 0 || fittedKey.current === structureKey) {
+      return;
     }
-  }, [positions, fitView]);
+    fittedKey.current = structureKey;
+    // next frame, after React Flow has measured the repositioned nodes
+    const frame = requestAnimationFrame(() => {
+      void fitView(FIT_VIEW);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [positions, structureKey, fitView]);
 
   const nodes = useMemo<CanvasNode[]>(
     () =>
