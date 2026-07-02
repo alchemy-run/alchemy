@@ -23,10 +23,18 @@ import {
 } from "../../Auth/Env.ts";
 import type { StackProviderMetadata } from "../../Provider.ts";
 import * as Clank from "../../Util/Clank.ts";
+import * as CloudflareCredentials from "../Credentials.ts";
+import {
+  buildTokenPolicies,
+  fetchLivePermissionGroups,
+  mintToken,
+  resolveRequiredGroups,
+} from "./CreateToken.ts";
 import * as OAuthClient from "./OAuthClient.ts";
 import {
   collectCloudflareRequirements,
   suggestOAuthScopes,
+  type CloudflareRequirements,
 } from "./Requirements.ts";
 
 const options: Array<{
@@ -53,7 +61,17 @@ const options: Array<{
 
 export type CloudflareAuthConfig =
   | { method: "env" }
-  | { method: "stored"; credentialType: "apiToken" }
+  | {
+      method: "stored";
+      credentialType: "apiToken";
+      /**
+       * Permission-group ids the token was minted with (present when the
+       * token was created via `alchemy login --configure`'s scoped-token
+       * flow). Lets deploy preflight diff required-vs-granted for API-token
+       * profiles the same way it does for OAuth scopes.
+       */
+      permissionGroupIds?: string[];
+    }
   | { method: "stored"; credentialType: "apiKey" }
   | { method: "oauth"; scopes: string[]; accountId: string };
 
@@ -131,6 +149,43 @@ const selectAccount = (accessToken: string) =>
       })),
     }).pipe(retryOnce);
   }).pipe((e) => withOAuthCredentials(accessToken, e));
+
+/**
+ * List accounts with Global API Key credentials and pick one — the mint flow
+ * analogue of {@link selectAccount} (which authenticates with an OAuth token).
+ */
+const selectAccountWithApiKey = (auth: { apiKey: string; email: string }) =>
+  Effect.gen(function* () {
+    const list = yield* cfAccounts.listAccounts;
+    const response = yield* list({});
+    const accounts = response.result;
+    if (accounts.length === 0) {
+      return yield* new AuthError({
+        message: "Cloudflare: no accounts found for this credential.",
+      });
+    }
+    if (accounts.length === 1) {
+      const account = accounts[0]!;
+      yield* Clank.info(
+        `Cloudflare: using account: ${account.name} (${account.id})`,
+      );
+      return account.id;
+    }
+    return yield* Clank.select({
+      message: "Select a Cloudflare account",
+      options: accounts.map((a) => ({
+        value: a.id,
+        label: a.name,
+        hint: a.id,
+      })),
+    }).pipe(retryOnce);
+  }).pipe(
+    Effect.provideService(
+      CloudflareCredentials.Credentials,
+      Effect.succeed(CfCredentialsModule.apiKeyCredentials(auth)),
+    ),
+    Effect.provide(FetchHttpClient.layer),
+  );
 
 const promptAccountId = () =>
   getEnv("CLOUDFLARE_ACCOUNT_ID").pipe(
@@ -234,7 +289,110 @@ export const CloudflareAuth = AuthProviderLayer<
         return credentials;
       });
 
-    const loginStored = Effect.fn(function* (profileName: string) {
+    /**
+     * Mint a token scoped to exactly the permission groups the stack's
+     * resources require (from provider metadata) and store it as the
+     * profile's API-token credential. Authenticates the mint with the
+     * account's Global API Key — Cloudflare only mints a token whose
+     * permissions the authenticating credential can grant, and OAuth/scoped
+     * tokens silently produce a token with zero permissions. The key is used
+     * only for the mint and is never stored.
+     */
+    const mintStackToken = Effect.fn(function* (
+      profileName: string,
+      requirements: CloudflareRequirements,
+    ) {
+      yield* Clank.info(
+        "Minting uses your Global API Key (bottom of " +
+          "https://dash.cloudflare.com/profile/api-tokens). It is only used " +
+          "to create the token and is never stored.",
+      );
+      const envApiKey = yield* getEnv("CLOUDFLARE_API_KEY");
+      const apiKey =
+        envApiKey ??
+        (yield* Clank.password({
+          message: "Cloudflare Global API Key",
+          validate: (v) => (v.trim().length === 0 ? "Required" : undefined),
+        }).pipe(retryOnce));
+      const envEmail = yield* getEnv("CLOUDFLARE_EMAIL");
+      const email =
+        envEmail ??
+        (yield* Clank.text({
+          message: "Cloudflare account email",
+          validate: (v) => (v.trim().length === 0 ? "Required" : undefined),
+        }).pipe(retryOnce));
+
+      const accountId = yield* selectAccountWithApiKey({ apiKey, email });
+
+      const tokenName = yield* Clank.text({
+        message: "Token name",
+        placeholder: "alchemy",
+        defaultValue: "alchemy",
+      }).pipe(retryOnce);
+
+      const liveGroups = yield* fetchLivePermissionGroups({
+        apiKey,
+        email,
+      }).pipe(Effect.provide(FetchHttpClient.layer));
+      const { selected, missing } = resolveRequiredGroups(
+        requirements.permissionGroups,
+        liveGroups,
+      );
+      if (missing.length > 0) {
+        yield* Clank.warn(
+          "Some permission groups from the stack's metadata are not " +
+            `available to this credential and will be omitted:\n${missing
+              .map((m) => `  - ${m}`)
+              .join("\n")}`,
+        );
+      }
+      const policies = buildTokenPolicies([accountId], selected);
+      if (policies.length === 0) {
+        return yield* new AuthError({
+          message:
+            "Cloudflare: no permission groups resolved for this stack; cannot create a token.",
+        });
+      }
+
+      const minted = yield* mintToken({
+        auth: { apiKey, email },
+        name: tokenName,
+        policies,
+      }).pipe(Effect.provide(FetchHttpClient.layer));
+      if (!minted.value) {
+        return yield* new AuthError({
+          message: "Cloudflare did not return a token value. Try again.",
+        });
+      }
+      if (minted.granted === 0) {
+        yield* Clank.warn(
+          "Cloudflare granted 0 permissions. A token can only carry " +
+            "permissions the authenticating user already holds — check that " +
+            "the Global API Key's user is a Super Administrator on the " +
+            "selected account.",
+        );
+      }
+
+      yield* store.write<CloudflareStoredCredentials>(
+        profileName,
+        "cf-stored",
+        { type: "apiToken", apiToken: minted.value, accountId },
+      );
+      yield* Clank.success(
+        `Cloudflare: created token "${minted.name ?? tokenName}" with ` +
+          `${minted.granted} permission group(s) and saved credentials.`,
+      );
+      return {
+        method: "stored" as const,
+        credentialType: "apiToken" as const,
+        permissionGroupIds: selected.map((g) => g.id),
+      };
+    });
+
+    const loginStored = Effect.fn(function* (
+      profileName: string,
+      ctx: ConfigureContext,
+    ) {
       const credentialType = yield* Clank.select({
         message: "Cloudflare credential type",
         options: [
@@ -250,6 +408,34 @@ export const CloudflareAuth = AuthProviderLayer<
       return yield* Match.value(credentialType).pipe(
         Match.when("apiToken", () =>
           Effect.gen(function* () {
+            // When the stack compiled at configure time we know exactly which
+            // permission groups it needs — offer to mint that token here
+            // instead of making the user click through the dashboard.
+            if (ctx.providerMetadata?.used !== undefined) {
+              const requirements = collectCloudflareRequirements(
+                ctx.providerMetadata,
+              );
+              if (requirements.permissionGroups.size > 0) {
+                const source = yield* Clank.select({
+                  message: "Cloudflare API Token",
+                  options: [
+                    {
+                      value: "create" as const,
+                      label: `Create a token scoped to this stack (${requirements.permissionGroups.size} permission groups)`,
+                      hint: "mints with your Global API Key; only the token is stored",
+                    },
+                    {
+                      value: "paste" as const,
+                      label: "Paste an existing token",
+                    },
+                  ],
+                }).pipe(retryOnce);
+                if (source === "create") {
+                  return yield* mintStackToken(profileName, requirements);
+                }
+              }
+            }
+
             const apiToken = yield* Clank.password({
               message: "Cloudflare API Token",
               validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -331,7 +517,7 @@ export const CloudflareAuth = AuthProviderLayer<
           Match.value(method).pipe(
             Match.when("env", () => Effect.succeed({ method: "env" as const })),
             Match.when("oauth", () => configureOAuth(profileName, ctx)),
-            Match.when("stored", () => loginStored(profileName)),
+            Match.when("stored", () => loginStored(profileName, ctx)),
             Match.exhaustive,
           ),
         ),
@@ -511,7 +697,12 @@ export const CloudflareAuth = AuthProviderLayer<
               .read<CloudflareStoredCredentials>(profileName, "cf-stored")
               .pipe(
                 Effect.flatMap((creds) =>
-                  creds == null ? loginStored(profileName) : Effect.void,
+                  // `login` re-collects a missing credential outside the
+                  // configure flow — no stack metadata available, so the
+                  // create-token option is not offered here.
+                  creds == null
+                    ? loginStored(profileName, { ci: false })
+                    : Effect.void,
                 ),
               ),
           ),
@@ -634,8 +825,29 @@ export const CloudflareAuth = AuthProviderLayer<
             });
           }
         }
-        // Token/env methods: we don't know the token's grants (until
-        // create-token --from-stack records them), so nothing to diff yet.
+        if (
+          config.method === "stored" &&
+          config.credentialType === "apiToken" &&
+          config.permissionGroupIds !== undefined
+        ) {
+          // The token was minted by the scoped-token login flow, which
+          // recorded its permission-group ids — diff against what the stack
+          // now requires.
+          const granted = new Set(config.permissionGroupIds);
+          for (const [id, info] of requirements.permissionGroups) {
+            if (!granted.has(id)) {
+              findings.push({
+                severity: "warning",
+                missing: `${info.name} (${id})`,
+                resourceTypes: info.resourceTypes,
+                remediation:
+                  "Re-run `alchemy login --configure` to mint a token with the missing permission groups",
+              });
+            }
+          }
+        }
+        // Other token/env configs: the token's grants are unknown, so
+        // nothing to diff.
         return findings;
       });
 
