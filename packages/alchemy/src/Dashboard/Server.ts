@@ -1,0 +1,142 @@
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as HttpServer from "effect/unstable/http/HttpServer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { ActionState } from "../State/ActionState.ts";
+import type { ResourceState } from "../State/ResourceState.ts";
+import type { StateService } from "../State/State.ts";
+import { encodeState } from "../State/StateEncoding.ts";
+import { toGraph } from "./Graph.ts";
+
+export interface DashboardServerOptions {
+  state: StateService;
+  stack: string;
+  stage: string;
+}
+
+/**
+ * Locate the prebuilt dashboard SPA (`@alchemy.run/dashboard/dist`).
+ * Overridable via `ALCHEMY_DASHBOARD_DIST` for development.
+ */
+const resolveDistDir = Effect.fn(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const override = process.env.ALCHEMY_DASHBOARD_DIST;
+  if (override) {
+    return override;
+  }
+  const resolved = yield* Effect.try(() =>
+    import.meta.resolve("@alchemy.run/dashboard/package.json"),
+  ).pipe(Effect.option);
+  if (resolved._tag === "Some") {
+    const pkgDir = path.dirname(new URL(resolved.value).pathname);
+    const dist = path.join(pkgDir, "dist");
+    if (yield* fs.exists(dist).pipe(Effect.orElseSucceed(() => false))) {
+      return dist;
+    }
+  }
+  return undefined;
+});
+
+const FALLBACK_HTML = `<!doctype html>
+<html><head><title>alchemy dashboard</title></head>
+<body style="font-family: ui-monospace, monospace; background: #0b0b0f; color: #e2e2e8; padding: 4rem;">
+<h1>alchemy dashboard</h1>
+<p>The dashboard UI bundle was not found (<code>@alchemy.run/dashboard/dist</code>).</p>
+<p>The JSON API is live — try <a style="color:#8f8fff" href="/api/graph">/api/graph</a>.</p>
+<p>To develop the UI, run <code>vite dev</code> in <code>packages/dashboard</code> with
+<code>ALCHEMY_DASHBOARD_API</code> pointed at this server.</p>
+</body></html>`;
+
+/**
+ * Read every persisted resource/action state for (stack, stage).
+ */
+const readStates = ({ state, stack, stage }: DashboardServerOptions) =>
+  Effect.gen(function* () {
+    const fqns = yield* state.list({ stack, stage });
+    const states = yield* Effect.forEach(
+      fqns,
+      (fqn) => state.get({ stack, stage, fqn }),
+      { concurrency: 16 },
+    );
+    return states.filter(
+      (s): s is ResourceState | ActionState => s !== undefined,
+    );
+  });
+
+/**
+ * Start the dashboard HTTP server: a small JSON API over the state store
+ * plus the static SPA bundle. Returns the formatted server address; serving
+ * continues for as long as the surrounding scope stays open.
+ */
+export const serve = Effect.fn(function* (options: DashboardServerOptions) {
+  const { state, stack, stage } = options;
+  const distDir = yield* resolveDistDir();
+  const path = yield* Path.Path;
+  const fs = yield* FileSystem.FileSystem;
+  const server = yield* HttpServer.HttpServer;
+
+  const handler = Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const url = new URL(request.url, "http://localhost");
+    const route = url.pathname;
+    const stg = url.searchParams.get("stage") ?? stage;
+
+    if (route === "/api/meta") {
+      const stages = yield* state
+        .listStages(stack)
+        .pipe(Effect.orElseSucceed(() => [stage] as const));
+      return yield* HttpServerResponse.json({ stack, stage, stages });
+    }
+    if (route === "/api/graph") {
+      const states = yield* readStates({ state, stack, stage: stg });
+      return yield* HttpServerResponse.json(toGraph(states));
+    }
+    if (route === "/api/resource") {
+      const fqn = url.searchParams.get("fqn");
+      if (!fqn) {
+        return HttpServerResponse.empty({ status: 400 });
+      }
+      const value = yield* state.get({ stack, stage: stg, fqn });
+      return value === undefined
+        ? HttpServerResponse.empty({ status: 404 })
+        : yield* HttpServerResponse.json(encodeState(value));
+    }
+    if (route === "/api/outputs") {
+      const output = yield* state
+        .getOutput({ stack, stage: stg })
+        .pipe(Effect.orElseSucceed(() => undefined));
+      return yield* HttpServerResponse.json(output ?? null);
+    }
+    if (route.startsWith("/api/")) {
+      return HttpServerResponse.empty({ status: 404 });
+    }
+
+    // static SPA
+    if (distDir === undefined) {
+      return HttpServerResponse.html(FALLBACK_HTML);
+    }
+    const rel = route === "/" ? "index.html" : route.slice(1);
+    const file = path.join(distDir, path.normalize(rel));
+    // prevent path traversal + SPA-fallback unknown routes to index.html
+    const exists =
+      file.startsWith(distDir) &&
+      (yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)));
+    return yield* HttpServerResponse.file(
+      exists ? file : path.join(distDir, "index.html"),
+    );
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Console.error(cause),
+        HttpServerResponse.empty({ status: 500 }),
+      ),
+    ),
+  );
+
+  yield* server.serve(handler);
+  return HttpServer.formatAddress(server.address);
+});

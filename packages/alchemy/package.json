@@ -44,6 +44,54 @@
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
     },
+    "./UI/UIProvider": {
+      "types": "./lib/UI/UIProvider.d.ts",
+      "bun": "./src/UI/UIProvider.ts",
+      "worker": "./src/UI/UIProvider.ts",
+      "import": "./lib/UI/UIProvider.js"
+    },
+    "./AWS/UI": {
+      "types": "./lib/AWS/UI.d.ts",
+      "bun": "./src/AWS/UI.ts",
+      "worker": "./src/AWS/UI.ts",
+      "import": "./lib/AWS/UI.js"
+    },
+    "./Cloudflare/UI": {
+      "types": "./lib/Cloudflare/UI.d.ts",
+      "bun": "./src/Cloudflare/UI.ts",
+      "worker": "./src/Cloudflare/UI.ts",
+      "import": "./lib/Cloudflare/UI.js"
+    },
+    "./GitHub/UI": {
+      "types": "./lib/GitHub/UI.d.ts",
+      "bun": "./src/GitHub/UI.ts",
+      "worker": "./src/GitHub/UI.ts",
+      "import": "./lib/GitHub/UI.js"
+    },
+    "./Neon/UI": {
+      "types": "./lib/Neon/UI.d.ts",
+      "bun": "./src/Neon/UI.ts",
+      "worker": "./src/Neon/UI.ts",
+      "import": "./lib/Neon/UI.js"
+    },
+    "./Planetscale/UI": {
+      "types": "./lib/Planetscale/UI.d.ts",
+      "bun": "./src/Planetscale/UI.ts",
+      "worker": "./src/Planetscale/UI.ts",
+      "import": "./lib/Planetscale/UI.js"
+    },
+    "./Axiom/UI": {
+      "types": "./lib/Axiom/UI.d.ts",
+      "bun": "./src/Axiom/UI.ts",
+      "worker": "./src/Axiom/UI.ts",
+      "import": "./lib/Axiom/UI.js"
+    },
+    "./Docker/UI": {
+      "types": "./lib/Docker/UI.d.ts",
+      "bun": "./src/Docker/UI.ts",
+      "worker": "./src/Docker/UI.ts",
+      "import": "./lib/Docker/UI.js"
+    },
     "./AI": {
       "types": "./lib/AI/index.d.ts",
       "bun": "./src/AI/index.ts",
@@ -348,6 +396,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/dashboard": "workspace:*",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
