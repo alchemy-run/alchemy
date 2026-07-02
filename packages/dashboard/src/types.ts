@@ -10,6 +10,8 @@ export interface DashboardNode {
   attrs?: Record<string, any>;
   bindings: { sid: string; data: any }[];
   downstream: string[];
+  /** client-side annotation from the plan (absent for noop) */
+  planAction?: PlanAction;
 }
 
 export interface DashboardEdge {
@@ -28,4 +30,26 @@ export interface DashboardMeta {
   stack: string;
   stage: string;
   stages: string[];
+}
+
+export type PlanAction = "create" | "update" | "replace" | "delete" | "noop";
+
+/** Mirrors packages/alchemy/src/Dashboard/PlanJson.ts */
+export interface DashboardPlanNode {
+  fqn: string;
+  logicalId: string;
+  type: string;
+  action: PlanAction;
+  deleteFirst?: boolean;
+  downstream: string[];
+  bindings: { sid: string; action: string }[];
+}
+
+export interface DashboardPlan {
+  available: boolean;
+  error?: string;
+  resources: Record<string, DashboardPlanNode>;
+  deletions: Record<string, DashboardPlanNode>;
+  actions: Record<string, { fqn: string; action: "run" | "noop" | "delete" }>;
+  cycleMembers: string[];
 }

@@ -1,21 +1,26 @@
 import { FlaskConical, Search } from "lucide-react";
-import type { DashboardMeta } from "../types.ts";
+import { planSummary } from "../plan.ts";
+import { PLAN_COLORS, PLAN_LABELS } from "../theme.ts";
+import type { DashboardMeta, DashboardPlan } from "../types.ts";
 
 export type View = "canvas" | "list";
 
 export function TopBar({
   meta,
+  plan,
   view,
   onView,
   query,
   onQuery,
 }: {
   meta: DashboardMeta;
+  plan?: DashboardPlan;
   view: View;
   onView: (view: View) => void;
   query: string;
   onQuery: (query: string) => void;
 }) {
+  const summary = planSummary(plan);
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#26262f] bg-[#101016] px-4">
       <FlaskConical size={16} className="text-indigo-400" />
@@ -25,6 +30,26 @@ export function TopBar({
       <span className="rounded-full border border-[#2a2a35] px-2.5 py-0.5 text-[11px] text-zinc-400">
         {meta.stage}
       </span>
+      {plan?.available &&
+        (summary.length === 0 ? (
+          <span className="rounded-full border border-[#2a2a35] px-2.5 py-0.5 text-[11px] text-emerald-400">
+            ✓ in sync
+          </span>
+        ) : (
+          summary.map(({ action, count }) => (
+            <span
+              key={action}
+              className="rounded-full px-2.5 py-0.5 text-[11px] font-medium"
+              style={{
+                color: PLAN_COLORS[action],
+                background: `${PLAN_COLORS[action]}1f`,
+              }}
+              title={`next deploy will ${action} ${count} resource${count > 1 ? "s" : ""}`}
+            >
+              {count} {PLAN_LABELS[action]?.slice(2) ?? action}
+            </span>
+          ))
+        ))}
 
       <div className="relative ml-4 flex-1 max-w-xs">
         <Search

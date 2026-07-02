@@ -3,6 +3,8 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import {
   CLOUD_COLORS,
   cloudOf,
+  PLAN_COLORS,
+  PLAN_LABELS,
   serviceOf,
   statusColor,
   statusInFlight,
@@ -34,13 +36,18 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
   const link = safeCall(() => ui?.link?.(ctx));
   const Card = ui?.Card;
 
+  const plan = node.planAction;
+  const planColor = plan ? PLAN_COLORS[plan] : undefined;
+
   return (
     <div
       className="rounded-xl border bg-[#15151c] px-3.5 py-2.5 transition-colors"
       style={{
         width: NODE_WIDTH,
-        borderColor: selected ? color : "#2a2a35",
+        borderColor: selected ? color : (planColor ?? "#2a2a35"),
+        borderStyle: node.status === "pending" ? "dashed" : "solid",
         boxShadow: selected ? `0 0 0 1px ${color}` : undefined,
+        opacity: plan === "delete" ? 0.75 : undefined,
       }}
     >
       <Handle
@@ -72,11 +79,21 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
       ) : link ? (
         <div className="mt-1 truncate text-[11px] text-indigo-400">{link}</div>
       ) : null}
-      {node.bindings.length > 0 && (
-        <span className="mt-1.5 inline-block rounded bg-indigo-500/15 px-1.5 py-px text-[10px] text-indigo-300">
-          {node.bindings.length} binding{node.bindings.length > 1 ? "s" : ""}
-        </span>
-      )}
+      <div className="flex gap-1">
+        {plan && (
+          <span
+            className="mt-1.5 inline-block rounded px-1.5 py-px text-[10px] font-medium"
+            style={{ color: planColor, background: `${planColor}26` }}
+          >
+            {PLAN_LABELS[plan]}
+          </span>
+        )}
+        {node.bindings.length > 0 && (
+          <span className="mt-1.5 inline-block rounded bg-indigo-500/15 px-1.5 py-px text-[10px] text-indigo-300">
+            {node.bindings.length} binding{node.bindings.length > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
       <Handle
         type="source"
         position={Position.Right}

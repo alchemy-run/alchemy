@@ -1,8 +1,9 @@
 import type { UIRegistry } from "alchemy/UI/UIProvider";
 import { useEffect, useMemo, useState } from "react";
-import { fetchGraph, fetchMeta } from "./api.ts";
+import { fetchGraph, fetchMeta, fetchPlan } from "./api.ts";
+import { mergePlan } from "./plan.ts";
 import { loadRegistry } from "./registry.ts";
-import type { DashboardGraph, DashboardMeta } from "./types.ts";
+import type { DashboardGraph, DashboardMeta, DashboardPlan } from "./types.ts";
 import { Canvas } from "./ui/Canvas.tsx";
 import { Inspector } from "./ui/Inspector.tsx";
 import { ListView } from "./ui/ListView.tsx";
@@ -11,6 +12,7 @@ import { TopBar, type View } from "./ui/TopBar.tsx";
 export function App() {
   const [meta, setMeta] = useState<DashboardMeta>();
   const [graph, setGraph] = useState<DashboardGraph>();
+  const [plan, setPlan] = useState<DashboardPlan>();
   const [registry, setRegistry] = useState<UIRegistry>();
   const [error, setError] = useState<string>();
   const [selected, setSelected] = useState<string>();
@@ -25,28 +27,38 @@ export function App() {
         setRegistry(registry);
       })
       .catch((e) => setError(String(e)));
+    // the plan can take a while (it diffs the whole stack) and can be
+    // unavailable (no credentials) — load it independently, best-effort
+    fetchPlan()
+      .then(setPlan)
+      .catch(() => undefined);
   }, []);
 
+  const merged = useMemo(
+    () => (graph ? mergePlan(graph, plan) : undefined),
+    [graph, plan],
+  );
+
   const filtered = useMemo(() => {
-    if (!graph) {
+    if (!merged) {
       return undefined;
     }
     if (!query.trim()) {
-      return graph;
+      return merged;
     }
     const q = query.toLowerCase();
-    const nodes = graph.nodes.filter(
+    const nodes = merged.nodes.filter(
       (n) =>
         n.fqn.toLowerCase().includes(q) || n.type.toLowerCase().includes(q),
     );
     const keep = new Set(nodes.map((n) => n.fqn));
     return {
       nodes,
-      edges: graph.edges.filter(
+      edges: merged.edges.filter(
         (e) => keep.has(e.source) && keep.has(e.target),
       ),
     };
-  }, [graph, query]);
+  }, [merged, query]);
 
   if (error) {
     return (
@@ -72,6 +84,7 @@ export function App() {
     <div className="flex h-screen flex-col">
       <TopBar
         meta={meta}
+        plan={plan}
         view={view}
         onView={setView}
         query={query}

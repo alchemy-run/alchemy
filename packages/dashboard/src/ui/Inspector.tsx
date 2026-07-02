@@ -1,7 +1,13 @@
 import type { UIFact, UIRegistry } from "alchemy/UI/UIProvider";
 import { ExternalLink, X } from "lucide-react";
 import { toCtx } from "../registry.ts";
-import { CLOUD_COLORS, cloudOf, statusColor, typeName } from "../theme.ts";
+import {
+  CLOUD_COLORS,
+  cloudOf,
+  PLAN_COLORS,
+  PLAN_LABELS,
+  statusColor,
+} from "../theme.ts";
 import type { DashboardMeta, DashboardNode } from "../types.ts";
 import { ResourceIcon } from "./Icon.tsx";
 
@@ -50,6 +56,23 @@ export function Inspector({
       </div>
 
       <div className="space-y-4 p-4">
+        {node.planAction && (
+          <div
+            className="rounded-lg border px-3 py-2 text-[12px]"
+            style={{
+              borderColor: `${PLAN_COLORS[node.planAction]}55`,
+              background: `${PLAN_COLORS[node.planAction]}14`,
+              color: PLAN_COLORS[node.planAction],
+            }}
+          >
+            Next deploy: {PLAN_LABELS[node.planAction] ?? node.planAction}
+            {node.status === "pending" &&
+              " — not deployed yet, defined in the stack file"}
+            {node.planAction === "delete" &&
+              node.status !== "pending" &&
+              " — no longer in the stack file (orphaned)"}
+          </div>
+        )}
         <section className="space-y-1.5">
           <Fact
             fact={{ label: "status", value: node.status }}

@@ -1,4 +1,4 @@
-import type { DashboardGraph, DashboardMeta } from "./types.ts";
+import type { DashboardGraph, DashboardMeta, DashboardPlan } from "./types.ts";
 
 const get = async <T>(path: string): Promise<T> => {
   const res = await fetch(path);
@@ -14,6 +14,8 @@ export const fetchGraph = (stage?: string) =>
   get<DashboardGraph>(
     stage ? `/api/graph?stage=${encodeURIComponent(stage)}` : "/api/graph",
   );
+
+export const fetchPlan = () => get<DashboardPlan>("/api/plan");
 
 export const fetchOutputs = (stage?: string) =>
   get<unknown>(

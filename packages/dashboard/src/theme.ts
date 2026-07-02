@@ -33,6 +33,20 @@ export const CATEGORY_ICONS: Record<UICategory, string> = {
   other: "box",
 };
 
+export const PLAN_COLORS: Record<string, string> = {
+  create: "#34d399",
+  update: "#fbbf24",
+  replace: "#c084fc",
+  delete: "#f87171",
+};
+
+export const PLAN_LABELS: Record<string, string> = {
+  create: "+ create",
+  update: "~ update",
+  replace: "↻ replace",
+  delete: "− delete",
+};
+
 export const statusColor = (status: string): string => {
   switch (status) {
     case "created":
