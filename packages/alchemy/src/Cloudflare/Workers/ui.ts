@@ -1,10 +1,80 @@
 import * as Layer from "effect/Layer";
+import * as UIProvider from "../../UI/UIProvider.ts";
+import type { AccountSetting } from "./AccountSetting.ts";
+import type { WorkerRoute } from "./Route.ts";
+import type { Subdomain } from "./Subdomain.ts";
+import type { Worker } from "./Worker.ts";
 
 /**
  * Dashboard UI providers for Cloudflare Workers resources.
  *
- * Implemented by the dashboard UI factory — see processes/Dashboard.md for
- * the UIProvider contract. Until then this is an empty layer so the
- * aggregators and the dashboard SPA compile.
+ * Browser-safe: only `effect/*` runtime imports; resource types are
+ * type-only so no Cloudflare SDK code reaches the dashboard bundle.
  */
-export const ui = (): Layer.Layer<never> => Layer.empty;
+export const WorkerUI = UIProvider.succeed<Worker>("Cloudflare.Worker", {
+  displayName: "Worker",
+  icon: "zap",
+  color: "#F6821F",
+  category: "compute",
+  summary: (ctx) => ctx.attrs?.workerName,
+  link: (ctx) => ctx.attrs?.url,
+  consoleUrl: (ctx) =>
+    ctx.attrs?.accountId === undefined || ctx.attrs.workerName === undefined
+      ? undefined
+      : `https://dash.cloudflare.com/${ctx.attrs.accountId}/workers/services/view/${ctx.attrs.workerName}`,
+  facts: (ctx) => [
+    { label: "name", value: ctx.attrs?.workerName, copy: true },
+    {
+      label: "url",
+      value: ctx.attrs?.url,
+      href: ctx.attrs?.url,
+      copy: true,
+    },
+    { label: "namespace", value: ctx.attrs?.namespace },
+    {
+      label: "crons",
+      value: ctx.attrs?.crons?.length ? ctx.attrs.crons.join(", ") : undefined,
+      mono: true,
+    },
+    {
+      label: "domains",
+      value: ctx.attrs?.domains?.length
+        ? ctx.attrs.domains.join(", ")
+        : undefined,
+    },
+  ],
+});
+
+export const WorkerRouteUI = UIProvider.succeed<WorkerRoute>(
+  "Cloudflare.Workers.Route",
+  {
+    displayName: "Worker Route",
+    icon: "route",
+    color: "#F6821F",
+    category: "network",
+    summary: (ctx) => ctx.props?.pattern,
+  },
+);
+
+export const SubdomainUI = UIProvider.succeed<Subdomain>(
+  "Cloudflare.Workers.Subdomain",
+  {
+    displayName: "Workers Subdomain",
+    icon: "globe",
+    color: "#F6821F",
+    category: "dns",
+  },
+);
+
+export const AccountSettingUI = UIProvider.succeed<AccountSetting>(
+  "Cloudflare.Workers.AccountSetting",
+  {
+    displayName: "Workers Account Setting",
+    icon: "settings-2",
+    color: "#F6821F",
+    category: "config",
+  },
+);
+
+export const ui = () =>
+  Layer.mergeAll(WorkerUI, WorkerRouteUI, SubdomainUI, AccountSettingUI);
