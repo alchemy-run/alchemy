@@ -249,6 +249,16 @@ surfaces a lie, and repeats until green.
 
 A few mechanical choices mattered more than any prompt:
 
+**One workspace across two repos.** distilled is embedded in
+the alchemy repo as a git submodule and included in its bun
+workspaces, so the SDK and its consumer install together —
+one `bun install`, one consistent dependency graph, and
+`@distilled.cloud/cloudflare` resolves to the submodule
+sitting right there in the checkout. An agent patches the SDK
+and the resource that consumes it in the same working tree,
+and a wave's output lands as two PRs: one to alchemy-effect,
+one to distilled.
+
 **Regeneration is instantly visible.** Our vitest config adds
 the `bun` export condition, so tests resolve distilled from
 its TypeScript source rather than built output:
@@ -258,16 +268,10 @@ its TypeScript source rather than built output:
 externalConditions: ["bun", "node", "module-sync"],
 ```
 
-The moment a service regenerates, the next test run sees the
-new types — no build step between "patch the SDK" and "re-run
-the test". The flywheel's cycle time is the test's runtime.
-
-**One type-checker for the whole fleet.** `tsc -b` over the
-workspace is expensive; twelve agents running it concurrently
-thrashes the machine and races on incremental build state.
-Agents were banned from invoking the compiler at all — a
-coordinator runs one authoritative type-check at wave
-boundaries.
+No compile step after regenerating a service — the moment the
+generator writes `services/turnstile.ts`, the next test run
+sees the new types. The flywheel's cycle time is the test's
+runtime.
 
 **Never wait on a hang.** Every test invocation ran under a
 hard `timeout` kill, every retry was bounded, and polling for
