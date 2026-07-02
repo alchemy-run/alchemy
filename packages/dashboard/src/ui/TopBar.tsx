@@ -1,4 +1,4 @@
-import { FlaskConical, Search } from "lucide-react";
+import { FlaskConical, Search, X } from "lucide-react";
 import { planSummary } from "../plan.ts";
 import { PLAN_COLORS, PLAN_LABELS } from "../theme.ts";
 import type { DashboardMeta, DashboardPlan } from "../types.ts";
@@ -15,6 +15,8 @@ export function TopBar({
   onView,
   query,
   onQuery,
+  shown,
+  total,
 }: {
   meta: DashboardMeta;
   stage: string;
@@ -24,6 +26,9 @@ export function TopBar({
   onView: (view: View) => void;
   query: string;
   onQuery: (query: string) => void;
+  /** nodes visible after filtering / total nodes */
+  shown: number;
+  total: number;
 }) {
   const summary = planSummary(plan);
   return (
@@ -66,9 +71,31 @@ export function TopBar({
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           placeholder="Filter resources…"
-          className="w-full rounded-lg border border-[#2a2a35] bg-[#0b0b10] py-1.5 pl-8 pr-3 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500/50 focus:outline-none"
+          className={`w-full rounded-lg border bg-[#0b0b10] py-1.5 pl-8 pr-8 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none ${
+            query.trim()
+              ? "border-amber-500/60 focus:border-amber-400"
+              : "border-[#2a2a35] focus:border-indigo-500/50"
+          }`}
         />
+        {query.trim() && (
+          <button
+            onClick={() => onQuery("")}
+            title="Clear filter"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+          >
+            <X size={12} />
+          </button>
+        )}
       </div>
+      {query.trim() && (
+        <button
+          onClick={() => onQuery("")}
+          className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-400 hover:bg-amber-500/25"
+          title="Click to clear the filter"
+        >
+          filtered: {shown} of {total} shown ✕
+        </button>
+      )}
 
       <div className="ml-auto flex rounded-lg border border-[#2a2a35] p-0.5">
         {(["canvas", "list"] as const).map((v) => (
