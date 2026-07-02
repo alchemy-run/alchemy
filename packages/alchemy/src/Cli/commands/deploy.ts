@@ -1,6 +1,8 @@
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -16,8 +18,11 @@ import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CLI from "../../Cli/Cli.ts";
+import * as Discovery from "../../Dashboard/Discovery.ts";
+import * as Dashboard from "../../Dashboard/Launch.ts";
 import * as Plan from "../../Plan.ts";
 import { Stage } from "../../Stage.ts";
+import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
@@ -44,6 +49,7 @@ export const ExecStackOptions = Schema.Struct({
   destroy: Schema.optional(Schema.Boolean),
   dev: Schema.optional(Schema.Boolean),
   adopt: Schema.optional(Schema.Boolean),
+  ui: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
 export type ExecStackOptionsEncoded = typeof ExecStackOptions.Encoded;
@@ -57,12 +63,21 @@ const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.destroy": !!args.destroy,
   "alchemy.dev": !!args.dev,
   "alchemy.adopt": !!args.adopt,
+  "alchemy.ui": !!args.ui,
 });
 
 const adopt = Flag.boolean("adopt").pipe(
   Flag.withDescription(
     "Adopt pre-existing cloud resources that conflict with this stack instead of failing. " +
       "Useful for re-importing infrastructure into a fresh state store.",
+  ),
+  Flag.withDefault(false),
+);
+
+const ui = Flag.boolean("ui").pipe(
+  Flag.withDescription(
+    "Open the alchemy dashboard and stream this run into it. Requires the " +
+      "optional @alchemy.run/dashboard package.",
   ),
   Flag.withDefault(false),
 );
@@ -78,8 +93,53 @@ export const execStack = Effect.fn(function* ({
   destroy = false,
   dev = false,
   adopt = false,
+  ui = false,
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
+
+  // --ui: make sure the dashboard is up before any planning so the run
+  // streams into it from the first event (via the DashboardReporter tee).
+  // Reuse an already-running dashboard for this project; otherwise launch
+  // one in-process on a random port. Fails fast (with install
+  // instructions) when the optional @alchemy.run/dashboard peer is
+  // missing — before any cloud interaction.
+  let dashboardUrl: string | undefined;
+  if (ui) {
+    yield* Dashboard.requireDistDir();
+    const existing = yield* Discovery.discover().pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (existing !== undefined) {
+      dashboardUrl = existing.url;
+      yield* Clank.openUrl(existing.url).pipe(Effect.catch(() => Effect.void));
+    } else {
+      const ready = yield* Deferred.make<string>();
+      yield* Effect.forkScoped(
+        Dashboard.launchDashboard({
+          stackEffect,
+          stage,
+          envFile,
+          profile: profile ?? "default",
+          port: 0,
+          open: true,
+          ready,
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Console.error(`dashboard failed:\n${Cause.pretty(cause)}`),
+          ),
+        ),
+      );
+      dashboardUrl = yield* Deferred.await(ready).pipe(
+        Effect.timeout(Duration.seconds(30)),
+        Effect.orElseSucceed(() => undefined),
+      );
+      if (dashboardUrl === undefined) {
+        yield* Console.error(
+          "dashboard did not start in time; continuing without --ui",
+        );
+      }
+    }
+  }
 
   const services = Layer.mergeAll(
     Layer.effect(
@@ -178,6 +238,15 @@ export const execStack = Effect.fn(function* ({
         }
       }
     }).pipe(Effect.provide(stack.services));
+
+    // keep the in-process dashboard serving after the run so the settled
+    // graph can be inspected; Ctrl+C exits.
+    if (ui && !dev && dashboardUrl !== undefined) {
+      yield* Console.log(
+        `\ndashboard serving at ${dashboardUrl} — press Ctrl+C to exit`,
+      );
+      yield* Effect.never;
+    }
   }).pipe(Effect.provide(services));
 });
 
@@ -192,6 +261,7 @@ export const deployCommand = Command.make(
     yes,
     profile,
     adopt,
+    ui,
   },
   instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
@@ -205,6 +275,7 @@ export const destroyCommand = Command.make(
     stage,
     yes,
     profile,
+    ui,
   },
   instrumentCommand(
     "destroy",
@@ -224,6 +295,7 @@ export const planCommand = Command.make(
     envFile,
     stage,
     profile,
+    ui,
   },
   instrumentCommand(
     "plan",

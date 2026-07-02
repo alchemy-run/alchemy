@@ -433,6 +433,7 @@
     "ws": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/dashboard": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
@@ -443,6 +444,9 @@
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/dashboard": {
+      "optional": true
+    },
     "@effect/platform-node": {
       "optional": true
     },
