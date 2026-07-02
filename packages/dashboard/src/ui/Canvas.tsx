@@ -5,6 +5,8 @@ import {
   Controls,
   MarkerType,
   ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
   type Edge,
 } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
@@ -92,7 +94,23 @@ async function layout(
   return positions;
 }
 
-export function Canvas({
+const FIT_VIEW = { padding: 0.2, maxZoom: 1.25 };
+
+export function Canvas(props: {
+  graph: DashboardGraph;
+  registry: UIRegistry;
+  meta: DashboardMeta;
+  selected?: string;
+  onSelect: (fqn: string | undefined) => void;
+}) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function CanvasInner({
   graph,
   registry,
   meta,
@@ -108,6 +126,7 @@ export function Canvas({
   const [positions, setPositions] = useState<
     Map<string, { x: number; y: number }>
   >(new Map());
+  const { fitView } = useReactFlow();
 
   const visualEdges = useMemo(() => mergeEdges(graph), [graph]);
 
@@ -122,6 +141,18 @@ export function Canvas({
       cancelled = true;
     };
   }, [graph, visualEdges]);
+
+  // fitView on mount sees every node at (0,0) — ELK positions arrive async,
+  // so re-fit once the real layout lands (and on subsequent re-layouts).
+  useEffect(() => {
+    if (positions.size > 0) {
+      // next frame, after React Flow has measured the repositioned nodes
+      const frame = requestAnimationFrame(() => {
+        void fitView(FIT_VIEW);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [positions, fitView]);
 
   const nodes = useMemo<CanvasNode[]>(
     () =>
@@ -161,6 +192,7 @@ export function Canvas({
       edges={edges}
       nodeTypes={nodeTypes}
       fitView
+      fitViewOptions={FIT_VIEW}
       minZoom={0.2}
       proOptions={{ hideAttribution: true }}
       onNodeClick={(_, node) => onSelect(node.id)}
