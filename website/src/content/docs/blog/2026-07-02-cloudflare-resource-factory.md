@@ -85,7 +85,9 @@ turnstile.getWidget({ accountId, sitekey }).pipe(
 r2.listBucketDomainCustoms({ accountId, bucketName }).pipe(
   Effect.retry({
     while: (e) => e._tag === "NoSuchBucket",
-    schedule: r2BucketEndpointConsistencySchedule,
+    schedule: Schedule.exponential("100 millis").pipe(
+      Schedule.both(Schedule.recurs(5)),
+    ),
   }),
 );
 ```
