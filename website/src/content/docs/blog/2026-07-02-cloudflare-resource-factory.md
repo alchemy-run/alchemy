@@ -66,13 +66,39 @@ done; it compounds.
 
 ## One turn of the flywheel
 
-Here's a single turn, end to end, from the Turnstile service.
+Infrastructure-as-code is, on the inside, mostly disciplined
+error handling. Deletes must tolerate already-gone. Creates
+must absorb losing a race to a name that already exists. Reads
+must ride out eventual-consistency windows where the API
+briefly denies what it just did. That discipline is everywhere
+in Alchemy's lifecycle code, and it's typed — you catch a tag,
+or retry while a tag is observed; you never sniff a status
+code or match a message string:
 
-A lifecycle test deletes a widget, then reads it back to prove
-it's gone. The read fails — Cloudflare error code `10404`,
-which the spec doesn't declare, so it surfaces as an unmatched
-catch-all the resource isn't allowed to touch. The fix is a
-four-line patch in distilled:
+```typescript
+// idempotent delete: reading back an already-gone widget is success
+turnstile.getWidget({ accountId, sitekey }).pipe(
+  Effect.catchTag("WidgetNotFound", () => Effect.succeed(undefined)),
+);
+
+// fresh scoped tokens propagate eventually-consistently — ride out the blips
+snippets.listSnippets({ zoneId }).pipe(
+  Effect.retry({ while: (e) => e._tag === "Forbidden", schedule, times: 8 }),
+);
+```
+
+The agents write this code *first* — the reconciler, the
+idempotent delete, the test cases for every lifecycle
+operation — and then run it against the real API, where
+reality pushes back. A Turnstile lifecycle test deletes a
+widget, then reads it back to prove it's gone. The read fails
+with Cloudflare error code `10404`, which the spec doesn't
+declare — so the `catchTag` above doesn't even typecheck yet,
+because `WidgetNotFound` isn't in `getWidget`'s error union,
+and at runtime the failure surfaces as an unmatched catch-all
+the resource isn't allowed to touch. Either way it lands, the
+failure has exactly one permitted exit — a four-line patch in
+distilled:
 
 ```json
 // distilled/packages/cloudflare/patches/turnstile/getWidget.json
@@ -112,19 +138,18 @@ export class WidgetNotFound extends T.applyErrorMatchers(
 ) {}
 ```
 
-Now the resource handles it the only way it's allowed to —
-fully inferred, no casts, no status sniffing:
+Now the `catchTag` compiles — fully inferred, no casts — the
+test goes green, and the agent moves to the next lifecycle
+operation. Around the loop goes: reconcile, read, diff,
+delete, list, each operation's test cases forcing the next
+correction, until the whole resource is green against the
+live API. The resource is the product; the truthful SDK falls
+out as a byproduct.
 
-```typescript
-turnstile.getWidget({ accountId, sitekey }).pipe(
-  Effect.catchTag("WidgetNotFound", () => Effect.succeed(undefined)),
-);
-```
-
-And here's the part that compounds: that patch doesn't belong
-to the Turnstile resource, or to Alchemy. It belongs to the
-SDK. Every future consumer of distilled's Turnstile module —
-ours or anyone's — gets `WidgetNotFound` as a typed, catchable
+And the byproduct compounds: that patch doesn't belong to the
+Turnstile resource, or to Alchemy. It belongs to the SDK.
+Every future consumer of distilled's Turnstile module — ours
+or anyone's — gets `WidgetNotFound` as a typed, catchable
 error forever. The test didn't just verify a resource. It
 compiled a piece of Cloudflare's actual behavior into the type
 system.
