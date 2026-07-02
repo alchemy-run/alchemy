@@ -220,7 +220,7 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
               });
             }
           }
-        } else {
+        } else if (event.kind === "annotate") {
           for (const key of keys) {
             const current = next.get(key);
             if (!current) continue;
@@ -231,6 +231,8 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
             });
           }
         }
+        // "log" events are dashboard-only; the terminal already shows them
+        // through the merged default logger
 
         return next;
       });

@@ -18,11 +18,25 @@ export type ApplyStatus =
   | "skipped"
   | "fail";
 
-export type ApplyEvent = AnnotateEvent | StatusChangeEvent;
+export type ApplyEvent = AnnotateEvent | StatusChangeEvent | LogEvent;
 
 export interface AnnotateEvent {
   kind: "annotate";
   id: string;
+  message: string;
+}
+
+/**
+ * A log line (`Effect.log*`) captured during a resource's lifecycle
+ * operation, attributed to the resource being applied. Emitted by the
+ * per-resource logger `apply()` injects around each lifecycle call —
+ * renderers that don't care (LoggingCli, TUI) ignore these; the dashboard
+ * shows them per-resource.
+ */
+export interface LogEvent {
+  kind: "log";
+  id: string;
+  level: string;
   message: string;
 }
 

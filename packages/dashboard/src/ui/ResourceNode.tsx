@@ -1,5 +1,6 @@
 import type { UIRegistry } from "alchemy/UI/UIProvider";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
+import { Loader2 } from "lucide-react";
 import {
   CLOUD_COLORS,
   cloudOf,
@@ -60,11 +61,20 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
         <span className="truncate text-[13px] font-medium text-zinc-100">
           {node.logicalId}
         </span>
-        <span
-          className={`ml-auto h-2 w-2 shrink-0 rounded-full ${statusInFlight(node.status) ? "status-pulse" : ""}`}
-          style={{ background: statusColor(node.status) }}
-          title={node.status}
-        />
+        {statusInFlight(node.status) ? (
+          <Loader2
+            size={13}
+            className="ml-auto shrink-0 animate-spin"
+            style={{ color: statusColor(node.status) }}
+            aria-label={node.status}
+          />
+        ) : (
+          <span
+            className="ml-auto h-2 w-2 shrink-0 rounded-full"
+            style={{ background: statusColor(node.status) }}
+            title={node.status}
+          />
+        )}
       </div>
       <div className="mt-1 truncate text-[11px] text-zinc-500">
         {serviceOf(node.type)
@@ -79,6 +89,14 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
       ) : link ? (
         <div className="mt-1 truncate text-[11px] text-indigo-400">{link}</div>
       ) : null}
+      {node.note && statusInFlight(node.status) && (
+        <div
+          className="mt-1 truncate text-[10.5px] text-amber-300/90"
+          title={node.note}
+        >
+          {node.note}
+        </div>
+      )}
       <div className="flex gap-1">
         {plan && (
           <span

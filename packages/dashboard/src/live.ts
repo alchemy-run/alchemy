@@ -3,10 +3,11 @@ import type { DashboardPlan } from "./types.ts";
 
 /** Mirrors packages/alchemy/src/Cli/Event.ts */
 export interface ApplyEventJson {
-  kind: "status-change" | "annotate";
+  kind: "status-change" | "annotate" | "log";
   id: string;
   type?: string;
   status?: string;
+  level?: string;
   message?: string;
   bindingId?: string;
 }
@@ -30,33 +31,78 @@ export interface FeedEntry {
   id: string;
   text: string;
   status?: string;
+  /** log-level entries render dimmed */
+  log?: boolean;
 }
+
+export interface ResourceLogEntry {
+  key: number;
+  level: string;
+  message: string;
+}
+
+/** keep the last N log lines per resource */
+const LOG_CAP = 500;
 
 export interface LiveApply {
   sessionId: string;
   plan: DashboardPlan;
   /** latest status per resource logical id (bindings roll up to the host) */
   statuses: Map<string, { status: string; message?: string }>;
+  /** latest annotate note per resource logical id */
+  notes: Map<string, string>;
+  /** captured Effect.log* lines per resource logical id */
+  logs: Map<string, ResourceLogEntry[]>;
   feed: FeedEntry[];
   done: boolean;
 }
 
 const applyEvent = (live: LiveApply, seq: number, event: ApplyEventJson) => {
-  if (event.kind === "status-change" && event.status) {
-    if (!event.bindingId) {
-      live.statuses.set(event.id, {
+  switch (event.kind) {
+    case "status-change": {
+      if (!event.status) {
+        return;
+      }
+      if (!event.bindingId) {
+        live.statuses.set(event.id, {
+          status: event.status,
+          message: event.message,
+        });
+      }
+      live.feed.push({
+        key: seq,
+        id: event.bindingId ? `${event.id}/${event.bindingId}` : event.id,
+        text: event.message
+          ? `${event.status} — ${event.message}`
+          : event.status,
         status: event.status,
-        message: event.message,
       });
+      return;
     }
-    live.feed.push({
-      key: seq,
-      id: event.bindingId ? `${event.id}/${event.bindingId}` : event.id,
-      text: event.message ? `${event.status} — ${event.message}` : event.status,
-      status: event.status,
-    });
-  } else if (event.kind === "annotate") {
-    live.feed.push({ key: seq, id: event.id, text: event.message ?? "" });
+    case "annotate": {
+      live.notes.set(event.id, event.message ?? "");
+      live.feed.push({ key: seq, id: event.id, text: event.message ?? "" });
+      return;
+    }
+    case "log": {
+      const entries = live.logs.get(event.id) ?? [];
+      entries.push({
+        key: seq,
+        level: event.level ?? "Info",
+        message: event.message ?? "",
+      });
+      if (entries.length > LOG_CAP) {
+        entries.splice(0, entries.length - LOG_CAP);
+      }
+      live.logs.set(event.id, entries);
+      live.feed.push({
+        key: seq,
+        id: event.id,
+        text: event.message ?? "",
+        log: true,
+      });
+      return;
+    }
   }
 };
 
@@ -65,6 +111,8 @@ const fromSession = (session: ApplySessionJson): LiveApply => {
     sessionId: session.sessionId,
     plan: session.plan,
     statuses: new Map(),
+    notes: new Map(),
+    logs: new Map(),
     feed: [],
     done: session.done,
   };
@@ -114,6 +162,8 @@ export function useApplyStream(onDone: () => void): LiveApply | undefined {
           ? {
               ...current,
               statuses: new Map(current.statuses),
+              notes: new Map(current.notes),
+              logs: new Map(current.logs),
               feed: [...current.feed],
             }
           : undefined,

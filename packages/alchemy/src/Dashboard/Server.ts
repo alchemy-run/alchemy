@@ -220,6 +220,12 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         : yield* HttpServerResponse.json(encodeState(value));
     }
     if (route === "/api/plan") {
+      // While an apply is streaming, its plan is authoritative AND
+      // recomputing would re-evaluate the whole stack inside the deploying
+      // process (starving the event loop mid-apply for `--ui`).
+      if (current !== undefined && !current.done && stg === stage) {
+        return yield* HttpServerResponse.json(current.plan);
+      }
       if (plan === undefined) {
         return yield* HttpServerResponse.json({
           available: false,

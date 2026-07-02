@@ -104,6 +104,30 @@ export function Inspector({
           </section>
         )}
 
+        {node.logs && node.logs.length > 0 && (
+          <section>
+            <SectionTitle>Deploy logs</SectionTitle>
+            <div className="max-h-64 overflow-y-auto rounded-lg bg-[#0b0b10] p-2">
+              {node.logs.map((entry) => (
+                <div
+                  key={entry.key}
+                  className="flex gap-2 py-0.5 font-mono text-[10.5px] leading-relaxed"
+                >
+                  <span
+                    className="w-12 shrink-0 uppercase"
+                    style={{ color: logLevelColor(entry.level) }}
+                  >
+                    {entry.level}
+                  </span>
+                  <span className="whitespace-pre-wrap break-all text-zinc-400">
+                    {entry.message}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {node.bindings.length > 0 && (
           <section>
             <SectionTitle>Bindings</SectionTitle>
@@ -206,5 +230,20 @@ const safe = <T,>(fn: () => T): T | undefined => {
     return fn();
   } catch {
     return undefined;
+  }
+};
+
+const logLevelColor = (level: string): string => {
+  switch (level.toLowerCase()) {
+    case "error":
+    case "fatal":
+      return "#f87171";
+    case "warning":
+      return "#fbbf24";
+    case "debug":
+    case "trace":
+      return "#52525b";
+    default:
+      return "#71717a";
   }
 };
