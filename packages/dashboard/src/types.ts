@@ -38,6 +38,35 @@ export interface DashboardMeta {
   stages: string[];
 }
 
+/** Mirrors packages/alchemy/src/Dashboard/Scene.ts */
+export interface SceneFeedEntry {
+  key: number;
+  id: string;
+  text: string;
+  status?: string;
+  log?: boolean;
+}
+
+export interface SceneSession {
+  id: string;
+  done: boolean;
+  failed: boolean;
+  feed: SceneFeedEntry[];
+}
+
+export interface Scene {
+  revision: number;
+  stack: string;
+  stage: string;
+  stages: string[];
+  nodes: DashboardNode[];
+  edges: DashboardEdge[];
+  session: SceneSession | null;
+  approval: { id: string } | null;
+  planReady: boolean;
+  planError?: string;
+}
+
 export type PlanAction = "create" | "update" | "replace" | "delete" | "noop";
 
 /** Mirrors packages/alchemy/src/Dashboard/PlanJson.ts */

@@ -7,20 +7,21 @@ import {
   XCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { LiveApply } from "../live.ts";
 import { statusColor } from "../theme.ts";
+import type { SceneSession } from "../types.ts";
 
 /**
  * Floating deploy feed. Starts minimized: a one-line pill showing the most
  * recent event (or the final outcome once done); expands to the full
- * scrolling log. Dismissing (✕) also clears the session's result overlay
- * (ghost nodes, apply-result badges) — the parent owns that state.
+ * scrolling log. Dismissing (✕) hides the pill for this session — the
+ * scene's node annotations live server-side and retire when the next
+ * operation begins.
  */
 export function ActivityFeed({
-  live,
+  session,
   onDismiss,
 }: {
-  live: LiveApply;
+  session: SceneSession;
   onDismiss: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -28,24 +29,24 @@ export function ActivityFeed({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [live.feed.length, expanded]);
+  }, [session.feed.length, expanded]);
 
-  const failed =
-    [...live.results.values()].some((r) => r.result === "failed") ||
-    live.feed.some((e) => e.status === "fail");
-  const latest = live.feed[live.feed.length - 1];
+  const latest = session.feed[session.feed.length - 1];
 
-  const StatusIcon = live.done ? (failed ? XCircle : CheckCircle2) : Loader2;
-  const statusIconClass = live.done
-    ? failed
+  const StatusIcon = session.done
+    ? session.failed
+      ? XCircle
+      : CheckCircle2
+    : Loader2;
+  const statusIconClass = session.done
+    ? session.failed
       ? "text-red-400"
       : "text-emerald-400"
     : "animate-spin text-amber-400";
 
-  const title = live.done
-    ? failed
-      ? "Deployment failed"
-      : "Deployment complete"
+  const outcome = session.failed ? "Deployment failed" : "Deployment complete";
+  const title = session.done
+    ? outcome
     : latest
       ? `[${latest.id}] ${latest.text}`
       : "Deploying…";
@@ -63,13 +64,7 @@ export function ActivityFeed({
           className="min-w-0 flex-1 truncate text-left text-[12px] font-medium text-zinc-200 hover:text-white"
           title={expanded ? "Collapse" : title}
         >
-          {expanded
-            ? live.done
-              ? failed
-                ? "Deployment failed"
-                : "Deployment complete"
-              : "Deploying…"
-            : title}
+          {expanded ? (session.done ? outcome : "Deploying…") : title}
         </button>
         <button
           onClick={() => setExpanded((e) => !e)}
@@ -81,7 +76,7 @@ export function ActivityFeed({
         <button
           onClick={onDismiss}
           className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-          title="Dismiss (clears deploy annotations)"
+          title="Dismiss"
         >
           <X size={12} />
         </button>
@@ -91,7 +86,7 @@ export function ActivityFeed({
           ref={listRef}
           className="max-h-48 overflow-y-auto border-t border-[#26262f] px-3 py-2"
         >
-          {live.feed.slice(-150).map((entry) => (
+          {session.feed.slice(-150).map((entry) => (
             <div key={entry.key} className="flex gap-2 py-0.5 text-[11.5px]">
               <span
                 className={`shrink-0 font-medium ${entry.log ? "text-zinc-600" : "text-zinc-400"}`}

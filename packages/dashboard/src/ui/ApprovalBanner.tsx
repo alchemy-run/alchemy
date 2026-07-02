@@ -1,7 +1,7 @@
 import { ShieldQuestion } from "lucide-react";
-import type { PendingApproval } from "../live.ts";
 import { planSummary } from "../plan.ts";
 import { PLAN_COLORS, PLAN_LABELS } from "../theme.ts";
+import type { DashboardNode } from "../types.ts";
 
 /**
  * Shown when a `deploy --ui` run (without `--yes`) is waiting for the plan
@@ -9,13 +9,13 @@ import { PLAN_COLORS, PLAN_LABELS } from "../theme.ts";
  * plan's badges; this banner carries the decision.
  */
 export function ApprovalBanner({
-  approval,
+  nodes,
   onDecide,
 }: {
-  approval: PendingApproval;
+  nodes: DashboardNode[];
   onDecide: (approved: boolean) => void;
 }) {
-  const summary = planSummary(approval.plan);
+  const summary = planSummary(nodes);
   return (
     <div className="absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-indigo-500/40 bg-[#12121c]/95 px-4 py-2.5 shadow-xl shadow-black/40 backdrop-blur">
       <ShieldQuestion size={16} className="shrink-0 text-indigo-400" />
