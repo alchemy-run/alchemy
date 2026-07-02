@@ -10,11 +10,19 @@ import type { ResourceState } from "../State/ResourceState.ts";
 import type { StateService } from "../State/State.ts";
 import { encodeState } from "../State/StateEncoding.ts";
 import { toGraph } from "./Graph.ts";
+import type { DashboardPlan } from "./PlanJson.ts";
 
 export interface DashboardServerOptions {
   state: StateService;
   stack: string;
   stage: string;
+  /**
+   * Computes the current plan (diff of the stack file against state).
+   * Already provided with the stack's services; failures are expected
+   * (e.g. missing credentials) and must be surfaced as an unavailable
+   * plan rather than an error.
+   */
+  plan?: Effect.Effect<DashboardPlan>;
 }
 
 /**
@@ -73,7 +81,7 @@ const readStates = ({ state, stack, stage }: DashboardServerOptions) =>
  * continues for as long as the surrounding scope stays open.
  */
 export const serve = Effect.fn(function* (options: DashboardServerOptions) {
-  const { state, stack, stage } = options;
+  const { state, stack, stage, plan } = options;
   const distDir = yield* resolveDistDir();
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
@@ -104,6 +112,19 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       return value === undefined
         ? HttpServerResponse.empty({ status: 404 })
         : yield* HttpServerResponse.json(encodeState(value));
+    }
+    if (route === "/api/plan") {
+      if (plan === undefined) {
+        return yield* HttpServerResponse.json({
+          available: false,
+          error: "plan not enabled",
+          resources: {},
+          deletions: {},
+          actions: {},
+          cycleMembers: [],
+        });
+      }
+      return yield* HttpServerResponse.json(yield* plan);
     }
     if (route === "/api/outputs") {
       const output = yield* state

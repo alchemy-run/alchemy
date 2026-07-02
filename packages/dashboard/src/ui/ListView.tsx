@@ -3,6 +3,8 @@ import { toCtx } from "../registry.ts";
 import {
   CLOUD_COLORS,
   cloudOf,
+  PLAN_COLORS,
+  PLAN_LABELS,
   serviceOf,
   statusColor,
   typeName,
@@ -36,6 +38,7 @@ export function ListView({
             <th className="px-4 py-2 font-medium">Resource</th>
             <th className="px-4 py-2 font-medium">Type</th>
             <th className="px-4 py-2 font-medium">Status</th>
+            <th className="px-4 py-2 font-medium">Plan</th>
             <th className="px-4 py-2 font-medium">Summary</th>
           </tr>
         </thead>
@@ -79,6 +82,19 @@ export function ListView({
                     />
                     {node.status}
                   </span>
+                </td>
+                <td className="px-4 py-2">
+                  {node.planAction && (
+                    <span
+                      className="rounded px-1.5 py-px text-[11px] font-medium"
+                      style={{
+                        color: PLAN_COLORS[node.planAction],
+                        background: `${PLAN_COLORS[node.planAction]}1f`,
+                      }}
+                    >
+                      {PLAN_LABELS[node.planAction] ?? node.planAction}
+                    </span>
+                  )}
                 </td>
                 <td className="max-w-64 truncate px-4 py-2 text-zinc-500">
                   {summary ?? ""}

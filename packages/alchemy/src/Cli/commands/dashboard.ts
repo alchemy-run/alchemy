@@ -1,13 +1,20 @@
+import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
+import { toPlanJson, unavailablePlan } from "../../Dashboard/PlanJson.ts";
 import * as Dashboard from "../../Dashboard/Server.ts";
+import * as Plan from "../../Plan.ts";
 import { Stage } from "../../Stage.ts";
 import * as State from "../../State/index.ts";
 import * as Clank from "../../Util/Clank.ts";
@@ -36,10 +43,13 @@ const noOpen = Flag.boolean("no-open").pipe(
 
 /**
  * `alchemy dashboard [main]` — serve a local web dashboard visualizing the
- * stack's resource graph from the state store.
+ * stack's resource graph from the state store, annotated with the current
+ * plan (create/update/replace/delete) when it can be computed.
  *
- * Like `alchemy login`, the stack file is imported to discover the stack
- * (name + configured state backend); no cloud lifecycle calls are made.
+ * The stack file is imported and evaluated with the same layers `alchemy
+ * plan` uses, so `/api/plan` reflects exactly what a deploy would do. If
+ * plan computation fails (e.g. missing credentials), the dashboard
+ * degrades to the state-only view.
  */
 export const dashboardCommand = Command.make(
   "dashboard",
@@ -62,8 +72,23 @@ export const dashboardCommand = Command.make(
     Effect.fn(function* ({ main, stage, envFile, profile, port, noOpen }) {
       const stackEffect = yield* importStack(main);
 
+      // Same service layers as `alchemy plan` (execStack with dryRun) so
+      // Plan.make behaves identically to the CLI plan.
       const services = Layer.mergeAll(
-        Layer.succeed(AuthProviders, {}),
+        Layer.effect(
+          AlchemyContext,
+          AlchemyContext.pipe(
+            Effect.map((ctx) => ({ ...ctx, dev: false, adopt: false })),
+          ),
+        ),
+        Layer.succeed(AdoptPolicy, false),
+        Layer.succeed(ArtifactStore, createArtifactStore()),
+        Layer.succeed(
+          AuthProviders,
+          yield* Effect.serviceOption(AuthProviders).pipe(
+            Effect.map(Option.getOrElse(() => ({}))),
+          ),
+        ),
         ConfigProvider.layer(
           withProfileOverride(yield* loadConfigProvider(envFile), profile),
         ),
@@ -76,10 +101,23 @@ export const dashboardCommand = Command.make(
         yield* Effect.gen(function* () {
           const state = yield* yield* State.State;
 
+          // Provided with the current context, so the server can run it
+          // per-request without re-threading services.
+          const computePlan = Effect.gen(function* () {
+            const plan = yield* Plan.make(stack, { force: false });
+            return toPlanJson(plan);
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.succeed(unavailablePlan(Cause.pretty(cause))),
+            ),
+            Effect.provideContext(yield* Effect.context<State.State>()),
+          );
+
           const address = yield* Dashboard.serve({
             state,
             stack: stackEffect.stackName,
             stage,
+            plan: computePlan,
           });
 
           const url = address.replace("0.0.0.0", "127.0.0.1");
