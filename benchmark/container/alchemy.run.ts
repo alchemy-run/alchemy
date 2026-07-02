@@ -11,6 +11,7 @@ import EffectfulNodeLive from "./src/effectful-node.ts";
 import ExternalMicrovmLive from "./src/external-image.ts";
 import MicrovmWorker from "./src/microvm-worker.ts";
 import NodeMicrovmLive from "./src/node-image.ts";
+import OpencodeMicrovmLive from "./src/opencode-image.ts";
 import Orchestrator from "./src/orchestrator.ts";
 
 /**
@@ -26,10 +27,11 @@ export const benchMicrovm = !!process.env.BENCH_MICROVM;
  * - Cloudflare: a {@link ContainerWorker} fronting three container variants
  *   (effectful bundled-Effect image, bun-baseline Dockerfile, remote pre-built
  *   image), each behind its own Durable Object.
- * - AWS (optional, `BENCH_MICROVM=1`): five MicroVM images (effectful Effect
- *   bundle on bun + node, raw bun + node baselines, and an external Python
- *   Dockerfile) booted by both a Lambda {@link Orchestrator} and a cross-cloud
- *   Cloudflare {@link MicrovmWorker}.
+ * - AWS (optional, `BENCH_MICROVM=1`): six MicroVM images (effectful Effect
+ *   bundle on bun + node, raw bun + node baselines, an external Python
+ *   Dockerfile, and an eagerly-started opencode server) booted by both a
+ *   Lambda {@link Orchestrator} and a cross-cloud Cloudflare
+ *   {@link MicrovmWorker}.
  *
  * Exposes each host's URL so the driver can fire boot/shutdown loads and record
  * the time-to-usable-service for every variant.
@@ -64,6 +66,7 @@ export default Alchemy.Stack(
             BunMicrovmLive,
             NodeMicrovmLive,
             ExternalMicrovmLive,
+            OpencodeMicrovmLive,
           )
         : EffectfulContainerLive,
     ),
