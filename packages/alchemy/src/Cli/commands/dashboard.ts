@@ -12,6 +12,7 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
+import * as Discovery from "../../Dashboard/Discovery.ts";
 import { toPlanJson, unavailablePlan } from "../../Dashboard/PlanJson.ts";
 import * as Dashboard from "../../Dashboard/Server.ts";
 import * as Plan from "../../Plan.ts";
@@ -121,6 +122,12 @@ export const dashboardCommand = Command.make(
           });
 
           const url = address.replace("0.0.0.0", "127.0.0.1");
+          // advertise so deploys in this project stream apply events here
+          yield* Discovery.advertise({
+            url,
+            stack: stackEffect.stackName,
+            stage,
+          });
           yield* Console.log(
             `alchemy dashboard for ${stackEffect.stackName}/${stage}`,
           );

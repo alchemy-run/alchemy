@@ -7,6 +7,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileLive } from "alchemy/Auth/Profile";
+import { withDashboardReporter } from "alchemy/Dashboard/Reporter";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
@@ -60,7 +61,9 @@ const services = Layer.mergeAll(
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   TelemetryLive,
-  selectCli(),
+  // every apply session is also streamed to a running `alchemy dashboard`
+  // in this project (no-op when none is running)
+  Layer.provide(withDashboardReporter(selectCli()), PlatformServices),
 );
 
 const program = Effect.gen(function* () {

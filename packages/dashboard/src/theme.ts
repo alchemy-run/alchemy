@@ -47,32 +47,39 @@ export const PLAN_LABELS: Record<string, string> = {
   delete: "− delete",
 };
 
+const IN_FLIGHT = new Set([
+  "creating",
+  "updating",
+  "replacing",
+  "deleting",
+  "running",
+  "pre-creating",
+  "creating replacement",
+  "attaching",
+  "post-attach",
+]);
+
 export const statusColor = (status: string): string => {
   switch (status) {
     case "created":
     case "updated":
     case "ran":
       return "#34d399";
-    case "creating":
-    case "updating":
-    case "replacing":
-    case "running":
-      return "#fbbf24";
-    case "deleting":
+    case "fail":
       return "#f87171";
     case "replaced":
+    case "deleted":
+    case "skipped":
       return "#71717a";
+    case "deleting":
+      return "#f87171";
     default:
-      return "#71717a";
+      return IN_FLIGHT.has(status) ? "#fbbf24" : "#71717a";
   }
 };
 
 export const statusInFlight = (status: string): boolean =>
-  status === "creating" ||
-  status === "updating" ||
-  status === "replacing" ||
-  status === "deleting" ||
-  status === "running";
+  IN_FLIGHT.has(status);
 
 /** Last segment of a resource type: "AWS.S3.Bucket" -> "Bucket". */
 export const typeName = (type: string): string =>
