@@ -75,7 +75,10 @@ export const toPlanJson = (plan: Plan.Plan): DashboardPlan => {
       type: node.state.resourceType,
       action: "delete",
       downstream: [...(node.downstream ?? [])],
-      bindings: [],
+      bindings: (node.state.bindings ?? []).map((b) => ({
+        sid: b.sid,
+        action: "delete",
+      })),
     };
   }
 

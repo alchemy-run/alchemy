@@ -20,11 +20,22 @@ interface ApplySessionJson {
   startedAt: string;
 }
 
+export interface PendingApproval {
+  id: string;
+  plan: DashboardPlan;
+}
+
 type ServerMessage =
-  | { kind: "snapshot"; session: ApplySessionJson | null }
+  | {
+      kind: "snapshot";
+      session: ApplySessionJson | null;
+      approval: PendingApproval | null;
+    }
   | { kind: "apply-start"; session: ApplySessionJson }
   | { kind: "apply-event"; seq: number; event: ApplyEventJson }
-  | { kind: "apply-done" };
+  | { kind: "apply-done" }
+  | { kind: "approval-request"; approval: PendingApproval }
+  | { kind: "approval-done"; id: string; approved: boolean };
 
 export interface FeedEntry {
   key: number;
@@ -151,13 +162,22 @@ const fromSession = (session: ApplySessionJson): LiveApply => {
   return live;
 };
 
+export interface ApplyStream {
+  live: LiveApply | undefined;
+  /** a plan waiting for browser-side approval (`deploy --ui` sans --yes) */
+  approval: PendingApproval | undefined;
+  decide: (id: string, approved: boolean) => void;
+}
+
 /**
  * Subscribe to the dashboard's SSE apply stream. Returns the current live
- * apply session (with replay for browsers connecting mid-deploy) and calls
- * `onDone` when the apply completes so the caller can refetch state/plan.
+ * apply session (with replay for browsers connecting mid-deploy), any plan
+ * pending browser approval, and calls `onDone` when an apply completes so
+ * the caller can refetch state/plan.
  */
-export function useApplyStream(onDone: () => void): LiveApply | undefined {
+export function useApplyStream(onDone: () => void): ApplyStream {
   const [live, setLive] = useState<LiveApply>();
+  const [approval, setApproval] = useState<PendingApproval>();
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 
@@ -170,9 +190,12 @@ export function useApplyStream(onDone: () => void): LiveApply | undefined {
       switch (msg.kind) {
         case "snapshot":
           current = msg.session ? fromSession(msg.session) : undefined;
+          setApproval(msg.approval ?? undefined);
           break;
         case "apply-start":
           current = fromSession(msg.session);
+          // a starting apply supersedes any approval banner
+          setApproval(undefined);
           break;
         case "apply-event":
           if (current) {
@@ -184,6 +207,12 @@ export function useApplyStream(onDone: () => void): LiveApply | undefined {
             current.done = true;
             onDoneRef.current();
           }
+          break;
+        case "approval-request":
+          setApproval(msg.approval);
+          break;
+        case "approval-done":
+          setApproval(undefined);
           break;
       }
       setLive(
@@ -203,5 +232,13 @@ export function useApplyStream(onDone: () => void): LiveApply | undefined {
     return () => source.close();
   }, []);
 
-  return live;
+  const decide = (id: string, approved: boolean) => {
+    void fetch("/api/approval/decide", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, approved }),
+    }).catch(() => undefined);
+  };
+
+  return { live, approval, decide };
 }

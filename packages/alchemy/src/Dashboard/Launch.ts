@@ -70,6 +70,50 @@ export const requireDistDir = Effect.fn(function* () {
 });
 
 /**
+ * Ask the dashboard's user to approve a plan (`--ui` without `--yes`).
+ *
+ * Sends the plan to the dashboard and polls for the browser's decision.
+ * Interruption (Ctrl-C) propagates normally; a failure to reach the
+ * dashboard resolves to `undefined` so the caller can fall back to the
+ * terminal prompt rather than silently rejecting.
+ */
+export const requestApprovalViaDashboard = Effect.fn(function* (
+  dashboardUrl: string,
+  plan: Parameters<typeof toPlanJson>[0],
+) {
+  const id = `approval-${process.pid}-${Date.now().toString(36)}`;
+  const post = Effect.tryPromise(() =>
+    fetch(`${dashboardUrl}/api/approval/request`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, plan: toPlanJson(plan) }),
+      signal: AbortSignal.timeout(3000),
+    }),
+  ).pipe(Effect.orElseSucceed(() => undefined));
+  if ((yield* post) === undefined) {
+    return undefined;
+  }
+
+  const poll = Effect.tryPromise(async () => {
+    const res = await fetch(
+      `${dashboardUrl}/api/approval/status?id=${encodeURIComponent(id)}`,
+      { signal: AbortSignal.timeout(3000) },
+    );
+    const body = (await res.json()) as { approved: boolean | null };
+    return body.approved;
+  }).pipe(Effect.orElseSucceed(() => null));
+
+  // wait indefinitely for the human; Ctrl-C interrupts the whole run
+  while (true) {
+    const decision = yield* poll;
+    if (decision !== null) {
+      return decision;
+    }
+    yield* Effect.sleep("500 millis");
+  }
+});
+
+/**
  * Launch the dashboard web app for a stack and serve until interrupted.
  *
  * Runs in the CLI's ambient context (platform services, AlchemyContext,
