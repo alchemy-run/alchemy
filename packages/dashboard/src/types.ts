@@ -65,6 +65,7 @@ export interface Scene {
   approval: { id: string } | null;
   planReady: boolean;
   planError?: string;
+  stateError?: string;
 }
 
 export type PlanAction = "create" | "update" | "replace" | "delete" | "noop";

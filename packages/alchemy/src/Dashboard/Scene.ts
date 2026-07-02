@@ -64,6 +64,8 @@ export interface Scene {
   /** false while the stage's plan hasn't been computed yet */
   planReady: boolean;
   planError?: string;
+  /** the state store failed or timed out — nodes may be incomplete */
+  stateError?: string;
 }
 
 export interface SessionInput {
@@ -120,6 +122,7 @@ export interface SceneInput {
   timelines: ReadonlyMap<string, TimelineEntry[]>;
   /** the stack's shape (see {@link StackStructure}) */
   structure: StackStructure | undefined;
+  stateError?: string;
 }
 
 const LOG_CAP = 500;
@@ -345,5 +348,6 @@ export const assembleScene = (input: SceneInput): Scene => {
     approval: input.approvalId !== undefined ? { id: input.approvalId } : null,
     planReady: input.planReady,
     planError: input.planError,
+    stateError: input.stateError,
   };
 };

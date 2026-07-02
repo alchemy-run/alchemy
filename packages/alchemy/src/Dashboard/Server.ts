@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -177,27 +178,40 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
     string,
     { at: number; states: (ResourceState | ActionState)[] }
   >();
+  const stateErrors = new Map<string, string>();
   const readStates = (stg: string, force = false) =>
     Effect.gen(function* () {
       const cached = statesCache.get(stg);
       if (!force && cached && Date.now() - cached.at < STATES_TTL_MS) {
         return cached.states;
       }
-      const fqns = yield* state
-        .list({ stack, stage: stg })
-        .pipe(Effect.orElseSucceed(() => [] as readonly string[]));
+      // bounded: a hanging state backend must surface as an error in the
+      // scene, not an endlessly-pending page
+      const fqns = yield* state.list({ stack, stage: stg }).pipe(
+        Effect.timeout("20 seconds"),
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            stateErrors.set(stg, Cause.pretty(cause).split("\n")[0] ?? "");
+            return [] as readonly string[];
+          }),
+        ),
+      );
       const states = yield* Effect.forEach(
         fqns,
         (fqn) =>
-          state
-            .get({ stack, stage: stg, fqn })
-            .pipe(Effect.orElseSucceed(() => undefined)),
+          state.get({ stack, stage: stg, fqn }).pipe(
+            Effect.timeout("20 seconds"),
+            Effect.orElseSucceed(() => undefined),
+          ),
         { concurrency: 16 },
       );
       const settled = states.filter(
         (s): s is ResourceState | ActionState => s !== undefined,
       );
-      statesCache.set(stg, { at: Date.now(), states: settled });
+      if (fqns.length > 0 || !stateErrors.has(stg)) {
+        stateErrors.delete(stg);
+        statesCache.set(stg, { at: Date.now(), states: settled });
+      }
       return settled;
     });
 
@@ -250,6 +264,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         session: stg === stage ? session : undefined,
         timelines: stg === stage ? timelines : new Map(),
         structure: lastStructures.get(stg),
+        stateError: stateErrors.get(stg),
         approvalId:
           stg === stage && approval !== undefined
             ? approval.approved === undefined
@@ -371,6 +386,10 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         Effect.gen(function* () {
           const subscription = yield* PubSub.subscribe(pubsub);
           const scene = yield* buildScene(stage);
+          // the SPA's default view loads exclusively over this stream —
+          // kick the structure/plan evaluation here, or a fresh dashboard
+          // would wait forever for a /api/scene request that never comes
+          yield* requestPlan(stage);
           const heartbeat = Stream.fromSchedule(
             Schedule.spaced("8 seconds"),
           ).pipe(Stream.map(() => ":ping\n\n"));
