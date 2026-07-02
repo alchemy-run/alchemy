@@ -181,6 +181,8 @@ export function App() {
         onView={setView}
         query={query}
         onQuery={setQuery}
+        shown={filtered.nodes.length}
+        total={merged?.nodes.length ?? filtered.nodes.length}
       />
       <div className="relative flex min-h-0 flex-1">
         {live && (
