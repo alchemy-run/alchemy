@@ -291,6 +291,7 @@ export default defineConfig({
                   label: "Durable Objects",
                   link: "/cloudflare/durable-objects",
                 },
+                { label: "Containers", link: "/cloudflare/containers" },
               ],
             },
             {

@@ -69,6 +69,7 @@ The primary resources you build Cloudflare apps with. Each page covers what it i
 
 - [Workers](https://v2.alchemy.run/cloudflare/workers) — Cloudflare Workers are the compute runtime of every alchemy app — define infrastructure and runtime behavior in one Effect program, bind resources with full type safety, and call other Workers over schemaless RPC.
 - [Durable Objects](https://v2.alchemy.run/cloudflare/durable-objects) — Durable Objects are globally-unique stateful instances with transactional storage — define one as an Effect, persist state per key, expose typed RPC methods, and stream values back to the caller.
+- [Containers](https://v2.alchemy.run/cloudflare/containers) — Cloudflare Containers run long-lived processes beside a Durable Object — declare a typed container class, implement its runtime in a separate file, and alchemy builds the image, pushes it, and wires the DO pairing.
 - [D1](https://v2.alchemy.run/cloudflare/d1) — Cloudflare D1 is serverless SQLite — create a database, apply migrations on deploy, and query it from a Worker through a typed binding.
 - [KV](https://v2.alchemy.run/cloudflare/kv) — Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
 - [R2](https://v2.alchemy.run/cloudflare/r2) — Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.

@@ -89,6 +89,7 @@ const SECTIONS: Section[] = [
       slugs: [
         "cloudflare/workers",
         "cloudflare/durable-objects",
+        "cloudflare/containers",
         "cloudflare/d1",
         "cloudflare/kv",
         "cloudflare/r2",
