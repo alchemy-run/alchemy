@@ -343,18 +343,25 @@ export default defineConfig({
               items: [
                 { label: "DynamoDB", link: "/aws/dynamodb" },
                 { label: "S3", link: "/aws/s3" },
+                { label: "RDS & Aurora", link: "/aws/rds" },
               ],
             },
             {
               label: "Messaging & Events",
               items: [
                 { label: "SQS", link: "/aws/sqs" },
+                { label: "SNS", link: "/aws/sns" },
                 { label: "Kinesis", link: "/aws/kinesis" },
+                { label: "EventBridge & Scheduler", link: "/aws/eventbridge" },
               ],
             },
             {
               label: "Frontend",
               items: [{ label: "Websites", link: "/aws/websites" }],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "CloudWatch", link: "/aws/cloudwatch" }],
             },
             {
               label: "Networking",
@@ -369,6 +376,14 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/planetscale" },
             { label: "Setup", link: "/planetscale/setup" },
+            {
+              label: "Data",
+              items: [
+                { label: "Postgres", link: "/planetscale/postgres" },
+                { label: "MySQL", link: "/planetscale/mysql" },
+                { label: "Migrations", link: "/planetscale/migrations" },
+              ],
+            },
             {
               label: "Guides",
               items: [
@@ -393,7 +408,11 @@ export default defineConfig({
             { label: "Setup", link: "/neon/setup" },
             {
               label: "Data",
-              items: [{ label: "Migrations", link: "/neon/migrations" }],
+              items: [
+                { label: "Branching", link: "/neon/branching" },
+                { label: "Connections", link: "/neon/connections" },
+                { label: "Migrations", link: "/neon/migrations" },
+              ],
             },
             {
               label: "Guides",
@@ -422,8 +441,18 @@ export default defineConfig({
             { label: "Overview", link: "/axiom" },
             { label: "Setup", link: "/axiom/setup" },
             {
+              label: "Data",
+              items: [{ label: "Datasets & ingest", link: "/axiom/ingest" }],
+            },
+            {
               label: "Guides",
               items: [
+                { label: "Alerting", link: "/axiom/guides/alerting" },
+                { label: "Dashboards", link: "/axiom/guides/dashboards" },
+                {
+                  label: "Worker telemetry to Axiom",
+                  link: "/cloudflare/guides/axiom-observability",
+                },
                 {
                   label: "Observability",
                   link: "/concepts/observability",
@@ -438,6 +467,17 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/github" },
             { label: "Setup", link: "/github/setup" },
+            {
+              label: "Building Blocks",
+              items: [
+                { label: "Repositories", link: "/github/repository" },
+                {
+                  label: "Actions secrets & variables",
+                  link: "/github/actions-config",
+                },
+                { label: "Webhooks & events", link: "/github/events" },
+              ],
+            },
             {
               label: "Guides",
               items: [

@@ -20,6 +20,9 @@ The next `alchemy login` adds a `Neon` step with two options:
 - **Stored API key** — entered interactively, saved under
   `~/.alchemy/credentials/<profile>/neon-stored.json`.
 
+In CI (`CI=true`), the environment-variable method is selected
+automatically — no prompt, just set `NEON_API_KEY`.
+
 See [Profiles](/concepts/profiles) for how credentials are stored
 and switched.
 

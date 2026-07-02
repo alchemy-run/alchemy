@@ -137,6 +137,10 @@ const SECTIONS: Section[] = [
         "aws/s3",
         "aws/sqs",
         "aws/kinesis",
+        "aws/sns",
+        "aws/eventbridge",
+        "aws/rds",
+        "aws/cloudwatch",
         "aws/websites",
         "aws/networking",
       ],
@@ -152,25 +156,57 @@ const SECTIONS: Section[] = [
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
-    pages: { slugs: ["planetscale/index", "planetscale/setup"] },
+    pages: {
+      slugs: [
+        "planetscale/index",
+        "planetscale/setup",
+        "planetscale/postgres",
+        "planetscale/mysql",
+        "planetscale/migrations",
+      ],
+    },
   },
   {
     heading: "Neon",
     intro:
       "Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.",
-    pages: { slugs: ["neon/index", "neon/setup", "neon/migrations"] },
+    pages: {
+      slugs: [
+        "neon/index",
+        "neon/setup",
+        "neon/branching",
+        "neon/connections",
+        "neon/migrations",
+      ],
+    },
   },
   {
     heading: "Axiom",
     intro:
       "Observability as Stack resources — datasets, monitors, notifiers. The exporter-Layer pattern is documented in Concepts → Observability.",
-    pages: { slugs: ["axiom/index", "axiom/setup"] },
+    pages: {
+      slugs: [
+        "axiom/index",
+        "axiom/setup",
+        "axiom/ingest",
+        "axiom/guides/alerting",
+        "axiom/guides/dashboards",
+      ],
+    },
   },
   {
     heading: "GitHub",
     intro:
       "Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.",
-    pages: { slugs: ["github/index", "github/setup"] },
+    pages: {
+      slugs: [
+        "github/index",
+        "github/setup",
+        "github/repository",
+        "github/actions-config",
+        "github/events",
+      ],
+    },
   },
 ];
 

@@ -52,6 +52,10 @@ Cloudflare you can:
 - **Sign in with OAuth** — opens the browser, no tokens to manage.
 - **Paste an API token** — if you prefer explicit, scoped tokens.
 
+The OAuth flow asks whether you want to customize scopes — answer
+yes to pick exactly which ones to grant at a multiselect prompt (the
+default set covers typical use).
+
 Either way the result is saved to your **`default`**
 [profile](/concepts/profiles) at `~/.alchemy/profiles.json` — no
 environment variables and no `wrangler login` required.
@@ -94,8 +98,9 @@ See [Profiles](/concepts/profiles) for the full picture.
 
 :::note[Running in CI?]
 CI environments can't do interactive logins. There, alchemy reads
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the
-environment instead — see the [CI guide](/guides/ci) for the full
+credentials from the environment instead: `CLOUDFLARE_ACCOUNT_ID`
+plus either `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_API_KEY` +
+`CLOUDFLARE_EMAIL`. See the [CI guide](/guides/ci) for the full
 GitHub Actions setup.
 :::
 

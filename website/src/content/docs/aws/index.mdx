@@ -30,15 +30,36 @@ Not sure which? See
 
 ## Building blocks
 
+### Data
+
 - **[DynamoDB](/aws/dynamodb)** — key/value tables with
   `GetItem`/`PutItem` bindings and change-data-capture Streams.
 - **[S3](/aws/s3)** — object storage with `GetObject`/`PutObject`
   bindings and bucket event notifications.
+- **[RDS & Aurora](/aws/rds)** — managed Postgres/MySQL: the
+  `Aurora` helper stands up the whole cluster in one call, with
+  a `Connect` binding or the Data API at runtime.
+
+### Messaging & events
+
 - **[SQS](/aws/sqs)** — queues with a `SendMessage` binding and a
   `Stream`-shaped Lambda consumer.
+- **[SNS](/aws/sns)** — pub/sub topics with a `Publish` binding
+  and fan-out to queues and functions.
+- **[EventBridge & Scheduler](/aws/eventbridge)** — event buses,
+  rules, and cron/rate schedules that invoke your functions.
 - **[Kinesis](/aws/kinesis)** — ordered, sharded data streams
   with a `PutRecord` binding and the same `Stream` consumer
   surface.
+
+### Observability
+
+- **[CloudWatch](/aws/cloudwatch)** — dashboards and metric
+  alarms, declared in the same Stack as the resources they
+  watch.
+
+### Frontend & networking
+
 - **[Websites](/aws/websites)** — the frontend block: static
   sites and built Vite apps on S3 + CloudFront as a single
   `StaticSite` resource.
@@ -52,10 +73,14 @@ Not sure which? See
 | ------------------------------------- | ----------------------------------------------------------------------------- |
 | An HTTP API                           | [Lambda](/aws/lambda) + Function URL + [DynamoDB](/aws/dynamodb)              |
 | A typed HTTP API                      | [Effect HTTP API on Lambda](/aws/guides/effect-http-api)                      |
+| A typed RPC backend                   | [Effect RPC on Lambda](/aws/guides/effect-rpc)                                |
 | A REST API with stages/custom domains | [API Gateway](/aws/guides/api-gateway)                                        |
+| Your own domain on a site or API      | [Custom domains with Route53 + ACM](/aws/guides/custom-domains)               |
 | A static site                         | [Deploy a static site](/aws/guides/static-site) on S3 + CloudFront            |
 | An event pipeline                     | [Kinesis](/aws/kinesis) → Lambda                                              |
 | Background jobs                       | [SQS](/aws/sqs) + Lambda                                                      |
+| Scheduled jobs                        | [EventBridge Scheduler](/aws/eventbridge) → Lambda                            |
+| A Postgres database                   | [RDS & Aurora](/aws/rds)                                                      |
 | Object processing                     | [S3 events](/aws/guides/s3-events)                                            |
 | Change data capture                   | [DynamoDB Streams](/aws/guides/dynamodb-streams)                              |
 
@@ -68,5 +93,4 @@ Not sure which? See
   end-to-end guides for the two most common app shapes.
 - [Providers reference](/providers) — generated API docs for
   every AWS resource Alchemy ships, well beyond the blocks
-  documented here (CloudFront, Route53, RDS, EventBridge, IAM,
-  and more).
+  documented here (CloudFront, Route53, IAM, and more).

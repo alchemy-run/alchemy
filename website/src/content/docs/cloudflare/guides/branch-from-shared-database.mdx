@@ -1,8 +1,6 @@
 ---
 title: Branch from a shared database
-description: Have ephemeral PR-preview stages reference a long-lived Neon project from the staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra Postgres clusters.
-sidebar:
-  order: 14
+description: Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, cheap branches, no extra clusters.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
@@ -236,6 +234,131 @@ untouched. Alchemy doesn't own `app-db` from this stage's
 perspective, so it can't delete it. The shared project keeps
 serving every other PR stage and `staging` itself.
 
+## The same recipe on PlanetScale
+
+Nothing here is Neon-specific. [PlanetScale](/planetscale) has the
+same shape — an expensive long-lived database, cheap per-stage
+branches — so the same conditional works, with
+`Planetscale.PostgresDatabase.ref` (or `MySQLDatabase.ref`) in
+place of `Neon.Project.ref`:
+
+<Tabs syncKey="ps-engine">
+  <TabItem label="Postgres">
+
+```typescript
+// src/Db.ts
+export const PlanetscaleDb = Effect.gen(function* () {
+  const { stage } = yield* Alchemy.Stack;
+
+  const schema = yield* Drizzle.Schema("app-schema", {
+    schema: "./src/schema.ts",
+    out: "./migrations",
+  });
+
+  const database = stage.startsWith("pr-")
+    ? yield* Planetscale.PostgresDatabase.ref("app-db", {
+        stage: `staging-${stage}`,
+      })
+    : yield* Planetscale.PostgresDatabase("app-db", {
+        region: { slug: "us-east" },
+        clusterSize: "PS_10",
+      });
+
+  const branch = yield* Planetscale.PostgresBranch("app-branch", {
+    database,
+    migrationsDir: schema.out,
+  });
+
+  const role = yield* Planetscale.PostgresRole("app-role", {
+    database,
+    branch,
+    inheritedRoles: ["postgres"],
+  });
+
+  return { database, branch, role, schema };
+});
+```
+
+  </TabItem>
+  <TabItem label="MySQL">
+
+```typescript
+// src/Db.ts
+export const PlanetscaleDb = Effect.gen(function* () {
+  const { stage } = yield* Alchemy.Stack;
+
+  const database = stage.startsWith("pr-")
+    ? yield* Planetscale.MySQLDatabase.ref("app-db", {
+        stage: `staging-${stage}`,
+      })
+    : yield* Planetscale.MySQLDatabase("app-db", {
+        region: { slug: "us-east" },
+        clusterSize: "PS_10",
+      });
+
+  const branch = yield* Planetscale.MySQLBranch("app-branch", {
+    database,
+    isProduction: false,
+    migrationsDir: "./migrations",
+  });
+
+  const password = yield* Planetscale.MySQLPassword("app-password", {
+    database,
+    branch,
+    role: "readwriter",
+  });
+
+  return { database, branch, password };
+});
+```
+
+  </TabItem>
+</Tabs>
+
+The database is the shared tier; the branch and its credential
+(`PostgresRole` / `MySQLPassword`) are per-stage, just like
+`Neon.Branch` was.
+
+## A staging tier per PR
+
+Look closely at the ref: it targets `staging-${stage}`, not a
+single global `staging`. Deploying `pr-42` reads the database from
+a parallel `staging-pr-42` stage:
+
+```typescript
+Planetscale.PostgresDatabase.ref("app-db", {
+  stage: `staging-${stage}`, // pr-42 → staging-pr-42
+});
+```
+
+Deriving the staging stage name from the PR stage gives every PR
+its own database owner — isolated data per PR — while the
+create-vs-reference split stays identical. Deploy `staging-pr-42`
+first (it takes the create path), then `pr-42` (it takes the ref
+path). Prefer one database shared by all PRs? Use
+`stage: "staging"` and you're back to exactly the Neon flow above.
+
+## Point Hyperdrive at the credential
+
+PlanetScale's connection string comes from the per-stage
+credential rather than the branch, so the Hyperdrive origin
+changes accordingly:
+
+```typescript
+export const Hyperdrive = Effect.gen(function* () {
+  const { role } = yield* PlanetscaleDb; // { password } for MySQL
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+    origin: role.origin, // password.origin for MySQL
+    caching: { disabled: true },
+  });
+});
+```
+
+The full working projects live at
+[`cloudflare-planetscale-postgres-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-planetscale-postgres-drizzle)
+and
+[`cloudflare-planetscale-mysql-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-planetscale-mysql-drizzle).
+
 ## Where to from here
 
 You now have:
@@ -251,3 +374,9 @@ shared resource you have — an S3 bucket of seed fixtures, a global
 rate-limiter Durable Object, a DNS zone. Anywhere a per-stage
 copy is wasteful, lift it to a long-lived stage and reference it
 from the rest.
+
+- [Neon](/neon) — projects, branches, and migrations.
+- [PlanetScale](/planetscale) — the Postgres and MySQL resource
+  families used above.
+- [Shared database across stages](/cloudflare/guides/shared-database)
+  — the general `Resource.ref` pattern, including cross-stack refs.

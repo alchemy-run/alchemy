@@ -22,6 +22,12 @@ const logs    = yield* Axiom.Dataset("logs",    { name: "app-logs",    kind: "ot
 const metrics = yield* Axiom.Dataset("metrics", { name: "app-metrics", kind: "otel:metrics:v1" });
 ```
 
+:::caution
+Renaming a dataset or changing its `kind` is a **replacement** — the
+old dataset and all its events are deleted. See
+[Datasets & Ingest](/axiom/ingest) for details.
+:::
+
 An `ApiToken` mints a least-privilege ingest credential for your
 runtime to ship with:
 
@@ -34,7 +40,9 @@ const ingest = yield* Axiom.ApiToken("ingest", {
 });
 ```
 
-`Monitor` + `Notifier` turn queries into alerts:
+`Monitor` + `Notifier` turn queries into alerts — see
+[Monitors & Alerting](/axiom/guides/alerting) for threshold and
+anomaly monitors:
 
 ```typescript
 const slack = yield* Axiom.Notifier("ops-slack", {
@@ -54,6 +62,11 @@ yield* Axiom.Monitor("panics", {
 });
 ```
 
+Beyond alerts, `Dashboard` declares charts as code, `View` saves an
+APL query as a virtual dataset, and `Annotation` marks deploys on
+your charts — see [Dashboards as Code](/axiom/guides/dashboards).
+`VirtualField` derives computed fields on a dataset at query time.
+
 ## Compose with your cloud
 
 Wire the dataset's OTLP endpoints and the ingest token into your
@@ -68,6 +81,10 @@ vars: {
   OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: logs.otelLogsEndpoint,
 },
 ```
+
+For a full end-to-end walkthrough — dataset, token, Worker wiring,
+and a monitor on top — follow
+[Observability with Axiom](/cloudflare/guides/axiom-observability).
 
 ## Reference
 

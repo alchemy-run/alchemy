@@ -13,8 +13,9 @@ New here? [Set up credentials](/github/setup) first.
 
 ## Resources
 
-`Repository` creates and converges a repo's settings. Destroying the
-stack retains the repository by default, protecting its history:
+`Repository` creates and converges a repo's settings — see
+[Repositories](/github/repository). Destroying the stack retains the
+repository by default, protecting its history:
 
 ```typescript
 const repo = yield* GitHub.Repository("api", {
@@ -26,7 +27,8 @@ const repo = yield* GitHub.Repository("api", {
 ```
 
 `Secrets` and `Variables` bulk-seed GitHub Actions configuration —
-values can be outputs of other resources:
+values can be outputs of other resources. See
+[Actions secrets & variables](/github/actions-config):
 
 ```typescript
 yield* GitHub.Secrets({
@@ -47,8 +49,11 @@ yield* GitHub.Variables({
 });
 ```
 
+`Webhook` manages a repository webhook pointed at any URL, and
 `consumeRepositoryEvents` subscribes a host (e.g. a Cloudflare
-Worker) to repository webhooks with typed payloads:
+Worker) to repository webhooks with typed payloads — see
+[Webhooks & events](/github/events) and
+[React to GitHub events from a Worker](/cloudflare/guides/github-events):
 
 ```typescript
 yield* GitHub.consumeRepositoryEvents(
@@ -62,12 +67,26 @@ yield* GitHub.consumeRepositoryEvents(
 );
 ```
 
+`Comment` posts a comment on an issue or pull request and updates it
+in place on subsequent deploys — handy for deploy previews and
+status updates:
+
+```typescript
+yield* GitHub.Comment("status", {
+  owner: "my-org",
+  repository: "my-repo",
+  issueNumber: 456,
+  body: "Deployed to staging!",
+});
+```
+
 ## Compose with your cloud
 
-The canonical pattern: a one-shot stack mints a scoped Cloudflare
-API token and stores it as an Actions secret, so CI deploys with a
+The canonical pattern: a one-shot stack mints a scoped cloud
+credential and stores it as an Actions secret, so CI deploys with a
 credential that was itself provisioned as code. Walk through it in
-[Part 5: CI/CD](/cloudflare/tutorial/part-5), and see
+[Part 5: CI/CD (Cloudflare)](/cloudflare/tutorial/part-5) or
+[Part 5: CI/CD (AWS)](/aws/tutorial/part-5), and see
 [CI](/guides/ci) for the general GitHub Actions setup.
 
 ## Reference

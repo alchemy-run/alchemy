@@ -1,8 +1,6 @@
 ---
 title: Shared database across stages
-description: Have ephemeral PR-preview stages reference a long-lived Neon Postgres project from staging instead of provisioning their own — fast previews, copy-on-write branches, no extra Postgres clusters.
-sidebar:
-  order: 13
+description: Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 ---
 
 [Stages](/concepts/stages) make it cheap to spin up isolated copies
@@ -186,6 +184,44 @@ stage with `alchemy destroy --stage pr-147` deletes the branch but
 leaves the shared project alone — Alchemy doesn't own it from this
 stage's perspective.
 
+## The same pattern with PlanetScale
+
+`Resource.ref` isn't Neon-specific. The
+[PlanetScale](/planetscale) examples use the identical shape — a
+long-lived `PostgresDatabase` owned by a staging tier, referenced
+from `pr-*` stages that only own the ephemeral pieces (branch,
+role, Hyperdrive, Worker):
+
+```typescript
+const database = stage.startsWith("pr-")
+  ? yield* Planetscale.PostgresDatabase.ref("app-db", {
+      stage: `staging-${stage}`,
+    })
+  : yield* Planetscale.PostgresDatabase("app-db", {
+      region: { slug: "us-east" },
+      clusterSize: "PS_10",
+    });
+
+const branch = yield* Planetscale.PostgresBranch("app-branch", {
+  database,
+  migrationsDir: schema.out,
+});
+```
+
+One twist worth stealing: instead of pointing every PR at a single
+global `staging`, the ref targets `staging-${stage}` — so `pr-42`
+reads from `staging-pr-42`. Each PR gets a parallel staging stage
+that owns its database, keeping PR data isolated while the
+create-vs-reference split stays the same. Deploy `staging-pr-42`
+before `pr-42`, same as the Neon flow. If you'd rather share one
+database across all PRs, use `stage: "staging"` exactly as above.
+
+The MySQL family works identically — `MySQLDatabase.ref`,
+`MySQLBranch`, `MySQLPassword`. Full files:
+[`cloudflare-planetscale-postgres-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-planetscale-postgres-drizzle/src/Db.ts)
+and
+[`cloudflare-planetscale-mysql-drizzle`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/cloudflare-planetscale-mysql-drizzle/src/Db.ts).
+
 ## Cross-stack too
 
 `Resource.ref` also takes a `stack` option for pulling a resource
@@ -222,3 +258,5 @@ in what shape they return.
   `dev_*`, `staging`, `prod`.
 - [Monorepos](/guides/monorepo) — whole-stack references via
   typed `Stack` handles.
+- [Neon](/neon) and [PlanetScale](/planetscale) — the two database
+  providers used in this guide.

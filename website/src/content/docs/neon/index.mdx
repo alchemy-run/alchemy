@@ -27,6 +27,9 @@ const branch = yield* Neon.Branch("app-branch", {
 });
 ```
 
+Branches can fork from any parent, pin to a point in time, copy
+schema only, and expire on their own — see [Branching](/neon/branching).
+
 Both resources accept a `migrationsDir` of SQL files applied in
 order on deploy:
 
@@ -37,23 +40,42 @@ const featureBranch = yield* Neon.Branch("feature", {
 });
 ```
 
-## Compose with your cloud
+Migrations are ordered, hashed, and tracked in a `neon_migrations`
+table so each file runs exactly once — see
+[Migrations](/neon/migrations).
 
-The branch's `origin` output points at the direct (non-pooled)
-endpoint — exactly what Cloudflare Hyperdrive wants to pool at the
-edge:
+## Pooled vs direct
+
+Every project and branch exposes its connection details twice:
+`origin` points straight at the branch's compute endpoint, while
+`pooledOrigin` routes through Neon's pgbouncer pooler. Hyperdrive is
+itself a pooler, so hand it the direct origin — and hand the pooled
+one to everything that connects without Hyperdrive in front, like
+local dev, CI jobs, and containers:
 
 ```typescript
 const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
-  origin: branch.origin,
+  origin: branch.origin, //    direct — Hyperdrive does the pooling
+  dev: branch.pooledOrigin, // local dev bypasses Hyperdrive
 });
 ```
 
-Follow [Connect to a Database with Hyperdrive](/cloudflare/hyperdrive)
-for the full walkthrough. For PR previews that fork a branch off a
-long-lived staging project instead of provisioning a cluster per
-stage, see [shared database](/cloudflare/guides/shared-database) and
-[branch from a shared database](/cloudflare/guides/branch-from-shared-database).
+See [Connections](/neon/connections) for the raw URIs, the parsed
+origin shape, and when each applies.
+
+## The Neon path
+
+On Cloudflare, Neon slots into a four-step path:
+
+1. [Hyperdrive](/cloudflare/hyperdrive) pools the branch's direct
+   origin at the edge
+2. [Drizzle](/cloudflare/guides/drizzle) gives the Worker a typed
+   query layer over that connection
+3. [Shared database](/cloudflare/guides/shared-database) keeps one
+   long-lived project instead of provisioning a cluster per stage
+4. [Branch from a shared database](/cloudflare/guides/branch-from-shared-database)
+   forks a copy-on-write preview branch per PR off that shared
+   project
 
 ## Reference
 
