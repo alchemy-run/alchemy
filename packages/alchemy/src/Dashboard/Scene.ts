@@ -73,6 +73,34 @@ export interface SessionInput {
   done: boolean;
 }
 
+/**
+ * One entry in a resource's deployment timeline: a status transition, an
+ * annotate note, or a captured Effect.log* line. Maintained by the server
+ * across sessions (each resource's timeline resets when its NEXT lifecycle
+ * operation begins), so logs survive completed deploys.
+ */
+export interface TimelineEntry {
+  key: number;
+  /** "status" | "note" | or the log level ("Info", "Error", ...) */
+  level: string;
+  message: string;
+}
+
+/**
+ * The stack's SHAPE, from evaluating the stack file without planning — no
+ * cloud calls, no credentials, seconds instead of the plan's stack-diff.
+ * Lets the canvas render "what this stack defines" immediately, even for
+ * an empty stage, upgraded with plan actions when the plan lands.
+ */
+export interface StackStructure {
+  resources: {
+    fqn: string;
+    logicalId: string;
+    type: string;
+    bindingSids: string[];
+  }[];
+}
+
 export interface SceneInput {
   revision: number;
   stack: string;
@@ -88,6 +116,10 @@ export interface SceneInput {
   planError?: string;
   session: SessionInput | undefined;
   approvalId: string | undefined;
+  /** per-resource deployment timelines, keyed by logicalId */
+  timelines: ReadonlyMap<string, TimelineEntry[]>;
+  /** the stack's shape (see {@link StackStructure}) */
+  structure: StackStructure | undefined;
 }
 
 const LOG_CAP = 500;
@@ -180,6 +212,59 @@ export const assembleScene = (input: SceneInput): Scene => {
     }
   }
 
+  // 2b. structure fallback: anything the stack DEFINES that neither state
+  //     nor the plan produced yet renders as a "not deployed" ghost — the
+  //     canvas never shows a blank screen for a defined stack
+  if (input.structure !== undefined) {
+    const logicalIds = new Map<string, string[]>();
+    for (const n of nodes) {
+      logicalIds.set(n.logicalId, [
+        ...(logicalIds.get(n.logicalId) ?? []),
+        n.fqn,
+      ]);
+    }
+    const added: SceneNode[] = [];
+    for (const res of input.structure.resources) {
+      if (byFqn.has(res.fqn)) {
+        continue;
+      }
+      const node: SceneNode = {
+        fqn: res.fqn,
+        logicalId: res.logicalId,
+        path: res.fqn.split("/").slice(0, -1),
+        kind: "resource",
+        type: res.type,
+        status: "pending",
+        bindings: [],
+        downstream: [],
+      };
+      nodes.push(node);
+      added.push(node);
+      byFqn.set(node.fqn, node);
+      logicalIds.set(node.logicalId, [
+        ...(logicalIds.get(node.logicalId) ?? []),
+        node.fqn,
+      ]);
+    }
+    const seen = new Set(
+      edges.map((e) => `${e.kind}:${e.source}->${e.target}`),
+    );
+    for (const res of input.structure.resources) {
+      for (const sid of res.bindingSids) {
+        const segments = logicalIds.has(sid) ? [sid] : sid.split(", ");
+        for (const segment of segments) {
+          for (const target of logicalIds.get(segment) ?? []) {
+            const key = `binding:${res.fqn}->${target}`;
+            if (!seen.has(key) && res.fqn !== target) {
+              seen.add(key);
+              edges.push({ source: res.fqn, target, kind: "binding", sid });
+            }
+          }
+        }
+      }
+    }
+  }
+
   // 3. session overlay: fold apply events in order. Events are keyed by
   //    logicalId — resolve against the assembled node set (all fqns that
   //    share the logicalId; ambiguity applies to each, same as the TUI).
@@ -228,13 +313,6 @@ export const assembleScene = (input: SceneInput): Scene => {
           break;
         }
         case "log": {
-          for (const node of targets) {
-            const logs = (node.logs ??= []);
-            logs.push({ key: seq, level: event.level, message: event.message });
-            if (logs.length > LOG_CAP) {
-              logs.splice(0, logs.length - LOG_CAP);
-            }
-          }
           feed.push({ key: seq, id: event.id, text: event.message, log: true });
           break;
         }
@@ -246,6 +324,14 @@ export const assembleScene = (input: SceneInput): Scene => {
       failed,
       feed,
     };
+  }
+
+  // attach deployment timelines (persisted server-side across sessions)
+  for (const node of nodes) {
+    const timeline = input.timelines.get(node.logicalId);
+    if (timeline !== undefined && timeline.length > 0) {
+      node.logs = timeline;
+    }
   }
 
   return {

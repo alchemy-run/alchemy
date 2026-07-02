@@ -124,16 +124,26 @@ export function App() {
               onSelect={setSelected}
             />
           )}
-          {filtered.nodes.length === 0 && (
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-sm text-zinc-500">
-                No resources in {scene.stack}/{scene.stage}
-              </p>
-              <p className="mt-2 text-[12px] text-zinc-600">
-                Deploy the stack first: <code>bun alchemy deploy</code>
-              </p>
-            </div>
-          )}
+          {filtered.nodes.length === 0 &&
+            (scene.planReady ? (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-sm text-zinc-500">
+                  This stack defines no resources
+                </p>
+                <p className="mt-2 text-[12px] text-zinc-600">
+                  {scene.stack}/{scene.stage}
+                </p>
+              </div>
+            ) : (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p className="animate-pulse text-sm text-zinc-500">
+                  Evaluating stack…
+                </p>
+                <p className="mt-2 text-[12px] text-zinc-600">
+                  {scene.stack}/{scene.stage}
+                </p>
+              </div>
+            ))}
         </main>
         {selectedNode && (
           <Inspector

@@ -16,7 +16,13 @@ import type { StateService } from "../State/State.ts";
 import { encodeState } from "../State/StateEncoding.ts";
 import { toGraph } from "./Graph.ts";
 import type { DashboardPlan } from "./PlanJson.ts";
-import { assembleScene, type Scene, type SessionInput } from "./Scene.ts";
+import {
+  assembleScene,
+  type Scene,
+  type SessionInput,
+  type StackStructure,
+  type TimelineEntry,
+} from "./Scene.ts";
 
 /**
  * A plan awaiting browser-side approval (`deploy --ui` without `--yes`).
@@ -50,6 +56,12 @@ export interface DashboardServerOptions {
    * as an unavailable plan rather than an error.
    */
   plan?: (stage: string) => Effect.Effect<DashboardPlan>;
+  /**
+   * Evaluates the stack's SHAPE for a stage (resources + binding sids, no
+   * planning) — fast and credential-free; feeds the "defined but not
+   * deployed" ghosts so an empty stage never renders blank.
+   */
+  structure?: (stage: string) => Effect.Effect<StackStructure>;
 }
 
 /**
@@ -96,7 +108,7 @@ const FALLBACK_HTML = `<!doctype html>
  * continues for as long as the surrounding scope stays open.
  */
 export const serve = Effect.fn(function* (options: DashboardServerOptions) {
-  const { state, stack, stage, plan } = options;
+  const { state, stack, stage, plan, structure } = options;
   const distDir = yield* resolveDistDir();
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
@@ -108,6 +120,54 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   let revision = 0;
   let session: SessionInput | undefined;
   let approval: PendingApproval | undefined;
+
+  // Per-resource deployment timelines (status transitions + notes + logs),
+  // persisted across sessions so "view this resource's deploy logs" works
+  // after the apply completes. A resource's timeline resets when its next
+  // lifecycle operation begins.
+  const TIMELINE_CAP = 500;
+  const timelines = new Map<string, TimelineEntry[]>();
+  let timelineResets = new Set<string>();
+  const IN_FLIGHT = new Set([
+    "creating",
+    "updating",
+    "replacing",
+    "deleting",
+    "creating replacement",
+    "pre-creating",
+    "running",
+  ]);
+  const recordTimeline = (seq: number, event: ApplyEvent) => {
+    if ("bindingId" in event && event.bindingId) {
+      return;
+    }
+    if (
+      event.kind === "status-change" &&
+      IN_FLIGHT.has(event.status) &&
+      !timelineResets.has(event.id)
+    ) {
+      timelineResets.add(event.id);
+      timelines.set(event.id, []);
+    }
+    const entries = timelines.get(event.id) ?? [];
+    entries.push(
+      event.kind === "status-change"
+        ? {
+            key: seq,
+            level: "status",
+            message: event.message
+              ? `${event.status} — ${event.message}`
+              : event.status,
+          }
+        : event.kind === "annotate"
+          ? { key: seq, level: "note", message: event.message }
+          : { key: seq, level: event.level, message: event.message },
+    );
+    if (entries.length > TIMELINE_CAP) {
+      entries.splice(0, entries.length - TIMELINE_CAP);
+    }
+    timelines.set(event.id, entries);
+  };
 
   // Persisted states per stage, cached: reading the state store can be
   // slow (HTTP backends) and must not run per SSE event. Refreshed on
@@ -147,6 +207,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   // the plan lands (planReady: false); when it lands the scene is
   // re-broadcast.
   const lastPlans = new Map<string, DashboardPlan>();
+  const lastStructures = new Map<string, StackStructure>();
   const planInFlight = new Set<string>();
   // computations run on a server-scoped worker fiber (request scopes close
   // when the response completes, which would kill a fork)
@@ -187,6 +248,8 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         planError: overlay?.available === false ? overlay.error : undefined,
         // the session belongs to the server's stage
         session: stg === stage ? session : undefined,
+        timelines: stg === stage ? timelines : new Map(),
+        structure: lastStructures.get(stg),
         approvalId:
           stg === stage && approval !== undefined
             ? approval.approved === undefined
@@ -227,6 +290,9 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         done: false,
       };
       approval = undefined;
+      // timelines reset lazily per resource as its first in-flight status
+      // arrives in THIS session
+      timelineResets = new Set();
       yield* broadcast(stage);
       return yield* HttpServerResponse.json({ ok: true });
     }
@@ -238,6 +304,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       };
       if (session?.sessionId === body.sessionId) {
         session.events.push({ seq: body.seq, event: body.event });
+        recordTimeline(body.seq, body.event);
         yield* broadcast(stage);
       }
       return yield* HttpServerResponse.json({ ok: true });
@@ -379,6 +446,13 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
     Effect.gen(function* () {
       while (true) {
         const stg = yield* Queue.take(planQueue);
+        // fast structure pass first: the canvas can render the stack's
+        // shape within seconds while the full plan (which bundles and
+        // diffs) is still computing
+        if (structure !== undefined && !lastStructures.has(stg)) {
+          lastStructures.set(stg, yield* structure(stg));
+          yield* broadcast(stg);
+        }
         if (plan === undefined) {
           continue;
         }
