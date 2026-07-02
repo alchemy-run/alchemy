@@ -49,16 +49,18 @@ function providersSidebarEntry() {
 
 /**
  * A cloud hub's "Resources" section: that provider's slice of the generated
- * reference tree, collapsed below Guides so each hub is self-sufficient.
+ * reference tree below Guides, expanded one level (categories/services show,
+ * everything inside them stays collapsed) so each hub is self-sufficient.
  *
  * @param {string} provider Provider label / directory name (e.g. "Cloudflare")
  */
 function providerResourcesEntry(provider) {
   const group = providersSidebar()?.find((p) => p.label === provider);
-  if (group) return { label: "Resources", collapsed: true, items: group.items };
+  if (group)
+    return { label: "Resources", collapsed: false, items: group.items };
   return {
     label: "Resources",
-    collapsed: true,
+    collapsed: false,
     autogenerate: { directory: `providers/${provider}`, collapsed: true },
   };
 }
