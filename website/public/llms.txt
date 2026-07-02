@@ -98,6 +98,13 @@ Task-oriented Cloudflare how-tos. Each solves a specific problem; read in any or
 - [Secrets Store & auth tokens](https://v2.alchemy.run/cloudflare/guides/secrets-store) — Store secrets in Cloudflare's account-level Secrets Store, generate stable tokens with Alchemy.Random, and read them in a Worker through the ReadSecret binding.
 - [Send & receive email](https://v2.alchemy.run/cloudflare/guides/email) — Enable Email Routing on a zone, verify destination addresses, forward inbound mail with rules and a catch-all, and send email from a Worker with the send_email binding.
 - [React to GitHub events from a Worker](https://v2.alchemy.run/cloudflare/guides/github-events) — Subscribe a Cloudflare Worker to GitHub repository webhooks with typed payloads — alchemy provisions the webhook and verifies delivery signatures.
+- [Vector search with Vectorize](https://v2.alchemy.run/cloudflare/guides/vectorize) — Create a Vectorize index, bind it to a Worker with SearchIndex, and run filtered nearest-neighbor queries over vector embeddings.
+- [Browser rendering](https://v2.alchemy.run/cloudflare/guides/browser-rendering) — Attach Cloudflare Browser Rendering to a Worker — run quick actions like markdown and scrape, stream screenshots and PDFs, or drive the raw binding with puppeteer.
+- [Turnstile CAPTCHA](https://v2.alchemy.run/cloudflare/guides/turnstile) — Manage Cloudflare Turnstile widgets as resources — deploy a widget, embed its sitekey in HTML, and verify tokens server-side with the redacted secret.
+- [Analytics Engine](https://v2.alchemy.run/cloudflare/guides/analytics-engine) — Write time-series data points from a Worker with Workers Analytics Engine — declare a dataset, bind it with WriteDataset, and query it later over Cloudflare's SQL API.
+- [Expose private origins with Tunnel](https://v2.alchemy.run/cloudflare/guides/tunnel) — Connect a private origin to Cloudflare's edge with a Tunnel, declare its ingress rules as a Configuration resource, and point DNS at it with a proxied CNAME.
+- [Workers for Platforms](https://v2.alchemy.run/cloudflare/guides/workers-for-platforms) — Run your customers' Workers in your own account — create a dispatch namespace, upload user Workers into it, and route requests from a platform Worker with the Get binding.
+- [Build a release-automation agent](https://v2.alchemy.run/cloudflare/guides/release-agent) — Case study of the cloudflare-agent example — GitHub push events routed through a Worker to a per-release Durable Object that drives an AI agent with container-backed tools.
 - [Add Drizzle ORM](https://v2.alchemy.run/cloudflare/guides/drizzle) — Replace raw pg with Drizzle's effect-postgres integration, manage your schema as a resource, and have alchemy generate and apply migrations on every deploy — on Neon or PlanetScale.
 - [Branch from a shared database](https://v2.alchemy.run/cloudflare/guides/branch-from-shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, cheap branches, no extra clusters.
 - [Shared database across stages](https://v2.alchemy.run/cloudflare/guides/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
@@ -127,6 +134,7 @@ The primary resources you build AWS apps with. Read the Lambda page first; the o
 - [Lambda](https://v2.alchemy.run/aws/lambda) — Stand up an AWS Lambda Function from a single Effect, expose it over a Function URL, and call it from a test.
 - [ECS](https://v2.alchemy.run/aws/ecs) — Run a long-lived Effect program as a container on Fargate — Alchemy builds and pushes the Docker image, provisions the roles and log group, and can front the service with a public ALB.
 - [EC2](https://v2.alchemy.run/aws/ec2) — Launch virtual machines with the Instance resource — as a raw compute primitive, or hosting a bundled long-lived Effect program served straight off the box.
+- [EKS](https://v2.alchemy.run/aws/eks) — Stand up an EKS Auto Mode cluster on a Network and declare Kubernetes workloads in TypeScript — deployments, load-balanced services, and Pod Identity, with no YAML and no kubectl.
 - [DynamoDB](https://v2.alchemy.run/aws/dynamodb) — Add a DynamoDB Table, bind GetItem and PutItem to your Lambda, and serve a typed key/value HTTP API backed by DynamoDB.
 - [S3](https://v2.alchemy.run/aws/s3) — Add an S3 Bucket to your Stack, bind PutObject and GetObject as runtime capabilities, and let Alchemy mint the IAM policy for you.
 - [SQS](https://v2.alchemy.run/aws/sqs) — Add an SQS Queue, publish messages from your Lambda, and consume them from a second consumer Lambda — all wired through Alchemy bindings.
@@ -148,6 +156,8 @@ Task-oriented AWS how-tos. Each solves a specific problem; read in any order.
 - [Effect HTTP API on Lambda](https://v2.alchemy.run/aws/guides/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as an AWS Lambda Function behind a Function URL.
 - [Custom domains with Route53 + ACM](https://v2.alchemy.run/aws/guides/custom-domains) — Serve your site or API from your own domain — DNS-validated ACM certificates, Route 53 alias records, and the domain prop on Website resources.
 - [Effect RPC on Lambda](https://v2.alchemy.run/aws/guides/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as an AWS Lambda Function behind a Function URL.
+- [Lambda MicroVMs](https://v2.alchemy.run/aws/guides/microvms) — Build a Firecracker MicroVM image from TypeScript or a Dockerfile, then launch and drive isolated stateful instances from a Lambda Function with typed lifecycle bindings and RPC.
+- [Secrets on AWS](https://v2.alchemy.run/aws/guides/secrets) — Store secrets in AWS Secrets Manager and read them from a Lambda through an IAM-scoped GetSecretValue binding.
 - [REST API (API Gateway v1)](https://v2.alchemy.run/aws/guides/api-gateway) — Expose a Lambda with a regional Amazon API Gateway REST API using RestApi, Resource, Method, Deployment, and Stage primitives.
 
 ## PlanetScale
@@ -159,6 +169,10 @@ Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdr
 - [Postgres](https://v2.alchemy.run/planetscale/postgres) — PlanetScale Postgres as Stack resources — databases, branches, roles with least-privilege inherited roles, and direct vs pooled connection origins.
 - [MySQL](https://v2.alchemy.run/planetscale/mysql) — PlanetScale MySQL (Vitess) as Stack resources — databases, branches, and passwords, with SQL migrations per branch and a straight line into Cloudflare Hyperdrive.
 - [Migrations](https://v2.alchemy.run/planetscale/migrations) — Apply SQL migrations and seed data to PlanetScale databases and branches as part of every deploy — ordered, hashed, tracked, and run over short-lived credentials.
+- [Credentials](https://v2.alchemy.run/planetscale/credentials) — PlanetScale credentials as Stack resources — Postgres roles, the default role and forceReset, MySQL passwords, TTLs, CIDR allowlists, and direct vs pooled connection origins.
+- [Backups & restores](https://v2.alchemy.run/planetscale/backups) — Restore a PlanetScale backup into a fresh branch with backupId, or seed a new branch from the last successful backup with seedData.
+- [Preview branches per PR](https://v2.alchemy.run/planetscale/guides/preview-branches) — Give every pull request its own PlanetScale branch — a long-lived database owned by a staging stage, referenced by ephemeral PR stages that fork, migrate, and tear down a branch each.
+- [Drizzle ORM with PlanetScale](https://v2.alchemy.run/planetscale/guides/drizzle) — Manage your PlanetScale schema in TypeScript with Drizzle — migrations generated on deploy (Postgres) or checked in (MySQL), applied through the branch's migrationsDir, connected via role and password origins.
 
 ## Neon
 
@@ -169,6 +183,8 @@ Serverless Postgres with copy-on-write branching as Stack resources. Composes wi
 - [Branching](https://v2.alchemy.run/neon/branching) — Neon branches are copy-on-write forks of a parent branch — create them per stage or preview, pin them to a point in time, copy schema only, and let them expire on their own.
 - [Connections](https://v2.alchemy.run/neon/connections) — Every Neon project and branch exposes direct and pooled connection URIs plus pre-parsed origin outputs — feed the direct origin to Hyperdrive and the pooled one to everything else.
 - [Migrations](https://v2.alchemy.run/neon/migrations) — Apply SQL migrations and seed data to Neon projects and branches as part of every deploy — ordered, hashed, and tracked in a neon_migrations table.
+- [Preview branches per PR](https://v2.alchemy.run/neon/guides/preview-branches) — Keep one long-lived Neon project in a staging stage and fork a copy-on-write branch per PR stage — isolated preview databases in seconds, destroyed with the stage.
+- [Drizzle ORM with Neon](https://v2.alchemy.run/neon/guides/drizzle) — Manage your Drizzle schema as a resource — alchemy regenerates migration SQL on deploy and Neon applies it transactionally on the project or branch.
 
 ## Axiom
 
@@ -179,6 +195,7 @@ Observability as Stack resources — datasets, monitors, notifiers. The exporter
 - [Datasets & ingest](https://v2.alchemy.run/axiom/ingest) — Axiom datasets per OTel signal with OTLP endpoints as outputs, least-privilege ingest tokens, and per-stage naming with Stack.useSync.
 - [Alerting: monitors & notifiers](https://v2.alchemy.run/axiom/guides/alerting) — Turn APL queries into alerts — Threshold, MatchEvent, and AnomalyDetection monitors wired to Slack, email, PagerDuty, and webhook notifiers, all as resources in your Stack.
 - [Dashboards as code](https://v2.alchemy.run/axiom/guides/dashboards) — Declare Axiom dashboards — charts, layout, filter bars, saved views, and deploy annotations — as alchemy resources next to the services they observe.
+- [Deploy markers & annotations](https://v2.alchemy.run/axiom/guides/annotations) — Overlay deploys, incidents, and flag flips as vertical markers on Axiom charts — point or range annotations, scoped to one or more datasets, declared as alchemy resources.
 
 ## GitHub
 

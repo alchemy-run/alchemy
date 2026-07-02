@@ -336,6 +336,7 @@ export default defineConfig({
                 { label: "Lambda", link: "/aws/lambda" },
                 { label: "ECS", link: "/aws/ecs" },
                 { label: "EC2", link: "/aws/ec2" },
+                { label: "EKS", link: "/aws/eks" },
               ],
             },
             {
@@ -382,19 +383,20 @@ export default defineConfig({
                 { label: "Postgres", link: "/planetscale/postgres" },
                 { label: "MySQL", link: "/planetscale/mysql" },
                 { label: "Migrations", link: "/planetscale/migrations" },
+                { label: "Credentials", link: "/planetscale/credentials" },
+                { label: "Backups", link: "/planetscale/backups" },
               ],
             },
             {
               label: "Guides",
               items: [
                 {
-                  label: "Hyperdrive origin",
-                  link: "/cloudflare/hyperdrive",
+                  label: "Preview branches per PR",
+                  link: "/planetscale/guides/preview-branches",
                 },
-                { label: "Drizzle ORM", link: "/cloudflare/guides/drizzle" },
                 {
-                  label: "Shared database across stages",
-                  link: "/cloudflare/guides/shared-database",
+                  label: "Drizzle ORM",
+                  link: "/planetscale/guides/drizzle",
                 },
               ],
             },
@@ -418,18 +420,10 @@ export default defineConfig({
               label: "Guides",
               items: [
                 {
-                  label: "Hyperdrive origin",
-                  link: "/cloudflare/hyperdrive",
+                  label: "Preview branches per PR",
+                  link: "/neon/guides/preview-branches",
                 },
-                { label: "Drizzle ORM", link: "/cloudflare/guides/drizzle" },
-                {
-                  label: "Shared database across stages",
-                  link: "/cloudflare/guides/shared-database",
-                },
-                {
-                  label: "Branch from a shared database",
-                  link: "/cloudflare/guides/branch-from-shared-database",
-                },
+                { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
               ],
             },
             providerResourcesEntry("Neon"),
@@ -449,14 +443,7 @@ export default defineConfig({
               items: [
                 { label: "Alerting", link: "/axiom/guides/alerting" },
                 { label: "Dashboards", link: "/axiom/guides/dashboards" },
-                {
-                  label: "Worker telemetry to Axiom",
-                  link: "/cloudflare/guides/axiom-observability",
-                },
-                {
-                  label: "Observability",
-                  link: "/concepts/observability",
-                },
+                { label: "Annotations", link: "/axiom/guides/annotations" },
               ],
             },
             providerResourcesEntry("Axiom"),
@@ -476,20 +463,6 @@ export default defineConfig({
                   link: "/github/actions-config",
                 },
                 { label: "Webhooks & events", link: "/github/events" },
-              ],
-            },
-            {
-              label: "Guides",
-              items: [
-                { label: "CI/CD", link: "/guides/ci" },
-                {
-                  label: "Cloudflare CI/CD tutorial",
-                  link: "/cloudflare/tutorial/part-5",
-                },
-                {
-                  label: "AWS CI/CD tutorial",
-                  link: "/aws/tutorial/part-5",
-                },
               ],
             },
             providerResourcesEntry("GitHub"),
