@@ -240,8 +240,8 @@ header.bar {
   flex: none; font: 600 10.5px var(--mono); color: var(--faint);
   width: 66px; padding-top: 2px; text-align: right;
 }
-.pm .pwho.dispatch { color: var(--iris); }
-.pm .pwho.tool { color: var(--run); }
+.pm .pwho.r-dispatch { color: var(--iris); }
+.pm .pwho.r-tool { color: var(--run); }
 .pm .ptext {
   color: var(--muted); min-width: 0;
   overflow-wrap: break-word; white-space: pre-wrap;

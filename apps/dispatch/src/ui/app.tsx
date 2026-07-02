@@ -219,7 +219,7 @@ function TaskRow({ card }: { card: TaskCard }) {
               </div>
               {card.transcript.slice(-6).map((entry, i) => (
                 <div className="pm" key={i}>
-                  <span className={`pwho ${entry.role}`}>
+                  <span className={`pwho r-${entry.role}`}>
                     {entry.role === "dispatch" ? "dispatch ›" : entry.role}
                   </span>
                   <span className="ptext">{entry.text}</span>

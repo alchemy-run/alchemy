@@ -129,21 +129,48 @@ class Orchestrator {
     return this.currentEntry;
   }
 
-  private appendText(text: string) {
+  /** text held back while it could still turn out to be a "[silent]" wake reply */
+  private pendingText = "";
+
+  private flushPending() {
+    if (!this.pendingText) return;
     const entry = this.entry();
     const last = entry.parts[entry.parts.length - 1];
-    if (last && last.t === "text") last.text += text;
-    else entry.parts.push({ t: "text", text });
+    if (last && last.t === "text") last.text += this.pendingText;
+    else entry.parts.push({ t: "text", text: this.pendingText });
+    this.pendingText = "";
     store.upsertEntry(entry);
   }
 
+  private appendText(text: string) {
+    this.pendingText += text;
+    // Until the entry is visible, hold back while the accumulated text is
+    // still a prefix of "[silent]" — otherwise wake-turn suppression would
+    // flash "[silent]" in the UI mid-stream before finishEntry removes it.
+    if (!this.currentEntry) {
+      const probe = this.pendingText.trimStart();
+      if (probe.length <= "[silent]".length + 2 && "[silent]".startsWith(probe.slice(0, 8))) {
+        return;
+      }
+    }
+    this.flushPending();
+  }
+
   private appendTaskRef(taskId: string) {
+    this.flushPending();
     const entry = this.entry();
     entry.parts.push({ t: "task", taskId });
     store.upsertEntry(entry);
   }
 
   private finishEntry() {
+    const buffered = this.pendingText.trim();
+    if (!this.currentEntry && (buffered === "" || "[silent]".startsWith(buffered) || buffered === "[silent]")) {
+      // fully suppressed wake turn — nothing was ever shown
+      this.pendingText = "";
+      return;
+    }
+    this.flushPending();
     const entry = this.currentEntry;
     this.currentEntry = null;
     if (!entry) return;
