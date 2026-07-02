@@ -1,0 +1,26 @@
+{
+  "name": "dispatch",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "One orchestrator agent that manages all your coding-agent threads — tasks live as cards inside a single conversation.",
+  "scripts": {
+    "dev": "bun --hot src/server.ts",
+    "start": "bun src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.198",
+    "@anthropic-ai/sdk": ">=0.93.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.21",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.9.0"
+  }
+}
