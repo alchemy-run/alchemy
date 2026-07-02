@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpServer from "effect/unstable/http/HttpServer";
@@ -15,43 +16,26 @@ import type { StateService } from "../State/State.ts";
 import { encodeState } from "../State/StateEncoding.ts";
 import { toGraph } from "./Graph.ts";
 import type { DashboardPlan } from "./PlanJson.ts";
-
-/**
- * A live apply session, as reported by a deploying alchemy process through
- * the DashboardReporter Cli decorator. Kept in memory so browsers that
- * connect mid-apply can replay the full event log from the snapshot.
- */
-export interface ApplySessionState {
-  sessionId: string;
-  plan: DashboardPlan;
-  events: { seq: number; event: ApplyEvent }[];
-  done: boolean;
-  startedAt: string;
-}
+import { assembleScene, type Scene, type SessionInput } from "./Scene.ts";
 
 /**
  * A plan awaiting browser-side approval (`deploy --ui` without `--yes`).
  * The deploying process polls `/api/approval/status` while the browser
  * shows the plan and an approve/reject choice.
  */
-export interface PendingApproval {
+interface PendingApproval {
   id: string;
   plan: DashboardPlan;
   /** undefined while the user is deciding */
   approved?: boolean;
 }
 
-type ServerMessage =
-  | {
-      kind: "snapshot";
-      session: ApplySessionState | null;
-      approval: PendingApproval | null;
-    }
-  | { kind: "apply-start"; session: ApplySessionState }
-  | { kind: "apply-event"; seq: number; event: ApplyEvent }
-  | { kind: "apply-done" }
-  | { kind: "approval-request"; approval: PendingApproval }
-  | { kind: "approval-done"; id: string; approved: boolean };
+/**
+ * The SSE protocol is a single message kind: the full scene, re-assembled
+ * server-side on every change. The SPA renders it verbatim — no client
+ * merging, no precedence rules, no identity joins.
+ */
+type ServerMessage = { kind: "scene"; scene: Scene };
 
 const sse = (message: ServerMessage) => `data: ${JSON.stringify(message)}\n\n`;
 
@@ -101,30 +85,14 @@ const FALLBACK_HTML = `<!doctype html>
 <body style="font-family: ui-monospace, monospace; background: #0b0b0f; color: #e2e2e8; padding: 4rem;">
 <h1>alchemy dashboard</h1>
 <p>The dashboard UI bundle was not found (<code>@alchemy.run/dashboard/dist</code>).</p>
-<p>The JSON API is live — try <a style="color:#8f8fff" href="/api/graph">/api/graph</a>.</p>
+<p>The JSON API is live — try <a style="color:#8f8fff" href="/api/scene">/api/scene</a>.</p>
 <p>To develop the UI, run <code>vite dev</code> in <code>packages/dashboard</code> with
 <code>ALCHEMY_DASHBOARD_API</code> pointed at this server.</p>
 </body></html>`;
 
 /**
- * Read every persisted resource/action state for (stack, stage).
- */
-const readStates = ({ state, stack, stage }: DashboardServerOptions) =>
-  Effect.gen(function* () {
-    const fqns = yield* state.list({ stack, stage });
-    const states = yield* Effect.forEach(
-      fqns,
-      (fqn) => state.get({ stack, stage, fqn }),
-      { concurrency: 16 },
-    );
-    return states.filter(
-      (s): s is ResourceState | ActionState => s !== undefined,
-    );
-  });
-
-/**
- * Start the dashboard HTTP server: a small JSON API over the state store
- * plus the static SPA bundle. Returns the formatted server address; serving
+ * Start the dashboard HTTP server: the scene API over the state store plus
+ * the static SPA bundle. Returns the formatted server address; serving
  * continues for as long as the surrounding scope stays open.
  */
 export const serve = Effect.fn(function* (options: DashboardServerOptions) {
@@ -134,35 +102,105 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   const fs = yield* FileSystem.FileSystem;
   const server = yield* HttpServer.HttpServer;
 
-  // live apply hub: current session + broadcast to SSE subscribers
   const pubsub = yield* PubSub.unbounded<string>();
-  let current: ApplySessionState | undefined;
+
+  // ── scene inputs (server-owned, single source of truth) ───────────────
+  let revision = 0;
+  let session: SessionInput | undefined;
   let approval: PendingApproval | undefined;
 
-  // Plan computation re-evaluates the entire stack (bundling included) —
-  // cache per stage with a TTL and dedupe concurrent requests, so page
-  // reloads don't repeatedly starve the server. Cleared when an apply
-  // completes so the next request reflects the new state.
-  const planEffects = new Map<string, Effect.Effect<DashboardPlan>>();
-  const planFor = (stg: string) =>
+  // Persisted states per stage, cached: reading the state store can be
+  // slow (HTTP backends) and must not run per SSE event. Refreshed on
+  // demand with a TTL and explicitly after an apply completes.
+  const STATES_TTL_MS = 10_000;
+  const statesCache = new Map<
+    string,
+    { at: number; states: (ResourceState | ActionState)[] }
+  >();
+  const readStates = (stg: string, force = false) =>
     Effect.gen(function* () {
-      if (plan === undefined) {
-        return {
-          available: false,
-          error: "plan not enabled",
-          resources: {},
-          deletions: {},
-          actions: {},
-          cycleMembers: [],
-        } satisfies DashboardPlan;
+      const cached = statesCache.get(stg);
+      if (!force && cached && Date.now() - cached.at < STATES_TTL_MS) {
+        return cached.states;
       }
-      let cached = planEffects.get(stg);
-      if (cached === undefined) {
-        cached = yield* Effect.cachedWithTTL(plan(stg), "30 seconds");
-        planEffects.set(stg, cached);
-      }
-      return yield* cached;
+      const fqns = yield* state
+        .list({ stack, stage: stg })
+        .pipe(Effect.orElseSucceed(() => [] as readonly string[]));
+      const states = yield* Effect.forEach(
+        fqns,
+        (fqn) =>
+          state
+            .get({ stack, stage: stg, fqn })
+            .pipe(Effect.orElseSucceed(() => undefined)),
+        { concurrency: 16 },
+      );
+      const settled = states.filter(
+        (s): s is ResourceState | ActionState => s !== undefined,
+      );
+      statesCache.set(stg, { at: Date.now(), states: settled });
+      return settled;
     });
+
+  // Plan computation re-evaluates the entire stack (bundling included) —
+  // compute lazily per stage, dedupe concurrent requests, keep the last
+  // result. Cleared when an apply completes. A scene can be served before
+  // the plan lands (planReady: false); when it lands the scene is
+  // re-broadcast.
+  const lastPlans = new Map<string, DashboardPlan>();
+  const planInFlight = new Set<string>();
+  // computations run on a server-scoped worker fiber (request scopes close
+  // when the response completes, which would kill a fork)
+  const planQueue = yield* Queue.unbounded<string>();
+  const requestPlan = (stg: string) =>
+    plan === undefined || planInFlight.has(stg) || lastPlans.has(stg)
+      ? Effect.void
+      : Effect.gen(function* () {
+          planInFlight.add(stg);
+          yield* Queue.offer(planQueue, stg);
+        });
+
+  const buildScene = (stg: string) =>
+    Effect.gen(function* () {
+      const states = yield* readStates(stg);
+      const stages = yield* state
+        .listStages(stack)
+        .pipe(Effect.orElseSucceed(() => [stage] as const));
+      // plan precedence: pending approval > active session > computed plan
+      const computed = lastPlans.get(stg);
+      const overlay =
+        stg !== stage
+          ? computed
+          : approval !== undefined && approval.approved === undefined
+            ? approval.plan
+            : session !== undefined && (!session.done || computed === undefined)
+              ? session.plan
+              : computed;
+      return assembleScene({
+        revision: ++revision,
+        stack,
+        stage: stg,
+        stages: [...new Set([...stages, stage])].sort(),
+        states,
+        plan: overlay,
+        planReady:
+          overlay !== undefined || (plan === undefined && stg === stage),
+        planError: overlay?.available === false ? overlay.error : undefined,
+        // the session belongs to the server's stage
+        session: stg === stage ? session : undefined,
+        approvalId:
+          stg === stage && approval !== undefined
+            ? approval.approved === undefined
+              ? approval.id
+              : undefined
+            : undefined,
+      });
+    });
+
+  const broadcast = (stg: string) =>
+    Effect.gen(function* () {
+      const scene = yield* buildScene(stg);
+      yield* PubSub.publish(pubsub, sse({ kind: "scene", scene }));
+    }).pipe(Effect.ignore);
 
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest;
@@ -173,22 +211,23 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
     if (route === "/api/health") {
       return yield* HttpServerResponse.json({ ok: true, stack, stage });
     }
+
+    // ── apply session ingest (from the DashboardReporter tee) ──────────
     if (route === "/api/apply/start" && request.method === "POST") {
       const body = (yield* request.json) as unknown as {
         sessionId: string;
         plan: DashboardPlan;
       };
-      current = {
+      // a new operation begins: the previous session's overlay (results,
+      // ghosts) and any stale approval are retired with it
+      session = {
         sessionId: body.sessionId,
         plan: body.plan,
         events: [],
         done: false,
-        startedAt: new Date().toISOString(),
       };
-      yield* PubSub.publish(
-        pubsub,
-        sse({ kind: "apply-start", session: current }),
-      );
+      approval = undefined;
+      yield* broadcast(stage);
       return yield* HttpServerResponse.json({ ok: true });
     }
     if (route === "/api/apply/event" && request.method === "POST") {
@@ -197,34 +236,37 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         seq: number;
         event: ApplyEvent;
       };
-      if (current?.sessionId === body.sessionId) {
-        current.events.push({ seq: body.seq, event: body.event });
-        yield* PubSub.publish(
-          pubsub,
-          sse({ kind: "apply-event", seq: body.seq, event: body.event }),
-        );
+      if (session?.sessionId === body.sessionId) {
+        session.events.push({ seq: body.seq, event: body.event });
+        yield* broadcast(stage);
       }
       return yield* HttpServerResponse.json({ ok: true });
     }
     if (route === "/api/apply/done" && request.method === "POST") {
       const body = (yield* request.json) as unknown as { sessionId: string };
-      if (current?.sessionId === body.sessionId) {
-        current.done = true;
-        planEffects.clear();
-        yield* PubSub.publish(pubsub, sse({ kind: "apply-done" }));
+      if (session?.sessionId === body.sessionId) {
+        session.done = true;
+        // the world changed: refresh state now and recompute the plan
+        lastPlans.delete(stage);
+        yield* readStates(stage, true).pipe(Effect.ignore);
+        yield* broadcast(stage);
+        yield* requestPlan(stage);
       }
       return yield* HttpServerResponse.json({ ok: true });
     }
+
+    // ── browser-side approval (deploy --ui without --yes) ──────────────
     if (route === "/api/approval/request" && request.method === "POST") {
       const body = (yield* request.json) as unknown as {
         id: string;
         plan: DashboardPlan;
       };
       approval = { id: body.id, plan: body.plan };
-      yield* PubSub.publish(
-        pubsub,
-        sse({ kind: "approval-request", approval }),
-      );
+      // the pending plan is a NEW operation: retire the previous
+      // session's result overlay so the canvas shows what WILL happen,
+      // not what last happened
+      session = undefined;
+      yield* broadcast(stage);
       return yield* HttpServerResponse.json({ ok: true });
     }
     if (route === "/api/approval/status") {
@@ -243,12 +285,16 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       };
       if (approval?.id === body.id && approval.approved === undefined) {
         approval.approved = body.approved;
-        yield* PubSub.publish(
-          pubsub,
-          sse({ kind: "approval-done", id: body.id, approved: body.approved }),
-        );
+        yield* broadcast(stage);
       }
       return yield* HttpServerResponse.json({ ok: true });
+    }
+
+    // ── scene ───────────────────────────────────────────────────────────
+    if (route === "/api/scene") {
+      const scene = yield* buildScene(stg);
+      yield* requestPlan(stg);
+      return yield* HttpServerResponse.json(scene);
     }
     if (route === "/api/events") {
       // SSE: subscribe first, then snapshot, so nothing is lost in between.
@@ -257,18 +303,11 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       const body = Stream.unwrap(
         Effect.gen(function* () {
           const subscription = yield* PubSub.subscribe(pubsub);
-          const snapshot = sse({
-            kind: "snapshot",
-            session: current ?? null,
-            approval:
-              approval !== undefined && approval.approved === undefined
-                ? approval
-                : null,
-          });
+          const scene = yield* buildScene(stage);
           const heartbeat = Stream.fromSchedule(
             Schedule.spaced("8 seconds"),
           ).pipe(Stream.map(() => ":ping\n\n"));
-          return Stream.make(snapshot).pipe(
+          return Stream.make(sse({ kind: "scene", scene })).pipe(
             Stream.concat(
               Stream.fromSubscription(subscription).pipe(
                 Stream.merge(heartbeat),
@@ -286,15 +325,9 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       });
     }
 
-    if (route === "/api/meta") {
-      const stages = yield* state
-        .listStages(stack)
-        .pipe(Effect.orElseSucceed(() => [stage] as const));
-      return yield* HttpServerResponse.json({ stack, stage, stages });
-    }
+    // ── raw data (debugging / power users) ─────────────────────────────
     if (route === "/api/graph") {
-      const states = yield* readStates({ state, stack, stage: stg });
-      return yield* HttpServerResponse.json(toGraph(states));
+      return yield* HttpServerResponse.json(toGraph(yield* readStates(stg)));
     }
     if (route === "/api/resource") {
       const fqn = url.searchParams.get("fqn");
@@ -305,15 +338,6 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       return value === undefined
         ? HttpServerResponse.empty({ status: 404 })
         : yield* HttpServerResponse.json(encodeState(value));
-    }
-    if (route === "/api/plan") {
-      // While an apply is streaming, its plan is authoritative AND
-      // recomputing would re-evaluate the whole stack inside the deploying
-      // process (starving the event loop mid-apply for `--ui`).
-      if (current !== undefined && !current.done && stg === stage) {
-        return yield* HttpServerResponse.json(current.plan);
-      }
-      return yield* HttpServerResponse.json(yield* planFor(stg));
     }
     if (route === "/api/outputs") {
       const output = yield* state
@@ -348,5 +372,28 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   );
 
   yield* server.serve(handler);
+
+  // plan worker: computes plans sequentially on the server's scope and
+  // re-broadcasts the scene when each lands
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      while (true) {
+        const stg = yield* Queue.take(planQueue);
+        if (plan === undefined) {
+          continue;
+        }
+        const result = yield* plan(stg).pipe(
+          Effect.ensuring(Effect.sync(() => planInFlight.delete(stg))),
+        );
+        lastPlans.set(stg, result);
+        yield* broadcast(stg);
+      }
+    }).pipe(Effect.ignore),
+  );
+  // NOTE: the plan is NOT computed eagerly — a full stack re-evaluation
+  // (bundling included) can starve this process's event loop and hang the
+  // first page load. The first /api/scene request queues it; the page
+  // renders immediately with planReady:false and updates when it lands.
+
   return HttpServer.formatAddress(server.address);
 });

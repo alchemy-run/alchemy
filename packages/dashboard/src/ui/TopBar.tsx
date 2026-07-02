@@ -1,7 +1,7 @@
 import { FlaskConical, Search, X } from "lucide-react";
 import { planSummary } from "../plan.ts";
 import { PLAN_COLORS, PLAN_LABELS } from "../theme.ts";
-import type { DashboardMeta, DashboardPlan } from "../types.ts";
+import type { DashboardMeta, DashboardNode } from "../types.ts";
 import { StageSelect } from "./StageSelect.tsx";
 
 export type View = "canvas" | "list";
@@ -10,7 +10,8 @@ export function TopBar({
   meta,
   stage,
   onStage,
-  plan,
+  nodes,
+  planReady,
   view,
   onView,
   query,
@@ -21,7 +22,8 @@ export function TopBar({
   meta: DashboardMeta;
   stage: string;
   onStage: (stage: string) => void;
-  plan?: DashboardPlan;
+  nodes: DashboardNode[];
+  planReady: boolean;
   view: View;
   onView: (view: View) => void;
   query: string;
@@ -30,7 +32,7 @@ export function TopBar({
   shown: number;
   total: number;
 }) {
-  const summary = planSummary(plan);
+  const summary = planSummary(nodes);
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#26262f] bg-[#101016] px-4">
       <FlaskConical size={16} className="text-indigo-400" />
@@ -38,10 +40,10 @@ export function TopBar({
         {meta.stack}
       </span>
       <StageSelect stage={stage} stages={meta.stages} onSelect={onStage} />
-      {plan === undefined && (
+      {!planReady && (
         <span className="text-[11px] text-zinc-600">planning…</span>
       )}
-      {plan?.available &&
+      {planReady &&
         (summary.length === 0 ? (
           <span className="rounded-full border border-[#2a2a35] px-2.5 py-0.5 text-[11px] text-emerald-400">
             ✓ in sync
