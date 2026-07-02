@@ -5,6 +5,8 @@ import {
   cloudOf,
   PLAN_COLORS,
   PLAN_LABELS,
+  RESULT_COLORS,
+  RESULT_LABELS,
   serviceOf,
   statusColor,
   typeName,
@@ -84,7 +86,17 @@ export function ListView({
                   </span>
                 </td>
                 <td className="px-4 py-2">
-                  {node.planAction && (
+                  {node.applyResult ? (
+                    <span
+                      className="rounded px-1.5 py-px text-[11px] font-medium"
+                      style={{
+                        color: "#0b0b10",
+                        background: RESULT_COLORS[node.applyResult],
+                      }}
+                    >
+                      {RESULT_LABELS[node.applyResult] ?? node.applyResult}
+                    </span>
+                  ) : node.planAction ? (
                     <span
                       className="rounded px-1.5 py-px text-[11px] font-medium"
                       style={{
@@ -94,7 +106,7 @@ export function ListView({
                     >
                       {PLAN_LABELS[node.planAction] ?? node.planAction}
                     </span>
-                  )}
+                  ) : null}
                 </td>
                 <td className="max-w-64 truncate px-4 py-2 text-zinc-500">
                   {summary ?? ""}

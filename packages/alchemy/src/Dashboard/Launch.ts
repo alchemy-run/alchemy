@@ -167,6 +167,11 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
         yield* Clank.openUrl(url).pipe(Effect.catch(() => Effect.void));
       }
       yield* Effect.never;
-    }).pipe(Effect.provide(stack.services), Effect.provide(httpServer(port)));
+    }).pipe(
+      Effect.provide(stack.services),
+      // plan evaluation can hold a request open for a long time — give it
+      // headroom past Bun's 10s default idle timeout
+      Effect.provide(httpServer(port, "127.0.0.1", { idleTimeout: 240 })),
+    );
   }).pipe(Effect.provide(servicesFor(stage)), Effect.scoped);
 });

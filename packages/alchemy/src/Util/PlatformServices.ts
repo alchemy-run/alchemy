@@ -79,11 +79,25 @@ export const runMain = <E, A>(
 export const httpServer = (
   port: number = 0,
   host: string = "127.0.0.1",
+  options?: {
+    /**
+     * Bun kills responses idle for >10s by default — long-running request
+     * handlers (e.g. the dashboard's plan evaluation) need more headroom.
+     * Seconds, max 255. Node's server is unaffected.
+     */
+    idleTimeout?: number;
+  },
 ): Layer.Layer<HttpServer, ServeError> =>
   platformLayer({
     bun: async () => {
       const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
-      return BunHttpServer.layer({ hostname: host, port });
+      return BunHttpServer.layer({
+        hostname: host,
+        port,
+        ...(options?.idleTimeout !== undefined
+          ? { idleTimeout: options.idleTimeout }
+          : undefined),
+      });
     },
     node: async () => {
       const [NodeHttpServer, Http] = await Promise.all([

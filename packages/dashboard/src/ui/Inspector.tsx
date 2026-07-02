@@ -6,6 +6,8 @@ import {
   cloudOf,
   PLAN_COLORS,
   PLAN_LABELS,
+  RESULT_COLORS,
+  RESULT_LABELS,
   statusColor,
 } from "../theme.ts";
 import type { DashboardMeta, DashboardNode } from "../types.ts";
@@ -56,7 +58,21 @@ export function Inspector({
       </div>
 
       <div className="space-y-4 p-4">
-        {node.planAction && (
+        {node.applyResult && (
+          <div
+            className="rounded-lg border px-3 py-2 text-[12px]"
+            style={{
+              borderColor: `${RESULT_COLORS[node.applyResult]}55`,
+              background: `${RESULT_COLORS[node.applyResult]}14`,
+              color: RESULT_COLORS[node.applyResult],
+            }}
+          >
+            Last deploy: {RESULT_LABELS[node.applyResult] ?? node.applyResult}
+            {node.applyResult === "deleted" &&
+              " — removed from the stack; this ghost clears when the deploy feed is dismissed"}
+          </div>
+        )}
+        {node.planAction && !node.applyResult && (
           <div
             className="rounded-lg border px-3 py-2 text-[12px]"
             style={{

@@ -1,22 +1,25 @@
 import { CheckCircle2, Loader2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { LiveApply } from "../live.ts";
 import { statusColor } from "../theme.ts";
 
 /**
  * Floating activity feed shown while (and just after) a deploy streams in.
+ * Dismissing also clears the session's result overlay (ghost nodes,
+ * apply-result badges) — the parent owns that state.
  */
-export function ActivityFeed({ live }: { live: LiveApply }) {
-  const [dismissed, setDismissed] = useState<string>();
+export function ActivityFeed({
+  live,
+  onDismiss,
+}: {
+  live: LiveApply;
+  onDismiss: () => void;
+}) {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [live.feed.length]);
-
-  if (dismissed === live.sessionId) {
-    return null;
-  }
 
   return (
     <div className="absolute bottom-4 left-4 z-10 w-[340px] overflow-hidden rounded-xl border border-[#2a2a35] bg-[#101016]/95 backdrop-blur">
@@ -30,7 +33,7 @@ export function ActivityFeed({ live }: { live: LiveApply }) {
           {live.done ? "Deploy complete" : "Deploying…"}
         </span>
         <button
-          onClick={() => setDismissed(live.sessionId)}
+          onClick={onDismiss}
           className="ml-auto rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
         >
           <X size={12} />

@@ -47,6 +47,23 @@ export const PLAN_LABELS: Record<string, string> = {
   delete: "− delete",
 };
 
+/** what the last apply DID (terminal results), vs PLAN_* (what a deploy would do) */
+export const RESULT_COLORS: Record<string, string> = {
+  created: "#34d399",
+  updated: "#fbbf24",
+  replaced: "#c084fc",
+  deleted: "#f87171",
+  failed: "#f87171",
+};
+
+export const RESULT_LABELS: Record<string, string> = {
+  created: "✓ created",
+  updated: "✓ updated",
+  replaced: "↻ replaced",
+  deleted: "− deleted",
+  failed: "✗ failed",
+};
+
 const IN_FLIGHT = new Set([
   "creating",
   "updating",

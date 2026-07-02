@@ -1,11 +1,25 @@
 import type { DashboardGraph, DashboardMeta, DashboardPlan } from "./types.ts";
 
-const get = async <T>(path: string): Promise<T> => {
-  const res = await fetch(path);
-  if (!res.ok) {
-    throw new Error(`${path} -> ${res.status}`);
+/**
+ * Fetch with retries: while a deploy runs in the serving process, requests
+ * can transiently stall or get reset — never take the whole app down over
+ * one dropped request.
+ */
+const get = async <T>(path: string, attempts = 4): Promise<T> => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(path);
+      if (!res.ok) {
+        throw new Error(`${path} -> ${res.status}`);
+      }
+      return (await res.json()) as T;
+    } catch (error) {
+      if (attempt >= attempts - 1) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+    }
   }
-  return (await res.json()) as T;
 };
 
 export const fetchMeta = () => get<DashboardMeta>("/api/meta");
