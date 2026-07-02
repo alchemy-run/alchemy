@@ -120,7 +120,17 @@ const SECTIONS: Section[] = [
   },
   {
     heading: "Testing & observability",
-    pages: { slugs: ["concepts/testing", "concepts/observability"] },
+    intro:
+      "Tests run against real clouds: the model, the end-to-end walkthrough, provider-lifecycle testing, and the harness reference.",
+    pages: {
+      slugs: [
+        "concepts/testing",
+        "guides/testing-a-stack",
+        "guides/testing-providers",
+        "concepts/test-harness",
+        "concepts/observability",
+      ],
+    },
   },
   {
     heading: "Cloudflare — start here",

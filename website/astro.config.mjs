@@ -347,6 +347,15 @@ export default defineConfig({
               label: "Testing & observability",
               items: [
                 { label: "Testing", link: "/concepts/testing" },
+                {
+                  label: "Testing a Stack",
+                  link: "/guides/testing-a-stack",
+                },
+                {
+                  label: "Testing Providers",
+                  link: "/guides/testing-providers",
+                },
+                { label: "Test harness", link: "/concepts/test-harness" },
                 { label: "Observability", link: "/concepts/observability" },
               ],
             },

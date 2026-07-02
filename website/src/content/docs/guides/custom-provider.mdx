@@ -820,6 +820,8 @@ providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
 
 ## Test the lifecycle
 
+Full `test.provider` reference and patterns: [Testing Providers](/guides/testing-providers).
+
 Alchemy's test harness (`alchemy/Test/Vitest` or `alchemy/Test/Bun`)
 configures providers + state once at the top of the file, then
 exposes `test.provider(name, (stack) => ...)` for provider-level
@@ -913,8 +915,8 @@ If you'd rather start from a real provider:
 
 - [Actions](/concepts/action) — deploy-time work that isn't a
   resource.
-- [Testing](/concepts/testing) — the harness patterns behind
-  `test.provider`.
+- [Testing Providers](/guides/testing-providers) — the harness
+  patterns behind `test.provider`.
 - [Providers](/concepts/provider) — the operation contract this
   guide implements.
 - [Bindings](/concepts/binding) — next up: connecting Resources to Functions.
