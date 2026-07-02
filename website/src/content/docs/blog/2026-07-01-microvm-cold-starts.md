@@ -114,10 +114,18 @@ distribution view makes the trade explicit:
 
 ![CDF of time to usable service — container curves cross the MicroVM curves before the 90th percentile](/blog/microvms/cdf.png)
 
-The container curves race ahead early and then go flat: 73–90%
-of boots are done by 3 seconds, and the rest drag out an order
-of magnitude longer. The MicroVM curves start later and go
-vertical — the p50 and the max are nearly the same number.
+The container curves race ahead early and then go flat. Flat is
+the problem: 73–90% of boots are done by 3 seconds, and then the
+curve stalls — the remaining 10–27% of your users are waiting
+10, 20, 40+ seconds. Every point in that flat stretch is a
+person staring at a spinner.
+
+The MicroVM curves are the opposite shape: they start later but
+go straight up. A vertical line means every boot takes the same
+amount of time — the median user and the unluckiest user get
+nearly the same experience. That's the property you can build a
+product on: you know what to promise, and the promise holds for
+the last user as well as the first.
 
 | | p50 | p95 | max |
 | --- | --- | --- | --- |
