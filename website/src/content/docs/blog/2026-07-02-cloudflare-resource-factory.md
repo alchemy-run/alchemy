@@ -81,9 +81,12 @@ turnstile.getWidget({ accountId, sitekey }).pipe(
   Effect.catchTag("WidgetNotFound", () => Effect.succeed(undefined)),
 );
 
-// fresh scoped tokens propagate eventually-consistently — ride out the blips
-snippets.listSnippets({ zoneId }).pipe(
-  Effect.retry({ while: (e) => e._tag === "Forbidden", schedule, times: 8 }),
+// R2's endpoint lags a fresh bucket create — retry the not-found until it settles
+r2.listBucketDomainCustoms({ accountId, bucketName }).pipe(
+  Effect.retry({
+    while: (e) => e._tag === "NoSuchBucket",
+    schedule: r2BucketEndpointConsistencySchedule,
+  }),
 );
 ```
 
