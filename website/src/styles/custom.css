@@ -28,18 +28,24 @@
   color-scheme: light;
 }
 
+/* Faint accent wash across the top of the whole docs page — sidebar,
+   content, and TOC alike (bun.com-style), fading into the page background.
+   The fixed sidebar goes transparent on desktop so the wash shows through
+   it; on mobile it stays an opaque overlay. */
+.page {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--alc-accent) 5%, transparent),
+    transparent 24rem
+  );
+}
+
 @media (min-width: 50rem) {
-  /* Shift Starlight's fixed sidebar off the viewport edge by the gutter,
-     and give it a faint accent wash fading into the page background —
-     the divider is the hairline, not a contrasting panel color. */
+  /* Shift Starlight's fixed sidebar off the viewport edge by the gutter;
+     division comes from the hairline, not a contrasting panel color. */
   .sidebar-pane {
     inset-inline-start: var(--alc-shell-gutter);
-    background: linear-gradient(
-        to bottom,
-        color-mix(in srgb, var(--alc-accent) 5%, transparent),
-        transparent 16rem
-      )
-      var(--sl-color-bg-sidebar);
+    background: transparent;
   }
   /* …offset the main column to match (Starlight derives the content inset
      from this var)… */
