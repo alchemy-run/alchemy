@@ -20,7 +20,36 @@
   --sl-nav-height: calc(var(--alc-nav-row-height) + var(--alc-tabs-height));
   --sl-nav-pad-x: 2rem;
   --sl-nav-pad-y: 0;
+  /* Cap the whole docs shell (sidebar + content + TOC) and center it,
+     bun.com/nextjs-style, instead of pinning the sidebar and TOC to the
+     viewport edges on wide screens. */
+  --alc-shell-max: 96rem;
+  --alc-shell-gutter: max(0rem, calc((100vw - var(--alc-shell-max)) / 2));
   color-scheme: light;
+}
+
+@media (min-width: 50rem) {
+  /* Shift Starlight's fixed sidebar off the viewport edge by the gutter… */
+  .sidebar-pane {
+    inset-inline-start: var(--alc-shell-gutter);
+  }
+  /* …offset the main column to match (Starlight derives the content inset
+     from this var)… */
+  [data-has-sidebar] .page {
+    --sl-content-inline-start: calc(
+      var(--sl-sidebar-width) + var(--alc-shell-gutter)
+    );
+  }
+  /* …and mirror the gutter on the right so the TOC pulls in too. */
+  .main-frame {
+    padding-inline-end: var(--alc-shell-gutter);
+  }
+  /* The fixed header keeps its full-width background; its content (nav row +
+     tab bar) is capped to the same shell. */
+  .alc-docs-header {
+    max-width: var(--alc-shell-max);
+    margin-inline: auto;
+  }
 }
 
 /* Pin Starlight's floating mobile hamburger to the first header row — it
@@ -896,4 +925,59 @@ header.header {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── Docs sidebar restyle (redesign mockups): small-caps group headings,
+   flat sections instead of accordion rows, active page = accent bar +
+   tinted background instead of a filled pill. ── */
+
+/* Group labels read as small-caps section headings. */
+#starlight__sidebar .top-level > li > details > summary .group-label .large {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--alc-fg-4);
+}
+#starlight__sidebar .top-level > li > details {
+  margin-top: 0.9rem;
+}
+
+/* Hub-tab groups contain only links — render them as flat, always-open
+   sections: no caret, no collapse affordance. Reference's provider groups
+   nest further groups (categories → services) and keep the caret. */
+#starlight__sidebar .top-level > li > details:not(:has(details)) > summary {
+  pointer-events: none;
+}
+#starlight__sidebar
+  .top-level
+  > li
+  > details:not(:has(details))
+  > summary
+  .caret {
+  display: none;
+}
+
+/* Entries: tighter and smaller, with a reserved rail for the accent bar. */
+#starlight__sidebar .sidebar-content a {
+  font-size: 13px;
+  padding-block: 0.22rem;
+  border-inline-start: 3px solid transparent;
+  border-radius: 0;
+}
+#starlight__sidebar .sidebar-content a.large {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sl-color-gray-2);
+}
+#starlight__sidebar .sidebar-content a:hover {
+  color: var(--alc-accent-deep);
+}
+
+/* Active page: left accent bar + tint, mockup-style. */
+#starlight__sidebar .sidebar-content a[aria-current="page"] {
+  background: var(--alc-accent-12);
+  color: var(--alc-accent-deep);
+  border-inline-start-color: var(--alc-accent-deep);
+  font-weight: 500;
 }

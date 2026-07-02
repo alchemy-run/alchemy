@@ -217,6 +217,7 @@ export default defineConfig({
         ThemeProvider: "./src/components/ThemeProvider.astro",
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
+        Sidebar: "./src/components/starlight/Sidebar.astro",
       },
       prerender: true,
       social: [
@@ -258,18 +259,26 @@ export default defineConfig({
               autogenerate: { directory: "cloudflare/tutorial" },
             },
             {
-              label: "Building Blocks",
+              label: "Compute",
               items: [
                 { label: "Workers", link: "/cloudflare/workers" },
                 {
                   label: "Durable Objects",
                   link: "/cloudflare/durable-objects",
                 },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
                 { label: "D1", link: "/cloudflare/d1" },
                 { label: "R2", link: "/cloudflare/r2" },
-                { label: "Queues", link: "/cloudflare/queues" },
                 { label: "Hyperdrive", link: "/cloudflare/hyperdrive" },
               ],
+            },
+            {
+              label: "Messaging",
+              items: [{ label: "Queues", link: "/cloudflare/queues" }],
             },
             {
               label: "Guides",
@@ -283,13 +292,19 @@ export default defineConfig({
             { label: "Overview", link: "/aws" },
             { label: "Setup", link: "/aws/setup" },
             {
-              label: "Compute",
+              label: "Tutorial",
+              autogenerate: { directory: "aws/tutorial" },
+            },
+            {
+              label: "Compute — pick one",
               items: [
                 {
                   label: "Choosing a runtime",
                   link: "/aws/choosing-a-runtime",
                 },
                 { label: "Lambda", link: "/aws/lambda" },
+                { label: "ECS", link: "/aws/ecs" },
+                { label: "EC2", link: "/aws/ec2" },
               ],
             },
             {
@@ -305,6 +320,10 @@ export default defineConfig({
                 { label: "SQS", link: "/aws/sqs" },
                 { label: "Kinesis", link: "/aws/kinesis" },
               ],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "VPC & networking", link: "/aws/networking" }],
             },
             { label: "Guides", autogenerate: { directory: "aws/guides" } },
           ],

@@ -102,15 +102,28 @@ The AWS hub: overview (runtimes + building blocks + recipes), setup (credentials
 - [Setup](https://v2.alchemy.run/aws/setup) — Install Alchemy and connect it to your AWS account — SSO, environment variables, or stored access keys.
 - [Choosing a runtime](https://v2.alchemy.run/aws/choosing-a-runtime) — Lambda vs ECS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
 
+## AWS — tutorial
+
+A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. Each part builds on the previous one.
+
+- [Part 1: Your First Stack](https://v2.alchemy.run/aws/tutorial/part-1) — Install Alchemy, create a Stack with an AWS S3 Bucket, and deploy it.
+- [Part 2: Add a Lambda](https://v2.alchemy.run/aws/tutorial/part-2) — Create an AWS Lambda Function with a public URL, bind the S3 Bucket, and implement GET/PUT routes.
+- [Part 3: Testing](https://v2.alchemy.run/aws/tutorial/part-3) — Write integration tests that deploy your stack and make HTTP requests against your live Lambda Function URL.
+- [Part 4: Stages](https://v2.alchemy.run/aws/tutorial/part-4) — Deploy isolated dev, staging, and prod instances of your stack with --stage, and tune resources per stage.
+- [Part 5: CI/CD](https://v2.alchemy.run/aws/tutorial/part-5) — Set up GitHub Actions for automated AWS deployments and PR previews — with OIDC credentials provisioned as code.
+
 ## AWS — building blocks
 
-The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda.
+The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda. ECS and EC2 are the long-running alternatives to Lambda; the networking page covers the VPC primitives that support them.
 
 - [Lambda](https://v2.alchemy.run/aws/lambda) — Stand up an AWS Lambda Function from a single Effect, expose it over a Function URL, and call it from a test.
+- [ECS](https://v2.alchemy.run/aws/ecs) — Run a long-lived Effect program as a container on Fargate — Alchemy builds and pushes the Docker image, provisions the roles and log group, and can front the service with a public ALB.
+- [EC2](https://v2.alchemy.run/aws/ec2) — Launch virtual machines with the Instance resource — as a raw compute primitive, or hosting a bundled long-lived Effect program served straight off the box.
 - [DynamoDB](https://v2.alchemy.run/aws/dynamodb) — Add a DynamoDB Table, bind GetItem and PutItem to your Lambda, and serve a typed key/value HTTP API backed by DynamoDB.
 - [S3](https://v2.alchemy.run/aws/s3) — Add an S3 Bucket to your Stack, bind PutObject and GetObject as runtime capabilities, and let Alchemy mint the IAM policy for you.
 - [SQS](https://v2.alchemy.run/aws/sqs) — Add an SQS Queue, publish messages from your Lambda, and consume them from a second consumer Lambda — all wired through Alchemy bindings.
 - [Kinesis](https://v2.alchemy.run/aws/kinesis) — Add a Kinesis Data Stream, publish records from one Lambda, and consume them in order from another — wired through the same Stream-shaped event source.
+- [VPC & networking](https://v2.alchemy.run/aws/networking) — The Network helper for a production-shaped VPC in one call, and the full set of EC2 networking primitives — VPCs, subnets, gateways, routes, security groups, and endpoints — for explicit control.
 
 ## AWS — guides
 

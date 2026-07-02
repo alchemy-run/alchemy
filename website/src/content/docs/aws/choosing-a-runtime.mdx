@@ -59,9 +59,11 @@ ECS with three resources:
   for you.
 
 You pay for running tasks whether or not they're serving
-traffic, and you bring a VPC (subnets + security groups). ECS is
-documented through the generated reference pages above rather
-than a walkthrough track.
+traffic, and you bring a VPC (subnets + security groups) — the
+[`Network`](/providers/aws/ec2/network) helper builds one in a
+single call.
+
+→ [ECS](/aws/ecs)
 
 ## EC2 — when you need the machine
 
@@ -74,11 +76,12 @@ Alchemy ships the complete networking toolkit around it:
 [`Vpc`](/providers/aws/ec2/vpc),
 [`Subnet`](/providers/aws/ec2/subnet),
 [`SecurityGroup`](/providers/aws/ec2/securitygroup), NAT and
-internet gateways, route tables, EIPs, and VPC endpoints.
+internet gateways, route tables, EIPs, and VPC endpoints (see
+[VPC & networking](/aws/networking)).
 
-You own patching, scaling, and availability. Like ECS, EC2 is
-documented through the generated reference pages rather than a
-walkthrough track.
+You own patching, scaling, and availability.
+
+→ [EC2](/aws/ec2)
 
 ## Rule of thumb
 

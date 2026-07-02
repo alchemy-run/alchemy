@@ -109,11 +109,34 @@ const SECTIONS: Section[] = [
     pages: { slugs: ["aws/index", "aws/setup", "aws/choosing-a-runtime"] },
   },
   {
+    heading: "AWS — tutorial",
+    intro:
+      "A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. Each part builds on the previous one.",
+    pages: {
+      slugs: [
+        "aws/tutorial/part-1",
+        "aws/tutorial/part-2",
+        "aws/tutorial/part-3",
+        "aws/tutorial/part-4",
+        "aws/tutorial/part-5",
+      ],
+    },
+  },
+  {
     heading: "AWS — building blocks",
     intro:
-      "The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda.",
+      "The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda. ECS and EC2 are the long-running alternatives to Lambda; the networking page covers the VPC primitives that support them.",
     pages: {
-      slugs: ["aws/lambda", "aws/dynamodb", "aws/s3", "aws/sqs", "aws/kinesis"],
+      slugs: [
+        "aws/lambda",
+        "aws/ecs",
+        "aws/ec2",
+        "aws/dynamodb",
+        "aws/s3",
+        "aws/sqs",
+        "aws/kinesis",
+        "aws/networking",
+      ],
     },
   },
   {

@@ -19,13 +19,14 @@ your first [Lambda](/aws/lambda).
   with public Function URLs. The primary documented path: every
   building block and event source in this section is shown
   running on Lambda.
-- **ECS** — long-running containers on Fargate. Alchemy bundles
-  your Effect program into a Docker image and runs it as a
-  Cluster + Service + Task. See
-  [Choosing a runtime](/aws/choosing-a-runtime).
-- **EC2** — full-control virtual machines, with the complete VPC
-  networking toolkit around them. See
-  [Choosing a runtime](/aws/choosing-a-runtime).
+- **[ECS](/aws/ecs)** — long-running containers on Fargate.
+  Alchemy bundles your Effect program into a Docker image and
+  runs it as a Cluster + Service + Task.
+- **[EC2](/aws/ec2)** — full-control virtual machines, with the
+  complete VPC networking toolkit around them.
+
+Not sure which? See
+[Choosing a runtime](/aws/choosing-a-runtime).
 
 ## Building blocks
 
@@ -38,6 +39,9 @@ your first [Lambda](/aws/lambda).
 - **[Kinesis](/aws/kinesis)** — ordered, sharded data streams
   with a `PutRecord` binding and the same `Stream` consumer
   surface.
+- **[VPC & networking](/aws/networking)** — the `Network` helper
+  and the VPC primitives, for when ECS or EC2 needs explicit
+  networking.
 
 ## What are you building?
 

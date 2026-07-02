@@ -1,19 +1,40 @@
 ---
+import { TAB_ICONS } from "../../docs-icons";
 import { DOCS_TABS, activeTab } from "../../docs-tabs";
+
+// bun.com-style split: primary sections on the left, meta sections on the
+// right (see docs-tabs.ts for the definitions).
+const RIGHT_TABS = new Set(["Reference", "Blog"]);
+const left = DOCS_TABS.filter((tab) => !RIGHT_TABS.has(tab.label));
+const right = DOCS_TABS.filter((tab) => RIGHT_TABS.has(tab.label));
 
 const current = activeTab(Astro.url.pathname);
 ---
 
 <nav class="alc-tabs" aria-label="Documentation sections">
   {
-    DOCS_TABS.map((tab) => (
-      <a
-        href={tab.href}
-        class:list={["alc-tabs__tab", { "alc-tabs__tab--active": tab.label === current.label }]}
-        aria-current={tab.label === current.label ? "true" : undefined}
-      >
-        {tab.label}
-      </a>
+    [left, right].map((tabs, groupIndex) => (
+      <div class:list={["alc-tabs__group", { "alc-tabs__group--end": groupIndex === 1 }]}>
+        {tabs.map((tab) => (
+          <a
+            href={tab.href}
+            class:list={["alc-tabs__tab", { "alc-tabs__tab--active": tab.label === current.label }]}
+            aria-current={tab.label === current.label ? "true" : undefined}
+          >
+            {TAB_ICONS[tab.label] && (
+              <svg
+                class="alc-tabs__icon"
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                set:html={TAB_ICONS[tab.label]}
+              />
+            )}
+            {tab.label}
+          </a>
+        ))}
+      </div>
     ))
   }
 </nav>
@@ -22,20 +43,27 @@ const current = activeTab(Astro.url.pathname);
   .alc-tabs {
     display: flex;
     align-items: stretch;
-    gap: 4px;
+    justify-content: space-between;
+    gap: 16px;
     height: var(--alc-tabs-height, 2.5rem);
     margin: 0 calc(-1 * var(--sl-nav-pad-x));
-    padding: 0 calc(var(--sl-nav-pad-x) - 10px);
+    padding: 0 calc(var(--sl-nav-pad-x) - 12px);
     overflow-x: auto;
     scrollbar-width: none;
   }
   .alc-tabs::-webkit-scrollbar {
     display: none;
   }
+  .alc-tabs__group {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+  }
   .alc-tabs__tab {
     display: inline-flex;
     align-items: center;
-    padding: 0 10px;
+    gap: 7px;
+    padding: 0 12px;
     font-size: 13.5px;
     color: var(--alc-fg-2);
     text-decoration: none;
@@ -50,5 +78,9 @@ const current = activeTab(Astro.url.pathname);
     color: var(--alc-accent-deep);
     font-weight: 500;
     border-bottom-color: var(--alc-accent-deep);
+  }
+  .alc-tabs__icon {
+    flex-shrink: 0;
+    opacity: 0.85;
   }
 </style>

@@ -1,0 +1,19 @@
+---
+/**
+ * Sidebar override: identical to Starlight's default Sidebar, but rendering
+ * entries through our `SidebarList` (which adds group-heading icons).
+ */
+import MobileMenuFooter from "@astrojs/starlight/components/MobileMenuFooter.astro";
+import SidebarPersister from "@astrojs/starlight/components/SidebarPersister.astro";
+import SidebarList from "./SidebarList.astro";
+
+const { sidebar } = Astro.locals.starlightRoute;
+---
+
+<SidebarPersister>
+  <SidebarList sublist={sidebar} />
+</SidebarPersister>
+
+<div class="md:sl-hidden">
+  <MobileMenuFooter />
+</div>
