@@ -1,8 +1,6 @@
 ---
-title: State Store
+title: State store
 description: How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
-sidebar:
-  order: 10
 ---
 
 import StateStoreBootstrap from "../../../components/marketing-islands/StateStoreBootstrap.tsx";
@@ -138,24 +136,6 @@ because state is persisted before the cloud operation completes. If
 the process crashes mid-operation, Alchemy uses the intermediate
 state to recover on the next deploy.
 
-## Writing your own state store
-
-A state store is just an Effect `Layer` that provides the `State`
-service. If the built-in stores don't fit, you can back one with
-Postgres, S3, Redis, DynamoDB, or any other backend.
-
-The `State` service holds an `Effect<StateService>` — a deferred
-initializer — rather than a `StateService` directly. Wrap your
-builder in `Effect.cached` so the backend is only contacted on first
-use and the result is reused afterwards. This keeps commands that
-provide the layer but never read state (like `alchemy login`) from
-connecting to your backend or prompting for credentials.
-
-See [Writing a Custom State Store](/guides/custom-state-store) for
-a walkthrough of the `StateService` interface, an end-to-end
-implementation, and references to the built-in stores you can copy
-from.
-
 ## In-memory state (testing)
 
 For tests, Alchemy provides an in-memory state store so tests don't
@@ -174,3 +154,18 @@ const state = TestState.state({
 
 The test harness (`alchemy/Test/Bun` and `alchemy/Test/Vitest`)
 handles state setup automatically.
+
+## Writing your own state store
+
+A state store is just an Effect `Layer` that provides the `State`
+service — back it with Postgres, S3, Redis, DynamoDB, or any other
+backend. See [Custom state store](/guides/custom-state-store) for
+the full walkthrough.
+
+## Where next
+
+- [Custom state store](/guides/custom-state-store) — implement the
+  `StateService` interface end-to-end.
+- [Testing](/concepts/testing) — the in-memory store in practice.
+- [References](/concepts/references) — reading another stack's
+  state.

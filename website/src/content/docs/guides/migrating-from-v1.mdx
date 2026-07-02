@@ -1,8 +1,6 @@
 ---
 title: Migrating from v1
 description: Migrate your Alchemy v1 (async/await) project to Alchemy v2.
-sidebar:
-  order: 0
 ---
 
 Alchemy v1 uses `async/await` with top-level `await` for
@@ -64,11 +62,8 @@ export default Alchemy.Stack(
 
 Key differences:
 
-- `await alchemy("name")` + `await app.finalize()` → `Alchemy.Stack("name", { providers }, effect)`
-- `await Bucket("name", {})` → `Cloudflare.R2.Bucket("name")`
-- `await Worker("name", { entrypoint })` → `Cloudflare.Worker("name", { main })`
 - `entrypoint` is now called `main`
-- Resources are declared at the top level, then `yield*`-ed inside the Stack
+- `await` is now `yield*`
 - No more `finalize()` — the Stack handles lifecycle automatically
 
 ## Step 2: Keep your async handler
@@ -213,3 +208,10 @@ export default Alchemy.Stack(
 | Runtime code | `async fetch(req, env)`       | `async fetch(req, env)`       | `Effect.gen(function* () { ... })` |
 | Lifecycle    | `await app.finalize()`        | automatic                     | automatic                          |
 | Type safety  | runtime errors                | typed `env` via `InferEnv`    | full Effect type system            |
+
+## Where next
+
+- [Tutorial](/cloudflare/tutorial/part-1) — build a full app on v2 from scratch
+- [Bindings](/concepts/binding) — what replaced v1 `bindings:`
+- [Cloudflare](/cloudflare) — the Cloudflare provider hub
+- [AWS](/aws) — the AWS provider hub

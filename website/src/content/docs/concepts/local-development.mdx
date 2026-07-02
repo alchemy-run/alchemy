@@ -1,8 +1,6 @@
 ---
-title: Local Development
+title: Local development
 description: How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
-sidebar:
-  order: 12
 ---
 
 import Terminal from "../../../components/Terminal.astro";
@@ -35,6 +33,10 @@ Three things happen:
 3. **File changes hot reload** — edit your code and the Worker
    rebuilds instantly.
 
+`dev` deploys into your personal [stage](/concepts/stages)
+(`dev_$USER` by default), so your loop never collides with
+teammates or prod.
+
 ## Hot module reloading
 
 <Terminal content={`[d]Watching for changes ...[/d]
@@ -50,13 +52,11 @@ Three things happen:
 - Code changes take effect in **milliseconds**, not minutes
 - Cloud resources stay deployed across reloads — only your
   application code is rebuilt
-- Edit, save, refresh
 
 ## Why not emulate everything?
 
 Full local emulation (Miniflare, LocalStack) replicates cloud APIs
-on your machine. This leads to fidelity gaps, missing features, and
-false confidence — tests pass locally but fail in production.
+on your machine. This leads to fidelity gaps and missing features.
 
 Alchemy avoids this. Your R2 Bucket is a real R2 Bucket. Your D1
 Database is a real D1 Database. The only thing running locally is
@@ -69,8 +69,6 @@ Because Workers run locally in workerd, you can attach a debugger:
 - Set breakpoints in your IDE
 - Inspect variables and call stacks
 - Profile performance
-
-No more `console.log` debugging against deployed Workers.
 
 ## Resource adaptation
 
@@ -108,3 +106,10 @@ export default Cloudflare.Worker("Worker", {
 | Debugging        | Attach local debugger   | Tail logs            |
 | Speed            | Milliseconds            | Seconds to minutes   |
 | Fidelity         | Real cloud resources    | Real cloud resources |
+
+To automate the deploy side, see the [CI guide](/guides/ci).
+
+## Where next
+
+- [CI](/guides/ci) — deploy the same stack from GitHub Actions with PR previews.
+- [Stages](/concepts/stages) — how `dev_$USER`, `pr-42`, and `prod` stay isolated.

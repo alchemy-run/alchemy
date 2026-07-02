@@ -27,6 +27,10 @@ export const TAB_ICONS: Record<string, string | undefined> = {
 /** Sidebar group-heading icons, keyed by (normalized) group label. */
 const GROUP_ICONS: Record<string, string | undefined> = {
   Tutorial: l("graduation-cap"),
+  Stacks: l("square-stack"),
+  Deploys: l("rocket"),
+  Environments: l("sliders-horizontal"),
+  "Testing & observability": l("flask-conical"),
   Compute: l("zap"),
   Frontend: l("layout-template"),
   APIs: l("braces"),

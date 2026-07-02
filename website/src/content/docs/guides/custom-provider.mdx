@@ -1,28 +1,19 @@
 ---
-title: Writing a Custom Resource Provider
+title: Custom provider
 description: Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
-sidebar:
-  order: 8
 ---
 
-A **provider** is what gives meaning to a [Resource](/concepts/resource)
-declaration. When you `yield*` a resource inside a Stack, Alchemy
-looks up the provider for that resource's type and calls the
-appropriate lifecycle method — `reconcile`, `delete`, and
-optionally `diff`, `read`, `precreate`, `tail`, `logs`.
-
-Providers are just Effect `Layer`s, which means **adding support for
-a new cloud or third-party API is "declare a type, implement a
-Layer"** — no codegen, no registry, no schema.
+Providers are Effect `Layer`s — adding support for a new cloud or
+third-party API is "declare a type, implement a Layer". See
+[Providers](/concepts/provider) for the operation contract.
 
 This guide walks through building a Stripe `Product` provider
 end-to-end: declaring props and attributes, defining the resource
 type, implementing the lifecycle, bundling it into a `providers()`
 layer, and writing a test.
 
-See [Provider](/concepts/provider) for the conceptual overview and
-[Resource Lifecycle](/concepts/resource-lifecycle) for the semantics
-of when each lifecycle method fires.
+See [Resource lifecycle](/concepts/resource-lifecycle) for the
+semantics of when each lifecycle method fires.
 
 ## Declare props and attributes
 
@@ -327,7 +318,7 @@ fields that drifted from `news`, and we're converged.
 when `alchemy destroy` runs.
 
 :::tip[Treat 404 as success]
-Like `create`, `delete` **must be idempotent**. Alchemy may retry
+Like `reconcile`, `delete` **must be idempotent**. Alchemy may retry
 it if persistence fails between the cloud call succeeding and state
 being written. Catch "not found" errors and return `Effect.void`.
 :::
@@ -917,3 +908,12 @@ If you'd rather start from a real provider:
 - [`Axiom/AuthProvider.ts`](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Axiom/AuthProvider.ts) — full `AuthProvider` with `env` + `stored` methods and `Clank` prompts
 - [`Axiom/Credentials.ts`](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Axiom/Credentials.ts) — `fromAuthProvider()` bridge layer
 - [`Axiom/Providers.ts`](https://github.com/sam-goodwin/alchemy-effect/blob/main/packages/alchemy/src/Axiom/Providers.ts) — example of bundling a `providers()` layer with `AuthProviderLayer`
+
+## Where next
+
+- [Action](/concepts/action) — deploy-time work that isn't a
+  resource.
+- [Testing](/concepts/testing) — the harness patterns behind
+  `test.provider`.
+- [Providers](/concepts/provider) — the operation contract this
+  guide implements.

@@ -1,8 +1,6 @@
 ---
-title: Monorepos
+title: Monorepo
 description: Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
-sidebar:
-  order: 3
 ---
 
 A real app usually ships a backend API and a frontend that calls
@@ -434,7 +432,7 @@ export default Alchemy.Stack(
 `yield* Backend` resolves to the **same stage** of the named
 stack that the frontend is being deployed to — `sam` frontend
 reads `sam` backend, `pr-42` reads `pr-42`, and so on. Under the
-hood it's [`Output.stackRef`](/concepts/outputs#ref) reading
+hood it's [`Output.stackRef`](/concepts/references) reading
 the backend's persisted stack output from the state store.
 
 ### Deploy
@@ -493,12 +491,9 @@ const backend = yield* Backend.stage["pr-42"];
 | `destroy` blast radius            | Whole app                   | One package at a time                    |
 | Best for                          | Most projects               | Independent deploy cadences / consumers  |
 
-## Related
+## Where next
 
-- [Stack](/concepts/stack) — defining stacks and stack outputs.
-- [Inputs and Outputs](/concepts/outputs#ref) — the underlying
-  `Output.stackRef` and `Output.ref` operators.
-- [Shared database across stages](/cloudflare/guides/shared-database) —
-  per-resource references between stages of the same stack.
-- [Stages](/concepts/stages) — naming and isolating per-environment
-  deploys.
+- [Resource lifecycle](/concepts/resource-lifecycle) — what happens when you run `deploy`.
+- [Stacks](/concepts/stack) — defining stacks and stack outputs.
+- [Stages](/concepts/stages) — naming and isolating per-environment deploys.
+- [References](/concepts/references) — the underlying `Output.stackRef` and `Output.ref` operators.

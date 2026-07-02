@@ -269,9 +269,68 @@ export default defineConfig({
           label: "Docs",
           items: [
             { label: "What is Alchemy?", link: "/what-is-alchemy" },
-            { label: "Getting Started", link: "/getting-started" },
-            { label: "Concepts", autogenerate: { directory: "concepts" } },
-            { label: "Guides", autogenerate: { directory: "guides" } },
+            { label: "Getting started", link: "/getting-started" },
+            { label: "Migrating from v1", link: "/guides/migrating-from-v1" },
+            { label: "CLI", link: "/guides/cli" },
+            {
+              label: "Stacks",
+              items: [
+                { label: "Stacks", link: "/concepts/stack" },
+                { label: "Resources", link: "/concepts/resource" },
+                { label: "Bindings", link: "/concepts/binding" },
+                {
+                  label: "Circular bindings",
+                  link: "/guides/circular-bindings",
+                },
+                { label: "Inputs & outputs", link: "/concepts/outputs" },
+                { label: "Layers", link: "/concepts/layers" },
+                {
+                  label: "Infrastructure layers",
+                  link: "/guides/infrastructure-layers",
+                },
+                { label: "Platforms", link: "/concepts/platform" },
+                { label: "Phases", link: "/concepts/phases" },
+                { label: "Monorepo", link: "/guides/monorepo" },
+              ],
+            },
+            {
+              label: "Deploys",
+              items: [
+                {
+                  label: "Resource lifecycle",
+                  link: "/concepts/resource-lifecycle",
+                },
+                { label: "Providers", link: "/concepts/provider" },
+                { label: "Custom provider", link: "/guides/custom-provider" },
+                { label: "Actions", link: "/concepts/action" },
+                { label: "References", link: "/concepts/references" },
+                { label: "State store", link: "/concepts/state-store" },
+                {
+                  label: "Custom state store",
+                  link: "/guides/custom-state-store",
+                },
+              ],
+            },
+            {
+              label: "Environments",
+              items: [
+                { label: "Stages", link: "/concepts/stages" },
+                { label: "Profiles", link: "/concepts/profiles" },
+                { label: "Secrets & config", link: "/concepts/secrets" },
+                {
+                  label: "Local development",
+                  link: "/concepts/local-development",
+                },
+                { label: "CI", link: "/guides/ci" },
+              ],
+            },
+            {
+              label: "Testing & observability",
+              items: [
+                { label: "Testing", link: "/concepts/testing" },
+                { label: "Observability", link: "/concepts/observability" },
+              ],
+            },
           ],
         },
         {

@@ -1,8 +1,6 @@
 ---
-title: Building Infrastructure Layers
+title: Infrastructure layers
 description: Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
-sidebar:
-  order: 7
 ---
 
 A [Layer](/concepts/layers) packages infrastructure behind a typed
@@ -195,7 +193,6 @@ KV namespace resource into the Stack:
  import * as Cloudflare from "alchemy/Cloudflare";
  import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";
- import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  import { JobService } from "./JobService.ts";
 +import { JobServiceKV } from "./JobService.KV.ts";
@@ -291,7 +288,7 @@ export const JobServiceR2 = Layer.effect(
 ```
 
 Same `Layer.effect(JobService, …)` shape, same `getJob`/`putJob`
-contract — internally it yields an `Bucket` resource and binds
+contract — internally it yields a `Bucket` resource and binds
 it instead of a KV namespace.
 
 ## Swap the Layer on the Worker
@@ -313,10 +310,8 @@ The Worker still yields `JobService` and calls `getJob`/`putJob`;
 `Jobs` R2 bucket (no KV namespace) and the Worker is configured
 to talk to it.
 
-## Related
+## Where next
 
-- [Layers](/concepts/layers) — the concept behind this guide
-- [Binding](/concepts/binding) — what `Binding(resource)` does under the hood
-- [Phases](/concepts/phases) — when init vs runtime code runs
-- [Circular Bindings](/guides/circular-bindings) — two Layers
-  referencing each other
+- [Platform](/concepts/platform) — the Worker/Lambda model these Layers plug into.
+- [Layers](/concepts/layers) — the concept behind this guide.
+- [Circular bindings](/guides/circular-bindings) — two Layers referencing each other.

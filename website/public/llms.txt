@@ -7,43 +7,51 @@ This file is a navigation index for the documentation site at https://v2.alchemy
 ## Start here
 
 - [What is Alchemy?](https://v2.alchemy.run/what-is-alchemy) — Alchemy is an Infrastructure-as-Effects framework that combines cloud infrastructure and application logic into a single type-safe program powered by Effect.
-- [Getting Started](https://v2.alchemy.run/getting-started) — Install Alchemy and create your first Stack in under two minutes.
+- [Getting started](https://v2.alchemy.run/getting-started) — Install Alchemy and create your first Stack in under two minutes.
+- [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
+- [CLI](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, aws, cloudflare, login, profile, and state.
 
-## Concepts — the mental model
+## Stacks — write your program
 
-Reference pages explaining what each primitive means and how they fit together. Read these when something in a tutorial feels magical, or before designing a new Stack.
+The authoring model, in reading order: a Stack of Resources wired by Bindings, composed with Layers, deployed onto Platforms.
 
-- [Stack](https://v2.alchemy.run/concepts/stack) — A Stack is a collection of Resources deployed together as a unit.
-- [Resource](https://v2.alchemy.run/concepts/resource) — Resources are named cloud entities with input properties and output attributes.
-- [Action](https://v2.alchemy.run/concepts/action) — A node in the dependency graph that runs an Effect during apply when its inputs change.
-- [Inputs and Outputs](https://v2.alchemy.run/concepts/outputs) — Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
-- [References](https://v2.alchemy.run/concepts/references) — Read values out of another stack or stage at plan time — typed, lazy, and resolved from persisted state.
-- [Resource Lifecycle](https://v2.alchemy.run/concepts/resource-lifecycle) — How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
-- [Provider](https://v2.alchemy.run/concepts/provider) — Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
+- [Stacks](https://v2.alchemy.run/concepts/stack) — A Stack is a collection of Resources deployed together as a unit.
+- [Resources](https://v2.alchemy.run/concepts/resource) — Resources are named cloud entities with input properties and output attributes.
+- [Bindings](https://v2.alchemy.run/concepts/binding) — A binding connects a resource to a Worker or Lambda. It generates IAM policies, env vars, and a typed SDK in one call.
+- [Circular bindings](https://v2.alchemy.run/guides/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
+- [Inputs & outputs](https://v2.alchemy.run/concepts/outputs) — Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
+- [Layers](https://v2.alchemy.run/concepts/layers) — A Layer encapsulates a slice of infrastructure (resources, bindings, runtime logic) behind a typed service interface. Code that depends on the interface stays cloud-agnostic; swapping the implementation swaps the underlying infrastructure.
+- [Infrastructure layers](https://v2.alchemy.run/guides/infrastructure-layers) — Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
 - [Platform](https://v2.alchemy.run/concepts/platform) — A Platform bundles infrastructure with the runtime code that runs on it — Workers, Lambda Functions, Containers — so your handler ships with its bindings.
 - [Phases](https://v2.alchemy.run/concepts/phases) — Alchemy programs run in two phases — plantime/init drives the deploy, runtime handles requests. Knowing which is which is the key to using Platforms.
-- [Binding](https://v2.alchemy.run/concepts/binding) — A binding connects a resource to a Worker or Lambda. It generates IAM policies, env vars, and a typed SDK in one call.
-- [Secrets and Config](https://v2.alchemy.run/concepts/secrets) — Use effect/Config to read env vars at init time and have Alchemy automatically bind them onto the deploy target.
-- [Layers](https://v2.alchemy.run/concepts/layers) — A Layer encapsulates a slice of infrastructure (resources, bindings, runtime logic) behind a typed service interface. Code that depends on the interface stays cloud-agnostic; swapping the implementation swaps the underlying infrastructure.
-- [State Store](https://v2.alchemy.run/concepts/state-store) — How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
-- [Testing](https://v2.alchemy.run/concepts/testing) — Reference for alchemy/Test — every helper, hook, and option exposed by Test.make for Bun and Vitest.
-- [Local Development](https://v2.alchemy.run/concepts/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
-- [Observability](https://v2.alchemy.run/concepts/observability) — Effect emits OpenTelemetry natively and the exporter is a Layer. Provision the receiving end — datasets, monitors, notifiers, alarms — as resources in the same Stack as the code that emits the signals.
-- [Profiles](https://v2.alchemy.run/concepts/profiles) — Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
-- [Stages](https://v2.alchemy.run/concepts/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
+- [Monorepo](https://v2.alchemy.run/guides/monorepo) — Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
 
-## Guides — cloud-agnostic
+## Deploys — the engine
 
-Standalone how-to pages that apply on any cloud (CI, monorepos, custom providers, migration). Cloud-specific guides live in their cloud's section below.
+What happens when you run alchemy deploy: lifecycle, providers, actions, cross-stack references, and persisted state.
 
-- [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
-- [CLI Reference](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, aws, cloudflare, login, profile, and state.
-- [Continuous Integration](https://v2.alchemy.run/guides/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
-- [Monorepos](https://v2.alchemy.run/guides/monorepo) — Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
-- [Circular Bindings](https://v2.alchemy.run/guides/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
-- [Building Infrastructure Layers](https://v2.alchemy.run/guides/infrastructure-layers) — Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
+- [Resource lifecycle](https://v2.alchemy.run/concepts/resource-lifecycle) — How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
+- [Providers](https://v2.alchemy.run/concepts/provider) — Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
+- [Custom provider](https://v2.alchemy.run/guides/custom-provider) — Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
+- [Action](https://v2.alchemy.run/concepts/action) — A node in the dependency graph that runs an Effect during apply when its inputs change.
+- [References](https://v2.alchemy.run/concepts/references) — Read values out of another stack or stage at plan time — typed, lazy, and resolved from persisted state.
+- [State store](https://v2.alchemy.run/concepts/state-store) — How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
 - [Writing a Custom State Store](https://v2.alchemy.run/guides/custom-state-store) — Build a Postgres-backed Alchemy state store step by step — implement the StateService interface, plug it into a stack, and test it end-to-end.
-- [Writing a Custom Resource Provider](https://v2.alchemy.run/guides/custom-provider) — Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
+
+## Environments — the same app in many places
+
+Stages, credential profiles, secrets and config, local development, and CI.
+
+- [Stages](https://v2.alchemy.run/concepts/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
+- [Profiles](https://v2.alchemy.run/concepts/profiles) — Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
+- [Secrets & config](https://v2.alchemy.run/concepts/secrets) — Use effect/Config to read env vars at init time and have Alchemy automatically bind them onto the deploy target.
+- [Local development](https://v2.alchemy.run/concepts/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
+- [CI](https://v2.alchemy.run/guides/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
+
+## Testing & observability
+
+- [Testing](https://v2.alchemy.run/concepts/testing) — Reference for alchemy/Test — every helper, hook, and option exposed by Test.make for Bun and Vitest.
+- [Observability](https://v2.alchemy.run/concepts/observability) — Effect emits OpenTelemetry natively and the exporter is a Layer. Provision the receiving end — datasets, monitors, notifiers, alarms — as resources in the same Stack as the code that emits the signals.
 
 ## Cloudflare — start here
 

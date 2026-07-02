@@ -1,8 +1,6 @@
 ---
 title: Phases
 description: Alchemy programs run in two phases — plantime/init drives the deploy, runtime handles requests. Knowing which is which is the key to using Platforms.
-sidebar:
-  order: 6
 ---
 
 import DAG from "../../../components/DAG.astro";
@@ -22,7 +20,7 @@ Every alchemy program operates in two distinct phases:
 Platform resources express both in a single program by **returning
 an Effect from inside an Effect**.
 
-## Init vs Runtime
+## Init vs runtime
 
 ```typescript
 Cloudflare.Worker(
@@ -171,5 +169,12 @@ Effect.gen(function* () {
 });
 ```
 
-Continue to [Binding](/concepts/binding) for the full mechanics of
-how `Bind(resource)` wires resources into your handler.
+The `bind()` mechanics behind the guard are covered in
+[Bindings](/concepts/binding). To close out the stack model,
+continue to [Monorepo](/guides/monorepo).
+
+## Where next
+
+- [Monorepo](/guides/monorepo) — structuring stacks across packages.
+- [Bindings](/concepts/binding) — what `bind(resource)` records at plantime.
+- [Layers](/concepts/layers) — runtime as a colored function.

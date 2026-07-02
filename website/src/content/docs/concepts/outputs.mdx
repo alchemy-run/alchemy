@@ -1,8 +1,6 @@
 ---
-title: Inputs and Outputs
+title: Inputs & outputs
 description: Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
-sidebar:
-  order: 2
 ---
 
 A [Resource](/concepts/resource)'s **inputs** are the props you pass
@@ -317,5 +315,13 @@ declared.
 | Inspect dependencies                        | `Output.upstream(output)`                    |
 
 For the surrounding model — what an `Output` actually flows into,
-and how the graph deploys — see [Resource](/concepts/resource) and
-[Resource Lifecycle](/concepts/resource-lifecycle).
+and how the graph deploys — see [Resources](/concepts/resource) and
+[Resource lifecycle](/concepts/resource-lifecycle). To hide
+resources and their Outputs behind a service interface, continue to
+[Layers](/concepts/layers).
+
+## Where next
+
+- [Layers](/concepts/layers) — hide resources and their Outputs behind a service interface.
+- [References](/concepts/references) — read Outputs across stacks and stages.
+- [Resource lifecycle](/concepts/resource-lifecycle) — how the graph deploys.

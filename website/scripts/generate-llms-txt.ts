@@ -47,19 +47,67 @@ interface Section {
 const SECTIONS: Section[] = [
   {
     heading: "Start here",
-    pages: { slugs: ["what-is-alchemy", "getting-started"] },
+    pages: {
+      slugs: [
+        "what-is-alchemy",
+        "getting-started",
+        "guides/migrating-from-v1",
+        "guides/cli",
+      ],
+    },
   },
   {
-    heading: "Concepts — the mental model",
+    heading: "Stacks — write your program",
     intro:
-      "Reference pages explaining what each primitive means and how they fit together. Read these when something in a tutorial feels magical, or before designing a new Stack.",
-    pages: { directory: "concepts" },
+      "The authoring model, in reading order: a Stack of Resources wired by Bindings, composed with Layers, deployed onto Platforms.",
+    pages: {
+      slugs: [
+        "concepts/stack",
+        "concepts/resource",
+        "concepts/binding",
+        "guides/circular-bindings",
+        "concepts/outputs",
+        "concepts/layers",
+        "guides/infrastructure-layers",
+        "concepts/platform",
+        "concepts/phases",
+        "guides/monorepo",
+      ],
+    },
   },
   {
-    heading: "Guides — cloud-agnostic",
+    heading: "Deploys — the engine",
     intro:
-      "Standalone how-to pages that apply on any cloud (CI, monorepos, custom providers, migration). Cloud-specific guides live in their cloud's section below.",
-    pages: { directory: "guides" },
+      "What happens when you run alchemy deploy: lifecycle, providers, actions, cross-stack references, and persisted state.",
+    pages: {
+      slugs: [
+        "concepts/resource-lifecycle",
+        "concepts/provider",
+        "guides/custom-provider",
+        "concepts/action",
+        "concepts/references",
+        "concepts/state-store",
+        "guides/custom-state-store",
+      ],
+    },
+  },
+  {
+    heading: "Environments — the same app in many places",
+    intro:
+      "Stages, credential profiles, secrets and config, local development, and CI.",
+    pages: {
+      slugs: [
+        "concepts/stages",
+        "concepts/profiles",
+        "concepts/secrets",
+        "concepts/local-development",
+        "guides/ci",
+      ],
+    },
+  },
+  {
+    heading: "Testing & observability",
+    pages: { slugs: ["concepts/testing", "concepts/observability"] },
   },
   {
     heading: "Cloudflare — start here",

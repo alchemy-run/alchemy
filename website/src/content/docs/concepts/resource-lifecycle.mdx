@@ -1,8 +1,6 @@
 ---
-title: Resource Lifecycle
+title: Resource lifecycle
 description: How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
-sidebar:
-  order: 3
 ---
 
 import Terminal from "../../../components/Terminal.astro";
@@ -13,10 +11,9 @@ Every [Resource](/concepts/resource) goes through the same lifecycle:
 resource as create, update, replace, delete, or no-op, but the
 provider implements a single `reconcile` function that converges the
 cloud's actual state to what's declared — whether that's the first
-provisioning, a routine update, or an adoption takeover. This page
-walks through each step, what triggers it, and how alchemy recovers
-when things go wrong. For the CLI flags that drive these operations,
-see the [CLI reference](/guides/cli).
+provisioning, a routine update, or an adoption takeover. For the CLI
+flags that drive these operations, see the
+[CLI reference](/guides/cli).
 
 ## The lifecycle, end-to-end
 
@@ -199,3 +196,15 @@ The same engine powers all of these commands:
 
 See the [CLI reference](/guides/cli) for the full set of flags
 (`--yes`, `--force`, `--dry-run`, `--stage`, `--profile`, ...).
+
+Every lifecycle operation on this page is implemented per resource
+type by a [Provider](/concepts/provider).
+
+## Where next
+
+- [Providers](/concepts/provider) — the object that implements
+  `reconcile`, `delete`, `diff`, and `read` for a resource type.
+- [CLI](/guides/cli) — the commands and flags that drive the
+  lifecycle.
+- [State store](/concepts/state-store) — where the persisted state
+  behind the plan lives.

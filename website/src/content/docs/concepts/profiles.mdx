@@ -1,8 +1,6 @@
 ---
 title: Profiles
 description: Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
-sidebar:
-  hidden: true
 ---
 
 A **profile** is a named bundle of cloud credentials stored locally
@@ -110,4 +108,11 @@ shape each provider expects.
 For the full set of CLI flags involving profiles see
 [`alchemy login`](/guides/cli#login) and
 [`alchemy profile show`](/guides/cli#profile) in the CLI reference.
-For environment isolation, see [Stages](/concepts/stages).
+For environment isolation, see [Stages](/concepts/stages). To wire
+profiles into GitHub Actions, see the [CI guide](/guides/ci).
+
+## Where next
+
+- [Secrets & config](/concepts/secrets) — bind env vars and secrets onto your deploy targets.
+- [CI](/guides/ci) — one profile per environment, minted and pushed to your repo as code.
+- [CLI](/guides/cli) — every `login`, `profile`, and `--profile` flag.

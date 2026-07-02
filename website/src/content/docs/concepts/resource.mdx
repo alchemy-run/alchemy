@@ -1,8 +1,6 @@
 ---
-title: Resource
+title: Resources
 description: Resources are named cloud entities with input properties and output attributes.
-sidebar:
-  order: 1
 ---
 
 import DAG from "../../../components/DAG.astro";
@@ -26,7 +24,7 @@ const queue = yield* AWS.SQS.Queue("Jobs", {
 The logical ID (`"Bucket"`, `"Jobs"`) is stable across deploys. It
 identifies this resource within the stack and is used to track state.
 
-## Input Properties and Output Attributes
+## Input properties and output attributes
 
 Every resource has two sides:
 
@@ -44,7 +42,7 @@ const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 bucket.bucketName; // Output<string>
 ```
 
-See [Inputs and Outputs](/concepts/outputs) for the full set of
+See [Inputs & outputs](/concepts/outputs) for the full set of
 operators (`map`, `mapEffect`, `all`, `interpolate`, `ref`).
 
 These are lazy references that resolve after the resource is created.
@@ -165,7 +163,7 @@ deploys:
 
 Logical IDs only need to be unique **within a stack**.
 
-## Physical Name
+## Physical name
 
 The **physical name** is what the cloud actually sees — `myapp-dev_sam-bucket-a3f1`
 on R2, an ARN suffix on AWS, etc. Alchemy generates it for you from
@@ -324,26 +322,19 @@ It then deploys in topological order:
 3. `Worker` depends on all three → created last, after every
    upstream Output has resolved.
 
-Cycles (Worker A binds Worker B, Worker B binds Worker A) are
-handled with a two-phase plan — see
-[Circular Bindings](/guides/circular-bindings).
+Outputs draw the edges. [Bindings](/concepts/binding) attach
+resources to Workers and Lambdas — and when bindings form a cycle,
+alchemy handles it with a two-phase plan; see
+[Circular bindings](/guides/circular-bindings).
 
 ## Circular references
 
-Real systems have cycles. Two Workers that call each other. A Lambda
-that invokes another Lambda. Tables that reference each other. Most
-IaC engines reject these — alchemy resolves them by splitting each
-[Platform](/concepts/platform) resource into two pieces:
-
-- A **class** that acts as the Tag (the identity / declaration)
-- A **`.make(...)`** Layer that supplies the runtime implementation
-
-The class can be referenced before its implementation exists, so two
-Workers can name each other in their handlers without a hard
-ordering constraint.
-
-For a circular Worker pair, the resource graph contains edges in
-both directions:
+Real systems have cycles — two Workers that call each other, a
+Lambda that invokes another Lambda. Alchemy resolves them by
+splitting each [Platform](/concepts/platform) resource into a
+**class** that acts as the Tag (the identity) and a **`.make(...)`**
+Layer that supplies the runtime implementation — so the class can be
+referenced before its implementation exists:
 
 <DAG
   nodes={[
@@ -356,31 +347,11 @@ both directions:
   ]}
 />
 
-```typescript
-// src/MyWorker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+See [Circular bindings](/guides/circular-bindings) for the full A↔B
+build-up and how alchemy plans the two-phase create-then-wire deploy.
 
-// The class is the Tag — used as a typed identifier elsewhere.
-export class MyWorker extends Cloudflare.Worker<MyWorker>()("MyWorker", {
-  main: import.meta.url,
-}) {}
+## Where next
 
-// The default export is the Layer — the runtime implementation.
-export default MyWorker.make(
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.gen(function* () {
-        return HttpServerResponse.text("hello");
-      }),
-    };
-  }),
-);
-```
-
-To compose Workers that reference each other, provide both Layers
-to your Stack with `Effect.provide`. See the
-[Circular Bindings guide](/guides/circular-bindings) for a complete
-worked A↔B example, including how alchemy plans the two-phase
-create-then-wire deploy.
+- [Bindings](/concepts/binding) — connect resources to Workers and Lambdas.
+- [Inputs & outputs](/concepts/outputs) — the lazy references that draw the graph.
+- [Resource lifecycle](/concepts/resource-lifecycle) — what happens on deploy.

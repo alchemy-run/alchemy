@@ -1,8 +1,6 @@
 ---
-title: Binding
+title: Bindings
 description: A binding connects a resource to a Worker or Lambda. It generates IAM policies, env vars, and a typed SDK in one call.
-sidebar:
-  order: 7
 ---
 
 A **Binding** connects a [Resource](/concepts/resource) to a
@@ -249,5 +247,12 @@ const sendWithRetry = enqueue({ MessageBody: msg }).pipe(
 
 Because every binding is an Effect with the same shape, you can
 hide them behind a service interface and swap implementations
-without touching handler code. That's exactly what
-[Layers](/concepts/layers) is about — read on.
+without touching handler code — that's what
+[Layers](/concepts/layers) covers. When two platforms bind each
+other, see [Circular bindings](/guides/circular-bindings).
+
+## Where next
+
+- [Circular bindings](/guides/circular-bindings) — two Workers that bind each other.
+- [Layers](/concepts/layers) — hide bindings behind a service interface.
+- [Phases](/concepts/phases) — when the deploy-time wiring runs vs the runtime client.

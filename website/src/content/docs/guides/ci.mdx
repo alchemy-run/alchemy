@@ -1,8 +1,6 @@
 ---
-title: Continuous Integration
+title: CI
 description: Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
-sidebar:
-  order: 2
 ---
 
 import { Code, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
@@ -165,12 +163,7 @@ fi`,
 return <Code lang="yaml" code={content} />;
 }
 
-This guide walks you through wiring up GitHub Actions for an Alchemy
-project: a deploy workflow with PR previews, a `stacks/github.ts`
-that mints scoped CI credentials and pushes them into your repo, and
-provider-specific recipes for Cloudflare and AWS.
-
-The unifying idea is **credentials as code**. Rather than copy-paste
+The core idea is **credentials as code**. Rather than copy-paste
 API keys into the GitHub UI, you let Alchemy provision exactly the
 credentials your CI needs — a scoped Cloudflare API token, an AWS
 IAM role for OIDC, etc. — and write them straight into the repo as
@@ -183,8 +176,9 @@ Open a PR. Alchemy does the rest.
 1. **A pull request is opened.** GitHub fires `pull_request`. The
    workflow computes `STAGE = pr-{number}` and runs the deploy job.
 2. **Alchemy deploys the stack to that stage.** An isolated copy of
-   every resource — Workers, Lambdas, queues, tables. Stage state
-   lives separately, so PRs can't touch each other or prod.
+   every resource — Workers, Lambdas, queues, tables.
+   [Stage state lives separately](/concepts/stages), so PRs can't
+   touch each other or prod.
 3. **A bot comment is posted (or updated) on the PR.** The
    `GitHub.Comment` resource keeps its logical id stable, so the
    comment updates in place on each push.
@@ -315,8 +309,8 @@ than your day-to-day app stack. Creating a Cloudflare API token
 requires `API Tokens > Write`; creating an IAM role and OIDC
 provider requires IAM admin rights.
 
-Rather than hand those rights to your default profile, create a
-separate `admin` profile:
+Rather than hand those rights to your default
+[profile](/concepts/profiles), create a separate `admin` profile:
 
 ```sh
 alchemy login --profile admin
@@ -779,3 +773,10 @@ Then add the secrets to your workflow's deploy and cleanup steps:
 +         AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
           PULL_REQUEST: ${{ github.event.number }}
 ```
+
+## Where next
+
+- [Stages](/concepts/stages) — how `pr-42` and `prod` stay isolated.
+- [Profiles](/concepts/profiles) — one credential bundle per environment.
+- [Secrets & env on Cloudflare](/cloudflare/secrets-env) — wire app secrets into a Worker.
+- [Secrets & env on AWS](/aws/secrets-env) — the same walk for Lambda.

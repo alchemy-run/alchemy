@@ -1,16 +1,14 @@
 ---
-title: CLI Reference
+title: CLI
 description: All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, aws, cloudflare, login, profile, and state.
-sidebar:
-  order: 1
 ---
 
 import Terminal from "../../../components/Terminal.astro";
 
 The Alchemy CLI manages the lifecycle of your stacks. Every command
 operates on an `alchemy.run.ts` file (or a custom entrypoint) and
-targets a **stage** — an isolated environment like `dev_sam`, `prod`,
-or `pr-42`.
+targets a [**stage**](/concepts/stages) — an isolated environment
+like `dev_sam`, `prod`, or `pr-42`.
 
 ```sh
 alchemy <command> [file] [options]
@@ -525,9 +523,12 @@ alchemy login --profile prod
 alchemy login --configure
 ```
 
+See [Profiles](/concepts/profiles).
+
 ## `profile`
 
-Inspect credentials stored in `~/.alchemy/profiles.json`.
+Inspect credentials stored in `~/.alchemy/profiles.json`. See
+[Profiles](/concepts/profiles).
 
 ### `profile show`
 
@@ -573,7 +574,8 @@ alchemy profile show --profile prod
 Inspect and manage the state store — the record of which resources
 Alchemy thinks exist for each stack/stage. Reads from whatever state
 layer the stack file configures (e.g. `Cloudflare.state(...)`), or
-from the on-disk `.alchemy/state` directory with `--local`.
+from the on-disk `.alchemy/state` directory with `--local`. See
+[State store](/concepts/state-store).
 
 ```sh
 alchemy state <subcommand> [options]
@@ -676,16 +678,17 @@ alchemy state clear --local
 
 ## Stages
 
-Every command targets a **stage** — an isolated instance of your
-stack. The stage defaults to `dev_$USER` (e.g. `dev_sam`), so each
-developer gets their own environment automatically.
-
 ```sh
 alchemy deploy --stage prod
 alchemy deploy --stage pr-42
 alchemy destroy --stage dev_sam
 ```
 
-Resources are namespaced by stage. Physical names include the stage
-(e.g. `myapp-prod-bucket-abc123`), so environments never interfere
-with each other.
+See [Stages](/concepts/stages).
+
+## Where next
+
+- [Stages](/concepts/stages) — how environments are isolated
+- [Profiles](/concepts/profiles) — auth profiles and credentials
+- [State store](/concepts/state-store) — where resource state lives
+- [CI](/guides/ci) — run these commands in CI
