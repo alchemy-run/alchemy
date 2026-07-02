@@ -13,7 +13,7 @@ const b = (name: string): string | undefined => brands.icons[name]?.body;
 
 /** Tab bar icons, keyed by tab label (see docs-tabs.ts). */
 export const TAB_ICONS: Record<string, string | undefined> = {
-  Docs: l("book-open"),
+  Core: l("book-open"),
   CLI: l("square-terminal"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),

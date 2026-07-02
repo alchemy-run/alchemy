@@ -28,7 +28,7 @@ export interface DocsTab {
 }
 
 export const DOCS_TABS: DocsTab[] = [
-  { label: "Docs", href: "/getting-started", prefixes: [], slot: "primary" },
+  { label: "Core", href: "/getting-started", prefixes: [], slot: "primary" },
   { label: "CLI", href: "/cli", prefixes: ["/cli"], slot: "primary" },
   {
     label: "Cloudflare",
@@ -73,7 +73,7 @@ const matches = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);
 
 /**
- * Resolve the active tab for a pathname. Docs (the platform tab) is the
+ * Resolve the active tab for a pathname. Core (the platform tab) is the
  * fallback for every docs page that no provider/reference/blog prefix claims
  * (what-is-alchemy, getting-started, concepts, guides).
  */

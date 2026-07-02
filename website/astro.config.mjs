@@ -266,7 +266,7 @@ export default defineConfig({
       // the rendered sidebar only ever navigates within the current tab.
       sidebar: [
         {
-          label: "Docs",
+          label: "Core",
           items: [
             { label: "What is Alchemy?", link: "/what-is-alchemy" },
             { label: "Getting started", link: "/getting-started" },
