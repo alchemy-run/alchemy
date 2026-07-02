@@ -1,9 +1,11 @@
 import type { UIRegistry } from "alchemy/UI/UIProvider";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchGraph, fetchMeta, fetchPlan } from "./api.ts";
+import { useApplyStream } from "./live.ts";
 import { mergePlan } from "./plan.ts";
 import { loadRegistry } from "./registry.ts";
 import type { DashboardGraph, DashboardMeta, DashboardPlan } from "./types.ts";
+import { ActivityFeed } from "./ui/ActivityFeed.tsx";
 import { Canvas } from "./ui/Canvas.tsx";
 import { Inspector } from "./ui/Inspector.tsx";
 import { ListView } from "./ui/ListView.tsx";
@@ -34,10 +36,37 @@ export function App() {
       .catch(() => undefined);
   }, []);
 
-  const merged = useMemo(
-    () => (graph ? mergePlan(graph, plan) : undefined),
-    [graph, plan],
-  );
+  // live apply stream: while a deploy is running, its plan drives the
+  // annotations and node statuses update in real time; on completion the
+  // settled state + plan are refetched
+  const refresh = useCallback(() => {
+    fetchGraph()
+      .then(setGraph)
+      .catch(() => undefined);
+    fetchPlan()
+      .then(setPlan)
+      .catch(() => undefined);
+  }, []);
+  const live = useApplyStream(refresh);
+
+  const effectivePlan = live && !live.done ? live.plan : plan;
+
+  const merged = useMemo(() => {
+    if (!graph) {
+      return undefined;
+    }
+    const withPlan = mergePlan(graph, effectivePlan);
+    if (!live || live.statuses.size === 0) {
+      return withPlan;
+    }
+    return {
+      ...withPlan,
+      nodes: withPlan.nodes.map((node) => {
+        const status = live.statuses.get(node.logicalId);
+        return status ? { ...node, status: status.status } : node;
+      }),
+    };
+  }, [graph, effectivePlan, live]);
 
   const filtered = useMemo(() => {
     if (!merged) {
@@ -90,7 +119,8 @@ export function App() {
         query={query}
         onQuery={setQuery}
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {live && <ActivityFeed live={live} />}
         <main className="min-w-0 flex-1">
           {filtered.nodes.length === 0 ? (
             <Center>

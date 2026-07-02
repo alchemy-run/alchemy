@@ -2,15 +2,39 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as PubSub from "effect/PubSub";
+import * as Stream from "effect/Stream";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { ApplyEvent } from "../Cli/Event.ts";
 import type { ActionState } from "../State/ActionState.ts";
 import type { ResourceState } from "../State/ResourceState.ts";
 import type { StateService } from "../State/State.ts";
 import { encodeState } from "../State/StateEncoding.ts";
 import { toGraph } from "./Graph.ts";
 import type { DashboardPlan } from "./PlanJson.ts";
+
+/**
+ * A live apply session, as reported by a deploying alchemy process through
+ * the DashboardReporter Cli decorator. Kept in memory so browsers that
+ * connect mid-apply can replay the full event log from the snapshot.
+ */
+export interface ApplySessionState {
+  sessionId: string;
+  plan: DashboardPlan;
+  events: { seq: number; event: ApplyEvent }[];
+  done: boolean;
+  startedAt: string;
+}
+
+type ServerMessage =
+  | { kind: "snapshot"; session: ApplySessionState | null }
+  | { kind: "apply-start"; session: ApplySessionState }
+  | { kind: "apply-event"; seq: number; event: ApplyEvent }
+  | { kind: "apply-done" };
+
+const sse = (message: ServerMessage) => `data: ${JSON.stringify(message)}\n\n`;
 
 export interface DashboardServerOptions {
   state: StateService;
@@ -87,11 +111,79 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   const fs = yield* FileSystem.FileSystem;
   const server = yield* HttpServer.HttpServer;
 
+  // live apply hub: current session + broadcast to SSE subscribers
+  const pubsub = yield* PubSub.unbounded<string>();
+  let current: ApplySessionState | undefined;
+
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
     const route = url.pathname;
     const stg = url.searchParams.get("stage") ?? stage;
+
+    if (route === "/api/health") {
+      return yield* HttpServerResponse.json({ ok: true, stack, stage });
+    }
+    if (route === "/api/apply/start" && request.method === "POST") {
+      const body = (yield* request.json) as unknown as {
+        sessionId: string;
+        plan: DashboardPlan;
+      };
+      current = {
+        sessionId: body.sessionId,
+        plan: body.plan,
+        events: [],
+        done: false,
+        startedAt: new Date().toISOString(),
+      };
+      yield* PubSub.publish(
+        pubsub,
+        sse({ kind: "apply-start", session: current }),
+      );
+      return yield* HttpServerResponse.json({ ok: true });
+    }
+    if (route === "/api/apply/event" && request.method === "POST") {
+      const body = (yield* request.json) as unknown as {
+        sessionId: string;
+        seq: number;
+        event: ApplyEvent;
+      };
+      if (current?.sessionId === body.sessionId) {
+        current.events.push({ seq: body.seq, event: body.event });
+        yield* PubSub.publish(
+          pubsub,
+          sse({ kind: "apply-event", seq: body.seq, event: body.event }),
+        );
+      }
+      return yield* HttpServerResponse.json({ ok: true });
+    }
+    if (route === "/api/apply/done" && request.method === "POST") {
+      const body = (yield* request.json) as unknown as { sessionId: string };
+      if (current?.sessionId === body.sessionId) {
+        current.done = true;
+        yield* PubSub.publish(pubsub, sse({ kind: "apply-done" }));
+      }
+      return yield* HttpServerResponse.json({ ok: true });
+    }
+    if (route === "/api/events") {
+      // SSE: subscribe first, then snapshot, so nothing is lost in between
+      const body = Stream.unwrap(
+        Effect.gen(function* () {
+          const subscription = yield* PubSub.subscribe(pubsub);
+          const snapshot = sse({ kind: "snapshot", session: current ?? null });
+          return Stream.make(snapshot).pipe(
+            Stream.concat(Stream.fromSubscription(subscription)),
+          );
+        }),
+      ).pipe(Stream.map((chunk) => new TextEncoder().encode(chunk)));
+      return HttpServerResponse.stream(body, {
+        contentType: "text/event-stream",
+        headers: {
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+        },
+      });
+    }
 
     if (route === "/api/meta") {
       const stages = yield* state
