@@ -120,11 +120,11 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
 </Section>
 
-{/* ───── PICK YOUR CLOUD ───── */}
+{/* ───── PICK YOUR PROVIDER ───── */}
 
 <Section padding="8px 32px 48px" id="pick-your-cloud">
   <div style="text-align:center;margin-bottom:20px;">
-    <Eyebrow>pick your cloud</Eyebrow>
+    <Eyebrow>pick your provider</Eyebrow>
   </div>
   <div class="alc-cloud-cards">
     <a class="alc-cloud-card" href="/cloudflare">
@@ -137,13 +137,21 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
       <span class="alc-cloud-card__body">Lambda, ECS, EC2, DynamoDB, S3, SQS, Kinesis</span>
       <span class="alc-cloud-card__cta">Start building &rarr;</span>
     </a>
+    <a class="alc-cloud-card" href="/planetscale">
+      <span class="alc-cloud-card__title">PlanetScale</span>
+      <span class="alc-cloud-card__body">Serverless MySQL &amp; Postgres with branching workflows</span>
+      <span class="alc-cloud-card__cta">Start building &rarr;</span>
+    </a>
+    <a class="alc-cloud-card" href="/neon">
+      <span class="alc-cloud-card__title">Neon</span>
+      <span class="alc-cloud-card__body">Serverless Postgres with copy-on-write branches per PR</span>
+      <span class="alc-cloud-card__cta">Start building &rarr;</span>
+    </a>
   </div>
   <div class="alc-cloud-chips">
-    <span class="alc-cloud-chips__label">Works with</span>
-    <a class="alc-cloud-chip" href="/integrations/planetscale">PlanetScale</a>
-    <a class="alc-cloud-chip" href="/integrations/neon">Neon</a>
-    <a class="alc-cloud-chip" href="/integrations/axiom">Axiom</a>
-    <a class="alc-cloud-chip" href="/integrations/github">GitHub</a>
+    <span class="alc-cloud-chips__label">Also</span>
+    <a class="alc-cloud-chip" href="/axiom">Axiom</a>
+    <a class="alc-cloud-chip" href="/github">GitHub</a>
   </div>
 </Section>
 

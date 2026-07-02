@@ -356,13 +356,90 @@ export default defineConfig({
           ],
         },
         {
-          label: "Integrations",
+          label: "PlanetScale",
           items: [
-            { label: "Overview", link: "/integrations" },
-            { label: "PlanetScale", link: "/integrations/planetscale" },
-            { label: "Neon", link: "/integrations/neon" },
-            { label: "Axiom", link: "/integrations/axiom" },
-            { label: "GitHub", link: "/integrations/github" },
+            { label: "Overview", link: "/planetscale" },
+            { label: "Setup", link: "/planetscale/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Hyperdrive origin",
+                  link: "/cloudflare/hyperdrive",
+                },
+                { label: "Drizzle ORM", link: "/cloudflare/guides/drizzle" },
+                {
+                  label: "Shared database across stages",
+                  link: "/cloudflare/guides/shared-database",
+                },
+              ],
+            },
+            providerResourcesEntry("Planetscale"),
+          ],
+        },
+        {
+          label: "Neon",
+          items: [
+            { label: "Overview", link: "/neon" },
+            { label: "Setup", link: "/neon/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Hyperdrive origin",
+                  link: "/cloudflare/hyperdrive",
+                },
+                { label: "Drizzle ORM", link: "/cloudflare/guides/drizzle" },
+                {
+                  label: "Shared database across stages",
+                  link: "/cloudflare/guides/shared-database",
+                },
+                {
+                  label: "Branch from a shared database",
+                  link: "/cloudflare/guides/branch-from-shared-database",
+                },
+              ],
+            },
+            providerResourcesEntry("Neon"),
+          ],
+        },
+        {
+          label: "Axiom",
+          items: [
+            { label: "Overview", link: "/axiom" },
+            { label: "Setup", link: "/axiom/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Observability",
+                  link: "/concepts/observability",
+                },
+              ],
+            },
+            providerResourcesEntry("Axiom"),
+          ],
+        },
+        {
+          label: "GitHub",
+          items: [
+            { label: "Overview", link: "/github" },
+            { label: "Setup", link: "/github/setup" },
+            {
+              label: "Guides",
+              items: [
+                { label: "CI/CD", link: "/guides/ci" },
+                {
+                  label: "Cloudflare CI/CD tutorial",
+                  link: "/cloudflare/tutorial/part-5",
+                },
+                {
+                  label: "AWS CI/CD tutorial",
+                  link: "/aws/tutorial/part-5",
+                },
+              ],
+            },
+            providerResourcesEntry("GitHub"),
           ],
         },
         providersSidebarEntry(),

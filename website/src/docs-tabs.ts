@@ -6,25 +6,66 @@
  * (`docs-tabs-sidebar.ts`) swaps in the sidebar group whose label matches the
  * active tab. The `label` here MUST match the top-level group label in
  * `astro.config.mjs`'s `sidebar` array.
+ *
+ * Placement (`slot`):
+ * - "primary"  — always-visible tabs on the left. Reserved for providers with
+ *   runtimes you build on (plus the flagship databases) — scarce real estate.
+ * - "more"     — residents of the "More ▾" dropdown, grouped by `category`.
+ *   Full hubs, identical skeleton; only the entry point differs. Promotion
+ *   is moving an entry from "more" to "primary".
+ * - "end"      — meta sections pinned to the right (Reference, Blog).
  */
 export interface DocsTab {
   label: string;
   href: string;
   /** URL path prefixes this tab owns (matched on segment boundaries). */
   prefixes: string[];
+  slot: "primary" | "more" | "end";
+  /** Dropdown category heading (only for slot: "more"). */
+  category?: string;
+  /** One-line scope hint shown in the dropdown. */
+  hint?: string;
 }
 
 export const DOCS_TABS: DocsTab[] = [
-  { label: "Docs", href: "/getting-started", prefixes: [] },
-  { label: "Cloudflare", href: "/cloudflare", prefixes: ["/cloudflare"] },
-  { label: "AWS", href: "/aws", prefixes: ["/aws"] },
+  { label: "Docs", href: "/getting-started", prefixes: [], slot: "primary" },
   {
-    label: "Integrations",
-    href: "/integrations",
-    prefixes: ["/integrations"],
+    label: "Cloudflare",
+    href: "/cloudflare",
+    prefixes: ["/cloudflare"],
+    slot: "primary",
   },
-  { label: "Reference", href: "/providers", prefixes: ["/providers"] },
-  { label: "Blog", href: "/blog", prefixes: ["/blog"] },
+  { label: "AWS", href: "/aws", prefixes: ["/aws"], slot: "primary" },
+  {
+    label: "PlanetScale",
+    href: "/planetscale",
+    prefixes: ["/planetscale"],
+    slot: "primary",
+  },
+  { label: "Neon", href: "/neon", prefixes: ["/neon"], slot: "primary" },
+  {
+    label: "Axiom",
+    href: "/axiom",
+    prefixes: ["/axiom"],
+    slot: "more",
+    category: "Observability",
+    hint: "logs · traces · alerts",
+  },
+  {
+    label: "GitHub",
+    href: "/github",
+    prefixes: ["/github"],
+    slot: "more",
+    category: "Source & CI",
+    hint: "repos · secrets · events",
+  },
+  {
+    label: "Reference",
+    href: "/providers",
+    prefixes: ["/providers"],
+    slot: "end",
+  },
+  { label: "Blog", href: "/blog", prefixes: ["/blog"], slot: "end" },
 ];
 
 const matches = (pathname: string, prefix: string) =>
@@ -32,7 +73,7 @@ const matches = (pathname: string, prefix: string) =>
 
 /**
  * Resolve the active tab for a pathname. Docs (the platform tab) is the
- * fallback for every docs page that no cloud/reference/blog prefix claims
+ * fallback for every docs page that no provider/reference/blog prefix claims
  * (what-is-alchemy, getting-started, concepts, guides).
  */
 export function activeTab(pathname: string): DocsTab {

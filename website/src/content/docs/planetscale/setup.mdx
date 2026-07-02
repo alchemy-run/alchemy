@@ -1,0 +1,29 @@
+---
+title: Setup
+description: Connect alchemy to PlanetScale — account, credentials, and profiles.
+---
+
+Sign up at [planetscale.com](https://planetscale.com) and create a
+[service token](https://planetscale.com/docs/concepts/service-tokens).
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Planetscale from "alchemy/Planetscale";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Planetscale.providers()),
+```
+
+The next `alchemy login` adds a `Planetscale` step with two options:
+
+- **Environment variables** — reads `PLANETSCALE_API_TOKEN_ID`,
+  `PLANETSCALE_API_TOKEN`, and `PLANETSCALE_ORGANIZATION` (good for CI).
+- **Stored service token** — entered interactively, saved under
+  `~/.alchemy/credentials/<profile>/planetscale-stored.json`.
+
+See [Profiles](/concepts/profiles) for how credentials are stored
+and switched.
+
+## Next steps
+
+- [PlanetScale overview](/planetscale) — resources and compositions.

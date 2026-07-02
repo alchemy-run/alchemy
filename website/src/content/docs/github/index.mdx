@@ -9,28 +9,7 @@ Stack can mint a scoped cloud credential and store it as an Actions
 secret in the same deploy — no pasting tokens into repo settings.
 Workers can even subscribe to repository events directly.
 
-## Connect
-
-Register the provider next to your cloud's:
-
-```typescript
-// alchemy.run.ts
-import * as GitHub from "alchemy/GitHub";
-
-providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
-```
-
-The next `alchemy login` adds a `GitHub` step with three options:
-
-- **`gh` CLI** — shells out to `gh auth token` (recommended).
-- **Environment variables** — reads `GITHUB_ACCESS_TOKEN` or
-  `GITHUB_TOKEN` (good for CI).
-- **Stored PAT** — a personal access token entered interactively,
-  saved under `~/.alchemy/credentials/<profile>/`.
-
-The token needs `repo` scope (plus `delete_repo` if you opt into
-repository deletion). See [Profiles](/concepts/profiles) for how
-credentials are stored and switched.
+New here? [Set up credentials](/github/setup) first.
 
 ## Resources
 

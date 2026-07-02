@@ -146,10 +146,28 @@ const SECTIONS: Section[] = [
     pages: { directory: "aws/guides" },
   },
   {
-    heading: "Integrations",
+    heading: "PlanetScale",
     intro:
-      "Auxiliary providers that compose with your primary cloud — databases, observability, CI — managed as resources in the same Stack.",
-    pages: { directory: "integrations" },
+      "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
+    pages: { slugs: ["planetscale/index", "planetscale/setup"] },
+  },
+  {
+    heading: "Neon",
+    intro:
+      "Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.",
+    pages: { slugs: ["neon/index", "neon/setup"] },
+  },
+  {
+    heading: "Axiom",
+    intro:
+      "Observability as Stack resources — datasets, monitors, notifiers. The exporter-Layer pattern is documented in Concepts → Observability.",
+    pages: { slugs: ["axiom/index", "axiom/setup"] },
+  },
+  {
+    heading: "GitHub",
+    intro:
+      "Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.",
+    pages: { slugs: ["github/index", "github/setup"] },
   },
 ];
 

@@ -133,15 +133,33 @@ Task-oriented AWS how-tos. Each solves a specific problem; read in any order.
 - [Process DynamoDB Streams](https://v2.alchemy.run/aws/guides/dynamodb-streams) — Enable a DynamoDB Stream on your table and consume change records as a typed Effect Stream from the same Lambda.
 - [React to S3 Events](https://v2.alchemy.run/aws/guides/s3-events) — Subscribe a Lambda Function to S3 bucket notifications, process them as an Effect Stream, and let Alchemy wire up the IAM and event-source plumbing.
 
-## Integrations
+## PlanetScale
 
-Auxiliary providers that compose with your primary cloud — databases, observability, CI — managed as resources in the same Stack.
+Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.
 
-- [Axiom](https://v2.alchemy.run/integrations/axiom) — Observability as resources — OTEL datasets, ingest tokens, monitors, notifiers, and dashboards declared next to the code that emits the data.
-- [GitHub](https://v2.alchemy.run/integrations/github) — Repositories, Actions secrets and variables, webhooks, and repository event sources as Stack resources — the glue for CI/CD.
-- [Integrations](https://v2.alchemy.run/integrations) — Auxiliary providers — databases, observability, CI — that compose with your primary cloud, managed as resources in the same Stack.
-- [Neon](https://v2.alchemy.run/integrations/neon) — Serverless Postgres with copy-on-write branching — projects and branches as Stack resources, with built-in SQL migrations.
-- [PlanetScale](https://v2.alchemy.run/integrations/planetscale) — Serverless MySQL (Vitess) and Postgres with database branching — databases, branches, and credentials as Stack resources.
+- [PlanetScale](https://v2.alchemy.run/planetscale) — Serverless MySQL (Vitess) and Postgres with database branching — databases, branches, and credentials as Stack resources.
+- [Setup](https://v2.alchemy.run/planetscale/setup) — Connect alchemy to PlanetScale — account, credentials, and profiles.
+
+## Neon
+
+Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.
+
+- [Neon](https://v2.alchemy.run/neon) — Serverless Postgres with copy-on-write branching — projects and branches as Stack resources, with built-in SQL migrations.
+- [Setup](https://v2.alchemy.run/neon/setup) — Connect alchemy to Neon — account, credentials, and profiles.
+
+## Axiom
+
+Observability as Stack resources — datasets, monitors, notifiers. The exporter-Layer pattern is documented in Concepts → Observability.
+
+- [Axiom](https://v2.alchemy.run/axiom) — Observability as resources — OTEL datasets, ingest tokens, monitors, notifiers, and dashboards declared next to the code that emits the data.
+- [Setup](https://v2.alchemy.run/axiom/setup) — Connect alchemy to Axiom — account, credentials, and profiles.
+
+## GitHub
+
+Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.
+
+- [GitHub](https://v2.alchemy.run/github) — Repositories, Actions secrets and variables, webhooks, and repository event sources as Stack resources — the glue for CI/CD.
+- [Setup](https://v2.alchemy.run/github/setup) — Connect alchemy to GitHub — account, credentials, and profiles.
 
 ## Providers
 

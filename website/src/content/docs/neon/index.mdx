@@ -9,27 +9,7 @@ same Stack as your Workers — each preview stage forks its own branch
 in seconds and destroys it just as fast, and SQL migrations run as
 part of the deploy.
 
-## Connect
-
-Sign up at [neon.tech](https://neon.tech) and create an API key in
-the [Neon console](https://console.neon.tech). Register the provider
-next to your cloud's:
-
-```typescript
-// alchemy.run.ts
-import * as Neon from "alchemy/Neon";
-
-providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
-```
-
-The next `alchemy login` adds a `Neon` step with two options:
-
-- **Environment variable** — reads `NEON_API_KEY` (good for CI).
-- **Stored API key** — entered interactively, saved under
-  `~/.alchemy/credentials/<profile>/neon-stored.json`.
-
-See [Profiles](/concepts/profiles) for how credentials are stored
-and switched.
+New here? [Set up credentials](/neon/setup) first.
 
 ## Resources
 
