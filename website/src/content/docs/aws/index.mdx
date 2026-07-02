@@ -39,6 +39,9 @@ Not sure which? See
 - **[Kinesis](/aws/kinesis)** — ordered, sharded data streams
   with a `PutRecord` binding and the same `Stream` consumer
   surface.
+- **[Websites](/aws/websites)** — the frontend block: static
+  sites and built Vite apps on S3 + CloudFront as a single
+  `StaticSite` resource.
 - **[VPC & networking](/aws/networking)** — the `Network` helper
   and the VPC primitives, for when ECS or EC2 needs explicit
   networking.
@@ -48,7 +51,9 @@ Not sure which? See
 | You're building                       | Reach for                                                                     |
 | ------------------------------------- | ----------------------------------------------------------------------------- |
 | An HTTP API                           | [Lambda](/aws/lambda) + Function URL + [DynamoDB](/aws/dynamodb)              |
+| A typed HTTP API                      | [Effect HTTP API on Lambda](/aws/guides/effect-http-api)                      |
 | A REST API with stages/custom domains | [API Gateway](/aws/guides/api-gateway)                                        |
+| A static site                         | [Deploy a static site](/aws/guides/static-site) on S3 + CloudFront            |
 | An event pipeline                     | [Kinesis](/aws/kinesis) → Lambda                                              |
 | Background jobs                       | [SQS](/aws/sqs) + Lambda                                                      |
 | Object processing                     | [S3 events](/aws/guides/s3-events)                                            |
@@ -58,6 +63,9 @@ Not sure which? See
 
 - [Setup](/aws/setup) — install Alchemy and connect your AWS
   account.
+- [Deploy a static site](/aws/guides/static-site) and
+  [Effect HTTP API on Lambda](/aws/guides/effect-http-api) —
+  end-to-end guides for the two most common app shapes.
 - [Providers reference](/providers) — generated API docs for
   every AWS resource Alchemy ships, well beyond the blocks
   documented here (CloudFront, Route53, RDS, EventBridge, IAM,

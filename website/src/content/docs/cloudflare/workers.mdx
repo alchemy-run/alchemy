@@ -194,10 +194,74 @@ schema-*validated* procedures — payload validation, tagged error
 schemas, streaming over HTTP for external clients — reach for
 [Effect RPC](/cloudflare/guides/effect-rpc) instead.
 
+## Custom domains
+
+The `workers.dev` URL is for development. To serve a Worker from
+your own hostname, pass `domain` — a single hostname or an array.
+The zone is inferred from the hostname and must already exist in
+the account:
+
+```typescript
+export default Cloudflare.Worker(
+  "Worker",
+  {
+    main: import.meta.url,
+    domain: "app.example.com",
+  },
+  // ...
+);
+```
+
+For zone setup, DNS records, and route patterns, see the
+[custom domains guide](/cloudflare/guides/custom-domains).
+
+## Typed env for async Workers
+
+A Worker doesn't have to be an Effect program. When `main` points at
+a plain module — a classic async `fetch` handler, or a prebuilt
+bundle from another tool — declare bindings with the `env` prop and
+derive the runtime type with `InferEnv`:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Bucket = Cloudflare.R2.Bucket("Bucket");
+export const DB = Cloudflare.D1.Database("DB");
+
+export const Worker = Cloudflare.Worker("Worker", {
+  main: "./src/worker.ts",
+  env: { Bucket, DB },
+});
+
+export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+```
+
+`InferEnv` maps each `env` entry to its native `workers-types`
+client — an R2 bucket becomes `R2Bucket`, a D1 database becomes
+`D1Database`, a Durable Object becomes a typed
+`DurableObjectNamespace`, and `Config`/`Redacted` values become
+`string`. The handler stays plain JavaScript but the env can never
+drift from the infrastructure that produced it:
+
+```typescript
+// src/worker.ts
+import type { WorkerEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: WorkerEnv) {
+    const object = await env.Bucket.get("hello.txt");
+    return new Response(object ? await object.text() : "Not found");
+  },
+};
+```
+
 ## Where next
 
 Guides that build on Workers:
 
+- [Custom domains](/cloudflare/guides/custom-domains) — serve
+  Workers from your own hostnames and routes.
 - [Effect HTTP API](/cloudflare/guides/effect-http-api) — a
   schema-validated HTTP API with `HttpApi`.
 - [Effect RPC](/cloudflare/guides/effect-rpc) — schema-typed
@@ -211,8 +275,11 @@ Related building blocks:
 
 - [Durable Objects](/cloudflare/durable-objects) — stateful instances
   behind your Worker.
+- [KV](/cloudflare/kv) — low-latency key-value reads at the edge.
 - [Queues](/cloudflare/queues) — background work with at-least-once
   delivery.
+- [Domains](/cloudflare/domains) — zones, DNS records, and
+  certificates.
 
 Reference:
 

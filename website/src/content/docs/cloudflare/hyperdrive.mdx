@@ -323,6 +323,75 @@ MySQLBranch → MySQLPassword → Hyperdrive on the deploy graph.
   </TabItem>
 </Tabs>
 
+## Dev mode and the pooled origin
+
+In `bun alchemy dev`, alchemy doesn't create a Hyperdrive config at
+all — the local Worker gets a connection string that points straight
+at the database. With Hyperdrive out of the path, nothing pools
+those local connections, so point the `dev` override at the
+provider's **own** pooled endpoint instead:
+
+<Tabs syncKey="db-provider">
+  <TabItem label="Neon">
+
+```diff lang="typescript"
+// src/Db.ts
+export const Hyperdrive = Effect.gen(function* () {
+  const { branch } = yield* Db;
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+    origin: branch.origin,
++    dev: branch.pooledOrigin,
+  });
+});
+```
+
+`branch.pooledOrigin` is the same connection parsed against Neon's
+pgbouncer endpoint (the raw URI is `branch.pooledConnectionUri`).
+Deployed Workers still go through Hyperdrive at the direct endpoint;
+local dev goes through Neon's pooler.
+
+  </TabItem>
+  <TabItem label="PlanetScale (Postgres)">
+
+```diff lang="typescript"
+// src/Db.ts
+export const Hyperdrive = Effect.gen(function* () {
+  const { role } = yield* Db;
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+    origin: role.origin,
++    dev: role.pooledOrigin,
+  });
+});
+```
+
+`role.pooledOrigin` targets PSBouncer on port 6432 — the direct
+`role.origin` uses 5432 — and the raw pooled URL is available as
+`role.connectionUrlPooled`. Deployed Workers still go through
+Hyperdrive at the direct endpoint; local dev goes through
+PlanetScale's pooler.
+
+  </TabItem>
+  <TabItem label="PlanetScale (MySQL)">
+
+`MySQLPassword` has no pooled variant — when `dev` is omitted the
+binding falls back to `password.origin` automatically, so there is
+nothing to add. Set `dev` only when local dev should hit a
+*different* database, e.g. a MySQL running on `localhost`.
+
+  </TabItem>
+</Tabs>
+
+The pooled endpoint is also the right target when Hyperdrive isn't
+in the picture at all. A Hyperdrive connection string only exists
+inside a deployed Worker — the binding resolves it at runtime — so
+anything else that talks to the database (CI jobs, a container,
+`psql` on your laptop) should connect to the pooled URI directly:
+`branch.pooledConnectionUri` on Neon, `role.connectionUrlPooled` on
+PlanetScale. Just don't do the reverse — `origin` deliberately
+points Hyperdrive at the *direct* endpoint, because Hyperdrive
+already pools, and stacking it on top of the provider's pooler
+means two poolers fighting over the same connections.
+
 ## Install the client library
 
 The Worker uses a Node-compatible driver to talk to Hyperdrive over
@@ -405,6 +474,7 @@ underlying `Hyperdrive` object:
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
++import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 +import { Client } from "pg";
 +import { Hyperdrive } from "./Db.ts";
@@ -423,7 +493,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 +
     return {
       fetch: Effect.gen(function* () {
-+        const connectionString = yield* hd.connectionString;
++        const connectionString = Redacted.value(yield* hd.connectionString);
 +        const rows = yield* Effect.promise(async () => {
 +          // One client per request — Hyperdrive does the pooling.
 +          const client = new Client({ connectionString });
@@ -450,6 +520,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
++import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 +import { Client } from "pg";
 +import { Hyperdrive } from "./Db.ts";
@@ -468,7 +539,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 +
     return {
       fetch: Effect.gen(function* () {
-+        const connectionString = yield* hd.connectionString;
++        const connectionString = Redacted.value(yield* hd.connectionString);
 +        const rows = yield* Effect.promise(async () => {
 +          // One client per request — Hyperdrive does the pooling.
 +          const client = new Client({ connectionString });
@@ -495,6 +566,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
++import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 +import { createConnection } from "mysql2/promise";
 +import { Hyperdrive } from "./Db.ts";
@@ -513,7 +585,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 +
     return {
       fetch: Effect.gen(function* () {
-+        const connectionString = yield* hd.connectionString;
++        const connectionString = Redacted.value(yield* hd.connectionString);
 +        const rows = yield* Effect.promise(async () => {
 +          // One connection per request — Hyperdrive does the pooling.
 +          const conn = await createConnection(connectionString);

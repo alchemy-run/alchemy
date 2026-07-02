@@ -25,6 +25,8 @@ New here? [Set up your account](/cloudflare/setup), then start the
 
 - [D1](/cloudflare/d1) — serverless SQLite with migrations managed as
   part of the deploy.
+- [KV](/cloudflare/kv) — edge key-value storage for config, sessions,
+  and cached lookups.
 - [R2](/cloudflare/r2) — object storage with read/write-scoped
   bindings.
 - [Hyperdrive](/cloudflare/hyperdrive) — edge connection pooling for
@@ -34,6 +36,11 @@ New here? [Set up your account](/cloudflare/setup), then start the
 
 - [Queues](/cloudflare/queues) — at-least-once message delivery
   between Workers.
+
+### Networking
+
+- [Domains & DNS](/cloudflare/domains) — zones, DNS records, and zone
+  settings as resources; adopt the domains you already own.
 
 ## What are you building?
 
@@ -47,6 +54,12 @@ New here? [Set up your account](/cloudflare/setup), then start the
 | Postgres-backed API | [Hyperdrive](/cloudflare/hyperdrive) + [Drizzle](/cloudflare/guides/drizzle) |
 | Durable multi-step jobs | [Workflows](/cloudflare/guides/workflows) |
 | AI apps | [AI Gateway](/cloudflare/guides/ai-gateway), [Effect AI](/cloudflare/guides/effect-ai), [AI Search](/cloudflare/guides/ai-search) |
+| App on your own domain | [Domains & DNS](/cloudflare/domains) — see [Custom domains & routes](/cloudflare/guides/custom-domains) |
+| Production observability | [Ship Worker telemetry to Axiom](/cloudflare/guides/axiom-observability) |
+
+For frontends, alchemy is Workers-first: Pages resources exist, but
+static assets served from a [Worker](/cloudflare/workers) is the
+recommended path.
 
 ## Where next
 
@@ -54,4 +67,15 @@ New here? [Set up your account](/cloudflare/setup), then start the
   Cloudflare account.
 - [Tutorial](/cloudflare/tutorial/part-1) — from empty directory to a
   deployed Worker with tests, stages, and CI.
+- [Custom domains & routes](/cloudflare/guides/custom-domains) — put
+  your Worker on a domain you own.
+- [Ship Worker telemetry to Axiom](/cloudflare/guides/axiom-observability) —
+  datasets, ingest tokens, and monitors in the same Stack as the Worker.
 - [API reference](/providers) — every Cloudflare resource and binding.
+
+## Everything else
+
+The blocks above are what most apps are built from, but coverage goes
+much further: the zero-trust and zone-security long tail — roughly 60
+more services, produced by the resource factory — ships as
+reference-only documentation in the [API reference](/providers).

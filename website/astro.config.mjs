@@ -297,6 +297,7 @@ export default defineConfig({
               label: "Data",
               items: [
                 { label: "D1", link: "/cloudflare/d1" },
+                { label: "KV", link: "/cloudflare/kv" },
                 { label: "R2", link: "/cloudflare/r2" },
                 { label: "Hyperdrive", link: "/cloudflare/hyperdrive" },
               ],
@@ -304,6 +305,10 @@ export default defineConfig({
             {
               label: "Messaging",
               items: [{ label: "Queues", link: "/cloudflare/queues" }],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Domains & DNS", link: "/cloudflare/domains" }],
             },
             {
               label: "Guides",
@@ -348,6 +353,10 @@ export default defineConfig({
               ],
             },
             {
+              label: "Frontend",
+              items: [{ label: "Websites", link: "/aws/websites" }],
+            },
+            {
               label: "Networking",
               items: [{ label: "VPC & networking", link: "/aws/networking" }],
             },
@@ -382,6 +391,10 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/neon" },
             { label: "Setup", link: "/neon/setup" },
+            {
+              label: "Data",
+              items: [{ label: "Migrations", link: "/neon/migrations" }],
+            },
             {
               label: "Guides",
               items: [

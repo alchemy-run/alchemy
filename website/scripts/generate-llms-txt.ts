@@ -90,9 +90,11 @@ const SECTIONS: Section[] = [
         "cloudflare/workers",
         "cloudflare/durable-objects",
         "cloudflare/d1",
+        "cloudflare/kv",
         "cloudflare/r2",
         "cloudflare/queues",
         "cloudflare/hyperdrive",
+        "cloudflare/domains",
       ],
     },
   },
@@ -135,6 +137,7 @@ const SECTIONS: Section[] = [
         "aws/s3",
         "aws/sqs",
         "aws/kinesis",
+        "aws/websites",
         "aws/networking",
       ],
     },
@@ -155,7 +158,7 @@ const SECTIONS: Section[] = [
     heading: "Neon",
     intro:
       "Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.",
-    pages: { slugs: ["neon/index", "neon/setup"] },
+    pages: { slugs: ["neon/index", "neon/setup", "neon/migrations"] },
   },
   {
     heading: "Axiom",
