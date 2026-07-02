@@ -1,9 +1,9 @@
 {
   "name": "@alchemy.run/dashboard",
   "version": "0.0.0",
-  "description": "Local web dashboard for alchemy stacks (`alchemy dashboard`)",
+  "description": "Web dashboard for alchemy stacks (`alchemy dashboard` / `--ui`)",
   "type": "module",
-  "private": true,
+  "files": ["dist"],
   "exports": {
     "./package.json": "./package.json"
   },
@@ -11,22 +11,21 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@xyflow/react": "^12.3.0",
-    "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "elkjs": "^0.10.0",
-    "lucide-react": "^0.475.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "vite build"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.2",
+    "@xyflow/react": "^12.3.0",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "elkjs": "^0.10.0",
+    "lucide-react": "^0.475.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "tailwindcss": "^4.1.14",
     "vite": "catalog:"
   }

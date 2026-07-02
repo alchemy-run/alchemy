@@ -878,6 +878,7 @@
         "ws": "catalog:",
       },
       "peerDependencies": {
+        "@alchemy.run/dashboard": "workspace:*",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/sql-pg": "catalog:",
@@ -888,6 +889,7 @@
         "ws": "catalog:",
       },
       "optionalPeers": [
+        "@alchemy.run/dashboard",
         "@effect/platform-bun",
         "@effect/platform-node",
         "@effect/sql-pg",
@@ -911,7 +913,11 @@
     "packages/dashboard": {
       "name": "@alchemy.run/dashboard",
       "version": "0.0.0",
-      "dependencies": {
+      "devDependencies": {
+        "@tailwindcss/vite": "^4.1.14",
+        "@types/react": "^19.2.0",
+        "@types/react-dom": "^19.2.0",
+        "@vitejs/plugin-react": "^6.0.2",
         "@xyflow/react": "^12.3.0",
         "alchemy": "workspace:*",
         "effect": "catalog:",
@@ -919,12 +925,6 @@
         "lucide-react": "^0.475.0",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
-      },
-      "devDependencies": {
-        "@tailwindcss/vite": "^4.1.14",
-        "@types/react": "^19.2.0",
-        "@types/react-dom": "^19.2.0",
-        "@vitejs/plugin-react": "^6.0.2",
         "tailwindcss": "^4.1.14",
         "vite": "catalog:",
       },

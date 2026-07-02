@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -51,14 +52,18 @@ export interface DashboardServerOptions {
 
 /**
  * Locate the prebuilt dashboard SPA (`@alchemy.run/dashboard/dist`).
- * Overridable via `ALCHEMY_DASHBOARD_DIST` for development.
+ * `@alchemy.run/dashboard` is an optional peer dependency — returns
+ * undefined when it isn't installed. Overridable via
+ * `ALCHEMY_DASHBOARD_DIST` for development.
  */
-const resolveDistDir = Effect.fn(function* () {
+export const resolveDistDir = Effect.fn(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const override = process.env.ALCHEMY_DASHBOARD_DIST;
   if (override) {
-    return override;
+    return (yield* fs.exists(override).pipe(Effect.orElseSucceed(() => false)))
+      ? override
+      : undefined;
   }
   const resolved = yield* Effect.try(() =>
     import.meta.resolve("@alchemy.run/dashboard/package.json"),
@@ -166,13 +171,22 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       return yield* HttpServerResponse.json({ ok: true });
     }
     if (route === "/api/events") {
-      // SSE: subscribe first, then snapshot, so nothing is lost in between
+      // SSE: subscribe first, then snapshot, so nothing is lost in between.
+      // Heartbeat comments defeat idle timeouts (Bun.serve kills responses
+      // idle for >10s); EventSource ignores `:` lines.
       const body = Stream.unwrap(
         Effect.gen(function* () {
           const subscription = yield* PubSub.subscribe(pubsub);
           const snapshot = sse({ kind: "snapshot", session: current ?? null });
+          const heartbeat = Stream.fromSchedule(
+            Schedule.spaced("8 seconds"),
+          ).pipe(Stream.map(() => ":ping\n\n"));
           return Stream.make(snapshot).pipe(
-            Stream.concat(Stream.fromSubscription(subscription)),
+            Stream.concat(
+              Stream.fromSubscription(subscription).pipe(
+                Stream.merge(heartbeat),
+              ),
+            ),
           );
         }),
       ).pipe(Stream.map((chunk) => new TextEncoder().encode(chunk)));
