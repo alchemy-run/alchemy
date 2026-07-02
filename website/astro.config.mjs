@@ -321,6 +321,14 @@ export default defineConfig({
                 { label: "File layout", link: "/guides/file-layout" },
                 { label: "Monorepo", link: "/guides/monorepo" },
                 {
+                  label: "Single Stack",
+                  link: "/guides/monorepo-single-stack",
+                },
+                {
+                  label: "Multiple Stacks",
+                  link: "/guides/monorepo-multi-stack",
+                },
+                {
                   label: "Stack References",
                   link: "/guides/stack-references",
                 },

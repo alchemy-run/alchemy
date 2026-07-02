@@ -27,7 +27,7 @@ Three rules of thumb:
 - **Otherwise, share one stack.** Inside a stack, Outputs flow in
   memory — no reference needed.
 
-[Monorepo](/guides/monorepo#which-one-should-i-use) has the full
+[Monorepo](/guides/monorepo#how-to-choose) has the full
 trade-off table. And stages are free — reach for a new stage
 before a new stack.
 
@@ -114,7 +114,7 @@ pin one. Choosing between them:
 | `pr-*` reads staging, everything else owns  | branch on `Alchemy.Stack`'s stage, as in the sharing section above |
 
 Handle declaration, the `./Client` subpath, and the full
-two-package walkthrough: [Monorepo](/guides/monorepo).
+two-package walkthrough: [Multiple Stacks](/guides/monorepo-multi-stack).
 
 ## Deploy order
 

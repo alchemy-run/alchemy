@@ -45,7 +45,7 @@ How app code and infrastructure compose: Bindings, Layers, Functions & Servers, 
 Scaling the codebase: file conventions for one stack, monorepos for many, Stack References to wire them together.
 
 - [File layout](https://v2.alchemy.run/guides/file-layout) — How to organize an Alchemy project — one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
-- [Monorepo](https://v2.alchemy.run/guides/monorepo) — Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
+- [Monorepo](https://v2.alchemy.run/guides/monorepo) — Two ways to organize an Alchemy monorepo — one Stack at the workspace root, or one Stack per package wired with typed references.
 - [Stack References](https://v2.alchemy.run/guides/stack-references) — Structure a project around References — long-lived stages that own expensive Resources, ephemeral pr-* stages that borrow them, infra/app stack splits, and monorepo wiring.
 
 ## Environments — the same app in many places
