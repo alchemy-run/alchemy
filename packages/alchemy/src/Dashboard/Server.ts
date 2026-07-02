@@ -120,6 +120,31 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   const pubsub = yield* PubSub.unbounded<string>();
   let current: ApplySessionState | undefined;
 
+  // Plan computation re-evaluates the entire stack (bundling included) —
+  // cache per stage with a TTL and dedupe concurrent requests, so page
+  // reloads don't repeatedly starve the server. Cleared when an apply
+  // completes so the next request reflects the new state.
+  const planEffects = new Map<string, Effect.Effect<DashboardPlan>>();
+  const planFor = (stg: string) =>
+    Effect.gen(function* () {
+      if (plan === undefined) {
+        return {
+          available: false,
+          error: "plan not enabled",
+          resources: {},
+          deletions: {},
+          actions: {},
+          cycleMembers: [],
+        } satisfies DashboardPlan;
+      }
+      let cached = planEffects.get(stg);
+      if (cached === undefined) {
+        cached = yield* Effect.cachedWithTTL(plan(stg), "30 seconds");
+        planEffects.set(stg, cached);
+      }
+      return yield* cached;
+    });
+
   const handler = Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const url = new URL(request.url, "http://localhost");
@@ -166,6 +191,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       const body = (yield* request.json) as unknown as { sessionId: string };
       if (current?.sessionId === body.sessionId) {
         current.done = true;
+        planEffects.clear();
         yield* PubSub.publish(pubsub, sse({ kind: "apply-done" }));
       }
       return yield* HttpServerResponse.json({ ok: true });
@@ -226,17 +252,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       if (current !== undefined && !current.done && stg === stage) {
         return yield* HttpServerResponse.json(current.plan);
       }
-      if (plan === undefined) {
-        return yield* HttpServerResponse.json({
-          available: false,
-          error: "plan not enabled",
-          resources: {},
-          deletions: {},
-          actions: {},
-          cycleMembers: [],
-        });
-      }
-      return yield* HttpServerResponse.json(yield* plan(stg));
+      return yield* HttpServerResponse.json(yield* planFor(stg));
     }
     if (route === "/api/outputs") {
       const output = yield* state

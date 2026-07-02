@@ -175,7 +175,7 @@ function CanvasInner({
 
   // Fit the viewport once per structure — when the layout for a new node
   // set lands — never on data-only updates (statuses, notes, badges).
-  const fittedKey = useRef<string>();
+  const fittedKey = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (positions.size === 0 || fittedKey.current === structureKey) {
       return;

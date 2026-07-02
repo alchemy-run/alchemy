@@ -22,6 +22,7 @@ export function App() {
   const [view, setView] = useState<View>("canvas");
   const [query, setQuery] = useState("");
   const [planStale, setPlanStale] = useState(false);
+  const [dismissedSession, setDismissedSession] = useState<string>();
 
   const stage = stageOverride ?? meta?.stage;
 
@@ -66,7 +67,10 @@ export function App() {
   // live apply stream: while a deploy is running, its plan drives the
   // annotations and node statuses update in real time; on completion the
   // settled state + plan are refetched
-  const live = useApplyStream(refresh);
+  const rawLive = useApplyStream(refresh);
+  // dismissing the activity feed also clears the session's result overlay
+  const live =
+    rawLive && rawLive.sessionId !== dismissedSession ? rawLive : undefined;
 
   // the live session's plan stays authoritative until the post-apply
   // refetch actually lands — never fall back to a stale pre-deploy plan
@@ -84,24 +88,44 @@ export function App() {
     if (!live) {
       return withPlan;
     }
-    return {
-      ...withPlan,
-      nodes: withPlan.nodes.map((node) => {
-        const status = live.statuses.get(node.logicalId);
-        const note =
-          live.notes.get(node.logicalId) ?? status?.message ?? undefined;
-        const logs = live.logs.get(node.logicalId);
-        if (!status && note === undefined && logs === undefined) {
-          return node;
-        }
-        return {
-          ...node,
-          status: status?.status ?? node.status,
-          note,
-          logs,
-        };
-      }),
-    };
+    const nodes = withPlan.nodes.map((node) => {
+      const status = live.statuses.get(node.logicalId);
+      const note =
+        live.notes.get(node.logicalId) ?? status?.message ?? undefined;
+      const logs = live.logs.get(node.logicalId);
+      const applyResult = live.results.get(node.logicalId)?.result;
+      if (!status && note === undefined && logs === undefined) {
+        return node;
+      }
+      return {
+        ...node,
+        status: status?.status ?? node.status,
+        note,
+        logs,
+        applyResult,
+      };
+    });
+    // deleted resources vanish from state after the refresh — keep them on
+    // the canvas as ghosts so the apply's full story stays visible until
+    // the session is dismissed
+    const present = new Set(nodes.map((n) => n.logicalId));
+    for (const [logicalId, { result, type }] of live.results) {
+      if (result === "deleted" && !present.has(logicalId)) {
+        nodes.push({
+          fqn: logicalId,
+          logicalId,
+          path: [],
+          kind: "resource",
+          type,
+          status: "deleted",
+          bindings: [],
+          downstream: [],
+          applyResult: "deleted",
+          logs: live.logs.get(logicalId),
+        });
+      }
+    }
+    return { ...withPlan, nodes };
   }, [graph, effectivePlan, live]);
 
   const filtered = useMemo(() => {
@@ -159,7 +183,12 @@ export function App() {
         onQuery={setQuery}
       />
       <div className="relative flex min-h-0 flex-1">
-        {live && <ActivityFeed live={live} />}
+        {live && (
+          <ActivityFeed
+            live={live}
+            onDismiss={() => setDismissedSession(live.sessionId)}
+          />
+        )}
         <main className="relative min-w-0 flex-1">
           {/* keep the canvas mounted even when the node list is transiently
               empty (plan/graph/live handoffs) — unmount/remount pops the

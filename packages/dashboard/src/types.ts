@@ -16,6 +16,8 @@ export interface DashboardNode {
   note?: string;
   /** client-side: captured Effect.log* lines from the live apply */
   logs?: { key: number; level: string; message: string }[];
+  /** client-side: what the last apply did to this resource */
+  applyResult?: "created" | "updated" | "replaced" | "deleted" | "failed";
 }
 
 export interface DashboardEdge {

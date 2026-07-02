@@ -44,6 +44,13 @@ export interface ResourceLogEntry {
 /** keep the last N log lines per resource */
 const LOG_CAP = 500;
 
+export type ApplyResult =
+  | "created"
+  | "updated"
+  | "replaced"
+  | "deleted"
+  | "failed";
+
 export interface LiveApply {
   sessionId: string;
   plan: DashboardPlan;
@@ -53,9 +60,23 @@ export interface LiveApply {
   notes: Map<string, string>;
   /** captured Effect.log* lines per resource logical id */
   logs: Map<string, ResourceLogEntry[]>;
+  /**
+   * terminal outcome per resource logical id — what this apply DID.
+   * `type` is kept so deleted resources (gone from state) can still be
+   * rendered as ghost nodes.
+   */
+  results: Map<string, { result: ApplyResult; type: string }>;
   feed: FeedEntry[];
   done: boolean;
 }
+
+const TERMINAL: Record<string, ApplyResult> = {
+  created: "created",
+  updated: "updated",
+  replaced: "replaced",
+  deleted: "deleted",
+  fail: "failed",
+};
 
 const applyEvent = (live: LiveApply, seq: number, event: ApplyEventJson) => {
   switch (event.kind) {
@@ -68,6 +89,13 @@ const applyEvent = (live: LiveApply, seq: number, event: ApplyEventJson) => {
           status: event.status,
           message: event.message,
         });
+        const result = TERMINAL[event.status];
+        if (result) {
+          live.results.set(event.id, {
+            result,
+            type: event.type ?? "unknown",
+          });
+        }
       }
       live.feed.push({
         key: seq,
@@ -113,6 +141,7 @@ const fromSession = (session: ApplySessionJson): LiveApply => {
     statuses: new Map(),
     notes: new Map(),
     logs: new Map(),
+    results: new Map(),
     feed: [],
     done: session.done,
   };
@@ -164,6 +193,7 @@ export function useApplyStream(onDone: () => void): LiveApply | undefined {
               statuses: new Map(current.statuses),
               notes: new Map(current.notes),
               logs: new Map(current.logs),
+              results: new Map(current.results),
               feed: [...current.feed],
             }
           : undefined,

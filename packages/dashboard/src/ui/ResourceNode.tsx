@@ -6,6 +6,8 @@ import {
   cloudOf,
   PLAN_COLORS,
   PLAN_LABELS,
+  RESULT_COLORS,
+  RESULT_LABELS,
   serviceOf,
   statusColor,
   statusInFlight,
@@ -39,16 +41,19 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
 
   const plan = node.planAction;
   const planColor = plan ? PLAN_COLORS[plan] : undefined;
+  const result = node.applyResult;
+  const resultColor = result ? RESULT_COLORS[result] : undefined;
+  const ghost = result === "deleted";
 
   return (
     <div
       className="rounded-xl border bg-[#15151c] px-3.5 py-2.5 transition-colors"
       style={{
         width: NODE_WIDTH,
-        borderColor: selected ? color : (planColor ?? "#2a2a35"),
-        borderStyle: node.status === "pending" ? "dashed" : "solid",
+        borderColor: selected ? color : (resultColor ?? planColor ?? "#2a2a35"),
+        borderStyle: node.status === "pending" || ghost ? "dashed" : "solid",
         boxShadow: selected ? `0 0 0 1px ${color}` : undefined,
-        opacity: plan === "delete" ? 0.75 : undefined,
+        opacity: ghost ? 0.55 : plan === "delete" ? 0.75 : undefined,
       }}
     >
       <Handle
@@ -98,7 +103,19 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
         </div>
       )}
       <div className="flex gap-1">
-        {plan && (
+        {result && (
+          <span
+            className="mt-1.5 inline-block rounded px-1.5 py-px text-[10px] font-medium"
+            style={{
+              color: "#0b0b10",
+              background: resultColor,
+            }}
+            title={`last deploy: ${result}`}
+          >
+            {RESULT_LABELS[result]}
+          </span>
+        )}
+        {plan && !result && (
           <span
             className="mt-1.5 inline-block rounded px-1.5 py-px text-[10px] font-medium"
             style={{ color: planColor, background: `${planColor}26` }}
