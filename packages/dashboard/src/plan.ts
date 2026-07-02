@@ -49,9 +49,17 @@ export function mergePlan(
     indexLogicalId(n);
   }
 
-  // synthesize plan-only nodes (not yet in state)
+  // Synthesize plan-only nodes missing from state: resources not yet
+  // deployed (pending creates) AND deletions — a destroy plan has empty
+  // `resources` with everything in `deletions`, and once the destroy
+  // lands the state graph is empty too; without synthesizing deletions
+  // the whole architecture would vanish instead of showing its teardown.
   const synthesized: DashboardNode[] = [];
-  for (const planNode of Object.values(plan.resources)) {
+  const planNodes = [
+    ...Object.values(plan.resources),
+    ...Object.values(plan.deletions),
+  ];
+  for (const planNode of planNodes) {
     if (byFqn.has(planNode.fqn)) {
       continue;
     }
@@ -62,7 +70,8 @@ export function mergePlan(
       path: parts.slice(0, -1),
       kind: "resource",
       type: planNode.type,
-      status: "pending",
+      // deletions exist(ed) in the cloud; creates don't yet
+      status: planNode.action === "delete" ? "created" : "pending",
       bindings: [],
       downstream: planNode.downstream,
       planAction: planNode.action,
@@ -82,7 +91,7 @@ export function mergePlan(
     }
   };
   // dependency + binding edges contributed by plan-only nodes
-  for (const planNode of Object.values(plan.resources)) {
+  for (const planNode of planNodes) {
     for (const d of planNode.downstream) {
       if (all.has(planNode.fqn) && all.has(d)) {
         push({ source: planNode.fqn, target: d, kind: "dependency" });

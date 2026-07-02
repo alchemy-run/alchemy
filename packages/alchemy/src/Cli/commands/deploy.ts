@@ -203,7 +203,26 @@ export const execStack = Effect.fn(function* ({
               node.bindings.some((b) => b.action !== "noop"),
           );
         if (!yes && hasChanges) {
-          const approved = yield* cli.approvePlan(updatePlan);
+          // --ui delegates approval to the browser: the dashboard shows the
+          // plan with an approve/reject choice and the terminal just points
+          // at it. Falls back to the terminal prompt if the dashboard can't
+          // be reached.
+          let approved: boolean | undefined;
+          if (ui && dashboardUrl !== undefined) {
+            yield* Console.log(
+              `Review and approve the plan in the dashboard: ${dashboardUrl}`,
+            );
+            approved = yield* Dashboard.requestApprovalViaDashboard(
+              dashboardUrl,
+              updatePlan,
+            );
+            if (approved === false) {
+              yield* Console.log("Plan rejected in the dashboard.");
+            }
+          }
+          if (approved === undefined) {
+            approved = yield* cli.approvePlan(updatePlan);
+          }
           if (!approved) {
             return;
           }

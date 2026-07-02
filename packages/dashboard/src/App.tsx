@@ -6,6 +6,7 @@ import { mergePlan } from "./plan.ts";
 import { loadRegistry } from "./registry.ts";
 import type { DashboardGraph, DashboardMeta, DashboardPlan } from "./types.ts";
 import { ActivityFeed } from "./ui/ActivityFeed.tsx";
+import { ApprovalBanner } from "./ui/ApprovalBanner.tsx";
 import { Canvas } from "./ui/Canvas.tsx";
 import { Inspector } from "./ui/Inspector.tsx";
 import { ListView } from "./ui/ListView.tsx";
@@ -67,15 +68,18 @@ export function App() {
   // live apply stream: while a deploy is running, its plan drives the
   // annotations and node statuses update in real time; on completion the
   // settled state + plan are refetched
-  const rawLive = useApplyStream(refresh);
+  const { live: rawLive, approval, decide } = useApplyStream(refresh);
   // dismissing the activity feed also clears the session's result overlay
   const live =
     rawLive && rawLive.sessionId !== dismissedSession ? rawLive : undefined;
 
-  // the live session's plan stays authoritative until the post-apply
-  // refetch actually lands — never fall back to a stale pre-deploy plan
-  const effectivePlan =
-    live && (!live.done || planStale || plan === undefined) ? live.plan : plan;
+  // precedence: a plan awaiting approval > the streaming apply's plan >
+  // the fetched plan (kept until the post-apply refetch lands)
+  const effectivePlan = approval
+    ? approval.plan
+    : live && (!live.done || planStale || plan === undefined)
+      ? live.plan
+      : plan;
 
   const merged = useMemo(() => {
     // during a live apply, don't gate the canvas on the (possibly slow)
@@ -185,6 +189,12 @@ export function App() {
         total={merged?.nodes.length ?? filtered.nodes.length}
       />
       <div className="relative flex min-h-0 flex-1">
+        {approval && (
+          <ApprovalBanner
+            approval={approval}
+            onDecide={(approved) => decide(approval.id, approved)}
+          />
+        )}
         {live && (
           <ActivityFeed
             live={live}

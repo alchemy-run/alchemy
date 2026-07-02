@@ -29,11 +29,29 @@ export interface ApplySessionState {
   startedAt: string;
 }
 
+/**
+ * A plan awaiting browser-side approval (`deploy --ui` without `--yes`).
+ * The deploying process polls `/api/approval/status` while the browser
+ * shows the plan and an approve/reject choice.
+ */
+export interface PendingApproval {
+  id: string;
+  plan: DashboardPlan;
+  /** undefined while the user is deciding */
+  approved?: boolean;
+}
+
 type ServerMessage =
-  | { kind: "snapshot"; session: ApplySessionState | null }
+  | {
+      kind: "snapshot";
+      session: ApplySessionState | null;
+      approval: PendingApproval | null;
+    }
   | { kind: "apply-start"; session: ApplySessionState }
   | { kind: "apply-event"; seq: number; event: ApplyEvent }
-  | { kind: "apply-done" };
+  | { kind: "apply-done" }
+  | { kind: "approval-request"; approval: PendingApproval }
+  | { kind: "approval-done"; id: string; approved: boolean };
 
 const sse = (message: ServerMessage) => `data: ${JSON.stringify(message)}\n\n`;
 
@@ -119,6 +137,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   // live apply hub: current session + broadcast to SSE subscribers
   const pubsub = yield* PubSub.unbounded<string>();
   let current: ApplySessionState | undefined;
+  let approval: PendingApproval | undefined;
 
   // Plan computation re-evaluates the entire stack (bundling included) —
   // cache per stage with a TTL and dedupe concurrent requests, so page
@@ -196,6 +215,41 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       }
       return yield* HttpServerResponse.json({ ok: true });
     }
+    if (route === "/api/approval/request" && request.method === "POST") {
+      const body = (yield* request.json) as unknown as {
+        id: string;
+        plan: DashboardPlan;
+      };
+      approval = { id: body.id, plan: body.plan };
+      yield* PubSub.publish(
+        pubsub,
+        sse({ kind: "approval-request", approval }),
+      );
+      return yield* HttpServerResponse.json({ ok: true });
+    }
+    if (route === "/api/approval/status") {
+      const id = url.searchParams.get("id");
+      return yield* HttpServerResponse.json({
+        approved:
+          approval !== undefined && approval.id === id
+            ? (approval.approved ?? null)
+            : null,
+      });
+    }
+    if (route === "/api/approval/decide" && request.method === "POST") {
+      const body = (yield* request.json) as unknown as {
+        id: string;
+        approved: boolean;
+      };
+      if (approval?.id === body.id && approval.approved === undefined) {
+        approval.approved = body.approved;
+        yield* PubSub.publish(
+          pubsub,
+          sse({ kind: "approval-done", id: body.id, approved: body.approved }),
+        );
+      }
+      return yield* HttpServerResponse.json({ ok: true });
+    }
     if (route === "/api/events") {
       // SSE: subscribe first, then snapshot, so nothing is lost in between.
       // Heartbeat comments defeat idle timeouts (Bun.serve kills responses
@@ -203,7 +257,14 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       const body = Stream.unwrap(
         Effect.gen(function* () {
           const subscription = yield* PubSub.subscribe(pubsub);
-          const snapshot = sse({ kind: "snapshot", session: current ?? null });
+          const snapshot = sse({
+            kind: "snapshot",
+            session: current ?? null,
+            approval:
+              approval !== undefined && approval.approved === undefined
+                ? approval
+                : null,
+          });
           const heartbeat = Stream.fromSchedule(
             Schedule.spaced("8 seconds"),
           ).pipe(Stream.map(() => ":ping\n\n"));

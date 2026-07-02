@@ -43,17 +43,22 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
   const planColor = plan ? PLAN_COLORS[plan] : undefined;
   const result = node.applyResult;
   const resultColor = result ? RESULT_COLORS[result] : undefined;
-  const ghost = result === "deleted";
+  // terminated resources render "dead": gray dashed shell, dimmed
+  const ghost = result === "deleted" || node.status === "deleted";
 
   return (
     <div
       className="rounded-xl border bg-[#15151c] px-3.5 py-2.5 transition-colors"
       style={{
         width: NODE_WIDTH,
-        borderColor: selected ? color : (resultColor ?? planColor ?? "#2a2a35"),
+        borderColor: selected
+          ? color
+          : ghost
+            ? "#3f3f46"
+            : (resultColor ?? planColor ?? "#2a2a35"),
         borderStyle: node.status === "pending" || ghost ? "dashed" : "solid",
         boxShadow: selected ? `0 0 0 1px ${color}` : undefined,
-        opacity: ghost ? 0.55 : plan === "delete" ? 0.75 : undefined,
+        opacity: ghost ? 0.55 : plan === "delete" ? 0.8 : undefined,
       }}
     >
       <Handle
