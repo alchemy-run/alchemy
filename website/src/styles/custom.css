@@ -992,6 +992,18 @@ header.header {
   color: var(--alc-accent-deep);
 }
 
+/* Nested group labels (Resources categories/services, the Reference tree)
+   read like regular entries, not headings — only top-level group summaries
+   get the small-caps heading treatment above. */
+#starlight__sidebar .sidebar-content ul ul .group-label .large {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sl-color-gray-2);
+}
+#starlight__sidebar .sidebar-content ul ul summary:hover .group-label .large {
+  color: var(--alc-accent-deep);
+}
+
 /* Active page: left accent bar + tint, mockup-style. */
 #starlight__sidebar .sidebar-content a[aria-current="page"] {
   background: var(--alc-accent-12);
