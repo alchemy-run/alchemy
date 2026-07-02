@@ -269,7 +269,8 @@ There's no AWS account configuration in that file. The binding
 detects what it's attached to. On a Lambda host,
 `AWS.Lambda.RunMicrovm(EffectfulBun)` adds `lambda:RunMicrovm`
 on that image's ARN to the function's execution role, and the
-runtime call signs with the ambient credentials.
+runtime uses the assumed IAM Role credentials already available
+in the Lambda Function's environment.
 
 On a Worker host there is no execution role, so the binding
 builds the bridge itself. At deploy time it creates, once per
@@ -316,6 +317,13 @@ launch → ready → terminate with nothing else in flight.
 Containers have no comparable per-boot limit, so they're
 measured under concurrent load (10 rounds × 10 simultaneous
 boots).
+
+This is also why we didn't compare 100 simultaneous MicroVM
+launches: the 5 TPS is a soft limit, raised by request. It's
+the standard AWS pattern of putting friction on access to a
+resource rather than a hard capacity ceiling — they'll bump it
+when you ask, so it says nothing about how fast the platform
+boots VMs, only how fast a fresh account is allowed to ask.
 
 **The driver measures inside the host.** Each host (the Lambda
 orchestrator, the Worker) exposes a `/boot` route that starts
