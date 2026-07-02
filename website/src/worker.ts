@@ -29,8 +29,68 @@ interface HTMLRewriterElement {
  */
 const CANONICAL_HOST = "v2.alchemy.run";
 
+/**
+ * 301s for the docs restructure (guides/tutorials moved into per-cloud hubs).
+ * Keys and targets are extensionless; `.md` requests (agents fetching raw
+ * markdown) are redirected to the target's `.md` form with any fragment
+ * dropped.
+ */
+const REDIRECTS: Record<string, string> = {
+  "/tutorial/part-1": "/cloudflare/tutorial/part-1",
+  "/tutorial/part-2": "/cloudflare/tutorial/part-2",
+  "/tutorial/part-3": "/cloudflare/tutorial/part-3",
+  "/tutorial/part-4": "/cloudflare/tutorial/part-4",
+  "/tutorial/part-5": "/cloudflare/tutorial/part-5",
+  "/tutorial/cloudflare/durable-objects": "/cloudflare/durable-objects",
+  "/tutorial/cloudflare/hyperdrive": "/cloudflare/hyperdrive",
+  "/tutorial/cloudflare/queue-consumer": "/cloudflare/queues",
+  "/tutorial/cloudflare/rpc-durable-object":
+    "/cloudflare/durable-objects#schemaless-rpc",
+  "/tutorial/cloudflare/rpc-worker": "/cloudflare/workers#schemaless-rpc",
+  "/tutorial/cloudflare/ai-gateway": "/cloudflare/guides/ai-gateway",
+  "/tutorial/cloudflare/ai-search": "/cloudflare/guides/ai-search",
+  "/tutorial/cloudflare/artifacts": "/cloudflare/guides/artifacts",
+  "/tutorial/cloudflare/branch-from-shared-database":
+    "/cloudflare/guides/branch-from-shared-database",
+  "/tutorial/cloudflare/containers": "/cloudflare/guides/containers",
+  "/tutorial/cloudflare/cross-worker-durable-object":
+    "/cloudflare/guides/cross-worker-durable-object",
+  "/tutorial/cloudflare/drizzle": "/cloudflare/guides/drizzle",
+  "/tutorial/cloudflare/hibernatable-websockets":
+    "/cloudflare/guides/hibernatable-websockets",
+  "/tutorial/cloudflare/vite-spa": "/cloudflare/guides/vite-spa",
+  "/tutorial/cloudflare/workflows": "/cloudflare/guides/workflows",
+  "/tutorial/aws/lambda": "/aws/lambda",
+  "/tutorial/aws/dynamodb": "/aws/dynamodb",
+  "/tutorial/aws/sqs": "/aws/sqs",
+  "/tutorial/aws/s3": "/aws/s3",
+  "/tutorial/aws/kinesis": "/aws/kinesis",
+  "/tutorial/aws/api-gateway": "/aws/guides/api-gateway",
+  "/tutorial/aws/dynamodb-streams": "/aws/guides/dynamodb-streams",
+  "/tutorial/aws/s3-events": "/aws/guides/s3-events",
+  "/guides/effect-http-api": "/cloudflare/guides/effect-http-api",
+  "/guides/effect-rpc": "/cloudflare/guides/effect-rpc",
+  "/guides/effect-ai": "/cloudflare/guides/effect-ai",
+  "/guides/frontends": "/cloudflare/guides/frontends",
+  "/guides/shared-database": "/cloudflare/guides/shared-database",
+};
+
+const resolveRedirect = (url: URL): string | undefined => {
+  let p = url.pathname.replace(/\/$/, "");
+  const isMarkdown = p.endsWith(".md");
+  if (isMarkdown) p = p.slice(0, -".md".length);
+  const target = REDIRECTS[p];
+  if (!target) return undefined;
+  if (isMarkdown) return `${target.split("#")[0]}.md`;
+  return target;
+};
+
 export default {
   fetch: async (request: Request, env: WorkerEnv) => {
+    const redirect = resolveRedirect(new URL(request.url));
+    if (redirect !== undefined) {
+      return Response.redirect(new URL(redirect, request.url), 301);
+    }
     if (request.method === "GET" && prefersMarkdown(request)) {
       const mdUrl = toMarkdownUrl(new URL(request.url)).toString();
       const res = await env.ASSETS.fetch(new Request(mdUrl, request));

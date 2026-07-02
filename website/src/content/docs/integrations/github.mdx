@@ -1,0 +1,102 @@
+---
+title: GitHub
+description: Repositories, Actions secrets and variables, webhooks, and repository event sources as Stack resources — the glue for CI/CD.
+---
+
+The GitHub provider manages repositories, Actions secrets and
+variables, and webhooks as resources. It's the glue for CI/CD: your
+Stack can mint a scoped cloud credential and store it as an Actions
+secret in the same deploy — no pasting tokens into repo settings.
+Workers can even subscribe to repository events directly.
+
+## Connect
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as GitHub from "alchemy/GitHub";
+
+providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
+```
+
+The next `alchemy login` adds a `GitHub` step with three options:
+
+- **`gh` CLI** — shells out to `gh auth token` (recommended).
+- **Environment variables** — reads `GITHUB_ACCESS_TOKEN` or
+  `GITHUB_TOKEN` (good for CI).
+- **Stored PAT** — a personal access token entered interactively,
+  saved under `~/.alchemy/credentials/<profile>/`.
+
+The token needs `repo` scope (plus `delete_repo` if you opt into
+repository deletion). See [Profiles](/concepts/profiles) for how
+credentials are stored and switched.
+
+## Resources
+
+`Repository` creates and converges a repo's settings. Destroying the
+stack retains the repository by default, protecting its history:
+
+```typescript
+const repo = yield* GitHub.Repository("api", {
+  owner: "my-org",
+  name: "api",
+  description: "API service",
+  autoInit: true,
+});
+```
+
+`Secrets` and `Variables` bulk-seed GitHub Actions configuration —
+values can be outputs of other resources:
+
+```typescript
+yield* GitHub.Secrets({
+  owner: "my-org",
+  repository: "api",
+  secrets: {
+    AXIOM_INGEST_TOKEN: tokenValue,
+  },
+});
+
+yield* GitHub.Variables({
+  owner: "my-org",
+  repository: "api",
+  variables: {
+    AWS_ROLE_ARN: role.roleArn,
+    AWS_REGION: region,
+  },
+});
+```
+
+`consumeRepositoryEvents` subscribes a host (e.g. a Cloudflare
+Worker) to repository webhooks with typed payloads:
+
+```typescript
+yield* GitHub.consumeRepositoryEvents(
+  {
+    owner: "my-org",
+    repository: "my-repo",
+    events: ["push", "pull_request"],
+    secret,
+  },
+  (event) => Effect.log(`received ${event.name} (${event.id})`),
+);
+```
+
+## Compose with your cloud
+
+The canonical pattern: a one-shot stack mints a scoped Cloudflare
+API token and stores it as an Actions secret, so CI deploys with a
+credential that was itself provisioned as code. Walk through it in
+[Part 5: CI/CD](/cloudflare/tutorial/part-5), and see
+[CI](/guides/ci) for the general GitHub Actions setup.
+
+## Reference
+
+[Repository](/providers/github/repository) ·
+[Secret](/providers/github/secret) ·
+[Secrets](/providers/github/secrets) ·
+[Variable](/providers/github/variable) ·
+[Variables](/providers/github/variables) ·
+[Webhook](/providers/github/webhook) ·
+[Comment](/providers/github/comment)

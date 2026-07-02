@@ -28,12 +28,12 @@ function providersSidebarEntry() {
       ),
       "utf8",
     );
-    // Expanded one level deep: the Providers group shows its providers
+    // Expanded one level deep: the Reference tab shows its providers
     // (AWS, Cloudflare, …) on load; everything below stays collapsed.
-    return { label: "Providers", collapsed: false, items: JSON.parse(json) };
+    return { label: "Reference", collapsed: false, items: JSON.parse(json) };
   } catch {
     return {
-      label: "Providers",
+      label: "Reference",
       collapsed: false,
       autogenerate: { directory: "providers", collapsed: true },
     };
@@ -215,7 +215,7 @@ export default defineConfig({
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
-        Header: "./src/components/marketing/Nav.astro",
+        Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
       },
       prerender: true,
@@ -235,36 +235,89 @@ export default defineConfig({
         baseUrl:
           "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
       },
+      // One top-level group per docs tab (see src/docs-tabs.ts). The
+      // docs-tabs-sidebar middleware swaps in the active tab's group, so
+      // the rendered sidebar only ever navigates within the current tab.
       sidebar: [
-        { label: "What is Alchemy?", link: "/what-is-alchemy" },
-        { label: "Getting Started", link: "/getting-started" },
         {
-          label: "Tutorial",
+          label: "Docs",
           items: [
-            { label: "Part 1: Your First Stack", link: "/tutorial/part-1" },
-            { label: "Part 2: Add a Worker", link: "/tutorial/part-2" },
-            { label: "Part 3: Testing", link: "/tutorial/part-3" },
-            { label: "Part 4: Local Dev", link: "/tutorial/part-4" },
-            { label: "Part 5: CI/CD", link: "/tutorial/part-5" },
+            { label: "What is Alchemy?", link: "/what-is-alchemy" },
+            { label: "Getting Started", link: "/getting-started" },
+            { label: "Concepts", autogenerate: { directory: "concepts" } },
+            { label: "Guides", autogenerate: { directory: "guides" } },
+          ],
+        },
+        {
+          label: "Cloudflare",
+          items: [
+            { label: "Overview", link: "/cloudflare" },
+            { label: "Setup", link: "/cloudflare/setup" },
             {
-              label: "Cloudflare",
-              autogenerate: { directory: "tutorial/cloudflare" },
-              collapsed: true,
+              label: "Tutorial",
+              autogenerate: { directory: "cloudflare/tutorial" },
             },
             {
-              label: "AWS",
-              autogenerate: { directory: "tutorial/aws" },
-              collapsed: true,
+              label: "Building Blocks",
+              items: [
+                { label: "Workers", link: "/cloudflare/workers" },
+                {
+                  label: "Durable Objects",
+                  link: "/cloudflare/durable-objects",
+                },
+                { label: "D1", link: "/cloudflare/d1" },
+                { label: "R2", link: "/cloudflare/r2" },
+                { label: "Queues", link: "/cloudflare/queues" },
+                { label: "Hyperdrive", link: "/cloudflare/hyperdrive" },
+              ],
+            },
+            {
+              label: "Guides",
+              autogenerate: { directory: "cloudflare/guides" },
             },
           ],
         },
         {
-          label: "Concepts",
-          autogenerate: { directory: "concepts" },
+          label: "AWS",
+          items: [
+            { label: "Overview", link: "/aws" },
+            { label: "Setup", link: "/aws/setup" },
+            {
+              label: "Compute",
+              items: [
+                {
+                  label: "Choosing a runtime",
+                  link: "/aws/choosing-a-runtime",
+                },
+                { label: "Lambda", link: "/aws/lambda" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "DynamoDB", link: "/aws/dynamodb" },
+                { label: "S3", link: "/aws/s3" },
+              ],
+            },
+            {
+              label: "Messaging & Events",
+              items: [
+                { label: "SQS", link: "/aws/sqs" },
+                { label: "Kinesis", link: "/aws/kinesis" },
+              ],
+            },
+            { label: "Guides", autogenerate: { directory: "aws/guides" } },
+          ],
         },
         {
-          label: "Guides",
-          autogenerate: { directory: "guides" },
+          label: "Integrations",
+          items: [
+            { label: "Overview", link: "/integrations" },
+            { label: "PlanetScale", link: "/integrations/planetscale" },
+            { label: "Neon", link: "/integrations/neon" },
+            { label: "Axiom", link: "/integrations/axiom" },
+            { label: "GitHub", link: "/integrations/github" },
+          ],
         },
         providersSidebarEntry(),
       ],
@@ -272,7 +325,7 @@ export default defineConfig({
       // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
       // We want every post listed, so set it effectively unlimited.
       plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
-      routeMiddleware: ["./src/blog-sidebar.ts"],
+      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts"],
     }),
     mdx(),
   ],

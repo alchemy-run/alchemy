@@ -1,0 +1,90 @@
+---
+title: PlanetScale
+description: Serverless MySQL (Vitess) and Postgres with database branching — databases, branches, and credentials as Stack resources.
+---
+
+PlanetScale gives you serverless MySQL (Vitess-backed) and managed
+Postgres with a branch-per-PR workflow. With alchemy you declare the
+database, its branches, and the credentials as resources in the same
+Stack as your Workers — branches fork per preview stage and tear
+down with it.
+
+## Connect
+
+Sign up at [planetscale.com](https://planetscale.com) and create a
+[service token](https://planetscale.com/docs/concepts/service-tokens).
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Planetscale from "alchemy/Planetscale";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Planetscale.providers()),
+```
+
+The next `alchemy login` adds a `Planetscale` step with two options:
+
+- **Environment variables** — reads `PLANETSCALE_API_TOKEN_ID`,
+  `PLANETSCALE_API_TOKEN`, and `PLANETSCALE_ORGANIZATION` (good for CI).
+- **Stored service token** — entered interactively, saved under
+  `~/.alchemy/credentials/<profile>/planetscale-stored.json`.
+
+See [Profiles](/concepts/profiles) for how credentials are stored
+and switched.
+
+## Resources
+
+A `PostgresDatabase` owns the long-lived cluster, a `PostgresBranch`
+is a cheap fork, and a `PostgresRole` materializes a user + password:
+
+```typescript
+const database = yield* Planetscale.PostgresDatabase("app-db", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+
+const branch = yield* Planetscale.PostgresBranch("app-branch", {
+  database,
+  isProduction: false,
+});
+
+const role = yield* Planetscale.PostgresRole("app-role", {
+  database,
+  branch,
+  inheritedRoles: ["postgres"],
+});
+```
+
+The MySQL family is the same shape — `MySQLDatabase`, `MySQLBranch`,
+and `MySQLPassword` (with `role: "readwriter"` instead of inherited
+roles).
+
+## Compose with your cloud
+
+The role's `origin` output (host / port / database / user / password)
+feeds straight into Cloudflare Hyperdrive for edge-pooled
+connections:
+
+```typescript
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+  origin: role.origin,
+});
+```
+
+Follow [Connect to a Database with Hyperdrive](/cloudflare/hyperdrive)
+for the full walkthrough, and the
+[shared database](/cloudflare/guides/shared-database) /
+[branch from a shared database](/cloudflare/guides/branch-from-shared-database)
+guides for branch-per-PR preview environments.
+
+## Reference
+
+- Postgres:
+  [PostgresDatabase](/providers/planetscale/postgres/postgresdatabase) ·
+  [PostgresBranch](/providers/planetscale/postgres/postgresbranch) ·
+  [PostgresRole](/providers/planetscale/postgres/postgresrole) ·
+  [PostgresDefaultRole](/providers/planetscale/postgres/postgresdefaultrole)
+- MySQL:
+  [MySQLDatabase](/providers/planetscale/mysql/mysqldatabase) ·
+  [MySQLBranch](/providers/planetscale/mysql/mysqlbranch) ·
+  [MySQLPassword](/providers/planetscale/mysql/mysqlpassword)

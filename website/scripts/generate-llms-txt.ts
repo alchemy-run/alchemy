@@ -50,42 +50,83 @@ const SECTIONS: Section[] = [
     pages: { slugs: ["what-is-alchemy", "getting-started"] },
   },
   {
-    heading: "Tutorial — main path (Cloudflare)",
-    intro:
-      "A linear five-part walkthrough from zero to a tested, locally-developed, CI-deployed Cloudflare project. Each part builds on the previous one.",
-    pages: {
-      slugs: [
-        "tutorial/part-1",
-        "tutorial/part-2",
-        "tutorial/part-3",
-        "tutorial/part-4",
-        "tutorial/part-5",
-      ],
-    },
-  },
-  {
-    heading: "Tutorial — Cloudflare add-ons",
-    intro:
-      "Standalone tutorials that extend the main tutorial's Worker with a specific Cloudflare feature. Pick the ones that match your use case.",
-    pages: { directory: "tutorial/cloudflare" },
-  },
-  {
-    heading: "Tutorial — AWS",
-    intro:
-      "End-to-end AWS tutorials. Read the Lambda page first; the others bind storage and event sources to that Lambda.",
-    pages: { directory: "tutorial/aws" },
-  },
-  {
     heading: "Concepts — the mental model",
     intro:
       "Reference pages explaining what each primitive means and how they fit together. Read these when something in a tutorial feels magical, or before designing a new Stack.",
     pages: { directory: "concepts" },
   },
   {
-    heading: "Guides — task-oriented",
+    heading: "Guides — cloud-agnostic",
     intro:
-      "Standalone how-to pages. Each solves a specific problem; read in any order.",
+      "Standalone how-to pages that apply on any cloud (CI, monorepos, custom providers, migration). Cloud-specific guides live in their cloud's section below.",
     pages: { directory: "guides" },
+  },
+  {
+    heading: "Cloudflare — start here",
+    intro:
+      "The Cloudflare hub: overview (building blocks + recipes) and setup (install, account, OAuth vs API token, profiles).",
+    pages: { slugs: ["cloudflare/index", "cloudflare/setup"] },
+  },
+  {
+    heading: "Cloudflare — tutorial",
+    intro:
+      "A linear five-part walkthrough from zero to a tested, locally-developed, CI-deployed Cloudflare project. Each part builds on the previous one.",
+    pages: {
+      slugs: [
+        "cloudflare/tutorial/part-1",
+        "cloudflare/tutorial/part-2",
+        "cloudflare/tutorial/part-3",
+        "cloudflare/tutorial/part-4",
+        "cloudflare/tutorial/part-5",
+      ],
+    },
+  },
+  {
+    heading: "Cloudflare — building blocks",
+    intro:
+      "The primary resources you build Cloudflare apps with. Each page covers what it is, a minimal deploy, bindings, recommended patterns (e.g. schemaless RPC on Workers and Durable Objects), and where to go next.",
+    pages: {
+      slugs: [
+        "cloudflare/workers",
+        "cloudflare/durable-objects",
+        "cloudflare/d1",
+        "cloudflare/r2",
+        "cloudflare/queues",
+        "cloudflare/hyperdrive",
+      ],
+    },
+  },
+  {
+    heading: "Cloudflare — guides",
+    intro:
+      "Task-oriented Cloudflare how-tos. Each solves a specific problem; read in any order.",
+    pages: { directory: "cloudflare/guides" },
+  },
+  {
+    heading: "AWS — start here",
+    intro:
+      "The AWS hub: overview (runtimes + building blocks + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
+    pages: { slugs: ["aws/index", "aws/setup", "aws/choosing-a-runtime"] },
+  },
+  {
+    heading: "AWS — building blocks",
+    intro:
+      "The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda.",
+    pages: {
+      slugs: ["aws/lambda", "aws/dynamodb", "aws/s3", "aws/sqs", "aws/kinesis"],
+    },
+  },
+  {
+    heading: "AWS — guides",
+    intro:
+      "Task-oriented AWS how-tos. Each solves a specific problem; read in any order.",
+    pages: { directory: "aws/guides" },
+  },
+  {
+    heading: "Integrations",
+    intro:
+      "Auxiliary providers that compose with your primary cloud — databases, observability, CI — managed as resources in the same Stack.",
+    pages: { directory: "integrations" },
   },
 ];
 
@@ -192,7 +233,8 @@ async function loadPage(slug: string): Promise<Page> {
         throw new Error(`Missing title in frontmatter: ${rel}`);
       }
       return {
-        href: `/${slug}`,
+        // `foo/index.mdx` is served at `/foo`.
+        href: `/${slug}`.replace(/\/index$/, "") || "/",
         slug,
         title,
         description,

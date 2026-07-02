@@ -1,0 +1,54 @@
+---
+import { DOCS_TABS, activeTab } from "../../docs-tabs";
+
+const current = activeTab(Astro.url.pathname);
+---
+
+<nav class="alc-tabs" aria-label="Documentation sections">
+  {
+    DOCS_TABS.map((tab) => (
+      <a
+        href={tab.href}
+        class:list={["alc-tabs__tab", { "alc-tabs__tab--active": tab.label === current.label }]}
+        aria-current={tab.label === current.label ? "true" : undefined}
+      >
+        {tab.label}
+      </a>
+    ))
+  }
+</nav>
+
+<style>
+  .alc-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    height: var(--alc-tabs-height, 2.5rem);
+    margin: 0 calc(-1 * var(--sl-nav-pad-x));
+    padding: 0 calc(var(--sl-nav-pad-x) - 10px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .alc-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .alc-tabs__tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 13.5px;
+    color: var(--alc-fg-2);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color var(--alc-dur) var(--alc-ease);
+  }
+  .alc-tabs__tab:hover {
+    color: var(--alc-accent-deep);
+  }
+  .alc-tabs__tab--active {
+    color: var(--alc-accent-deep);
+    font-weight: 500;
+    border-bottom-color: var(--alc-accent-deep);
+  }
+</style>

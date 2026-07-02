@@ -43,7 +43,7 @@ fails fast with `InvalidReferenceError` — there is no
 
 A common pattern is long-lived `staging` / `prod` stages owning
 the expensive resources while ephemeral `pr-*` stages reference
-them. See [Shared database across stages](/guides/shared-database)
+them. See [Shared database across stages](/cloudflare/guides/shared-database)
 for the full walkthrough.
 
 ## Cross a stack boundary
@@ -204,7 +204,7 @@ The fix is always the same: deploy the upstream first.
 
 - [Monorepos](/guides/monorepo) — `Stack.stage` / `yield* Stack`
   in practice.
-- [Shared database across stages](/guides/shared-database) —
+- [Shared database across stages](/cloudflare/guides/shared-database) —
   `Resource.ref` for sharing expensive cloud resources between
   PR-preview and long-lived stages.
 - [Inputs and Outputs](/concepts/outputs) — the broader Output

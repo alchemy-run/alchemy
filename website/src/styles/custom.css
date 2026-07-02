@@ -11,12 +11,30 @@
   /* Widen the docs sidebar (Starlight default is 18rem) so long generated
      provider entries (e.g. GitHubRepositoryEventSourcePolicy) don't wrap. */
   --sl-sidebar-width: 20rem;
-  /* Match the marketing header (64px tall, 32px horizontal padding, no
-     vertical padding) so docs and landing pages line up pixel-for-pixel. */
-  --sl-nav-height: 4rem;
+  /* The docs header is two rows: the marketing nav (64px, matching landing
+     pages pixel-for-pixel) plus the horizontal docs tab bar below it (see
+     components/starlight/Header.astro). Starlight offsets the sidebar and
+     content by --sl-nav-height, so it covers both rows. */
+  --alc-nav-row-height: 4rem;
+  --alc-tabs-height: 2.5rem;
+  --sl-nav-height: calc(var(--alc-nav-row-height) + var(--alc-tabs-height));
   --sl-nav-pad-x: 2rem;
   --sl-nav-pad-y: 0;
   color-scheme: light;
+}
+
+/* Pin Starlight's floating mobile hamburger to the first header row — it
+   centers itself against the full --sl-nav-height, which is now two rows. */
+starlight-menu-button button {
+  top: calc(
+    (var(--alc-nav-row-height) - var(--sl-menu-button-size)) / 2
+  ) !important;
+}
+
+/* The tab bar already links Docs and Blog on docs pages; the nav row's own
+   Docs/Blog text links are redundant there (they stay on marketing pages). */
+.alc-nav--docs .alc-nav__link:not(.alc-nav__link--icon) {
+  display: none;
 }
 
 /* On phones the 2rem desktop gutter is too generous: the docs header has to

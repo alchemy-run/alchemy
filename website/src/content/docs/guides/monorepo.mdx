@@ -151,7 +151,7 @@ export default class Service extends Cloudflare.Worker<Service>()(
 ```
 
 Standard `HttpApi` plumbing — see
-[Effect HTTP API](/guides/effect-http-api) for the long-form
+[Effect HTTP API](/cloudflare/guides/effect-http-api) for the long-form
 walkthrough.
 
 ### Build the typed client
@@ -480,7 +480,7 @@ const backend = yield* Backend.stage["pr-42"];
 | -------------------------------------------------------- | ---------------------------- |
 | Frontend's stage maps 1:1 to the backend's stage         | `yield* Backend`             |
 | Always pin to a specific backend stage                   | `yield* Backend.stage.prod`  |
-| Branch on the current stage (e.g. PR previews → staging) | a conditional, see [Shared database across stages](/guides/shared-database) |
+| Branch on the current stage (e.g. PR previews → staging) | a conditional, see [Shared database across stages](/cloudflare/guides/shared-database) |
 
 ## Comparison
 
@@ -498,7 +498,7 @@ const backend = yield* Backend.stage["pr-42"];
 - [Stack](/concepts/stack) — defining stacks and stack outputs.
 - [Inputs and Outputs](/concepts/outputs#ref) — the underlying
   `Output.stackRef` and `Output.ref` operators.
-- [Shared database across stages](/guides/shared-database) —
+- [Shared database across stages](/cloudflare/guides/shared-database) —
   per-resource references between stages of the same stack.
 - [Stages](/concepts/stages) — naming and isolating per-environment
   deploys.

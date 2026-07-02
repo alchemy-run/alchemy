@@ -1,0 +1,81 @@
+---
+title: Neon
+description: Serverless Postgres with copy-on-write branching — projects and branches as Stack resources, with built-in SQL migrations.
+---
+
+Neon is serverless Postgres with copy-on-write branching. With
+alchemy you declare the project and its branches as resources in the
+same Stack as your Workers — each preview stage forks its own branch
+in seconds and destroys it just as fast, and SQL migrations run as
+part of the deploy.
+
+## Connect
+
+Sign up at [neon.tech](https://neon.tech) and create an API key in
+the [Neon console](https://console.neon.tech). Register the provider
+next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Neon from "alchemy/Neon";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
+```
+
+The next `alchemy login` adds a `Neon` step with two options:
+
+- **Environment variable** — reads `NEON_API_KEY` (good for CI).
+- **Stored API key** — entered interactively, saved under
+  `~/.alchemy/credentials/<profile>/neon-stored.json`.
+
+See [Profiles](/concepts/profiles) for how credentials are stored
+and switched.
+
+## Resources
+
+A `Neon.Project` is the top-level container — creating it also
+provisions a default branch, role, database, and compute endpoint. A
+`Neon.Branch` is a copy-on-write fork with its own connection string:
+
+```typescript
+const project = yield* Neon.Project("app-db", {
+  region: "aws-us-east-1",
+});
+
+const branch = yield* Neon.Branch("app-branch", {
+  project,
+});
+```
+
+Both resources accept a `migrationsDir` of SQL files applied in
+order on deploy:
+
+```typescript
+const featureBranch = yield* Neon.Branch("feature", {
+  project,
+  migrationsDir: "./migrations",
+});
+```
+
+## Compose with your cloud
+
+The branch's `origin` output points at the direct (non-pooled)
+endpoint — exactly what Cloudflare Hyperdrive wants to pool at the
+edge:
+
+```typescript
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+  origin: branch.origin,
+});
+```
+
+Follow [Connect to a Database with Hyperdrive](/cloudflare/hyperdrive)
+for the full walkthrough. For PR previews that fork a branch off a
+long-lived staging project instead of provisioning a cluster per
+stage, see [shared database](/cloudflare/guides/shared-database) and
+[branch from a shared database](/cloudflare/guides/branch-from-shared-database).
+
+## Reference
+
+- [Project](/providers/neon/project)
+- [Branch](/providers/neon/branch)
