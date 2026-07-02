@@ -64,7 +64,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Cloudflare — start here",
     intro:
-      "The Cloudflare hub: overview (building blocks + recipes) and setup (install, account, OAuth vs API token, profiles).",
+      "The Cloudflare hub: overview (resources + recipes) and setup (install, account, OAuth vs API token, profiles).",
     pages: { slugs: ["cloudflare/index", "cloudflare/setup"] },
   },
   {
@@ -82,7 +82,7 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "Cloudflare — building blocks",
+    heading: "Cloudflare — primary resources",
     intro:
       "The primary resources you build Cloudflare apps with. Each page covers what it is, a minimal deploy, bindings, recommended patterns (e.g. schemaless RPC on Workers and Durable Objects), and where to go next.",
     pages: {
@@ -108,7 +108,7 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — start here",
     intro:
-      "The AWS hub: overview (runtimes + building blocks + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
+      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
     pages: { slugs: ["aws/index", "aws/setup", "aws/choosing-a-runtime"] },
   },
   {
@@ -126,7 +126,7 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "AWS — building blocks",
+    heading: "AWS — primary resources",
     intro:
       "The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda. ECS and EC2 are the long-running alternatives to Lambda; the networking page covers the VPC primitives that support them.",
     pages: {

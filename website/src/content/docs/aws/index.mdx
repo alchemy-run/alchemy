@@ -1,10 +1,10 @@
 ---
 title: AWS
-description: Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed building blocks, wired together by bindings that mint least-privilege IAM policies.
+description: Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed resources, wired together by bindings that mint least-privilege IAM policies.
 ---
 
 An Alchemy app on AWS is one **runtime** — usually a Lambda
-Function — plus the **building blocks** it talks to: tables,
+Function — plus the **resources** it talks to: tables,
 buckets, queues, streams. You wire them together with typed
 **bindings**: call `S3.PutObject(bucket)` in your code and
 Alchemy attaches the matching least-privilege IAM statement to
@@ -17,7 +17,7 @@ your first [Lambda](/aws/lambda).
 
 - **[Lambda](/aws/lambda)** — serverless, event-driven functions
   with public Function URLs. The primary documented path: every
-  building block and event source in this section is shown
+  resource and event source in this section is shown
   running on Lambda.
 - **[ECS](/aws/ecs)** — long-running containers on Fargate.
   Alchemy bundles your Effect program into a Docker image and
@@ -28,9 +28,7 @@ your first [Lambda](/aws/lambda).
 Not sure which? See
 [Choosing a runtime](/aws/choosing-a-runtime).
 
-## Building blocks
-
-### Data
+## Data
 
 - **[DynamoDB](/aws/dynamodb)** — key/value tables with
   `GetItem`/`PutItem` bindings and change-data-capture Streams.
@@ -40,7 +38,7 @@ Not sure which? See
   `Aurora` helper stands up the whole cluster in one call, with
   a `Connect` binding or the Data API at runtime.
 
-### Messaging & events
+## Messaging & events
 
 - **[SQS](/aws/sqs)** — queues with a `SendMessage` binding and a
   `Stream`-shaped Lambda consumer.
@@ -52,13 +50,13 @@ Not sure which? See
   with a `PutRecord` binding and the same `Stream` consumer
   surface.
 
-### Observability
+## Observability
 
 - **[CloudWatch](/aws/cloudwatch)** — dashboards and metric
   alarms, declared in the same Stack as the resources they
   watch.
 
-### Frontend & networking
+## Frontend & networking
 
 - **[Websites](/aws/websites)** — the frontend block: static
   sites and built Vite apps on S3 + CloudFront as a single

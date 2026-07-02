@@ -48,9 +48,9 @@ Standalone how-to pages that apply on any cloud (CI, monorepos, custom providers
 
 ## Cloudflare — start here
 
-The Cloudflare hub: overview (building blocks + recipes) and setup (install, account, OAuth vs API token, profiles).
+The Cloudflare hub: overview (resources + recipes) and setup (install, account, OAuth vs API token, profiles).
 
-- [Cloudflare](https://v2.alchemy.run/cloudflare) — Build and deploy full applications on Cloudflare with Alchemy — one Worker runtime plus building blocks like Durable Objects, D1, R2, Queues, and Hyperdrive, wired together by typed bindings.
+- [Cloudflare](https://v2.alchemy.run/cloudflare) — Build and deploy full applications on Cloudflare with Alchemy — one Worker runtime plus resources like Durable Objects, D1, R2, Queues, and Hyperdrive, wired together by typed bindings.
 - [Setup](https://v2.alchemy.run/cloudflare/setup) — Install Alchemy, create a Cloudflare account, and connect the two — OAuth or API token, saved to a local profile. No environment variables required.
 
 ## Cloudflare — tutorial
@@ -63,7 +63,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Part 4: Local Dev](https://v2.alchemy.run/cloudflare/tutorial/part-4) — Run your stack locally with alchemy dev for hot reloading and instant feedback.
 - [Part 5: CI/CD](https://v2.alchemy.run/cloudflare/tutorial/part-5) — Set up GitHub Actions for automated deployments, PR previews, and remote state — with Cloudflare credentials managed as code.
 
-## Cloudflare — building blocks
+## Cloudflare — primary resources
 
 The primary resources you build Cloudflare apps with. Each page covers what it is, a minimal deploy, bindings, recommended patterns (e.g. schemaless RPC on Workers and Durable Objects), and where to go next.
 
@@ -112,9 +112,9 @@ Task-oriented Cloudflare how-tos. Each solves a specific problem; read in any or
 
 ## AWS — start here
 
-The AWS hub: overview (runtimes + building blocks + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.
+The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.
 
-- [AWS](https://v2.alchemy.run/aws) — Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed building blocks, wired together by bindings that mint least-privilege IAM policies.
+- [AWS](https://v2.alchemy.run/aws) — Build AWS applications with Alchemy — a runtime (usually Lambda) plus typed resources, wired together by bindings that mint least-privilege IAM policies.
 - [Setup](https://v2.alchemy.run/aws/setup) — Install Alchemy and connect it to your AWS account — SSO, environment variables, or stored access keys.
 - [Choosing a runtime](https://v2.alchemy.run/aws/choosing-a-runtime) — Lambda vs ECS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
 
@@ -128,7 +128,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 - [Part 4: Stages](https://v2.alchemy.run/aws/tutorial/part-4) — Deploy isolated dev, staging, and prod instances of your stack with --stage, and tune resources per stage.
 - [Part 5: CI/CD](https://v2.alchemy.run/aws/tutorial/part-5) — Set up GitHub Actions for automated AWS deployments and PR previews — with OIDC credentials provisioned as code.
 
-## AWS — building blocks
+## AWS — primary resources
 
 The primary resources you build AWS apps with. Read the Lambda page first; the others bind storage and event sources to that Lambda. ECS and EC2 are the long-running alternatives to Lambda; the networking page covers the VPC primitives that support them.
 

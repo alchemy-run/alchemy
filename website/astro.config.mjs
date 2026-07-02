@@ -455,17 +455,12 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/github" },
             { label: "Setup", link: "/github/setup" },
+            { label: "Repositories", link: "/github/repository" },
             {
-              label: "Building Blocks",
-              items: [
-                { label: "Repositories", link: "/github/repository" },
-                {
-                  label: "Actions secrets & variables",
-                  link: "/github/actions-config",
-                },
-                { label: "Webhooks & events", link: "/github/events" },
-              ],
+              label: "Actions secrets & variables",
+              link: "/github/actions-config",
             },
+            { label: "Webhooks & events", link: "/github/events" },
             providerResourcesEntry("GitHub"),
           ],
         },

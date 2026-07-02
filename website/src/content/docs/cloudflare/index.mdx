@@ -1,10 +1,10 @@
 ---
 title: Cloudflare
-description: Build and deploy full applications on Cloudflare with Alchemy — one Worker runtime plus building blocks like Durable Objects, D1, R2, Queues, and Hyperdrive, wired together by typed bindings.
+description: Build and deploy full applications on Cloudflare with Alchemy — one Worker runtime plus resources like Durable Objects, D1, R2, Queues, and Hyperdrive, wired together by typed bindings.
 ---
 
 An alchemy app on Cloudflare is one **Worker** runtime plus the
-building blocks it talks to — databases, object storage, queues,
+resources it talks to — databases, object storage, queues,
 stateful objects — all declared in the same TypeScript program and
 wired together by typed bindings. Deploy the whole thing with
 `bun alchemy deploy`; Alchemy figures out what changed.
@@ -12,16 +12,14 @@ wired together by typed bindings. Deploy the whole thing with
 New here? [Set up your account](/cloudflare/setup), then start the
 [tutorial](/cloudflare/tutorial/part-1).
 
-## Building blocks
-
-### Compute
+## Compute
 
 - [Workers](/cloudflare/workers) — the compute runtime; every app has
   at least one.
 - [Durable Objects](/cloudflare/durable-objects) — globally-unique
   stateful instances with transactional storage and typed RPC.
 
-### Data
+## Data
 
 - [D1](/cloudflare/d1) — serverless SQLite with migrations managed as
   part of the deploy.
@@ -32,12 +30,12 @@ New here? [Set up your account](/cloudflare/setup), then start the
 - [Hyperdrive](/cloudflare/hyperdrive) — edge connection pooling for
   external Postgres and MySQL.
 
-### Messaging
+## Messaging
 
 - [Queues](/cloudflare/queues) — at-least-once message delivery
   between Workers.
 
-### Networking
+## Networking
 
 - [Domains & DNS](/cloudflare/domains) — zones, DNS records, and zone
   settings as resources; adopt the domains you already own.
