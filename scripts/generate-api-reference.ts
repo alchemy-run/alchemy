@@ -526,21 +526,53 @@ function renderPermissionsSection(
       parts.push(`Scope: **${cf.scope}**`);
     }
     const oauth = cf.auth?.oauth;
+    const token = cf.auth?.token;
+    const oauthUnsupported = oauth?.supported === false;
+    const hasTokenGroups =
+      (token?.permissionGroups?.length ?? 0) > 0 ||
+      (token?.readPermissionGroups?.length ?? 0) > 0;
+    if (oauthUnsupported && hasTokenGroups) {
+      parts.push(
+        [
+          ":::caution",
+          "This resource cannot be managed with an OAuth user token (`alchemy login`). " +
+            "Use an API token carrying the permission groups below — e.g. " +
+            "`alchemy cloudflare create-token --from-stack alchemy.run.ts`.",
+          ":::",
+        ].join("\n"),
+      );
+    } else if (oauthUnsupported) {
+      parts.push(
+        [
+          ":::caution",
+          "This resource cannot be managed with an OAuth user token, and Cloudflare " +
+            "does not publish an API-token permission group for it yet. Managing it " +
+            "requires Global API Key credentials.",
+          ":::",
+        ].join("\n"),
+      );
+    } else if (!hasTokenGroups && (oauth?.scopes?.length ?? 0) > 0) {
+      parts.push(
+        [
+          ":::caution",
+          "No API-token permission group is cataloged for this resource — manage it " +
+            "with an OAuth user token (`alchemy login`) using the scopes below.",
+          ":::",
+        ].join("\n"),
+      );
+    }
     if (oauth) {
-      if (oauth.supported === false) {
-        parts.push(
-          "**OAuth:** not manageable via OAuth user tokens — use an API token.",
-        );
-      } else if (oauth.scopes && oauth.scopes.length > 0) {
+      if (!oauthUnsupported && oauth.scopes && oauth.scopes.length > 0) {
         parts.push(`**OAuth scopes:** ${inlineCodes(oauth.scopes)}`);
       }
+      // Rendered even when full management is OAuth-unsupported: read-only
+      // scopes still enable plan-only sessions.
       if (oauth.readScopes && oauth.readScopes.length > 0) {
         parts.push(
           `**Plan-only (read) OAuth scopes:** ${inlineCodes(oauth.readScopes)}`,
         );
       }
     }
-    const token = cf.auth?.token;
     if (token?.permissionGroups && token.permissionGroups.length > 0) {
       parts.push(
         [
