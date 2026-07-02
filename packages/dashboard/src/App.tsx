@@ -124,6 +124,11 @@ export function App() {
               onSelect={setSelected}
             />
           )}
+          {scene.stateError && (
+            <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-300">
+              State store unreachable: {scene.stateError}
+            </div>
+          )}
           {filtered.nodes.length === 0 &&
             (scene.planReady ? (
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
