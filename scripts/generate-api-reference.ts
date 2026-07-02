@@ -379,6 +379,12 @@ function renderPage(doc: PageDoc): string {
 /** Providers shown first in the sidebar; the rest follow alphabetically. */
 const PROVIDER_ORDER = ["AWS", "Cloudflare"];
 
+/**
+ * Uncategorized providers with at most this many pages render as a flat
+ * resource list instead of per-service folders (see buildProvidersSidebar).
+ */
+const FLAT_PROVIDER_MAX_PAGES = 16;
+
 interface SidebarLeaf {
   label: string;
   link: string;
@@ -484,9 +490,22 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
         items: buildServiceItems(categorized.get(cat)!),
       });
     }
-    // Pages without a category fall back to service grouping directly under
-    // the provider (this is how AWS renders until it gets categorized).
-    items.push(...buildServiceItems(uncategorized));
+    if (categorized.size === 0 && pages.length <= FLAT_PROVIDER_MAX_PAGES) {
+      // Small uncategorized providers (Neon, Planetscale, Axiom, GitHub, …)
+      // render as a flat resource list — per-service folders around one or
+      // two pages ("Branch > Branch") are redundant nesting, and prefixed
+      // resource names (MySQLBranch/PostgresBranch) already carry the
+      // grouping information.
+      items.push(
+        ...uncategorized
+          .map((p) => ({ label: p.resource, link: p.link }))
+          .sort(byLabel),
+      );
+    } else {
+      // Pages without a category fall back to service grouping directly under
+      // the provider (this is how AWS renders until it gets categorized).
+      items.push(...buildServiceItems(uncategorized));
+    }
 
     providers.push({ label: provider, collapsed: true, items });
   }
