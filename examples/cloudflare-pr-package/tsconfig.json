@@ -11,6 +11,9 @@
   "references": [
     {
       "path": "../../packages/alchemy/tsconfig.json"
+    },
+    {
+      "path": "../../packages/pr-package/tsconfig.json"
     }
   ]
 }
