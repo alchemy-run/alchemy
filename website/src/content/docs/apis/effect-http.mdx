@@ -21,28 +21,29 @@ and encode, so it's equally discouraged for internal
 service-to-service calls — that's what
 [schemaless RPC](/apis/schemaless) is for.
 
-## The layout
+## The pieces
 
 Four files. Three are the API — domain model, endpoint
-declarations, and the Worker that serves them — and the fourth is a
-client that derives everything from the second:
+declarations, and the host that serves them (a Cloudflare Worker or
+Lambda Function) — and the fourth is a client that derives
+everything from the second:
 
 ```sh
 src/
 ├── Task.ts        # domain model + typed 404 (Schema.Class, TaggedErrorClass)
 ├── ApiSchema.ts   # endpoint declarations — one HttpApi value, imported by server AND clients
-└── ApiService.ts  # the Worker serving TaskApi — returns { fetch }
-scripts/
-└── client.ts      # typed client derived from ApiSchema — no codegen, no string URLs
+├── ApiService.ts  # the host — a Worker or Lambda Function; wired on the hub pages — returns { fetch }
+└── ApiClient.ts   # typed client derived from ApiSchema — no codegen, no string URLs
 ```
 
 The load-bearing file is `src/ApiSchema.ts`: the server implements
 it, every typed client is derived from it, and plain HTTP consumers
-get its validation for free. We build the tree top to bottom.
+get its validation for free.
 
-## The domain model
+## Schema
 
-Start with `src/Task.ts` — the value that crosses the wire:
+`src/Task.ts` owns the value that crosses the wire and the error
+that crosses with it:
 
 ```typescript
 // src/Task.ts
@@ -53,46 +54,30 @@ export class Task extends Schema.Class<Task>("Task")({
   title: Schema.String,
   completed: Schema.Boolean,
 }) {}
+
+export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
+  "TaskNotFound",
+  { id: Schema.String },
+  { httpApiStatus: 404 },
+) {}
 ```
 
 `Schema.Class` gives you a runtime-validated class with an inferred
-TypeScript type — the server encodes it on the way out, clients
-decode it on the way in, and both sides import this one definition.
+TypeScript type — one definition imported by both sides — and
+`httpApiStatus: 404` maps the tagged error to a real 404 over plain
+HTTP instead of a generic 500.
 
-## A typed 404
+## Endpoints
 
-The domain file also owns the error that crosses the wire:
-
-```diff lang="typescript"
-  // src/Task.ts
-  import * as Schema from "effect/Schema";
-
-  export class Task extends Schema.Class<Task>("Task")({
-    id: Schema.String,
-    title: Schema.String,
-    completed: Schema.Boolean,
-  }) {}
-
-+export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
-+  "TaskNotFound",
-+  { id: Schema.String },
-+  { httpApiStatus: 404 },
-+) {}
-```
-
-`httpApiStatus: 404` maps the tagged error to a real status code —
-`TaskNotFound` is a typed value in the Effect error channel *and* a
-404 over plain HTTP, instead of a generic 500.
-
-## Declare the read endpoint
-
-Now `src/ApiSchema.ts` — endpoints are declarations of
-`(method, path, schemas)`, implementing nothing:
+`src/ApiSchema.ts` declares the contract — endpoints, a group, and
+the API value:
 
 ```typescript
 // src/ApiSchema.ts
 import * as Schema from "effect/Schema";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import { Task, TaskNotFound } from "./Task.ts";
 
 export const getTask = HttpApiEndpoint.get("getTask", "/:id", {
@@ -100,205 +85,93 @@ export const getTask = HttpApiEndpoint.get("getTask", "/:id", {
   success: Task,
   error: TaskNotFound,
 });
+
+export const createTask = HttpApiEndpoint.post("createTask", "/", {
+  payload: Schema.Struct({ title: Schema.String }),
+  success: Task,
+});
+
+export class TasksGroup extends HttpApiGroup.make("Tasks")
+  .add(getTask)
+  .add(createTask) {}
+
+export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}
 ```
 
-The `/:id` path parameter is declared under the `params` key (not
-`path`), and that declaration is what makes `params.id` a typed
-`string` in both the handler and the client later on.
+Endpoints are pure declarations of `(method, path, schemas)`: the
+`/:id` path parameter declared under `params` is what makes
+`params.id` a typed `string` in both the handler and the client,
+request bodies are decoded against the `payload` Schema before your
+handler runs (anything that doesn't match gets an automatic 400 with
+a structured validation error), and `TaskApi` is a plain value —
+importable by the server and every client without dragging any
+runtime code across.
 
-## Declare the write endpoint
-
-`POST` endpoints declare a `payload` Schema for the request body:
-
-```diff lang="typescript"
-  export const getTask = HttpApiEndpoint.get("getTask", "/:id", {
-    params: Schema.Struct({ id: Schema.String }),
-    success: Task,
-    error: TaskNotFound,
-  });
-
-+export const createTask = HttpApiEndpoint.post("createTask", "/", {
-+  payload: Schema.Struct({ title: Schema.String }),
-+  success: Task,
-+});
-```
-
-Incoming JSON bodies are decoded against the `payload` Schema before
-your handler runs — anything that doesn't match gets an automatic
-400 with a structured validation error, no manual checking.
-
-## Group into one API value
-
-Endpoints collect into a group, groups into the API:
-
-```diff lang="typescript"
-+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-
-  export const createTask = HttpApiEndpoint.post("createTask", "/", {
-    payload: Schema.Struct({ title: Schema.String }),
-    success: Task,
-  });
-
-+export class TasksGroup extends HttpApiGroup.make("Tasks")
-+  .add(getTask)
-+  .add(createTask) {}
-
-+export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}
-```
-
-Nothing executes yet — `TaskApi` is a pure description, which is
-exactly why the same constant can be imported by the server and by
-every client without dragging any runtime code across.
-
-## Checkpoint: the contract is done
-
-```sh
-src/
-├── Task.ts        # ✓ Task + TaskNotFound
-├── ApiSchema.ts   # ✓ getTask + createTask, grouped into TaskApi
-└── ApiService.ts  # ← next: serve it
-```
-
-Everything above this line is host-agnostic; what remains is to give
-`TaskApi` handlers and a place to run.
-
-## The Worker skeleton
-
-`src/ApiService.ts` starts as an
-[Effectful Constructor](/infrastructure-as-effects/functions-and-servers#the-effectful-constructor-pattern)
-with an empty Init phase:
-
-```typescript
-// src/ApiService.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-
-export default class ApiService extends Cloudflare.Worker<ApiService>()(
-  "ApiService",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    return {};
-  }),
-) {}
-```
-
-The generator is the Init phase — it runs at plan time *and* when
-the Worker boots a fresh isolate, so everything inside must be pure
-construction, never per-request work.
-
-## Handle `getTask`
+## Handlers
 
 `HttpApiBuilder.group` wires handlers into the spec:
 
-```diff lang="typescript"
-  // src/ApiService.ts
-+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-+import { TaskApi } from "./ApiSchema.ts";
-+import { TaskNotFound } from "./Task.ts";
+```typescript
+// src/ApiService.ts — inside the host's Init phase (a Cloudflare Worker or Lambda Function)
+import * as Effect from "effect/Effect";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { TaskApi } from "./ApiSchema.ts";
+import { Task, TaskNotFound } from "./Task.ts";
 
-  Effect.gen(function* () {
-+    const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
-+      handlers.handle("getTask", ({ params }) =>
-+        // look up the task in storage — the hub guides wire R2/DynamoDB
-+        Effect.fail(new TaskNotFound({ id: params.id })),
-+      ),
-+    );
-
-    return {};
-  }),
+const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
+  handlers
+    .handle("getTask", ({ params }) =>
+      // look up the task in storage — the hub guides wire R2/DynamoDB
+      Effect.fail(new TaskNotFound({ id: params.id })),
+    )
+    .handle("createTask", ({ payload }) =>
+      Effect.succeed(
+        new Task({
+          id: crypto.randomUUID(),
+          title: payload.title,
+          completed: false,
+        }),
+      ),
+    ),
+);
 ```
 
 `HttpApiBuilder.group` *constructs* a handler Layer — it runs
-nothing, which is what makes it safe inside Init — and the handler
-receives the typed request the endpoint declared: `params.id` is a
-`string`, and the only allowed failure is `TaskNotFound`.
+nothing, which is what makes it safe at init/plan time — and each
+handler receives the typed request its endpoint declared:
+`params.id` and `payload.title` are `string`s, the handler must
+return a `Task`, and the only allowed failure is `TaskNotFound` — a
+wrong shape or an undeclared error is a compile error, not a runtime
+surprise.
 
-## Handle `createTask`
+## Serve it
 
-The write handler chains onto the same builder:
+Assemble the API Layer and convert it into the `HttpEffect` that
+`fetch` expects:
 
-```diff lang="typescript"
--import { TaskNotFound } from "./Task.ts";
-+import { Task, TaskNotFound } from "./Task.ts";
+```typescript
+// src/ApiService.ts — end of the Init phase
+import * as Layer from "effect/Layer";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
 
-    const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
-      handlers
-        .handle("getTask", ({ params }) =>
-          Effect.fail(new TaskNotFound({ id: params.id })),
--       ),
-+       )
-+       .handle("createTask", ({ payload }) =>
-+         Effect.succeed(
-+           new Task({
-+             id: crypto.randomUUID(),
-+             title: payload.title,
-+             completed: false,
-+           }),
-+         ),
-+       ),
-    );
+// platform = the host's platform service Layers — differs per host
+return {
+  fetch: yield* HttpRouter.toHttpEffect(
+    HttpApiBuilder.layer(TaskApi).pipe(
+      Layer.provide(tasksGroup),
+      Layer.provide(platform),
+    ),
+  ),
+};
 ```
 
-`payload.title` is a `string` because the endpoint's `payload`
-Schema said so, and the handler must return a `Task` — a wrong shape
-or an undeclared error is a compile error, not a runtime surprise.
-
-## Stub `HttpPlatform` for the isolate
-
-HTTP's framing is part of the contract, so `HttpApi` needs platform
-services that Effect RPC's internal framing doesn't. One of them,
-`HttpPlatform`, normally requires a `FileSystem` — and a Workers
-isolate has none — so a module-scope stub stands in:
-
-```diff lang="typescript"
-  // src/ApiService.ts
-+import * as Layer from "effect/Layer";
-+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
-
-+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
-+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-+  fileWebResponse: () =>
-+    Effect.die("HttpPlatform.fileWebResponse not supported"),
-+});
-
-  export default class ApiService extends Cloudflare.Worker<ApiService>()(
-```
-
-The stub only dies on the file-serving methods — which JSON
-endpoints never touch — while satisfying the Layer requirement so
-the builder assembles.
-
-## Return `fetch`
-
-Assemble the API Layer and convert it into the `HttpEffect` the
-Worker's `fetch` expects:
-
-```diff lang="typescript"
-+import * as Path from "effect/Path";
-+import * as Etag from "effect/unstable/http/Etag";
-+import * as HttpRouter from "effect/unstable/http/HttpRouter";
-
--    return {};
-+    return {
-+      fetch: yield* HttpRouter.toHttpEffect(
-+        HttpApiBuilder.layer(TaskApi).pipe(
-+          Layer.provide(tasksGroup),
-+          Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
-+        ),
-+      ),
-+    };
-  }),
-```
-
-`HttpRouter.toHttpEffect` builds the assembled Layer once and yields
-the request handler — route construction happens at boot, not per
-request — with `Etag.layer` and `Path.layer` filling in the
-remaining platform services. The same construction returns
-`{ fetch }` from a Lambda Function with `url: true`; full wiring for
-both hosts, including storage and CORS, lives on the
+`HttpRouter.toHttpEffect` builds the Layer once at boot and yields
+the request handler — the same `{ fetch }` shape a Worker or a
+Lambda Function with `url: true` serves. The `platform` Layers are
+the host-specific part of the wiring — see
 [Workers](/cloudflare/apis/effect-http-api) and
-[Lambda](/aws/apis/effect-http-api) hub pages.
+[Lambda](/aws/apis/effect-http-api) for the exact set, plus storage
+bindings and deploy (and CORS, on Workers).
 
 ## Plain HTTP for everyone else
 
@@ -321,27 +194,16 @@ validation errors, and a missing task comes back as a real 404 — the
 `httpApiStatus` declared on `TaskNotFound` — in any language, with
 any HTTP library, against the same validated contract.
 
-## The last file: a typed client
-
-```sh
-src/
-├── Task.ts        # ✓
-├── ApiSchema.ts   # ✓ ← the client imports this
-└── ApiService.ts  # ✓ deployed, serving TaskApi
-scripts/
-└── client.ts      # ← next: an Effect consumer
-```
+## A typed client
 
 For consumers that *are* Effect programs, the same `TaskApi` value
-drives a fully typed client — no codegen, no string URLs.
-
-## Derive the client from the schema
+drives a fully typed client — no codegen, no string URLs:
 
 ```typescript
-// scripts/client.ts
+// src/ApiClient.ts
 import * as Effect from "effect/Effect";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import { TaskApi } from "../src/ApiSchema.ts";
+import { TaskApi } from "./ApiSchema.ts";
 
 const program = Effect.gen(function* () {
   const client = yield* HttpApiClient.make(TaskApi, {
@@ -362,32 +224,20 @@ Request keys mirror the declarations — `payload` for bodies,
 `params` for path parameters — and `client.Tasks.getTask` returns
 `Effect<Task, TaskNotFound | HttpClientError>`: the 404 arrives as a
 typed value you pattern-match on, not a status code you interpret.
-
-## Point the client at a Binding
-
-The client also works over a Binding instead of a URL:
-
-```typescript
-const client = yield* HttpApiClient.makeWith(TaskApi, {
-  baseUrl: "http://localhost", // requests never leave the isolate
-  httpClient: Cloudflare.toHttpClient(tasksDO.getByName("default")),
-});
-```
-
-`Cloudflare.toHttpClient` turns any Durable Object or Worker stub
-into the transport — see the
-[DO-bridging recipe](/cloudflare/apis/effect-http-api#bonus-route-some-endpoints-to-a-durable-object)
-on the Cloudflare hub.
+The client can also ride a Binding instead of a URL — see the
+[Durable Object bridge](/cloudflare/apis/effect-http-api#bridge-the-do-into-a-typed-client)
+on the Workers page.
 
 ## Where next
 
-- [Effect HTTP API on Workers](/cloudflare/apis/effect-http-api) —
-  full Worker wiring: R2 storage, CORS, and the DO sub-API bridge.
-- [Effect HTTP API on Lambda](/aws/apis/effect-http-api) — full
-  Lambda wiring: DynamoDB storage and a typed end-to-end test.
-- [REST API (API Gateway v1)](/aws/apis/api-gateway) — put API
-  Gateway in front instead of a Function URL.
+- [Effect HTTP on Workers](/cloudflare/apis/effect-http-api) — full
+  Worker wiring: R2 storage, the `HttpPlatform` stub, CORS, and the
+  DO sub-API bridge.
+- [Effect HTTP on Lambda](/aws/apis/effect-http-api) — full Lambda
+  wiring: DynamoDB bindings, IAM, and a typed end-to-end test.
 - [Effect RPC](/apis/effect-rpc) — same trust boundary, leaner wire
   protocol, for consumers that are Effect programs.
 - [Schemaless RPC](/apis/schemaless) — the default for internal
   calls: typed clients with no schema and no per-request validation.
+- [REST API (API Gateway v1)](/aws/apis/api-gateway) — put API
+  Gateway in front instead of a Function URL.

@@ -63,8 +63,8 @@ How app code and infrastructure compose: Functions & Servers, Bindings, the init
 Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.
 
 - [APIs](https://v2.alchemy.run/apis) — Every Function and Server returns { fetch, ...rpcs } — schemaless typed calls are the default for internal communication; Effect RPC and Effect HTTP add schemas where data crosses a trust boundary.
-- [Schemaless RPC](https://v2.alchemy.run/apis/schemaless) — Typed RPC between Functions & Servers with no schema — bind the class, get the client; serialization is automatic.
-- [Effect RPC](https://v2.alchemy.run/apis/effect-rpc) — Schema-first RPC for trust boundaries — define a schema, serve it as an HttpEffect from any Function or Worker, and build clients from the schema plus a Fetcher.
+- [Schemaless RPC](https://v2.alchemy.run/apis/schemaless) — The pattern behind typed, schema-free RPC — what an RPC member may be, how the typed client arises, how calls travel over the wire, and where the limits are.
+- [Effect RPC](https://v2.alchemy.run/apis/effect-rpc) — Schema-first RPC for trust boundaries — declare procedures, construct handler Layers, derive typed clients from the same schema.
 - [Effect HTTP](https://v2.alchemy.run/apis/effect-http) — Schema-validated REST endpoints with an rpc-like typed interface — for trust boundaries where consumers want a plain HTTP client.
 
 ## Environments — the same app in many places

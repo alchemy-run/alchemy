@@ -1,225 +1,146 @@
 ---
 title: Schemaless RPC
-description: Typed RPC between Functions & Servers with no schema — bind the class, get the client; serialization is automatic.
+description: The pattern behind typed, schema-free RPC — what an RPC member may be, how the typed client arises, how calls travel over the wire, and where the limits are.
 sidebar:
   order: 1
 ---
 
-Schemaless RPC is the default for internal communication. Any Function or Server returns `{ fetch, ...rpcs }`; any other Resource that binds to it gets a fully typed client — Worker to Worker, Worker to Durable Object, Container into a Worker, MicroVM into a Lambda Function. Serialization is handled automatically. There is no schema, no runtime checking, and no per-request validation cost.
+Schemaless RPC is the default for internal communication between the
+services you deploy together: expose methods on a runtime's
+interface, bind it from another resource, and call them through a
+fully typed client — no schema, no runtime validation, no
+per-request decode cost.
 
-## The contract
+## The shape
 
-A Function or Server's init Effect returns a Shape: a `fetch` handler plus any number of RPC members, where each member is an Effect, a Stream, or a function returning either.
+RPC is a feature of every
+[Functions & Servers](/infrastructure-as-effects/functions-and-servers)
+runtime — the interface its Effectful Constructor returns may
+include methods alongside `fetch`:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
-export default class BindingTargetWorker extends Cloudflare.Worker<BindingTargetWorker>()(
-  "BindingTargetWorker",
-  {
-    main: import.meta.url,
-  },
+export default class Greeter extends Cloudflare.Worker<Greeter>()(
+  "Greeter",
+  { main: import.meta.url },
   Effect.gen(function* () {
     return {
       greet: (name: string) => Effect.succeed(`hello ${name}`),
       fetch: Effect.gen(function* () {
-        return HttpServerResponse.text("hello from BindingTargetWorker");
+        return HttpServerResponse.text("ok");
       }),
     };
   }),
 ) {}
 ```
 
-The Shape *is* the class instance type: `class T extends Cloudflare.Worker<T>()(...)` makes the class's instance type equal to whatever the init Effect returns, and yielding the class produces a value that carries the Shape — so every binder infers the client type with zero extra declarations.
+The host class here happens to be `Cloudflare.Worker`, but the host
+is incidental — the pattern is identical on every runtime. This page
+covers what members are allowed, how the typed client arises, what
+crosses the wire, and where the limits are.
 
-## Typed clients by binding
+## What a member may be
 
-Bind the class, get the client — `target.greet(name)` is typed end-to-end from the callee's Shape.
-
-```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import BindingTargetWorker from "./binding-target-worker.ts";
-
-export default class BindingEffectCaller extends Cloudflare.Worker<BindingEffectCaller>()(
-  "BindingEffectCaller",
-  {
-    main: import.meta.url,
-  },
-  Effect.gen(function* () {
-    const target = yield* Cloudflare.Workers.bindWorker(BindingTargetWorker);
-
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const name =
-          new URL(request.url, "http://x").searchParams.get("name") ?? "world";
-        const greeting = yield* target.greet(name);
-        return HttpServerResponse.text(String(greeting));
-      }),
-    };
-  }),
-) {}
-```
-
-`bindWorker` registers a service Binding on the host at plan time and returns a proxy typed as the target's Shape that resolves the binding stub from the Worker's environment at call time. At runtime, calls ride Cloudflare's native JSRPC over the service-binding fabric — they never touch the public internet.
-
-## Every runtime pair
-
-### Worker → Durable Object
-
-A Durable Object's Shape mixes value methods and streaming methods freely.
+An RPC-callable member is a **function returning an Effect**:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-
-const KV = Cloudflare.KV.Namespace("DurableObjectWorkerEnvironmentKV", {
-  title: "durable-object-worker-environment-kv",
-});
-
-export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEnvironmentKVObject>()(
-  "WorkerEnvironmentKVObject",
-  Effect.gen(function* () {
-    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
-
-    return Effect.gen(function* () {
-      return {
-        put: (key: string, value: string) => kv.put(key, value),
-        get: (key: string) => kv.get(key),
-        tick: (n: number) =>
-          Stream.iterate(0, (i) => i + 1).pipe(
-            Stream.take(n),
-            Stream.schedule(Schedule.spaced("100 millis")),
-          ),
-      };
-    });
-  }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
-) {}
+return {
+  greet: (name: string) => Effect.succeed(`hello ${name}`),
+};
 ```
 
-`getByName(name)` returns a stub mirroring the Shape: value methods `yield*` as Effects, and a streaming method's result forwards straight onto an HTTP response (condensed from the fixture's two routes):
+…or a **function returning a Stream**, which the caller consumes
+with the usual `Stream.*` combinators:
+
+```diff lang="typescript"
+return {
+  greet: (name: string) => Effect.succeed(`hello ${name}`),
++  tick: (n: number) =>
++    Stream.iterate(0, (i) => i + 1).pipe(
++      Stream.take(n),
++      Stream.schedule(Schedule.spaced("100 millis")),
++    ),
+};
+```
+
+That is the whole rule: a function, with any arguments, returning an
+Effect or a Stream. Bare Effect and Stream members also satisfy the
+type — `fetch` itself is one — but they serve the host rather than
+remote callers, so declare your RPC surface as functions. Typed
+failures flow to the caller
+([errors over the wire](#errors-over-the-wire) below), and
+requirements like `RuntimeContext` are satisfied by the deployed
+runtime.
+
+### What the types reject
+
+A member that is a plain value, or a function returning a plain value, fails the Shape constraint:
 
 ```typescript
-Effect.gen(function* () {
-  const objects = yield* WorkerEnvironmentKVObject;
+// ❌ rejected — neither member is an Effect, a Stream, or returns one:
+return {
+  version: "1.0",
+  greet: (name: string) => `hello ${name}`,
+};
 
-  return {
-    fetch: Effect.gen(function* () {
-      // value methods yield* as Effects:
-      const object = objects.getByName("default");
-      yield* object.put(key, "ok").pipe(Effect.orDie);
-      const value = yield* object.get(key).pipe(Effect.orDie);
-
-      // streaming methods pipe as Streams — forwarded onto the response:
-      const stream = objects
-        .getByName("tick")
-        .tick(n)
-        .pipe(
-          Stream.map((i) => `${i}\n`),
-          Stream.encodeText,
-        );
-      return HttpServerResponse.stream(stream, {
-        headers: { "content-type": "text/plain" },
-      });
-    }),
-  };
-})
+// ✅ accepted:
+return {
+  version: () => Effect.succeed("1.0"),
+  greet: (name: string) => Effect.succeed(`hello ${name}`),
+};
 ```
 
-Wiring details live in [Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc); to bind another script's Durable Object with `Counter.from(WorkerA)`, see [Cross-Worker Durable Objects](/cloudflare/compute/cross-worker-durable-object).
+The rejection happens at declaration, not at call time — it surfaces as an assignability error on the init Effect you pass to the host class, so a shape that compiles is a shape every caller can rely on.
 
-### Container into a Worker
+## The typed client
 
-Containers run inside Durable Objects, so the shape is Container → Durable Object → Worker: `Cloudflare.Containers.layer(MyContainer, ...)` is provided on a Durable Object, and a Worker fronts the DO. The Container declares its Shape as a type parameter:
+There is no schema because the class itself carries the type. `class Greeter extends Cloudflare.Worker<Greeter>()(...)` gives the class a construct signature — `new (_: never): Shape & ...` — that makes its instance type exactly the Shape the init Effect returns, and the value you get by yielding the class carries that Shape as a phantom type (`Rpc<Shape> = { "~alchemy/rpc": Shape }`) that binders read back. Binding the class produces the client:
 
 ```typescript
-export class MyContainer extends Cloudflare.Container<
-  MyContainer,
-  {
-    ping: () => Effect.Effect<string>;
-    readObject: (
-      key: string,
-    ) => Effect.Effect<string | null, never, RuntimeContext>;
-  }
->()("EffectfulContainer") {}
+// in another resource's Effectful Constructor:
+const target = yield* Cloudflare.Workers.bindWorker(Greeter);
+
+// in the interface it returns:
+const greeting = yield* target.greet(name); // typed from Greeter's Shape
 ```
 
-The Durable Object yields the class and calls it like any other typed client:
+`bindWorker` is the Cloudflare Worker-to-Worker binder; each runtime pair has its own bind callable — the hub pages list them, with full callers per pairing. The mental model is the same everywhere: the stub is a Proxy whose get-trap dispatches over the wire. Every property access is a remote call — the only exceptions are the host's own `fetch`/`connect` surface, which pass through to the underlying binding.
+
+## How a call travels
+
+One wire protocol, two carriers. Where the platform provides a native structured-clone channel (Cloudflare service bindings and Durable Object stubs, for example), calls ride it directly and values move by structured clone. Everywhere else — Containers and MicroVMs among them — a generic fetch transport carries the call: each method invocation is a `POST {base}/__rpc__/{name}` whose body is the JSON-encoded argument array, and the response is a JSON value, a JSON error envelope, or an NDJSON stream flagged by a response header:
 
 ```typescript
-Effect.gen(function* () {
-  const container = yield* MyContainer;
-
-  return Effect.gen(function* () {
-    return {
-      ping: () => container.ping(),
-      // Read the object from inside the container over RPC.
-      readObjectRpc: (key: string) => container.readObject(key),
-    };
-  });
-}).pipe(
-  Effect.provide(
-    Cloudflare.Containers.layer(MyContainer, { enableInternet: true }),
-  ),
-)
+// packages/alchemy/src/Rpc.ts
+/** Path prefix under which RPC methods are dispatched. */
+export const RPC_PATH_PREFIX = "/__rpc__/";
+/** Response header flag marking an NDJSON streamed body (vs a JSON value). */
+export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
 ```
 
-Image builds, ports, and lifecycle live in [Containers](/cloudflare/compute/containers).
+Per-call protocol overhead is sub-millisecond — benchmarked in the wire-protocol test suite.
 
-### MicroVM into a Lambda Function
+## Streams
 
-A MicroVM image declares its Shape the same way:
+A stub call's return value is *both* an Effect and a Stream. The stub can't know synchronously which one the remote method returns — the call is asynchronous — yet its declared type mirrors the remote Shape verbatim, so the single value it hands back satisfies both interfaces:
 
 ```typescript
-export class Sandbox extends AWS.Lambda.MicrovmImage<
-  Sandbox,
-  {
-    hello: (message: string) => Effect.Effect<string>;
-  }
->()("MicrovmSandbox") {}
+// one stub, both call shapes:
+const greeting = stub.greet(name);                  // value method — yield* it as an Effect
+const firstFive = stub.tick(n).pipe(Stream.take(5)); // streaming method — pipe it as a Stream
 ```
 
-The Lambda Function connects to a running instance and gets the typed stub:
+Streams are pulled lazily under backpressure: an infinite remote Stream can be `Stream.take(5)`-ed, and the server stops producing when the client stops consuming. A returned Stream can be piped through any `Stream.*` combinator, including straight onto an HTTP response. Byte streams (`Uint8Array`) round-trip alongside JSON object streams. A failure mid-stream travels as a trailing error marker and surfaces on the consumer as `RpcRemoteStreamError` with the encoded inner error on `.error`; values emitted before the failure are delivered.
 
-```typescript
-const sandbox = yield* AWS.Lambda.connectMicrovm(Sandbox, {
-  endpoint: vm.endpoint,
-  authToken,
-});
-const reply = yield* sandbox.hello(message).pipe(
-  Effect.retry({
-    schedule: Schedule.exponential("500 millis"),
-    times: 8,
-  }),
-);
-```
+## Errors over the wire
 
-Launching, suspending, and authenticating MicroVMs is covered in [MicroVMs](/aws/compute/microvms).
-
-### Everything else
-
-- **Dynamically-loaded Workers** get the same typed stub over the loader entrypoint — a Worker loaded at runtime speaks schemaless RPC exactly like a statically bound one.
-- **Non-Effect callers**: `Cloudflare.toRpcAsync` wraps a binding stub in a Promise-shaped proxy, and plain async Workers can call `env.TARGET.greet(name)` directly over the service binding — see [Vite SPA](/cloudflare/frontend/vite-spa).
-
-## Streams and errors over the wire
-
-Streams work in both directions. The stub can't know synchronously whether the remote method returns a value or a Stream — the call is asynchronous — so every stub call is typed as *both*: its declared type mirrors the remote Shape verbatim, which means value methods `yield*` as Effects and streaming methods `.pipe` through `Stream.*` combinators, including forwarding a returned Stream straight onto an HTTP response as shown above. A failure mid-stream travels as a trailing error marker and surfaces on the consumer as `RpcRemoteStreamError`.
-
-Typed failures cross the wire intact: `Effect.fail(new MyTaggedError(...))` on the callee is recoverable on the caller with `_tag` and all own enumerable fields preserved — but as a plain struct, not a class instance. The following pair illustrates the codec behavior (verified by the wire-codec unit tests):
+Typed failures cross the wire intact — `Effect.fail(new MyTaggedError(...))` on the callee is recoverable on the caller:
 
 ```typescript
 class KeyMissing extends Data.TaggedError("KeyMissing")<{
   readonly key: string;
 }> {}
 
-// callee — a Durable Object method that fails with a tagged error:
+// callee — a method that fails with a tagged error:
 get: (key: string) =>
   kv.get(key).pipe(
     Effect.flatMap((value) =>
@@ -230,33 +151,23 @@ get: (key: string) =>
   ),
 
 // caller — `_tag` and `key` survive the wire; class identity does not:
-const value = yield* object.get(key).pipe(
+const value = yield* stub.get(key).pipe(
   Effect.catchTag("KeyMissing", (e) =>
     Effect.succeed(`missing: ${e.key}`),
   ),
 );
 ```
 
-`Effect.catchTag` matches because `_tag` is preserved; `e instanceof KeyMissing` is `false` because the decoded error is a plain struct. Plain `Error`s keep `name`/`message`/`stack`. Defects are not enveloped — on native JSRPC the call rejects and surfaces as `RpcCallError`; on the fetch transport they fail the response.
+The codec rules: tagged errors keep `_tag` and all own enumerable fields, and arrive as plain structs — `Effect.catchTag` matches because it keys on `_tag`, but `e instanceof KeyMissing` is `false`; class identity does not survive. Plain `Error`s keep `name`, `message`, and `stack`. Calling an unknown method fails with `RpcCallError`. Defects are not enveloped — the call rejects and surfaces as `RpcCallError`.
 
-## Limits (and the point)
+## Limits, and why there is no validation
 
-Values must survive the wire codec:
+Arguments and results must survive the wire codec: structured clone on the native channel, JSON on the fetch transport. Stream elements must be JSON values or `Uint8Array` (binary is base64-tagged on the fetch transport so it round-trips). Functions and callbacks don't serialize. Class identity is always stripped. And because every property access on a stub dispatches remotely (bar the host's own `fetch`/`connect` pass-through), there are no local fields — the stub is only its methods.
 
-- **Native JSRPC** (Worker → Worker, Worker → Durable Object) carries values by structured clone.
-- **The fetch transport** (Containers, MicroVMs) carries each call as `POST /__rpc__/{name}` with a JSON args array; responses are JSON, and streams are NDJSON.
-- **Stream elements** must be JSON values or `Uint8Array`.
-- **Class identity is always stripped** — a `Schema.Class` instance arrives as a plain struct.
-- **Functions and callbacks don't serialize** — every property access on the stub is a remote method call, nothing more.
-
-There is no runtime validation of arguments or results anywhere. That is the point — no schema to maintain, no per-request decode cost — and the trade-off: nothing sanitizes what arrives. When data crosses a trust boundary — exposed to a web app or an external service — or when class identity must survive the hop, reach for [Effect RPC](/apis/effect-rpc).
+There is zero runtime validation anywhere in the stub or the server. That is the point — no schema to maintain, no per-request decode cost — and the trade-off: nothing sanitizes what arrives. Both sides are your code, deployed together and typed from the same Shape, which is why that trade is safe internally. At a trust boundary — external callers, versioned APIs, untrusted input — reach for schema-validated [Effect RPC](/apis/effect-rpc) instead.
 
 ## Where next
 
-- [Effect RPC](/apis/effect-rpc) — schema-first RPC for trust boundaries
-- [Workers](/cloudflare/compute/workers#schemaless-rpc) — Worker → Worker wiring
-- [Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc) — Worker → DO wiring
-- [Cross-Worker Durable Objects](/cloudflare/compute/cross-worker-durable-object) — bind another script's DO
-- [Containers](/cloudflare/compute/containers) — build and run Container images
-- [MicroVMs](/aws/compute/microvms) — launch and connect MicroVMs from Lambda
-- [Vite SPA](/cloudflare/frontend/vite-spa) — async (non-Effect) consumers
+- [Schemaless RPC on Cloudflare](/cloudflare/apis/schemaless-rpc) — every Cloudflare pairing: Worker → Worker, Worker → Durable Object, another script's Durable Object, Containers, and async consumers.
+- [Schemaless RPC on AWS](/aws/apis/schemaless-rpc) — Lambda → MicroVM, plus what AWS does not yet have a schemaless stub for.
+- [Effect RPC](/apis/effect-rpc) — schema-validated RPC for trust boundaries.
