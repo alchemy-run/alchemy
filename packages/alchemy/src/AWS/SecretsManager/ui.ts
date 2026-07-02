@@ -1,10 +1,33 @@
 import * as Layer from "effect/Layer";
+import * as UIProvider from "../../UI/UIProvider.ts";
+import type { Secret } from "./Secret.ts";
 
 /**
- * Dashboard UI providers for AWS SecretsManager resources.
+ * Dashboard UI providers for AWS Secrets Manager resources.
  *
- * Implemented by the dashboard UI factory — see processes/Dashboard.md for
- * the UIProvider contract. Until then this is an empty layer so the
- * aggregators and the dashboard SPA compile.
+ * Browser-safe: only `effect/*` runtime imports; resource types are
+ * type-only so no AWS SDK code reaches the dashboard bundle.
  */
-export const ui = (): Layer.Layer<never> => Layer.empty;
+export const SecretUI = UIProvider.succeed<Secret>(
+  "AWS.SecretsManager.Secret",
+  {
+    displayName: "Secret",
+    icon: "file-lock-2",
+    color: "#DD344C",
+    category: "security",
+    summary: (ctx) => ctx.attrs?.secretName,
+    consoleUrl: (ctx) =>
+      ctx.attrs?.secretName === undefined
+        ? undefined
+        : `https://console.aws.amazon.com/secretsmanager/secret?name=${encodeURIComponent(ctx.attrs.secretName)}`,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.secretName, copy: true },
+      { label: "arn", value: ctx.attrs?.secretArn, mono: true, copy: true },
+      { label: "version", value: ctx.attrs?.versionId, mono: true },
+      { label: "kms key", value: ctx.attrs?.kmsKeyId, mono: true },
+      { label: "description", value: ctx.attrs?.description },
+    ],
+  },
+);
+
+export const ui = () => Layer.mergeAll(SecretUI);

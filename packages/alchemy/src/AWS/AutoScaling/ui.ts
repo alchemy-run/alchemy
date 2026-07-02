@@ -1,10 +1,120 @@
 import * as Layer from "effect/Layer";
+import * as UIProvider from "../../UI/UIProvider.ts";
+import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
+import type { LaunchTemplate } from "./LaunchTemplate.ts";
+import type { ScalingPolicy } from "./ScalingPolicy.ts";
 
 /**
  * Dashboard UI providers for AWS AutoScaling resources.
  *
- * Implemented by the dashboard UI factory — see processes/Dashboard.md for
- * the UIProvider contract. Until then this is an empty layer so the
- * aggregators and the dashboard SPA compile.
+ * Browser-safe: only `effect/*` runtime imports; resource types are
+ * type-only so no AWS SDK code reaches the dashboard bundle.
  */
-export const ui = (): Layer.Layer<never> => Layer.empty;
+
+/** AWS compute brand orange. */
+const COMPUTE_ORANGE = "#ED7100";
+
+/** Extract the region segment from an AWS ARN (arn:aws:svc:REGION:...). */
+const regionOfArn = (arn: string | undefined): string | undefined =>
+  arn?.split(":")[3] || undefined;
+
+export const AutoScalingGroupUI = UIProvider.succeed<AutoScalingGroup>(
+  "AWS.AutoScaling.AutoScalingGroup",
+  {
+    displayName: "Auto Scaling Group",
+    icon: "scaling",
+    color: COMPUTE_ORANGE,
+    category: "compute",
+    summary: (ctx) => ctx.attrs?.autoScalingGroupName,
+    consoleUrl: (ctx) => {
+      const region = regionOfArn(ctx.attrs?.autoScalingGroupArn);
+      return ctx.attrs?.autoScalingGroupName === undefined ||
+        region === undefined
+        ? undefined
+        : `https://${region}.console.aws.amazon.com/ec2/home?region=${region}#AutoScalingGroupDetails:id=${encodeURIComponent(ctx.attrs.autoScalingGroupName)};view=details`;
+    },
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.autoScalingGroupName, copy: true },
+      {
+        label: "arn",
+        value: ctx.attrs?.autoScalingGroupArn,
+        mono: true,
+        copy: true,
+      },
+      {
+        label: "capacity",
+        value:
+          ctx.attrs?.desiredCapacity === undefined
+            ? undefined
+            : `${ctx.attrs.minSize} / ${ctx.attrs.desiredCapacity} / ${ctx.attrs.maxSize} (min/desired/max)`,
+      },
+      {
+        label: "launch template",
+        value: ctx.attrs?.launchTemplateName ?? ctx.attrs?.launchTemplateId,
+        mono: true,
+      },
+      { label: "health check", value: ctx.attrs?.healthCheckType },
+      { label: "subnets", value: ctx.attrs?.subnetIds?.length },
+      { label: "target groups", value: ctx.attrs?.targetGroupArns?.length },
+    ],
+  },
+);
+
+export const LaunchTemplateUI = UIProvider.succeed<LaunchTemplate>(
+  "AWS.AutoScaling.LaunchTemplate",
+  {
+    displayName: "Launch Template",
+    icon: "rocket",
+    color: COMPUTE_ORANGE,
+    category: "compute",
+    summary: (ctx) => ctx.attrs?.launchTemplateName,
+    consoleUrl: (ctx) => {
+      const region = regionOfArn(ctx.attrs?.launchTemplateArn);
+      return ctx.attrs?.launchTemplateId === undefined || region === undefined
+        ? undefined
+        : `https://${region}.console.aws.amazon.com/ec2/home?region=${region}#LaunchTemplateDetails:launchTemplateId=${ctx.attrs.launchTemplateId}`;
+    },
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.launchTemplateName, copy: true },
+      {
+        label: "template id",
+        value: ctx.attrs?.launchTemplateId,
+        mono: true,
+        copy: true,
+      },
+      {
+        label: "arn",
+        value: ctx.attrs?.launchTemplateArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "latest version", value: ctx.attrs?.latestVersionNumber },
+      { label: "default version", value: ctx.attrs?.defaultVersionNumber },
+      { label: "instance type", value: ctx.props?.instanceType },
+      { label: "ami", value: ctx.props?.imageId, mono: true },
+    ],
+  },
+);
+
+export const ScalingPolicyUI = UIProvider.succeed<ScalingPolicy>(
+  "AWS.AutoScaling.ScalingPolicy",
+  {
+    displayName: "Scaling Policy",
+    icon: "gauge",
+    color: COMPUTE_ORANGE,
+    category: "compute",
+    summary: (ctx) => ctx.attrs?.policyName,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.policyName, copy: true },
+      { label: "arn", value: ctx.attrs?.policyArn, mono: true, copy: true },
+      { label: "auto scaling group", value: ctx.attrs?.autoScalingGroupName },
+      { label: "type", value: ctx.attrs?.policyType },
+      { label: "metric", value: ctx.attrs?.predefinedMetricType },
+      { label: "target value", value: ctx.attrs?.targetValue },
+      { label: "alarms", value: ctx.attrs?.alarms?.length },
+    ],
+  },
+);
+
+export const ui = () =>
+  Layer.mergeAll(AutoScalingGroupUI, LaunchTemplateUI, ScalingPolicyUI);

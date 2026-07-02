@@ -1,10 +1,123 @@
 import * as Layer from "effect/Layer";
+import * as UIProvider from "../../UI/UIProvider.ts";
+import type { AccessEntry } from "./AccessEntry.ts";
+import type { Addon } from "./Addon.ts";
+import type { Cluster } from "./Cluster.ts";
+import type { PodIdentityAssociation } from "./PodIdentityAssociation.ts";
 
 /**
  * Dashboard UI providers for AWS EKS resources.
  *
- * Implemented by the dashboard UI factory — see processes/Dashboard.md for
- * the UIProvider contract. Until then this is an empty layer so the
- * aggregators and the dashboard SPA compile.
+ * Browser-safe: only `effect/*` runtime imports; resource types are
+ * type-only so no AWS SDK code reaches the dashboard bundle.
  */
-export const ui = (): Layer.Layer<never> => Layer.empty;
+
+const regionOf = (arn: string | undefined): string | undefined =>
+  arn?.split(":")[3] || undefined;
+
+export const ClusterUI = UIProvider.succeed<Cluster>("AWS.EKS.Cluster", {
+  displayName: "EKS Cluster",
+  icon: "ship",
+  color: "#ED7100",
+  category: "compute",
+  summary: (ctx) => ctx.attrs?.clusterName,
+  consoleUrl: (ctx) => {
+    const region = regionOf(ctx.attrs?.clusterArn);
+    return region === undefined || ctx.attrs?.clusterName === undefined
+      ? undefined
+      : `https://${region}.console.aws.amazon.com/eks/home?region=${region}#/clusters/${ctx.attrs.clusterName}`;
+  },
+  facts: (ctx) => [
+    { label: "cluster", value: ctx.attrs?.clusterName, copy: true },
+    { label: "arn", value: ctx.attrs?.clusterArn, mono: true, copy: true },
+    { label: "status", value: ctx.attrs?.status },
+    { label: "version", value: ctx.attrs?.version },
+    {
+      label: "endpoint",
+      value: ctx.attrs?.endpoint,
+      mono: true,
+      copy: true,
+    },
+    { label: "role", value: ctx.attrs?.roleArn, mono: true },
+    { label: "oidc issuer", value: ctx.attrs?.oidcIssuer, mono: true },
+  ],
+});
+
+export const AddonUI = UIProvider.succeed<Addon>("AWS.EKS.Addon", {
+  displayName: "EKS Add-on",
+  icon: "puzzle",
+  color: "#ED7100",
+  category: "config",
+  summary: (ctx) => ctx.attrs?.addonName,
+  facts: (ctx) => [
+    { label: "add-on", value: ctx.attrs?.addonName, copy: true },
+    { label: "arn", value: ctx.attrs?.addonArn, mono: true, copy: true },
+    { label: "cluster", value: ctx.attrs?.clusterName },
+    { label: "version", value: ctx.attrs?.addonVersion, mono: true },
+    { label: "status", value: ctx.attrs?.status },
+    { label: "namespace", value: ctx.attrs?.namespace },
+  ],
+});
+
+export const PodIdentityAssociationUI =
+  UIProvider.succeed<PodIdentityAssociation>("AWS.EKS.PodIdentityAssociation", {
+    displayName: "EKS Pod Identity",
+    icon: "key-round",
+    color: "#ED7100",
+    category: "auth",
+    summary: (ctx) =>
+      ctx.attrs?.namespace === undefined ||
+      ctx.attrs?.serviceAccount === undefined
+        ? undefined
+        : `${ctx.attrs.namespace}/${ctx.attrs.serviceAccount}`,
+    facts: (ctx) => [
+      {
+        label: "arn",
+        value: ctx.attrs?.associationArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "id", value: ctx.attrs?.associationId, mono: true },
+      { label: "cluster", value: ctx.attrs?.clusterName },
+      { label: "namespace", value: ctx.attrs?.namespace },
+      { label: "service account", value: ctx.attrs?.serviceAccount },
+      { label: "role", value: ctx.attrs?.roleArn, mono: true, copy: true },
+    ],
+  });
+
+export const AccessEntryUI = UIProvider.succeed<AccessEntry>(
+  "AWS.EKS.AccessEntry",
+  {
+    displayName: "EKS Access Entry",
+    icon: "user-check",
+    color: "#ED7100",
+    category: "auth",
+    summary: (ctx) => ctx.attrs?.principalArn,
+    facts: (ctx) => [
+      {
+        label: "principal",
+        value: ctx.attrs?.principalArn,
+        mono: true,
+        copy: true,
+      },
+      {
+        label: "arn",
+        value: ctx.attrs?.accessEntryArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "cluster", value: ctx.attrs?.clusterName },
+      { label: "username", value: ctx.attrs?.username },
+      { label: "type", value: ctx.attrs?.type },
+      {
+        label: "kubernetes groups",
+        value: ctx.attrs?.kubernetesGroups?.length
+          ? ctx.attrs.kubernetesGroups.join(", ")
+          : undefined,
+      },
+    ],
+  },
+);
+
+export const ui = () =>
+  Layer.mergeAll(ClusterUI, AddonUI, PodIdentityAssociationUI, AccessEntryUI);

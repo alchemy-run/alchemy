@@ -1,6 +1,7 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
 import type { AccountSetting } from "./AccountSetting.ts";
+import type { ObservabilityDestination } from "./ObservabilityDestination.ts";
 import type { WorkerRoute } from "./Route.ts";
 import type { Subdomain } from "./Subdomain.ts";
 import type { Worker } from "./Worker.ts";
@@ -10,6 +11,11 @@ import type { Worker } from "./Worker.ts";
  *
  * Browser-safe: only `effect/*` runtime imports; resource types are
  * type-only so no Cloudflare SDK code reaches the dashboard bundle.
+ *
+ * Note: DurableObject, Browser, RateLimit, VersionMetadata, and
+ * WorkerLoader are `Binding.Service`s (Worker-only bindings with no
+ * backing Resource), so they have no Resource tag and no UIProvider —
+ * they surface on the dashboard as bindings of their host Worker.
  */
 export const WorkerUI = UIProvider.succeed<Worker>("Cloudflare.Worker", {
   displayName: "Worker",
@@ -76,5 +82,43 @@ export const AccountSettingUI = UIProvider.succeed<AccountSetting>(
   },
 );
 
+export const ObservabilityDestinationUI =
+  UIProvider.succeed<ObservabilityDestination>(
+    "Cloudflare.Workers.ObservabilityDestination",
+    {
+      displayName: "Observability Destination",
+      icon: "satellite-dish",
+      color: "#F6821F",
+      category: "observability",
+      summary: (ctx) => ctx.attrs?.name,
+      link: (ctx) => ctx.attrs?.url,
+      facts: (ctx) => [
+        { label: "name", value: ctx.attrs?.name, copy: true },
+        { label: "slug", value: ctx.attrs?.slug, mono: true, copy: true },
+        {
+          label: "endpoint",
+          value: ctx.attrs?.url,
+          href: ctx.attrs?.url,
+          copy: true,
+        },
+        { label: "dataset", value: ctx.attrs?.logpushDataset, mono: true },
+        { label: "enabled", value: ctx.attrs?.enabled },
+        {
+          label: "scripts",
+          value: ctx.attrs?.scripts?.length
+            ? ctx.attrs.scripts.join(", ")
+            : undefined,
+          mono: true,
+        },
+      ],
+    },
+  );
+
 export const ui = () =>
-  Layer.mergeAll(WorkerUI, WorkerRouteUI, SubdomainUI, AccountSettingUI);
+  Layer.mergeAll(
+    WorkerUI,
+    WorkerRouteUI,
+    SubdomainUI,
+    AccountSettingUI,
+    ObservabilityDestinationUI,
+  );
