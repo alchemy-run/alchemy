@@ -5,14 +5,22 @@ sidebar:
   order: 7
 ---
 
+Effect RPC is a trust-boundary tool: schemas validate every request,
+so reach for it when data needs sanitizing on its way in — a web app
+or an external service calling your Lambda. Internal calls use
+[Schemaless RPC](/rpc/schemaless) instead (on AWS, a Lambda Function
+driving a [MicroVM](/aws/compute/microvms)); the
+[RPC overview](/rpc) has the full decision.
+
 The [HTTP API guide](/aws/apis/effect-http-api) showed how to
 build REST-style endpoints with schema validation. Effect RPC takes
 a different angle — you define **procedures** instead of HTTP
 endpoints, and you get a fully typed client for free with no URL
-construction or manual serialization. It's the same `Rpc` module
-used in the
-[Workers version of this guide](/cloudflare/apis/effect-rpc); the
-group and handlers are portable, only the host changes.
+construction or manual serialization.
+[Effect RPC](/rpc/effect-rpc) covers the host-agnostic core; this
+page covers the Lambda side — a public Function URL via `url: true`,
+and binding implementations provided with
+`Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp)`.
 
 The transport is still HTTP under the hood — the RPC server compiles
 down to the same `HttpEffect` a Lambda's `fetch` expects — so the
@@ -383,18 +391,14 @@ The errors are typed values: `client.getJob` returns
 `Effect.catchTag("JobNotFound", ...)` to handle the missing case
 explicitly.
 
-## HTTP API vs RPC
+## Choosing an API style
 
-Both approaches produce the same `HttpEffect` and wire into a Lambda
-the same way. The difference is in how clients interact:
-
-- **HTTP API** — standard REST endpoints, any HTTP client can call
-  them. Best for public APIs.
-- **RPC** — typed procedures, ideal for service-to-service
-  communication where both sides share the schema definitions.
-
-You can even combine them in the same Function — serve an HTTP API
-for external consumers and RPC for internal services.
+- **External Effect/TypeScript consumers** — this page.
+- **External plain-HTTP consumers** (curl, non-TypeScript clients) —
+  [Effect HTTP API on Lambda](/aws/apis/effect-http-api).
+- **Internal service-to-service calls** —
+  [Schemaless RPC](/rpc/schemaless).
+- **The full decision** — [RPC overview](/rpc).
 
 ## Go further
 

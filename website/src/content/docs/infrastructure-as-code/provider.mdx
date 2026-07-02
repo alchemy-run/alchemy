@@ -19,7 +19,7 @@ for that cloud:
 ```typescript
 Alchemy.Stack(
   "MyApp",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     yield* Cloudflare.R2.Bucket("Bucket");
   }),
@@ -234,6 +234,18 @@ Optional. Reserves a physical name (or stub resource) before
 `create` runs. This is what enables [circular
 bindings](/infrastructure-as-effects/circular-bindings) — Worker A can know Worker B's
 URL before either is fully created.
+
+### `list`
+
+Enumerates every existing resource of this type in the ambient
+scope (account, region, or zone), returning the same `Attributes`
+shape `read` produces — so each item is directly usable with
+`delete`. This powers account-wide operations like
+[`alchemy unsafe nuke`](/cli/nuke). It must paginate exhaustively;
+resources with no enumeration API (singletons, existence-only
+resources) return an empty array. Providers can opt out of nuke
+with `nuke.singleton` (delete only resets always-present config)
+or `nuke.skip` (the resource can never actually be deleted).
 
 ### `tail` / `logs`
 

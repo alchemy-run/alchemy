@@ -4,17 +4,16 @@ description: A Layer encapsulates a slice of infrastructure (resources, bindings
 ---
 
 A [Binding](/infrastructure-as-effects/binding) connects one [Resource](/infrastructure-as-code/resource)
-to a Worker or Lambda ([Functions & Servers](/infrastructure-as-effects/platform)).
+to a Worker or Lambda ([Functions & Servers](/infrastructure-as-effects/functions-and-servers)).
 A **Layer** is the next abstraction
 up: a unit of *encapsulated infrastructure*. It owns whatever resources
 and bindings it needs, returns a typed implementation of a service
 interface, and hides everything behind that interface.
 
-Layers are the mechanism that makes Alchemy code portable. A Worker
-written against an abstract `JobService` doesn't know whether its
-underlying storage is a KV namespace, a DynamoDB table, or an
-in-memory map — it depends on the *service*, and a Layer wires up
-the rest.
+This is where portability lives: a Worker written against an
+abstract `JobService` doesn't know whether its underlying storage
+is a KV namespace, a DynamoDB table, or an in-memory map — it
+depends on the *service*, and a Layer wires up the rest.
 
 ## The encapsulation problem
 
@@ -39,7 +38,7 @@ export default Cloudflare.Worker(
         return HttpServerResponse.json(job);
       }),
     };
-  }),
+  }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
 );
 ```
 
@@ -126,20 +125,33 @@ export default Cloudflare.Worker(
         return yield* jobs.getJob("job-1");
       }),
     };
-  }).pipe(Effect.provide(JobServiceKV)),
+  }).pipe(
+    Effect.provide(
+      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+    ),
+  ),
 );
 ```
 
-The handler never mentions KV. Swapping the implementation is a
-one-line change:
+The `Layer.provide` satisfies `JobServiceKV`'s own dependency on the
+KV runtime binding privately, so the handler sees only `JobService`.
+Swapping the implementation is a one-line change:
 
 ```diff lang="typescript"
--.pipe(Effect.provide(JobServiceKV))
-+.pipe(Effect.provide(JobServiceDynamo))
+-      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
++      JobServiceDynamo.pipe(Layer.provide(AWS.DynamoDB.GetItemHttp)),
 ```
 
 The next deploy tears down the KV namespace and creates whatever
 `JobServiceDynamo` declares. The handler is untouched.
+
+The same duality runs one level down: alchemy's own Bindings follow
+the same Tag/Layer split — `ReadWriteNamespace` satisfied by
+`ReadWriteNamespaceBinding` or `ReadWriteNamespaceHttp` — the same
+one-line diff, enforced by the same types
+([a contract and a Layer](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
+[Building with Layers](/infrastructure-as-effects/infrastructure-layers)
+composes both levels in one Worker.
 
 ## Where runtime requirements live
 
@@ -162,7 +174,7 @@ The Cloudflare-specific surface is gone — absorbed by the Layer:
 
 ```typescript
 export const ReadWriteNamespaceBinding = Layer.effect(
-  NamespaceReadWrite,
+  ReadWriteNamespace,
   Effect.gen(function* () {
     const env = yield* WorkerEnvironment; // ← required here, once
     // ...returns a client that closes over env
@@ -176,37 +188,20 @@ The Worker that consumes `ReadWriteNamespaceBinding` satisfies
 
 ```diff lang="typescript"
 -.pipe(Effect.provide(JobServiceKV))         // requires WorkerEnvironment ✓
-+.pipe(Effect.provide(JobServiceDynamo))     // requires AWS.FunctionEnvironment ✗
++.pipe(Effect.provide(JobServiceDynamo))     // requires AWS Credentials | Region ✗
 ```
 
-The Cloudflare Worker can't satisfy `AWS.FunctionEnvironment`, so
-the program won't type-check. Functions and Layers fit together by
-type, not by convention.
+The DynamoDB-backed Layer requires AWS `Credentials` and `Region`,
+which a Cloudflare Worker's constructor can't satisfy — the program
+won't type-check. Functions and Layers fit together by type, not by
+convention.
 
 ## Runtime as a colored function
 
-A Worker or Lambda program has two [Phases](/infrastructure-as-effects/phases): the **init**
-closure (outer) runs at both plantime and cold start, and the
-**runtime** closure (inner) runs only inside the deployed handler.
-Bindings live in init; the actual cloud calls live in runtime:
-
-```typescript
-Cloudflare.Worker(
-  "Api",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    // ─── Init: declare dependencies ───
-    const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
-
-    return {
-      // ─── Runtime: use them ───
-      fetch: Effect.gen(function* () {
-        return yield* kv.get<Job>("job-1", "json");
-      }),
-    };
-  }),
-);
-```
+As [Phases](/infrastructure-as-effects/phases) covered, the init
+closure runs at plantime and at cold start; the runtime closure
+runs only inside the deployed handler. Bindings live in init; the
+actual cloud calls live in runtime.
 
 `Alchemy.RuntimeContext` is the Effect service that exists *only*
 inside the runtime closure. It is not provided at plantime, cold
@@ -255,11 +250,6 @@ of the underlying primitives.
 | `Layer.provideMerge`   | A Layer that supplies *and* exposes a service             |
 | `Layer.provide`        | Satisfy one Layer's dependencies privately from another   |
 
-For the deploy-time mechanics that make Layers possible — typed
-clients, IAM, env injection — see [Binding](/infrastructure-as-effects/binding). For
-the step-by-step of building one yourself, see
-[Building with Layers](/infrastructure-as-effects/infrastructure-layers).
-
 ## Why this matters
 
 Because Layers are normal Effect Layers, the patterns scale all the
@@ -278,3 +268,12 @@ way out:
 
 Infrastructure becomes a value you can encapsulate, name, and
 substitute — like any other module.
+
+## Where next
+
+- [Building with Layers](/infrastructure-as-effects/infrastructure-layers) —
+  build a `JobService` Layer end to end, then swap KV for R2.
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings) —
+  the Tag/Layer split applied to two services that reference each other.
+- [Bindings](/infrastructure-as-effects/binding) — the deploy-time
+  mechanics Layers are built on.

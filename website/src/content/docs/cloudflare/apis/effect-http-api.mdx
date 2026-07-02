@@ -5,6 +5,13 @@ sidebar:
   order: 3
 ---
 
+Effect HTTP is the trust-boundary modality: schema-validated REST
+endpoints — real URLs, path params, query strings, payloads — that
+any HTTP client can call, no Effect or TypeScript required on the
+consumer's side. This page deploys one to a Cloudflare Worker; the
+concept home is [Effect HTTP](/rpc/effect-http), and
+[RPC](/rpc) covers choosing between the modalities.
+
 In the [tutorial](/cloudflare/tutorial/part-2), you built a Worker with manual
 `if/else` routing and raw request parsing. That works, but as your
 API grows you lose type safety at the boundary — request payloads
@@ -24,8 +31,9 @@ The mental model we'll follow is:
    The Init phase runs at plan time *and* runtime, so we only do
    pure construction here — we never `yield*` something that needs
    a request to exist.
-3. **Return `{ fetch }`** where `fetch` is an `HttpEffect`.
-   That's the value Workers invoke on every request.
+3. **Return `{ fetch }`** where `fetch` is an `HttpEffect` produced
+   by `HttpRouter.toHttpEffect`. That's the value Workers invoke on
+   every request.
 4. **Bonus:** deploy, grab the URL, and call the API from a fully
    typed client.
 
@@ -45,20 +53,22 @@ export class Task extends Schema.Class<Task>("Task")({
   completed: Schema.Boolean,
 }) {}
 
-export class TaskNotFound extends Schema.TaggedClass<TaskNotFound>()(
+export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
   "TaskNotFound",
   { id: Schema.String },
+  { httpApiStatus: 404 },
 ) {}
 ```
 
 `Schema.Class` gives you a runtime-validated class with an inferred
-TypeScript type. `Schema.TaggedClass` gives you a typed error you
-can return from handlers and discriminate against on the client.
+TypeScript type. `Schema.TaggedErrorClass` gives you a typed error you
+can return from handlers and discriminate against on the client —
+`httpApiStatus: 404` maps it to a 404 response instead of a generic 500.
 
 ## 2. Declare the API
 
 Endpoints are declarations — they describe `(method, path,
-payload, success, error)` without implementing anything yet. Putting
+params, payload, success, error)` without implementing anything yet. Putting
 them in their own file keeps the spec importable from both the
 server *and* a typed client.
 
@@ -73,7 +83,12 @@ import { Task, TaskNotFound } from "./task.ts";
 export const decodeTask = Schema.decodeUnknownEffect(Task);
 export const encodeTask = Schema.encodeUnknownSync(Task);
 
+const TaskParams = Schema.Struct({
+  id: Schema.String,
+});
+
 const getTask = HttpApiEndpoint.get("getTask", "/:id", {
+  params: TaskParams,
   success: Task,
   error: TaskNotFound,
 });
@@ -171,11 +186,11 @@ safe to call inside Init.
 
 +   const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
 +     handlers
-+       .handle("getTask", ({ path }) =>
++       .handle("getTask", ({ params }) =>
 +         Effect.gen(function* () {
-+           const object = yield* tasks.get(path.id);
++           const object = yield* tasks.get(params.id);
 +           if (!object) {
-+             return yield* Effect.fail(new TaskNotFound({ id: path.id }));
++             return yield* Effect.fail(new TaskNotFound({ id: params.id }));
 +           }
 +           return Schema.decodeUnknownSync(Task)(JSON.parse(yield* object.text()));
 +         }).pipe(Effect.orDie),
@@ -197,7 +212,7 @@ safe to call inside Init.
   }),
 ```
 
-Each handler receives a typed request. `path.id` is a `string`
+Each handler receives a typed request. `params.id` is a `string`
 because that's what the endpoint declared, and the return type must
 satisfy `Task` (or fail with `TaskNotFound`). Mismatches are caught
 at compile time.
@@ -214,25 +229,43 @@ fetch-style Worker that means an object with a `fetch` field. The
 value of `fetch` must be an `HttpEffect`: an `Effect` that, given an
 `HttpServerRequest`, produces an `HttpServerResponse`.
 
-We assemble it in three layers:
+We assemble it in three layers, then convert:
 
 - `HttpApiBuilder.layer(TaskApi)` — the top-level API layer.
 - `Layer.provide(tasksGroup)` — plug in the handlers we just built.
-- `Layer.provide([HttpPlatform.layer, Etag.layer])` — platform
-  services the builder needs (content negotiation, ETag generation).
-- `HttpRouter.toHttpEffect` — convert the assembled layer into an
-  `HttpEffect`.
+- `Layer.provide([Etag.layer, HttpPlatformStub, Path.layer])` —
+  platform services the builder needs (content negotiation, ETag
+  generation, path handling).
+- `yield* HttpRouter.toHttpEffect(...)` — build the assembled Layer
+  and yield the `HttpEffect`.
+
+`HttpPlatformStub` stands in for `HttpPlatform.layer`, which requires
+a `FileSystem` and therefore can't run on Workers — there is no
+filesystem in the isolate. Define it once at module scope:
+
+```typescript
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () =>
+    Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
+```
 
 ```typescript twoslash
 // @noErrors
     return {
-+     fetch: HttpApiBuilder.layer(TaskApi).pipe(
-+       Layer.provide(tasksGroup),
-+       Layer.provide([HttpPlatform.layer, Etag.layer]),
-+       HttpRouter.toHttpEffect,
++     fetch: yield* HttpRouter.toHttpEffect(
++       HttpApiBuilder.layer(TaskApi).pipe(
++         Layer.provide(tasksGroup),
++         Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
++       ),
 +     ),
     };
 ```
+
+`HttpRouter.toHttpEffect` returns an `Effect` that builds the Layer
+and hands back the request handler — yielding it once in Init means
+route construction happens at boot, not per request.
 
 ### 3d. Enable CORS
 
@@ -242,15 +275,16 @@ another `Layer.provide`.
 
 ```diff lang="typescript"
     return {
-      fetch: HttpApiBuilder.layer(TaskApi).pipe(
-        Layer.provide(tasksGroup),
-        Layer.provide([HttpPlatform.layer, Etag.layer]),
-+       Layer.provide(HttpRouter.cors({
-+         allowedOrigins: ["*"],
-+         allowedMethods: ["GET", "POST", "OPTIONS"],
-+         allowedHeaders: ["Content-Type"],
-+       })),
-        HttpRouter.toHttpEffect,
+      fetch: yield* HttpRouter.toHttpEffect(
+        HttpApiBuilder.layer(TaskApi).pipe(
+          Layer.provide(tasksGroup),
+          Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
++         Layer.provide(HttpRouter.cors({
++           allowedOrigins: ["*"],
++           allowedMethods: ["GET", "POST", "OPTIONS"],
++           allowedHeaders: ["Content-Type"],
++         })),
+        ),
       ),
     };
 ```
@@ -270,6 +304,7 @@ Here's the complete `src/worker.ts`:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Etag from "effect/unstable/http/Etag";
 import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
@@ -279,6 +314,12 @@ import { TaskApi } from "./api.ts";
 import { Tasks } from "./bucket.ts";
 import { Task, TaskNotFound } from "./task.ts";
 
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () =>
+    Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
+
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
@@ -287,11 +328,11 @@ export default Cloudflare.Worker(
 
     const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
       handlers
-        .handle("getTask", ({ path }) =>
+        .handle("getTask", ({ params }) =>
           Effect.gen(function* () {
-            const object = yield* tasks.get(path.id);
+            const object = yield* tasks.get(params.id);
             if (!object) {
-              return yield* Effect.fail(new TaskNotFound({ id: path.id }));
+              return yield* Effect.fail(new TaskNotFound({ id: params.id }));
             }
             return Schema.decodeUnknownSync(Task)(
               JSON.parse(yield* object.text()),
@@ -312,17 +353,18 @@ export default Cloudflare.Worker(
     );
 
     return {
-      fetch: HttpApiBuilder.layer(TaskApi).pipe(
-        Layer.provide(tasksGroup),
-        Layer.provide([HttpPlatform.layer, Etag.layer]),
-        Layer.provide(
-          HttpRouter.cors({
-            allowedOrigins: ["*"],
-            allowedMethods: ["GET", "POST", "OPTIONS"],
-            allowedHeaders: ["Content-Type"],
-          }),
+      fetch: yield* HttpRouter.toHttpEffect(
+        HttpApiBuilder.layer(TaskApi).pipe(
+          Layer.provide(tasksGroup),
+          Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+          Layer.provide(
+            HttpRouter.cors({
+              allowedOrigins: ["*"],
+              allowedMethods: ["GET", "POST", "OPTIONS"],
+              allowedHeaders: ["Content-Type"],
+            }),
+          ),
         ),
-        HttpRouter.toHttpEffect,
       ),
     };
   }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
@@ -340,7 +382,7 @@ import Worker from "./src/worker.ts";
 
 export default Alchemy.Stack(
   "TaskApi",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const worker = yield* Worker;
     return { url: worker.url };
@@ -393,7 +435,7 @@ const program = Effect.gen(function* () {
   console.log("Created:", created.id);
 
   const fetched = yield* client.Tasks.getTask({
-    path: { id: created.id },
+    params: { id: created.id },
   });
   console.log("Fetched:", fetched.title);
 });
@@ -428,6 +470,7 @@ endpoints:
 ```typescript
 // src/api.ts
 const getTaskDO = HttpApiEndpoint.get("getTaskDO", "/do/:id", {
+  params: TaskParams,
   success: Task,
   error: TaskNotFound,
 });
@@ -462,10 +505,19 @@ instead of R2.
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Etag from "effect/unstable/http/Etag";
+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { TaskDOApi, decodeTask, encodeTask } from "./api.ts";
 import { Task } from "./task.ts";
+
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () =>
+    Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
 
 export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()(
   "TasksObject",
@@ -474,8 +526,8 @@ export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()
     return Effect.gen(function* () {
       const tasksGroup = HttpApiBuilder.group(TaskDOApi, "TasksDO", (handlers) =>
         handlers
-          .handle("getTask", ({ path }) =>
-            state.storage.get<Task>(path.id).pipe(
+          .handle("getTask", ({ params }) =>
+            state.storage.get<Task>(params.id).pipe(
               Effect.flatMap(decodeTask),
               Effect.orDie,
             ),
@@ -491,9 +543,11 @@ export default class TasksObject extends Cloudflare.DurableObject<TasksObject>()
       );
 
       return {
-        fetch: HttpApiBuilder.layer(TaskDOApi).pipe(
-          Layer.provide(tasksGroup),
-          HttpRouter.toHttpEffect,
+        fetch: yield* HttpRouter.toHttpEffect(
+          HttpApiBuilder.layer(TaskDOApi).pipe(
+            Layer.provide(tasksGroup),
+            Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+          ),
         ),
       };
     });
@@ -537,9 +591,9 @@ public endpoint's error schema, so there's no remapping:
       handlers
         .handle("getTask", /* ... R2 implementation ... */)
         .handle("createTask", /* ... R2 implementation ... */)
-+       .handle("getTaskDO", ({ path }) =>
++       .handle("getTaskDO", ({ params }) =>
 +         getTaskDOClient().pipe(
-+           Effect.flatMap((client) => client.TasksDO.getTask({ path })),
++           Effect.flatMap((client) => client.TasksDO.getTask({ params })),
 +         ),
 +       )
 +       .handle("createTaskDO", ({ payload }) =>
@@ -562,6 +616,16 @@ backends behind the scenes.
   closure. We build a `Layer` with `HttpApiBuilder.group` but never
   `yield*` the running server — that only makes sense per-request.
 - The Worker's surface is `{ fetch }`, where `fetch` is an
-  `HttpEffect` produced by `HttpRouter.toHttpEffect`.
+  `HttpEffect` yielded once from `HttpRouter.toHttpEffect`.
 - The same `TaskApi` value drives a fully typed client via
   `HttpApiClient.make` — no codegen, no string URLs.
+
+## Where next
+
+- [Effect HTTP](/rpc/effect-http) — the concept home for this modality.
+- [RPC](/rpc) — how to choose between Schemaless RPC, Effect RPC, and
+  Effect HTTP.
+- [Effect RPC on Workers](/cloudflare/apis/effect-rpc) — the
+  schema-first RPC shape for Effect/TypeScript consumers.
+- [Schemaless RPC](/cloudflare/compute/workers#schemaless-rpc) — the
+  default for internal Worker-to-Worker calls.

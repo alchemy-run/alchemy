@@ -372,7 +372,8 @@ const counter = counters.getByName("user-123");
 const value = yield* counter.increment(); // Effect<number>
 ```
 
-This schemaless, typed-stub pattern is the recommended way to talk
+This schemaless, typed-stub pattern — the DO shape of
+[Schemaless RPC](/rpc/schemaless) — is the recommended way to talk
 to a Durable Object. The types flow from the implementation — add a
 method, and every caller sees it immediately; change a return type,
 and every caller that mismatches fails to compile. The same
@@ -383,9 +384,13 @@ others bind to it by class — see
 Alchemy also ships a schema-based `RpcDurableObject` that serves an
 Effect RPC group on the DO's `fetch`. It is no longer the suggested
 path for DO method calls — the schemaless bridge covers typed
-methods and streaming without the ceremony. If you want
-schema-*validated* procedures (payload validation, tagged error
-schemas shared with external clients), reach for
+methods and streaming without the ceremony. Its one remaining niche
+is when return values are `Schema.Class` instances whose identity
+must survive the boundary — the schemaless bridge serializes return
+values and strips class identity — see
+[`Cloudflare.RpcDurableObject`](/cloudflare/apis/effect-rpc#sugar-cloudflarerpcdurableobject).
+If you want schema-*validated* procedures (payload validation,
+tagged error schemas shared with external clients), reach for
 [Effect RPC](/cloudflare/apis/effect-rpc) on a Worker instead.
 
 ## Where next

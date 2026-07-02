@@ -48,7 +48,9 @@ alchemy login --profile prod --configure
 ```
 
 `login` imports your stack file to discover which providers are
-needed, so the prompts match the providers you actually use.
+needed, so the prompts match the providers you actually use. Each
+provider's prompts and credential resolution are implemented by its
+[Auth Provider](/environments/auth-providers).
 
 ## Inspecting a profile
 
@@ -105,14 +107,10 @@ JSON keyed by profile name; you can edit it manually, but
 `alchemy login --configure` is usually safer because it knows the
 shape each provider expects.
 
-For the full set of CLI flags involving profiles see
-[`alchemy login`](/cli/login) and
-[`alchemy profile show`](/cli/profile) in the CLI reference.
-For environment isolation, see [Stages](/environments/stages). To wire
-profiles into GitHub Actions, see the [CI guide](/environments/ci).
-
 ## Where next
 
+- [Auth Providers](/environments/auth-providers) — the machinery behind `login`: lazy credential resolution and auto-refresh.
+- [Stages](/environments/stages) — environment isolation; profiles pick the credentials, stages pick the instance.
 - [Secrets & Config](/environments/secrets) — bind env vars and secrets onto your deploy targets.
 - [CI](/environments/ci) — one profile per environment, minted and pushed to your repo as code.
 - [CLI](/cli) — every `login`, `profile`, and `--profile` flag.

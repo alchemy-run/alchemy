@@ -5,6 +5,14 @@ sidebar:
   order: 5
 ---
 
+Effect HTTP defines real REST endpoints — URLs, path params, query
+strings, typed bodies — behind an RPC-like typed interface, which
+makes it the natural fit when your consumers aren't Effect (or
+aren't TypeScript at all) and want a plain HTTP client. This page is
+the Lambda wiring; the concept lives at
+[Effect HTTP](/rpc/effect-http), and [RPC](/rpc) covers choosing
+between the RPC styles.
+
 The [Lambda](/aws/compute/lambda) page serves HTTP with a hand-rolled
 `fetch` handler — raw request parsing, manual routing. That works,
 but as your API grows you lose type safety at the boundary: request
@@ -462,6 +470,10 @@ explains the service-Layer pattern it uses.
 
 ## Where next
 
+- [Effect HTTP](/rpc/effect-http) — the concept home: endpoints,
+  groups, handlers, and typed clients, independent of any host.
+- [RPC](/rpc) — deciding between schemaless RPC, Effect RPC, and
+  Effect HTTP.
 - [Lambda](/aws/compute/lambda) — how the Function class, Function URLs,
   and the test harness work.
 - [Effect HTTP API on Workers](/cloudflare/apis/effect-http-api) —

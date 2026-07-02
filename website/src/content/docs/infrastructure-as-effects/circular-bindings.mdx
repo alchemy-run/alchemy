@@ -14,8 +14,9 @@ needs B's URL, but B needs A's URL too. Alchemy resolves the
 deadlock by separating **identity** (a class used as a Tag) from
 **implementation** (a Layer attached via `.make()`).
 
-In this guide, which builds on [Bindings](/infrastructure-as-effects/binding), you'll
-build two Workers that call each other, one step at a time.
+This guide builds on [Bindings](/infrastructure-as-effects/binding) and
+[Layers](/infrastructure-as-effects/layers): two Workers that call each
+other, one step at a time.
 
 ## Sketch the cycle
 
@@ -39,29 +40,34 @@ behind a `.make()` call that runs only when the Stack provides it.
 ## Create A as a Tag
 
 Start `src/A.ts` with just the class — no runtime yet. The class
-extends `Cloudflare.Worker<A>()(...)`, which produces a typed
-identifier you can `yield*` from anywhere.
+extends `Cloudflare.Worker<A, Shape>()(...)`, which produces a typed
+identifier you can `yield*` from anywhere. The second type parameter
+declares the shape A's runtime will expose — here, a `work` method.
 
 ```typescript
 // src/A.ts
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 
-export class A extends Cloudflare.Worker<A, {}>()("A") {}
+export class A extends Cloudflare.Worker<A, { work: () => Effect.Effect<string> }>()("A") {}
 ```
 
-`A` is now a Tag. Importing it from another file does **not** force
-its implementation to load — there is no implementation yet. This is
-what makes the cycle resolvable.
+`A` is now a Tag. It carries the type of A's interface, but no
+implementation — importing it from another file does **not** force
+any runtime code to load, because there is no implementation yet.
+This is what makes the cycle resolvable.
 
 ## Create B as a Tag
 
-Do the same for `B`. Both files only declare identity at this point.
+Do the same for `B`. Both files only declare identity and shape at
+this point — no runtime.
 
 ```typescript
 // src/B.ts
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 
-export class B extends Cloudflare.Worker<B, {}>()("B") {}
+export class B extends Cloudflare.Worker<B, { work: () => Effect.Effect<string> }>()("B") {}
 ```
 
 Now `A` and `B` can freely `import` each other — neither side
@@ -77,11 +83,11 @@ own `work` RPC method so B can call back into it.
 ```diff lang="typescript"
   // src/A.ts
   import * as Cloudflare from "alchemy/Cloudflare";
-+ import * as Effect from "effect/Effect";
+  import * as Effect from "effect/Effect";
 + import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 + import { B } from "./B.ts";
 
-  export class A extends Cloudflare.Worker<A, {}>()("A") {}
+  export class A extends Cloudflare.Worker<A, { work: () => Effect.Effect<string> }>()("A") {}
 
 + export default A.make(
 +   { main: import.meta.url },
@@ -99,9 +105,9 @@ own `work` RPC method so B can call back into it.
 ```
 
 The `import { B }` line pulls in B's Tag only. `bindWorker(B)`
-returns a typed RPC stub — at plan time it registers the service
-binding; at runtime `b.work()` round-trips to B's deployed Worker as
-a native RPC call.
+returns a [typed RPC stub](/rpc/schemaless) — at plan time it
+registers the service binding; at runtime `b.work()` round-trips to
+B's deployed Worker as a native RPC call.
 
 ## Add B's runtime, binding A
 
@@ -111,11 +117,11 @@ binds it.
 ```diff lang="typescript"
   // src/B.ts
   import * as Cloudflare from "alchemy/Cloudflare";
-+ import * as Effect from "effect/Effect";
+  import * as Effect from "effect/Effect";
 + import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 + import { A } from "./A.ts";
 
-  export class B extends Cloudflare.Worker<B, {}>()("B") {}
+  export class B extends Cloudflare.Worker<B, { work: () => Effect.Effect<string> }>()("B") {}
 
 + export default B.make(
 +   { main: import.meta.url },
@@ -152,7 +158,7 @@ import BLive, { B } from "./src/B.ts";
 
 export default Alchemy.Stack(
   "AB",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const a = yield* A;
     const b = yield* B;
@@ -196,7 +202,7 @@ Under the hood, alchemy plans the cycle in two passes:
 
 The same pattern works for Lambda↔Lambda, Worker↔Container, or any
 mix — the Tag/Layer split is a property of every Function resource
-([Functions & Servers](/infrastructure-as-effects/platform)), not just Workers.
+([Functions & Servers](/infrastructure-as-effects/functions-and-servers)), not just Workers.
 
 ## When you don't need this
 
@@ -223,5 +229,4 @@ in [Inputs & Outputs](/infrastructure-as-code/outputs).
 ## Where next
 
 - [Inputs & Outputs](/infrastructure-as-code/outputs) — the deferred references that make the cycle resolvable.
-- [Layers](/infrastructure-as-effects/layers) — package resources behind service interfaces.
 - [Providers](/infrastructure-as-code/provider) — the `precreate` hook that reserves resources up front.

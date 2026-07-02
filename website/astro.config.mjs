@@ -306,23 +306,81 @@ export default defineConfig({
               label: "Infrastructure as Effects",
               items: [
                 {
+                  label: "Overview",
+                  link: "/infrastructure-as-effects",
+                },
+                {
+                  label: "Functions & Servers",
+                  link: "/infrastructure-as-effects/functions-and-servers",
+                },
+                {
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },
                 {
-                  label: "Circular Bindings",
-                  link: "/infrastructure-as-effects/circular-bindings",
+                  label: "Event Sources",
+                  link: "/infrastructure-as-effects/event-sources",
                 },
+                {
+                  label: "Sinks",
+                  link: "/infrastructure-as-effects/sinks",
+                },
+                { label: "Phases", link: "/infrastructure-as-effects/phases" },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
                   label: "Building with Layers",
                   link: "/infrastructure-as-effects/infrastructure-layers",
                 },
                 {
-                  label: "Functions & Servers",
-                  link: "/infrastructure-as-effects/platform",
+                  label: "Circular Bindings",
+                  link: "/infrastructure-as-effects/circular-bindings",
                 },
-                { label: "Phases", link: "/infrastructure-as-effects/phases" },
+                {
+                  label: "Custom Runtime",
+                  link: "/infrastructure-as-effects/custom-runtime",
+                },
+              ],
+            },
+            {
+              label: "RPC",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/rpc",
+                },
+                {
+                  label: "Schemaless RPC",
+                  link: "/rpc/schemaless",
+                },
+                {
+                  label: "Effect RPC",
+                  link: "/rpc/effect-rpc",
+                },
+                {
+                  label: "Effect HTTP",
+                  link: "/rpc/effect-http",
+                },
+              ],
+            },
+            {
+              label: "Environments",
+              items: [
+                { label: "Stages", link: "/environments/stages" },
+                { label: "Profiles", link: "/environments/profiles" },
+                {
+                  label: "Auth Providers",
+                  link: "/environments/auth-providers",
+                },
+                {
+                  label: "Custom Auth Provider",
+                  link: "/environments/custom-auth-provider",
+                },
+                { label: "Secrets & Config", link: "/environments/secrets" },
+                {
+                  label: "Local development",
+                  link: "/environments/local-development",
+                },
+                { label: "CI", link: "/environments/ci" },
               ],
             },
             {
@@ -351,19 +409,6 @@ export default defineConfig({
                   label: "Multiple Stacks",
                   link: "/project-structure/monorepo-multi-stack",
                 },
-              ],
-            },
-            {
-              label: "Environments",
-              items: [
-                { label: "Stages", link: "/environments/stages" },
-                { label: "Profiles", link: "/environments/profiles" },
-                { label: "Secrets & Config", link: "/environments/secrets" },
-                {
-                  label: "Local development",
-                  link: "/environments/local-development",
-                },
-                { label: "CI", link: "/environments/ci" },
               ],
             },
             {

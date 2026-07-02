@@ -45,14 +45,39 @@ The noun graph and its semantics: Stacks of Resources and Actions, data flow via
 
 ## Infrastructure as Effects
 
-How app code and infrastructure compose: Bindings, Layers, Functions & Servers, and the init/runtime Phases.
+How app code and infrastructure compose: Functions & Servers, Bindings, the init/runtime Phases, and Layers.
 
+- [Infrastructure as Effects](https://v2.alchemy.run/infrastructure-as-effects) — One Effect program models both your runtime code and the infrastructure it runs on — Functions carry code, Bindings wire resources into them, Phases split deploy from runtime, Layers package it all behind typed services.
+- [Functions & Servers](https://v2.alchemy.run/infrastructure-as-effects/functions-and-servers) — Workers, Lambda Functions, and Containers ship runtime code along with their infrastructure — declared with the Effectful Constructor pattern, bind what you need, return what you expose.
 - [Bindings](https://v2.alchemy.run/infrastructure-as-effects/binding) — A binding connects a resource to a Worker or Lambda. It generates IAM policies, env vars, and a typed SDK in one call.
-- [Circular Bindings](https://v2.alchemy.run/infrastructure-as-effects/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
+- [Event Sources](https://v2.alchemy.run/infrastructure-as-effects/event-sources) — An event source is a binding that runs your Function when something happens on a resource — one call wires the event-source mapping, the permissions, and a typed handler.
+- [Sinks](https://v2.alchemy.run/infrastructure-as-effects/sinks) — A Sink is the write-side dual of an Event Source — a Binding that exposes a resource as an Effect Sink, batching writes into the batch API with least-privilege IAM.
+- [Phases](https://v2.alchemy.run/infrastructure-as-effects/phases) — Alchemy programs run in two phases — plantime/init drives the deploy, runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
 - [Layers](https://v2.alchemy.run/infrastructure-as-effects/layers) — A Layer encapsulates a slice of infrastructure (resources, bindings, runtime logic) behind a typed service interface. Code that depends on the interface stays cloud-agnostic; swapping the implementation swaps the underlying infrastructure.
 - [Building with Layers](https://v2.alchemy.run/infrastructure-as-effects/infrastructure-layers) — Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
-- [Functions & Servers](https://v2.alchemy.run/infrastructure-as-effects/platform) — Workers, Lambda Functions, and Containers ship runtime code along with their infrastructure — your handler deploys with its bindings.
-- [Phases](https://v2.alchemy.run/infrastructure-as-effects/phases) — Alchemy programs run in two phases — plantime/init drives the deploy, runtime handles requests. Knowing which is which is the key to writing Workers and Lambda Functions.
+- [Circular Bindings](https://v2.alchemy.run/infrastructure-as-effects/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
+- [Custom Runtime](https://v2.alchemy.run/infrastructure-as-effects/custom-runtime) — Implement your own Function/Server resource on the Platform type — a Provider that provisions the compute and bundles the runtime Effect.
+
+## RPC
+
+Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.
+
+- [RPC](https://v2.alchemy.run/rpc) — Every Function and Server returns { fetch, ...rpcs } — schemaless typed calls are the default for internal communication; Effect RPC and Effect HTTP add schemas where data crosses a trust boundary.
+- [Schemaless RPC](https://v2.alchemy.run/rpc/schemaless) — Typed RPC between Functions & Servers with no schema — bind the class, get the client; serialization is automatic.
+- [Effect RPC](https://v2.alchemy.run/rpc/effect-rpc) — Schema-first RPC for trust boundaries — define a schema, serve it as an HttpEffect from any Function or Worker, and build clients from the schema plus a Fetcher.
+- [Effect HTTP](https://v2.alchemy.run/rpc/effect-http) — Schema-validated REST endpoints with an rpc-like typed interface — for trust boundaries where consumers want a plain HTTP client.
+
+## Environments — the same app in many places
+
+Stages, credential profiles, auth providers, secrets and config, local development, and CI.
+
+- [Stages](https://v2.alchemy.run/environments/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
+- [Profiles](https://v2.alchemy.run/environments/profiles) — Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
+- [Auth Providers](https://v2.alchemy.run/environments/auth-providers) — An Auth Provider produces the credentials for a cloud's API calls — resolved lazily as Effects, so tokens and role sessions can refresh instead of pinning one static key.
+- [Custom Auth Provider](https://v2.alchemy.run/environments/custom-auth-provider) — Plug a third-party API into alchemy login — a lazy credentials service backed by an AuthProvider that resolves keys from a Profile, env vars, or a refreshable session.
+- [Secrets & Config](https://v2.alchemy.run/environments/secrets) — Use effect/Config to read env vars at init time and have Alchemy automatically bind them onto the deploy target.
+- [Local development](https://v2.alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
+- [CI](https://v2.alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 
 ## State Store
 
@@ -65,16 +90,6 @@ Scaling the codebase: file conventions for one stack, monorepos for many — sin
 
 - [File layout](https://v2.alchemy.run/project-structure/file-layout) — How to organize an Alchemy project — one file per Resource or Layer, group Resources that travel together by concern, and keep alchemy.run.ts as the composition root.
 - [Monorepo](https://v2.alchemy.run/project-structure/monorepo) — Two ways to organize an Alchemy monorepo — one Stack at the workspace root, or one Stack per package wired with typed references.
-
-## Environments — the same app in many places
-
-Stages, credential profiles, secrets and config, local development, and CI.
-
-- [Stages](https://v2.alchemy.run/environments/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
-- [Profiles](https://v2.alchemy.run/environments/profiles) — Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
-- [Secrets & Config](https://v2.alchemy.run/environments/secrets) — Use effect/Config to read env vars at init time and have Alchemy automatically bind them onto the deploy target.
-- [Local development](https://v2.alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
-- [CI](https://v2.alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 
 ## Testing & observability
 

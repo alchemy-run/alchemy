@@ -3,7 +3,7 @@ title: What is Alchemy?
 description: Alchemy is an Infrastructure-as-Effects framework that combines cloud infrastructure and application logic into a single type-safe program powered by Effect.
 ---
 
-Alchemy is an **Infrastructure-as-Effects** framework. It extends
+Alchemy is an **[Infrastructure-as-Effects](/infrastructure-as-effects)** framework. It extends
 Infrastructure-as-Code by combining your cloud resources and the
 application logic that uses them into a single, type-safe program
 powered by [Effect](https://effect.website).
@@ -30,7 +30,7 @@ const Bucket = Cloudflare.R2.Bucket("Bucket");
 
 export default Alchemy.Stack(
   "MyApp",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const bucket = yield* Bucket;
     const worker = yield* Worker;
@@ -123,7 +123,7 @@ const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 ## Bindings
 
 A **Binding** connects a resource to a Worker or Lambda. A single
-`bind()` call hands your handler a typed client and — at deploy time
+binding call hands your handler a typed client and — at deploy time
 — wires up the permissions, environment variables, and platform
 bindings that client needs:
 
@@ -138,7 +138,7 @@ yield* bucket.put("hello.txt", "world");
 `env.BUCKET`, no `BUCKET_NAME` lookup, and no hand-written IAM policy
 — the binding **is** the client.
 
-On AWS, `bind()` emits least-privilege IAM scoped to the exact
+On AWS, the binding emits least-privilege IAM scoped to the exact
 resource ARN. On Cloudflare, it attaches the native Worker binding
 (R2, KV, D1, Durable Object). The runtime API is identical, so code
 written against one consumes the other.
@@ -185,7 +185,7 @@ Providers are Effect Layers, wired into a Stack with
 ```typescript
 Alchemy.Stack(
   "App",
-  { providers: Cloudflare.providers() } /* ... */,
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
 );
 ```
 

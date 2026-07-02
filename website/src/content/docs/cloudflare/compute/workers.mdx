@@ -127,6 +127,9 @@ in [tutorial part 2](/cloudflare/tutorial/part-2).
 
 ## Schemaless RPC
 
+This is the Cloudflare shape of [Schemaless RPC](/rpc/schemaless) —
+see that page for the full concept.
+
 Workers can call each other's methods directly — no HTTP routes, no
 schema declarations, no public URL. Declare the Worker as a class
 whose type carries its RPC shape, and any method returning an
@@ -189,9 +192,9 @@ fabric — never the public internet — and `b.greet("world")` is
 type-checked against WorkerB's declared shape end-to-end.
 
 The same pattern works for [Durable
-Objects](/cloudflare/compute/durable-objects#schemaless-rpc). If you want
-schema-*validated* procedures — payload validation, tagged error
-schemas, streaming over HTTP for external clients — reach for
+Objects](/cloudflare/compute/durable-objects#schemaless-rpc). For external
+clients across a trust boundary — where payloads need schema
+validation before they touch your code — reach for
 [Effect RPC](/cloudflare/apis/effect-rpc) instead.
 
 ## Custom domains

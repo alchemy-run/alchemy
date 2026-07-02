@@ -5,20 +5,10 @@ description: Alchemy programs run in two phases — plantime/init drives the dep
 
 import DAG from "../../../components/DAG.astro";
 
-:::tip
-Read this after [Functions & Servers](/infrastructure-as-effects/platform). The init/runtime
-pattern shown there is what this page explains in depth.
-:::
-
-Every alchemy program operates in two distinct phases:
-
-- **Plantime** — the deploy. Runs `alchemy deploy`, `plan`, or
-  `dev`. Produces the resource graph, runs providers, persists state.
-- **Runtime** — the deployed handler. Runs inside a Worker or Lambda
-  Function whenever a request comes in.
-
-Function resources — Workers, Lambdas, Containers — express both in
-a single program by **returning an Effect from inside an Effect**.
+Every alchemy program runs in two phases — plantime builds the plan,
+runtime serves requests. Function resources — Workers, Lambdas,
+Containers — express both in a single program by **returning an
+Effect from inside an Effect**.
 
 ## Init vs runtime
 
@@ -37,7 +27,7 @@ Cloudflare.Worker(
         return HttpServerResponse.text(yield* obj.text());
       }),
     };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
 
@@ -53,8 +43,9 @@ runtime body runs per request with everything already wired up.
 The runtime phase is the *only* place where `Alchemy.RuntimeContext`
 is available. Any Effect whose requirements include `RuntimeContext`
 can only execute inside the runtime closure — the type system
-rejects it everywhere else. See
-[Layers › Runtime as a colored function](/infrastructure-as-effects/layers#runtime-as-a-colored-function).
+rejects it everywhere else. The next page builds the
+[colored-function model](/infrastructure-as-effects/layers#runtime-as-a-colored-function)
+on top of this split.
 
 ## What runs when
 
@@ -99,7 +90,7 @@ variable / config key:
 | `runtime` | Running inside a deployed Worker or Lambda Function.                 |
 
 Most user code never reads this directly — but providers and
-[bindings](/infrastructure-as-effects/binding) use it internally to behave
+[Bindings](/infrastructure-as-effects/binding) use it internally to behave
 differently across phases.
 
 ## `ALCHEMY_DEV`
@@ -123,8 +114,10 @@ Effect.gen(function* () {
 
 ## The `__ALCHEMY_RUNTIME__` guard
 
-A binding is a single `Binding.Service` whose setup Effect does two
-things — and the phase decides how much of it runs:
+A binding's contract is a `Binding.Service`; the guarded setup
+Effect lives in the implementation Layer you provide, not the
+contract. That setup Effect does two things — and the phase decides
+how much of it runs:
 
 | Work                    | Phase | Job                                                      |
 | ----------------------- | ----- | -------------------------------------------------------- |
@@ -136,6 +129,10 @@ At plantime the guard is open, so calling `bind()` records what the
 function will need. At runtime the global flag is set, so the guard is
 skipped and `bind()` returns just the typed client. The runtime bundle
 stays small because the planning branch never executes.
+
+Which wiring the guard protects is decided by the implementation
+Layer you provided
+([Bindings](/infrastructure-as-effects/binding#a-contract-and-a-layer)).
 
 This is also how alchemy can let you write `bucket.get(...)` inside a
 Worker without bundling AWS / Cloudflare provisioning code: the
@@ -153,28 +150,11 @@ The init/runtime split lets you write code that:
    variable in the runtime body already knows which resource to
    talk to.
 
-```typescript
-Effect.gen(function* () {
-  // Init: runs once per cold start
-  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
-  const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
-
-  return {
-    // Runtime: runs per request
-    fetch: Effect.gen(function* () {
-      const obj = yield* bucket.get("key");
-      // ...
-    }),
-  };
-});
-```
-
-The `bind()` mechanics behind the guard are covered in
-[Bindings](/infrastructure-as-effects/binding). Next: where all of this is
-persisted — [State Store](/state-store).
+Next: [Layers](/infrastructure-as-effects/layers) turns this phase
+split into a type-level model — `RuntimeContext` as a colored
+function.
 
 ## Where next
 
+- [Layers](/infrastructure-as-effects/layers) — `RuntimeContext` as a colored function; infrastructure behind service interfaces.
 - [State Store](/state-store) — where deploy results persist between runs.
-- [Bindings](/infrastructure-as-effects/binding) — what `bind(resource)` records at plantime.
-- [Layers](/infrastructure-as-effects/layers) — runtime as a colored function.

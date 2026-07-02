@@ -52,7 +52,7 @@ export const Worker = Cloudflare.Worker("Worker", {
 
 export default Alchemy.Stack(
   "MyApp",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const worker = yield* Worker;
     return { url: worker.url };
@@ -188,7 +188,7 @@ import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
   "MyApp",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
 +   const bucket = yield* Bucket;
     const worker = yield* Worker;

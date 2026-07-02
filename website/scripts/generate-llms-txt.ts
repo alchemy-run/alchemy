@@ -95,15 +95,48 @@ const SECTIONS: Section[] = [
   {
     heading: "Infrastructure as Effects",
     intro:
-      "How app code and infrastructure compose: Bindings, Layers, Functions & Servers, and the init/runtime Phases.",
+      "How app code and infrastructure compose: Functions & Servers, Bindings, the init/runtime Phases, and Layers.",
     pages: {
       slugs: [
+        "infrastructure-as-effects/index",
+        "infrastructure-as-effects/functions-and-servers",
         "infrastructure-as-effects/binding",
-        "infrastructure-as-effects/circular-bindings",
+        "infrastructure-as-effects/event-sources",
+        "infrastructure-as-effects/sinks",
+        "infrastructure-as-effects/phases",
         "infrastructure-as-effects/layers",
         "infrastructure-as-effects/infrastructure-layers",
-        "infrastructure-as-effects/platform",
-        "infrastructure-as-effects/phases",
+        "infrastructure-as-effects/circular-bindings",
+        "infrastructure-as-effects/custom-runtime",
+      ],
+    },
+  },
+  {
+    heading: "RPC",
+    intro:
+      "Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.",
+    pages: {
+      slugs: [
+        "rpc/index",
+        "rpc/schemaless",
+        "rpc/effect-rpc",
+        "rpc/effect-http",
+      ],
+    },
+  },
+  {
+    heading: "Environments — the same app in many places",
+    intro:
+      "Stages, credential profiles, auth providers, secrets and config, local development, and CI.",
+    pages: {
+      slugs: [
+        "environments/stages",
+        "environments/profiles",
+        "environments/auth-providers",
+        "environments/custom-auth-provider",
+        "environments/secrets",
+        "environments/local-development",
+        "environments/ci",
       ],
     },
   },
@@ -117,20 +150,6 @@ const SECTIONS: Section[] = [
       "Scaling the codebase: file conventions for one stack, monorepos for many — single Stack or one per package.",
     pages: {
       slugs: ["project-structure/file-layout", "project-structure/monorepo"],
-    },
-  },
-  {
-    heading: "Environments — the same app in many places",
-    intro:
-      "Stages, credential profiles, secrets and config, local development, and CI.",
-    pages: {
-      slugs: [
-        "environments/stages",
-        "environments/profiles",
-        "environments/secrets",
-        "environments/local-development",
-        "environments/ci",
-      ],
     },
   },
   {

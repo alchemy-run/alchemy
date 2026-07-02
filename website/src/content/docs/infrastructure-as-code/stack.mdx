@@ -21,7 +21,7 @@ import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
   "MyApp",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("Bucket");
     return { bucketName: bucket.bucketName };
@@ -32,7 +32,8 @@ export default Alchemy.Stack(
 `Alchemy.Stack` takes three arguments:
 
 1. **Name** — identifies this stack in state storage
-2. **Options** — `providers` (required), `state` (optional)
+2. **Options** — `providers` and `state`, both required (see
+   [State Store](/state-store) for the available state layers)
 3. **Effect** — a generator that declares resources and returns outputs
 
 :::note[`alchemy.run.ts` is a convention]
@@ -116,8 +117,9 @@ Effect.gen(function* () {
 
 When you declare a resource at module scope (outside any
 `Effect.gen`), there is no `yield*` available to read the `Stack`
-service. `Stack.useSync` lets you compute props synchronously from
-the current stack — useful for parameterizing names by stage:
+service. But a Resource's props can themselves be an Effect —
+`Stack.useSync` builds one that computes props from the current
+stack, useful for parameterizing names by stage:
 
 ```typescript
 import * as Axiom from "alchemy/Axiom";
@@ -152,11 +154,24 @@ export class Backend extends Alchemy.Stack<
 
 ```typescript
 // frontend/alchemy.run.ts — reads the matching stage of Backend
-const backend = yield* Backend;             // current stage
-const pinned = yield* Backend.stage.prod;   // pinned stage
-yield* Cloudflare.Website.Vite("Website", {
-  env: { VITE_API_URL: backend.url },
-});
+import { Backend } from "backend";
+
+export default Alchemy.Stack(
+  "Frontend",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const backend = yield* Backend;
+
+    const website = yield* Cloudflare.Website.Vite("Website", {
+      env: { VITE_API_URL: backend.url },
+    });
+
+    return { url: website.url.as<string>() };
+  }),
+);
 ```
 
 `yield* Backend` defaults to the **current stage** — `sam`
@@ -164,8 +179,7 @@ frontend reads `sam` backend, `pr-42` reads `pr-42`. Use
 `Backend.stage.<name>` to pin to a specific stage instead.
 
 See [References](/infrastructure-as-code/references) for the underlying
-operators, [References](/infrastructure-as-code/references) for the
-structuring patterns, and [Monorepo](/project-structure/monorepo) for the
+operators and [Monorepo](/project-structure/monorepo) for the
 end-to-end walkthrough (package layout, schema sharing, deploy
 ordering).
 

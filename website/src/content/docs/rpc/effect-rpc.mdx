@@ -1,0 +1,191 @@
+---
+title: Effect RPC
+description: Schema-first RPC for trust boundaries — define a schema, serve it as an HttpEffect from any Function or Worker, and build clients from the schema plus a Fetcher.
+sidebar:
+  order: 2
+---
+
+Effect RPC is schema-first: every procedure declares `payload`,
+`success`, and `error` Schemas, and every request and response is
+validated against them. Use it when data needs sanitizing or crosses
+a **trust boundary** — exposing an API to a web app or an external
+service.
+
+That validation has a per-request price: a frame parse, a Schema
+decode of the payload, and a Schema encode of the result — mirrored
+on the client. For internal service-to-service calls it is
+**discouraged**: [Schemaless RPC](/rpc/schemaless) gives you the same
+typed client with no schema, no runtime checking, and no per-request
+validation cost.
+
+## The shape
+
+The recipe is the same on every host:
+
+1. **Schemas outside.** Domain types and tagged errors live in a
+   standalone file both server and client import.
+2. **Procedures.** Each is an
+   `Rpc.make(name, { payload, success, error })`, collected by
+   `RpcGroup.make(...)`.
+3. **Handlers.** `Group.toLayer({ handlers })` builds the handler
+   Layer in the Init phase.
+4. **`fetch`.** Produced by
+   `RpcServer.toHttpEffect(Group).pipe(Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)))`.
+5. **Client.** The same `RpcGroup` plus a transport.
+
+NDJSON is required as soon as any rpc streams, and it is what
+`RpcWorker.bind`'s built-in client speaks — it hardcodes ndjson. A
+plain request/response group served over HTTP can use
+`RpcSerialization.layerJson` instead.
+
+The group and handlers are portable across hosts; only the host
+changes. Here is the sugar-free form on a plain Lambda Function with
+`url: true`:
+
+```typescript
+// JobRpcApi.ts — schemas, group, handlers, serialization: host-agnostic
+export class JobRpcs extends RpcGroup.make(getJob, createJob) {}
+
+export const JobRpcHttpEffect = RpcServer.toHttpEffect(JobRpcs).pipe(
+  Effect.provide(Layer.mergeAll(JobRpcsLive, RpcSerialization.layerJson)),
+);
+
+// JobFunction.ts — the host
+export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
+  "JobFunction",
+  {
+    main: import.meta.url,
+    url: true,
+  },
+  JobRpcHttpEffect.pipe(
+    Effect.map((fetch) => ({ fetch })),
+    Effect.provide(Layer.mergeAll(JobStorageDynamoDB, JobNotificationsSNS)),
+  ),
+) {}
+```
+
+The `HttpEffect` maps into the `{ fetch }` interface the host
+expects; the provided Layers satisfy the handlers' Bindings. Swap the
+host for a Cloudflare Worker and nothing above the host changes.
+
+## Clients: schema + a Fetcher
+
+A client is the schema combined with a reference to the **Fetcher** —
+either a plain URL or a Binding.
+
+### Plain URL (external consumer)
+
+`RpcClient.make(Group)` plus an HTTP transport pointed at the
+deployed URL, run inside `Effect.scoped`:
+
+```typescript
+const clientLayer = (url: string) =>
+  RpcClient.layerProtocolHttp({ url }).pipe(
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(
+      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
+    ),
+  );
+
+const program = Effect.gen(function* () {
+  const client = yield* RpcClient.make(TargetRpcs);
+  const result = yield* client.Greet({ name: "world" }).pipe(
+    Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 5 }),
+  );
+  expect(result.greeting).toBe("hello world");
+}).pipe(Effect.scoped, Effect.provide(clientLayer(targetUrl)));
+```
+
+### Binding (in-account)
+
+Inside another Worker, the Fetcher is the service binding —
+`Cloudflare.RpcWorker.bind` (see below) returns the typed
+`RpcClient` and the transport never leaves the isolate:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import { CallerRpcs } from "./group.ts";
+import BindingTargetRpcWorker from "./target-worker.ts";
+
+export default class BindingCallerRpcWorker extends Cloudflare.RpcWorker<BindingCallerRpcWorker>()(
+  "BindingCallerRpcWorker",
+  { main: import.meta.url, schema: CallerRpcs },
+  Effect.gen(function* () {
+    const target = yield* Cloudflare.RpcWorker.bind(BindingTargetRpcWorker);
+
+    const handlers = CallerRpcs.toLayer({
+      ProxyGreet: ({ name }) => target.Greet({ name }).pipe(Effect.orDie),
+    });
+    return RpcServer.toHttpEffect(CallerRpcs).pipe(
+      Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
+    );
+  }),
+) {}
+```
+
+If you ever need to hand-wire a transport, `Cloudflare.toHttpClient`
+turns anything with an Effect-typed `fetch` into an `HttpClient` —
+but the built-ins make that unnecessary.
+
+## Cloudflare sugar: `RpcWorker`
+
+`Cloudflare.RpcWorker` is particularly good for exposing RPC over
+the wire. The schema goes in the props and the impl returns the
+piped `RpcServer.toHttpEffect(schema)` directly — no `{ fetch }`
+wrapper:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import { TargetRpcs } from "./group.ts";
+
+export default class BindingTargetRpcWorker extends Cloudflare.RpcWorker<BindingTargetRpcWorker>()(
+  "BindingTargetRpcWorker",
+  { main: import.meta.url, schema: TargetRpcs },
+  Effect.gen(function* () {
+    const handlers = TargetRpcs.toLayer({
+      Greet: ({ name }) => Effect.succeed({ greeting: `hello ${name}` }),
+    });
+    return RpcServer.toHttpEffect(TargetRpcs).pipe(
+      Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
+    );
+  }),
+) {}
+```
+
+`RpcWorker.bind(WorkerClass)` gives any other Worker the typed
+`RpcClient` with zero client wiring. Full mechanics — the modular
+class/`.make` form, streaming rpcs, Binding wiring, and deploy — live
+in [Effect RPC on Workers](/cloudflare/apis/effect-rpc).
+
+## `RpcDurableObject` (niche)
+
+You rarely need runtime checking internally, so this is not the
+default path for Durable Object method calls — schemaless
+`getByName` already covers typed methods and streaming. Its niche is
+when an external client connects to a Durable Object and speaks RPC
+over a WebSocket connection, or when values crossing the DO boundary
+are `Schema.Class` instances that must survive with class identity:
+the schemaless bridge `JSON.stringify`s each return value and loses
+class identity, while `RpcDurableObject.getByName(id)` returns an
+`RpcClient` that round-trips through the shared `RpcSerialization`
+codec. Mechanics are in
+[Effect RPC on Workers](/cloudflare/apis/effect-rpc).
+
+## Where next
+
+- [Effect HTTP](/rpc/effect-http) — the same idea as real HTTP
+  endpoints (URLs, path params, status codes), better when consumers
+  are non-Effect or non-TypeScript.
+- [Effect RPC on Workers](/cloudflare/apis/effect-rpc) and
+  [Effect RPC on Lambda](/aws/apis/effect-rpc) — full per-cloud
+  wiring.
+- [Schemaless RPC](/rpc/schemaless) — the default for internal
+  calls.

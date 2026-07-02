@@ -1,0 +1,197 @@
+---
+title: Effect HTTP
+description: Schema-validated REST endpoints with an rpc-like typed interface — for trust boundaries where consumers want a plain HTTP client.
+sidebar:
+  order: 4
+---
+
+Effect HTTP (`effect/unstable/httpapi`) is the same idea as
+[Effect RPC](/rpc/effect-rpc): define a Schema, construct handler
+Layers, return an `HttpEffect` from `fetch`, call it through an
+rpc-like typed interface. The difference is what goes on the wire —
+real HTTP endpoints, with URLs, path params, query strings, headers,
+bodies, and content types.
+
+The use case is the same trust boundary — data that needs validating
+and sanitizing on the way in, exposed to a web app or an external
+service. Choose Effect HTTP over Effect RPC when your consumers
+aren't Effect (or TypeScript) programs and want a plain HTTP client.
+The cost is also the same: every request pays for a schema decode
+and encode, so it's equally discouraged for internal
+service-to-service calls — that's what
+[schemaless RPC](/rpc/schemaless) is for.
+
+## The shape
+
+Endpoints are declarations — method, URL, and Schemas for params,
+query, payload, success, and error — grouped into an API value that
+both the server and every client import:
+
+```typescript
+// src/api.ts
+import * as Schema from "effect/Schema";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+
+export class Task extends Schema.Class<Task>("Task")({
+  id: Schema.String,
+  title: Schema.String,
+  completed: Schema.Boolean,
+}) {}
+
+export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
+  "TaskNotFound",
+  { id: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
+export const getTask = HttpApiEndpoint.get("getTask", "/:id", {
+  params: Schema.Struct({ id: Schema.String }),
+  success: Task,
+  error: TaskNotFound,
+});
+
+export const createTask = HttpApiEndpoint.post("createTask", "/", {
+  success: Task,
+  payload: Schema.Struct({ title: Schema.String }),
+});
+
+export class TasksGroup extends HttpApiGroup.make("Tasks")
+  .add(getTask)
+  .add(createTask) {}
+
+export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}
+```
+
+`httpApiStatus: 404` maps the tagged error to a real status code —
+`TaskNotFound` is a typed value in the Effect error channel *and* a
+404 over plain HTTP. Nothing executes yet; `TaskApi` is a pure
+description.
+
+The host side follows the
+[Effectful Constructor pattern](/infrastructure-as-effects/functions-and-servers#the-effectful-constructor-pattern):
+`HttpApiBuilder.group` constructs the handler Layer inside Init
+(pure construction, no per-request work), and
+`HttpRouter.toHttpEffect` turns the assembled API Layer into the
+`HttpEffect` that `fetch` expects:
+
+```typescript
+// src/TaskFunction.ts
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Etag from "effect/unstable/http/Etag";
+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { Task, TaskApi, TaskNotFound } from "./api.ts";
+
+export default class TaskFunction extends AWS.Lambda.Function<TaskFunction>()(
+  "TaskFunction",
+  { main: import.meta.url, url: true },
+  Effect.gen(function* () {
+    const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
+      handlers
+        .handle("getTask", ({ params }) =>
+          // look up the task in storage — see the hub guides for R2/DynamoDB wiring
+          Effect.fail(new TaskNotFound({ id: params.id })),
+        )
+        .handle("createTask", ({ payload }) =>
+          Effect.succeed(
+            new Task({
+              id: crypto.randomUUID(),
+              title: payload.title,
+              completed: false,
+            }),
+          ),
+        ),
+    );
+
+    return {
+      fetch: yield* HttpRouter.toHttpEffect(
+        HttpApiBuilder.layer(TaskApi).pipe(Layer.provide(tasksGroup)),
+      ),
+    };
+  }).pipe(Effect.provide(Layer.mergeAll(HttpPlatform.layer, Etag.layer))),
+) {}
+```
+
+Each handler receives a typed request — `params.id` is a `string`
+because the endpoint declared it — and must return `Task` or fail
+with `TaskNotFound`; mismatches are compile errors. `HttpApi` needs
+two platform Layers that Effect RPC doesn't — `HttpPlatform.layer`
+and `Etag.layer` (content negotiation, ETags) — because RPC's
+framing is internal while HTTP's is part of the contract. The same
+construction returns `{ fetch }` from a Cloudflare Worker; full
+wiring for both hosts, including storage and CORS, lives on the
+[Workers](/cloudflare/apis/effect-http-api) and
+[Lambda](/aws/apis/effect-http-api) hub pages.
+
+## Typed client for Effect consumers
+
+The same `TaskApi` value drives a fully typed client — no codegen,
+no string URLs:
+
+```typescript
+// scripts/client.ts
+import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import { TaskApi } from "../src/api.ts";
+
+const program = Effect.gen(function* () {
+  const client = yield* HttpApiClient.make(TaskApi, {
+    baseUrl: process.env.TASK_API_URL!,
+  });
+
+  const created = yield* client.Tasks.createTask({
+    payload: { title: "Write docs" },
+  });
+
+  const task = yield* client.Tasks.getTask({
+    params: { id: created.id },
+  });
+});
+```
+
+`client.Tasks.getTask` returns
+`Effect<Task, TaskNotFound | HttpClientError>` — the 404 arrives as
+a typed value you pattern-match on, not a status code you interpret.
+The client also works over a Binding instead of a URL:
+`HttpApiClient.makeWith(TaskApi, { baseUrl: "http://localhost", httpClient: Cloudflare.toHttpClient(stub) })`
+turns any Durable Object or Worker stub into the transport — see the
+[DO-bridging recipe](/cloudflare/apis/effect-http-api#bonus-route-some-endpoints-to-a-durable-object)
+on the Cloudflare hub.
+
+## Plain HTTP for everyone else
+
+This is the payoff over Effect RPC: the wire format is ordinary
+REST, so consumers need nothing but an HTTP client.
+
+```sh
+curl -X POST https://<your-api-url>/ \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Write docs"}'
+# → {"id":"...","title":"Write docs","completed":false}
+
+curl https://<your-api-url>/<id>
+# → {"id":"...","title":"Write docs","completed":false}
+```
+
+Invalid payloads get automatic 400 responses with structured
+validation errors — no manual checking — and a missing task comes
+back as a real 404, the `httpApiStatus` declared on `TaskNotFound`.
+Any language, any HTTP library, same validated contract.
+
+## Where next
+
+- [Effect HTTP API on Workers](/cloudflare/apis/effect-http-api) —
+  full Worker wiring: R2 storage, CORS, and the DO sub-API bridge.
+- [Effect HTTP API on Lambda](/aws/apis/effect-http-api) — full
+  Lambda wiring: DynamoDB storage and a typed end-to-end test.
+- [REST API (API Gateway v1)](/aws/apis/api-gateway) — put API
+  Gateway in front instead of a Function URL.
+- [Effect RPC](/rpc/effect-rpc) — same trust boundary, leaner wire
+  protocol, for consumers that are Effect programs.
+- [Schemaless RPC](/rpc/schemaless) — the default for internal
+  calls: typed clients with no schema and no per-request validation.

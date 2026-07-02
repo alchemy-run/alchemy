@@ -57,7 +57,7 @@ export class Backend extends Alchemy.Stack<
 ```
 
 ```typescript
-// frontend/alchemy.run.ts
+// inside the frontend Stack's Effect.gen
 const a = yield* Backend;                // current stage
 const b = yield* Backend.stage.prod;     // pinned to "prod"
 const c = yield* Backend.stage["pr-42"]; // any stage name

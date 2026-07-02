@@ -65,7 +65,7 @@ const Bucket = Cloudflare.R2.Bucket("Bucket");
 //    just collecting the desired-state graph.
 export default Alchemy.Stack(
   "MyApp",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const bucket = yield* Bucket;
     return { name: bucket.bucketName };
@@ -94,7 +94,7 @@ import { Bucket } from "./src/bucket.ts";
 
 export default Alchemy.Stack(
   "MyApp",
-  { providers: Cloudflare.providers() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     yield* Bucket;
   }),
@@ -279,8 +279,11 @@ The lifecycle hooks the provider implements — `reconcile`,
 
 ## The resource graph
 
-Passing an `Output` from one resource as input to another draws an
-edge in the dependency graph. Take this stack:
+Every attribute a resource exposes (`Bucket.bucketName`,
+`Worker.url`) is an [Output](/infrastructure-as-code/outputs) — a lazy,
+typed reference that resolves at deploy time. Passing an Output from
+one resource as input to another draws an edge in the dependency
+graph. Take this stack:
 
 ```typescript
 const Bucket = yield* Cloudflare.R2.Bucket("Bucket");
@@ -331,7 +334,7 @@ alchemy handles it with a two-phase plan; see
 
 Real systems have cycles — two Workers that call each other, a
 Lambda that invokes another Lambda. Alchemy resolves them by
-splitting each Function resource ([Functions & Servers](/infrastructure-as-effects/platform)) into a
+splitting each Function resource ([Functions & Servers](/infrastructure-as-effects/functions-and-servers)) into a
 **class** that acts as the Tag (the identity) and a **`.make(...)`**
 Layer that supplies the runtime implementation — so the class can be
 referenced before its implementation exists:
