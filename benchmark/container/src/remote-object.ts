@@ -6,8 +6,10 @@ import { RemoteContainer } from "./remote-container.ts";
 
 /**
  * Durable Object backing one remote (non-effectful) container instance.
- * `boot()` measures the time, from inside the DO, until the container's HTTP
- * server answers on its TCP port — the time to usable service.
+ * `boot()` blocks until the container's HTTP server answers on its TCP port.
+ * NOTE: the authoritative cold-start clock runs in the Worker AROUND the whole
+ * DO call — the container layer eagerly starts the container during DO
+ * construction, so a clock started here would miss part of the start.
  */
 export class RemoteObject extends Cloudflare.DurableObject<RemoteObject>()(
   "BenchRemoteObject",
