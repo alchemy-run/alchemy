@@ -1,12 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
-import { Docker } from "../../Docker/Docker.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
-import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
@@ -15,10 +10,9 @@ import type {
   ContainerApplicationProps,
 } from "./ContainerApplication.ts";
 import {
-  buildFinalDockerfile,
-  bundleContainerProgram,
   createContainerApplicationName,
   foldEnvIntoEnvironmentVariables,
+  prepareContainerBuildContext,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
@@ -41,64 +35,17 @@ export const LocalContainerProvider = () =>
     ContainerPlatform,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
-      const { dotAlchemy } = yield* AlchemyContext;
-      const docker = yield* Docker;
-      const path = yield* Path.Path;
-
       // Bundle the container entrypoint and write it (plus the generated
       // Dockerfile) into a stable build context directory. `Docker.build` in
       // cloudflare-runtime reads `dockerfile` as a file path and uses
-      // `context` as the build context, so we point `dev` at both.
-      const prepareImage = Effect.fn(function* (
-        id: string,
-        news: ContainerApplicationProps,
-      ) {
-        const main = news.main;
-        if (!main) {
-          return yield* Effect.die(
-            new Error("Container requires a `main` entrypoint."),
-          );
-        }
-        const runtime = news.runtime ?? "bun";
-        const context = yield* getStableContextDir(
-          process.cwd(),
-          dotAlchemy,
-          `${id}-container`,
+      // `context` as the build context, so we point `dev` at both. The
+      // build-context materialization is shared with the live provider (see
+      // `prepareContainerBuildContext`); we only add run-scoped caching here so
+      // repeated reconciles in a single dev session don't re-bundle.
+      const prepareImage = (id: string, news: ContainerApplicationProps) =>
+        prepareContainerBuildContext(id, news).pipe(
+          Artifacts.cached("container-image"),
         );
-        const dockerfileContent = buildFinalDockerfile(
-          news.dockerfile,
-          runtime,
-          news.external,
-          news.autoInstallExternals,
-        );
-        const [bundle] = yield* Effect.all(
-          [
-            bundleContainerProgram({
-              id,
-              main,
-              runtime,
-              handler: news.handler,
-              isExternal: news.isExternal,
-              external: news.external,
-              outdir: context,
-            }),
-            docker.materialize({
-              context: context,
-              dockerfile: dockerfileContent,
-              files: [],
-            }),
-          ],
-          { concurrency: "unbounded" },
-        );
-        return {
-          context,
-          dockerfile: path.join(context, "Dockerfile"),
-          hash: yield* sha256Object({
-            bundle: bundle.hash,
-            dockerfileContent,
-          }),
-        };
-      }, Artifacts.cached("container-image"));
 
       const placeholderConfiguration = (
         props: ContainerApplicationProps,
@@ -164,7 +111,7 @@ export const LocalContainerProvider = () =>
           if (!output) return { action: "update" };
           if (!isResolved(news)) return undefined;
           const input = yield* prepareImage(id, news);
-          return input.hash !== output.hash?.image
+          return input.hash !== output.hash?.image || !output.dev
             ? { action: "update" }
             : undefined;
         }),
