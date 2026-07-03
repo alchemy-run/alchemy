@@ -23,6 +23,15 @@ New here? [Set up your account](/cloudflare/setup), then start the
 - [Workflows](/cloudflare/compute/workflows) — durable multi-step jobs with
   checkpointed, replayable steps.
 
+## Frontend
+
+- [Vite](/cloudflare/frontend/vite) — deploy any pure-Vite app
+  (SPAs, TanStack Start, React Router, SolidStart) as a Worker with
+  assets.
+- [Static sites](/cloudflare/frontend/static-site) — any build
+  command's static output, including frameworks Vite doesn't cover
+  yet.
+
 ## Data
 
 - [D1](/cloudflare/data/d1) — serverless SQLite with migrations managed as
@@ -62,7 +71,7 @@ New here? [Set up your account](/cloudflare/setup), then start the
 | Call one Worker from another (internal RPC) | [Worker](/cloudflare/compute/workers) — see [Schemaless RPC](/cloudflare/compute/workers#schemaless-rpc) and the [concept](/apis/schemaless) |
 | Typed API for external clients | [Effect RPC](/cloudflare/apis/effect-rpc) for Effect clients, [Effect HTTP API](/cloudflare/apis/effect-http-api) for plain HTTP |
 | Real-time / WebSockets | [Durable Objects](/cloudflare/compute/durable-objects) — see [Accept WebSockets](/cloudflare/compute/hibernatable-websockets) |
-| Full-stack app | [Worker](/cloudflare/compute/workers) + Vite SPA — see [Add a Vite SPA](/cloudflare/frontend/vite-spa) or [Frontend frameworks](/cloudflare/frontend/frontends) |
+| Full-stack app | [Worker](/cloudflare/compute/workers) + a React SPA — see [Add a React SPA](/cloudflare/frontend/vite-spa) or [Frontend frameworks](/cloudflare/frontend/frontends) |
 | Background jobs | [Queues](/cloudflare/messaging/queues) |
 | Postgres-backed API | [Hyperdrive](/cloudflare/data/hyperdrive) + [Drizzle](/cloudflare/data/drizzle) |
 | Durable multi-step jobs | [Workflows](/cloudflare/compute/workflows) |

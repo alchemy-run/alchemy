@@ -521,10 +521,30 @@ export default defineConfig({
               label: "Frontend",
               items: [
                 {
-                  label: "Frontend frameworks",
+                  label: "Overview",
                   link: "/cloudflare/frontend/frontends",
                 },
-                { label: "Vite SPA", link: "/cloudflare/frontend/vite-spa" },
+                { label: "Vite", link: "/cloudflare/frontend/vite" },
+                {
+                  label: "Static sites",
+                  link: "/cloudflare/frontend/static-site",
+                },
+                { label: "React SPA", link: "/cloudflare/frontend/vite-spa" },
+                {
+                  label: "TanStack Start",
+                  link: "/cloudflare/frontend/tanstack-start",
+                },
+                {
+                  label: "React Router",
+                  link: "/cloudflare/frontend/react-router",
+                },
+                { label: "Vue", link: "/cloudflare/frontend/vue" },
+                {
+                  label: "SolidStart",
+                  link: "/cloudflare/frontend/solidstart",
+                },
+                { label: "Astro", link: "/cloudflare/frontend/astro" },
+                { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
               ],
             },
             {
