@@ -21,6 +21,10 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Neon: b("neon"),
   Axiom: l("activity"),
   GitHub: b("github"),
+  Docker: b("docker"),
+  Kubernetes: b("kubernetes"),
+  Drizzle: b("drizzle"),
+  Command: l("square-terminal"),
   Reference: l("code"),
   Blog: l("newspaper"),
 };
@@ -64,6 +68,8 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Axiom: l("activity"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
+  Drizzle: b("drizzle"),
+  Command: l("square-terminal"),
   Stripe: b("stripe"),
 };
 

@@ -70,6 +70,38 @@ export const DOCS_TABS: DocsTab[] = [
     category: "Source & CI",
     hint: "repos · secrets · events",
   },
+  {
+    label: "Docker",
+    href: "/docker",
+    prefixes: ["/docker", "/providers/docker"],
+    slot: "more",
+    category: "Containers",
+    hint: "images · containers · networks",
+  },
+  {
+    label: "Kubernetes",
+    href: "/kubernetes",
+    prefixes: ["/kubernetes", "/providers/kubernetes"],
+    slot: "more",
+    category: "Containers",
+    hint: "namespaces · deployments · services",
+  },
+  {
+    label: "Drizzle",
+    href: "/drizzle",
+    prefixes: ["/drizzle", "/providers/drizzle"],
+    slot: "more",
+    category: "Data",
+    hint: "schema · migrations · orm",
+  },
+  {
+    label: "Command",
+    href: "/command",
+    prefixes: ["/command", "/providers/command"],
+    slot: "more",
+    category: "Toolchain",
+    hint: "build · dev · exec",
+  },
   // A provider's reference pages belong to its hub tab (the prefixes
   // above claim /providers/{provider} first) — the Reference tab owns
   // only the directory landing plus providers without a hub.

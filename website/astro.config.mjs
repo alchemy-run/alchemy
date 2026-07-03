@@ -35,36 +35,27 @@ function providersSidebar() {
 }
 
 /**
- * Providers with their own docs hub (a tab in the tab bar). Their reference
- * trees render inside the hub's "Resources" group and their reference URLs
- * belong to the hub tab (see docs-tabs.ts), so the Reference tab's sidebar
- * carries only the providers without a hub.
+ * Every provider has a docs hub: its reference tree renders inside the
+ * hub's "Resources" group and its reference URLs belong to the hub tab
+ * (see docs-tabs.ts). The Reference tab is a directory — its sidebar is
+ * just the list of providers, each linking to its hub.
  */
-const HUB_PROVIDERS = [
-  "AWS",
-  "Cloudflare",
-  "PlanetScale",
-  "Planetscale",
-  "Neon",
-  "Axiom",
-  "GitHub",
-];
-
 function providersSidebarEntry() {
-  const providers = providersSidebar();
-  // Expanded one level deep: the Reference tab shows its providers on
-  // load; everything below stays collapsed. Hub providers are excluded —
-  // their trees live in their hubs.
-  if (providers)
-    return {
-      label: "Reference",
-      collapsed: false,
-      items: providers.filter((p) => !HUB_PROVIDERS.includes(p.label)),
-    };
   return {
     label: "Reference",
     collapsed: false,
-    autogenerate: { directory: "providers", collapsed: true },
+    items: [
+      { label: "AWS", link: "/aws" },
+      { label: "Cloudflare", link: "/cloudflare" },
+      { label: "PlanetScale", link: "/planetscale" },
+      { label: "Neon", link: "/neon" },
+      { label: "Axiom", link: "/axiom" },
+      { label: "GitHub", link: "/github" },
+      { label: "Docker", link: "/docker" },
+      { label: "Kubernetes", link: "/kubernetes" },
+      { label: "Drizzle", link: "/drizzle" },
+      { label: "Command", link: "/command" },
+    ],
   };
 }
 
@@ -868,6 +859,51 @@ export default defineConfig({
             },
             { label: "Webhooks & events", link: "/github/events" },
             providerResourcesEntry("GitHub"),
+          ],
+        },
+        {
+          label: "Docker",
+          items: [
+            { label: "Overview", link: "/docker" },
+            { label: "Setup", link: "/docker/setup" },
+            { label: "Run local services", link: "/docker/local-services" },
+            { label: "Build & push images", link: "/docker/build-and-push" },
+            providerResourcesEntry("Docker"),
+          ],
+        },
+        {
+          label: "Kubernetes",
+          items: [
+            { label: "Overview", link: "/kubernetes" },
+            { label: "Setup", link: "/kubernetes/setup" },
+            {
+              label: "How objects deploy",
+              link: "/kubernetes/objects-as-bindings",
+            },
+            providerResourcesEntry("Kubernetes"),
+          ],
+        },
+        {
+          label: "Drizzle",
+          items: [
+            { label: "Overview", link: "/drizzle" },
+            {
+              label: "Migrations as resources",
+              link: "/drizzle/migrations",
+            },
+            providerResourcesEntry("Drizzle"),
+          ],
+        },
+        {
+          label: "Command",
+          items: [
+            { label: "Overview", link: "/command" },
+            {
+              label: "Memoized builds & commands",
+              link: "/command/memoization",
+            },
+            { label: "Dev servers", link: "/command/dev-servers" },
+            providerResourcesEntry("Command"),
           ],
         },
         providersSidebarEntry(),

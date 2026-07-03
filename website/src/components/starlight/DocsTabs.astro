@@ -95,8 +95,10 @@ const categories = [...new Set(more.map((tab) => tab.category))];
                         set:html={TAB_ICONS[tab.label]}
                       />
                     )}
-                    <span>{tab.label}</span>
-                    {tab.hint && <span class="alc-tabs__menu-hint">{tab.hint}</span>}
+                    <span class="alc-tabs__menu-text">
+                      <span>{tab.label}</span>
+                      {tab.hint && <span class="alc-tabs__menu-hint">{tab.hint}</span>}
+                    </span>
                   </a>
                 ))}
             </div>
@@ -216,7 +218,7 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     position: absolute;
     top: 100%;
     inset-inline-start: 0;
-    min-width: 240px;
+    min-width: 280px;
     z-index: 30;
     background: var(--alc-bg);
     border: 1px solid var(--alc-hairline-2);
@@ -244,7 +246,7 @@ const categories = [...new Set(more.map((tab) => tab.category))];
   .alc-tabs__menu-item {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     padding: 6px 14px;
     font-size: 13px;
     color: var(--alc-fg-2);
@@ -258,10 +260,20 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     color: var(--alc-accent-deep);
     font-weight: 500;
   }
+  /* Stacked label + hint: every row renders the same height regardless
+     of hint length; a too-long hint ellipsizes instead of wrapping. */
+  .alc-tabs__menu-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
   .alc-tabs__menu-hint {
-    margin-inline-start: auto;
     font-size: 11px;
     color: var(--alc-fg-4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* Desktop shows the dropdown; the flattened overflow tabs are mobile-only. */
   .alc-tabs__tab--overflow {
