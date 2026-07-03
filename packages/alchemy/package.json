@@ -50,6 +50,24 @@
       "worker": "./src/UI/UIProvider.ts",
       "import": "./lib/UI/UIProvider.js"
     },
+    "./Dashboard/Document": {
+      "types": "./lib/Dashboard/Document.d.ts",
+      "bun": "./src/Dashboard/Document.ts",
+      "worker": "./src/Dashboard/Document.ts",
+      "import": "./lib/Dashboard/Document.js"
+    },
+    "./Dashboard/DocumentPatch": {
+      "types": "./lib/Dashboard/DocumentPatch.d.ts",
+      "bun": "./src/Dashboard/DocumentPatch.ts",
+      "worker": "./src/Dashboard/DocumentPatch.ts",
+      "import": "./lib/Dashboard/DocumentPatch.js"
+    },
+    "./Dashboard/Projections": {
+      "types": "./lib/Dashboard/Projections.d.ts",
+      "bun": "./src/Dashboard/Projections.ts",
+      "worker": "./src/Dashboard/Projections.ts",
+      "import": "./lib/Dashboard/Projections.js"
+    },
     "./AWS/UI": {
       "types": "./lib/AWS/UI.d.ts",
       "bun": "./src/AWS/UI.ts",

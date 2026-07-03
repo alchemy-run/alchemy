@@ -1,0 +1,291 @@
+/**
+ * Dashboard v2 transport — the ONLY code that talks to /api/v2. Ingestion
+ * mutates the store OUTSIDE React (see store.ts):
+ *
+ * - `connect(stage?)` opens the SSE stream; the first frame is a full
+ *   snapshot, subsequent frames carry typed patch batches. A revision gap
+ *   triggers a fresh /api/v2/document snapshot (backoff-guarded); a
+ *   dropped connection reconnects with capped exponential backoff and
+ *   naturally re-snapshots (every SSE connection starts snapshot-first).
+ * - `loadDeployments` / `selectDeployment` drive the history overlay.
+ * - `setStage` reconnects with the new stage, clearing per-stage slices
+ *   but KEEPING the position cache.
+ */
+import type {
+  DocumentPatch,
+  DocumentSnapshot,
+} from "alchemy/Dashboard/Document";
+import {
+  DocumentPatchSchema,
+  DocumentSnapshotSchema,
+} from "alchemy/Dashboard/DocumentPatch";
+import * as S from "effect/Schema";
+import {
+  applySnapshot,
+  dashboardStore,
+  ingestPatches,
+  resetForStage,
+  setConnectionStatus,
+  setDeployments,
+  setHistoryError,
+  setHistoryLoading,
+  setSelectedDeployment,
+  type DeploymentRecord,
+  type HistoricalProjections,
+} from "./store.ts";
+
+/** The SSE `data:` payload union (mirrors the server's DocumentFrame). */
+export type DocumentFrame =
+  | { kind: "snapshot"; snapshot: DocumentSnapshot }
+  | { kind: "patches"; patches: DocumentPatch[] };
+
+const DocumentFrameSchema = S.Union([
+  S.Struct({ kind: S.Literal("snapshot"), snapshot: DocumentSnapshotSchema }),
+  S.Struct({
+    kind: S.Literal("patches"),
+    patches: S.Array(DocumentPatchSchema),
+  }),
+]);
+
+const decodeFrame = S.decodeUnknownSync(DocumentFrameSchema);
+const decodeSnapshot = S.decodeUnknownSync(DocumentSnapshotSchema);
+
+const stageQuery = (stage: string | undefined): string =>
+  stage === undefined ? "" : `?stage=${encodeURIComponent(stage)}`;
+
+// ─────────────────────────────────────────────────────── connection state
+
+let source: EventSource | undefined;
+/** bumped on every connect/disconnect — stale async callbacks bail out */
+let generation = 0;
+let reconnectAttempt = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let resnapshotting = false;
+let lastResnapshotAt = 0;
+
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_CAP_MS = 10_000;
+/** minimum spacing between gap-triggered snapshot re-fetches */
+const RESNAPSHOT_SPACING_MS = 1_000;
+
+/**
+ * Open (or re-open) the live SSE stream for a stage. `undefined` stage =
+ * the server's default stage.
+ */
+export const connect = (stage?: string): void => {
+  generation += 1;
+  if (reconnectTimer !== undefined) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+  }
+  source?.close();
+  source = undefined;
+  reconnectAttempt = 0;
+  setConnectionStatus("connecting");
+  open(generation, stage);
+};
+
+export const disconnect = (): void => {
+  generation += 1;
+  if (reconnectTimer !== undefined) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+  }
+  source?.close();
+  source = undefined;
+};
+
+const open = (gen: number, stage: string | undefined): void => {
+  const es = new EventSource(`/api/v2/events${stageQuery(stage)}`);
+  source = es;
+  es.onmessage = (message) => {
+    if (gen !== generation) {
+      return;
+    }
+    let frame: DocumentFrame;
+    try {
+      frame = decodeFrame(JSON.parse(message.data)) as DocumentFrame;
+    } catch (error) {
+      // a frame we can't decode means client/server version skew — a
+      // fresh snapshot is the only safe recovery
+      console.warn("dashboard: undecodable frame, re-snapshotting", error);
+      void resnapshot(gen, stage);
+      return;
+    }
+    reconnectAttempt = 0;
+    if (frame.kind === "snapshot") {
+      applySnapshot(frame.snapshot);
+      setConnectionStatus("live");
+      return;
+    }
+    const result = ingestPatches(frame.patches);
+    if (result.gap) {
+      void resnapshot(gen, stage);
+    }
+  };
+  es.onerror = () => {
+    if (gen !== generation) {
+      return;
+    }
+    // self-managed reconnect (not the browser's): every new connection
+    // is snapshot-first, so reconnecting re-syncs by construction
+    es.close();
+    setConnectionStatus("error");
+    const delay = Math.min(
+      RECONNECT_CAP_MS,
+      RECONNECT_BASE_MS * 2 ** reconnectAttempt,
+    );
+    reconnectAttempt += 1;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = undefined;
+      if (gen !== generation) {
+        return;
+      }
+      setConnectionStatus("connecting");
+      open(gen, stage);
+    }, delay);
+  };
+};
+
+/**
+ * Revision-gap recovery: re-fetch the full document snapshot. Spaced by
+ * RESNAPSHOT_SPACING_MS so a misbehaving stream can't loop us into a
+ * snapshot storm.
+ */
+const resnapshot = async (
+  gen: number,
+  stage: string | undefined,
+): Promise<void> => {
+  if (resnapshotting) {
+    return;
+  }
+  resnapshotting = true;
+  try {
+    const wait = Math.max(
+      0,
+      lastResnapshotAt + RESNAPSHOT_SPACING_MS - Date.now(),
+    );
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+    if (gen !== generation) {
+      return;
+    }
+    lastResnapshotAt = Date.now();
+    const res = await fetch(`/api/v2/document${stageQuery(stage)}`);
+    if (!res.ok) {
+      throw new Error(`/api/v2/document -> ${res.status}`);
+    }
+    const snapshot = decodeSnapshot(await res.json()) as DocumentSnapshot;
+    if (gen !== generation) {
+      return;
+    }
+    applySnapshot(snapshot);
+    setConnectionStatus("live");
+  } catch (error) {
+    console.warn("dashboard: snapshot re-fetch failed", error);
+    if (gen === generation) {
+      setConnectionStatus("error");
+    }
+  } finally {
+    resnapshotting = false;
+  }
+};
+
+// ──────────────────────────────────────────────────────────── stage switch
+
+/**
+ * Switch stages: clear per-stage document/history slices (positions cache
+ * survives — it's keyed by structuralHash), reconnect the SSE stream, and
+ * refresh the deployment history for the new stage.
+ */
+export const setStage = (stage: string | undefined): void => {
+  resetForStage(stage);
+  connect(stage);
+  void loadDeployments(stage);
+};
+
+// ───────────────────────────────────────────────────── deployment history
+
+/** GET /api/v2/deployments → the history slice (newest first). */
+export const loadDeployments = async (stage?: string): Promise<void> => {
+  const stg = stage ?? dashboardStore.getState().connection.stage;
+  setHistoryLoading(true);
+  try {
+    const res = await fetch(`/api/v2/deployments${stageQuery(stg)}`);
+    if (res.status === 404) {
+      // the state store has no deployment-history support
+      setDeployments([]);
+      return;
+    }
+    if (!res.ok) {
+      throw new Error(`/api/v2/deployments -> ${res.status}`);
+    }
+    setDeployments((await res.json()) as DeploymentRecord[]);
+  } catch (error) {
+    setHistoryError(String(error));
+  }
+};
+
+/**
+ * Select a deployment version for the history overlay ("live" clears
+ * it). The endpoint returns that version's journal folded over the
+ * CURRENT structure, so the graph never moves while flipping history.
+ */
+export const selectDeployment = async (
+  version: number | "live",
+): Promise<void> => {
+  if (version === "live") {
+    setSelectedDeployment("live");
+    return;
+  }
+  const stg = dashboardStore.getState().connection.stage;
+  setHistoryLoading(true);
+  try {
+    const res = await fetch(`/api/v2/deployments/${version}${stageQuery(stg)}`);
+    if (!res.ok) {
+      throw new Error(`/api/v2/deployments/${version} -> ${res.status}`);
+    }
+    const body = (await res.json()) as {
+      record: DeploymentRecord;
+      snapshot: unknown;
+      projections: HistoricalProjections;
+    };
+    const snapshot = decodeSnapshot(body.snapshot) as DocumentSnapshot;
+    setSelectedDeployment(version, body.record, snapshot, body.projections);
+  } catch (error) {
+    setHistoryError(String(error));
+  }
+};
+
+// ──────────────────────────────────────────────────────────────── approval
+
+/**
+ * Decide the pending browser-side approval. The v2 document's approval
+ * slice doesn't carry the approval id (only the plan), so resolve it via
+ * the v1 scene endpoint before POSTing the decision; the resulting
+ * approval-clear patch arrives over the live stream.
+ */
+export const decideApproval = async (approved: boolean): Promise<void> => {
+  const stg = dashboardStore.getState().connection.stage;
+  try {
+    const res = await fetch(`/api/scene${stageQuery(stg)}`);
+    if (!res.ok) {
+      throw new Error(`/api/scene -> ${res.status}`);
+    }
+    const scene = (await res.json()) as {
+      approval: { id: string } | null;
+    };
+    const id = scene.approval?.id;
+    if (id === undefined) {
+      return;
+    }
+    await fetch("/api/approval/decide", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, approved }),
+    });
+  } catch (error) {
+    console.warn("dashboard: approval decide failed", error);
+  }
+};

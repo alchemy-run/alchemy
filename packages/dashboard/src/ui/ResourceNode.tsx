@@ -1,6 +1,21 @@
-import type { UIRegistry } from "alchemy/UI/UIProvider";
-import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
+/**
+ * The canvas node card (v1 visual design, v2 data flow).
+ *
+ * React Flow hands this component `data: { fqn }` ONLY — everything else is
+ * read from the store via per-fqn subscriptions, so:
+ * - a decorate patch re-renders exactly the affected node(s);
+ * - clicking re-renders 2 nodes (old + new selection);
+ * - a filter keystroke only re-renders nodes whose dimmed flag flips.
+ *
+ * History overlay: `useNode` is overlay-aware (structure is always live,
+ * decoration comes from the selected deployment when one is open), so
+ * flipping through past deployments recolors cards with zero layout change.
+ */
+import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import type { ResourceUIContext } from "alchemy/UI/UIProvider";
 import { Loader2 } from "lucide-react";
+import { memo, useMemo } from "react";
+import { NODE_HEIGHT, NODE_WIDTH } from "../layout/elkGraph.ts";
 import {
   CLOUD_COLORS,
   cloudOf,
@@ -13,38 +28,68 @@ import {
   statusInFlight,
   typeName,
 } from "../theme.ts";
-import type { DashboardMeta, DashboardNode } from "../types.ts";
-import { toCtx } from "../registry.ts";
+import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
+import { useIsDimmed, useIsSelected, useMeta, useNode } from "../store.ts";
 import { ResourceIcon } from "./Icon.tsx";
 
-export type CanvasNode = Node<
-  {
-    node: DashboardNode;
-    registry: UIRegistry;
-    meta: DashboardMeta;
-    selected?: boolean;
-  },
-  "resource"
->;
+export type CanvasNode = Node<{ fqn: string }, "resource">;
 
-export const NODE_WIDTH = 230;
-export const NODE_HEIGHT = 80;
+export { NODE_HEIGHT, NODE_WIDTH };
 
-export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
-  const { node, registry, meta } = data;
-  const ui = registry.get(node.type);
-  const ctx = toCtx(node, meta);
-  const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? "#8b8b96";
-  const summary = safeCall(() => ui?.summary?.(ctx));
-  const link = safeCall(() => ui?.link?.(ctx));
+export const ResourceNode = memo(function ResourceNode({
+  data,
+}: NodeProps<CanvasNode>) {
+  const { fqn } = data;
+  const { node, decoration } = useNode(fqn);
+  const selected = useIsSelected(fqn);
+  const dimmed = useIsDimmed(fqn);
+  const meta = useMeta();
+  const registry = useRegistry();
+
+  // live overlay wins over the structural baseline
+  const status = decoration?.status ?? node?.status ?? "unknown";
+  const ui = node !== undefined ? registry?.get(node.type) : undefined;
+
+  // UIProvider hooks are pure functions of the ctx — memoized on the node's
+  // structural identity + decoration-driven status, so they re-run only
+  // when THIS node's slice changes (the component itself is memo'd and
+  // renders only on its own subscriptions).
+  const ctx = useMemo<ResourceUIContext | undefined>(
+    () => (node === undefined ? undefined : uiCtxOf(node, status, meta)),
+    [node, status, meta],
+  );
+  const summary = useMemo(
+    () =>
+      ui?.summary !== undefined && ctx !== undefined
+        ? safeUI(() => ui.summary?.(ctx))
+        : undefined,
+    [ui, ctx],
+  );
+  const link = useMemo(
+    () =>
+      ui?.link !== undefined && ctx !== undefined
+        ? safeUI(() => ui.link?.(ctx))
+        : undefined,
+    [ui, ctx],
+  );
+
+  if (node === undefined || ctx === undefined) {
+    // transient: the flow-node array still holds an fqn a structure-replace
+    // just retired; the next commit removes it
+    return null;
+  }
+
   const Card = ui?.Card;
-
-  const plan = node.planAction;
+  const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? "#8b8b96";
+  const plan = decoration?.planAction ?? node.planAction;
+  const result = decoration?.applyResult;
+  const note = decoration?.note;
+  const hidden = decoration?.hidden === true;
   const planColor = plan ? PLAN_COLORS[plan] : undefined;
-  const result = node.applyResult;
   const resultColor = result ? RESULT_COLORS[result] : undefined;
-  // terminated resources render "dead": gray dashed shell, dimmed
-  const ghost = result === "deleted" || node.status === "deleted";
+  // terminated / declared-only resources render "dead": gray dashed shell
+  const ghost =
+    node.ghost !== undefined || result === "deleted" || status === "deleted";
 
   return (
     <div
@@ -56,9 +101,17 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
           : ghost
             ? "#3f3f46"
             : (resultColor ?? planColor ?? "#2a2a35"),
-        borderStyle: node.status === "pending" || ghost ? "dashed" : "solid",
+        borderStyle: status === "pending" || ghost ? "dashed" : "solid",
         boxShadow: selected ? `0 0 0 1px ${color}` : undefined,
-        opacity: ghost ? 0.55 : plan === "delete" ? 0.8 : undefined,
+        // filter dimming is decoration-only: layout and viewport never move
+        opacity:
+          dimmed || hidden
+            ? 0.2
+            : ghost
+              ? 0.55
+              : plan === "delete"
+                ? 0.8
+                : undefined,
       }}
     >
       <Handle
@@ -71,18 +124,18 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
         <span className="truncate text-[13px] font-medium text-zinc-100">
           {node.logicalId}
         </span>
-        {statusInFlight(node.status) ? (
+        {statusInFlight(status) ? (
           <Loader2
             size={13}
             className="ml-auto shrink-0 animate-spin"
-            style={{ color: statusColor(node.status) }}
-            aria-label={node.status}
+            style={{ color: statusColor(status) }}
+            aria-label={status}
           />
         ) : (
           <span
             className="ml-auto h-2 w-2 shrink-0 rounded-full"
-            style={{ background: statusColor(node.status) }}
-            title={node.status}
+            style={{ background: statusColor(status) }}
+            title={status}
           />
         )}
       </div>
@@ -99,12 +152,12 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
       ) : link ? (
         <div className="mt-1 truncate text-[11px] text-indigo-400">{link}</div>
       ) : null}
-      {node.note && statusInFlight(node.status) && (
+      {note && statusInFlight(status) && (
         <div
           className="mt-1 truncate text-[10.5px] text-amber-300/90"
-          title={node.note}
+          title={note}
         >
-          {node.note}
+          {note}
         </div>
       )}
       <div className="flex gap-1">
@@ -141,12 +194,4 @@ export function ResourceNode({ data, selected }: NodeProps<CanvasNode>) {
       />
     </div>
   );
-}
-
-const safeCall = <T,>(fn: () => T): T | undefined => {
-  try {
-    return fn();
-  } catch {
-    return undefined;
-  }
-};
+});
