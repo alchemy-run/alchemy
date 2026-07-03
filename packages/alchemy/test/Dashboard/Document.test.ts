@@ -10,7 +10,6 @@ import {
   applyDeploymentRecord,
   applyEvent,
   applyPlan,
-  applyStates,
   applyStructure,
   clearApproval,
   foldJournal,
@@ -24,6 +23,7 @@ import {
   type DeploymentDocument,
   type DocumentPatch,
 } from "@/Dashboard/Document.ts";
+import { applyStates } from "@/Dashboard/DocumentStates.ts";
 import { applyPatches } from "@/Dashboard/DocumentPatch.ts";
 import type { DashboardPlan } from "@/Dashboard/PlanJson.ts";
 import {

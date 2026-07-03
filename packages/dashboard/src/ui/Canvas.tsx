@@ -46,7 +46,12 @@ import {
   useFitRequest,
   type XY,
 } from "../store.ts";
-import { ResourceNode, type CanvasNode } from "./ResourceNode.tsx";
+import {
+  NODE_HEIGHT,
+  NODE_WIDTH,
+  ResourceNode,
+  type CanvasNode,
+} from "./ResourceNode.tsx";
 
 const nodeTypes = { resource: ResourceNode };
 
@@ -133,6 +138,14 @@ function CanvasInner() {
           type: "resource",
           position: { x: position.x, y: position.y },
           data: nodeDataOf(fqn),
+          // Fixed dimensions: nodes render at a known size (ResourceNode sets
+          // the same constants), so React Flow treats them as measured
+          // immediately. Without this, the rebuild-on-position-change effect
+          // replaces node objects and wipes RF's measured dimensions —
+          // `nodesInitialized` never turns true and edges silently never
+          // render.
+          width: NODE_WIDTH,
+          height: NODE_HEIGHT,
         };
       });
       return next.length === previous.length &&
