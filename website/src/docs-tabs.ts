@@ -33,21 +33,31 @@ export const DOCS_TABS: DocsTab[] = [
   {
     label: "Cloudflare",
     href: "/cloudflare",
-    prefixes: ["/cloudflare"],
+    prefixes: ["/cloudflare", "/providers/cloudflare"],
     slot: "primary",
   },
-  { label: "AWS", href: "/aws", prefixes: ["/aws"], slot: "primary" },
+  {
+    label: "AWS",
+    href: "/aws",
+    prefixes: ["/aws", "/providers/aws"],
+    slot: "primary",
+  },
   {
     label: "PlanetScale",
     href: "/planetscale",
-    prefixes: ["/planetscale"],
+    prefixes: ["/planetscale", "/providers/planetscale"],
     slot: "primary",
   },
-  { label: "Neon", href: "/neon", prefixes: ["/neon"], slot: "primary" },
+  {
+    label: "Neon",
+    href: "/neon",
+    prefixes: ["/neon", "/providers/neon"],
+    slot: "primary",
+  },
   {
     label: "Axiom",
     href: "/axiom",
-    prefixes: ["/axiom"],
+    prefixes: ["/axiom", "/providers/axiom"],
     slot: "more",
     category: "Observability",
     hint: "logs · traces · alerts",
@@ -55,11 +65,14 @@ export const DOCS_TABS: DocsTab[] = [
   {
     label: "GitHub",
     href: "/github",
-    prefixes: ["/github"],
+    prefixes: ["/github", "/providers/github"],
     slot: "more",
     category: "Source & CI",
     hint: "repos · secrets · events",
   },
+  // A provider's reference pages belong to its hub tab (the prefixes
+  // above claim /providers/{provider} first) — the Reference tab owns
+  // only the directory landing plus providers without a hub.
   {
     label: "Reference",
     href: "/providers",

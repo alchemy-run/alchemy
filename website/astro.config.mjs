@@ -34,12 +34,33 @@ function providersSidebar() {
   }
 }
 
+/**
+ * Providers with their own docs hub (a tab in the tab bar). Their reference
+ * trees render inside the hub's "Resources" group and their reference URLs
+ * belong to the hub tab (see docs-tabs.ts), so the Reference tab's sidebar
+ * carries only the providers without a hub.
+ */
+const HUB_PROVIDERS = [
+  "AWS",
+  "Cloudflare",
+  "PlanetScale",
+  "Planetscale",
+  "Neon",
+  "Axiom",
+  "GitHub",
+];
+
 function providersSidebarEntry() {
   const providers = providersSidebar();
-  // Expanded one level deep: the Reference tab shows its providers
-  // (AWS, Cloudflare, …) on load; everything below stays collapsed.
+  // Expanded one level deep: the Reference tab shows its providers on
+  // load; everything below stays collapsed. Hub providers are excluded —
+  // their trees live in their hubs.
   if (providers)
-    return { label: "Reference", collapsed: false, items: providers };
+    return {
+      label: "Reference",
+      collapsed: false,
+      items: providers.filter((p) => !HUB_PROVIDERS.includes(p.label)),
+    };
   return {
     label: "Reference",
     collapsed: false,
