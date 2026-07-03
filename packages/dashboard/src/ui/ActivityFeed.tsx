@@ -45,6 +45,21 @@ export const ActivityFeed = memo(function ActivityFeed() {
   );
 });
 
+/**
+ * The expanded log renders on the walnut code surface, where the semantic
+ * page tokens sink — remap `statusColor`'s output onto the syntax palette
+ * (tuned for walnut in both themes) instead.
+ */
+const WALNUT_STATUS_COLORS: Record<string, string> = {
+  "var(--alc-success)": "var(--alc-code-keyword)",
+  "var(--alc-warn)": "var(--alc-code-string)",
+  "var(--alc-danger)": "var(--alc-code-literal)",
+  "var(--alc-muted)": "var(--alc-code-comment)",
+};
+
+const walnutStatusColor = (status: string): string =>
+  WALNUT_STATUS_COLORS[statusColor(status)] ?? "var(--alc-code-type)";
+
 function Feed({
   sessionKey,
   live,
@@ -72,9 +87,9 @@ function Feed({
   const StatusIcon = done ? (failed ? XCircle : CheckCircle2) : Loader2;
   const statusIconClass = done
     ? failed
-      ? "text-red-400"
-      : "text-emerald-400"
-    : "animate-spin text-amber-400";
+      ? "text-[var(--alc-danger)]"
+      : "text-[var(--alc-success)]"
+    : "animate-spin text-[var(--alc-warn)]";
 
   const outcome = failed ? "Deployment failed" : "Deployment complete";
   const title = done
@@ -85,7 +100,7 @@ function Feed({
 
   return (
     <div
-      className={`absolute bottom-4 left-4 z-10 overflow-hidden rounded-xl border border-[#2a2a35] bg-[#101016]/95 backdrop-blur ${
+      className={`absolute bottom-4 left-4 z-10 overflow-hidden rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-2)]/95 shadow-[var(--alc-shadow)] backdrop-blur ${
         expanded ? "w-[340px]" : "max-w-[400px]"
       }`}
     >
@@ -93,21 +108,21 @@ function Feed({
         <StatusIcon size={14} className={`shrink-0 ${statusIconClass}`} />
         <button
           onClick={() => setFeedExpanded(!expanded)}
-          className="min-w-0 flex-1 truncate text-left text-[12px] font-medium text-zinc-200 hover:text-white"
+          className="min-w-0 flex-1 truncate text-left font-mono text-[11.5px] font-medium text-[var(--alc-fg-1)] transition-colors duration-[var(--alc-dur-fast)] hover:text-[var(--alc-accent-deep)]"
           title={expanded ? "Collapse" : title}
         >
           {expanded ? (done ? outcome : "Deploying…") : title}
         </button>
         <button
           onClick={() => setFeedExpanded(!expanded)}
-          className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          className="shrink-0 rounded-[var(--alc-radius-sm)] p-0.5 text-[var(--alc-fg-4)] transition-colors duration-[var(--alc-dur-fast)] hover:bg-[var(--alc-bg-sunk)] hover:text-[var(--alc-fg-1)]"
           title={expanded ? "Collapse" : "Expand log"}
         >
           {expanded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
         </button>
         <button
           onClick={() => dismissSession(sessionKey)}
-          className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          className="shrink-0 rounded-[var(--alc-radius-sm)] p-0.5 text-[var(--alc-fg-4)] transition-colors duration-[var(--alc-dur-fast)] hover:bg-[var(--alc-bg-sunk)] hover:text-[var(--alc-fg-1)]"
           title="Dismiss"
         >
           <X size={12} />
@@ -116,12 +131,19 @@ function Feed({
       {expanded && (
         <div
           ref={listRef}
-          className="max-h-48 overflow-y-auto border-t border-[#26262f] px-3 py-2"
+          className="max-h-48 overflow-y-auto border-t border-[var(--alc-hairline)] bg-[var(--alc-bg-code)] px-3 py-2"
         >
           {feed.entries.slice(-150).map((entry) => (
-            <div key={entry.key} className="flex gap-2 py-0.5 text-[11.5px]">
+            <div
+              key={entry.key}
+              className="flex gap-2 py-0.5 font-mono text-[11px]"
+            >
               <span
-                className={`shrink-0 font-medium ${entry.log ? "text-zinc-600" : "text-zinc-400"}`}
+                className={`shrink-0 font-medium ${
+                  entry.log
+                    ? "text-[var(--alc-code-comment)]"
+                    : "text-[var(--alc-fg-invert)]"
+                }`}
               >
                 [{entry.id}]
               </span>
@@ -129,10 +151,10 @@ function Feed({
                 className="truncate"
                 style={{
                   color: entry.log
-                    ? "#52525b"
+                    ? "var(--alc-code-comment)"
                     : entry.status
-                      ? statusColor(entry.status)
-                      : "#818cf8",
+                      ? walnutStatusColor(entry.status)
+                      : "var(--alc-code-type)",
                 }}
                 title={entry.text}
               >

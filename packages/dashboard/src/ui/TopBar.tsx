@@ -1,4 +1,4 @@
-import { FlaskConical, Maximize, Search, X } from "lucide-react";
+import { Maximize, Moon, Search, Sun, SunMoon, X } from "lucide-react";
 import { memo } from "react";
 import { setStage } from "../ingest.ts";
 import {
@@ -13,7 +13,16 @@ import {
   useView,
   type ViewKind,
 } from "../store.ts";
-import { PLAN_COLORS, PLAN_LABELS } from "../theme.ts";
+import {
+  CHIP,
+  chipStyle,
+  HAIRLINE_BUTTON,
+  PLAN_COLORS,
+  PLAN_LABELS,
+  SUNK_INPUT,
+} from "../theme.ts";
+import { useThemeMode, type ThemeMode } from "../themeMode.ts";
+import { Yantra } from "./Brand.tsx";
 import { DeploymentPicker, HistoricalPill } from "./DeploymentPicker.tsx";
 import { StageSelect } from "./StageSelect.tsx";
 
@@ -33,8 +42,8 @@ const VIEWS: readonly ViewKind[] = [
  */
 export const TopBar = memo(function TopBar() {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#26262f] bg-[#101016] px-4">
-      <FlaskConical size={16} className="text-indigo-400" />
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--alc-hairline-2)] bg-[var(--alc-bg-nav)] px-4">
+      <Yantra size={18} className="shrink-0 text-[var(--alc-accent-deep)]" />
       <StackName />
       <StageArea />
       <ConnectionDot />
@@ -45,6 +54,7 @@ export const TopBar = memo(function TopBar() {
         <DeploymentPicker />
         <FitButton />
         <ViewTabs />
+        <ThemeToggle />
       </div>
     </header>
   );
@@ -53,7 +63,9 @@ export const TopBar = memo(function TopBar() {
 function StackName() {
   const meta = useMeta();
   return (
-    <span className="text-[13px] font-medium text-zinc-100">{meta.stack}</span>
+    <span className="font-serif text-[15px] font-medium tracking-[-0.01em] text-[var(--alc-fg-1)]">
+      {meta.stack}
+    </span>
   );
 }
 
@@ -68,25 +80,26 @@ function StageArea() {
   );
 }
 
+const CONNECTING_STYLE = chipStyle("var(--alc-warn)");
+const ERROR_STYLE = chipStyle("var(--alc-danger)");
+
 function ConnectionDot() {
   const connection = useConnection();
   if (connection.status === "live") {
     return null;
   }
+  const connecting = connection.status === "connecting";
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10.5px] font-medium ${
-        connection.status === "connecting"
-          ? "animate-pulse bg-amber-500/15 text-amber-400"
-          : "bg-red-500/15 text-red-400"
-      }`}
+      className={`${CHIP} ${connecting ? "animate-pulse" : ""}`}
+      style={connecting ? CONNECTING_STYLE : ERROR_STYLE}
       title={
-        connection.status === "connecting"
+        connecting
           ? "Connecting to the dashboard server…"
           : "Connection lost — reconnecting"
       }
     >
-      {connection.status === "connecting" ? "connecting…" : "reconnecting…"}
+      {connecting ? "connecting…" : "reconnecting…"}
     </span>
   );
 }
@@ -99,7 +112,9 @@ function PlanChips() {
   );
   if (entries.length === 0) {
     return (
-      <span className="rounded-full border border-[#2a2a35] px-2.5 py-0.5 text-[11px] text-emerald-400">
+      <span
+        className={`${CHIP} border border-[var(--alc-hairline-2)] text-[var(--alc-success)]`}
+      >
         ✓ in sync
       </span>
     );
@@ -109,11 +124,8 @@ function PlanChips() {
       {entries.map(([action, count]) => (
         <span
           key={action}
-          className="rounded-full px-2.5 py-0.5 text-[11px] font-medium"
-          style={{
-            color: PLAN_COLORS[action],
-            background: `${PLAN_COLORS[action]}1f`,
-          }}
+          className={CHIP}
+          style={chipStyle(PLAN_COLORS[action] ?? "var(--alc-muted)")}
           title={`next deploy will ${action} ${count} resource${count > 1 ? "s" : ""}`}
         >
           {count} {PLAN_LABELS[action]?.slice(2) ?? action}
@@ -127,6 +139,8 @@ function PlanChips() {
  * Filter box + match-count chip. Filtering is decoration-only (dims
  * non-matching nodes) — it NEVER touches layout, positions, or viewport.
  */
+const FILTER_ACTIVE_STYLE = chipStyle("var(--alc-warn)");
+
 function FilterBox() {
   const filter = useFilter();
   const counts = useFilterCounts();
@@ -136,23 +150,23 @@ function FilterBox() {
       <div className="relative ml-4 max-w-xs flex-1">
         <Search
           size={13}
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600"
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--alc-fg-4)]"
         />
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter resources…"
-          className={`w-full rounded-lg border bg-[#0b0b10] py-1.5 pl-8 pr-8 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none ${
+          className={`${SUNK_INPUT} w-full py-1.5 pl-8 pr-8 ${
             active
-              ? "border-amber-500/60 focus:border-amber-400"
-              : "border-[#2a2a35] focus:border-indigo-500/50"
+              ? "border-[var(--alc-warn)] focus:border-[var(--alc-warn)]"
+              : ""
           }`}
         />
         {active && (
           <button
             onClick={() => setFilter("")}
             title="Clear filter"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-[var(--alc-radius-sm)] p-0.5 text-[var(--alc-fg-4)] transition-colors duration-[var(--alc-dur-fast)] hover:bg-[var(--alc-accent-12)] hover:text-[var(--alc-fg-1)]"
           >
             <X size={12} />
           </button>
@@ -161,7 +175,8 @@ function FilterBox() {
       {active && (
         <button
           onClick={() => setFilter("")}
-          className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-400 hover:bg-amber-500/25"
+          className={`${CHIP} transition-colors duration-[var(--alc-dur-fast)]`}
+          style={FILTER_ACTIVE_STYLE}
           title="Click to clear the filter"
         >
           filtered: {counts.shown} of {counts.total} shown ✕
@@ -181,7 +196,7 @@ function FitButton() {
     <button
       onClick={requestFit}
       title="Fit the graph to the viewport"
-      className="rounded-lg border border-[#2a2a35] p-1.5 text-zinc-500 hover:border-[#3a3a48] hover:text-zinc-200"
+      className={`${HAIRLINE_BUTTON} p-1.5`}
     >
       <Maximize size={13} />
     </button>
@@ -191,20 +206,46 @@ function FitButton() {
 function ViewTabs() {
   const view = useView();
   return (
-    <div className="flex rounded-lg border border-[#2a2a35] p-0.5">
+    <div className="flex rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] p-0.5">
       {VIEWS.map((v) => (
         <button
           key={v}
           onClick={() => setView(v)}
-          className={`rounded-md px-2.5 py-1 text-[12px] capitalize transition-colors ${
+          className={`rounded-[var(--alc-radius-sm)] px-2.5 py-1 text-[12px] capitalize transition-colors duration-[var(--alc-dur)] ${
             view === v
-              ? "bg-[#26262f] text-zinc-100"
-              : "text-zinc-500 hover:text-zinc-300"
+              ? "bg-[var(--alc-accent-12)] font-medium text-[var(--alc-accent-deep)]"
+              : "text-[var(--alc-fg-3)] hover:text-[var(--alc-fg-1)]"
           }`}
         >
           {v}
         </button>
       ))}
     </div>
+  );
+}
+
+/** light → dark → auto cycle; auto follows the system preference live. */
+const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
+  light: "dark",
+  dark: "auto",
+  auto: "light",
+};
+
+function ThemeToggle() {
+  const { mode, setMode } = useThemeMode();
+  return (
+    <button
+      onClick={() => setMode(NEXT_MODE[mode])}
+      title={`Theme: ${mode} — click to switch to ${NEXT_MODE[mode]}`}
+      className={`${HAIRLINE_BUTTON} p-1.5`}
+    >
+      {mode === "light" ? (
+        <Sun size={13} />
+      ) : mode === "dark" ? (
+        <Moon size={13} />
+      ) : (
+        <SunMoon size={13} />
+      )}
+    </button>
   );
 }

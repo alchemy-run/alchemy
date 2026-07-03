@@ -1,5 +1,6 @@
 import { Check, ChevronDown, CornerDownLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { MENU_ITEM, PANEL } from "../theme.ts";
 
 /**
  * Stage picker: choose one of the stages known to the state store, or type
@@ -52,13 +53,20 @@ export function StageSelect({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-full border border-[#2a2a35] px-2.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#3a3a48] hover:text-zinc-200"
+        className="flex items-center gap-1.5 rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline-2)] px-2 py-0.5 transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-hairline-3)]"
       >
-        stage: <span className="text-zinc-200">{stage}</span>
-        <ChevronDown size={11} />
+        <span className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--alc-accent-deep)]">
+          stage
+        </span>
+        <span className="font-mono text-[11px] text-[var(--alc-fg-1)]">
+          {stage}
+        </span>
+        <ChevronDown size={11} className="text-[var(--alc-fg-3)]" />
       </button>
       {open && (
-        <div className="absolute left-0 top-7 z-20 w-56 overflow-hidden rounded-xl border border-[#2a2a35] bg-[#15151c] shadow-xl shadow-black/40">
+        <div
+          className={`${PANEL} absolute left-0 top-7 z-20 w-56 overflow-hidden`}
+        >
           <input
             autoFocus
             value={input}
@@ -72,34 +80,30 @@ export function StageSelect({
               }
             }}
             placeholder="Select or type a stage…"
-            className="w-full border-b border-[#26262f] bg-transparent px-3 py-2 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+            className="w-full border-b border-[var(--alc-hairline)] bg-transparent px-3 py-2 font-mono text-[12px] text-[var(--alc-fg-1)] placeholder:text-[var(--alc-fg-4)] focus:outline-none"
           />
           <div className="max-h-56 overflow-y-auto py-1">
             {filtered.map((s) => (
-              <button
-                key={s}
-                onClick={() => choose(s)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-[#1c1c24]"
-              >
+              <button key={s} onClick={() => choose(s)} className={MENU_ITEM}>
                 <span className="w-3">
                   {s === stage && (
-                    <Check size={12} className="text-indigo-400" />
+                    <Check size={12} className="text-[var(--alc-accent)]" />
                   )}
                 </span>
-                {s}
+                <span className="font-mono">{s}</span>
               </button>
             ))}
             {custom && (
               <button
                 onClick={() => choose(custom)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-emerald-400 hover:bg-[#1c1c24]"
+                className={`${MENU_ITEM} text-[var(--alc-success)]`}
               >
                 <CornerDownLeft size={12} className="ml-0.5" />
                 preview new stage “{custom}”
               </button>
             )}
             {filtered.length === 0 && !custom && (
-              <p className="px-3 py-1.5 text-[11px] text-zinc-600">
+              <p className="px-3 py-1.5 text-[11px] text-[var(--alc-fg-4)]">
                 no matching stages
               </p>
             )}

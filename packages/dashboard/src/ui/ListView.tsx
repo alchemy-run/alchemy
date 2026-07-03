@@ -9,8 +9,12 @@ import {
   useProjection,
 } from "../store.ts";
 import {
+  CHIP,
+  chipStyle,
   CLOUD_COLORS,
   cloudOf,
+  EYEBROW,
+  NEUTRAL_COLOR,
   PLAN_COLORS,
   PLAN_LABELS,
   RESULT_COLORS,
@@ -31,11 +35,11 @@ const GROUP_LABELS: Record<ListGroup, string> = {
 };
 
 const GROUP_COLORS: Record<ListGroup, string> = {
-  failed: "#f87171",
-  "in-flight": "#fbbf24",
-  pending: "#71717a",
-  completed: "#34d399",
-  other: "#71717a",
+  failed: "var(--alc-danger)",
+  "in-flight": "var(--alc-warn)",
+  pending: "var(--alc-muted)",
+  completed: "var(--alc-success)",
+  other: "var(--alc-muted)",
 };
 
 /**
@@ -48,7 +52,7 @@ export const ListView = memo(function ListView() {
   const groups = useProjection("list");
   if (groups.length === 0) {
     return (
-      <p className="p-8 text-center text-sm text-zinc-600">
+      <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
         This stack defines no resources
       </p>
     );
@@ -57,15 +61,15 @@ export const ListView = memo(function ListView() {
     <div className="mx-auto max-w-4xl space-y-6 p-6">
       {groups.map((group) => (
         <section key={group.group}>
-          <h2 className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+          <h2 className={`${EYEBROW} mb-2 flex items-center gap-2`}>
             <span
               className="h-1.5 w-1.5 rounded-full"
               style={{ background: GROUP_COLORS[group.group] }}
             />
             {GROUP_LABELS[group.group]}
-            <span className="text-zinc-600">{group.nodes.length}</span>
+            <span className="text-[var(--alc-fg-4)]">{group.nodes.length}</span>
           </h2>
-          <div className="overflow-hidden rounded-xl border border-[#26262f]">
+          <div className="overflow-hidden rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)] shadow-[var(--alc-shadow-sm)]">
             {group.nodes.map((node) => (
               <Row key={node.fqn} fqn={node.fqn} />
             ))}
@@ -100,38 +104,38 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
   }
   const applyResult = decoration?.applyResult;
   const planAction = node.planAction ?? decoration?.planAction;
-  const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? "#8b8b96";
+  const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? NEUTRAL_COLOR;
 
   return (
     <button
       onClick={() => setSelectedFqn(fqn)}
-      className={`flex w-full items-center gap-3 border-t border-[#1c1c24] px-4 py-2 text-left text-[12.5px] first:border-t-0 hover:bg-[#15151c] ${
-        selected ? "bg-[#15151c]" : ""
+      className={`flex w-full items-center gap-3 border-t border-[var(--alc-hairline)] px-4 py-2 text-left text-[12.5px] transition-colors duration-[var(--alc-dur-fast)] first:border-t-0 hover:bg-[var(--alc-bg-elev-2)] ${
+        selected ? "bg-[var(--alc-accent-12)]" : ""
       }`}
       style={dimmed ? { opacity: 0.35 } : undefined}
     >
       <ResourceIcon ui={ui} color={color} size={14} />
       <span className="min-w-0">
-        <span className="text-zinc-200">{node.logicalId}</span>
+        <span className="text-[var(--alc-fg-1)]">{node.logicalId}</span>
         {node.path.length > 0 && (
-          <span className="ml-2 text-[11px] text-zinc-600">
+          <span className="ml-2 font-mono text-[11px] text-[var(--alc-fg-4)]">
             {node.path.join("/")}
           </span>
         )}
       </span>
-      <span className="hidden text-zinc-500 sm:inline">
+      <span className="hidden text-[var(--alc-fg-3)] sm:inline">
         {ui?.displayName ??
           `${serviceOf(node.type) ? `${serviceOf(node.type)}.` : ""}${typeName(node.type)}`}
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-3">
         {summary !== undefined && (
-          <span className="max-w-56 truncate text-[11.5px] text-zinc-500">
+          <span className="max-w-56 truncate text-[11.5px] text-[var(--alc-fg-3)]">
             {summary}
           </span>
         )}
         {decoration?.note !== undefined && (
           <span
-            className="max-w-48 truncate text-[11px] text-amber-300/90"
+            className="max-w-48 truncate text-[11px] text-[var(--alc-warn)]"
             title={decoration.note}
           >
             {decoration.note}
@@ -139,18 +143,15 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
         )}
         {applyResult ? (
           <span
-            className="rounded px-1.5 py-px text-[11px] font-medium"
-            style={{ color: "#0b0b10", background: RESULT_COLORS[applyResult] }}
+            className={CHIP}
+            style={chipStyle(RESULT_COLORS[applyResult] ?? NEUTRAL_COLOR)}
           >
             {RESULT_LABELS[applyResult] ?? applyResult}
           </span>
         ) : planAction ? (
           <span
-            className="rounded px-1.5 py-px text-[11px] font-medium"
-            style={{
-              color: PLAN_COLORS[planAction],
-              background: `${PLAN_COLORS[planAction]}1f`,
-            }}
+            className={CHIP}
+            style={chipStyle(PLAN_COLORS[planAction] ?? NEUTRAL_COLOR)}
           >
             {PLAN_LABELS[planAction] ?? planAction}
           </span>

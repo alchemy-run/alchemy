@@ -3,6 +3,12 @@ import { memo } from "react";
 import { formatDuration, useNow } from "../format.ts";
 import { setSelectedFqn, useDeployment, useProjection } from "../store.ts";
 
+/** Segment colors — token strings so both themes work by construction. */
+const WAIT_COLOR = "var(--alc-hairline-3)";
+const RUNNING_COLOR = "var(--alc-warn)";
+const FAIL_COLOR = "var(--alc-danger)";
+const SUCCESS_COLOR = "var(--alc-success)";
+
 /**
  * The Waterfall view: per-resource bars on a shared time axis built from
  * op spans — muted wait segments (pending → op-start) and run segments
@@ -21,7 +27,7 @@ export const WaterfallView = memo(function WaterfallView() {
 
   if (rows.length === 0) {
     return (
-      <p className="p-8 text-center text-sm text-zinc-600">
+      <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
         No lifecycle operations recorded for this deployment
       </p>
     );
@@ -53,7 +59,7 @@ export const WaterfallView = memo(function WaterfallView() {
           {ticks.map((tick, i) => (
             <span
               key={i}
-              className="absolute top-0 -translate-x-1/2 font-mono text-[10px] text-zinc-600"
+              className="absolute top-0 -translate-x-1/2 font-mono text-[10px] text-[var(--alc-fg-4)]"
               style={{ left: `${(tick / total) * 100}%` }}
             >
               +{formatDuration(tick)}
@@ -61,7 +67,7 @@ export const WaterfallView = memo(function WaterfallView() {
           ))}
         </div>
       </div>
-      <div className="overflow-hidden rounded-xl border border-[#26262f]">
+      <div className="overflow-hidden rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)] shadow-[var(--alc-shadow-sm)]">
         {rows.map((row) => (
           <WaterfallRow
             key={row.fqn}
@@ -89,10 +95,10 @@ const WaterfallRow = memo(function WaterfallRow({
 }) {
   const label = row.fqn.split("/").at(-1) ?? row.fqn;
   return (
-    <div className="flex items-center border-t border-[#1c1c24] first:border-t-0 hover:bg-[#101016]">
+    <div className="flex items-center border-t border-[var(--alc-hairline)] transition-colors duration-[var(--alc-dur-fast)] first:border-t-0 hover:bg-[var(--alc-bg-elev-2)]">
       <button
         onClick={() => setSelectedFqn(row.fqn)}
-        className="w-56 shrink-0 truncate px-4 py-2 text-left font-mono text-[11.5px] text-zinc-300 hover:text-zinc-100"
+        className="w-56 shrink-0 truncate px-4 py-2 text-left font-mono text-[11.5px] text-[var(--alc-fg-2)] hover:text-[var(--alc-fg-1)]"
         title={row.fqn}
       >
         {label}
@@ -102,7 +108,7 @@ const WaterfallRow = memo(function WaterfallRow({
         {[1, 2, 3, 4].map((i) => (
           <span
             key={i}
-            className="absolute bottom-0 top-0 w-px bg-[#1c1c24]"
+            className="absolute bottom-0 top-0 w-px bg-[var(--alc-hairline)]"
             style={{ left: `${(i / 5) * 100}%` }}
           />
         ))}
@@ -113,12 +119,12 @@ const WaterfallRow = memo(function WaterfallRow({
           const width = Math.max(((end - segment.startTs) / total) * 100, 0.4);
           const color =
             segment.kind === "wait"
-              ? "#3f3f4a"
+              ? WAIT_COLOR
               : running
-                ? "#fbbf24"
+                ? RUNNING_COLOR
                 : segment.outcome === "fail"
-                  ? "#f87171"
-                  : "#34d399";
+                  ? FAIL_COLOR
+                  : SUCCESS_COLOR;
           const title =
             segment.kind === "wait"
               ? `waited ${formatDuration(end - segment.startTs)} (+${formatDuration(segment.startTs - t0)})`
@@ -126,12 +132,12 @@ const WaterfallRow = memo(function WaterfallRow({
           return (
             <span
               key={i}
-              className={`absolute top-1/2 h-3 -translate-y-1/2 rounded-sm ${running ? "animate-pulse" : ""}`}
+              className={`absolute top-1/2 h-3 -translate-y-1/2 rounded-[var(--alc-radius-xs)] ${running ? "animate-pulse" : ""}`}
               style={{
                 left: `${left}%`,
                 width: `${width}%`,
                 background: color,
-                opacity: segment.kind === "wait" ? 0.6 : 0.9,
+                opacity: segment.kind === "wait" ? 1 : 0.9,
               }}
               title={title}
             />
