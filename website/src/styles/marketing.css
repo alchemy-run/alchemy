@@ -3411,9 +3411,16 @@ body.alc-root,
   transform: translateY(-2px);
 }
 .alc-cloud-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: 17px;
   font-weight: 600;
   color: var(--alc-fg-1);
+}
+.alc-cloud-card__title .alc-provider-mark {
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 .alc-cloud-card__body {
   font-size: 13.5px;

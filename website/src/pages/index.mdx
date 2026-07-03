@@ -6,6 +6,7 @@ description: "Alchemy is the IaC tool that's actually TypeScript. Stand up your 
 
 import Section from "../components/marketing/Section.astro";
 import Eyebrow from "../components/marketing/Eyebrow.astro";
+import ProviderMark from "../components/marketing/ProviderMark.astro";
 import Button from "../components/marketing/Button.astro";
 import BetaBadge from "../components/marketing/BetaBadge.astro";
 import DiscordCallout from "../components/marketing/DiscordCallout.astro";
@@ -128,28 +129,20 @@ export const P99Alarm = AWS.CloudWatch.Alarm("p99Latency", {
   </div>
   <div class="alc-cloud-cards">
     <a class="alc-cloud-card" href="/cloudflare">
-      <span class="alc-cloud-card__title">Cloudflare</span>
+      <span class="alc-cloud-card__title"><ProviderMark name="Cloudflare" /> Cloudflare</span>
       <span class="alc-cloud-card__body">Workers, Durable Objects, D1, R2, Queues, Hyperdrive</span>
       <span class="alc-cloud-card__cta">Start building &rarr;</span>
     </a>
     <a class="alc-cloud-card" href="/aws">
-      <span class="alc-cloud-card__title">AWS</span>
+      <span class="alc-cloud-card__title"><ProviderMark name="AWS" /> AWS</span>
       <span class="alc-cloud-card__body">Lambda, ECS, EC2, DynamoDB, S3, SQS, Kinesis</span>
-      <span class="alc-cloud-card__cta">Start building &rarr;</span>
-    </a>
-    <a class="alc-cloud-card" href="/planetscale">
-      <span class="alc-cloud-card__title">PlanetScale</span>
-      <span class="alc-cloud-card__body">Serverless MySQL &amp; Postgres with branching workflows</span>
-      <span class="alc-cloud-card__cta">Start building &rarr;</span>
-    </a>
-    <a class="alc-cloud-card" href="/neon">
-      <span class="alc-cloud-card__title">Neon</span>
-      <span class="alc-cloud-card__body">Serverless Postgres with copy-on-write branches per PR</span>
       <span class="alc-cloud-card__cta">Start building &rarr;</span>
     </a>
   </div>
   <div class="alc-cloud-chips">
     <span class="alc-cloud-chips__label">Also</span>
+    <a class="alc-cloud-chip" href="/planetscale">PlanetScale</a>
+    <a class="alc-cloud-chip" href="/neon">Neon</a>
     <a class="alc-cloud-chip" href="/axiom">Axiom</a>
     <a class="alc-cloud-chip" href="/github">GitHub</a>
   </div>
