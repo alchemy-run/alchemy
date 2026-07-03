@@ -1,239 +1,252 @@
-import type { UIRegistry } from "alchemy/UI/UIProvider";
+/**
+ * The graph canvas (v2 data flow — takes NO props, reads the store).
+ *
+ * Render doctrine:
+ * - React Flow node objects carry `data: { fqn }` ONLY (stable per-fqn
+ *   object), are rebuilt only when the structural hash or its positions
+ *   change, and unchanged nodes keep identity so memoized ResourceNodes
+ *   skip. Decorate patches therefore re-render exactly the affected node.
+ * - Edges are memoized per structural hash with hoisted style/marker
+ *   constants and stable `edgeKeyOf` ids.
+ * - ELK runs in a Web Worker keyed by structuralHash (useCanvasLayout);
+ *   positions live in the store's LRU and survive view/stage switches.
+ * - fitView fires only on the first-ever layout of a never-seen hash (and
+ *   never once the user has panned), or when the explicit Fit button bumps
+ *   `layout.fitRequest`.
+ * - The viewport persists to the store on move-end and is restored on
+ *   mount, so view switches are zero-jump even if the Canvas unmounts.
+ */
 import {
+  applyNodeChanges,
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   MarkerType,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
   type Edge,
+  type NodeChange,
+  type NodeMouseHandler,
+  type OnMoveEnd,
+  type OnMoveStart,
 } from "@xyflow/react";
-import ELK from "elkjs/lib/elk.bundled.js";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { DashboardGraph, DashboardMeta } from "../types.ts";
+import { edgeKeyOf } from "alchemy/Dashboard/Document";
+import { Maximize } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCanvasLayout } from "../layout/useCanvasLayout.ts";
 import {
-  NODE_HEIGHT,
-  NODE_WIDTH,
-  ResourceNode,
-  type CanvasNode,
-} from "./ResourceNode.tsx";
-
-const elk = new ELK();
+  dashboardStore,
+  requestFit,
+  setPositions,
+  setSelectedFqn,
+  setUserPanned,
+  setViewport,
+  useFitRequest,
+  type XY,
+} from "../store.ts";
+import { ResourceNode, type CanvasNode } from "./ResourceNode.tsx";
 
 const nodeTypes = { resource: ResourceNode };
 
-interface VisualEdge {
-  source: string;
-  target: string;
-  binding: boolean;
-}
+const FIT_VIEW = { padding: 0.2, maxZoom: 1.25 };
+const PRO_OPTIONS = { hideAttribution: true };
+const ORIGIN: XY = { x: 0, y: 0 };
+
+// hoisted edge style/marker constants — no fresh literals per render
+const BINDING_STYLE = { stroke: "#818cf8", strokeDasharray: "5 4" };
+const DEPENDENCY_STYLE = { stroke: "#3f3f4a" };
+const BINDING_MARKER = {
+  type: MarkerType.ArrowClosed,
+  color: "#818cf8",
+  width: 16,
+  height: 16,
+};
+const DEPENDENCY_MARKER = {
+  type: MarkerType.ArrowClosed,
+  color: "#3f3f4a",
+  width: 16,
+  height: 16,
+};
 
 /**
- * A binding edge host→resource usually coexists with the reverse dependency
- * edge resource→host (the host consumes the resource's outputs). Rendering
- * both draws a loop around the pair, so merge them: keep the dependency
- * direction, style it as a binding.
+ * Stable per-fqn `data` objects: the same fqn always reuses the same
+ * `{ fqn }` reference, so rebuilding the node array never feeds a fresh
+ * literal into a memoized ResourceNode.
  */
-function mergeEdges(graph: DashboardGraph): VisualEdge[] {
-  const bindings = new Set(
-    graph.edges
-      .filter((e) => e.kind === "binding")
-      .map((e) => `${e.source}->${e.target}`),
-  );
-  const out: VisualEdge[] = [];
-  for (const e of graph.edges) {
-    if (
-      e.kind === "binding" &&
-      graph.edges.some(
-        (d) =>
-          d.kind === "dependency" &&
-          d.source === e.target &&
-          d.target === e.source,
-      )
-    ) {
-      continue; // folded into the reverse dependency edge below
-    }
-    out.push({
-      source: e.source,
-      target: e.target,
-      binding: e.kind === "binding" || bindings.has(`${e.target}->${e.source}`),
-    });
+const nodeDataByFqn = new Map<string, { fqn: string }>();
+const nodeDataOf = (fqn: string): { fqn: string } => {
+  let data = nodeDataByFqn.get(fqn);
+  if (data === undefined) {
+    data = { fqn };
+    nodeDataByFqn.set(fqn, data);
   }
-  return out;
-}
+  return data;
+};
 
-async function layout(
-  graph: DashboardGraph,
-  edges: VisualEdge[],
-): Promise<Map<string, { x: number; y: number }>> {
-  const res = await elk.layout({
-    id: "root",
-    layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": "RIGHT",
-      "elk.spacing.nodeNode": "36",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "90",
-      "elk.layered.mergeEdges": "true",
-    },
-    children: graph.nodes.map((n) => ({
-      id: n.fqn,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    })),
-    edges: edges.map((e, i) => ({
-      id: `e${i}`,
-      sources: [e.source],
-      targets: [e.target],
-    })),
-  });
-  const positions = new Map<string, { x: number; y: number }>();
-  for (const child of res.children ?? []) {
-    positions.set(child.id, { x: child.x ?? 0, y: child.y ?? 0 });
-  }
-  return positions;
-}
+/**
+ * Hashes whose first layout already auto-fit. Module-level so a Canvas
+ * remount (view switch, if the host chooses to unmount) never re-fits a
+ * structure the user has already seen — zero jump either way.
+ */
+const fittedHashes = new Set<string>();
 
-const FIT_VIEW = { padding: 0.2, maxZoom: 1.25 };
-
-export function Canvas(props: {
-  graph: DashboardGraph;
-  registry: UIRegistry;
-  meta: DashboardMeta;
-  selected?: string;
-  onSelect: (fqn: string | undefined) => void;
-}) {
+export function Canvas() {
   return (
     <ReactFlowProvider>
-      <CanvasInner {...props} />
+      <CanvasInner />
     </ReactFlowProvider>
   );
 }
 
-function CanvasInner({
-  graph,
-  registry,
-  meta,
-  selected,
-  onSelect,
-}: {
-  graph: DashboardGraph;
-  registry: UIRegistry;
-  meta: DashboardMeta;
-  selected?: string;
-  onSelect: (fqn: string | undefined) => void;
-}) {
-  const [positions, setPositions] = useState<
-    Map<string, { x: number; y: number }>
-  >(new Map());
+function CanvasInner() {
+  const { hash, fqns, visualEdges, positions, layouted } = useCanvasLayout();
+  const fitRequest = useFitRequest();
   const { fitView } = useReactFlow();
 
-  const visualEdges = useMemo(() => mergeEdges(graph), [graph]);
+  // React Flow node array — controlled, so drags flow through
+  // applyNodeChanges (which clones only the dragged node).
+  const [nodes, setNodes] = useState<CanvasNode[]>([]);
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const hashRef = useRef(hash);
+  hashRef.current = hash;
 
-  // Layout (and later, viewport fitting) must react to STRUCTURE changes
-  // only. During a live apply every status/note event produces a new graph
-  // object; re-running ELK + fitView per event makes the whole scene
-  // flicker and jump. The structure key captures the node/edge sets.
-  const structureKey = useMemo(
+  // Rebuild only when the structure (hash → fqns) or its positions change;
+  // nodes whose position is unchanged keep their object identity.
+  useEffect(() => {
+    setNodes((previous) => {
+      const byId = new Map(previous.map((node) => [node.id, node]));
+      const next = fqns.map((fqn): CanvasNode => {
+        const position = positions.get(fqn) ?? ORIGIN;
+        const existing = byId.get(fqn);
+        if (
+          existing !== undefined &&
+          existing.position.x === position.x &&
+          existing.position.y === position.y
+        ) {
+          return existing;
+        }
+        return {
+          id: fqn,
+          type: "resource",
+          position: { x: position.x, y: position.y },
+          data: nodeDataOf(fqn),
+        };
+      });
+      return next.length === previous.length &&
+        next.every((node, index) => node === previous[index])
+        ? previous
+        : next;
+    });
+  }, [fqns, positions]);
+
+  const onNodesChange = useCallback((changes: NodeChange<CanvasNode>[]) => {
+    setNodes((current) => applyNodeChanges(changes, current));
+  }, []);
+
+  // Persist a drag into the position cache for this hash, so hand-tuned
+  // coordinates survive view switches exactly like ELK output.
+  const onNodeDragStop = useCallback(() => {
+    const dragged = new Map<string, XY>();
+    for (const node of nodesRef.current) {
+      dragged.set(node.id, { x: node.position.x, y: node.position.y });
+    }
+    setPositions(hashRef.current, dragged);
+  }, []);
+
+  // Edge array — pure function of the structural hash (visualEdges is
+  // memoized on it), stable edgeKeyOf ids, hoisted styles.
+  const edges = useMemo<Edge[]>(
     () =>
-      [
-        graph.nodes
-          .map((n) => n.fqn)
-          .sort()
-          .join(","),
-        visualEdges
-          .map((e) => `${e.source}>${e.target}:${e.binding ? "b" : "d"}`)
-          .sort()
-          .join(","),
-      ].join("|"),
-    [graph, visualEdges],
+      visualEdges.map((edge) => ({
+        id: edgeKeyOf({
+          kind: edge.binding ? "binding" : "dependency",
+          source: edge.source,
+          target: edge.target,
+        }),
+        source: edge.source,
+        target: edge.target,
+        animated: edge.binding,
+        style: edge.binding ? BINDING_STYLE : DEPENDENCY_STYLE,
+        markerEnd: edge.binding ? BINDING_MARKER : DEPENDENCY_MARKER,
+      })),
+    [visualEdges],
   );
 
-  const latest = useRef({ graph, visualEdges });
-  latest.current = { graph, visualEdges };
-
+  // Auto-fit exactly once per never-seen hash, when its first real layout
+  // lands — never on decorations, never after the user panned.
   useEffect(() => {
-    let cancelled = false;
-    layout(latest.current.graph, latest.current.visualEdges).then((p) => {
-      if (!cancelled) {
-        // keep previous coordinates for nodes ELK didn't place (shouldn't
-        // happen, but never blank out a node that was already on screen)
-        setPositions((prev) => {
-          const next = new Map(prev);
-          for (const [fqn, xy] of p) {
-            next.set(fqn, xy);
-          }
-          return next;
-        });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [structureKey]);
-
-  // Fit the viewport once per structure — when the layout for a new node
-  // set lands — never on data-only updates (statuses, notes, badges).
-  const fittedKey = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (positions.size === 0 || fittedKey.current === structureKey) {
+    if (!layouted || fqns.length === 0 || fittedHashes.has(hash)) {
       return;
     }
-    fittedKey.current = structureKey;
+    fittedHashes.add(hash);
+    if (dashboardStore.getState().layout.userPanned) {
+      return;
+    }
     // next frame, after React Flow has measured the repositioned nodes
     const frame = requestAnimationFrame(() => {
       void fitView(FIT_VIEW);
     });
     return () => cancelAnimationFrame(frame);
-  }, [positions, structureKey, fitView]);
+  }, [layouted, hash, fqns, fitView]);
 
-  const nodes = useMemo<CanvasNode[]>(
-    () =>
-      graph.nodes.map((node) => ({
-        id: node.fqn,
-        type: "resource" as const,
-        position: positions.get(node.fqn) ?? { x: 0, y: 0 },
-        selected: node.fqn === selected,
-        data: { node, registry, meta },
-      })),
-    [graph, positions, registry, meta, selected],
+  // Explicit Fit button (store bumps fitRequest and clears userPanned).
+  const lastFitRequest = useRef(fitRequest);
+  useEffect(() => {
+    if (fitRequest === lastFitRequest.current) {
+      return;
+    }
+    lastFitRequest.current = fitRequest;
+    void fitView(FIT_VIEW);
+  }, [fitRequest, fitView]);
+
+  // Restore the persisted viewport on mount (view switches are zero-jump);
+  // read once — live updates flow the other way via onMoveEnd.
+  const initialViewport = useRef(
+    dashboardStore.getState().layout.viewport,
+  ).current;
+
+  const onMoveStart = useCallback<OnMoveStart>((event) => {
+    // programmatic moves (fitView) carry no event — only user gestures arm
+    // the pan latch that disables auto-fit
+    if (event !== null) {
+      setUserPanned(true);
+    }
+  }, []);
+
+  const onMoveEnd = useCallback<OnMoveEnd>((_event, viewport) => {
+    setViewport(viewport);
+  }, []);
+
+  const onNodeClick = useCallback<NodeMouseHandler<CanvasNode>>(
+    (_event, node) => setSelectedFqn(node.id),
+    [],
   );
 
-  const edges = useMemo<Edge[]>(
-    () =>
-      visualEdges.map((edge, i) => ({
-        id: `e${i}`,
-        source: edge.source,
-        target: edge.target,
-        animated: edge.binding,
-        style: edge.binding
-          ? { stroke: "#818cf8", strokeDasharray: "5 4" }
-          : { stroke: "#3f3f4a" },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: edge.binding ? "#818cf8" : "#3f3f4a",
-          width: 16,
-          height: 16,
-        },
-      })),
-    [visualEdges],
-  );
+  const onPaneClick = useCallback(() => setSelectedFqn(undefined), []);
 
   return (
-    <ReactFlow
+    <ReactFlow<CanvasNode>
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      fitView
-      fitViewOptions={FIT_VIEW}
+      onNodesChange={onNodesChange}
+      onNodeDragStop={onNodeDragStop}
+      onNodeClick={onNodeClick}
+      onPaneClick={onPaneClick}
+      onMoveStart={onMoveStart}
+      onMoveEnd={onMoveEnd}
+      {...(initialViewport !== undefined
+        ? { defaultViewport: initialViewport }
+        : {})}
       minZoom={0.2}
-      proOptions={{ hideAttribution: true }}
-      onNodeClick={(_, node) => onSelect(node.id)}
-      onPaneClick={() => onSelect(undefined)}
+      proOptions={PRO_OPTIONS}
       colorMode="dark"
       nodesDraggable
       nodesConnectable={false}
+      elementsSelectable={false}
     >
       <Background
         variant={BackgroundVariant.Dots}
@@ -241,7 +254,11 @@ function CanvasInner({
         size={1}
         color="#26262f"
       />
-      <Controls showInteractive={false} />
+      <Controls showInteractive={false} showFitView={false}>
+        <ControlButton onClick={requestFit} title="fit view">
+          <Maximize size={12} />
+        </ControlButton>
+      </Controls>
     </ReactFlow>
   );
 }

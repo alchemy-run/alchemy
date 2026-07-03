@@ -1,6 +1,16 @@
-import type { UIFact, UIRegistry } from "alchemy/UI/UIProvider";
+import type { Decoration, DocumentNode } from "alchemy/Dashboard/Document";
+import type { UIFact } from "alchemy/UI/UIProvider";
 import { ExternalLink, X } from "lucide-react";
-import { toCtx } from "../registry.ts";
+import { memo, useMemo } from "react";
+import { formatDuration, formatTime } from "../format.ts";
+import {
+  setSelectedFqn,
+  useMeta,
+  useNode,
+  useOpSpans,
+  useSelectedFqn,
+  useTimeline,
+} from "../store.ts";
 import {
   CLOUD_COLORS,
   cloudOf,
@@ -10,26 +20,57 @@ import {
   RESULT_LABELS,
   statusColor,
 } from "../theme.ts";
-import type { DashboardMeta, DashboardNode } from "../types.ts";
+import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
 import { ResourceIcon } from "./Icon.tsx";
 
-export function Inspector({
+/**
+ * Right-hand detail panel for the selected resource. Subscribes only to
+ * the selected fqn's slices (node/decoration, timeline, op spans) — live
+ * events for OTHER resources never re-render it. When a structure-replace
+ * retires the selected fqn the store clears the selection (no silent
+ * unmount mid-render).
+ */
+export const Inspector = memo(function Inspector() {
+  const fqn = useSelectedFqn();
+  if (fqn === undefined) {
+    return null;
+  }
+  return <InspectorPanel key={fqn} fqn={fqn} />;
+});
+
+function InspectorPanel({ fqn }: { fqn: string }) {
+  const { node, decoration } = useNode(fqn);
+  if (node === undefined) {
+    // transient: the store clears selection when the fqn leaves structure
+    return null;
+  }
+  return <InspectorBody node={node} decoration={decoration} />;
+}
+
+function InspectorBody({
   node,
-  registry,
-  meta,
-  onClose,
+  decoration,
 }: {
-  node: DashboardNode;
-  registry: UIRegistry;
-  meta: DashboardMeta;
-  onClose: () => void;
+  node: DocumentNode;
+  decoration: Decoration | undefined;
 }) {
-  const ui = registry.get(node.type);
-  const ctx = toCtx(node, meta);
+  const meta = useMeta();
+  const registry = useRegistry();
+
+  const status = decoration?.status ?? node.status;
+  const applyResult = decoration?.applyResult;
+  const planAction = node.planAction ?? decoration?.planAction;
+  const note = decoration?.note;
+
+  const ui = registry?.get(node.type);
+  const ctx = useMemo(() => uiCtxOf(node, status, meta), [node, status, meta]);
+  const facts = useMemo(() => safeUI(() => ui?.facts?.(ctx)) ?? [], [ui, ctx]);
+  const link = useMemo(() => safeUI(() => ui?.link?.(ctx)), [ui, ctx]);
+  const consoleUrl = useMemo(
+    () => safeUI(() => ui?.consoleUrl?.(ctx)),
+    [ui, ctx],
+  );
   const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? "#8b8b96";
-  const facts = safe(() => ui?.facts?.(ctx)) ?? [];
-  const link = safe(() => ui?.link?.(ctx));
-  const consoleUrl = safe(() => ui?.consoleUrl?.(ctx));
   const Details = ui?.Details;
 
   return (
@@ -50,7 +91,7 @@ export function Inspector({
           )}
         </div>
         <button
-          onClick={onClose}
+          onClick={() => setSelectedFqn(undefined)}
           className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
         >
           <X size={14} />
@@ -58,43 +99,43 @@ export function Inspector({
       </div>
 
       <div className="space-y-4 p-4">
-        {node.applyResult && (
+        {applyResult && (
           <div
             className="rounded-lg border px-3 py-2 text-[12px]"
             style={{
-              borderColor: `${RESULT_COLORS[node.applyResult]}55`,
-              background: `${RESULT_COLORS[node.applyResult]}14`,
-              color: RESULT_COLORS[node.applyResult],
+              borderColor: `${RESULT_COLORS[applyResult]}55`,
+              background: `${RESULT_COLORS[applyResult]}14`,
+              color: RESULT_COLORS[applyResult],
             }}
           >
-            Last deploy: {RESULT_LABELS[node.applyResult] ?? node.applyResult}
-            {node.applyResult === "deleted" &&
-              " — removed from the stack; this ghost clears when the deploy feed is dismissed"}
+            Last deploy: {RESULT_LABELS[applyResult] ?? applyResult}
+            {applyResult === "deleted" && " — removed from the stack"}
           </div>
         )}
-        {node.planAction && !node.applyResult && (
+        {planAction && !applyResult && (
           <div
             className="rounded-lg border px-3 py-2 text-[12px]"
             style={{
-              borderColor: `${PLAN_COLORS[node.planAction]}55`,
-              background: `${PLAN_COLORS[node.planAction]}14`,
-              color: PLAN_COLORS[node.planAction],
+              borderColor: `${PLAN_COLORS[planAction]}55`,
+              background: `${PLAN_COLORS[planAction]}14`,
+              color: PLAN_COLORS[planAction],
             }}
           >
-            Next deploy: {PLAN_LABELS[node.planAction] ?? node.planAction}
-            {node.status === "pending" &&
+            Next deploy: {PLAN_LABELS[planAction] ?? planAction}
+            {status === "pending" &&
               " — not deployed yet, defined in the stack file"}
-            {node.planAction === "delete" &&
-              node.status !== "pending" &&
+            {planAction === "delete" &&
+              status !== "pending" &&
               " — no longer in the stack file (orphaned)"}
           </div>
         )}
         <section className="space-y-1.5">
           <Fact
-            fact={{ label: "status", value: node.status }}
-            valueColor={statusColor(node.status)}
+            fact={{ label: "status", value: status }}
+            valueColor={statusColor(status)}
           />
           <Fact fact={{ label: "fqn", value: node.fqn, mono: true }} />
+          {note !== undefined && <Fact fact={{ label: "note", value: note }} />}
           {facts
             .filter((f) => f.value !== undefined)
             .map((f, i) => (
@@ -120,29 +161,8 @@ export function Inspector({
           </section>
         )}
 
-        {node.logs && node.logs.length > 0 && (
-          <section>
-            <SectionTitle>Deploy logs</SectionTitle>
-            <div className="max-h-64 overflow-y-auto rounded-lg bg-[#0b0b10] p-2">
-              {node.logs.map((entry) => (
-                <div
-                  key={entry.key}
-                  className="flex gap-2 py-0.5 font-mono text-[10.5px] leading-relaxed"
-                >
-                  <span
-                    className="w-12 shrink-0 uppercase"
-                    style={{ color: logLevelColor(entry.level) }}
-                  >
-                    {entry.level}
-                  </span>
-                  <span className="whitespace-pre-wrap break-all text-zinc-400">
-                    {entry.message}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        <Operations fqn={node.fqn} />
+        <Timeline fqn={node.fqn} />
 
         {node.bindings.length > 0 && (
           <section>
@@ -176,6 +196,98 @@ export function Inspector({
         )}
       </div>
     </aside>
+  );
+}
+
+/** Lifecycle op spans: what ran, for how long, and how it ended. */
+function Operations({ fqn }: { fqn: string }) {
+  const { spans } = useOpSpans(fqn);
+  if (spans.length === 0) {
+    return null;
+  }
+  return (
+    <section>
+      <SectionTitle>Operations</SectionTitle>
+      <div className="space-y-1">
+        {spans.map((span) => {
+          const running = span.endTs === undefined;
+          const outcomeColor = running
+            ? "#fbbf24"
+            : span.outcome === "fail"
+              ? "#f87171"
+              : "#34d399";
+          const waitMs =
+            span.pendingTs !== undefined
+              ? span.startTs - span.pendingTs
+              : undefined;
+          return (
+            <div key={span.opId} className="text-[12px]">
+              <div className="flex items-baseline gap-2">
+                <span
+                  className="h-1.5 w-1.5 shrink-0 self-center rounded-full"
+                  style={{ background: outcomeColor }}
+                />
+                <span className="text-zinc-200">{span.op}</span>
+                {span.phase && (
+                  <span className="text-[10.5px] text-zinc-600">
+                    {span.phase}
+                  </span>
+                )}
+                <span className="ml-auto font-mono text-[11px] text-zinc-400">
+                  {running
+                    ? "running…"
+                    : formatDuration(span.endTs! - span.startTs)}
+                </span>
+              </div>
+              {waitMs !== undefined && waitMs > 0 && (
+                <div className="pl-3.5 text-[10.5px] text-zinc-600">
+                  waited {formatDuration(waitMs)}
+                </div>
+              )}
+              {span.error !== undefined && (
+                <div className="whitespace-pre-wrap break-all pl-3.5 text-[10.5px] text-red-400">
+                  {span.error}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** Per-resource deploy timeline (statuses, notes, captured logs). */
+function Timeline({ fqn }: { fqn: string }) {
+  const { entries } = useTimeline(fqn);
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <section>
+      <SectionTitle>Timeline</SectionTitle>
+      <div className="max-h-64 overflow-y-auto rounded-lg bg-[#0b0b10] p-2">
+        {entries.slice(-200).map((entry, i) => (
+          <div
+            key={i}
+            className="flex gap-2 py-0.5 font-mono text-[10.5px] leading-relaxed"
+          >
+            <span className="shrink-0 text-zinc-600">
+              {formatTime(entry.ts)}
+            </span>
+            <span
+              className="w-12 shrink-0 uppercase"
+              style={{ color: logLevelColor(entry.level) }}
+            >
+              {entry.level}
+            </span>
+            <span className="whitespace-pre-wrap break-all text-zinc-400">
+              {entry.message}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -240,14 +352,6 @@ function JsonBlock({ value, open }: { value: unknown; open?: boolean }) {
     </details>
   );
 }
-
-const safe = <T,>(fn: () => T): T | undefined => {
-  try {
-    return fn();
-  } catch {
-    return undefined;
-  }
-};
 
 const logLevelColor = (level: string): string => {
   switch (level.toLowerCase()) {
