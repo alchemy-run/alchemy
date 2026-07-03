@@ -617,33 +617,29 @@ async function main() {
 
   const sidebar = buildProvidersSidebar(pageEntries);
 
-  // Landing page for the Reference tab (/providers). Regenerated with the
-  // rest of the tree on every run.
-  const countByProvider = new Map<string, number>();
-  for (const e of pageEntries) {
-    countByProvider.set(e.provider, (countByProvider.get(e.provider) ?? 0) + 1);
-  }
+  // Landing page for the Reference tab (/providers): a provider directory.
+  // Each provider's reference belongs to its docs hub — the directory just
+  // routes there (or into the tree, for providers without a hub). The
+  // ProviderDirectory component reads the generated sidebar for counts.
+  // Regenerated with the rest of the tree on every run.
   const referenceIndex = [
     "---",
     "title: API Reference",
-    "description: Generated API reference for every alchemy resource, organized by provider.",
+    "description: Every provider alchemy can manage — pick a provider to open its docs hub and resource reference.",
     "---",
     "",
-    "The complete, generated reference for every resource alchemy can manage,",
-    "extracted from the source JSDoc. Pick a provider in the sidebar, or search",
-    "with `⌘K`.",
+    'import ProviderDirectory from "../../../components/ProviderDirectory.astro";',
     "",
-    ...orderedKeys([...countByProvider.keys()], PROVIDER_ORDER).map(
-      (provider) =>
-        `- **${provider}** — ${countByProvider.get(provider)} resources`,
-    ),
+    "Every resource alchemy can manage, documented from the source JSDoc and",
+    "organized by provider. A provider's reference lives in its docs hub —",
+    "pick one below, or search with `⌘K`.",
     "",
-    "Looking for curated docs instead? Each cloud's tab (Cloudflare, AWS) has",
-    "setup, tutorials, and building-block pages that link into this reference.",
+    "<ProviderDirectory />",
     "",
   ].join("\n");
+  await fs.rm(path.join(config.outRoot, "index.md"), { force: true });
   await fs.writeFile(
-    path.join(config.outRoot, "index.md"),
+    path.join(config.outRoot, "index.mdx"),
     referenceIndex,
     "utf8",
   );

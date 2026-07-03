@@ -53,6 +53,11 @@ teammates or prod.
 - Cloud resources stay deployed across reloads — only your
   application code is rebuilt
 
+Arbitrary dev processes — Vite, Next, anything with a dev server —
+join the loop via [Command.Dev](/command/dev-servers): started by
+`alchemy dev`, restarted when its inputs change, and a no-op on
+deploy.
+
 ## Why not emulate everything?
 
 Full local emulation (Miniflare, LocalStack) replicates cloud APIs
@@ -113,3 +118,4 @@ To automate the deploy side, see the [CI guide](/environments/ci).
 
 - [CI](/environments/ci) — deploy the same stack from GitHub Actions with PR previews.
 - [Stages](/environments/stages) — how `dev_$USER`, `pr-42`, and `prod` stay isolated.
+- [Dev servers](/command/dev-servers) — run any framework dev server as a `Command.Dev` resource in the dev loop.

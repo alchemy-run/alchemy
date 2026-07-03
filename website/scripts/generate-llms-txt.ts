@@ -343,6 +343,47 @@ const SECTIONS: Section[] = [
       ],
     },
   },
+  {
+    heading: "Docker",
+    intro:
+      "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",
+    pages: {
+      slugs: [
+        "docker/index",
+        "docker/setup",
+        "docker/local-services",
+        "docker/build-and-push",
+      ],
+    },
+  },
+  {
+    heading: "Kubernetes",
+    intro:
+      "Kubernetes objects (Namespace, Deployment, Service, ConfigMap, Job, ServiceAccount) defined in TypeScript and converged onto an EKS cluster via server-side apply; cluster provisioning and workload guides live under AWS → EKS.",
+    pages: {
+      slugs: [
+        "kubernetes/index",
+        "kubernetes/setup",
+        "kubernetes/objects-as-bindings",
+      ],
+    },
+  },
+  {
+    heading: "Drizzle",
+    intro:
+      "Drizzle schemas as Stack resources — migration SQL regenerated on deploy and applied by whichever database resource consumes it; Worker runtime wiring lives under Cloudflare → Data.",
+    pages: {
+      slugs: ["drizzle/index", "drizzle/migrations"],
+    },
+  },
+  {
+    heading: "Command",
+    intro:
+      "Cloud-agnostic local process primitives — memoized builds, one-off commands, and dev servers; the static-site guides in each cloud hub consume them under the hood.",
+    pages: {
+      slugs: ["command/index", "command/memoization", "command/dev-servers"],
+    },
+  },
 ];
 
 const PROVIDERS_INTRO = `Per-resource API reference, generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from \`@section\` / \`@example\` JSDoc tags. Grouped by cloud below.`;
