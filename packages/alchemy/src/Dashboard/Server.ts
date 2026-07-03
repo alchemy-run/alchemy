@@ -6,6 +6,8 @@ import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -15,8 +17,22 @@ import type { ActionState } from "../State/ActionState.ts";
 import type { ResourceState } from "../State/ResourceState.ts";
 import type { StateService } from "../State/State.ts";
 import { encodeState } from "../State/StateEncoding.ts";
+import {
+  applyDeploymentRecord,
+  foldJournal,
+  fromSnapshot,
+  snapshotOf,
+} from "./Document.ts";
+import * as DocumentHost from "./DocumentHost.ts";
 import { toGraph } from "./Graph.ts";
 import type { DashboardPlan } from "./PlanJson.ts";
+import {
+  annotationsOf,
+  listGroupsOf,
+  summaryOf,
+  tableRowsOf,
+  waterfallSpansOf,
+} from "./Projections.ts";
 import {
   assembleScene,
   type Scene,
@@ -121,6 +137,51 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   let revision = 0;
   let session: SessionInput | undefined;
   let approval: PendingApproval | undefined;
+
+  // ── v2 document hosts (one incremental document per stage) ─────────────
+  // Hosts fork their patch flusher on the SERVER's scope (request scopes
+  // close with the response), created lazily on the first /api/v2 request
+  // for a stage. `hosts.get(...)` (no create) is used on the ingest paths so
+  // deploys with no v2 subscriber pay nothing.
+  const serverScope = yield* Effect.scope;
+  const hosts = new Map<string, DocumentHost.DocumentHost>();
+  const hostGate = Semaphore.makeUnsafe(1);
+  const hostFor = (stg: string) =>
+    Semaphore.withPermits(
+      hostGate,
+      1,
+    )(
+      Effect.gen(function* () {
+        const existing = hosts.get(stg);
+        if (existing !== undefined) {
+          return existing;
+        }
+        const host = yield* DocumentHost.make({
+          state,
+          stack,
+          stage: stg,
+        }).pipe(Effect.provideService(Scope.Scope, serverScope));
+        // overlay whatever the plan worker already computed for this stage
+        const lastPlan = lastPlans.get(stg);
+        if (lastPlan !== undefined) {
+          yield* host.applyPlan(lastPlan);
+        }
+        const lastStructure = lastStructures.get(stg);
+        if (lastStructure !== undefined) {
+          yield* host.applyStructure(lastStructure);
+        }
+        hosts.set(stg, host);
+        return host;
+      }),
+    );
+  /** Best-effort notification of an existing host (never creates one). */
+  const withHost = (
+    stg: string,
+    f: (host: DocumentHost.DocumentHost) => Effect.Effect<void>,
+  ) => {
+    const host = hosts.get(stg);
+    return host === undefined ? Effect.void : f(host);
+  };
 
   // Per-resource deployment timelines (status transitions + notes + logs),
   // persisted across sessions so "view this resource's deploy logs" works
@@ -317,6 +378,20 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       // timelines reset lazily per resource as its first in-flight status
       // arrives in THIS session
       timelineResets = new Set();
+      yield* withHost(stage, (host) =>
+        Effect.gen(function* () {
+          yield* host.clearApproval();
+          yield* host.applyPlan(body.plan);
+          // a plan whose only work is deletions is a destroy
+          const command =
+            body.plan.available &&
+            Object.keys(body.plan.resources).length === 0 &&
+            Object.keys(body.plan.deletions).length > 0
+              ? "destroy"
+              : "deploy";
+          yield* host.deploymentStarted(command);
+        }),
+      );
       yield* broadcast(stage);
       return yield* HttpServerResponse.json({ ok: true });
     }
@@ -329,6 +404,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       if (session?.sessionId === body.sessionId) {
         session.events.push({ seq: body.seq, event: body.event });
         recordTimeline(body.seq, body.event);
+        yield* withHost(stage, (host) => host.applyEvent(body.event));
         yield* broadcast(stage);
       }
       return yield* HttpServerResponse.json({ ok: true });
@@ -340,6 +416,20 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         // the world changed: refresh state now and recompute the plan
         lastPlans.delete(stage);
         yield* readStates(stage, true).pipe(Effect.ignore);
+        yield* withHost(stage, (host) =>
+          Effect.gen(function* () {
+            // rebuild the persisted baseline (retires plan ghosts), then
+            // re-apply the structure pass; the fresh plan re-lands via the
+            // plan worker notification below
+            yield* host.refreshStates();
+            const lastStructure = lastStructures.get(stage);
+            if (lastStructure !== undefined) {
+              yield* host.applyStructure(lastStructure);
+            }
+            yield* host.refreshOutputs();
+            yield* host.deploymentDone();
+          }),
+        );
         yield* broadcast(stage);
         yield* requestPlan(stage);
       }
@@ -357,6 +447,12 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       // session's result overlay so the canvas shows what WILL happen,
       // not what last happened
       session = undefined;
+      yield* withHost(stage, (host) =>
+        Effect.gen(function* () {
+          yield* host.applyPlan(body.plan);
+          yield* host.setApproval({ plan: body.plan });
+        }),
+      );
       yield* broadcast(stage);
       return yield* HttpServerResponse.json({ ok: true });
     }
@@ -376,6 +472,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       };
       if (approval?.id === body.id && approval.approved === undefined) {
         approval.approved = body.approved;
+        yield* withHost(stage, (host) => host.clearApproval());
         yield* broadcast(stage);
       }
       return yield* HttpServerResponse.json({ ok: true });
@@ -417,6 +514,134 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           "cache-control": "no-cache",
           connection: "keep-alive",
         },
+      });
+    }
+
+    // ── v2: incremental document + patch protocol + history ────────────
+    if (route === "/api/v2/document") {
+      const host = yield* hostFor(stg);
+      yield* requestPlan(stg);
+      return yield* HttpServerResponse.json(host.snapshot());
+    }
+    if (route === "/api/v2/events") {
+      // SSE: one `snapshot` frame, then debounced `patches` frames.
+      // Heartbeat comments defeat idle timeouts (same idiom as v1's
+      // /api/events — Bun.serve kills responses idle for >10s).
+      const body = Stream.unwrap(
+        Effect.gen(function* () {
+          const host = yield* hostFor(stg);
+          const frames = yield* host.frames;
+          yield* requestPlan(stg);
+          const heartbeat = Stream.fromSchedule(
+            Schedule.spaced("8 seconds"),
+          ).pipe(Stream.map(() => ":ping\n\n"));
+          return frames.pipe(
+            Stream.map((frame) => `data: ${JSON.stringify(frame)}\n\n`),
+            Stream.merge(heartbeat),
+          );
+        }),
+      ).pipe(Stream.map((chunk) => new TextEncoder().encode(chunk)));
+      return HttpServerResponse.stream(body, {
+        contentType: "text/event-stream",
+        headers: {
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+        },
+      });
+    }
+    if (route === "/api/v2/deployments") {
+      const deployments = state.deployments;
+      if (deployments === undefined) {
+        // feature-detected: older/third-party stores have no history
+        return HttpServerResponse.empty({ status: 404 });
+      }
+      const before = url.searchParams.get("before");
+      const limit = url.searchParams.get("limit");
+      const records = yield* deployments.list({
+        stack,
+        stage: stg,
+        ...(before !== null && Number.isInteger(Number(before))
+          ? { before: Number(before) }
+          : {}),
+        ...(limit !== null && Number.isInteger(Number(limit))
+          ? { limit: Number(limit) }
+          : {}),
+      });
+      return yield* HttpServerResponse.json(records);
+    }
+    if (route.startsWith("/api/v2/deployments/")) {
+      const deployments = state.deployments;
+      if (deployments === undefined) {
+        return HttpServerResponse.empty({ status: 404 });
+      }
+      const version = Number(route.slice("/api/v2/deployments/".length));
+      if (!Number.isInteger(version) || version <= 0) {
+        return HttpServerResponse.empty({ status: 404 });
+      }
+      const record = yield* deployments.get({ stack, stage: stg, version });
+      if (record === undefined) {
+        return HttpServerResponse.empty({ status: 404 });
+      }
+      const events = yield* deployments
+        .readEvents({ stack, stage: stg, version })
+        .pipe(
+          Effect.catchTag("DeploymentNotFound", () =>
+            Effect.succeed([] as const),
+          ),
+        );
+      // historical overlay: the CURRENT structure document with this
+      // version's decorations/op-spans/annotations folded over it — the
+      // deployment picker swaps overlays without moving the graph
+      const live = (yield* hostFor(stg)).snapshot();
+      const doc = fromSnapshot({
+        revision: 0,
+        meta: live.meta,
+        structure: live.structure,
+        decorations: {},
+        timelines: {},
+        feed: [],
+        annotations: {},
+        opSpans: {},
+      });
+      // before the fold so deployment-start preserves version/meta; after
+      // the fold so the store's record (heartbeat, outcome) is authoritative
+      applyDeploymentRecord(doc, record);
+      foldJournal(doc, events);
+      applyDeploymentRecord(doc, record);
+      return yield* HttpServerResponse.json({
+        record,
+        snapshot: snapshotOf(doc),
+        // server-side projections so thin clients (TUI) render without
+        // re-implementing the fold
+        projections: {
+          summary: summaryOf(doc),
+          tableRows: tableRowsOf(doc),
+          waterfallSpans: waterfallSpansOf(doc),
+          annotations: annotationsOf(doc),
+        },
+      });
+    }
+    if (route === "/api/v2/projections") {
+      const view = url.searchParams.get("view") ?? "summary";
+      const host = yield* hostFor(stg);
+      const doc = host.document;
+      const data =
+        view === "summary"
+          ? summaryOf(doc)
+          : view === "table"
+            ? tableRowsOf(doc)
+            : view === "waterfall"
+              ? waterfallSpansOf(doc)
+              : view === "list"
+                ? listGroupsOf(doc)
+                : undefined;
+      if (data === undefined) {
+        return HttpServerResponse.empty({ status: 400 });
+      }
+      return yield* HttpServerResponse.json({
+        view,
+        revision: doc.revision,
+        data,
       });
     }
 
@@ -478,7 +703,10 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
         // shape within seconds while the full plan (which bundles and
         // diffs) is still computing
         if (structure !== undefined && !lastStructures.has(stg)) {
-          lastStructures.set(stg, yield* structure(stg));
+          const shape = yield* structure(stg);
+          lastStructures.set(stg, shape);
+          // the same fast-pass feeds both the v1 scene and the v2 document
+          yield* withHost(stg, (host) => host.applyStructure(shape));
           yield* broadcast(stg);
         }
         if (plan === undefined) {
@@ -488,6 +716,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           Effect.ensuring(Effect.sync(() => planInFlight.delete(stg))),
         );
         lastPlans.set(stg, result);
+        yield* withHost(stg, (host) => host.applyPlan(result));
         yield* broadcast(stg);
       }
     }).pipe(Effect.ignore),
