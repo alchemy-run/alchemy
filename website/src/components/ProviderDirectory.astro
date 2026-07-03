@@ -6,8 +6,6 @@
  * sidebar (`bun run build:reference`); the directory renders without
  * counts if it hasn't been generated yet.
  */
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { sidebarGroupIcon } from "../docs-icons";
 
 interface SidebarNode {
@@ -16,19 +14,20 @@ interface SidebarNode {
   items?: SidebarNode[];
 }
 
+/**
+ * Resolved at BUILD time via Vite's eager glob — a runtime fs read
+ * relative to import.meta.url breaks once this component is bundled
+ * into dist/ (the production /providers page rendered zero cards).
+ * The glob stays graceful when the file hasn't been generated yet
+ * (fresh `astro dev` before `bun run build:reference`).
+ */
+const generatedModules = import.meta.glob<{ default: SidebarNode[] }>(
+  "../generated/providers-sidebar.json",
+  { eager: true },
+);
+
 function generatedSidebar(): SidebarNode[] | undefined {
-  try {
-    return JSON.parse(
-      readFileSync(
-        fileURLToPath(
-          new URL("../generated/providers-sidebar.json", import.meta.url),
-        ),
-        "utf8",
-      ),
-    );
-  } catch {
-    return undefined;
-  }
+  return Object.values(generatedModules)[0]?.default;
 }
 
 const countLinks = (nodes: SidebarNode[]): number =>
