@@ -13,10 +13,35 @@ import { DOCS_TABS, activeTab } from "../../docs-tabs";
 import { TAB_ICONS } from "../../docs-icons";
 
 const current = activeTab(Astro.url.pathname);
-const primary = DOCS_TABS.filter((tab) => tab.slot === "primary");
-const more = DOCS_TABS.filter((tab) => tab.slot === "more");
-const end = DOCS_TABS.filter((tab) => tab.slot === "end");
-const categories = [...new Set(more.map((tab) => tab.category))];
+
+/**
+ * Mobile taxonomy. The desktop More ▾ categories only classify the
+ * overflow residents; here the whole tab list renders at once, so the
+ * grouping is redesigned — e.g. PlanetScale and Neon belong under Data
+ * next to Drizzle, not in the ungrouped primary run.
+ */
+const MOBILE_GROUPS: { heading?: string; labels: string[] }[] = [
+  { labels: ["Core", "CLI"] },
+  { heading: "Clouds", labels: ["Cloudflare", "AWS"] },
+  { heading: "Data", labels: ["PlanetScale", "Neon", "Drizzle"] },
+  { heading: "Containers", labels: ["Docker", "Kubernetes"] },
+  { heading: "Observability", labels: ["Axiom"] },
+  { heading: "Source & CI", labels: ["GitHub"] },
+  { heading: "Toolchain", labels: ["Command"] },
+  { heading: "Meta", labels: ["Reference", "Blog"] },
+];
+
+const byLabel = new Map(DOCS_TABS.map((tab) => [tab.label, tab]));
+const grouped = MOBILE_GROUPS.map((group) => ({
+  heading: group.heading,
+  tabs: group.labels.flatMap((label) => byLabel.get(label) ?? []),
+})).filter((group) => group.tabs.length > 0);
+
+// Any tab the taxonomy doesn't name still renders (trailing, ungrouped)
+// so a newly added provider can never silently vanish from mobile.
+const covered = new Set(MOBILE_GROUPS.flatMap((group) => group.labels));
+const leftover = DOCS_TABS.filter((tab) => !covered.has(tab.label));
+if (leftover.length > 0) grouped.push({ heading: "More", tabs: leftover });
 ---
 
 <details class="alc-switcher">
@@ -51,74 +76,31 @@ const categories = [...new Set(more.map((tab) => tab.category))];
   </summary>
   <div class="alc-switcher__panel">
     {
-      primary.map((tab) => (
-        <a
-          href={tab.href}
-          class:list={["alc-switcher__item", { "alc-switcher__item--active": tab.label === current.label }]}
-          aria-current={tab.label === current.label ? "true" : undefined}
-        >
-          {TAB_ICONS[tab.label] && (
-            <svg
-              class="alc-switcher__icon"
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              set:html={TAB_ICONS[tab.label]}
-            />
-          )}
-          <span>{tab.label}</span>
-        </a>
-      ))
-    }
-    {
-      categories.map((category) => (
+      grouped.map((group) => (
         <>
-          <div class="alc-switcher__heading">{category}</div>
-          {more
-            .filter((tab) => tab.category === category)
-            .map((tab) => (
-              <a
-                href={tab.href}
-                class:list={["alc-switcher__item", { "alc-switcher__item--active": tab.label === current.label }]}
-                aria-current={tab.label === current.label ? "true" : undefined}
-              >
-                {TAB_ICONS[tab.label] && (
-                  <svg
-                    class="alc-switcher__icon"
-                    aria-hidden="true"
-                    width="15"
-                    height="15"
-                    viewBox="0 0 24 24"
-                    set:html={TAB_ICONS[tab.label]}
-                  />
-                )}
-                <span>{tab.label}</span>
-              </a>
-            ))}
-        </>
-      ))
-    }
-    <div class="alc-switcher__heading">Meta</div>
-    {
-      end.map((tab) => (
-        <a
-          href={tab.href}
-          class:list={["alc-switcher__item", { "alc-switcher__item--active": tab.label === current.label }]}
-          aria-current={tab.label === current.label ? "true" : undefined}
-        >
-          {TAB_ICONS[tab.label] && (
-            <svg
-              class="alc-switcher__icon"
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              set:html={TAB_ICONS[tab.label]}
-            />
+          {group.heading && (
+            <div class="alc-switcher__heading">{group.heading}</div>
           )}
-          <span>{tab.label}</span>
-        </a>
+          {group.tabs.map((tab) => (
+            <a
+              href={tab.href}
+              class:list={["alc-switcher__item", { "alc-switcher__item--active": tab.label === current.label }]}
+              aria-current={tab.label === current.label ? "true" : undefined}
+            >
+              {TAB_ICONS[tab.label] && (
+                <svg
+                  class="alc-switcher__icon"
+                  aria-hidden="true"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  set:html={TAB_ICONS[tab.label]}
+                />
+              )}
+              <span>{tab.label}</span>
+            </a>
+          ))}
+        </>
       ))
     }
   </div>
