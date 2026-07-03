@@ -59,6 +59,12 @@ const BATCHES = Number(process.env.BENCH_BATCHES ?? 10);
 // fully isolated launch→ready→terminate), sampled MICROVM_BOOTS times serially.
 const MICROVM_CONCURRENCY = Number(process.env.BENCH_MICROVM_CONCURRENCY ?? 1);
 const MICROVM_BOOTS = Number(process.env.BENCH_MICROVM_BOOTS ?? 25);
+
+// Optional comma-separated variant filter (e.g. `BENCH_VARIANTS=opencode`) to
+// re-run a subset without re-measuring everything.
+const VARIANT_FILTER = process.env.BENCH_VARIANTS
+  ? new Set(process.env.BENCH_VARIANTS.split(","))
+  : undefined;
 const REQUEST_TIMEOUT = "240 seconds";
 
 const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
@@ -420,6 +426,16 @@ const buildTargets = (outputs: {
       concurrency: CONCURRENCY,
       rounds: BATCHES,
     },
+    {
+      env: "container",
+      host: clean(outputs.containerWorkerUrl),
+      variant: "opencode",
+      label: "Cloudflare container (opencode server, eager entrypoint)",
+      keyParam: "name",
+      shutdownBy: "name",
+      concurrency: CONCURRENCY,
+      rounds: BATCHES,
+    },
   ];
   if (benchMicrovm && outputs.lambdaUrl && outputs.microvmWorkerUrl) {
     const lambda = clean(outputs.lambdaUrl);
@@ -432,6 +448,9 @@ const buildTargets = (outputs: {
       { variant: "bun", label: "bun baseline (raw Bun.serve)" },
       { variant: "node", label: "node baseline (raw http)" },
       { variant: "external", label: "external (Python Dockerfile)" },
+      // The MicroVM image build starts opencode and snapshots the running
+      // memory, so each boot resumes with the server already up.
+      { variant: "opencode", label: "opencode (snapshotted eager server)" },
     ];
     for (const host of [
       { env: "lambda→microvm", url: lambda },
@@ -468,7 +487,9 @@ test(
       lambdaUrl?: string;
       microvmWorkerUrl?: string;
     };
-    const targets = buildTargets(outputs);
+    const targets = buildTargets(outputs).filter(
+      (t) => VARIANT_FILTER === undefined || VARIANT_FILTER.has(t.variant),
+    );
 
     // Wait for each distinct host to answer before timing.
     const hosts = [...new Set(targets.map((t) => t.host))];

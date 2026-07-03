@@ -1,0 +1,222 @@
+---
+title: ECS
+description: Run a long-lived Effect program as a container on Fargate — Alchemy builds and pushes the Docker image, provisions the roles and log group, and can front the service with a public ALB.
+---
+
+**ECS** is the runtime for workloads that don't fit Lambda's
+request/response window: WebSocket servers, workers that hold
+connections open, jobs longer than 15 minutes, anything that
+should be always-on. Alchemy models it with three resources —
+[`Cluster`](/providers/aws/ecs/cluster),
+[`Task`](/providers/aws/ecs/task), and
+[`Service`](/providers/aws/ecs/service) — driven by the same
+pattern as [Lambda](/aws/compute/lambda): bundle an Effect program,
+deploy it as a resource, keep composing around it.
+
+The trade against Lambda: you pay for running tasks whether or
+not they're serving traffic, containers take tens of seconds to
+launch instead of milliseconds, and you bring a VPC. See
+[Choosing a runtime](/aws/compute/choosing-a-runtime) for the full
+comparison.
+
+## Define a Task
+
+A `Task` looks just like a Lambda `Function` — a class wrapping
+an Effect program, with `fetch` handling HTTP. The difference is
+what happens at deploy time: instead of a zip, the program is
+baked into a Docker image.
+
+```typescript
+// src/server.ts
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Server extends AWS.ECS.Task<Server>()(
+  "Server",
+  {
+    main: import.meta.url,
+    cpu: 256,
+    memory: 512,
+    port: 3000,
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://task");
+        if (url.pathname === "/health") {
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+        return HttpServerResponse.text("hello from ECS");
+      }),
+    };
+  }),
+) {}
+```
+
+Deploying a `Task` automates the whole container supply chain:
+Alchemy bundles the program, generates a Dockerfile (base image
+`public.ecr.aws/docker/library/bun:1` unless you override
+`docker.base` or supply a full `docker.dockerfile`), builds the
+image with your local Docker, pushes it to a **generated ECR
+repository**, provisions the **task and execution IAM roles**
+and a **CloudWatch log group**, and registers a Fargate task
+definition. Each deploy registers a new immutable revision.
+
+:::tip
+Building on Apple Silicon? Match the image architecture to the
+Fargate runtime with
+`runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" }`
+so the locally built image runs on Graviton. If the default ECR
+mirror rate-limits your local pulls, switch the base image with
+`docker: { base: "oven/bun:1" }`.
+:::
+
+## Run background work
+
+Containers are always-on, so a Task can do more than answer
+requests. Yield `ServerHost` and register long-running loops
+with `host.run` — they execute alongside the HTTP handler for
+the life of the container:
+
+```diff lang="typescript"
+// src/server.ts
+import * as AWS from "alchemy/AWS";
++import { ServerHost } from "alchemy/Server";
+import * as Effect from "effect/Effect";
++import * as Schedule from "effect/Schedule";
+
+  Effect.gen(function* () {
++    const host = yield* ServerHost;
++
++    yield* host.run(
++      Effect.log("heartbeat").pipe(
++        Effect.repeat(Schedule.spaced("30 seconds")),
++        Effect.asVoid,
++      ),
++    );
++
+    return {
+      fetch: Effect.gen(function* () {
+        // ...
+      }),
+    };
+  }),
+```
+
+This is the shape Lambda can't give you: a polling loop, a queue
+drainer, or an open connection that outlives any single request.
+
+## Give it a network
+
+ECS services run with `awsvpc` networking, so you need a VPC
+with at least two subnets (an ALB spans two Availability Zones)
+and a security group that admits the listener and container
+ports. The [`Network`](/providers/aws/ec2/network) helper builds
+the standard layout in one call — see
+[VPC & networking](/aws/networking) for what's inside it:
+
+```typescript
+// alchemy.run.ts
+const network = yield* AWS.EC2.Network("AppNetwork", {
+  cidrBlock: "10.42.0.0/16",
+});
+
+const securityGroup = yield* AWS.EC2.SecurityGroup("AppSg", {
+  vpcId: network.vpcId,
+  description: "ALB + container traffic",
+  ingress: [
+    {
+      ipProtocol: "tcp",
+      fromPort: 80,
+      toPort: 80,
+      cidrIpv4: "0.0.0.0/0",
+      description: "ALB ingress",
+    },
+    {
+      ipProtocol: "tcp",
+      fromPort: 3000,
+      toPort: 3000,
+      cidrIpv4: "0.0.0.0/0",
+      description: "container traffic",
+    },
+  ],
+  egress: [
+    {
+      ipProtocol: "-1",
+      cidrIpv4: "0.0.0.0/0",
+      description: "all outbound",
+    },
+  ],
+});
+```
+
+## Keep it running with a Service
+
+A `Cluster` owns services; a `Service` keeps your task
+definition running at `desiredCount` replicas. Set
+`public: true` and Alchemy provisions a public **Application
+Load Balancer**, listener, and target group in front of it:
+
+```typescript
+// alchemy.run.ts (continued)
+const cluster = yield* AWS.ECS.Cluster("AppCluster", {});
+const server = yield* Server;
+
+const service = yield* AWS.ECS.Service("AppService", {
+  cluster,
+  task: {
+    taskDefinitionArn: server.taskDefinitionArn,
+    containerName: server.containerName,
+    port: server.port,
+  },
+  desiredCount: 1,
+  vpcId: network.vpcId,
+  subnets: network.publicSubnetIds,
+  securityGroups: [securityGroup.groupId],
+  assignPublicIp: true,
+  public: true,
+  healthCheckPath: "/health",
+});
+
+return { url: service.url };
+```
+
+`service.url` is the ALB's public endpoint. Most service
+configuration — desired count, task definition revision,
+network config, deployment settings — updates **in place** as a
+rolling deployment; only truly immutable aspects (service name,
+cluster, scheduling strategy) replace the service.
+
+For cost-sensitive workers, swap `launchType` (default
+`"FARGATE"`) for a `capacityProviderStrategy` mixing
+`FARGATE_SPOT` and `FARGATE` — see the
+[`Service` reference](/providers/aws/ecs/service) for the
+placement, deployment, and Service Connect knobs.
+
+## Bindings
+
+`Task` declares the same binding contract as a Lambda
+`Function`: bindings attach **environment variables and IAM
+policy statements**, which Alchemy folds into the container
+environment and the task role. The ECS control-plane bindings
+(`RunTask`, `StopTask`, `ListTasks`, `DescribeTasks`) work from
+Lambda functions and from other tasks — useful for a function
+that fans work out to containers. Coverage of the wider
+building-block bindings on ECS hosts is still expanding; Lambda
+remains the most fully bound runtime.
+
+## Where next
+
+- [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda or
+  EC2 fits better than ECS.
+- [VPC & networking](/aws/networking) — what the `Network`
+  helper creates, and the primitives underneath it.
+- [Lambda](/aws/compute/lambda) — the default runtime and the fully
+  documented binding surface.
+- [`Task` reference](/providers/aws/ecs/task),
+  [`Service` reference](/providers/aws/ecs/service),
+  [`Cluster` reference](/providers/aws/ecs/cluster) — every prop
+  and attribute.

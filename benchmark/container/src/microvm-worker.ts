@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -13,6 +14,7 @@ import { ExternalMicrovm } from "./external-image.ts";
 import { EffectfulBun } from "./effectful-bun.ts";
 import { EffectfulNode } from "./effectful-node.ts";
 import { NodeMicrovm } from "./node-image.ts";
+import { OpencodeMicrovm } from "./opencode-image.ts";
 
 /**
  * Cloudflare Worker host for the MicroVM cold-start benchmark — the cross-cloud
@@ -116,12 +118,59 @@ export default Cloudflare.Worker(
       term: yield* AWS.Lambda.TerminateMicrovm(ExternalMicrovm),
       reachable: rawReachable,
     };
+    // opencode is "usable" when its health endpoint answers healthy AND a
+    // session can actually be created — a real write through the app, which
+    // proves the server is functional after the snapshot resume, not merely
+    // listening. The server requires basic auth (see
+    // contexts/microvm-opencode/Dockerfile), stacked on the MicroVM proxy
+    // auth headers.
+    const opencode: Variant = {
+      run: yield* AWS.Lambda.RunMicrovm(OpencodeMicrovm),
+      get: yield* AWS.Lambda.GetMicrovm(OpencodeMicrovm),
+      auth: yield* AWS.Lambda.CreateAuthToken(OpencodeMicrovm),
+      term: yield* AWS.Lambda.TerminateMicrovm(OpencodeMicrovm),
+      reachable: (endpoint, authToken) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const headers = {
+            ...AWS.Lambda.microvmAuthHeaders(authToken),
+            // base64("opencode:bench")
+            authorization: "Basic b3BlbmNvZGU6YmVuY2g=",
+          };
+          const health = yield* client.get(
+            `https://${endpoint}/global/health`,
+            { headers },
+          );
+          const healthBody = yield* health.text;
+          if (health.status !== 200 || !healthBody.includes('"healthy":true')) {
+            return yield* Effect.fail(
+              new Error(
+                `opencode health ${health.status}: ${healthBody.slice(0, 120)}`,
+              ),
+            );
+          }
+          const session = yield* client.post(`https://${endpoint}/session`, {
+            headers,
+            body: HttpBody.text("{}", "application/json"),
+          });
+          const sessionBody = yield* session.text;
+          if (session.status !== 200 || !sessionBody.includes('"id"')) {
+            return yield* Effect.fail(
+              new Error(
+                `opencode session ${session.status}: ${sessionBody.slice(0, 120)}`,
+              ),
+            );
+          }
+          return sessionBody;
+        }),
+    };
     const variants: Record<string, Variant> = {
       "effectful-bun": effectfulBun,
       "effectful-node": effectfulNode,
       bun,
       node,
       external,
+      opencode,
     };
     const pick = (v: string | null): Variant => variants[v ?? ""] ?? effectfulBun;
 

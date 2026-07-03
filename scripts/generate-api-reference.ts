@@ -379,6 +379,12 @@ function renderPage(doc: PageDoc): string {
 /** Providers shown first in the sidebar; the rest follow alphabetically. */
 const PROVIDER_ORDER = ["AWS", "Cloudflare"];
 
+/**
+ * Uncategorized providers with at most this many pages render as a flat
+ * resource list instead of per-service folders (see buildProvidersSidebar).
+ */
+const FLAT_PROVIDER_MAX_PAGES = 16;
+
 interface SidebarLeaf {
   label: string;
   link: string;
@@ -411,26 +417,28 @@ function orderedKeys(keys: string[], order: string[]): string[] {
 
 /**
  * Build sidebar items for one set of pages sharing a provider+category:
- * every service (product) is its own collapsible folder containing its
- * resource pages, mirroring how Cloudflare's API reference gives each
- * product its own section — even single-page products like D1 or
- * Organization — so the grouping is uniform.
+ * every product is its own collapsible folder containing its resource
+ * pages, mirroring how Cloudflare's API reference gives each product its
+ * own section — even single-page products like D1 or Organization — so
+ * the grouping is uniform.
+ *
+ * Grouping is by resolved product LABEL (`@product`, falling back to the
+ * service dir name), not by directory: two directories declaring the same
+ * product merge into one group instead of rendering duplicate siblings.
  */
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
-  const byService = new Map<string, PageEntry[]>();
+  const byLabelKey = new Map<string, PageEntry[]>();
   for (const p of pages) {
-    const key = p.service || p.resource;
-    if (!byService.has(key)) byService.set(key, []);
-    byService.get(key)!.push(p);
+    const key = p.product || p.service || p.resource;
+    if (!byLabelKey.has(key)) byLabelKey.set(key, []);
+    byLabelKey.get(key)!.push(p);
   }
   const items: SidebarItem[] = [];
-  for (const [service, servicePages] of byService) {
-    // Prefer the human product name from `@product`; fall back to the dir name.
-    const label = servicePages.find((p) => p.product)?.product || service;
+  for (const [label, productPages] of byLabelKey) {
     items.push({
       label,
       collapsed: true,
-      items: servicePages
+      items: productPages
         .map((p) => ({ label: p.resource, link: p.link }))
         .sort(byLabel),
     });
@@ -448,12 +456,25 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
   const providers: SidebarGroup[] = [];
   for (const provider of orderedKeys([...byProvider.keys()], PROVIDER_ORDER)) {
     const pages = byProvider.get(provider)!;
+
+    // `@category` is per-file; a documented file that omits it must not fall
+    // out of its service's category and render a duplicate service group at
+    // the provider root. Inherit the category any sibling page of the same
+    // service dir declares.
+    const categoryByService = new Map<string, string>();
+    for (const p of pages) {
+      if (p.service && p.category && !categoryByService.has(p.service)) {
+        categoryByService.set(p.service, p.category);
+      }
+    }
+
     const categorized = new Map<string, PageEntry[]>();
     const uncategorized: PageEntry[] = [];
     for (const p of pages) {
-      if (p.category) {
-        if (!categorized.has(p.category)) categorized.set(p.category, []);
-        categorized.get(p.category)!.push(p);
+      const category = p.category || categoryByService.get(p.service) || "";
+      if (category) {
+        if (!categorized.has(category)) categorized.set(category, []);
+        categorized.get(category)!.push(p);
       } else {
         uncategorized.push(p);
       }
@@ -469,13 +490,53 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
         items: buildServiceItems(categorized.get(cat)!),
       });
     }
-    // Pages without a category fall back to service grouping directly under
-    // the provider (this is how AWS renders until it gets categorized).
-    items.push(...buildServiceItems(uncategorized));
+    if (categorized.size === 0 && pages.length <= FLAT_PROVIDER_MAX_PAGES) {
+      // Small uncategorized providers (Neon, Planetscale, Axiom, GitHub, …)
+      // render as a flat resource list — per-service folders around one or
+      // two pages ("Branch > Branch") are redundant nesting, and prefixed
+      // resource names (MySQLBranch/PostgresBranch) already carry the
+      // grouping information.
+      items.push(
+        ...uncategorized
+          .map((p) => ({ label: p.resource, link: p.link }))
+          .sort(byLabel),
+      );
+    } else {
+      // Pages without a category fall back to service grouping directly under
+      // the provider (this is how AWS renders until it gets categorized).
+      items.push(...buildServiceItems(uncategorized));
+    }
 
     providers.push({ label: provider, collapsed: true, items });
   }
+
+  assertNoDuplicateSiblings(providers, []);
   return providers;
+}
+
+/**
+ * Duplicate sibling labels are always a tagging bug (e.g. two products
+ * resolving to the same name in one category) and render as confusing
+ * twin sections — fail the generation instead of shipping them.
+ */
+function assertNoDuplicateSiblings(items: SidebarItem[], path: string[]) {
+  const seen = new Map<string, number>();
+  for (const item of items) {
+    seen.set(item.label, (seen.get(item.label) ?? 0) + 1);
+  }
+  const dups = [...seen.entries()].filter(([, n]) => n > 1);
+  if (dups.length > 0) {
+    throw new Error(
+      `Duplicate sidebar sibling label(s) under "${path.join(" > ") || "(root)"}": ${dups
+        .map(([label, n]) => `"${label}" ×${n}`)
+        .join(", ")} — fix the @product/@category tags on the offending files.`,
+    );
+  }
+  for (const item of items) {
+    if ("items" in item) {
+      assertNoDuplicateSiblings(item.items, [...path, item.label]);
+    }
+  }
 }
 
 async function main() {
@@ -555,6 +616,38 @@ async function main() {
   }
 
   const sidebar = buildProvidersSidebar(pageEntries);
+
+  // Landing page for the Reference tab (/providers). Regenerated with the
+  // rest of the tree on every run.
+  const countByProvider = new Map<string, number>();
+  for (const e of pageEntries) {
+    countByProvider.set(e.provider, (countByProvider.get(e.provider) ?? 0) + 1);
+  }
+  const referenceIndex = [
+    "---",
+    "title: API Reference",
+    "description: Generated API reference for every alchemy resource, organized by provider.",
+    "---",
+    "",
+    "The complete, generated reference for every resource alchemy can manage,",
+    "extracted from the source JSDoc. Pick a provider in the sidebar, or search",
+    "with `⌘K`.",
+    "",
+    ...orderedKeys([...countByProvider.keys()], PROVIDER_ORDER).map(
+      (provider) =>
+        `- **${provider}** — ${countByProvider.get(provider)} resources`,
+    ),
+    "",
+    "Looking for curated docs instead? Each cloud's tab (Cloudflare, AWS) has",
+    "setup, tutorials, and building-block pages that link into this reference.",
+    "",
+  ].join("\n");
+  await fs.writeFile(
+    path.join(config.outRoot, "index.md"),
+    referenceIndex,
+    "utf8",
+  );
+
   const sidebarPath = path.join(
     websiteRoot,
     "src/generated/providers-sidebar.json",

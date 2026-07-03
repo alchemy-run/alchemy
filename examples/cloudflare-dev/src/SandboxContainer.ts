@@ -6,8 +6,9 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export class SandboxContainer extends Cloudflare.Container<
   SandboxContainer,
   {}
->()(
-  "SandboxContainer",
+>()("SandboxContainer") {}
+
+export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
   Stack.useSync((stack) => ({
     main: import.meta.url,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
@@ -17,9 +18,6 @@ export class SandboxContainer extends Cloudflare.Container<
       },
     },
   })),
-) {}
-
-export default SandboxContainer.make(
   Effect.gen(function* () {
     return SandboxContainer.of({
       fetch: Effect.succeed(
@@ -28,3 +26,5 @@ export default SandboxContainer.make(
     });
   }),
 );
+
+export default SandboxLive;
