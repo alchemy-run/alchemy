@@ -66,6 +66,34 @@ const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.ui": !!args.ui,
 });
 
+/**
+ * Clean user-facing message for a deploy blocked by the deployment lease:
+ * who holds it, since when, and that it self-heals if the holder died.
+ */
+const formatDeploymentInProgress = (error: {
+  stack: string;
+  stage: string;
+  holder: {
+    version: number;
+    startedAt: number;
+    meta: {
+      command: string;
+      initiator?: { user?: string; host?: string; pid?: number };
+    };
+  };
+}): string => {
+  const { holder } = error;
+  const who = [holder.meta.initiator?.user, holder.meta.initiator?.host]
+    .filter((part): part is string => !!part)
+    .join("@");
+  const pid = holder.meta.initiator?.pid;
+  return [
+    `Another ${holder.meta.command} of ${error.stack}/${error.stage} is already in progress (deployment v${holder.version}).`,
+    `  started: ${new Date(holder.startedAt).toISOString()}${who ? `  by: ${who}` : ""}${pid !== undefined ? ` (pid ${pid})` : ""}`,
+    "  If that run died, its lease expires automatically ~60s after its last heartbeat — try again shortly.",
+  ].join("\n");
+};
+
 const adopt = Flag.boolean("adopt").pipe(
   Flag.withDescription(
     "Adopt pre-existing cloud resources that conflict with this stack instead of failing. " +
@@ -235,8 +263,21 @@ export const execStack = Effect.fn(function* ({
         // renderer only shows the failure status) so the keep-alive engages
         // and the rest of the stack keeps serving, but re-propagate a pure
         // interruption (Ctrl-C / fiber kill) so dev still shuts down cleanly.
+        // A concurrent deploy of the same stack/stage holds the deployment
+        // lease — surface who/since-when cleanly instead of a raw cause, and
+        // do NOT retry (the lease auto-expires ~60s after the holder's last
+        // heartbeat if it died).
+        const applyStack = apply(updatePlan, {
+          command: destroy ? "destroy" : "deploy",
+        }).pipe(
+          Effect.catchTag("DeploymentInProgress", (error) =>
+            Console.error(formatDeploymentInProgress(error)).pipe(
+              Effect.andThen(Effect.fail(error)),
+            ),
+          ),
+        );
         const applyPlan = dev
-          ? apply(updatePlan).pipe(
+          ? applyStack.pipe(
               Effect.catchCause((cause) =>
                 Cause.hasInterruptsOnly(cause)
                   ? Effect.failCause(cause)
@@ -245,7 +286,7 @@ export const execStack = Effect.fn(function* ({
                     ).pipe(Effect.as(undefined)),
               ),
             )
-          : apply(updatePlan);
+          : applyStack;
         const outputs = yield* applyPlan;
 
         if (outputs !== undefined) {
