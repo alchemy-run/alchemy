@@ -711,6 +711,17 @@ export const providers = () =>
     Layer.orDie,
   );
 
+/**
+ * The blanket Cloudflare retry policy as a standalone layer, for
+ * effect trees that talk to the Cloudflare API without going through
+ * {@link providers} — most importantly the state-store init/bootstrap
+ * flow, whose subdomain/script/secrets probes otherwise run with the
+ * SDK's shorter default policy and surface throttling ("Please wait
+ * and consider throttling your request speed") to users.
+ */
+export const CloudflareRetryLive = () =>
+  Layer.succeed(Retry.Retry, cloudflareRetryFactory);
+
 const cloudflareRetryFactory: Retry.Factory = (lastError) => {
   const defaults = Retry.makeDefault(lastError);
   return {

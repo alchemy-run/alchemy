@@ -115,12 +115,25 @@ const putWorkerScript = (params: {
         files: params.files,
       });
     }
-    return yield* workers.putScript({
-      accountId: params.accountId,
-      scriptName: params.scriptName,
-      metadata: params.metadata,
-      files: params.files,
-    });
+    return yield* workers
+      .putScript({
+        accountId: params.accountId,
+        scriptName: params.scriptName,
+        metadata: params.metadata,
+        files: params.files,
+      })
+      .pipe(
+        Effect.retry({
+          // A Secrets Store secret referenced by a binding can take a few
+          // seconds after creation before Cloudflare's deploy-time
+          // validation sees it; a genuinely missing secret keeps failing
+          // and surfaces after the (bounded) budget.
+          while: (e) => e._tag === "SecretsStoreBindingNotFound",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
   });
 
 /**

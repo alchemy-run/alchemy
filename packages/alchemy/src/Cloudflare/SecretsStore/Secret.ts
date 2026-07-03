@@ -3,6 +3,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -181,12 +182,21 @@ export const StoreSecretProvider = () =>
           );
         if (created) {
           const secret = created.result[0]!;
+          // Freshly created secrets report "pending" until Cloudflare
+          // activates them; a worker deploy that references a pending
+          // secret is rejected with "Secrets Store binding ... which
+          // were not found". Wait (bounded) for activation so
+          // downstream deploys in the same run see an active secret.
+          const status = yield* waitForSecretActive(
+            { accountId, storeId, secretId: secret.id },
+            asSecretStatus(secret.status),
+          );
           return {
             secretId: secret.id,
             secretName: secret.name,
             storeId: secret.storeId,
             accountId,
-            status: asSecretStatus(secret.status),
+            status,
             scopes,
             comment: secret.comment ?? undefined,
           };
@@ -216,12 +226,16 @@ export const StoreSecretProvider = () =>
         comment: news.comment,
         value: Redacted.value(news.value),
       });
+      const status = yield* waitForSecretActive(
+        { accountId, storeId, secretId: observed.id },
+        asSecretStatus(patched.status),
+      );
       return {
         secretId: observed.id,
         secretName: observed.name,
         storeId: observed.storeId,
         accountId,
-        status: asSecretStatus(patched.status),
+        status,
         scopes,
         comment: patched.comment ?? undefined,
       };
@@ -336,6 +350,34 @@ export const StoreSecretProvider = () =>
       return rows.flat();
     }),
   });
+
+/**
+ * Poll a secret until Cloudflare reports it "active" (bounded at
+ * ~10s). Returns the last observed status rather than failing on
+ * timeout — consumers that bind the secret retry the
+ * `SecretsStoreBindingNotFound` deploy rejection themselves, so a
+ * slow activation degrades to a retried deploy instead of a hard
+ * error here.
+ */
+const waitForSecretActive = (
+  key: { accountId: string; storeId: string; secretId: string },
+  initialStatus: SecretStatus,
+) =>
+  initialStatus === "active"
+    ? Effect.succeed<SecretStatus>("active")
+    : secretsStore.getStoreSecret(key).pipe(
+        Effect.map((s) => asSecretStatus(s.status)),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (status) => status === "active",
+          times: 20,
+        }),
+        // The secret was observed moments ago; a NotFound here is a
+        // read-replica lag blip, not a deletion. Report the last known
+        // status and let the deploy-side retry take over.
+        Effect.catchTag("SecretNotFound", () => Effect.succeed(initialStatus)),
+        Effect.catchTag("StoreNotFound", () => Effect.succeed(initialStatus)),
+      );
 
 const resolveScopes = (scopes: string[] | undefined): string[] =>
   scopes && scopes.length > 0 ? scopes : ["workers"];
