@@ -5,8 +5,6 @@ import type {
   DeploymentSummary,
 } from "../State/Deployment.ts";
 import type { DeploymentSessionPayload } from "../State/DeploymentSession.ts";
-import type { PersistedState } from "../State/State.ts";
-import { toGraph } from "./Graph.ts";
 import type { DashboardPlan } from "./PlanJson.ts";
 import type { StackStructure } from "./Scene.ts";
 
@@ -482,7 +480,7 @@ export const computeStructuralHash = (structure: {
   );
 
 /** Content signature of the whole structure (nodes + edges, key order). */
-const structureSignature = (structure: {
+export const structureSignature = (structure: {
   nodes: Map<string, DocumentNode>;
   edges: Map<string, DocumentEdge>;
 }): string =>
@@ -520,7 +518,7 @@ const targetsOf = (
       : [];
 
 /** Stamp the doc revision onto the collected patches (no-op when empty). */
-const commit = (
+export const commit = (
   doc: DeploymentDocument,
   patches: DocumentPatch[],
 ): Mutation => {
@@ -605,7 +603,7 @@ const appendFeed = (
  * `before` (a {@link structureSignature}). The hash itself only moves when
  * the fqn/edge sets moved.
  */
-const finishStructure = (
+export const finishStructure = (
   doc: DeploymentDocument,
   before: string,
   patches: DocumentPatch[],
@@ -643,34 +641,6 @@ export const makeDocument = (init: DocumentMeta): DeploymentDocument => {
   };
   doc.structure.structuralHash = computeStructuralHash(doc.structure);
   return doc;
-};
-
-/**
- * Rebuild the persisted baseline from the state store. This is the ONE
- * pass allowed to RETIRE nodes: the structure is replaced wholesale with
- * the graph derived from `states` (plan overlay / structure ghosts must be
- * re-applied afterwards — caller order is `applyStates` → `applyPlan` →
- * `applyStructure`). Decorations/timelines/op-spans are left untouched:
- * they belong to the deployment, not the baseline.
- */
-export const applyStates = (
-  doc: DeploymentDocument,
-  states: ReadonlyMap<string, PersistedState> | readonly PersistedState[],
-): Mutation => {
-  const patches: DocumentPatch[] = [];
-  const before = structureSignature(doc.structure);
-  const list = Array.isArray(states)
-    ? (states as PersistedState[])
-    : [...(states as ReadonlyMap<string, PersistedState>).values()];
-  const { nodes, edges } = toGraph(list);
-  doc.structure.nodes = new Map(
-    nodes.map((n) => [n.fqn, { ...n } as DocumentNode]),
-  );
-  doc.structure.edges = new Map(
-    edges.map((e) => [edgeKeyOf(e), { ...e } as DocumentEdge]),
-  );
-  finishStructure(doc, before, patches);
-  return commit(doc, patches);
 };
 
 /**

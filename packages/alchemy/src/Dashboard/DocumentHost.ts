@@ -13,7 +13,6 @@ import {
   applyDeploymentRecord,
   applyEvent as applyEventFold,
   applyPlan as applyPlanFold,
-  applyStates,
   applyStructure as applyStructureFold,
   clearApproval as clearApprovalFold,
   foldJournal,
@@ -29,6 +28,7 @@ import {
   type DocumentSnapshot,
   type Mutation,
 } from "./Document.ts";
+import { applyStates } from "./DocumentStates.ts";
 import type { DashboardPlan } from "./PlanJson.ts";
 import type { StackStructure } from "./Scene.ts";
 
