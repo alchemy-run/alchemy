@@ -1,6 +1,29 @@
+/**
+ * Shared theme API for the dashboard — every color is a CSS custom
+ * property string over the --alc-* design tokens (src/styles/tokens.css),
+ * so light/dark both work "by construction": [data-theme] flips the vars
+ * and every consumer re-colors for free, with ZERO JS theme branching.
+ *
+ * Conventions for consumers (phase-B restyles):
+ * - never concatenate alpha onto colors (`${color}1f` is dead — colors are
+ *   var() strings now). Use `wash(color)` for soft chip/badge backgrounds
+ *   or `chipStyle(color)` for the full { color, background } pair.
+ * - `chipStyle` returns a CACHED object per color — stable identity, safe
+ *   to pass into memoized React Flow nodes without breaking memoization.
+ * - class-name snippets (EYEBROW, SERIF_HEADING, CHIP, PANEL, MENU_ITEM,
+ *   HAIRLINE_BUTTON, SUNK_INPUT) keep the brand styling identical across
+ *   components — compose them with layout utilities.
+ */
+import type { CSSProperties } from "react";
 import type { UICategory } from "alchemy/UI/UIProvider";
 
-/** Brand fallback colors per cloud prefix (first segment of the type). */
+// ─────────────────────────────────────────────────────────── brand colors
+
+/**
+ * Brand fallback colors per cloud prefix (first segment of the type).
+ * Deliberately theme-independent — these are vendor brand hues, not
+ * semantic UI colors.
+ */
 export const CLOUD_COLORS: Record<string, string> = {
   AWS: "#FF9900",
   Cloudflare: "#F6821F",
@@ -11,6 +34,9 @@ export const CLOUD_COLORS: Record<string, string> = {
   Axiom: "#3b82f6",
   Docker: "#2496ED",
 };
+
+/** Fallback node/icon color when no UIProvider color and no cloud match. */
+export const NEUTRAL_COLOR = "var(--alc-muted)";
 
 /** Default lucide icon per category. */
 export const CATEGORY_ICONS: Record<UICategory, string> = {
@@ -33,11 +59,14 @@ export const CATEGORY_ICONS: Record<UICategory, string> = {
   other: "box",
 };
 
+// ──────────────────────────────────────────────────────── semantic colors
+
+/** What a deploy WOULD do — create moss, update honey, replace/delete brick. */
 export const PLAN_COLORS: Record<string, string> = {
-  create: "#34d399",
-  update: "#fbbf24",
-  replace: "#c084fc",
-  delete: "#f87171",
+  create: "var(--alc-success)",
+  update: "var(--alc-warn)",
+  replace: "var(--alc-danger)",
+  delete: "var(--alc-danger)",
 };
 
 export const PLAN_LABELS: Record<string, string> = {
@@ -47,13 +76,13 @@ export const PLAN_LABELS: Record<string, string> = {
   delete: "− delete",
 };
 
-/** what the last apply DID (terminal results), vs PLAN_* (what a deploy would do) */
+/** What the last apply DID (terminal results), vs PLAN_* (pending intent). */
 export const RESULT_COLORS: Record<string, string> = {
-  created: "#34d399",
-  updated: "#fbbf24",
-  replaced: "#c084fc",
-  deleted: "#f87171",
-  failed: "#f87171",
+  created: "var(--alc-success)",
+  updated: "var(--alc-warn)",
+  replaced: "var(--alc-danger)",
+  deleted: "var(--alc-danger)",
+  failed: "var(--alc-danger)",
 };
 
 export const RESULT_LABELS: Record<string, string> = {
@@ -76,27 +105,115 @@ const IN_FLIGHT = new Set([
   "post-attach",
 ]);
 
+/** Timeline/live status → token color (in-flight statuses read as honey). */
 export const statusColor = (status: string): string => {
   switch (status) {
     case "created":
     case "updated":
     case "ran":
-      return "#34d399";
+      return "var(--alc-success)";
     case "fail":
-      return "#f87171";
+      return "var(--alc-danger)";
     case "replaced":
     case "deleted":
     case "skipped":
-      return "#71717a";
+      return "var(--alc-muted)";
     case "deleting":
-      return "#f87171";
+      return "var(--alc-danger)";
     default:
-      return IN_FLIGHT.has(status) ? "#fbbf24" : "#71717a";
+      return IN_FLIGHT.has(status) ? "var(--alc-warn)" : "var(--alc-muted)";
   }
 };
 
 export const statusInFlight = (status: string): boolean =>
   IN_FLIGHT.has(status);
+
+// ────────────────────────────────────────────────────────── color helpers
+
+/**
+ * Soft wash of a color for chip/badge backgrounds — the token-era
+ * replacement for the old `${hex}1f` alpha-suffix trick. Works with any
+ * CSS color, including var() strings.
+ */
+export const wash = (color: string, percent = 16): string =>
+  `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+
+const chipStyleCache = new Map<string, CSSProperties>();
+
+/**
+ * `{ color, background: wash(color) }` for a result/plan chip. The object
+ * is cached per color — STABLE identity, so it is safe inside memoized
+ * React Flow nodes (no fresh style object per render).
+ */
+export const chipStyle = (color: string): CSSProperties => {
+  let style = chipStyleCache.get(color);
+  if (style === undefined) {
+    style = { color, background: wash(color) };
+    chipStyleCache.set(color, style);
+  }
+  return style;
+};
+
+const badgeStyleCache = new Map<string, CSSProperties>();
+
+/**
+ * Chip + hairline border in the same hue (Inspector-style outlined badge).
+ * Cached per color, same identity guarantees as `chipStyle`.
+ */
+export const badgeStyle = (color: string): CSSProperties => {
+  let style = badgeStyleCache.get(color);
+  if (style === undefined) {
+    style = {
+      color,
+      background: wash(color, 12),
+      borderColor: wash(color, 33),
+    };
+    badgeStyleCache.set(color, style);
+  }
+  return style;
+};
+
+// ───────────────────────────────────────────────── class-name snippets
+
+/**
+ * Eyebrow label — section headers (APPLIED, FAILURES, OUTPUTS, timeline
+ * headers): mono, small, uppercase, wide-tracked, deep accent.
+ */
+export const EYEBROW =
+  "font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--alc-accent-deep)]";
+
+/** Muted eyebrow — same shape, walnut instead of accent (secondary rows). */
+export const EYEBROW_MUTED =
+  "font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--alc-fg-4)]";
+
+/**
+ * Identity-carrying heading (Summary deployment header, view titles,
+ * empty states) — the brand serif. Add a text size per use.
+ */
+export const SERIF_HEADING =
+  "font-serif font-medium tracking-[-0.01em] text-[var(--alc-fg-1)]";
+
+/** Chip shape — pair with `chipStyle(color)` / `badgeStyle(color)`. */
+export const CHIP =
+  "rounded-[var(--alc-radius-sm)] px-2 py-0.5 text-[11px] font-medium";
+
+/** Elevated dropdown/popover panel. */
+export const PANEL =
+  "rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-2)] shadow-[var(--alc-shadow-lg)]";
+
+/** Row inside a PANEL. */
+export const MENU_ITEM =
+  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-[var(--alc-fg-2)] transition-colors duration-[var(--alc-dur-fast)] hover:bg-[var(--alc-accent-12)]";
+
+/** Ghost/outline button chrome (Fit, theme toggle, pickers). */
+export const HAIRLINE_BUTTON =
+  "rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] text-[var(--alc-fg-3)] transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-hairline-3)] hover:text-[var(--alc-fg-1)]";
+
+/** Sunk input (filter box, panel search fields). */
+export const SUNK_INPUT =
+  "rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-sunk)] font-mono text-[12px] text-[var(--alc-fg-1)] placeholder:text-[var(--alc-fg-4)] focus:outline-none focus:border-[var(--alc-accent-60)]";
+
+// ─────────────────────────────────────────────────────── type helpers
 
 /** Last segment of a resource type: "AWS.S3.Bucket" -> "Bucket". */
 export const typeName = (type: string): string =>

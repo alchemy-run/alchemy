@@ -1,32 +1,91 @@
+/*
+ * Dashboard global styles — everything derives from the --alc-* design
+ * tokens (src/styles/tokens.css, mirrored from the website). Both themes
+ * work "by construction": tokens flip via [data-theme] on <html>, so no
+ * component ever branches on the theme in JS (React Flow's colorMode is
+ * the single exception).
+ *
+ * Tailwind convention (project decision): color/surface/border utilities
+ * always use arbitrary values over the tokens — e.g. bg-[var(--alc-bg-elev-1)],
+ * text-[var(--alc-fg-2)], border-[var(--alc-hairline)]. Never raw palette
+ * utilities (zinc/gray/indigo). Fonts are the one @theme registration:
+ * `font-sans` / `font-serif` / `font-mono` map onto the token font stacks.
+ */
+@import "./styles/tokens.css";
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
+@theme inline {
+  --font-sans: var(--alc-font-sans);
+  --font-serif: var(--alc-font-serif);
+  --font-mono: var(--alc-font-mono);
+}
+
 :root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
   color-scheme: dark;
 }
 
 body {
   margin: 0;
-  background: #0b0b10;
-  color: #e4e4ea;
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
+  background: var(--alc-bg);
+  color: var(--alc-fg-2);
+  font-family: var(--alc-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* xyflow dark overrides */
+::selection {
+  background: var(--alc-accent-soft);
+  color: var(--alc-fg-1);
+}
+
+/* Scrollbars — walnut hairlines on the page surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--alc-hairline-3) transparent;
+}
+
+/* ---------- React Flow (xyflow) theme bridge ---------- */
+/* The canvas reads tokens through xyflow's own CSS variables, so the
+   graph re-themes purely via [data-theme] — no per-node JS. */
 .react-flow {
-  --xy-background-color: #0b0b10;
-  --xy-edge-stroke-default: #3f3f4a;
+  --xy-background-color: var(--alc-bg);
+  --xy-edge-stroke-default: var(--alc-hairline-3);
   --xy-edge-stroke-width-default: 1.5;
   --xy-attribution-background-color-default: transparent;
 }
 
 .react-flow__attribution {
-  color: #3f3f4a;
+  color: var(--alc-fg-4);
+}
+
+.react-flow__controls {
+  border-radius: var(--alc-radius);
+  overflow: hidden;
+  box-shadow: var(--alc-shadow-sm);
+  border: 1px solid var(--alc-hairline-2);
+}
+
+.react-flow__controls-button {
+  background: var(--alc-bg-elev-1);
+  border-bottom: 1px solid var(--alc-hairline);
+  color: var(--alc-fg-3);
+  transition: color var(--alc-dur) var(--alc-ease);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--alc-bg-elev-2);
+  color: var(--alc-fg-1);
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
 }
 
 @keyframes pulse-dot {

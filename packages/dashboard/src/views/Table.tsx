@@ -4,6 +4,9 @@ import { memo, useMemo, useState } from "react";
 import { formatDuration } from "../format.ts";
 import { setSelectedFqn, useProjection } from "../store.ts";
 import {
+  CHIP,
+  chipStyle,
+  NEUTRAL_COLOR,
   PLAN_COLORS,
   PLAN_LABELS,
   RESULT_COLORS,
@@ -92,7 +95,7 @@ export const TableView = memo(function TableView() {
 
   if (rows.length === 0) {
     return (
-      <p className="p-8 text-center text-sm text-zinc-600">
+      <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
         This stack defines no resources
       </p>
     );
@@ -101,13 +104,17 @@ export const TableView = memo(function TableView() {
   return (
     <div className="h-full overflow-y-auto">
       <table className="w-full text-left text-[12.5px]">
-        <thead className="sticky top-0 z-10 bg-[#0b0b10] text-[11px] uppercase tracking-wider text-zinc-600">
+        <thead className="sticky top-0 z-10 bg-[var(--alc-bg)]">
           <tr>
             {COLUMNS.map((column) => (
               <th key={column.key} className="px-4 py-2 font-medium">
                 <button
                   onClick={() => toggle(column.key)}
-                  className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-zinc-300"
+                  className={`inline-flex items-center gap-1 font-mono text-[11px] font-medium uppercase tracking-[0.12em] transition-colors duration-[var(--alc-dur-fast)] hover:text-[var(--alc-accent-deep)] ${
+                    sort.key === column.key
+                      ? "text-[var(--alc-accent-deep)]"
+                      : "text-[var(--alc-fg-4)]"
+                  }`}
                 >
                   {column.label}
                   {sort.key === column.key &&
@@ -135,12 +142,12 @@ const TableRow = memo(function TableRow({ row }: { row: TableRowView }) {
   return (
     <tr
       onClick={() => setSelectedFqn(row.fqn)}
-      className="cursor-pointer border-t border-[#1c1c24] hover:bg-[#15151c]"
+      className="cursor-pointer border-t border-[var(--alc-hairline)] transition-colors duration-[var(--alc-dur-fast)] hover:bg-[var(--alc-bg-elev-2)]"
     >
-      <td className="max-w-72 truncate px-4 py-2 font-mono text-[11.5px] text-zinc-200">
+      <td className="max-w-72 truncate px-4 py-2 font-mono text-[11.5px] text-[var(--alc-fg-1)]">
         {row.fqn}
       </td>
-      <td className="px-4 py-2 text-zinc-500">{row.type ?? ""}</td>
+      <td className="px-4 py-2 text-[var(--alc-fg-4)]">{row.type ?? ""}</td>
       <td className="px-4 py-2">
         <span
           className="inline-flex items-center gap-1.5"
@@ -156,11 +163,8 @@ const TableRow = memo(function TableRow({ row }: { row: TableRowView }) {
       <td className="px-4 py-2">
         {row.planAction && (
           <span
-            className="rounded px-1.5 py-px text-[11px] font-medium"
-            style={{
-              color: PLAN_COLORS[row.planAction],
-              background: `${PLAN_COLORS[row.planAction]}1f`,
-            }}
+            className={CHIP}
+            style={chipStyle(PLAN_COLORS[row.planAction] ?? NEUTRAL_COLOR)}
           >
             {PLAN_LABELS[row.planAction] ?? row.planAction}
           </span>
@@ -169,20 +173,17 @@ const TableRow = memo(function TableRow({ row }: { row: TableRowView }) {
       <td className="px-4 py-2">
         {row.applyResult && (
           <span
-            className="rounded px-1.5 py-px text-[11px] font-medium"
-            style={{
-              color: "#0b0b10",
-              background: RESULT_COLORS[row.applyResult],
-            }}
+            className={CHIP}
+            style={chipStyle(RESULT_COLORS[row.applyResult] ?? NEUTRAL_COLOR)}
           >
             {RESULT_LABELS[row.applyResult] ?? row.applyResult}
           </span>
         )}
       </td>
-      <td className="px-4 py-2 font-mono text-[11px] text-zinc-500">
+      <td className="px-4 py-2 font-mono text-[11px] text-[var(--alc-fg-4)]">
         {row.waitMs !== undefined ? formatDuration(row.waitMs) : ""}
       </td>
-      <td className="px-4 py-2 font-mono text-[11px] text-zinc-400">
+      <td className="px-4 py-2 font-mono text-[11px] text-[var(--alc-fg-3)]">
         {row.runMs !== undefined ? formatDuration(row.runMs) : ""}
       </td>
     </tr>

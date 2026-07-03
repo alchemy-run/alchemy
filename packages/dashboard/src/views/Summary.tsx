@@ -8,10 +8,16 @@ import {
 } from "../format.ts";
 import { setSelectedFqn, useProjection } from "../store.ts";
 import {
+  CHIP,
+  chipStyle,
+  EYEBROW,
+  NEUTRAL_COLOR,
   PLAN_COLORS,
   PLAN_LABELS,
   RESULT_COLORS,
   RESULT_LABELS,
+  SERIF_HEADING,
+  wash,
 } from "../theme.ts";
 import { Markdownish } from "../ui/Markdownish.tsx";
 
@@ -27,7 +33,9 @@ export const SummaryView = memo(function SummaryView() {
       {summary.deployment !== undefined ? (
         <DeploymentHeader deployment={summary.deployment} />
       ) : (
-        <p className="text-sm text-zinc-600">No deployment recorded yet</p>
+        <p className="font-serif text-[15px] text-[var(--alc-fg-3)]">
+          No deployment recorded yet
+        </p>
       )}
 
       <Counts
@@ -46,7 +54,7 @@ export const SummaryView = memo(function SummaryView() {
       {summary.outputs !== undefined && (
         <section>
           <SectionTitle>Outputs</SectionTitle>
-          <pre className="max-h-72 overflow-auto rounded-xl border border-[#26262f] bg-[#0b0b10] p-3 font-mono text-[11px] leading-relaxed text-zinc-300">
+          <pre className="max-h-72 overflow-auto rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline)] bg-[var(--alc-bg-code)] p-3 font-mono text-[11px] leading-relaxed text-[var(--alc-fg-invert)]">
             {JSON.stringify(summary.outputs, null, 2)}
           </pre>
         </section>
@@ -56,18 +64,22 @@ export const SummaryView = memo(function SummaryView() {
         <section>
           <SectionTitle>Annotations</SectionTitle>
           <div className="space-y-2">
-            {summary.annotations.map((annotation) => (
-              <div
-                key={annotation.context}
-                className="rounded-xl border p-3"
-                style={{
-                  borderColor: `${ANNOTATION_COLORS[annotation.style]}44`,
-                  background: `${ANNOTATION_COLORS[annotation.style]}0d`,
-                }}
-              >
-                <Markdownish text={annotation.markdown} />
-              </div>
-            ))}
+            {summary.annotations.map((annotation) => {
+              const color =
+                ANNOTATION_COLORS[annotation.style] ?? "var(--alc-info)";
+              return (
+                <div
+                  key={annotation.context}
+                  className="rounded-[var(--alc-radius)] border-l-[3px] p-3"
+                  style={{
+                    borderLeftColor: color,
+                    background: wash(color, 10),
+                  }}
+                >
+                  <Markdownish text={annotation.markdown} />
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -79,33 +91,34 @@ export const SummaryView = memo(function SummaryView() {
             {summary.failures.map((failure) => (
               <div
                 key={failure.fqn}
-                className="rounded-xl border border-red-500/30 bg-red-500/5 p-3"
+                className="rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] p-3"
+                style={{ background: wash("var(--alc-danger)", 8) }}
               >
                 <button
                   onClick={() => setSelectedFqn(failure.fqn)}
-                  className="font-mono text-[12px] text-red-300 hover:underline"
+                  className="font-mono text-[12px] text-[var(--alc-danger)] hover:underline"
                 >
                   {failure.fqn}
                 </button>
                 {failure.error !== undefined && (
-                  <p className="mt-1 whitespace-pre-wrap break-all text-[11.5px] text-red-400/90">
+                  <pre className="mt-2 whitespace-pre-wrap break-all rounded-[var(--alc-radius)] bg-[var(--alc-bg-code)] p-2 font-mono text-[11px] leading-relaxed text-[var(--alc-fg-invert)]">
                     {failure.error}
-                  </p>
+                  </pre>
                 )}
                 {failure.timelineTail.length > 0 && (
-                  <div className="mt-2 rounded-lg bg-[#0b0b10] p-2">
+                  <div className="mt-2 rounded-[var(--alc-radius)] bg-[var(--alc-bg-code)] p-2">
                     {failure.timelineTail.map((entry, i) => (
                       <div
                         key={i}
                         className="flex gap-2 py-0.5 font-mono text-[10.5px] leading-relaxed"
                       >
-                        <span className="shrink-0 text-zinc-600">
+                        <span className="shrink-0 text-[var(--alc-code-comment)]">
                           {formatTime(entry.ts)}
                         </span>
-                        <span className="w-12 shrink-0 uppercase text-zinc-500">
+                        <span className="w-12 shrink-0 uppercase text-[var(--alc-code-comment)]">
                           {entry.level}
                         </span>
-                        <span className="whitespace-pre-wrap break-all text-zinc-400">
+                        <span className="whitespace-pre-wrap break-all text-[var(--alc-fg-invert)]">
                           {entry.message}
                         </span>
                       </div>
@@ -121,11 +134,12 @@ export const SummaryView = memo(function SummaryView() {
   );
 });
 
+/** Annotation style → semantic token (website callout hues). */
 export const ANNOTATION_COLORS: Record<string, string> = {
-  success: "#34d399",
-  info: "#818cf8",
-  warning: "#fbbf24",
-  error: "#f87171",
+  success: "var(--alc-success)",
+  info: "var(--alc-info)",
+  warning: "var(--alc-warn)",
+  error: "var(--alc-danger)",
 };
 
 function DeploymentHeader({
@@ -140,30 +154,30 @@ function DeploymentHeader({
     (deployment.live ? now - deployment.startedAt : undefined);
   const outcome = deployment.live ? "running" : (deployment.outcome ?? "—");
   const outcomeColor = deployment.live
-    ? "#fbbf24"
+    ? "var(--alc-warn)"
     : deployment.outcome === "succeeded"
-      ? "#34d399"
+      ? "var(--alc-success)"
       : deployment.outcome === "failed"
-        ? "#f87171"
-        : "#fbbf24";
+        ? "var(--alc-danger)"
+        : "var(--alc-warn)";
   const initiator = deployment.initiator;
   return (
-    <section className="rounded-xl border border-[#26262f] bg-[#101016] p-4">
+    <section className="rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)] p-4 shadow-[var(--alc-shadow-sm)]">
       <div className="flex items-center gap-3">
-        <h1 className="text-sm font-medium text-zinc-100">
+        <h1 className={`${SERIF_HEADING} text-[19px]`}>
           Deployment v{deployment.version}
         </h1>
-        <span className="rounded-full border border-[#2a2a35] px-2 py-px text-[11px] text-zinc-400">
+        <span className="rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline-2)] px-2 py-px font-mono text-[11px] text-[var(--alc-fg-3)]">
           {deployment.command}
         </span>
         <span
-          className={`ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-medium ${deployment.live ? "animate-pulse" : ""}`}
-          style={{ color: outcomeColor, background: `${outcomeColor}1f` }}
+          className={`${CHIP} ml-auto ${deployment.live ? "animate-pulse" : ""}`}
+          style={chipStyle(outcomeColor)}
         >
           {outcome}
         </span>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12px] sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 font-mono text-[11.5px] sm:grid-cols-3">
         <HeaderFact
           label="started"
           value={formatDateTime(deployment.startedAt)}
@@ -190,8 +204,8 @@ function DeploymentHeader({
 function HeaderFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="shrink-0 text-zinc-500">{label}</span>
-      <span className="truncate text-zinc-200" title={value}>
+      <span className="shrink-0 text-[var(--alc-fg-4)]">{label}</span>
+      <span className="truncate text-[var(--alc-fg-3)]" title={value}>
         {value}
       </span>
     </div>
@@ -220,11 +234,8 @@ function Counts({
         {entries.map(([action, count]) => (
           <span
             key={action}
-            className="rounded-full px-3 py-1 text-[12px] font-medium"
-            style={{
-              color: colors[action] ?? "#8b8b96",
-              background: `${colors[action] ?? "#8b8b96"}1f`,
-            }}
+            className={`${CHIP} px-2.5 py-1 text-[12px]`}
+            style={chipStyle(colors[action] ?? NEUTRAL_COLOR)}
           >
             {count} {labels[action]?.slice(2) ?? action}
           </span>
@@ -235,9 +246,5 @@ function Counts({
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-      {children}
-    </h2>
-  );
+  return <h2 className={`${EYEBROW} mb-2`}>{children}</h2>;
 }

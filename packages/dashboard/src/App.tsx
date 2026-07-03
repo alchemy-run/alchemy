@@ -6,8 +6,10 @@ import {
   useMeta,
   useView,
 } from "./store.ts";
+import { SERIF_HEADING } from "./theme.ts";
 import { ActivityFeed } from "./ui/ActivityFeed.tsx";
 import { ApprovalBanner } from "./ui/ApprovalBanner.tsx";
+import { Yantra } from "./ui/Brand.tsx";
 import { Canvas } from "./ui/Canvas.tsx";
 import { Inspector } from "./ui/Inspector.tsx";
 import { ListView } from "./ui/ListView.tsx";
@@ -30,7 +32,7 @@ export function App() {
     return <BootScreen />;
   }
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-[var(--alc-bg)]">
       <TopBar />
       <div className="relative flex min-h-0 flex-1">
         <ApprovalBanner />
@@ -46,18 +48,32 @@ export function App() {
 function BootScreen() {
   const connection = useConnection();
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center">
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-[var(--alc-bg)]">
+      <Yantra
+        size={44}
+        strokeWidth={1.1}
+        className={`text-[var(--alc-accent-deep)] ${
+          connection.status === "error" ? "" : "animate-pulse"
+        }`}
+      />
+      <h1 className={`${SERIF_HEADING} mt-5 text-[22px]`}>alchemy dashboard</h1>
       {connection.status === "error" ? (
         <>
-          <p className="text-sm text-red-400">
+          <p className="mt-3 text-sm text-[var(--alc-danger)]">
             Cannot reach the dashboard server
           </p>
-          <p className="mt-2 text-[12px] text-zinc-500">
-            Is <code>alchemy dashboard</code> running? Retrying…
+          <p className="mt-2 text-[12px] text-[var(--alc-fg-3)]">
+            Is{" "}
+            <code className="rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline)] bg-[var(--alc-bg-sunk)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--alc-fg-1)]">
+              alchemy dashboard
+            </code>{" "}
+            running? Retrying…
           </p>
         </>
       ) : (
-        <p className="animate-pulse text-sm text-zinc-500">Loading stack…</p>
+        <p className="mt-3 animate-pulse text-sm text-[var(--alc-fg-3)]">
+          Loading stack…
+        </p>
       )}
     </div>
   );
@@ -85,7 +101,7 @@ const ViewHost = memo(function ViewHost() {
       </div>
       {view === "canvas" && <CanvasEmptyState />}
       {view !== "canvas" && (
-        <div className="absolute inset-0 z-10 overflow-y-auto bg-[#0b0b10]">
+        <div className="absolute inset-0 z-10 overflow-y-auto bg-[var(--alc-bg)]">
           {view === "summary" ? (
             <SummaryView />
           ) : view === "list" ? (
@@ -112,10 +128,16 @@ const CanvasEmptyState = memo(function CanvasEmptyState() {
   }
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-      <p className="animate-pulse text-sm text-zinc-500">
+      {/* faint alchemical watermark — decorative only */}
+      <Yantra
+        size={220}
+        strokeWidth={0.5}
+        className="absolute text-[var(--alc-fg-1)] opacity-[0.04]"
+      />
+      <p className={`${SERIF_HEADING} animate-pulse text-[17px]`}>
         Waiting for resources…
       </p>
-      <p className="mt-2 text-[12px] text-zinc-600">
+      <p className="mt-2 font-mono text-[12px] text-[var(--alc-fg-3)]">
         {meta.stack}/{meta.stage}
       </p>
     </div>

@@ -46,6 +46,7 @@ import {
   useFitRequest,
   type XY,
 } from "../store.ts";
+import { useThemeMode } from "../themeMode.ts";
 import {
   NODE_HEIGHT,
   NODE_WIDTH,
@@ -59,21 +60,28 @@ const FIT_VIEW = { padding: 0.2, maxZoom: 1.25 };
 const PRO_OPTIONS = { hideAttribution: true };
 const ORIGIN: XY = { x: 0, y: 0 };
 
-// hoisted edge style/marker constants — no fresh literals per render
-const BINDING_STYLE = { stroke: "#818cf8", strokeDasharray: "5 4" };
-const DEPENDENCY_STYLE = { stroke: "#3f3f4a" };
+// hoisted edge style/marker constants — no fresh literals per render.
+// Colors are CSS custom-property strings, so [data-theme] re-themes edges
+// with ZERO re-renders (the constants keep identity; the vars flip).
+const BINDING_STYLE = {
+  stroke: "var(--alc-terracotta)",
+  strokeDasharray: "5 4",
+};
+const DEPENDENCY_STYLE = { stroke: "var(--alc-hairline-3)" };
 const BINDING_MARKER = {
   type: MarkerType.ArrowClosed,
-  color: "#818cf8",
+  color: "var(--alc-terracotta)",
   width: 16,
   height: 16,
 };
 const DEPENDENCY_MARKER = {
   type: MarkerType.ArrowClosed,
-  color: "#3f3f4a",
+  color: "var(--alc-hairline-3)",
   width: 16,
   height: 16,
 };
+// canvas dot grid — hairline on the page token
+const BACKGROUND_DOT_COLOR = "var(--alc-hairline-2)";
 
 /**
  * Stable per-fqn `data` objects: the same fqn always reuses the same
@@ -107,6 +115,10 @@ export function Canvas() {
 
 function CanvasInner() {
   const { hash, fqns, visualEdges, positions, layouted } = useCanvasLayout();
+  // resolved theme drives ONLY React Flow's colorMode (a string prop) —
+  // all actual colors flow through CSS vars, so a theme flip re-renders
+  // just this component, never the nodes.
+  const { resolved } = useThemeMode();
   const fitRequest = useFitRequest();
   const { fitView } = useReactFlow();
 
@@ -256,7 +268,7 @@ function CanvasInner() {
         : {})}
       minZoom={0.2}
       proOptions={PRO_OPTIONS}
-      colorMode="dark"
+      colorMode={resolved}
       nodesDraggable
       nodesConnectable={false}
       elementsSelectable={false}
@@ -265,7 +277,7 @@ function CanvasInner() {
         variant={BackgroundVariant.Dots}
         gap={20}
         size={1}
-        color="#26262f"
+        color={BACKGROUND_DOT_COLOR}
       />
       <Controls showInteractive={false} showFitView={false}>
         <ControlButton onClick={requestFit} title="fit view">

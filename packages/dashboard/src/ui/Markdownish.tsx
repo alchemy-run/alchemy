@@ -22,7 +22,7 @@ const renderInline = (text: string, keyBase: string): ReactNode[] => {
       out.push(
         <code
           key={`${keyBase}c${i}`}
-          className="rounded bg-[#1c1c24] px-1 py-px font-mono text-[0.92em] text-zinc-300"
+          className="rounded-[var(--alc-radius-xs)] bg-[var(--alc-bg-sunk)] px-1 py-px font-mono text-[0.92em] text-[var(--alc-fg-1)]"
         >
           {match[1]}
         </code>,
@@ -34,7 +34,7 @@ const renderInline = (text: string, keyBase: string): ReactNode[] => {
           href={match[3]}
           target="_blank"
           rel="noreferrer"
-          className="text-indigo-400 hover:underline"
+          className="text-[var(--alc-accent-deep)] hover:underline"
         >
           {match[2]}
         </a>,
@@ -57,7 +57,7 @@ export const Markdownish = memo(function Markdownish({
   // even segments are prose, odd segments are fenced code
   const segments = text.split("```");
   return (
-    <div className="space-y-2 text-[12.5px] leading-relaxed text-zinc-300">
+    <div className="space-y-2 text-[12.5px] leading-relaxed text-[var(--alc-fg-2)]">
       {segments.map((segment, i) => {
         if (i % 2 === 1) {
           // fenced code: drop the optional language token on the first line
@@ -69,7 +69,7 @@ export const Markdownish = memo(function Markdownish({
           return (
             <pre
               key={i}
-              className="overflow-x-auto rounded-lg bg-[#0b0b10] p-2.5 font-mono text-[11px] leading-relaxed text-zinc-400"
+              className="overflow-x-auto rounded-[var(--alc-radius)] bg-[var(--alc-bg-code)] p-2.5 font-mono text-[11px] leading-relaxed text-[var(--alc-fg-invert)]"
             >
               <code>{body.replace(/\n$/, "")}</code>
             </pre>

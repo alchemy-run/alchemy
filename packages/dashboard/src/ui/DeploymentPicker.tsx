@@ -3,18 +3,25 @@ import { useEffect, useRef, useState } from "react";
 import { loadDeployments, selectDeployment } from "../ingest.ts";
 import { useHistory, type DeploymentRecord } from "../store.ts";
 import { formatRelative, useNow } from "../format.ts";
+import {
+  CHIP,
+  chipStyle,
+  HAIRLINE_BUTTON,
+  MENU_ITEM,
+  PANEL,
+} from "../theme.ts";
 
 const outcomeColor = (record: DeploymentRecord): string => {
   if (record.endedAt === undefined) {
-    return "#fbbf24"; // still open / heartbeating
+    return "var(--alc-warn)"; // still open / heartbeating
   }
   switch (record.outcome) {
     case "succeeded":
-      return "#34d399";
+      return "var(--alc-success)";
     case "failed":
-      return "#f87171";
+      return "var(--alc-danger)";
     default:
-      return "#fbbf24"; // interrupted / abandoned / completed-late
+      return "var(--alc-warn)"; // interrupted / abandoned / completed-late
   }
 };
 
@@ -64,25 +71,31 @@ export function DeploymentPicker() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-lg border border-[#2a2a35] px-2.5 py-1 text-[12px] text-zinc-400 hover:border-[#3a3a48] hover:text-zinc-200"
+        className={`${HAIRLINE_BUTTON} flex items-center gap-1.5 px-2.5 py-1 text-[12px]`}
         title="Deployment history"
       >
         <History size={13} />
-        {history.selected === "live" ? "history" : `v${history.selected}`}
+        {history.selected === "live" ? (
+          "history"
+        ) : (
+          <span className="font-mono">v{history.selected}</span>
+        )}
         <ChevronDown size={11} />
       </button>
       {open && (
-        <div className="absolute right-0 top-9 z-30 w-72 overflow-hidden rounded-xl border border-[#2a2a35] bg-[#15151c] shadow-xl shadow-black/40">
+        <div
+          className={`${PANEL} absolute right-0 top-9 z-30 w-72 overflow-hidden`}
+        >
           <div className="max-h-80 overflow-y-auto py-1">
             <button
               onClick={() => choose("live")}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-zinc-200 hover:bg-[#1c1c24]"
+              className={`${MENU_ITEM} py-2 text-[var(--alc-fg-1)]`}
             >
-              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--alc-success)]" />
               Live
               <span className="ml-auto w-3">
                 {history.selected === "live" && (
-                  <Check size={12} className="text-indigo-400" />
+                  <Check size={12} className="text-[var(--alc-accent)]" />
                 )}
               </span>
             </button>
@@ -92,47 +105,51 @@ export function DeploymentPicker() {
                 <button
                   key={record.version}
                   onClick={() => choose(record.version)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-zinc-300 hover:bg-[#1c1c24]"
+                  className={`${MENU_ITEM} py-2`}
                 >
                   <span
                     className="h-2 w-2 shrink-0 rounded-full"
                     style={{ background: outcomeColor(record) }}
                     title={record.outcome ?? "in progress"}
                   />
-                  <span className="font-medium text-zinc-200">
+                  <span className="font-mono font-medium text-[var(--alc-fg-1)]">
                     v{record.version}
                   </span>
-                  <span className="text-zinc-500">{record.meta.command}</span>
+                  <span className="font-mono text-[11px] text-[var(--alc-fg-3)]">
+                    {record.meta.command}
+                  </span>
                   <span className="ml-auto flex flex-col items-end">
-                    <span className="text-[11px] text-zinc-500">
+                    <span className="text-[11px] text-[var(--alc-fg-3)]">
                       {formatRelative(record.startedAt, now)}
                     </span>
                     {initiator && (
-                      <span className="max-w-32 truncate text-[10.5px] text-zinc-600">
+                      <span className="max-w-32 truncate font-mono text-[10.5px] text-[var(--alc-fg-4)]">
                         {initiator}
                       </span>
                     )}
                   </span>
                   <span className="w-3">
                     {history.selected === record.version && (
-                      <Check size={12} className="text-indigo-400" />
+                      <Check size={12} className="text-[var(--alc-accent)]" />
                     )}
                   </span>
                 </button>
               );
             })}
             {history.loading && history.deployments.length === 0 && (
-              <p className="px-3 py-2 text-[11px] text-zinc-600">loading…</p>
+              <p className="px-3 py-2 text-[11px] text-[var(--alc-fg-4)]">
+                loading…
+              </p>
             )}
             {!history.loading &&
               history.deployments.length === 0 &&
               history.error === undefined && (
-                <p className="px-3 py-2 text-[11px] text-zinc-600">
+                <p className="px-3 py-2 text-[11px] text-[var(--alc-fg-4)]">
                   no recorded deployments
                 </p>
               )}
             {history.error !== undefined && (
-              <p className="px-3 py-2 text-[11px] text-red-400">
+              <p className="px-3 py-2 text-[11px] text-[var(--alc-danger)]">
                 {history.error}
               </p>
             )}
@@ -143,6 +160,8 @@ export function DeploymentPicker() {
   );
 }
 
+const HISTORICAL_STYLE = chipStyle("var(--alc-info)");
+
 /** "viewing vN (historical)" indicator with a one-click return to Live. */
 export function HistoricalPill() {
   const history = useHistory();
@@ -152,7 +171,8 @@ export function HistoricalPill() {
   return (
     <button
       onClick={() => void selectDeployment("live")}
-      className="flex items-center gap-1.5 rounded-full bg-purple-500/15 px-2.5 py-0.5 text-[11px] font-medium text-purple-300 hover:bg-purple-500/25"
+      className={`${CHIP} flex items-center gap-1.5 transition-opacity duration-[var(--alc-dur-fast)] hover:opacity-80`}
+      style={HISTORICAL_STYLE}
       title="Return to the live document"
     >
       viewing v{history.selected} (historical)
