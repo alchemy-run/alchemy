@@ -31,6 +31,8 @@ export const destroy = ({
         bindings: {},
         actions: {},
         output: {},
-      }).pipe(Effect.flatMap(Apply.apply)),
+      }).pipe(
+        Effect.flatMap((plan) => Apply.apply(plan, { command: "destroy" })),
+      ),
     { stage, dev, scope },
   );

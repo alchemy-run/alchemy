@@ -296,7 +296,7 @@ export const scratchStack = <ROut>(
         actions: {},
         output: {},
       }).pipe(
-        Effect.flatMap(apply),
+        Effect.flatMap((plan) => apply(plan, { command: "destroy" })),
         Effect.asVoid,
         Effect.provide(stateLayer),
         Effect.provide(options.providers as Layer.Layer<any, never, any>),

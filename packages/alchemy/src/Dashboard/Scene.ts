@@ -283,9 +283,9 @@ export const assembleScene = (input: SceneInput): Scene => {
     const feed: SceneFeedEntry[] = [];
     let failed = false;
     for (const { seq, event } of input.session.events) {
-      const targets = byLogicalId.get(event.id) ?? [];
       switch (event.kind) {
         case "status-change": {
+          const targets = byLogicalId.get(event.id) ?? [];
           if (event.status === "fail") {
             failed = true;
           }
@@ -309,6 +309,7 @@ export const assembleScene = (input: SceneInput): Scene => {
           break;
         }
         case "annotate": {
+          const targets = byLogicalId.get(event.id) ?? [];
           for (const node of targets) {
             node.note = event.message;
           }
@@ -319,6 +320,10 @@ export const assembleScene = (input: SceneInput): Scene => {
           feed.push({ key: seq, id: event.id, text: event.message, log: true });
           break;
         }
+        default:
+          // v2 event kinds (op-start / op-end / annotation / future ones)
+          // are journal detail the v1 scene doesn't render — skip them.
+          break;
       }
     }
     session = {

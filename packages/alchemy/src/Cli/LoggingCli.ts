@@ -121,16 +121,22 @@ export const LoggingCli = Layer.succeed(
                 console.log(`${tag(event.id)} ${blue(event.message)}`);
                 return;
               }
-              const id = event.bindingId
-                ? `${event.id}/${event.bindingId}`
-                : event.id;
-              const status = statusColor(event.status)(event.status);
-              const msg = event.message ? ` ${dim("—")} ${event.message}` : "";
-              console.log(`${tag(id)} ${status}${msg}`);
-              if (isTerminal(event.status)) {
-                if (event.status === "fail") counts.fail++;
-                else counts.ok++;
+              if (event.kind === "status-change") {
+                const id = event.bindingId
+                  ? `${event.id}/${event.bindingId}`
+                  : event.id;
+                const status = statusColor(event.status)(event.status);
+                const msg = event.message
+                  ? ` ${dim("—")} ${event.message}`
+                  : "";
+                console.log(`${tag(id)} ${status}${msg}`);
+                if (isTerminal(event.status)) {
+                  if (event.status === "fail") counts.fail++;
+                  else counts.ok++;
+                }
               }
+              // other kinds (op-start / op-end / annotation / future events)
+              // are dashboard/journal detail — ignore them here
             }),
           done: () =>
             Console.log(

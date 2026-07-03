@@ -139,6 +139,15 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
     "running",
   ]);
   const recordTimeline = (seq: number, event: ApplyEvent) => {
+    if (
+      event.kind !== "status-change" &&
+      event.kind !== "annotate" &&
+      event.kind !== "log"
+    ) {
+      // v2 kinds (op-start / op-end / annotation / future ones) are journal
+      // detail the v1 timeline doesn't render — ignore them.
+      return;
+    }
     if ("bindingId" in event && event.bindingId) {
       return;
     }
