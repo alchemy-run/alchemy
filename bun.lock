@@ -947,6 +947,7 @@
         "tailwindcss": "^4.1.14",
       },
       "devDependencies": {
+        "@iconify-json/simple-icons": "^1.2.87",
         "astro-broken-links-checker": "^1.1.0",
         "typescript": "^6.0.3",
         "zod": "^3",
@@ -1446,6 +1447,8 @@
     "@iconify-json/logos": ["@iconify-json/logos@1.2.11", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-fOo4pGEatuyuCFNL+cwquYMa2Im0oJHRHV7lt/Qqs5Ode/lPImHCQcfTtPzZj7qYMPb/h8YHN3TG54uEowrjNQ=="],
 
     "@iconify-json/lucide": ["@iconify-json/lucide@1.2.113", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-hfHPXZmLAsZkEfSd4kKRPMRM2HOQz1k11XWtSReEWeecOM+nLtZlfHAzv8nSsrJw2scLz3DKqosNMNXd3mP60Q=="],
+
+    "@iconify-json/simple-icons": ["@iconify-json/simple-icons@1.2.87", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-8YciStObhSji3OZFmWAWK6kBujyqO5bLCxeDwLxf3CR3F4PVelq7keC2LBvgTqviWzSTysj5/g4PCFLiAMVGsw=="],
 
     "@iconify/react": ["@iconify/react@6.0.2", "", { "dependencies": { "@iconify/types": "^2.0.0" }, "peerDependencies": { "react": ">=16" } }, "sha512-SMmC2sactfpJD427WJEDN6PMyznTFMhByK9yLW0gOTtnjzzbsi/Ke/XqsumsavFPwNiXs8jSiYeZTmLCLwO+Fg=="],
 
