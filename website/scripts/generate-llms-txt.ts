@@ -20,9 +20,9 @@ const outFile = path.resolve(here, "../public/llms.txt");
 const siteUrl = "https://v2.alchemy.run";
 
 interface Page {
-  /** URL path, e.g. "/concepts/binding" */
+  /** URL path, e.g. "/infrastructure-as-effects/binding" */
   href: string;
-  /** Path relative to docs dir without extension, e.g. "concepts/binding" */
+  /** Path relative to docs dir without extension, e.g. "infrastructure-as-effects/binding" */
   slug: string;
   title: string;
   description: string;
@@ -47,45 +47,301 @@ interface Section {
 const SECTIONS: Section[] = [
   {
     heading: "Start here",
-    pages: { slugs: ["what-is-alchemy", "getting-started"] },
+    pages: {
+      slugs: ["what-is-alchemy", "getting-started", "migrating-from-v1"],
+    },
   },
   {
-    heading: "Tutorial — main path (Cloudflare)",
+    heading: "CLI",
     intro:
-      "A linear five-part walkthrough from zero to a tested, locally-developed, CI-deployed Cloudflare project. Each part builds on the previous one.",
+      "Every command runs through your package manager: bun alchemy <command>. Command pages by role, plus the Adopting Resources and Inspecting State guides.",
     pages: {
       slugs: [
-        "tutorial/part-1",
-        "tutorial/part-2",
-        "tutorial/part-3",
-        "tutorial/part-4",
-        "tutorial/part-5",
+        "cli/index",
+        "cli/deploy",
+        "cli/plan",
+        "cli/destroy",
+        "cli/nuke",
+        "cli/adopting-resources",
+        "cli/dev",
+        "cli/tail",
+        "cli/logs",
+        "cli/login",
+        "cli/profile",
+        "cli/state",
+        "cli/inspecting-state",
+        "cli/aws",
+        "cli/cloudflare",
       ],
     },
   },
   {
-    heading: "Tutorial — Cloudflare add-ons",
+    heading: "Infrastructure as Code",
     intro:
-      "Standalone tutorials that extend the main tutorial's Worker with a specific Cloudflare feature. Pick the ones that match your use case.",
-    pages: { directory: "tutorial/cloudflare" },
+      "The noun graph and its semantics: Stacks of Resources and Actions, data flow via Inputs & Outputs and References, deploy behavior via the Resource lifecycle and Providers.",
+    pages: {
+      slugs: [
+        "infrastructure-as-code/stack",
+        "infrastructure-as-code/resource",
+        "infrastructure-as-code/action",
+        "infrastructure-as-code/outputs",
+        "infrastructure-as-code/references",
+        "infrastructure-as-code/resource-lifecycle",
+        "infrastructure-as-code/provider",
+        "infrastructure-as-code/custom-provider",
+      ],
+    },
   },
   {
-    heading: "Tutorial — AWS",
+    heading: "Infrastructure as Effects",
     intro:
-      "End-to-end AWS tutorials. Read the Lambda page first; the others bind storage and event sources to that Lambda.",
-    pages: { directory: "tutorial/aws" },
+      "How app code and infrastructure compose: Functions & Servers, Bindings, the init/runtime Phases, and Layers.",
+    pages: {
+      slugs: [
+        "infrastructure-as-effects/index",
+        "infrastructure-as-effects/functions-and-servers",
+        "infrastructure-as-effects/binding",
+        "infrastructure-as-effects/event-sources",
+        "infrastructure-as-effects/sinks",
+        "infrastructure-as-effects/phases",
+        "infrastructure-as-effects/layers",
+        "infrastructure-as-effects/infrastructure-layers",
+        "infrastructure-as-effects/circular-bindings",
+        "infrastructure-as-effects/custom-runtime",
+      ],
+    },
   },
   {
-    heading: "Concepts — the mental model",
+    heading: "APIs",
     intro:
-      "Reference pages explaining what each primitive means and how they fit together. Read these when something in a tutorial feels magical, or before designing a new Stack.",
-    pages: { directory: "concepts" },
+      "Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.",
+    pages: {
+      slugs: [
+        "apis/index",
+        "apis/schemaless",
+        "apis/effect-rpc",
+        "apis/effect-http",
+      ],
+    },
   },
   {
-    heading: "Guides — task-oriented",
+    heading: "Environments — the same app in many places",
     intro:
-      "Standalone how-to pages. Each solves a specific problem; read in any order.",
-    pages: { directory: "guides" },
+      "Stages, credential profiles, auth providers, secrets and config, local development, and CI.",
+    pages: {
+      slugs: [
+        "environments/stages",
+        "environments/profiles",
+        "environments/auth-providers",
+        "environments/custom-auth-provider",
+        "environments/secrets",
+        "environments/local-development",
+        "environments/ci",
+      ],
+    },
+  },
+  {
+    heading: "State Store",
+    pages: { slugs: ["state-store/index", "state-store/custom-state-store"] },
+  },
+  {
+    heading: "Project structure",
+    intro:
+      "Scaling the codebase: file conventions for one stack, monorepos for many — single Stack or one per package.",
+    pages: {
+      slugs: ["project-structure/file-layout", "project-structure/monorepo"],
+    },
+  },
+  {
+    heading: "Testing & observability",
+    intro:
+      "Tests run against real clouds: the model, the end-to-end walkthrough, provider-lifecycle testing, and the harness reference.",
+    pages: {
+      slugs: [
+        "testing/index",
+        "testing/testing-a-stack",
+        "testing/testing-providers",
+        "testing/test-harness",
+        "testing/observability",
+      ],
+    },
+  },
+  {
+    heading: "Cloudflare — start here",
+    intro:
+      "The Cloudflare hub: overview (resources + recipes) and setup (install, account, OAuth vs API token, profiles).",
+    pages: { slugs: ["cloudflare/index", "cloudflare/setup"] },
+  },
+  {
+    heading: "Cloudflare — tutorial",
+    intro:
+      "A linear five-part walkthrough from zero to a tested, locally-developed, CI-deployed Cloudflare project. Each part builds on the previous one.",
+    pages: {
+      slugs: [
+        "cloudflare/tutorial/part-1",
+        "cloudflare/tutorial/part-2",
+        "cloudflare/tutorial/part-3",
+        "cloudflare/tutorial/part-4",
+        "cloudflare/tutorial/part-5",
+      ],
+    },
+  },
+  {
+    heading: "Cloudflare — Compute",
+    pages: { directory: "cloudflare/compute" },
+  },
+  {
+    heading: "Cloudflare — Frontend",
+    pages: { directory: "cloudflare/frontend" },
+  },
+  {
+    heading: "Cloudflare — APIs",
+    pages: { directory: "cloudflare/apis" },
+  },
+  {
+    heading: "Cloudflare — Data",
+    pages: { directory: "cloudflare/data" },
+  },
+  {
+    heading: "Cloudflare — Messaging & events",
+    pages: { directory: "cloudflare/messaging" },
+  },
+  {
+    heading: "Cloudflare — Email",
+    pages: { directory: "cloudflare/email" },
+  },
+  {
+    heading: "Cloudflare — AI",
+    pages: { directory: "cloudflare/ai" },
+  },
+  {
+    heading: "Cloudflare — Security & secrets",
+    pages: { directory: "cloudflare/security" },
+  },
+  {
+    heading: "Cloudflare — Observability",
+    pages: { directory: "cloudflare/observability" },
+  },
+  {
+    heading: "Cloudflare — Networking",
+    pages: { directory: "cloudflare/networking" },
+  },
+  {
+    heading: "AWS — start here",
+    intro:
+      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
+    pages: {
+      slugs: ["aws/index", "aws/setup", "aws/compute/choosing-a-runtime"],
+    },
+  },
+  {
+    heading: "AWS — tutorial",
+    intro:
+      "A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. Each part builds on the previous one.",
+    pages: {
+      slugs: [
+        "aws/tutorial/part-1",
+        "aws/tutorial/part-2",
+        "aws/tutorial/part-3",
+        "aws/tutorial/part-4",
+        "aws/tutorial/part-5",
+      ],
+    },
+  },
+  {
+    heading: "AWS — Compute",
+    pages: { directory: "aws/compute" },
+  },
+  {
+    heading: "AWS — Frontend",
+    pages: { directory: "aws/frontend" },
+  },
+  {
+    heading: "AWS — APIs",
+    pages: { directory: "aws/apis" },
+  },
+  {
+    heading: "AWS — Data",
+    pages: { directory: "aws/data" },
+  },
+  {
+    heading: "AWS — Messaging & events",
+    pages: { directory: "aws/messaging" },
+  },
+  {
+    heading: "AWS — Security & secrets",
+    pages: { directory: "aws/security" },
+  },
+  {
+    heading: "AWS — Observability",
+    pages: { directory: "aws/observability" },
+  },
+  {
+    heading: "AWS — Networking",
+    pages: { directory: "aws/networking" },
+  },
+  {
+    heading: "PlanetScale",
+    intro:
+      "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
+    pages: {
+      slugs: [
+        "planetscale/index",
+        "planetscale/setup",
+        "planetscale/data/postgres",
+        "planetscale/data/mysql",
+        "planetscale/data/migrations",
+        "planetscale/data/credentials",
+        "planetscale/data/backups",
+        "planetscale/guides/preview-branches",
+        "planetscale/guides/drizzle",
+      ],
+    },
+  },
+  {
+    heading: "Neon",
+    intro:
+      "Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.",
+    pages: {
+      slugs: [
+        "neon/index",
+        "neon/setup",
+        "neon/data/branching",
+        "neon/data/connections",
+        "neon/data/migrations",
+        "neon/guides/preview-branches",
+        "neon/guides/drizzle",
+      ],
+    },
+  },
+  {
+    heading: "Axiom",
+    intro:
+      "Observability as Stack resources — datasets, monitors, notifiers. The exporter-Layer pattern is documented in Concepts → Observability.",
+    pages: {
+      slugs: [
+        "axiom/index",
+        "axiom/setup",
+        "axiom/data/ingest",
+        "axiom/guides/alerting",
+        "axiom/guides/dashboards",
+        "axiom/guides/annotations",
+      ],
+    },
+  },
+  {
+    heading: "GitHub",
+    intro:
+      "Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.",
+    pages: {
+      slugs: [
+        "github/index",
+        "github/setup",
+        "github/repository",
+        "github/actions-config",
+        "github/events",
+      ],
+    },
   },
 ];
 
@@ -192,7 +448,8 @@ async function loadPage(slug: string): Promise<Page> {
         throw new Error(`Missing title in frontmatter: ${rel}`);
       }
       return {
-        href: `/${slug}`,
+        // `foo/index.mdx` is served at `/foo`.
+        href: `/${slug}`.replace(/\/index$/, "") || "/",
         slug,
         title,
         description,

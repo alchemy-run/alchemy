@@ -10,8 +10,10 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import crypto from "node:crypto";
 
 import * as Config from "effect/Config";
+import * as Option from "effect/Option";
 import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import {
   CredentialsStore,
@@ -58,6 +60,12 @@ export const state = () =>
       const profileName = yield* ALCHEMY_PROFILE;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
+      // `deploy --yes` flows in here (via AlchemyContext.updateStateStore) to
+      // auto-accept an out-of-date state store upgrade instead of prompting.
+      // Optional so callers that don't provide AlchemyContext keep the prompt.
+      const autoUpdateStateStore =
+        Option.getOrUndefined(yield* Effect.serviceOption(AlchemyContext))
+          ?.updateStateStore ?? false;
       const context = yield* Effect.context<Effect.Services<typeof init>>();
 
       const init = Effect.gen(function* () {
@@ -84,9 +92,11 @@ export const state = () =>
               yield* checkStateStoreVersion(url);
 
             if (observed === undefined) {
-              const shouldDeploy = yield* Clank.confirm({
-                message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
-              });
+              const shouldDeploy =
+                autoUpdateStateStore ||
+                (yield* Clank.confirm({
+                  message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
+                }));
               if (shouldDeploy) {
                 return yield* bootstrap({
                   workerName: scriptName,
@@ -100,10 +110,32 @@ export const state = () =>
             const httpState = yield* ensureAccess({ url, authToken });
             if (matches) {
               return httpState;
+            }
+
+            // The store is out of date. Upgrade it in place.
+            const upgrade = Effect.gen(function* () {
+              yield* Clank.info(
+                `Cloudflare State Store '${scriptName}' is out of date ` +
+                  `(expected v${expected}, observed v${observed ?? "unknown"}); upgrading...`,
+              );
+              const stateStoreOptions = yield* deployStateStore({
+                stage: scriptName,
+                state: httpState,
+                force: false,
+              });
+              return yield* makeCloudflareStateStore(stateStoreOptions);
+            });
+
+            if (autoUpdateStateStore) {
+              // `--yes`: upgrade automatically (also unblocks CI).
+              return yield* upgrade;
             } else if (isCI) {
               return yield* Effect.die(
                 new AuthError({
-                  message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+                  message:
+                    `Cloudflare State store is out of date ` +
+                    `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
+                    `Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
                 }),
               );
             } else {
@@ -113,12 +145,7 @@ export const state = () =>
                   `(expected v${expected}, observed v${observed ?? "unknown"})`,
               });
               if (shouldDeploy) {
-                const stateStoreOptions = yield* deployStateStore({
-                  stage: scriptName,
-                  state: httpState,
-                  force: false,
-                });
-                return yield* makeCloudflareStateStore(stateStoreOptions);
+                return yield* upgrade;
               } else {
                 return yield* Effect.die(new Clank.PromptCancelled());
               }
@@ -159,12 +186,13 @@ export const state = () =>
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false),
           );
+        } else if (autoUpdateStateStore) {
+          // `--yes`: deploy the missing state store automatically (also in CI).
+          return yield* bootstrap();
         } else if (isCI) {
-          // TODO(sam): do we want to support bootstrapping the state store from CI?
-          // for now - just die here
           return yield* Effect.die(
             new AuthError({
-              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
             }),
           );
         } else {

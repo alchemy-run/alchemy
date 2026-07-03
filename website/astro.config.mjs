@@ -20,7 +20,7 @@ import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
  * fresh `astro dev` before running the generator), fall back to autogenerating
  * from the directory tree so the docs still build.
  */
-function providersSidebarEntry() {
+function providersSidebar() {
   try {
     const json = readFileSync(
       fileURLToPath(
@@ -28,16 +28,41 @@ function providersSidebarEntry() {
       ),
       "utf8",
     );
-    // Expanded one level deep: the Providers group shows its providers
-    // (AWS, Cloudflare, …) on load; everything below stays collapsed.
-    return { label: "Providers", collapsed: false, items: JSON.parse(json) };
+    return JSON.parse(json);
   } catch {
-    return {
-      label: "Providers",
-      collapsed: false,
-      autogenerate: { directory: "providers", collapsed: true },
-    };
+    return undefined;
   }
+}
+
+function providersSidebarEntry() {
+  const providers = providersSidebar();
+  // Expanded one level deep: the Reference tab shows its providers
+  // (AWS, Cloudflare, …) on load; everything below stays collapsed.
+  if (providers)
+    return { label: "Reference", collapsed: false, items: providers };
+  return {
+    label: "Reference",
+    collapsed: false,
+    autogenerate: { directory: "providers", collapsed: true },
+  };
+}
+
+/**
+ * A cloud hub's "Resources" section: that provider's slice of the generated
+ * reference tree below Guides, expanded one level (categories/services show,
+ * everything inside them stays collapsed) so each hub is self-sufficient.
+ *
+ * @param {string} provider Provider label / directory name (e.g. "Cloudflare")
+ */
+function providerResourcesEntry(provider) {
+  const group = providersSidebar()?.find((p) => p.label === provider);
+  if (group)
+    return { label: "Resources", collapsed: false, items: group.items };
+  return {
+    label: "Resources",
+    collapsed: false,
+    autogenerate: { directory: `providers/${provider}`, collapsed: true },
+  };
 }
 
 /**
@@ -215,8 +240,9 @@ export default defineConfig({
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
-        Header: "./src/components/marketing/Nav.astro",
+        Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
+        Sidebar: "./src/components/starlight/Sidebar.astro",
       },
       prerender: true,
       social: [
@@ -235,36 +261,593 @@ export default defineConfig({
         baseUrl:
           "https://github.com/alchemy-run/alchemy-effect/edit/main/website",
       },
+      // One top-level group per docs tab (see src/docs-tabs.ts). The
+      // docs-tabs-sidebar middleware swaps in the active tab's group, so
+      // the rendered sidebar only ever navigates within the current tab.
       sidebar: [
-        { label: "What is Alchemy?", link: "/what-is-alchemy" },
-        { label: "Getting Started", link: "/getting-started" },
         {
-          label: "Tutorial",
+          label: "Core",
           items: [
-            { label: "Part 1: Your First Stack", link: "/tutorial/part-1" },
-            { label: "Part 2: Add a Worker", link: "/tutorial/part-2" },
-            { label: "Part 3: Testing", link: "/tutorial/part-3" },
-            { label: "Part 4: Local Dev", link: "/tutorial/part-4" },
-            { label: "Part 5: CI/CD", link: "/tutorial/part-5" },
+            { label: "What is Alchemy?", link: "/what-is-alchemy" },
+            { label: "Getting started", link: "/getting-started" },
+            { label: "Migrating from v1", link: "/migrating-from-v1" },
             {
-              label: "Cloudflare",
-              autogenerate: { directory: "tutorial/cloudflare" },
-              collapsed: true,
+              label: "Infrastructure as Code",
+              items: [
+                { label: "Stacks", link: "/infrastructure-as-code/stack" },
+                {
+                  label: "Resources",
+                  link: "/infrastructure-as-code/resource",
+                },
+                { label: "Actions", link: "/infrastructure-as-code/action" },
+                {
+                  label: "Inputs & Outputs",
+                  link: "/infrastructure-as-code/outputs",
+                },
+                {
+                  label: "References",
+                  link: "/infrastructure-as-code/references",
+                },
+                {
+                  label: "Resource lifecycle",
+                  link: "/infrastructure-as-code/resource-lifecycle",
+                },
+                {
+                  label: "Providers",
+                  link: "/infrastructure-as-code/provider",
+                },
+                {
+                  label: "Custom Provider",
+                  link: "/infrastructure-as-code/custom-provider",
+                },
+              ],
             },
             {
-              label: "AWS",
-              autogenerate: { directory: "tutorial/aws" },
-              collapsed: true,
+              label: "Infrastructure as Effects",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/infrastructure-as-effects",
+                },
+                {
+                  label: "Functions & Servers",
+                  link: "/infrastructure-as-effects/functions-and-servers",
+                },
+                {
+                  label: "Bindings",
+                  link: "/infrastructure-as-effects/binding",
+                },
+                {
+                  label: "Event Sources",
+                  link: "/infrastructure-as-effects/event-sources",
+                },
+                {
+                  label: "Sinks",
+                  link: "/infrastructure-as-effects/sinks",
+                },
+                { label: "Phases", link: "/infrastructure-as-effects/phases" },
+                { label: "Layers", link: "/infrastructure-as-effects/layers" },
+                {
+                  label: "Building with Layers",
+                  link: "/infrastructure-as-effects/infrastructure-layers",
+                },
+                {
+                  label: "Circular Bindings",
+                  link: "/infrastructure-as-effects/circular-bindings",
+                },
+                {
+                  label: "Custom Runtime",
+                  link: "/infrastructure-as-effects/custom-runtime",
+                },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/apis",
+                },
+                {
+                  label: "Schemaless RPC",
+                  link: "/apis/schemaless",
+                },
+                {
+                  label: "Effect RPC",
+                  link: "/apis/effect-rpc",
+                },
+                {
+                  label: "Effect HTTP",
+                  link: "/apis/effect-http",
+                },
+              ],
+            },
+            {
+              label: "Environments",
+              items: [
+                { label: "Stages", link: "/environments/stages" },
+                { label: "Profiles", link: "/environments/profiles" },
+                {
+                  label: "Auth Providers",
+                  link: "/environments/auth-providers",
+                },
+                {
+                  label: "Custom Auth Provider",
+                  link: "/environments/custom-auth-provider",
+                },
+                { label: "Secrets & Config", link: "/environments/secrets" },
+                {
+                  label: "Local development",
+                  link: "/environments/local-development",
+                },
+                { label: "CI", link: "/environments/ci" },
+              ],
+            },
+            {
+              label: "State Store",
+              items: [
+                { label: "State Store", link: "/state-store" },
+                {
+                  label: "Custom State Store",
+                  link: "/state-store/custom-state-store",
+                },
+              ],
+            },
+            {
+              label: "Project structure",
+              items: [
+                {
+                  label: "File layout",
+                  link: "/project-structure/file-layout",
+                },
+                { label: "Monorepo", link: "/project-structure/monorepo" },
+                {
+                  label: "Single Stack",
+                  link: "/project-structure/monorepo-single-stack",
+                },
+                {
+                  label: "Multiple Stacks",
+                  link: "/project-structure/monorepo-multi-stack",
+                },
+              ],
+            },
+            {
+              label: "Testing & observability",
+              items: [
+                { label: "Testing", link: "/testing" },
+                {
+                  label: "Testing a Stack",
+                  link: "/testing/testing-a-stack",
+                },
+                {
+                  label: "Testing Providers",
+                  link: "/testing/testing-providers",
+                },
+                { label: "Test harness", link: "/testing/test-harness" },
+                { label: "Observability", link: "/testing/observability" },
+              ],
             },
           ],
         },
         {
-          label: "Concepts",
-          autogenerate: { directory: "concepts" },
+          label: "CLI",
+          items: [
+            { label: "Overview", link: "/cli" },
+            {
+              label: "Deploy",
+              items: [
+                { label: "deploy", link: "/cli/deploy" },
+                { label: "plan", link: "/cli/plan" },
+                { label: "destroy", link: "/cli/destroy" },
+                { label: "nuke", link: "/cli/nuke" },
+                {
+                  label: "Adopting Resources",
+                  link: "/cli/adopting-resources",
+                },
+              ],
+            },
+            {
+              label: "Develop",
+              items: [
+                { label: "dev", link: "/cli/dev" },
+                { label: "tail", link: "/cli/tail" },
+                { label: "logs", link: "/cli/logs" },
+              ],
+            },
+            {
+              label: "Auth",
+              items: [
+                { label: "login", link: "/cli/login" },
+                { label: "profile", link: "/cli/profile" },
+              ],
+            },
+            {
+              label: "State",
+              items: [
+                { label: "state", link: "/cli/state" },
+                {
+                  label: "Inspecting State",
+                  link: "/cli/inspecting-state",
+                },
+              ],
+            },
+            {
+              label: "Providers",
+              items: [
+                { label: "aws", link: "/cli/aws" },
+                { label: "cloudflare", link: "/cli/cloudflare" },
+              ],
+            },
+          ],
         },
         {
-          label: "Guides",
-          autogenerate: { directory: "guides" },
+          label: "Cloudflare",
+          items: [
+            { label: "Overview", link: "/cloudflare" },
+            { label: "Setup", link: "/cloudflare/setup" },
+            {
+              label: "Tutorial",
+              autogenerate: { directory: "cloudflare/tutorial" },
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Workers", link: "/cloudflare/compute/workers" },
+                {
+                  label: "Durable Objects",
+                  link: "/cloudflare/compute/durable-objects",
+                },
+                { label: "Containers", link: "/cloudflare/compute/containers" },
+                { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                {
+                  label: "Cross-worker DOs",
+                  link: "/cloudflare/compute/cross-worker-durable-object",
+                },
+                {
+                  label: "WebSockets",
+                  link: "/cloudflare/compute/hibernatable-websockets",
+                },
+                {
+                  label: "Workers for Platforms",
+                  link: "/cloudflare/compute/workers-for-platforms",
+                },
+                {
+                  label: "Browser rendering",
+                  link: "/cloudflare/compute/browser-rendering",
+                },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: [
+                {
+                  label: "Overview",
+                  link: "/cloudflare/frontend/frontends",
+                },
+                { label: "Vite", link: "/cloudflare/frontend/vite" },
+                {
+                  label: "Static sites",
+                  link: "/cloudflare/frontend/static-site",
+                },
+                { label: "React SPA", link: "/cloudflare/frontend/vite-spa" },
+                {
+                  label: "TanStack Start",
+                  link: "/cloudflare/frontend/tanstack-start",
+                },
+                {
+                  label: "React Router",
+                  link: "/cloudflare/frontend/react-router",
+                },
+                { label: "Vue", link: "/cloudflare/frontend/vue" },
+                {
+                  label: "SolidStart",
+                  link: "/cloudflare/frontend/solidstart",
+                },
+                { label: "Astro", link: "/cloudflare/frontend/astro" },
+                { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [
+                {
+                  label: "Schemaless RPC",
+                  link: "/cloudflare/apis/schemaless-rpc",
+                },
+                { label: "Effect RPC", link: "/cloudflare/apis/effect-rpc" },
+                {
+                  label: "Effect HTTP",
+                  link: "/cloudflare/apis/effect-http-api",
+                },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "D1", link: "/cloudflare/data/d1" },
+                { label: "KV", link: "/cloudflare/data/kv" },
+                { label: "R2", link: "/cloudflare/data/r2" },
+                { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                {
+                  label: "Shared database",
+                  link: "/cloudflare/data/shared-database",
+                },
+                {
+                  label: "Branch from a shared database",
+                  link: "/cloudflare/data/branch-from-shared-database",
+                },
+                { label: "Artifacts", link: "/cloudflare/data/artifacts" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
+                {
+                  label: "GitHub events",
+                  link: "/cloudflare/messaging/github-events",
+                },
+              ],
+            },
+            {
+              label: "Email",
+              items: [
+                { label: "Email", link: "/cloudflare/email" },
+                {
+                  label: "Send & receive email",
+                  link: "/cloudflare/email/send-and-receive",
+                },
+              ],
+            },
+            {
+              label: "AI",
+              items: [
+                { label: "AI Gateway", link: "/cloudflare/ai/ai-gateway" },
+                {
+                  label: "AI Search (AutoRAG)",
+                  link: "/cloudflare/ai/ai-search",
+                },
+                { label: "Effect AI", link: "/cloudflare/ai/effect-ai" },
+                { label: "Vectorize", link: "/cloudflare/ai/vectorize" },
+                {
+                  label: "Release agent",
+                  link: "/cloudflare/ai/release-agent",
+                },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [
+                {
+                  label: "Secrets & env",
+                  link: "/cloudflare/security/secrets-env",
+                },
+                {
+                  label: "Secrets Store",
+                  link: "/cloudflare/security/secrets-store",
+                },
+                { label: "Turnstile", link: "/cloudflare/security/turnstile" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                {
+                  label: "Axiom telemetry",
+                  link: "/cloudflare/observability/axiom-observability",
+                },
+                {
+                  label: "Analytics Engine",
+                  link: "/cloudflare/observability/analytics-engine",
+                },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                {
+                  label: "Domains & DNS",
+                  link: "/cloudflare/networking/domains",
+                },
+                {
+                  label: "Custom domains & routes",
+                  link: "/cloudflare/networking/custom-domains",
+                },
+                { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
+              ],
+            },
+            providerResourcesEntry("Cloudflare"),
+          ],
+        },
+        {
+          label: "AWS",
+          items: [
+            { label: "Overview", link: "/aws" },
+            { label: "Setup", link: "/aws/setup" },
+            {
+              label: "Tutorial",
+              autogenerate: { directory: "aws/tutorial" },
+            },
+            {
+              label: "Compute",
+              items: [
+                {
+                  label: "Choosing a runtime",
+                  link: "/aws/compute/choosing-a-runtime",
+                },
+                { label: "Lambda", link: "/aws/compute/lambda" },
+                { label: "ECS", link: "/aws/compute/ecs" },
+                { label: "EC2", link: "/aws/compute/ec2" },
+                { label: "EKS", link: "/aws/compute/eks" },
+                { label: "Lambda MicroVMs", link: "/aws/compute/microvms" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Websites", link: "/aws/frontend/websites" },
+                { label: "Static site", link: "/aws/frontend/static-site" },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [
+                {
+                  label: "Schemaless RPC",
+                  link: "/aws/apis/schemaless-rpc",
+                },
+                { label: "Effect RPC", link: "/aws/apis/effect-rpc" },
+                {
+                  label: "Effect HTTP",
+                  link: "/aws/apis/effect-http-api",
+                },
+                { label: "API Gateway", link: "/aws/apis/api-gateway" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "DynamoDB", link: "/aws/data/dynamodb" },
+                { label: "S3", link: "/aws/data/s3" },
+                { label: "RDS & Aurora", link: "/aws/data/rds" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "SQS", link: "/aws/messaging/sqs" },
+                { label: "SNS", link: "/aws/messaging/sns" },
+                { label: "Kinesis", link: "/aws/messaging/kinesis" },
+                {
+                  label: "EventBridge & Scheduler",
+                  link: "/aws/messaging/eventbridge",
+                },
+                {
+                  label: "DynamoDB Streams",
+                  link: "/aws/messaging/dynamodb-streams",
+                },
+                { label: "S3 events", link: "/aws/messaging/s3-events" },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                { label: "CloudWatch", link: "/aws/observability/cloudwatch" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "VPC & networking", link: "/aws/networking" },
+                {
+                  label: "Custom domains",
+                  link: "/aws/networking/custom-domains",
+                },
+              ],
+            },
+            providerResourcesEntry("AWS"),
+          ],
+        },
+        {
+          label: "PlanetScale",
+          items: [
+            { label: "Overview", link: "/planetscale" },
+            { label: "Setup", link: "/planetscale/setup" },
+            {
+              label: "Data",
+              items: [
+                { label: "Postgres", link: "/planetscale/data/postgres" },
+                { label: "MySQL", link: "/planetscale/data/mysql" },
+                { label: "Migrations", link: "/planetscale/data/migrations" },
+                { label: "Credentials", link: "/planetscale/data/credentials" },
+                { label: "Backups", link: "/planetscale/data/backups" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Preview branches per PR",
+                  link: "/planetscale/guides/preview-branches",
+                },
+                {
+                  label: "Drizzle ORM",
+                  link: "/planetscale/guides/drizzle",
+                },
+              ],
+            },
+            providerResourcesEntry("Planetscale"),
+          ],
+        },
+        {
+          label: "Neon",
+          items: [
+            { label: "Overview", link: "/neon" },
+            { label: "Setup", link: "/neon/setup" },
+            {
+              label: "Data",
+              items: [
+                { label: "Branching", link: "/neon/data/branching" },
+                { label: "Connections", link: "/neon/data/connections" },
+                { label: "Migrations", link: "/neon/data/migrations" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Preview branches per PR",
+                  link: "/neon/guides/preview-branches",
+                },
+                { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
+              ],
+            },
+            providerResourcesEntry("Neon"),
+          ],
+        },
+        {
+          label: "Axiom",
+          items: [
+            { label: "Overview", link: "/axiom" },
+            { label: "Setup", link: "/axiom/setup" },
+            {
+              label: "Data",
+              items: [
+                { label: "Datasets & ingest", link: "/axiom/data/ingest" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                { label: "Alerting", link: "/axiom/guides/alerting" },
+                { label: "Dashboards", link: "/axiom/guides/dashboards" },
+                { label: "Annotations", link: "/axiom/guides/annotations" },
+              ],
+            },
+            providerResourcesEntry("Axiom"),
+          ],
+        },
+        {
+          label: "GitHub",
+          items: [
+            { label: "Overview", link: "/github" },
+            { label: "Setup", link: "/github/setup" },
+            { label: "Repositories", link: "/github/repository" },
+            {
+              label: "Actions secrets & variables",
+              link: "/github/actions-config",
+            },
+            { label: "Webhooks & events", link: "/github/events" },
+            providerResourcesEntry("GitHub"),
+          ],
         },
         providersSidebarEntry(),
       ],
@@ -272,7 +855,7 @@ export default defineConfig({
       // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
       // We want every post listed, so set it effectively unlimited.
       plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
-      routeMiddleware: ["./src/blog-sidebar.ts"],
+      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts"],
     }),
     mdx(),
   ],

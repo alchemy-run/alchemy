@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -24,6 +25,22 @@ import {
 
 export type RoleName = string;
 export type RoleArn = `arn:aws:iam::${AccountID}:role/${RoleName}`;
+
+/**
+ * IAM misuses `MalformedPolicyDocument` for an eventual-consistency case: a
+ * trust policy whose `Principal` names a *freshly created* user/role is
+ * rejected with "Invalid principal in policy" until that principal finishes
+ * propagating through IAM (typically a few seconds). That specific message is
+ * retryable; a genuinely malformed document (bad syntax/fields) is not and
+ * fails fast because its message never matches.
+ */
+const invalidPrincipalRetry = {
+  while: (e: { _tag: string; message?: string }) =>
+    e._tag === "MalformedPolicyDocumentException" &&
+    (e.message?.includes("Invalid principal") ?? false),
+  schedule: Schedule.exponential("2 seconds"),
+  times: 5,
+} as const;
 
 export interface RoleProps {
   /**
@@ -475,6 +492,7 @@ export const RoleProvider = () =>
                 Tags: createTagsList(desiredTags),
               })
               .pipe(
+                Effect.retry(invalidPrincipalRetry),
                 Effect.catchTag("EntityAlreadyExistsException", () =>
                   iam.getRole({ RoleName: roleName }),
                 ),
@@ -496,10 +514,14 @@ export const RoleProvider = () =>
             JSON.stringify(observedAssumePolicy ?? null) !==
             JSON.stringify(assumeRolePolicyDocument)
           ) {
-            yield* iam.updateAssumeRolePolicy({
-              RoleName: roleName,
-              PolicyDocument: stringifyPolicyDocument(assumeRolePolicyDocument),
-            });
+            yield* iam
+              .updateAssumeRolePolicy({
+                RoleName: roleName,
+                PolicyDocument: stringifyPolicyDocument(
+                  assumeRolePolicyDocument,
+                ),
+              })
+              .pipe(Effect.retry(invalidPrincipalRetry));
           }
 
           // Sync description / maxSessionDuration via updateRole.
