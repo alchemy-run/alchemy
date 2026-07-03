@@ -5,9 +5,11 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { fileURLToPath } from "node:url";
 
-const timeoutHandlerPath = new URL("./timeout-handler.ts", import.meta.url)
-  .pathname;
+const timeoutHandlerPath = fileURLToPath(
+  new URL("./timeout-handler.ts", import.meta.url),
+);
 
 const { test } = Test.make({ providers: AWS.providers() });
 

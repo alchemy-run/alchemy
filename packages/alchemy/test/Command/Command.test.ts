@@ -149,7 +149,12 @@ test.provider(
         session: stubSession,
         bindings: [],
       });
-      expect(reconciled.hash).toStrictEqual(baseline.hash);
+      // Inputs didn't change, so the input hash must match. The output hash
+      // can't be compared: build.sh embeds `$(date)` in dist/output.txt (the
+      // rebuild marker Build.test.ts relies on), so two builds only hash
+      // equal when they land in the same wall-clock second.
+      expect(reconciled.hash.input).toStrictEqual(baseline.hash.input);
+      expect(reconciled.hash.output).toEqual(expect.any(String));
       expect(pathe.isAbsolute(reconciled.outdir)).toBe(false);
       expect(pathe.resolve(reconciled.outdir)).toBe(distDir);
 

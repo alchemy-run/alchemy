@@ -41,7 +41,7 @@ test.provider.skipIf(!!process.env.FAST)(
 const domainName = process.env.AWS_TEST_APIGATEWAY_DOMAIN_NAME;
 const certificateArn = process.env.AWS_TEST_APIGATEWAY_CERT_ARN;
 
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(
   "list enumerates the deployed domain name",
   (stack) =>
     Effect.gen(function* () {

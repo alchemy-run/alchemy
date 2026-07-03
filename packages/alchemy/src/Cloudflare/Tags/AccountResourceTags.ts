@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -208,11 +209,14 @@ export const AccountResourceTagsProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const resourceId =
-        output?.resourceId ?? (olds?.resourceId as string | undefined);
-      const resourceType = output?.resourceType ?? olds?.resourceType;
-      const workerId =
-        output?.workerId ?? (olds?.workerId as string | undefined);
+      // At plan time `olds` may still hold unresolved Output proxies (e.g.
+      // an adoption pre-check before the referenced resource deploys) —
+      // only fall back to them once resolved.
+      const resolvedOlds =
+        olds !== undefined && isResolved(olds) ? olds : undefined;
+      const resourceId = output?.resourceId ?? resolvedOlds?.resourceId;
+      const resourceType = output?.resourceType ?? resolvedOlds?.resourceType;
+      const workerId = output?.workerId ?? resolvedOlds?.workerId;
       if (!resourceId || !resourceType) return undefined;
 
       const observed = yield* resourceTagging.getAccountTag({

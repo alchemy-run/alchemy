@@ -16,7 +16,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // requires an account that is onboarded to the preview. Gate the live
 // lifecycle behind LAMBDA_TEST_NETWORK_CONNECTOR=1 so an entitled account runs
 // it unchanged.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(
+  !!process.env.FAST || !process.env.LAMBDA_TEST_NETWORK_CONNECTOR,
+)(
   "create, update, list, delete network connector",
   (stack) =>
     Effect.gen(function* () {

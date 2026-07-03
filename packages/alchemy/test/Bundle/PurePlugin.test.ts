@@ -472,9 +472,14 @@ describe("Bundle.build with purePlugin", () => {
         );
 
         // Symlink the package under node_modules so rolldown can find it.
+        // Windows requires elevation for "dir" symlinks; junctions don't.
         const nm = path.join(root, "node_modules");
         yield* fs.makeDirectory(nm, { recursive: true });
-        nodeFs.symlinkSync(pkgDir, path.join(nm, "fake-ws"), "dir");
+        nodeFs.symlinkSync(
+          pkgDir,
+          path.join(nm, "fake-ws"),
+          process.platform === "win32" ? "junction" : "dir",
+        );
 
         const entry = path.join(root, "entry.ts");
         yield* fs.writeFileString(

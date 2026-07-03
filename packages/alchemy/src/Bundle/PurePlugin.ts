@@ -314,6 +314,11 @@ export async function resolvePackageInfo(
   let foundInfo: PackageInfo | null = null;
   // Hard ceiling to prevent runaway walks on weird ids.
   for (let i = 0; i < 64; i++) {
+    // Never walk above a `node_modules` boundary: the owning package of a
+    // `node_modules/<pkg>/...` id lives at or below `<pkg>`. Climbing past
+    // it can latch onto an unrelated package.json higher up (e.g. a stray
+    // one at the filesystem root) and poison the shared-ancestor cache.
+    if (path.basename(dir) === "node_modules") break;
     const cached = cache.get(dir);
     if (cached !== undefined) {
       cacheDescendants(cache, visited, dir, cached);
@@ -348,8 +353,16 @@ export async function resolvePackageInfo(
     dir = parent;
   }
   if (foundInfo !== null && foundRoot !== null) {
-    cacheDescendants(cache, visited, foundRoot, foundInfo);
-    return foundInfo;
+    // A nameless package.json (e.g. a nested `dist/package.json` holding
+    // only `{"type": "module"}`, or a stray file high up the tree) can't be
+    // matched against the configured patterns — prefer the path-derived
+    // `node_modules/<pkg>` name when one exists.
+    const info =
+      foundInfo.name === null && fastName !== null
+        ? { name: fastName, sideEffects: foundInfo.sideEffects }
+        : foundInfo;
+    cacheDescendants(cache, visited, foundRoot, info);
+    return info;
   }
   // No `package.json` found on disk. If we have a path-derived name
   // (from a `node_modules/<pkg>/...` segment), use it with no

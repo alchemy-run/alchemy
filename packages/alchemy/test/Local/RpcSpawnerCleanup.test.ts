@@ -2,6 +2,7 @@ import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
@@ -57,7 +58,10 @@ for (const runtime of runtimes()) {
             (acc, chunk) => Effect.succeed(acc + chunk),
           ),
         ),
-        Effect.timeout("5 seconds"),
+        // The parent fixture live-transforms TypeScript and spawns a second
+        // process doing the same; under worker contention (and on Windows,
+        // where process spawn is slower) this can take well over 5 seconds.
+        Effect.timeout("30 seconds"),
       );
 
       const childUrl = output.match(/CHILD_URL=(\S+)/)?.[1];
@@ -116,7 +120,12 @@ for (const runtime of runtimes()) {
       () =>
         Effect.gen(function* () {
           const [bin, ...args] = runtime.argv(DEVSERVER_PARENT_TS);
-          const pidFile = `/tmp/alchemy-devserver-${process.pid}-${runtime.name}.json`;
+          const fs = yield* FileSystem.FileSystem;
+          // `/tmp` doesn't exist on Windows — use a real temp directory.
+          const tmpDir = yield* fs.makeTempDirectory({
+            prefix: "alchemy-devserver-",
+          });
+          const pidFile = `${tmpDir}/${process.pid}-${runtime.name}.json`;
           const child = yield* ChildProcess.make(
             bin,
             [
@@ -141,7 +150,9 @@ for (const runtime of runtimes()) {
                 (acc, chunk) => Effect.succeed(acc + chunk),
               ),
             ),
-            Effect.timeout("10 seconds"),
+            // See `launch` above — fixture startup can exceed 10s under
+            // contention and on Windows.
+            Effect.timeout("30 seconds"),
           );
 
           const parentPid = Number.parseInt(

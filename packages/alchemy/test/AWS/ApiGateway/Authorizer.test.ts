@@ -15,7 +15,7 @@ const authorizerUri = process.env.ALCHEMY_TEST_AUTHORIZER_URI;
 /**
  * Requires a Lambda authorizer invocation URI accepted by API Gateway.
  */
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
   "create and update Lambda TOKEN authorizer",
   (stack) =>
     Effect.gen(function* () {
