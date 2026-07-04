@@ -1,4 +1,4 @@
-import { Maximize, Moon, Search, Sun, SunMoon, X } from "lucide-react";
+import { Maximize, Moon, Search, Sun, X } from "lucide-react";
 import { memo } from "react";
 import { setStage } from "../ingest.ts";
 import {
@@ -21,7 +21,7 @@ import {
   PLAN_LABELS,
   SUNK_INPUT,
 } from "../theme.ts";
-import { useThemeMode, type ThemeMode } from "../themeMode.ts";
+import { useThemeMode } from "../themeMode.ts";
 import { Yantra } from "./Brand.tsx";
 import { DeploymentPicker, HistoricalPill } from "./DeploymentPicker.tsx";
 import { StageSelect } from "./StageSelect.tsx";
@@ -224,28 +224,22 @@ function ViewTabs() {
   );
 }
 
-/** light → dark → auto cycle; auto follows the system preference live. */
-const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
-  light: "dark",
-  dark: "auto",
-  auto: "light",
-};
-
+/**
+ * Binary toggle on the RESOLVED theme. "auto" is only ever the initial
+ * (nothing-stored) state — cycling through it made the first click a
+ * visual no-op whenever auto already resolved to the current look, which
+ * read as "takes two clicks to switch".
+ */
 function ThemeToggle() {
-  const { mode, setMode } = useThemeMode();
+  const { resolved, setMode } = useThemeMode();
+  const next = resolved === "dark" ? "light" : "dark";
   return (
     <button
-      onClick={() => setMode(NEXT_MODE[mode])}
-      title={`Theme: ${mode} — click to switch to ${NEXT_MODE[mode]}`}
+      onClick={() => setMode(next)}
+      title={`Switch to ${next} mode`}
       className={`${HAIRLINE_BUTTON} p-1.5`}
     >
-      {mode === "light" ? (
-        <Sun size={13} />
-      ) : mode === "dark" ? (
-        <Moon size={13} />
-      ) : (
-        <SunMoon size={13} />
-      )}
+      {resolved === "dark" ? <Moon size={13} /> : <Sun size={13} />}
     </button>
   );
 }

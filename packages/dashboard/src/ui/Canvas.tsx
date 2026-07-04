@@ -67,7 +67,7 @@ const BINDING_STYLE = {
   stroke: "var(--alc-terracotta)",
   strokeDasharray: "5 4",
 };
-const DEPENDENCY_STYLE = { stroke: "var(--alc-hairline-3)" };
+const DEPENDENCY_STYLE = { stroke: "var(--alc-fg-4)" };
 const BINDING_MARKER = {
   type: MarkerType.ArrowClosed,
   color: "var(--alc-terracotta)",
@@ -76,12 +76,18 @@ const BINDING_MARKER = {
 };
 const DEPENDENCY_MARKER = {
   type: MarkerType.ArrowClosed,
-  color: "var(--alc-hairline-3)",
+  color: "var(--alc-fg-4)",
   width: 16,
   height: 16,
 };
 // canvas dot grid — hairline on the page token
 const BACKGROUND_DOT_COLOR = "var(--alc-hairline-2)";
+
+// reveal-latch wrapper: invisible until layout + fit have landed, then a
+// quick fade so the first visible paint is already the final framing
+const WRAPPER_HIDDEN = "h-full w-full opacity-0";
+const WRAPPER_SHOWN =
+  "h-full w-full opacity-100 transition-opacity duration-150";
 
 /**
  * Stable per-fqn `data` objects: the same fqn always reuses the same
@@ -200,22 +206,42 @@ function CanvasInner() {
     [visualEdges],
   );
 
+  // Reveal latch: the canvas stays invisible until the first real layout
+  // AND its fit have been applied, so the initial paint is already the
+  // final framing — no zoomed-out flash followed by a fitView jump.
+  const [revealed, setRevealed] = useState(false);
+
   // Auto-fit exactly once per never-seen hash, when its first real layout
   // lands — never on decorations, never after the user panned.
+  //
+  // Runs synchronously once the RENDERED nodes carry the layouted
+  // positions (React Flow's internal store is a child, so its sync runs
+  // before this parent effect) — no requestAnimationFrame, which never
+  // fires in hidden/backgrounded tabs and would leave the canvas stuck
+  // behind the reveal latch.
   useEffect(() => {
-    if (!layouted || fqns.length === 0 || fittedHashes.has(hash)) {
+    if (!layouted || nodes.length === 0) {
       return;
     }
-    fittedHashes.add(hash);
-    if (dashboardStore.getState().layout.userPanned) {
-      return;
-    }
-    // next frame, after React Flow has measured the repositioned nodes
-    const frame = requestAnimationFrame(() => {
-      void fitView(FIT_VIEW);
+    const inSync = nodes.every((node) => {
+      const target = positions.get(node.id);
+      return (
+        target !== undefined &&
+        target.x === node.position.x &&
+        target.y === node.position.y
+      );
     });
-    return () => cancelAnimationFrame(frame);
-  }, [layouted, hash, fqns, fitView]);
+    if (!inSync) {
+      return; // the rebuild effect hasn't committed the final positions yet
+    }
+    if (!fittedHashes.has(hash)) {
+      fittedHashes.add(hash);
+      if (!dashboardStore.getState().layout.userPanned) {
+        void fitView(FIT_VIEW);
+      }
+    }
+    setRevealed(true);
+  }, [nodes, positions, layouted, hash, fitView]);
 
   // Explicit Fit button (store bumps fitRequest and clears userPanned).
   const lastFitRequest = useRef(fitRequest);
@@ -253,37 +279,39 @@ function CanvasInner() {
   const onPaneClick = useCallback(() => setSelectedFqn(undefined), []);
 
   return (
-    <ReactFlow<CanvasNode>
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onNodeDragStop={onNodeDragStop}
-      onNodeClick={onNodeClick}
-      onPaneClick={onPaneClick}
-      onMoveStart={onMoveStart}
-      onMoveEnd={onMoveEnd}
-      {...(initialViewport !== undefined
-        ? { defaultViewport: initialViewport }
-        : {})}
-      minZoom={0.2}
-      proOptions={PRO_OPTIONS}
-      colorMode={resolved}
-      nodesDraggable
-      nodesConnectable={false}
-      elementsSelectable={false}
-    >
-      <Background
-        variant={BackgroundVariant.Dots}
-        gap={20}
-        size={1}
-        color={BACKGROUND_DOT_COLOR}
-      />
-      <Controls showInteractive={false} showFitView={false}>
-        <ControlButton onClick={requestFit} title="fit view">
-          <Maximize size={12} />
-        </ControlButton>
-      </Controls>
-    </ReactFlow>
+    <div className={revealed ? WRAPPER_SHOWN : WRAPPER_HIDDEN}>
+      <ReactFlow<CanvasNode>
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onNodeDragStop={onNodeDragStop}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
+        onMoveStart={onMoveStart}
+        onMoveEnd={onMoveEnd}
+        {...(initialViewport !== undefined
+          ? { defaultViewport: initialViewport }
+          : {})}
+        minZoom={0.2}
+        proOptions={PRO_OPTIONS}
+        colorMode={resolved}
+        nodesDraggable
+        nodesConnectable={false}
+        elementsSelectable={false}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1}
+          color={BACKGROUND_DOT_COLOR}
+        />
+        <Controls showInteractive={false} showFitView={false}>
+          <ControlButton onClick={requestFit} title="fit view">
+            <Maximize size={12} />
+          </ControlButton>
+        </Controls>
+      </ReactFlow>
+    </div>
   );
 }

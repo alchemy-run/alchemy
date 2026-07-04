@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
@@ -219,12 +220,20 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
     yield* Effect.gen(function* () {
       const state = yield* yield* State.State;
 
+      // Signals when any SSE client attaches — a previous dashboard tab
+      // auto-reconnects to the restarted server (the SPA retries with
+      // backoff), in which case opening ANOTHER tab is just clutter.
+      const clientConnected = yield* Deferred.make<void>();
+
       const address = yield* Server.serve({
         state,
         stack: stackEffect.stackName,
         stage,
         plan: planForStage,
         structure: structureForStage,
+        onClientConnected: Deferred.succeed(clientConnected, void 0).pipe(
+          Effect.asVoid,
+        ),
       });
 
       const url = address.replace("0.0.0.0", "127.0.0.1");
@@ -242,7 +251,18 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
         yield* Deferred.succeed(ready, url);
       }
       if (open) {
-        yield* Clank.openUrl(url).pipe(Effect.catch(() => Effect.void));
+        // Give a previously-open tab a moment to reconnect before opening
+        // a new one — the browser can't be asked to reuse a tab from the
+        // CLI, but a reconnected tab makes opening one unnecessary.
+        const reconnected = yield* Deferred.await(clientConnected).pipe(
+          Effect.timeout("2500 millis"),
+          Effect.result,
+        );
+        if (Result.isSuccess(reconnected)) {
+          yield* Console.log("  (existing dashboard tab reconnected)");
+        } else {
+          yield* Clank.openUrl(url).pipe(Effect.catch(() => Effect.void));
+        }
       }
       yield* Effect.never;
     }).pipe(

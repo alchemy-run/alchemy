@@ -70,8 +70,8 @@ const fgOf = (color: string): CSSProperties => {
 // --alc-glow ring (inline style wins over the hover class, so the ring
 // persists while hovered).
 const CARD_BASE =
-  "rounded-[var(--alc-radius-lg)] border px-3.5 py-2.5 bg-[var(--alc-bg-elev-1)] transition-[border-color,box-shadow,opacity] duration-[var(--alc-dur)] ease-[var(--alc-ease)]";
-const CARD_SOLID = `${CARD_BASE} border-[var(--alc-hairline)] shadow-[var(--alc-shadow-sm)] hover:border-[var(--alc-hairline-2)] hover:shadow-[var(--alc-shadow)]`;
+  "rounded-[var(--alc-radius-lg)] border px-3.5 py-2.5 bg-[var(--alc-bg-elev-2)] transition-[border-color,box-shadow,opacity] duration-[var(--alc-dur)] ease-[var(--alc-ease)]";
+const CARD_SOLID = `${CARD_BASE} border-[var(--alc-hairline-2)] shadow-[var(--alc-shadow-sm)] hover:border-[var(--alc-hairline-3)] hover:shadow-[var(--alc-shadow)]`;
 const CARD_SOLID_SELECTED = `${CARD_BASE} border-[var(--alc-accent-60)]`;
 // structure ghosts / deleted / pending-plan cards: dashed hairline shell
 const CARD_GHOST = `${CARD_BASE} border-dashed border-[var(--alc-hairline-2)]`;
@@ -84,7 +84,7 @@ const NODE_CHIP =
 
 const BINDING_CHIP_COLOR = "var(--alc-terracotta)";
 
-const HANDLE_CLASS = "!bg-[var(--alc-hairline-3)] !border-none !w-1.5 !h-1.5";
+const HANDLE_CLASS = "!bg-[var(--alc-fg-4)] !border-none !w-1.5 !h-1.5";
 
 export const ResourceNode = memo(function ResourceNode({
   data,
@@ -197,12 +197,12 @@ export const ResourceNode = memo(function ResourceNode({
           />
         )}
       </div>
-      <div className="mt-1 truncate font-mono text-[10.5px] text-[var(--alc-fg-4)]">
+      <div className="mt-1 truncate font-mono text-[10.5px] text-[var(--alc-fg-3)]">
         {serviceOf(node.type)
           ? `${serviceOf(node.type)}.${typeName(node.type)}`
           : typeName(node.type)}
         {summary ? (
-          <span className="text-[var(--alc-fg-3)]"> · {summary}</span>
+          <span className="text-[var(--alc-fg-2)]"> · {summary}</span>
         ) : null}
       </div>
       {Card ? (

@@ -79,6 +79,13 @@ export interface DashboardServerOptions {
    * deployed" ghosts so an empty stage never renders blank.
    */
   structure?: (stage: string) => Effect.Effect<StackStructure>;
+  /**
+   * Fired (fire-and-forget, may be invoked repeatedly) when an SSE client
+   * attaches. The launcher uses the first firing to skip opening a fresh
+   * browser tab when a previous tab has already reconnected to the
+   * restarted server.
+   */
+  onClientConnected?: Effect.Effect<void>;
 }
 
 /**
@@ -125,7 +132,8 @@ const FALLBACK_HTML = `<!doctype html>
  * continues for as long as the surrounding scope stays open.
  */
 export const serve = Effect.fn(function* (options: DashboardServerOptions) {
-  const { state, stack, stage, plan, structure } = options;
+  const { state, stack, stage, plan, structure, onClientConnected } = options;
+  const notifyClientConnected = onClientConnected ?? Effect.void;
   const distDir = yield* resolveDistDir();
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
@@ -490,6 +498,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       // idle for >10s); EventSource ignores `:` lines.
       const body = Stream.unwrap(
         Effect.gen(function* () {
+          yield* notifyClientConnected;
           const subscription = yield* PubSub.subscribe(pubsub);
           const scene = yield* buildScene(stage);
           // the SPA's default view loads exclusively over this stream —
@@ -529,6 +538,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       // /api/events — Bun.serve kills responses idle for >10s).
       const body = Stream.unwrap(
         Effect.gen(function* () {
+          yield* notifyClientConnected;
           const host = yield* hostFor(stg);
           const frames = yield* host.frames;
           yield* requestPlan(stg);
