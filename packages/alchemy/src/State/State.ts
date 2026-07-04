@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { ActionState } from "./ActionState.ts";
+import type { DeploymentStore } from "./Deployment.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 
 /**
@@ -22,6 +23,49 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   message: string;
   cause?: Error;
 }> {}
+
+/**
+ * # StateWriteFence
+ *
+ * The optional `fence` on {@link StateService.set} / `delete` /
+ * `setOutput` is a fencing token guarding head state against zombie
+ * writers — the classic lease problem: a deploy pauses (GC, laptop lid,
+ * network partition), its heartbeat lapses, a new deploy takes over the
+ * stage, and then the old deploy wakes up and keeps writing.
+ *
+ * The token is the deployment version, which every backend already
+ * allocates monotonically per `(stack, stage)` at `deployments.begin`.
+ * A write carrying `fence: F` must be REJECTED once any version `> F`
+ * has been begun — the newer begin supersedes the older lease, and
+ * versions are never re-used, so the check is a plain comparison
+ * against the newest allocated version.
+ *
+ * Enforcement strength is per backend:
+ * - in-memory and the Cloudflare Durable Object check atomically with
+ *   the write (single-threaded arbiter) — perfect fencing;
+ * - local FS and S3 check the newest version immediately before the
+ *   write — a small check-then-write window remains, so fencing is
+ *   best-effort there (still a categorical improvement: a zombie that
+ *   lost its lease minutes ago is caught by the very next write).
+ *
+ * A rejected write fails with a {@link StateStoreError} built by
+ * {@link fencedWriteRejected}; the engine treats it like any other
+ * fatal state write failure and aborts the zombie deploy.
+ *
+ * Writes WITHOUT `fence` (dashboards, CLIs, repair tooling, stores
+ * that predate fencing) bypass the check — the fence protects against
+ * *stale deploy sessions*, not against explicit operator writes.
+ */
+export const fencedWriteRejected = (request: {
+  stack: string;
+  stage: string;
+  fence: number;
+}): StateStoreError =>
+  new StateStoreError({
+    message:
+      `fenced write rejected: deployment v${request.fence} of ` +
+      `${request.stack}/${request.stage} has been superseded by a newer deployment`,
+  });
 
 export class State extends Context.Service<
   State,
@@ -82,20 +126,27 @@ export interface StateService {
   >;
   /**
    * Set a resource by its FQN (namespace-qualified key).
+   *
+   * `fence` (optional, feature-detected): the deployment version whose
+   * lease authorizes this write — see {@link StateWriteFence}.
    */
   set<V extends PersistedState>(request: {
     stack: string;
     stage: string;
     fqn: string;
     value: V;
+    fence?: number;
   }): Effect.Effect<V, StateStoreError, never>;
   /**
    * Delete a resource by its FQN (namespace-qualified key).
+   *
+   * `fence` (optional): see {@link StateWriteFence}.
    */
   delete(request: {
     stack: string;
     stage: string;
     fqn: string;
+    fence?: number;
   }): Effect.Effect<void, StateStoreError, never>;
   /**
    * Delete an entire stack, or a single stage when `stage` is provided.
@@ -126,10 +177,37 @@ export interface StateService {
   }): Effect.Effect<unknown, StateStoreError, never>;
   /**
    * Persist the resolved stack output for `(stack, stage)`.
+   *
+   * `fence` (optional): see {@link StateWriteFence}.
    */
   setOutput(request: {
     stack: string;
     stage: string;
     value: unknown;
+    fence?: number;
   }): Effect.Effect<unknown, StateStoreError, never>;
+  /**
+   * Read every resource in a stack/stage in one call.
+   *
+   * Optional (feature-detected): the dashboard and other batch readers use
+   * this to avoid the N+1 `list` + per-fqn `get` pattern; when absent,
+   * callers fall back to that pattern. All in-repo backends implement it.
+   */
+  getAll?(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<
+    ReadonlyMap<string, PersistedState>,
+    StateStoreError,
+    never
+  >;
+  /**
+   * Deployment history (versioned journal of every deploy/destroy).
+   *
+   * Optional (feature-detected): older or third-party state stores may not
+   * implement it, in which case the engine skips journaling and the
+   * dashboard's history views are unavailable. See {@link DeploymentStore}
+   * for the semantics every implementation must uphold.
+   */
+  deployments?: DeploymentStore;
 }
