@@ -20,11 +20,15 @@ import type { PersistedState, StateService, StateStoreError } from "./State.ts";
  * journals every engine state write alongside the head-state write.
  *
  * Robustness invariants:
- * - A deploy must NEVER fail or stall because journaling failed: journal
- *   writes are fire-and-forget with bounded retry; store errors are logged
- *   (`Effect.logWarning`) and swallowed. The one exception is
- *   {@link DeploymentInProgress} from `begin` — that is the concurrency
- *   protection working and IS surfaced to the caller.
+ * - **`begin` is fail-closed.** It is the mutual-exclusion gate for the
+ *   apply, so every failure aborts the deploy: {@link DeploymentInProgress}
+ *   (a live holder exists) and `StateStoreError` (the store could not prove
+ *   exclusivity) both propagate. A deploy never proceeds without the lock.
+ * - **Once open, journaling must never fail or stall the deploy**: journal
+ *   writes (append/heartbeat/end) are fire-and-forget with bounded retry;
+ *   store errors are logged (`Effect.logWarning`) and swallowed. Losing the
+ *   journal mid-flight loses observability, not correctness — the version
+ *   was already claimed.
  * - Stores without `deployments` support (older/third-party) yield a no-op
  *   session: `version` is `undefined`, `state` is the store itself, and
  *   `emit`/`end` do nothing.
@@ -137,6 +141,13 @@ export const makeDeploymentSession: (options: {
   stack: string;
   stage: string;
   meta: DeploymentMeta;
+  /**
+   * Targeted takeover — passed through to `deployments.begin`. Abandons
+   * exactly this open version (the caller proved the holder is dead)
+   * before claiming; any other live open still fails
+   * {@link DeploymentInProgress}.
+   */
+  supersede?: number;
 }) => Effect.Effect<
   DeploymentSession,
   DeploymentInProgress | StateStoreError,
@@ -146,8 +157,9 @@ export const makeDeploymentSession: (options: {
   stack: string;
   stage: string;
   meta: DeploymentMeta;
+  supersede?: number;
 }) {
-  const { store, stack, stage, meta } = options;
+  const { store, stack, stage, meta, supersede } = options;
   const deployments = store.deployments;
 
   if (deployments === undefined) {
@@ -161,7 +173,12 @@ export const makeDeploymentSession: (options: {
     return noop;
   }
 
-  const { version, token } = yield* deployments.begin({ stack, stage, meta });
+  const { version, token } = yield* deployments.begin({
+    stack,
+    stage,
+    meta,
+    supersede,
+  });
 
   const warn = (what: string) => (cause: unknown) =>
     Effect.logWarning(
@@ -276,8 +293,12 @@ export const makeDeploymentSession: (options: {
 
   // ── the state facade ────────────────────────────────────────────────────
   // Same StateService, but engine writes for THIS (stack, stage) also leave
-  // a status-level journal record. The before-image read is best-effort:
-  // journaling must never fail (or reorder) the head write.
+  // a status-level journal record AND carry the session's version as a
+  // fencing token (see StateWriteFence in State.ts): if a newer deployment
+  // has begun — this session is a zombie whose lease lapsed — the store
+  // rejects the write and the failure aborts the stale apply. The
+  // before-image read is best-effort: journaling must never fail (or
+  // reorder) the head write.
   const priorStatus = (request: {
     stack: string;
     stage: string;
@@ -306,7 +327,7 @@ export const makeDeploymentSession: (options: {
           return yield* store.set(request);
         }
         const before = yield* priorStatus(request);
-        const value = yield* store.set(request);
+        const value = yield* store.set({ ...request, fence: version });
         yield* journal(
           {
             kind: "state-set",
@@ -324,7 +345,7 @@ export const makeDeploymentSession: (options: {
           return yield* store.delete(request);
         }
         const before = yield* priorStatus(request);
-        yield* store.delete(request);
+        yield* store.delete({ ...request, fence: version });
         yield* journal(
           {
             kind: "state-delete",
@@ -336,10 +357,11 @@ export const makeDeploymentSession: (options: {
       }),
     setOutput: (request) =>
       Effect.gen(function* () {
-        const value = yield* store.setOutput(request);
-        if (mine(request)) {
-          yield* journal({ kind: "output-set" });
+        if (!mine(request)) {
+          return yield* store.setOutput(request);
         }
+        const value = yield* store.setOutput({ ...request, fence: version });
+        yield* journal({ kind: "output-set" });
         return value;
       }),
   };

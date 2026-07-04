@@ -4,12 +4,21 @@
  * `deployments` API, tees all apply events into the journal, journals every
  * engine state write, and closes the version with the run's outcome.
  */
-import { apply } from "@/Apply";
+import { spawnSync } from "node:child_process";
+import * as os from "node:os";
+import { apply, canTakeOverDeployment, isProcessAlive } from "@/Apply";
 import { provideFreshArtifactStore } from "@/Artifacts";
 import * as Plan from "@/Plan";
 import { make as makeStack } from "@/Stack";
 import { Stage } from "@/Stage";
-import { localState, State, type DeploymentEvent } from "@/State";
+import {
+  InMemoryService,
+  localState,
+  State,
+  StateStoreError,
+  type DeploymentEvent,
+  type StateService,
+} from "@/State";
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -280,6 +289,165 @@ describe("engine deployment journaling", () => {
         expect(after.map((r) => r.version)).toEqual([2, 1]);
         expect(after[0].outcome).toBe("succeeded");
       }),
+  );
+
+  test.provider(
+    "a live open held by a dead same-host process is taken over (supersede)",
+    (stack) =>
+      Effect.gen(function* () {
+        const store = yield* getStore;
+
+        // A pid that provably existed on this host and is now gone: spawn
+        // a short-lived child and wait for it to exit.
+        const deadPid = yield* Effect.sync(
+          () => spawnSync(process.execPath, ["--version"]).pid,
+        );
+        expect(typeof deadPid).toBe("number");
+
+        const held = yield* store.deployments!.begin({
+          stack: stack.name,
+          stage: "test",
+          meta: {
+            command: "deploy",
+            initiator: {
+              user: "crashed-cli",
+              host: os.hostname(),
+              pid: deadPid,
+            },
+          },
+        });
+
+        // The holder's heartbeat is fresh, but its process is dead on THIS
+        // host — the deploy takes over instead of failing.
+        yield* stack.deploy(TestResource("A", { string: "a" }));
+
+        const list = yield* store.deployments!.list({
+          stack: stack.name,
+          stage: "test",
+        });
+        expect(list.map((r) => r.version)).toEqual([
+          held.version + 1,
+          held.version,
+        ]);
+        expect(list[0].outcome).toBe("succeeded");
+        // The dead holder's version was reconciled to abandoned.
+        expect(list[1].outcome).toBe("abandoned");
+      }),
+  );
+
+  test(
+    "takeover predicate: only same-host dead pids qualify",
+    Effect.gen(function* () {
+      const holder = (initiator?: {
+        user?: string;
+        host?: string;
+        pid?: number;
+      }) => ({
+        stack: "s",
+        stage: "t",
+        version: 1,
+        meta: { command: "deploy" as const, initiator },
+        startedAt: 0,
+        heartbeatAt: 0,
+      });
+      const self = { host: "this-host", pid: 100 };
+      const dead = () => false;
+      const alive = () => true;
+
+      // same host + dead pid → takeover
+      expect(
+        canTakeOverDeployment(
+          holder({ host: "this-host", pid: 7 }),
+          self,
+          dead,
+        ),
+      ).toBe(true);
+      // same host + live pid → no
+      expect(
+        canTakeOverDeployment(
+          holder({ host: "this-host", pid: 7 }),
+          self,
+          alive,
+        ),
+      ).toBe(false);
+      // different host → never (the pid check is meaningless there)
+      expect(
+        canTakeOverDeployment(
+          holder({ host: "other-host", pid: 7 }),
+          self,
+          dead,
+        ),
+      ).toBe(false);
+      // missing host or pid → never
+      expect(canTakeOverDeployment(holder({ pid: 7 }), self, dead)).toBe(false);
+      expect(
+        canTakeOverDeployment(holder({ host: "this-host" }), self, dead),
+      ).toBe(false);
+      expect(canTakeOverDeployment(holder(undefined), self, dead)).toBe(false);
+      // our own pid → never (we cannot supersede ourselves)
+      expect(
+        canTakeOverDeployment(
+          holder({ host: "this-host", pid: 100 }),
+          self,
+          dead,
+        ),
+      ).toBe(false);
+
+      // the real liveness check recognizes our own process as alive
+      expect(isProcessAlive(process.pid)).toBe(true);
+    }),
+  );
+
+  test(
+    "a StateStoreError from begin fails the deploy (fail-closed: no lock, no mutation)",
+    Effect.gen(function* () {
+      const store = yield* InMemoryService();
+      const failing: StateService = {
+        ...store,
+        deployments: {
+          ...store.deployments!,
+          begin: () =>
+            Effect.fail(
+              new StateStoreError({ message: "journal store unreachable" }),
+            ),
+        },
+      };
+
+      const stackName = "engine-journal-fail-closed";
+      const result = yield* Effect.result(
+        TestResource("A", { string: "a" }).pipe(
+          makeStack({
+            name: stackName,
+            providers: TestLayers(),
+            state: Layer.succeed(State, Effect.succeed(failing)),
+          } as any) as any,
+          Effect.flatMap((compiled: any) =>
+            Plan.make(compiled).pipe(
+              Effect.flatMap((plan) => apply(plan)),
+              Effect.provide(compiled.services),
+            ),
+          ),
+          Effect.provide(Layer.succeed(Stage, "test")),
+          provideFreshArtifactStore,
+        ) as unknown as Effect.Effect<unknown, unknown>,
+      );
+
+      // begin is the mutual-exclusion gate — its failure aborts the apply.
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect((result.failure as { _tag?: string })._tag).toBe(
+          "StateStoreError",
+        );
+      }
+
+      // Fail-closed: nothing was deployed and no version was allocated.
+      expect(
+        yield* store.get({ stack: stackName, stage: "test", fqn: "A" }),
+      ).toBeUndefined();
+      expect(
+        yield* store.deployments!.list({ stack: stackName, stage: "test" }),
+      ).toHaveLength(0);
+    }),
   );
 
   test(

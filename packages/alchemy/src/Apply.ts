@@ -53,7 +53,7 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
   type DeploymentInProgress,
-  type DeploymentSession,
+  type DeploymentRecord,
   type StateService,
   makeDeploymentSession,
   State,
@@ -270,8 +270,9 @@ export const apply = <P extends Plan>(
       // deploy/destroy funnels through: CLI, programmatic, test harness).
       // The session's `state` facade journals every engine state write; its
       // `emit` tees apply events into the journal. Stores without
-      // `deployments` support yield a no-op session. DeploymentInProgress
-      // propagates — that is the concurrent-deploy protection working.
+      // `deployments` support yield a no-op session. `begin` is fail-closed:
+      // DeploymentInProgress AND StateStoreError abort the apply — we never
+      // proceed without the mutual-exclusion lock.
       const deployment = yield* openDeploymentSession({
         store,
         stack: stackName,
@@ -415,12 +416,67 @@ const planActionCounts = (plan: Plan): Record<string, number> => {
 };
 
 /**
+ * `true` when a process with `pid` is currently running on THIS host.
+ * Signal 0 performs the existence check without delivering anything;
+ * `EPERM` means "alive but owned by another user", `ESRCH` means gone.
+ */
+export const isProcessAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * Same-host dead-pid takeover predicate: the holder of a live open
+ * deployment can be superseded iff it was started on THIS host by a
+ * process that no longer exists. We only trust the pid check when the
+ * holder's recorded host matches ours — a pid from another machine is
+ * meaningless locally.
+ *
+ * A recycled pid (dead holder, new unrelated process with the same pid)
+ * makes this return `false` — conservative: the deploy waits for the TTL
+ * reconciliation path instead of taking over.
+ */
+export const canTakeOverDeployment = (
+  holder: DeploymentRecord,
+  self: { host?: string; pid?: number },
+  isAlive: (pid: number) => boolean = isProcessAlive,
+): boolean => {
+  const initiator = holder.meta.initiator;
+  return (
+    initiator?.host !== undefined &&
+    initiator.host === self.host &&
+    initiator.pid !== undefined &&
+    initiator.pid !== self.pid &&
+    !isAlive(initiator.pid)
+  );
+};
+
+/**
  * Open a {@link DeploymentSession} for this apply.
  *
- * Journaling must never fail or stall a deploy: a `StateStoreError` from
- * `begin` degrades to a no-op session (with a warning). The one exception is
- * `DeploymentInProgress` — the concurrency protection — which propagates to
- * the caller.
+ * `begin` is the mutual-exclusion gate for the whole apply, so every failure
+ * is fail-closed: `DeploymentInProgress` (a live holder exists) and
+ * `StateStoreError` (the store could not prove exclusivity — unreachable,
+ * unauthorized, or claim contention) both abort the deploy. Proceeding
+ * without the lock is never an option: the apply is one big transaction and
+ * a deploy that cannot claim its version must not mutate anything.
+ *
+ * One exception softens `DeploymentInProgress`: when the live holder was
+ * started on THIS host by a process that is provably gone (crashed CLI,
+ * killed terminal — see {@link canTakeOverDeployment}), waiting out the
+ * 60s heartbeat TTL just punishes the user for the crash. We retry `begin`
+ * once with `supersede: holder.version` — a targeted takeover that abandons
+ * exactly that version. If any OTHER deploy claimed the stage in between,
+ * the versions no longer match and the retry fails `DeploymentInProgress`
+ * like any other begin, so the takeover can never race a legitimate deploy.
+ *
+ * Stores without `deployments` support yield a no-op session inside
+ * {@link makeDeploymentSession} — that is a declared capability gap, not a
+ * failure.
  */
 const openDeploymentSession = Effect.fn("openDeploymentSession")(function* ({
   store,
@@ -438,27 +494,29 @@ const openDeploymentSession = Effect.fn("openDeploymentSession")(function* ({
     host: os.hostname(),
     pid: process.pid,
   }));
-  return yield* makeDeploymentSession({
-    store,
-    stack,
-    stage,
-    meta: {
-      command,
-      initiator,
-      alchemyVersion: packageJson.version,
-    },
-  }).pipe(
-    Effect.catchTag("StateStoreError", (error) =>
-      Effect.logWarning(
-        `alchemy: could not open a deployment journal for ${stack}/${stage} (deploy unaffected)`,
-        error,
-      ).pipe(
-        Effect.as<DeploymentSession>({
-          version: undefined,
-          state: store,
-          emit: () => Effect.void,
-          end: () => Effect.void,
-        }),
+  const open = (supersede?: number) =>
+    makeDeploymentSession({
+      store,
+      stack,
+      stage,
+      meta: {
+        command,
+        initiator,
+        alchemyVersion: packageJson.version,
+      },
+      supersede,
+    });
+  return yield* open().pipe(
+    Effect.catchTag("DeploymentInProgress", (error) =>
+      Effect.sync(() => canTakeOverDeployment(error.holder, initiator)).pipe(
+        Effect.flatMap((takeover) =>
+          takeover
+            ? Effect.logWarning(
+                `alchemy: taking over deployment v${error.holder.version} of ${stack}/${stage} — ` +
+                  `its holder (pid ${error.holder.meta.initiator?.pid} on this host) is no longer running`,
+              ).pipe(Effect.flatMap(() => open(error.holder.version)))
+            : Effect.fail(error),
+        ),
       ),
     ),
   );

@@ -7,6 +7,9 @@ import { pipe } from "effect/Function";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import {
   DEPLOYMENT_TTL_MILLIS,
+  endTransition,
+  isStaleOpen,
+  shouldAbandonOpen,
   type DeploymentEvent,
   type DeploymentMeta,
   type DeploymentRecord,
@@ -17,6 +20,12 @@ import type {
   ResourceState,
 } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
+import {
+  aesCtrDecryptJson,
+  aesCtrEncryptJson,
+  importAesCtrKey,
+} from "../../Util/aes-ctr.ts";
+import { sha256 } from "../../Util/sha256.ts";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
@@ -28,12 +37,9 @@ import {
   deploymentRecordKey,
   deploymentStagePrefix,
   INSERT_DEPLOYMENT_EVENT,
-  isStaleOpen,
-  makeDeploymentCrypto,
   parseDeploymentOpenKey,
   SELECT_DEPLOYMENT_MAX_SEQ,
   selectDeploymentEventsSql,
-  sha256Hex,
   toPublicDeploymentRecord,
   type DeploymentAppendResult,
   type DeploymentBeginResult,
@@ -61,67 +67,38 @@ export default class Store extends DurableObject<Store>()(
       const keyHex = yield* encryptionSecret
         .get()
         .pipe(Effect.map(Redacted.value), Effect.orDie);
-      const cryptoKey = yield* Effect.tryPromise(() =>
-        crypto.subtle.importKey(
-          "raw",
-          Buffer.from(keyHex, "hex"),
-          { name: "AES-CTR" },
-          false,
-          ["encrypt", "decrypt"],
-        ),
-      ).pipe(Effect.orDie);
+      const cryptoKey = yield* importAesCtrKey(keyHex);
 
       const encryptValue = (value: unknown) =>
-        Effect.tryPromise(async () => {
-          const plaintext = new TextEncoder().encode(
-            JSON.stringify(encodeState(value)),
-          );
-          const counter = crypto.getRandomValues(allocBytes(NONCE_BYTES));
-          const ct = new Uint8Array(
-            await crypto.subtle.encrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              plaintext,
-            ),
-          );
-          // Frame as a single base64 string: nonce || ciphertext.
-          return Buffer.concat([counter, ct]).toString("base64");
-        }).pipe(Effect.orDie);
+        aesCtrEncryptJson(cryptoKey, encodeState(value));
 
-      const decryptEntry = (entry: string) =>
-        Effect.tryPromise(async () => {
-          const framed = Buffer.from(entry, "base64");
-          const counter = framed.subarray(0, NONCE_BYTES);
-          const ciphertext = framed.subarray(NONCE_BYTES);
-          let pt;
-          try {
-            pt = await crypto.subtle.decrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              ciphertext,
-            );
-          } catch (error) {
-            // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
-            // So, we catch a decryption error here and return undefined instead.
-            // The engine should reconcile, hopefully, but users may lose some data
-            console.error(
-              "Error decrypting entry. Returning undefined instead.",
-              error,
-            );
-            return undefined;
-          }
-          return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
-        }).pipe(Effect.orDie);
+      const decryptEntry = (
+        entry: string,
+      ): Effect.Effect<ResourceState | undefined> =>
+        aesCtrDecryptJson<ResourceState>(cryptoKey, entry).pipe(
+          Effect.catchTag("AesCtrDecryptError", (error) =>
+            Effect.sync(() => {
+              // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
+              // So, we catch a decryption error here and return undefined instead.
+              // The engine should reconcile, hopefully, but users may lose some data
+              console.error(
+                "Error decrypting entry. Returning undefined instead.",
+                error,
+              );
+              return undefined;
+            }),
+          ),
+        );
 
       // -- Deployment history (DeploymentStore backing) --------------
       //
       // Records live in KV under reserved `d\x00`/`dl\x00`/`dc\x00`
       // prefixes; the event journal lives in `storage.sql` rows. Meta /
-      // summary / payloads are sealed with the same AES-CTR key as
-      // resource rows PLUS an integrity hash — corruption surfaces as a
-      // typed result instead of the legacy swallow-undefined behavior.
-      const deploymentCrypto = makeDeploymentCrypto(cryptoKey);
-
+      // summary / payloads are encrypted with the same AES-CTR key as
+      // resource rows. Unlike resource rows (which swallow decryption
+      // failures so the engine can reconcile), deployment history is
+      // read-only evidence — an unreadable record surfaces as a typed
+      // "corrupt" result instead of silently vanishing.
       const ensureEventsTable = storage.sql
         .exec(CREATE_DEPLOYMENT_EVENTS_TABLE)
         .pipe(Effect.asVoid);
@@ -131,16 +108,35 @@ export default class Store extends DurableObject<Store>()(
           deploymentRecordKey(stage, version),
         );
 
-      /** Unseal meta/summary and strip internal fields. */
+      /**
+       * Fencing check (see StateWriteFence in State.ts): a head-state
+       * write carrying `fence: F` is rejected once any deployment
+       * version > F has been begun. The per-stage counter IS the newest
+       * allocated version, so the check is one hot storage-cache read.
+       * The DO input gate stays closed across the check and the write
+       * that follows, so fencing here is perfectly atomic.
+       */
+      const fenceViolated = (stage: string, fence: number | undefined) =>
+        fence === undefined
+          ? Effect.succeed(false)
+          : storage
+              .get<number>(deploymentCounterKey(stage))
+              .pipe(Effect.map((newest) => (newest ?? 0) > fence));
+
+      /** Decrypt meta/summary and strip internal fields. */
       const toPublicDeployment = (stored: StoredDeploymentRecord) =>
         Effect.gen(function* () {
-          const meta = yield* deploymentCrypto.open<DeploymentMeta>(
+          const meta = yield* aesCtrDecryptJson<DeploymentMeta>(
+            cryptoKey,
             stored.meta,
           );
           const summary =
             stored.summary === undefined
               ? undefined
-              : yield* deploymentCrypto.open<DeploymentSummary>(stored.summary);
+              : yield* aesCtrDecryptJson<DeploymentSummary>(
+                  cryptoKey,
+                  stored.summary,
+                );
           return toPublicDeploymentRecord(stored, meta, summary);
         });
 
@@ -265,26 +261,33 @@ export default class Store extends DurableObject<Store>()(
             ),
 
         /**
-         * (Stack DO only) Persist a resource. Returns the stored
-         * value unchanged.
+         * (Stack DO only) Persist a resource. Returns the stored value,
+         * or a `fenced` result when the caller's lease is superseded —
+         * a discriminated value (not a thrown error) because the DO RPC
+         * stub serializes thrown errors lossily.
          */
-        set: ({
+        set: Effect.fn(function* ({
           stage,
           fqn,
           value,
+          fence,
         }: {
           stage: string;
           fqn: string;
           value: ResourceState;
-        }) =>
-          encryptValue(value).pipe(
-            Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(resourceKey(stage, fqn), encrypted)
-                .pipe(Effect.asVoid),
-            ),
-            Effect.map(() => value),
-          ),
+          fence?: number;
+        }) {
+          // Encrypt BEFORE the fence check: crypto is a non-storage
+          // await that opens the DO input gate, so it must not sit
+          // between the check and the put (which are both storage ops
+          // and therefore atomic under the closed gate).
+          const encrypted = yield* encryptValue(value);
+          if (yield* fenceViolated(stage, fence)) {
+            return { _tag: "fenced" as const };
+          }
+          yield* storage.put<string>(resourceKey(stage, fqn), encrypted);
+          return { _tag: "ok" as const, value };
+        }),
 
         /**
          * (Stack DO only) Delete a resource. Idempotent.
@@ -294,8 +297,21 @@ export default class Store extends DurableObject<Store>()(
          * proxy the call, surfacing as "RPC receiver does not
          * implement the method 'delete'".
          */
-        remove: ({ stage, fqn }: { stage: string; fqn: string }) =>
-          storage.delete(resourceKey(stage, fqn)),
+        remove: Effect.fn(function* ({
+          stage,
+          fqn,
+          fence,
+        }: {
+          stage: string;
+          fqn: string;
+          fence?: number;
+        }) {
+          if (yield* fenceViolated(stage, fence)) {
+            return { _tag: "fenced" as const };
+          }
+          yield* storage.delete(resourceKey(stage, fqn));
+          return { _tag: "ok" as const };
+        }),
 
         /**
          * (Stack DO only) Delete every resource in this stack, or every
@@ -326,17 +342,26 @@ export default class Store extends DurableObject<Store>()(
 
         /**
          * (Stack DO only) Persist the resolved stack output for
-         * `stage`. Returns the stored value unchanged.
+         * `stage`. Returns the stored value, or a `fenced` result when
+         * the caller's lease is superseded (see `set`).
          */
-        setOutput: ({ stage, value }: { stage: string; value: any }) =>
-          encryptValue(value).pipe(
-            Effect.flatMap((encrypted) =>
-              storage
-                .put<string>(stackOutputKey(stage), encrypted)
-                .pipe(Effect.asVoid),
-            ),
-            Effect.map(() => value),
-          ),
+        setOutput: Effect.fn(function* ({
+          stage,
+          value,
+          fence,
+        }: {
+          stage: string;
+          value: any;
+          fence?: number;
+        }) {
+          // Encrypt before the fence check — see `set`.
+          const encrypted = yield* encryptValue(value);
+          if (yield* fenceViolated(stage, fence)) {
+            return { _tag: "fenced" as const };
+          }
+          yield* storage.put<string>(stackOutputKey(stage), encrypted);
+          return { _tag: "ok" as const, value };
+        }),
 
         /**
          * (Stack DO only) Return every resource in a stage whose
@@ -410,25 +435,34 @@ export default class Store extends DurableObject<Store>()(
           stage,
           meta,
           ttlMillis,
+          supersede,
         }: {
           stack: string;
           stage: string;
           meta: DeploymentMeta;
           ttlMillis?: number;
+          /**
+           * Targeted takeover: abandon exactly this open version even with
+           * a fresh heartbeat (the caller proved the holder is dead); any
+           * other live open still loses the claim.
+           */
+          supersede?: number;
         }) {
           const now = yield* Clock.currentTimeMillis;
           const ttl = ttlMillis ?? DEPLOYMENT_TTL_MILLIS;
           const token = yield* Effect.sync(() => crypto.randomUUID());
           // Pre-compute ALL crypto outside the transaction: a non-storage
           // await inside it would open the DO input gate mid-claim.
-          const tokenHash = yield* sha256Hex(token);
-          const sealedMeta = yield* deploymentCrypto.seal(meta);
+          const tokenHash = yield* sha256(token);
+          const encryptedMeta = yield* aesCtrEncryptJson(cryptoKey, meta);
 
           // The version-claim primitive: the DO is single-threaded per
           // stack and `storage.transaction` makes the read-marker /
           // bump-counter / write-record step atomic even across the
           // storage await points, so two racing begins can never both
-          // allocate.
+          // allocate. (No blind-claim fast path here — begin is already a
+          // single client round trip; the marker/counter reads are hot
+          // in-DO storage-cache hits.)
           const claim = yield* storage.transaction((txn) =>
             Effect.gen(function* () {
               const open = yield* txn.get<DeploymentOpenMarker>(
@@ -438,10 +472,12 @@ export default class Store extends DurableObject<Store>()(
                 const holder = yield* txn.get<StoredDeploymentRecord>(
                   deploymentRecordKey(stage, open.version),
                 );
+                // Shared takeover semantics: stale heartbeat, or a targeted
+                // `supersede` of exactly this version.
                 if (
                   holder !== undefined &&
                   holder.endedAt === undefined &&
-                  !isStaleOpen(holder, now, ttl)
+                  !shouldAbandonOpen(holder, now, ttl, supersede)
                 ) {
                   // Live open — the loser re-checks and fails in-progress.
                   return {
@@ -472,7 +508,7 @@ export default class Store extends DurableObject<Store>()(
                 heartbeatAt: now,
                 ttlMillis: ttl,
                 tokenHash,
-                meta: sealedMeta,
+                meta: encryptedMeta,
               } satisfies StoredDeploymentRecord);
               yield* txn.put(deploymentOpenKey(stage), {
                 version,
@@ -528,14 +564,14 @@ export default class Store extends DurableObject<Store>()(
           token: string;
           events: readonly DeploymentEvent[];
         }) {
-          const tokenHash = yield* sha256Hex(token);
+          const tokenHash = yield* sha256(token);
           const rows = yield* Effect.forEach(events, (event) =>
-            deploymentCrypto.seal(event.payload ?? null).pipe(
-              Effect.map((box) => ({
+            aesCtrEncryptJson(cryptoKey, event.payload ?? null).pipe(
+              Effect.map((payload) => ({
                 seq: event.seq,
                 ts: event.ts,
                 fqn: event.fqn ?? null,
-                box,
+                payload,
               })),
             ),
           );
@@ -557,8 +593,7 @@ export default class Store extends DurableObject<Store>()(
               row.seq,
               row.ts,
               row.fqn,
-              row.box.hash,
-              row.box.data,
+              row.payload,
             );
           }
           const cursor = yield* storage.sql.exec<{ ackedSeq: number }>(
@@ -588,7 +623,7 @@ export default class Store extends DurableObject<Store>()(
           token: string;
         }) {
           const now = yield* Clock.currentTimeMillis;
-          const tokenHash = yield* sha256Hex(token);
+          const tokenHash = yield* sha256(token);
           return yield* storage.transaction((txn) =>
             Effect.gen(function* () {
               const stored = yield* txn.get<StoredDeploymentRecord>(
@@ -652,11 +687,11 @@ export default class Store extends DurableObject<Store>()(
           };
         }) {
           const now = yield* Clock.currentTimeMillis;
-          const tokenHash = yield* sha256Hex(token);
-          const sealedSummary =
+          const tokenHash = yield* sha256(token);
+          const encryptedSummary =
             summary === undefined
               ? undefined
-              : yield* deploymentCrypto.seal(summary);
+              : yield* aesCtrEncryptJson(cryptoKey, summary);
           return yield* storage.transaction((txn) =>
             Effect.gen(function* () {
               const stored = yield* txn.get<StoredDeploymentRecord>(
@@ -673,38 +708,31 @@ export default class Store extends DurableObject<Store>()(
                 return invalid;
               }
               const ok: DeploymentMutateResult = { _tag: "ok" };
-              if (stored.endedAt === undefined) {
-                const next: StoredDeploymentRecord = {
-                  ...stored,
-                  endedAt: now,
-                  outcome,
-                };
-                if (sealedSummary !== undefined) {
-                  next.summary = sealedSummary;
-                }
-                yield* txn.put(deploymentRecordKey(stage, version), next);
+              // Shared close semantics: first outcome wins, ending an
+              // "abandoned" version records "completed-late".
+              const wasOpen = stored.endedAt === undefined;
+              const nextOutcome = endTransition(stored, outcome);
+              if (nextOutcome === undefined) {
+                // Already ended with a real outcome: idempotent no-op.
+                return ok;
+              }
+              const next: StoredDeploymentRecord = {
+                ...stored,
+                endedAt: now,
+                outcome: nextOutcome,
+              };
+              if (encryptedSummary !== undefined) {
+                next.summary = encryptedSummary;
+              }
+              yield* txn.put(deploymentRecordKey(stage, version), next);
+              if (wasOpen) {
                 const open = yield* txn.get<DeploymentOpenMarker>(
                   deploymentOpenKey(stage),
                 );
                 if (open?.version === version) {
                   yield* txn.delete(deploymentOpenKey(stage));
                 }
-                return ok;
               }
-              if (stored.outcome === "abandoned") {
-                // The engine finished after the store reconciled the lost
-                // heartbeat — preserve that fact as "completed-late".
-                const next: StoredDeploymentRecord = {
-                  ...stored,
-                  endedAt: now,
-                  outcome: "completed-late",
-                };
-                if (sealedSummary !== undefined) {
-                  next.summary = sealedSummary;
-                }
-                yield* txn.put(deploymentRecordKey(stage, version), next);
-              }
-              // Already ended with a real outcome: idempotent no-op.
               return ok;
             }),
           );
@@ -808,10 +836,7 @@ export default class Store extends DurableObject<Store>()(
           const events: DeploymentEvent[] = [];
           for (const row of rows) {
             const payload = yield* Effect.result(
-              deploymentCrypto.open<unknown>({
-                hash: row.hash,
-                data: row.payload,
-              }),
+              aesCtrDecryptJson<unknown>(cryptoKey, row.payload),
             );
             if (Result.isFailure(payload)) {
               const corrupt: DeploymentReadEventsResult = {
@@ -857,9 +882,6 @@ const STACK_OUTPUT_PREFIX = `o${SEP}`;
 /** Key prefix for stack-index entries in the root DO. */
 const STACK_INDEX_PREFIX = "s:";
 
-/** AES-CTR counter block length. */
-const NONCE_BYTES = 16;
-
 /** Build the resource key inside a *stack DO*. */
 const resourceKey = (stage: string, fqn: string) =>
   `${RESOURCE_PREFIX}${stage}${SEP}${fqn}`;
@@ -883,11 +905,3 @@ const parseResourceKey = (
   if (sep < 0) return undefined;
   return { stage: rest.slice(0, sep), fqn: rest.slice(sep + 1) };
 };
-
-/**
- * Allocate a `Uint8Array` over a fresh `ArrayBuffer` (not shared) so
- * the resulting buffer satisfies Web Crypto's `BufferSource` type
- * constraint under strict DOM typings.
- */
-const allocBytes = (size: number): Uint8Array<ArrayBuffer> =>
-  new Uint8Array(new ArrayBuffer(size));

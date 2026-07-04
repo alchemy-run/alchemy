@@ -7,16 +7,21 @@ import type { PlatformError } from "effect/PlatformError";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import {
+  ClosedVersionHint,
   DEPLOYMENT_TTL_MILLIS,
   DeploymentInProgress,
   DeploymentNotFound,
   DeploymentTokenInvalid,
+  endTransition,
+  shouldAbandonOpen,
+  toPublicRecord,
   type DeploymentEvent,
-  type DeploymentRecord,
   type DeploymentStore,
+  type StoredDeploymentRecord,
 } from "./Deployment.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import {
+  fencedWriteRejected,
   State,
   StateStoreError,
   type PersistedState,
@@ -48,9 +53,6 @@ export const localState = (options?: LocalStateOptions) =>
       return yield* Effect.cached(make);
     }),
   );
-
-/** Internal deployment record: the public shape plus the open token. */
-type StoredDeploymentRecord = DeploymentRecord & { token: string };
 
 export const makeLocalState = (options?: LocalStateOptions) =>
   Effect.gen(function* () {
@@ -152,6 +154,14 @@ export const makeLocalState = (options?: LocalStateOptions) =>
     const deploymentsDir = (loc: Loc) =>
       path.join(stageDir(loc), ".deployments");
 
+    /**
+     * Blind-claim fast-path hint — see {@link ClosedVersionHint} for the
+     * invariant and the shared single-shot / monotonic policy. Here the
+     * claim primitive is an exclusive-create (`wx`) of N+1's record,
+     * skipping the O(history) record scan.
+     */
+    const closedHint = new ClosedVersionHint();
+
     const recordFile = (loc: Loc, version: number) =>
       path.join(deploymentsDir(loc), `${version}.record.json`);
 
@@ -245,15 +255,6 @@ export const makeLocalState = (options?: LocalStateOptions) =>
       ).pipe(Effect.catchTag("PlatformError", fail));
 
     /**
-     * Strip the token. Records/events are parsed fresh from disk on every
-     * read, so returned values never alias internal mutable state.
-     */
-    const toPublic = (record: StoredDeploymentRecord): DeploymentRecord => {
-      const { token: _token, ...rest } = record;
-      return rest;
-    };
-
-    /**
      * Parse an events.jsonl body. Skips blank and unparseable lines (a
      * crash mid-append can leave a torn trailing line — it must not poison
      * history) and dedupes by seq (first write wins).
@@ -280,7 +281,7 @@ export const makeLocalState = (options?: LocalStateOptions) =>
     };
 
     const deployments: DeploymentStore = {
-      begin: ({ stack, stage, meta, ttlMillis }) =>
+      begin: ({ stack, stage, meta, ttlMillis, supersede }) =>
         Effect.gen(function* () {
           const loc: Loc = { stack, stage };
           const now = yield* Clock.currentTimeMillis;
@@ -289,6 +290,44 @@ export const makeLocalState = (options?: LocalStateOptions) =>
           yield* fs
             .makeDirectory(deploymentsDir(loc), { recursive: true })
             .pipe(Effect.catchTag("PlatformError", fail));
+
+          const makeRecord = (version: number): StoredDeploymentRecord => ({
+            stack,
+            stage,
+            version,
+            meta,
+            startedAt: now,
+            heartbeatAt: now,
+            token,
+          });
+
+          // Blind-claim fast path: our own `end` closed version `known`,
+          // so an exclusive-create of known+1 succeeding proves no newer
+          // version (and no live open) exists — skip the record scan.
+          // `take` is single-shot: a conflict falls through to the loop.
+          const known =
+            supersede === undefined ? closedHint.take(loc) : undefined;
+          if (known !== undefined) {
+            const version = known + 1;
+            const claimed = yield* fs
+              .writeFileString(
+                recordFile(loc, version),
+                JSON.stringify(makeRecord(version), null, 2),
+                { flag: "wx" },
+              )
+              .pipe(
+                Effect.map(() => true),
+                Effect.catchTag("PlatformError", (e) =>
+                  e.reason._tag === "AlreadyExists"
+                    ? Effect.succeed(false)
+                    : fail(e),
+                ),
+              );
+            if (claimed) {
+              return { version, token };
+            }
+            // Someone else claimed known+1 — fall through to the full loop.
+          }
 
           const attempt = (
             remaining: number,
@@ -316,7 +355,9 @@ export const makeLocalState = (options?: LocalStateOptions) =>
                 if (stored === undefined || stored.endedAt !== undefined) {
                   continue;
                 }
-                if (now - stored.heartbeatAt >= ttl) {
+                // Shared takeover semantics: stale heartbeat, or a targeted
+                // `supersede` of exactly this version.
+                if (shouldAbandonOpen(stored, now, ttl, supersede)) {
                   stored.endedAt = now;
                   stored.outcome = "abandoned";
                   yield* writeRecord(loc, version, stored);
@@ -325,7 +366,7 @@ export const makeLocalState = (options?: LocalStateOptions) =>
                     new DeploymentInProgress({
                       stack,
                       stage,
-                      holder: toPublic(stored),
+                      holder: toPublicRecord(stored),
                     }),
                   );
                 }
@@ -333,19 +374,10 @@ export const makeLocalState = (options?: LocalStateOptions) =>
               // Claim: exclusive-create of the record file arbitrates the
               // race. The loser re-scans — it either finds the winner's
               // live open (DeploymentInProgress) or claims next + 1.
-              const record: StoredDeploymentRecord = {
-                stack,
-                stage,
-                version: next,
-                meta,
-                startedAt: now,
-                heartbeatAt: now,
-                token,
-              };
               return yield* fs
                 .writeFileString(
                   recordFile(loc, next),
-                  JSON.stringify(record, null, 2),
+                  JSON.stringify(makeRecord(next), null, 2),
                   { flag: "wx" },
                 )
                 .pipe(
@@ -413,25 +445,19 @@ export const makeLocalState = (options?: LocalStateOptions) =>
           const loc: Loc = { stack, stage };
           const now = yield* Clock.currentTimeMillis;
           const stored = yield* resolveStored(loc, version, token);
-          if (stored.endedAt === undefined) {
+          // Shared close semantics: first outcome wins, ending an
+          // "abandoned" version records "completed-late".
+          const nextOutcome = endTransition(stored, outcome);
+          if (nextOutcome !== undefined) {
             stored.endedAt = now;
-            stored.outcome = outcome;
-            if (summary !== undefined) {
-              stored.summary = summary;
-            }
-            yield* writeRecord(loc, version, stored);
-          } else if (stored.outcome === "abandoned") {
-            // The engine finished after the store reconciled the lost
-            // heartbeat — preserve that fact as "completed-late".
-            stored.endedAt = now;
-            stored.outcome = "completed-late";
+            stored.outcome = nextOutcome;
             if (summary !== undefined) {
               stored.summary = summary;
             }
             yield* writeRecord(loc, version, stored);
           }
-          // Already ended with a real outcome: idempotent no-op, the first
-          // outcome wins.
+          // Feed the blind-claim fast path: this version is known closed.
+          closedHint.noteClosed(loc, version);
         }),
       list: ({ stack, stage, before, limit }) =>
         Effect.gen(function* () {
@@ -448,13 +474,13 @@ export const makeLocalState = (options?: LocalStateOptions) =>
             { concurrency: 8 },
           );
           return records.flatMap((record) =>
-            record === undefined ? [] : [toPublic(record)],
+            record === undefined ? [] : [toPublicRecord(record)],
           );
         }),
       get: ({ stack, stage, version }) =>
         Effect.gen(function* () {
           const stored = yield* readStoredRecord({ stack, stage }, version);
-          return stored === undefined ? undefined : toPublic(stored);
+          return stored === undefined ? undefined : toPublicRecord(stored);
         }),
       readEvents: ({ stack, stage, version, fromSeq }) =>
         Effect.gen(function* () {
@@ -474,6 +500,38 @@ export const makeLocalState = (options?: LocalStateOptions) =>
             .sort((a, b) => a.seq - b.seq);
         }),
     };
+
+    /**
+     * Fencing check (see StateWriteFence in State.ts): reject a write
+     * carrying `fence: F` once any deployment version > F exists for the
+     * stage. The version directory read is cheap locally. Check-then-write
+     * (not atomic with the write), so fencing is best-effort here — a
+     * zombie that lost its lease is caught by its next write.
+     */
+    const checkFence = (request: {
+      stack: string;
+      stage: string;
+      fence?: number;
+    }): Effect.Effect<void, StateStoreError> =>
+      Effect.gen(function* () {
+        if (request.fence === undefined) {
+          return;
+        }
+        const versions = yield* listVersions({
+          stack: request.stack,
+          stage: request.stage,
+        });
+        const newest = versions.reduce((max, v) => (v > max ? v : max), 0);
+        if (newest > request.fence) {
+          return yield* Effect.fail(
+            fencedWriteRejected({
+              stack: request.stack,
+              stage: request.stage,
+              fence: request.fence,
+            }),
+          );
+        }
+      });
 
     const state: StateService = {
       id: "local",
@@ -505,17 +563,25 @@ export const makeLocalState = (options?: LocalStateOptions) =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        ensure(stageDir(request)).pipe(
+        checkFence(request).pipe(
           Effect.flatMap(() =>
-            writeAtomic(
-              resource(request),
-              JSON.stringify(encodeState(request.value), null, 2),
+            ensure(stageDir(request)).pipe(
+              Effect.flatMap(() =>
+                writeAtomic(
+                  resource(request),
+                  JSON.stringify(encodeState(request.value), null, 2),
+                ),
+              ),
+              recover,
             ),
           ),
-          recover,
           Effect.map(() => request.value),
         ),
-      delete: (request) => fs.remove(resource(request)).pipe(recover),
+      delete: (request) =>
+        checkFence(request).pipe(
+          Effect.flatMap(() => fs.remove(resource(request)).pipe(recover)),
+          Effect.asVoid,
+        ),
       deleteStack: ({ stack, stage }) =>
         fs
           .remove(
@@ -550,14 +616,18 @@ export const makeLocalState = (options?: LocalStateOptions) =>
           recover,
         ),
       setOutput: (request) =>
-        ensure(stageDir(request)).pipe(
+        checkFence(request).pipe(
           Effect.flatMap(() =>
-            writeAtomic(
-              outputFile(request),
-              JSON.stringify(encodeState(request.value as any), null, 2),
+            ensure(stageDir(request)).pipe(
+              Effect.flatMap(() =>
+                writeAtomic(
+                  outputFile(request),
+                  JSON.stringify(encodeState(request.value as any), null, 2),
+                ),
+              ),
+              recover,
             ),
           ),
-          recover,
           Effect.map(() => request.value),
         ),
       getAll: (request) =>

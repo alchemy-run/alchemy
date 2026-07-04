@@ -7,18 +7,21 @@ import {
   deploymentOpenKey,
   deploymentRecordKey,
   deploymentStagePrefix,
-  importDeploymentKey,
   INSERT_DEPLOYMENT_EVENT,
-  isStaleOpen,
-  makeDeploymentCrypto,
   parseDeploymentOpenKey,
   parseDeploymentRecordKey,
   SELECT_DEPLOYMENT_MAX_SEQ,
   selectDeploymentEventsSql,
-  sha256Hex,
   toPublicDeploymentRecord,
   type StoredDeploymentRecord,
 } from "@/Cloudflare/StateStore/Deployments.ts";
+import { isStaleOpen } from "@/State/Deployment.ts";
+import {
+  aesCtrDecryptJson,
+  aesCtrEncryptJson,
+  importAesCtrKey,
+} from "@/Util/aes-ctr.ts";
+import { sha256 } from "@/Util/sha256.ts";
 import { AlchemyContextLive } from "@/AlchemyContext.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
@@ -35,6 +38,7 @@ import {
 import { State } from "@/State/State.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "@effect/vitest";
+import { beforeAll } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
@@ -44,8 +48,8 @@ import { deploymentStoreConformance } from "../../State/deploymentStoreConforman
 
 // ---------------------------------------------------------------------------
 // Ungated unit tests for the pure pieces of the Cloudflare DO deployment
-// store: key builders, the stale-open predicate, the sealed (encrypted +
-// integrity-hashed) record codec and the SQL statement builders.
+// store: key builders, the stale-open predicate, the shared AES-CTR JSON
+// codec and the SQL statement builders.
 // ---------------------------------------------------------------------------
 
 describe("Cloudflare deployment keys", () => {
@@ -129,92 +133,55 @@ describe("Cloudflare deployment record codec", () => {
   const OTHER_KEY_HEX =
     "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100";
 
-  it.effect("sha256Hex matches a known vector", () =>
+  it.effect("sha256 matches a known vector", () =>
     Effect.gen(function* () {
-      const empty = yield* sha256Hex("");
+      const empty = yield* sha256("");
       expect(empty).toBe(
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       );
     }),
   );
 
-  it.effect("seal/open round-trips and never stores plaintext", () =>
+  it.effect("encrypt/decrypt round-trips and never stores plaintext", () =>
     Effect.gen(function* () {
-      const key = yield* importDeploymentKey(KEY_HEX);
-      const crypto = makeDeploymentCrypto(key);
+      const key = yield* importAesCtrKey(KEY_HEX);
       const value = {
         command: "deploy",
         initiator: { user: "sam" },
         nested: [1, 2, { deep: true }],
       };
-      const box = yield* crypto.seal(value);
-      expect(box.data).not.toContain("sam");
-      expect(box.hash).toMatch(/^[0-9a-f]{64}$/);
-      const opened = yield* crypto.open<typeof value>(box);
+      const data = yield* aesCtrEncryptJson(key, value);
+      expect(data).not.toContain("sam");
+      const opened = yield* aesCtrDecryptJson<typeof value>(key, data);
       expect(opened).toEqual(value);
-      // fresh object every open — no aliasing
-      const again = yield* crypto.open<typeof value>(box);
+      // fresh object every decrypt — no aliasing
+      const again = yield* aesCtrDecryptJson<typeof value>(key, data);
       expect(again).not.toBe(opened);
     }),
   );
 
-  it.effect("two seals of the same value use distinct nonces", () =>
+  it.effect("two encryptions of the same value use distinct nonces", () =>
     Effect.gen(function* () {
-      const key = yield* importDeploymentKey(KEY_HEX);
-      const crypto = makeDeploymentCrypto(key);
-      const a = yield* crypto.seal({ v: 1 });
-      const b = yield* crypto.seal({ v: 1 });
-      expect(a.data).not.toBe(b.data);
-      expect(a.hash).toBe(b.hash);
-    }),
-  );
-
-  it.effect("tampered ciphertext fails with DeploymentDataCorrupt", () =>
-    Effect.gen(function* () {
-      const key = yield* importDeploymentKey(KEY_HEX);
-      const crypto = makeDeploymentCrypto(key);
-      const box = yield* crypto.seal({ secret: "value" });
-      const bytes = Buffer.from(box.data, "base64");
-      // flip a bit in the ciphertext body (past the 16-byte nonce)
-      bytes[20] = bytes[20]! ^ 0xff;
-      const result = yield* Effect.result(
-        crypto.open({ hash: box.hash, data: bytes.toString("base64") }),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("DeploymentDataCorrupt");
-      }
-    }),
-  );
-
-  it.effect("tampered integrity hash fails with DeploymentDataCorrupt", () =>
-    Effect.gen(function* () {
-      const key = yield* importDeploymentKey(KEY_HEX);
-      const crypto = makeDeploymentCrypto(key);
-      const box = yield* crypto.seal({ secret: "value" });
-      const result = yield* Effect.result(
-        crypto.open({ hash: "0".repeat(64), data: box.data }),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("DeploymentDataCorrupt");
-      }
+      const key = yield* importAesCtrKey(KEY_HEX);
+      const a = yield* aesCtrEncryptJson(key, { v: 1 });
+      const b = yield* aesCtrEncryptJson(key, { v: 1 });
+      expect(a).not.toBe(b);
+      expect(yield* aesCtrDecryptJson(key, a)).toEqual({ v: 1 });
+      expect(yield* aesCtrDecryptJson(key, b)).toEqual({ v: 1 });
     }),
   );
 
   it.effect(
-    "opening with the wrong key fails typed instead of returning garbage",
+    "decrypting with the wrong key fails typed instead of returning garbage",
     () =>
       Effect.gen(function* () {
-        const key = yield* importDeploymentKey(KEY_HEX);
-        const wrongKey = yield* importDeploymentKey(OTHER_KEY_HEX);
-        const box = yield* makeDeploymentCrypto(key).seal({ secret: "value" });
-        const result = yield* Effect.result(
-          makeDeploymentCrypto(wrongKey).open(box),
-        );
+        const key = yield* importAesCtrKey(KEY_HEX);
+        const wrongKey = yield* importAesCtrKey(OTHER_KEY_HEX);
+        const data = yield* aesCtrEncryptJson(key, { secret: "value" });
+        const result = yield* Effect.result(aesCtrDecryptJson(wrongKey, data));
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
-          expect(result.failure._tag).toBe("DeploymentDataCorrupt");
+          expect(result.failure._tag).toBe("AesCtrDecryptError");
         }
       }),
   );
@@ -230,10 +197,10 @@ describe("Cloudflare deployment public-record assembly", () => {
     heartbeatAt: 200,
     ttlMillis: 60_000,
     tokenHash: "abc123",
-    meta: { hash: "h", data: "d" },
+    meta: "base64-ciphertext",
   };
 
-  it("never exposes the token hash or sealed boxes", () => {
+  it("never exposes the token hash or ciphertext", () => {
     const record = toPublicDeploymentRecord(stored, { command: "deploy" });
     expect("token" in record).toBe(false);
     expect("tokenHash" in record).toBe(false);
@@ -452,13 +419,27 @@ const makeLiveState = () =>
     ),
   );
 
-describe.skipIf(!process.env.ALCHEMY_TEST_STATE_CF)(
-  "Cloudflare state store (live)",
-  () => {
-    deploymentStoreConformance({
-      label: "Cloudflare DeploymentStore",
-      make: makeLiveState,
-      persistent: true,
-    });
-  },
-);
+describe("Cloudflare state store (live)", () => {
+  // The conformance suite assumes a fresh backend (versions start at 1),
+  // but the Durable Object persists across runs — wipe the conformance
+  // stack (its slug is derived from the label below) first. The DO's
+  // deleteAll clears both KV (records, counters, open markers) and SQL
+  // (the events table).
+  beforeAll(async () => {
+    await Effect.runPromise(
+      makeLiveState().pipe(
+        Effect.flatMap((state) =>
+          state.deleteStack({
+            stack: "cloudflare-deploymentstore-conformance",
+          }),
+        ),
+      ) as Effect.Effect<void, unknown, never>,
+    );
+  }, 120_000);
+
+  deploymentStoreConformance({
+    label: "Cloudflare DeploymentStore",
+    make: makeLiveState,
+    persistent: true,
+  });
+});

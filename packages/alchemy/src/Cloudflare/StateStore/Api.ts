@@ -18,6 +18,7 @@ import {
   type DeploymentInProgressWire,
   type DeploymentNotFoundWire,
   type DeploymentTokenInvalidWire,
+  type StateWriteFencedWire,
 } from "../../State/HttpStateApi.ts";
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
 import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
@@ -36,7 +37,7 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 8 as const;
+export const STATE_STORE_VERSION = 10 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -198,12 +199,22 @@ export default Worker(
               }),
             );
         })
-        .handle("setState", ({ params, payload }) => {
+        .handle("setState", ({ params, payload, query }) => {
           const fqn = decodeURIComponent(params.fqn);
           return store
             .getByName(params.stack)
-            .set({ stage: params.stage, fqn, value: payload as any })
+            .set({
+              stage: params.stage,
+              fqn,
+              value: payload as any,
+              fence: query.fence,
+            })
             .pipe(
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.succeed(result.value)
+                  : failStateWriteFenced(params, query.fence!),
+              ),
               Effect.tap(() =>
                 store
                   .getByName(Store.ROOT_DO_NAME)
@@ -219,15 +230,19 @@ export default Worker(
               }),
             );
         })
-        .handle("deleteState", ({ params }) => {
+        .handle("deleteState", ({ params, query }) => {
           const fqn = decodeURIComponent(params.fqn);
           // The DO method is `remove`, not `delete` — `delete` is
           // reserved by Cloudflare's RPC stub proxy.
           return store
             .getByName(params.stack)
-            .remove({ stage: params.stage, fqn })
+            .remove({ stage: params.stage, fqn, fence: query.fence })
             .pipe(
-              Effect.asVoid,
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.void
+                  : failStateWriteFenced(params, query.fence!),
+              ),
               Effect.withSpan("state_store.deleteState", {
                 attributes: {
                   "alchemy.state_store.op": "deleteState",
@@ -266,11 +281,20 @@ export default Worker(
               }),
             ),
         )
-        .handle("setStackOutput", ({ params, payload }) =>
+        .handle("setStackOutput", ({ params, payload, query }) =>
           store
             .getByName(params.stack)
-            .setOutput({ stage: params.stage, value: payload as any })
+            .setOutput({
+              stage: params.stage,
+              value: payload as any,
+              fence: query.fence,
+            })
             .pipe(
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.succeed(result.value)
+                  : failStateWriteFenced(params, query.fence!),
+              ),
               Effect.tap(() =>
                 store
                   .getByName(Store.ROOT_DO_NAME)
@@ -307,6 +331,7 @@ export default Worker(
               stage: params.stage,
               meta: payload.meta,
               ttlMillis: payload.ttlMillis,
+              supersede: payload.supersede,
             })
             .pipe(
               Effect.flatMap(
@@ -575,6 +600,23 @@ export default Worker(
     };
   }).pipe(Effect.provide(Layer.mergeAll(ReadSecretBinding))),
 );
+
+/**
+ * Map the stack DO's fenced-write refusal onto the schema-typed 412
+ * wire error. Like the deployment mutations, the DO surfaces the
+ * refusal as a discriminated result value (its RPC stub serializes
+ * thrown errors lossily); the worker is where it becomes typed HTTP.
+ */
+const failStateWriteFenced = (
+  params: { stack: string; stage: string },
+  fence: number,
+): Effect.Effect<never, typeof StateWriteFencedWire.Type> =>
+  Effect.fail({
+    _tag: "StateWriteFenced",
+    stack: params.stack,
+    stage: params.stage,
+    fence,
+  } as const);
 
 /**
  * Map the stack DO's deployment mutation failures onto the schema-typed

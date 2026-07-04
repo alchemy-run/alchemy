@@ -7,20 +7,26 @@ import {
   DeploymentInProgress,
   DeploymentNotFound,
   DeploymentTokenInvalid,
+  endTransition,
+  shouldAbandonOpen,
+  maxSeqOf,
+  toPublicRecord,
   type DeploymentEvent,
-  type DeploymentRecord,
   type DeploymentStore,
+  type StoredDeploymentRecord,
 } from "./Deployment.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import type { ResourceState } from "./ResourceState.ts";
-import { State, type PersistedState } from "./State.ts";
+import {
+  fencedWriteRejected,
+  State,
+  type PersistedState,
+  type StateStoreError,
+} from "./State.ts";
 
 type StackId = string;
 type StageId = string;
 type Fqn = string;
-
-/** Internal deployment record: the public shape plus the open token. */
-type StoredDeploymentRecord = DeploymentRecord & { token: string };
 
 /** Per-(stack, stage) deployment history for one in-memory instance. */
 interface StageDeployments {
@@ -65,12 +71,29 @@ export const InMemoryService = (
   };
 
   /**
-   * Strip the token and deep-copy so callers never alias internal mutable
-   * state (records/events are plain JSON data, so structuredClone is safe).
+   * Fencing check (see StateWriteFence in State.ts): a write carrying
+   * `fence: F` is rejected once any deployment version > F was begun for
+   * the stage. Returns the rejection error, or `undefined` when the write
+   * may proceed. Synchronous against the same map `begin` mutates and
+   * evaluated in the same step as the write — perfect fencing.
    */
-  const toPublic = (record: StoredDeploymentRecord): DeploymentRecord => {
-    const { token: _token, ...rest } = record;
-    return structuredClone(rest);
+  const fenceViolation = (request: {
+    stack: string;
+    stage: string;
+    fence?: number;
+  }): StateStoreError | undefined => {
+    if (request.fence === undefined) {
+      return undefined;
+    }
+    const newest =
+      deploymentState.get(stageKey(request.stack, request.stage))?.counter ?? 0;
+    return newest > request.fence
+      ? fencedWriteRejected({
+          stack: request.stack,
+          stage: request.stage,
+          fence: request.fence,
+        })
+      : undefined;
   };
 
   /** Look up an open-or-ended version and enforce the token. */
@@ -101,18 +124,21 @@ export const InMemoryService = (
     );
 
   const deployments: DeploymentStore = {
-    begin: ({ stack, stage, meta, ttlMillis }) =>
+    begin: ({ stack, stage, meta, ttlMillis, supersede }) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         const token = yield* Effect.sync(() => crypto.randomUUID());
         const ttl = ttlMillis ?? DEPLOYMENT_TTL_MILLIS;
         // Reconcile + live-check + allocate in one synchronous step so two
-        // racing begins can never both succeed.
+        // racing begins can never both succeed. (No blind-claim fast path
+        // here — there is no I/O to skip; the scan IS the fast path.)
         return yield* Effect.suspend(() => {
           const ns = stageDeployments(stack, stage);
           for (const record of ns.records.values()) {
             if (record.endedAt === undefined) {
-              if (now - record.heartbeatAt >= ttl) {
+              // Shared takeover semantics: stale heartbeat, or a targeted
+              // `supersede` of exactly this version.
+              if (shouldAbandonOpen(record, now, ttl, supersede)) {
                 record.endedAt = now;
                 record.outcome = "abandoned";
               } else {
@@ -120,7 +146,7 @@ export const InMemoryService = (
                   new DeploymentInProgress({
                     stack,
                     stage,
-                    holder: toPublic(record),
+                    holder: toPublicRecord(record),
                   }),
                 );
               }
@@ -156,13 +182,7 @@ export const InMemoryService = (
               journal.set(event.seq, structuredClone(event));
             }
           }
-          let ackedSeq = 0;
-          for (const seq of journal.keys()) {
-            if (seq > ackedSeq) {
-              ackedSeq = seq;
-            }
-          }
-          return { ackedSeq };
+          return { ackedSeq: maxSeqOf([...journal.values()]) };
         });
       }),
     heartbeat: ({ stack, stage, version, token }) =>
@@ -181,23 +201,16 @@ export const InMemoryService = (
         const now = yield* Clock.currentTimeMillis;
         const record = yield* resolveRecord(stack, stage, version, token);
         yield* Effect.sync(() => {
-          if (record.endedAt === undefined) {
+          // Shared close semantics: first outcome wins, ending an
+          // "abandoned" version records "completed-late".
+          const nextOutcome = endTransition(record, outcome);
+          if (nextOutcome !== undefined) {
             record.endedAt = now;
-            record.outcome = outcome;
-            if (summary !== undefined) {
-              record.summary = structuredClone(summary);
-            }
-          } else if (record.outcome === "abandoned") {
-            // The engine finished after the store reconciled the lost
-            // heartbeat — preserve that fact as "completed-late".
-            record.endedAt = now;
-            record.outcome = "completed-late";
+            record.outcome = nextOutcome;
             if (summary !== undefined) {
               record.summary = structuredClone(summary);
             }
           }
-          // Already ended with a real outcome: idempotent no-op, the first
-          // outcome wins.
         });
       }),
     list: ({ stack, stage, before, limit }) =>
@@ -213,14 +226,16 @@ export const InMemoryService = (
         if (limit !== undefined) {
           versions = versions.slice(0, limit);
         }
-        return versions.map((version) => toPublic(ns.records.get(version)!));
+        return versions.map((version) =>
+          toPublicRecord(ns.records.get(version)!),
+        );
       }),
     get: ({ stack, stage, version }) =>
       Effect.sync(() => {
         const record = deploymentState
           .get(stageKey(stack, stage))
           ?.records.get(version);
-        return record === undefined ? undefined : toPublic(record);
+        return record === undefined ? undefined : toPublicRecord(record);
       }),
     readEvents: ({ stack, stage, version, fromSeq }) =>
       Effect.suspend(() => {
@@ -277,27 +292,43 @@ export const InMemoryService = (
         stage,
         fqn,
         value,
+        fence,
       }: {
         stack: string;
         stage: string;
         fqn: string;
         value: V;
+        fence?: number;
       }) =>
-        Effect.sync(() => {
+        Effect.suspend(() => {
+          const violation = fenceViolation({ stack, stage, fence });
+          if (violation !== undefined) {
+            return Effect.fail(violation);
+          }
           const stackState = (state[stack] ??= {});
           const stageState = (stackState[stage] ??= {});
           stageState[fqn] = value as ResourceState;
-          return value;
+          return Effect.succeed(value);
         }),
       delete: ({
         stack,
         stage,
         fqn,
+        fence,
       }: {
         stack: string;
         stage: string;
         fqn: string;
-      }) => Effect.sync(() => delete state[stack]?.[stage]?.[fqn]),
+        fence?: number;
+      }) =>
+        Effect.suspend(() => {
+          const violation = fenceViolation({ stack, stage, fence });
+          if (violation !== undefined) {
+            return Effect.fail(violation);
+          }
+          delete state[stack]?.[stage]?.[fqn];
+          return Effect.void;
+        }),
       deleteStack: ({ stack, stage }: { stack: string; stage?: string }) =>
         Effect.sync(() => {
           if (stage === undefined) {
@@ -316,15 +347,21 @@ export const InMemoryService = (
         stack,
         stage,
         value,
+        fence,
       }: {
         stack: string;
         stage: string;
         value: unknown;
+        fence?: number;
       }) =>
-        Effect.sync(() => {
+        Effect.suspend(() => {
+          const violation = fenceViolation({ stack, stage, fence });
+          if (violation !== undefined) {
+            return Effect.fail(violation);
+          }
           const stackOutputs = (outputs[stack] ??= {});
           stackOutputs[stage] = value;
-          return value;
+          return Effect.succeed(value);
         }),
       getAll: ({ stack, stage }: { stack: string; stage: string }) =>
         Effect.sync(

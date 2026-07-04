@@ -7,15 +7,18 @@ import {
   deploymentsPrefix,
   encodeRecord,
   eventsPrefix,
-  isStaleOpen,
-  maxSeqOf,
   pad8,
   recordKey,
-  toPublicRecord,
-  versionFromRecordKey,
-  type StoredDeploymentRecord,
+  versionFromCommonPrefix,
+  versionPrefix,
 } from "@/AWS/StateStore/Deployments.ts";
 import { State, type DeploymentEvent } from "@/State";
+import {
+  isStaleOpen,
+  maxSeqOf,
+  toPublicRecord,
+  type StoredDeploymentRecord,
+} from "@/State/Deployment.ts";
 import * as Core from "@/Test/Core.ts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -73,22 +76,27 @@ describe("S3 deployment store key layout", () => {
     );
   });
 
-  it("parses the version back out of a record key", () => {
+  it("parses the version back out of a delimiter-list common prefix", () => {
     const prefix = deploymentsPrefix(stagePrefix);
-    expect(versionFromRecordKey(prefix, recordKey(stagePrefix, 1))).toBe(1);
-    expect(versionFromRecordKey(prefix, recordKey(stagePrefix, 12345678))).toBe(
-      12345678,
+    expect(versionFromCommonPrefix(prefix, versionPrefix(stagePrefix, 1))).toBe(
+      1,
     );
-    // event batch objects are not records
     expect(
-      versionFromRecordKey(prefix, batchKey(stagePrefix, 1, 1)),
+      versionFromCommonPrefix(prefix, versionPrefix(stagePrefix, 12345678)),
+    ).toBe(12345678);
+    // object keys (records, batches) are not version prefixes
+    expect(
+      versionFromCommonPrefix(prefix, recordKey(stagePrefix, 1)),
     ).toBeUndefined();
-    // foreign keys are ignored
     expect(
-      versionFromRecordKey(prefix, `${stagePrefix}resource.json`),
+      versionFromCommonPrefix(prefix, batchKey(stagePrefix, 1, 1)),
+    ).toBeUndefined();
+    // foreign prefixes are ignored
+    expect(
+      versionFromCommonPrefix(prefix, `${stagePrefix}other/`),
     ).toBeUndefined();
     expect(
-      versionFromRecordKey(prefix, `${prefix}not-a-version/record.json`),
+      versionFromCommonPrefix(prefix, `${prefix}not-a-version/`),
     ).toBeUndefined();
   });
 });
@@ -187,47 +195,41 @@ describe("S3 deployment store record codec", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Full conformance suite against real S3. Written completely but only run
-// when explicitly enabled — never in CI or a default local run.
-//
-//   ALCHEMY_TEST_STATE_S3=1 bun vitest run test/AWS/StateStore/S3Deployments.test.ts
+// Full conformance suite against real S3.
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!process.env.ALCHEMY_TEST_STATE_S3)(
-  "S3 DeploymentStore (live)",
-  () => {
-    // Each `make` builds a fresh StateService over the same bucket + prefix,
-    // mirroring the CLI runtime composition (`Core.toEffect` is what
-    // `Test.make` uses under the hood) so credentials/region resolution
-    // matches `alchemy deploy`.
-    const make = () =>
-      Core.toEffect(
-        Effect.gen(function* () {
-          return yield* yield* State;
-        }),
-        {
-          providers: AWS.providers(),
-          state: AWS.state({ prefix: "test-deployments" }),
-        },
-      );
+describe("S3 DeploymentStore (live)", () => {
+  // Each `make` builds a fresh StateService over the same bucket + prefix,
+  // mirroring the CLI runtime composition (`Core.toEffect` is what
+  // `Test.make` uses under the hood) so credentials/region resolution
+  // matches `alchemy deploy`.
+  const make = () =>
+    Core.toEffect(
+      Effect.gen(function* () {
+        return yield* yield* State;
+      }),
+      {
+        providers: AWS.providers(),
+        state: AWS.state({ prefix: "test-deployments" }),
+      },
+    );
 
-    // The conformance suite assumes a fresh backend (versions start at 1),
-    // but the S3 bucket persists across runs — wipe the conformance stack
-    // (its slug is derived from the label below) before running.
-    beforeAll(async () => {
-      await Effect.runPromise(
-        make().pipe(
-          Effect.flatMap((state) =>
-            state.deleteStack({ stack: "s3-deploymentstore-conformance" }),
-          ),
+  // The conformance suite assumes a fresh backend (versions start at 1),
+  // but the S3 bucket persists across runs — wipe the conformance stack
+  // (its slug is derived from the label below) before running.
+  beforeAll(async () => {
+    await Effect.runPromise(
+      make().pipe(
+        Effect.flatMap((state) =>
+          state.deleteStack({ stack: "s3-deploymentstore-conformance" }),
         ),
-      );
-    }, 120_000);
+      ),
+    );
+  }, 120_000);
 
-    deploymentStoreConformance({
-      label: "S3 DeploymentStore",
-      make,
-      persistent: true,
-    });
-  },
-);
+  deploymentStoreConformance({
+    label: "S3 DeploymentStore",
+    make,
+    persistent: true,
+  });
+});
