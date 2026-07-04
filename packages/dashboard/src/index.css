@@ -45,6 +45,15 @@ body {
   color: var(--alc-fg-1);
 }
 
+/* Tailwind v4's preflight leaves buttons with `cursor: default` — every
+   interactive control should read as clickable. */
+button:not(:disabled),
+[role="button"],
+select,
+summary {
+  cursor: pointer;
+}
+
 /* Scrollbars — walnut hairlines on the page surface. */
 * {
   scrollbar-width: thin;
@@ -63,6 +72,18 @@ body {
 
 .react-flow__attribution {
   color: var(--alc-fg-4);
+}
+
+/* Nodes are clickable (open the Inspector) — pointer, not the pane's
+   grab hand; keep grabbing while actually dragging. Matches xyflow's own
+   `.react-flow__node.draggable` specificity so import order decides. */
+.react-flow__node,
+.react-flow__node.draggable {
+  cursor: pointer;
+}
+
+.react-flow__node.draggable.dragging {
+  cursor: grabbing;
 }
 
 .react-flow__controls {

@@ -148,7 +148,9 @@ const chipStyleCache = new Map<string, CSSProperties>();
 export const chipStyle = (color: string): CSSProperties => {
   let style = chipStyleCache.get(color);
   if (style === undefined) {
-    style = { color, background: wash(color) };
+    // 22% wash: 16% read washed-out on parchment (and on dark walnut) —
+    // chips need enough pigment to register as status, not decoration.
+    style = { color, background: wash(color, 22) };
     chipStyleCache.set(color, style);
   }
   return style;
