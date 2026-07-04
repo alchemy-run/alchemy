@@ -345,8 +345,15 @@ const deployStateStore = ({
 }) =>
   Effect.gen(function* () {
     yield* annotateAccountHash();
+    // The state-store deploy is self-referential: when upgrading, `state`
+    // IS the (outdated) deployed store. Journaling this deploy against it
+    // would make `begin` — which is fail-closed — depend on the very
+    // contract version we are upgrading away from (a v7 store has no
+    // deployments API at all, bricking the upgrade). Strip `deployments`
+    // so the deploy runs with a declared no-op session instead.
+    const bootstrapState: StateService = { ...state, deployments: undefined };
     // deploy it with local state (which we will then hoist into the Cloudflare state store)
-    const stateLayer = Layer.succeed(State, Effect.succeed(state));
+    const stateLayer = Layer.succeed(State, Effect.succeed(bootstrapState));
     const { url, authToken } = yield* deploy({
       // use the script name as the stage name (so the user can have multiple state stores)
       stage,

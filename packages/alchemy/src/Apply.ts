@@ -1,8 +1,12 @@
+import * as os from "node:os";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import type { Simplify } from "effect/Types";
+import packageJson from "../package.json" with { type: "json" };
 import {
   Artifacts,
   ArtifactStore,
@@ -15,7 +19,11 @@ import {
   type ScopedPlanStatusSession,
   Cli,
 } from "./Cli/Cli.ts";
-import type { ApplyStatus } from "./Cli/Event.ts";
+import {
+  type ApplyStatus,
+  type UnstampedApplyEvent,
+  stampApplyEvent,
+} from "./Cli/Event.ts";
 import { havePropsChanged } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
@@ -44,6 +52,10 @@ import {
   type RunningActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
+  type DeploymentInProgress,
+  type DeploymentRecord,
+  type StateService,
+  makeDeploymentSession,
   State,
   StateStoreError,
 } from "./State/index.ts";
@@ -110,11 +122,16 @@ const instrumentLifecycle =
     resourceType: string,
     logicalId: string,
     instanceId: string,
+    session?: PlanStatusSession,
+    phase?: "execute" | "gc" | "converge",
   ) =>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
-    effect.pipe(
+  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> => {
+    const instrumented = effect.pipe(
+      session
+        ? Effect.provide(resourceLogs(logicalId, session, fqn))
+        : (e) => e,
       provideLifecycleScope(fqn, instanceId),
       recordResourceOp(resourceType, op),
       Effect.withSpan(`provider.${op}`, {
@@ -127,83 +144,242 @@ const instrumentLifecycle =
         },
       }),
     );
+    if (session === undefined || op === "read") {
+      return instrumented;
+    }
+    // v2 op events: bracket the dispatch with op-start / op-end correlated by
+    // a per-op unique opId, so consumers (deployment journal, dashboard v2)
+    // get exact run segments. Additive — existing status-change emissions are
+    // untouched, and renderers that predate these kinds ignore them.
+    return Effect.gen(function* () {
+      const opId = yield* Effect.sync(() => crypto.randomUUID());
+      yield* emit(session, {
+        kind: "op-start",
+        id: logicalId,
+        fqn,
+        opId,
+        op,
+        ...(phase !== undefined ? { phase } : {}),
+      });
+      const exit = yield* Effect.exit(instrumented);
+      if (Exit.isSuccess(exit)) {
+        yield* emit(session, {
+          kind: "op-end",
+          id: logicalId,
+          fqn,
+          opId,
+          outcome: "ok",
+        });
+        return exit.value;
+      }
+      if (!Cause.hasInterruptsOnly(exit.cause)) {
+        yield* emit(session, {
+          kind: "op-end",
+          id: logicalId,
+          fqn,
+          opId,
+          outcome: "fail",
+          error: causeDigest(exit.cause),
+        });
+      }
+      return yield* Effect.failCause(exit.cause);
+    });
+  };
+
+/** Short, single-string digest of a failure cause for journal/op events. */
+const causeDigest = (cause: Cause.Cause<unknown>): string => {
+  const pretty = Cause.pretty(cause);
+  return pretty.length > 2_000 ? `${pretty.slice(0, 2_000)}…` : pretty;
+};
+
+/**
+ * Emit an apply event through the session with the v2 envelope stamped:
+ * `ts` is assigned at emission via the Effect `Clock` (never at receipt).
+ * `fqn` is included by the call site when it knows it.
+ */
+const emit = (session: PlanStatusSession, event: UnstampedApplyEvent) =>
+  Effect.flatMap(stampApplyEvent(event), session.emit);
+
+/**
+ * Capture `Effect.log*` emitted during a resource's lifecycle operation and
+ * route it through the apply session as a `log` event tagged with the
+ * resource's logical id, so UIs (the dashboard) can attribute logs to the
+ * resource being applied. Merged with existing loggers — terminal and file
+ * logging are unchanged.
+ */
+const resourceLogs = (
+  logicalId: string,
+  session: PlanStatusSession,
+  fqn?: string,
+) =>
+  Logger.layer(
+    [
+      Logger.make(({ logLevel, message }) => {
+        try {
+          const text = (Array.isArray(message) ? message : [message])
+            .map((m) =>
+              typeof m === "string" ? m : (JSON.stringify(m) ?? String(m)),
+            )
+            .join(" ");
+          Effect.runSync(
+            emit(session, {
+              kind: "log",
+              id: logicalId,
+              fqn,
+              level: logLevel,
+              message: text,
+            }),
+          );
+        } catch {
+          // log capture must never break an apply
+        }
+      }),
+    ],
+    { mergeWithExisting: true },
+  );
 
 export const apply = <P extends Plan>(
   plan: P,
+  options?: {
+    /**
+     * The engine command driving this apply — recorded on the deployment
+     * journal record. `destroy` is an apply of an emptied plan, so callers
+     * (CLI destroy, programmatic `Destroy`, test harness) pass it explicitly.
+     * @default "deploy"
+     */
+    command?: "deploy" | "destroy";
+  },
 ): Effect.Effect<
   Input.Resolve<P["output"]>,
-  Output.InvalidReferenceError | Output.MissingSourceError | StateStoreError,
+  | Output.InvalidReferenceError
+  | Output.MissingSourceError
+  | StateStoreError
+  | DeploymentInProgress,
   Cli | State | Stack | Stage
 > =>
-  Effect.gen(function* () {
-    const cli = yield* Cli;
-    const session = yield* cli.startApplySession(plan);
-    const state = yield* yield* State;
-    const stack = yield* Stack;
-    const stage = yield* Stage;
-    const stackName = stack.name;
+  Effect.scoped(
+    Effect.gen(function* () {
+      const cli = yield* Cli;
+      const store = yield* yield* State;
+      const stack = yield* Stack;
+      const stage = yield* Stage;
+      const stackName = stack.name;
 
-    const tracker: Record<string, ResourceTracker> = {};
-    const terminalStatuses = new Map<
-      string,
-      {
-        id: string;
-        type: string;
-        status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
+      // ── deployment journal ──────────────────────────────────────────────
+      // Open one deployment version per apply (the single choke point every
+      // deploy/destroy funnels through: CLI, programmatic, test harness).
+      // The session's `state` facade journals every engine state write; its
+      // `emit` tees apply events into the journal. Stores without
+      // `deployments` support yield a no-op session. `begin` is fail-closed:
+      // DeploymentInProgress AND StateStoreError abort the apply — we never
+      // proceed without the mutual-exclusion lock.
+      const deployment = yield* openDeploymentSession({
+        store,
+        stack: stackName,
+        stage,
+        command: options?.command ?? "deploy",
+      });
+      const state = deployment.state;
+
+      const inner = yield* cli.startApplySession(plan);
+      // Tee every event that flows to the TUI/dashboard into the journal.
+      // Decorated at session creation (like withDashboardReporter) so ALL
+      // emitters — status changes, notes, logs, op events — are covered.
+      const session: PlanStatusSession = {
+        emit: (event) =>
+          inner.emit(event).pipe(Effect.andThen(deployment.emit(event))),
+        done: inner.done,
+      };
+
+      const run = Effect.gen(function* () {
+        const tracker: Record<string, ResourceTracker> = {};
+        const terminalStatuses = new Map<
+          string,
+          {
+            id: string;
+            type: string;
+            status: Extract<
+              ApplyStatus,
+              "created" | "updated" | "ran" | "skipped"
+            >;
+          }
+        >();
+
+        yield* executePlan(
+          plan,
+          tracker,
+          terminalStatuses,
+          session,
+          state,
+          stackName,
+          stage,
+        );
+
+        // TODO(sam): support roll back to previous state if errors occur during expansion
+        // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+        // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+        // collectGarbage re-resolves State from context — re-provide the
+        // journaling facade so its deletes/commits journal like every other
+        // engine write.
+        yield* collectGarbage(plan, session).pipe(
+          Effect.provideService(State, State.of(Effect.succeed(state))),
+        );
+
+        yield* converge(
+          plan,
+          tracker,
+          terminalStatuses,
+          session,
+          state,
+          stackName,
+          stage,
+        );
+
+        yield* Effect.forEach(
+          Array.from(terminalStatuses.entries()),
+          ([fqn, { id, type, status }]) =>
+            emit(session, { kind: "status-change", id, fqn, type, status }),
+          { concurrency: "unbounded" },
+        );
+
+        yield* session.done();
+
+        if (!plan.output) {
+          return undefined;
+        }
+
+        const outputs = Object.fromEntries(
+          Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
+        );
+        const resolved = yield* Output.evaluate(plan.output, outputs);
+
+        // Persist the stack's evaluated outputs so cross-stack references
+        // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
+        // can read them back out of the state store.
+        yield* state.setOutput({ stack: stackName, stage, value: resolved });
+
+        return resolved;
+      });
+
+      // Map the run's exit onto the deployment record. Interruption is left
+      // to the session's scope-finalizer backstop (which closes the version
+      // as "interrupted"), covering Ctrl-C and dev-mode teardown uniformly.
+      const exit = yield* Effect.exit(run);
+      const counts = planActionCounts(plan);
+      if (Exit.isSuccess(exit)) {
+        yield* deployment.end("succeeded", { counts });
+        return exit.value;
       }
-    >();
-
-    yield* executePlan(
-      plan,
-      tracker,
-      terminalStatuses,
-      session,
-      state,
-      stackName,
-      stage,
-    );
-
-    // TODO(sam): support roll back to previous state if errors occur during expansion
-    // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
-    // TODO(sam): should pivot be done separately? E.g shift traffic?
-
-    yield* collectGarbage(plan, session);
-
-    yield* converge(
-      plan,
-      tracker,
-      terminalStatuses,
-      session,
-      state,
-      stackName,
-      stage,
-    );
-
-    yield* Effect.forEach(
-      Array.from(terminalStatuses.values()),
-      ({ id, type, status }) =>
-        session.emit({ kind: "status-change", id, type, status }),
-      { concurrency: "unbounded" },
-    );
-
-    yield* session.done();
-
-    if (!plan.output) {
-      return undefined;
-    }
-
-    const outputs = Object.fromEntries(
-      Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
-    );
-    const resolved = yield* Output.evaluate(plan.output, outputs);
-
-    // Persist the stack's evaluated outputs so cross-stack references
-    // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
-    // can read them back out of the state store.
-    yield* state.setOutput({ stack: stackName, stage, value: resolved });
-
-    return resolved;
-  }).pipe(
+      if (!Cause.hasInterruptsOnly(exit.cause)) {
+        yield* deployment.end("failed", {
+          counts,
+          error: causeDigest(exit.cause),
+        });
+      }
+      return yield* Effect.failCause(exit.cause);
+    }),
+  ).pipe(
     ensureArtifactStore,
     Effect.withSpan("apply", {
       attributes: {
@@ -212,6 +388,139 @@ export const apply = <P extends Plan>(
       },
     }),
   );
+
+/**
+ * Per-action counts for the deployment summary, derived from the plan:
+ * resource actions (create/update/replace/noop), action runs, and deletions.
+ */
+const planActionCounts = (plan: Plan): Record<string, number> => {
+  const counts: Record<string, number> = {};
+  const bump = (key: string, by = 1) => {
+    if (by > 0) {
+      counts[key] = (counts[key] ?? 0) + by;
+    }
+  };
+  for (const node of Object.values(plan.resources)) {
+    bump(node.action);
+  }
+  for (const node of Object.values(plan.actions ?? {})) {
+    bump(node.action === "run" ? "run" : "noop");
+  }
+  bump(
+    "delete",
+    Object.values(plan.deletions ?? {}).filter((d) => d !== undefined).length +
+      Object.values(plan.actionDeletions ?? {}).filter((d) => d !== undefined)
+        .length,
+  );
+  return counts;
+};
+
+/**
+ * `true` when a process with `pid` is currently running on THIS host.
+ * Signal 0 performs the existence check without delivering anything;
+ * `EPERM` means "alive but owned by another user", `ESRCH` means gone.
+ */
+export const isProcessAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * Same-host dead-pid takeover predicate: the holder of a live open
+ * deployment can be superseded iff it was started on THIS host by a
+ * process that no longer exists. We only trust the pid check when the
+ * holder's recorded host matches ours — a pid from another machine is
+ * meaningless locally.
+ *
+ * A recycled pid (dead holder, new unrelated process with the same pid)
+ * makes this return `false` — conservative: the deploy waits for the TTL
+ * reconciliation path instead of taking over.
+ */
+export const canTakeOverDeployment = (
+  holder: DeploymentRecord,
+  self: { host?: string; pid?: number },
+  isAlive: (pid: number) => boolean = isProcessAlive,
+): boolean => {
+  const initiator = holder.meta.initiator;
+  return (
+    initiator?.host !== undefined &&
+    initiator.host === self.host &&
+    initiator.pid !== undefined &&
+    initiator.pid !== self.pid &&
+    !isAlive(initiator.pid)
+  );
+};
+
+/**
+ * Open a {@link DeploymentSession} for this apply.
+ *
+ * `begin` is the mutual-exclusion gate for the whole apply, so every failure
+ * is fail-closed: `DeploymentInProgress` (a live holder exists) and
+ * `StateStoreError` (the store could not prove exclusivity — unreachable,
+ * unauthorized, or claim contention) both abort the deploy. Proceeding
+ * without the lock is never an option: the apply is one big transaction and
+ * a deploy that cannot claim its version must not mutate anything.
+ *
+ * One exception softens `DeploymentInProgress`: when the live holder was
+ * started on THIS host by a process that is provably gone (crashed CLI,
+ * killed terminal — see {@link canTakeOverDeployment}), waiting out the
+ * 60s heartbeat TTL just punishes the user for the crash. We retry `begin`
+ * once with `supersede: holder.version` — a targeted takeover that abandons
+ * exactly that version. If any OTHER deploy claimed the stage in between,
+ * the versions no longer match and the retry fails `DeploymentInProgress`
+ * like any other begin, so the takeover can never race a legitimate deploy.
+ *
+ * Stores without `deployments` support yield a no-op session inside
+ * {@link makeDeploymentSession} — that is a declared capability gap, not a
+ * failure.
+ */
+const openDeploymentSession = Effect.fn("openDeploymentSession")(function* ({
+  store,
+  stack,
+  stage,
+  command,
+}: {
+  store: StateService;
+  stack: string;
+  stage: string;
+  command: "deploy" | "destroy";
+}) {
+  const initiator = yield* Effect.sync(() => ({
+    user: process.env.USER,
+    host: os.hostname(),
+    pid: process.pid,
+  }));
+  const open = (supersede?: number) =>
+    makeDeploymentSession({
+      store,
+      stack,
+      stage,
+      meta: {
+        command,
+        initiator,
+        alchemyVersion: packageJson.version,
+      },
+      supersede,
+    });
+  return yield* open().pipe(
+    Effect.catchTag("DeploymentInProgress", (error) =>
+      Effect.sync(() => canTakeOverDeployment(error.holder, initiator)).pipe(
+        Effect.flatMap((takeover) =>
+          takeover
+            ? Effect.logWarning(
+                `alchemy: taking over deployment v${error.holder.version} of ${stack}/${stage} — ` +
+                  `its holder (pid ${error.holder.meta.initiator?.pid} on this host) is no longer running`,
+              ).pipe(Effect.flatMap(() => open(error.holder.version)))
+            : Effect.fail(error),
+        ),
+      ),
+    ),
+  );
+});
 
 // ── Phase 1: concurrent initial execution ──────────────────────────────────
 //
@@ -411,13 +720,14 @@ const executeNode = (
     const scopedSession = {
       ...session,
       note: (note: string) =>
-        session.emit({ id: logicalId, kind: "annotate", message: note }),
+        emit(session, { id: logicalId, fqn, kind: "annotate", message: note }),
     } satisfies ScopedPlanStatusSession;
 
     const report = (status: ApplyStatus) =>
-      session.emit({
+      emit(session, {
         kind: "status-change",
         id: logicalId,
+        fqn,
         type: node.resource.Type,
         status,
       });
@@ -442,9 +752,10 @@ const executeNode = (
         // terminal status is known. Their final status is flushed from
         // `terminalStatuses` after `converge` completes.
         if (inCycle) return;
-        yield* session.emit({
+        yield* emit(session, {
           kind: "status-change",
           id: logicalId,
+          fqn,
           type: node.resource.Type,
           status,
         });
@@ -590,6 +901,8 @@ const executeNode = (
                 node.resource.Type,
                 logicalId,
                 instanceId,
+                session,
+                "execute",
               ),
             );
           yield* commit<CreatingResourceState>({
@@ -651,6 +964,8 @@ const executeNode = (
               node.resource.Type,
               logicalId,
               instanceId,
+              session,
+              "execute",
             ),
           );
 
@@ -773,6 +1088,8 @@ const executeNode = (
               node.resource.Type,
               logicalId,
               instanceId,
+              session,
+              "execute",
             ),
           );
 
@@ -894,6 +1211,8 @@ const executeNode = (
                     node.resource.Type,
                     logicalId,
                     old.instanceId,
+                    session,
+                    "execute",
                   ),
                 );
             }
@@ -939,6 +1258,8 @@ const executeNode = (
                 node.resource.Type,
                 logicalId,
                 instanceId,
+                session,
+                "execute",
               ),
             );
           yield* commit<ReplacingResourceState>({
@@ -1001,6 +1322,8 @@ const executeNode = (
               node.resource.Type,
               logicalId,
               instanceId,
+              session,
+              "execute",
             ),
           );
 
@@ -1080,9 +1403,10 @@ const executeNode = (
           readyStable[fqn],
           cause as Cause.Cause<never>,
         );
-        yield* session.emit({
+        yield* emit(session, {
           kind: "status-change",
           id: node.resource.LogicalId,
+          fqn,
           type: node.resource.Type,
           status: "fail",
         });
@@ -1148,9 +1472,10 @@ const executeActionNode = (
       });
 
     const report = (status: ApplyStatus) =>
-      session.emit({
+      emit(session, {
         kind: "status-change",
         id: logicalId,
+        fqn,
         type: task.Type,
         status,
       });
@@ -1246,9 +1571,10 @@ const executeActionNode = (
           readyStable[fqn],
           cause as Cause.Cause<never>,
         );
-        yield* session.emit({
+        yield* emit(session, {
           kind: "status-change",
           id: node.def.LogicalId,
+          fqn,
           type: node.def.Type,
           status: "fail",
         });
@@ -1334,7 +1660,12 @@ const converge = Effect.fn(function* (
       const scopedSession = {
         ...session,
         note: (note: string) =>
-          session.emit({ id: logicalId, kind: "annotate", message: note }),
+          emit(session, {
+            id: logicalId,
+            fqn,
+            kind: "annotate",
+            message: note,
+          }),
       } satisfies ScopedPlanStatusSession;
 
       const attr = yield* node.provider
@@ -1354,6 +1685,8 @@ const converge = Effect.fn(function* (
             node.resource.Type,
             logicalId,
             instanceId,
+            session,
+            "converge",
           ),
         );
 
@@ -1483,16 +1816,18 @@ const collectGarbage = Effect.fn(function* (
       node === undefined
         ? Effect.void
         : Effect.gen(function* () {
-            yield* session.emit({
+            yield* emit(session, {
               kind: "status-change",
               id: node.def.LogicalId,
+              fqn,
               type: node.def.Type,
               status: "deleting",
             });
             yield* state.delete({ stack: stackName, stage, fqn });
-            yield* session.emit({
+            yield* emit(session, {
               kind: "status-change",
               id: node.def.LogicalId,
+              fqn,
               type: node.def.Type,
               status: "deleted",
             });
@@ -1568,9 +1903,10 @@ const collectGarbage = Effect.fn(function* (
           });
 
         const report = (status: ApplyStatus) =>
-          session.emit({
+          emit(session, {
             kind: "status-change",
             id: logicalId,
+            fqn,
             type: resourceType,
             status,
           });
@@ -1578,8 +1914,9 @@ const collectGarbage = Effect.fn(function* (
         const scopedSession = {
           ...session,
           note: (note: string) =>
-            session.emit({
+            emit(session, {
               id: logicalId,
+              fqn,
               kind: "annotate",
               message: note,
             }),
@@ -1655,6 +1992,8 @@ const collectGarbage = Effect.fn(function* (
                     resourceType,
                     logicalId,
                     instanceId,
+                    session,
+                    "gc",
                   ),
                 );
             }
