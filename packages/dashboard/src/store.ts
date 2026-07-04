@@ -56,13 +56,7 @@ import { createStore } from "zustand/vanilla";
 /** A closed/open deployment record as returned by /api/v2/deployments. */
 export type DeploymentRecord = Omit<LiveDeploymentRecord, "live">;
 
-export type ViewKind =
-  | "canvas"
-  | "summary"
-  | "list"
-  | "table"
-  | "waterfall"
-  | "annotations";
+export type ViewKind = "canvas" | "summary" | "list";
 
 export type ConnectionStatus = "connecting" | "live" | "error";
 
@@ -121,7 +115,10 @@ export interface HistorySlice {
 export interface UiSlice {
   view: ViewKind;
   selectedFqn?: string;
+  /** List-view filter (the canvas/graph is never filtered) */
   filter: string;
+  /** command palette (⌘K) visibility */
+  paletteOpen: boolean;
   feedExpanded: boolean;
   /** feed-dismissal key (e.g. String(deployment.version)) */
   dismissedSession?: string;
@@ -216,7 +213,7 @@ const initialState = (): DashboardState => ({
   connection: { status: "connecting", stage: undefined, revision: 0 },
   history: initialHistory(),
   // feedExpanded starts false: the ActivityFeed opens as a one-line pill
-  ui: { view: "canvas", filter: "", feedExpanded: false },
+  ui: { view: "canvas", filter: "", paletteOpen: false, feedExpanded: false },
   layout: {
     positionsByHash: new Map(),
     userPanned: false,
@@ -639,6 +636,14 @@ export const setFilter = (filter: string): void => {
     return;
   }
   dashboardStore.setState({ ui: { ...state.ui, filter } });
+};
+
+export const setPaletteOpen = (paletteOpen: boolean): void => {
+  const state = dashboardStore.getState();
+  if (state.ui.paletteOpen === paletteOpen) {
+    return;
+  }
+  dashboardStore.setState({ ui: { ...state.ui, paletteOpen } });
 };
 
 export const setFeedExpanded = (feedExpanded: boolean): void => {
@@ -1134,6 +1139,9 @@ export const useSelectedFqn = (): string | undefined =>
 
 export const useFilter = (): string =>
   useStore(dashboardStore, (s) => s.ui.filter);
+
+export const usePaletteOpen = (): boolean =>
+  useStore(dashboardStore, (s) => s.ui.paletteOpen);
 
 export const useFeedExpanded = (): boolean =>
   useStore(dashboardStore, (s) => s.ui.feedExpanded);

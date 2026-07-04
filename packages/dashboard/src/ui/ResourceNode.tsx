@@ -5,7 +5,6 @@
  * read from the store via per-fqn subscriptions, so:
  * - a decorate patch re-renders exactly the affected node(s);
  * - clicking re-renders 2 nodes (old + new selection);
- * - a filter keystroke only re-renders nodes whose dimmed flag flips.
  *
  * Theming: every color is a CSS var over the --alc-* tokens, so a
  * [data-theme] flip recolors nodes with ZERO re-renders. Inline style
@@ -37,7 +36,7 @@ import {
   typeName,
 } from "../theme.ts";
 import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
-import { useIsDimmed, useIsSelected, useMeta, useNode } from "../store.ts";
+import { useIsSelected, useMeta, useNode } from "../store.ts";
 import { ResourceIcon } from "./Icon.tsx";
 
 export type CanvasNode = Node<{ fqn: string }, "resource">;
@@ -92,7 +91,6 @@ export const ResourceNode = memo(function ResourceNode({
   const { fqn } = data;
   const { node, decoration } = useNode(fqn);
   const selected = useIsSelected(fqn);
-  const dimmed = useIsDimmed(fqn);
   const meta = useMeta();
   const registry = useRegistry();
 
@@ -157,15 +155,13 @@ export const ResourceNode = memo(function ResourceNode({
         width: NODE_WIDTH,
         // accent glow ring — inline so it wins over the hover shadow class
         boxShadow: selected ? "var(--alc-glow)" : undefined,
-        // filter dimming is decoration-only: layout and viewport never move
-        opacity:
-          dimmed || hidden
-            ? 0.2
-            : ghost
-              ? 0.55
-              : plan === "delete"
-                ? 0.8
-                : undefined,
+        opacity: hidden
+          ? 0.2
+          : ghost
+            ? 0.55
+            : plan === "delete"
+              ? 0.8
+              : undefined,
       }}
     >
       <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
