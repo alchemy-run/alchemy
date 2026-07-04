@@ -366,7 +366,7 @@ function statusColor(
     case "deleted":
       return "red";
     case "retained":
-      return "yellow";
+      return "gray";
     case "running":
     case "ran":
       return "cyan";

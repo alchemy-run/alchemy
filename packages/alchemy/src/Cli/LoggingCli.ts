@@ -36,7 +36,7 @@ const statusColor = (status: ApplyStatus): ((s: string) => string) => {
     case "deleted":
       return dim;
     case "retained":
-      return yellow;
+      return dim;
     case "fail":
       return red;
     case "attaching":
