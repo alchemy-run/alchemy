@@ -195,23 +195,37 @@ function CanvasInner() {
     setPositions(hashRef.current, dragged);
   }, []);
 
-  // Edge array — pure function of the structural hash (visualEdges is
-  // memoized on it), stable edgeKeyOf ids, hoisted styles.
+  // Edge array — stable edgeKeyOf ids, hoisted styles. Also depends on
+  // positions: each edge picks a handle LANE from the laid-out geometry —
+  // forward edges leave the right side into the left; backward edges
+  // (cycles: A ⇄ B) leave the LEFT side into the RIGHT on a lower lane, so
+  // a two-node cycle reads as two clean parallel arrows (→ over ←) instead
+  // of one edge wrapping around the graph.
   const edges = useMemo<Edge[]>(
     () =>
-      visualEdges.map((edge) => ({
-        id: edgeKeyOf({
-          kind: edge.binding ? "binding" : "dependency",
+      visualEdges.map((edge) => {
+        const sourcePos = positions.get(edge.source);
+        const targetPos = positions.get(edge.target);
+        const backward =
+          sourcePos !== undefined &&
+          targetPos !== undefined &&
+          sourcePos.x > targetPos.x;
+        return {
+          id: edgeKeyOf({
+            kind: edge.binding ? "binding" : "dependency",
+            source: edge.source,
+            target: edge.target,
+          }),
           source: edge.source,
           target: edge.target,
-        }),
-        source: edge.source,
-        target: edge.target,
-        animated: edge.binding,
-        style: edge.binding ? BINDING_STYLE : DEPENDENCY_STYLE,
-        markerEnd: edge.binding ? BINDING_MARKER : DEPENDENCY_MARKER,
-      })),
-    [visualEdges],
+          sourceHandle: backward ? "out-back" : "out",
+          targetHandle: backward ? "in-back" : "in",
+          animated: edge.binding,
+          style: edge.binding ? BINDING_STYLE : DEPENDENCY_STYLE,
+          markerEnd: edge.binding ? BINDING_MARKER : DEPENDENCY_MARKER,
+        };
+      }),
+    [visualEdges, positions],
   );
 
   // Reveal latch: the canvas stays invisible until the first real layout

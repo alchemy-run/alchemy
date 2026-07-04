@@ -233,8 +233,10 @@ export const dashboardStore = createStore<DashboardState>(initialState);
  * viewports are persisted (programmatic fits pass persist: false), so a
  * stage the user never touched keeps auto-fitting to center.
  */
+// v2: bumped when layout geometry constants change (NODE_HEIGHT etc.) so
+// stale cached positions don't resurrect a cramped layout after upgrade
 const layoutKey = (stack: string, stage: string): string =>
-  `alchemy-dashboard-layout:${stack}:${stage}`;
+  `alchemy-dashboard-layout.v2:${stack}:${stage}`;
 
 const stagesKey = (stack: string): string =>
   `alchemy-dashboard-stages:${stack}`;

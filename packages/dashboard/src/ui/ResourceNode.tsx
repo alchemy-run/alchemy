@@ -86,6 +86,15 @@ const BINDING_CHIP_COLOR = "var(--alc-terracotta)";
 
 const HANDLE_CLASS = "!bg-[var(--alc-fg-4)] !border-none !w-1.5 !h-1.5";
 
+// Two lanes per side so opposing edges (circular bindings A ⇄ B) render as
+// clean parallel arrows (→ above, ← below) instead of one edge wrapping
+// around the whole graph. Forward edges ride the upper lane (out of the
+// right side, into the left); backward edges ride the lower lane (out of
+// the LEFT side, into the RIGHT). The Canvas picks lanes per edge from the
+// laid-out node positions.
+const LANE_FORWARD = { top: "38%" } as const;
+const LANE_BACKWARD = { top: "66%" } as const;
+
 export const ResourceNode = memo(function ResourceNode({
   data,
 }: NodeProps<CanvasNode>) {
@@ -163,7 +172,20 @@ export const ResourceNode = memo(function ResourceNode({
         opacity: hidden ? 0.2 : undefined,
       }}
     >
-      <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
+      <Handle
+        id="in"
+        type="target"
+        position={Position.Left}
+        style={LANE_FORWARD}
+        className={HANDLE_CLASS}
+      />
+      <Handle
+        id="in-back"
+        type="target"
+        position={Position.Right}
+        style={LANE_BACKWARD}
+        className={HANDLE_CLASS}
+      />
       <div className="flex items-center gap-2">
         <ResourceIcon ui={ui} color={color} size={16} />
         <span
@@ -235,8 +257,17 @@ export const ResourceNode = memo(function ResourceNode({
         )}
       </div>
       <Handle
+        id="out"
         type="source"
         position={Position.Right}
+        style={LANE_FORWARD}
+        className={HANDLE_CLASS}
+      />
+      <Handle
+        id="out-back"
+        type="source"
+        position={Position.Left}
+        style={LANE_BACKWARD}
         className={HANDLE_CLASS}
       />
     </div>

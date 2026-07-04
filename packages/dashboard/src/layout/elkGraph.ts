@@ -6,16 +6,25 @@
  */
 import type { ElkNode } from "elkjs/lib/elk.bundled.js";
 
-/** Fixed node card dimensions — ELK needs no measurement pass. */
+/**
+ * Fixed node card dimensions — ELK needs no measurement pass. Height is
+ * sized for the TALLEST card variant (Worker: title + type + URL + chip
+ * rows ≈ 120px); shorter cards just get more breathing room, while
+ * underestimating makes rows overlap.
+ */
 export const NODE_WIDTH = 230;
-export const NODE_HEIGHT = 80;
+export const NODE_HEIGHT = 120;
 
 export const ELK_OPTIONS: Record<string, string> = {
   "elk.algorithm": "layered",
   "elk.direction": "RIGHT",
-  "elk.spacing.nodeNode": "36",
+  "elk.spacing.nodeNode": "44",
   "elk.layered.spacing.nodeNodeBetweenLayers": "90",
   "elk.layered.mergeEdges": "true",
+  // disconnected subgraphs (e.g. the worker pair next to the command
+  // pipeline) get real separation instead of packing into overlaps
+  "elk.separateConnectedComponents": "true",
+  "elk.spacing.componentComponent": "72",
 };
 
 export interface LayoutEdgeInput {
