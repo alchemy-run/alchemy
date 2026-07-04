@@ -44,7 +44,7 @@ export const infrastructureAsEffects: Storyboard = {
       beats: [
         { subtitle: "One file declares the infrastructure.", duration: 3 },
         {
-          subtitle: "A Stack is a TypeScript program — no YAML, no console clicking.",
+          subtitle: "A Stack is a TypeScript program — real code, fully type-checked.",
           duration: 3,
         },
         { subtitle: "Providers plug in as values — Cloudflare here.", duration: 3 },
@@ -100,7 +100,7 @@ export const infrastructureAsEffects: Storyboard = {
           duration: 3.5,
         },
         {
-          subtitle: "No env.BUCKET. No wrangler.toml. No IAM file. Anywhere.",
+          subtitle: "One line carries the config, the permissions, and the client.",
           duration: 3.5,
         },
       ],
