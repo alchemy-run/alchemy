@@ -197,7 +197,7 @@ export const infrastructureAsEffects: Storyboard = {
           duration: 3.5,
         },
         {
-          subtitle: "env is fully typed — inferred from the stack file. Zero codegen.",
+          subtitle: "env is fully typed — inferred straight from the stack file.",
           duration: 3.5,
         },
       ],
