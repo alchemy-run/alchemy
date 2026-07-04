@@ -1,5 +1,5 @@
 import { Maximize, Moon, Search, Sun, X } from "lucide-react";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { setStage } from "../ingest.ts";
 import {
   requestFit,
@@ -9,6 +9,7 @@ import {
   useFilter,
   useFilterCounts,
   useMeta,
+  useSeenStages,
   useProjection,
   useView,
   type ViewKind,
@@ -71,10 +72,18 @@ function StackName() {
 
 function StageArea() {
   const meta = useMeta();
+  // union of the server's list and every stage this client has ever seen
+  // (persisted per stack) — switching to a new stage never hides the ones
+  // you came from
+  const seen = useSeenStages();
+  const stages = useMemo(
+    () => [...new Set([...(meta.stages ?? []), ...seen])].sort(),
+    [meta.stages, seen],
+  );
   return (
     <StageSelect
       stage={meta.stage}
-      stages={meta.stages ?? []}
+      stages={stages}
       onSelect={(stage) => setStage(stage)}
     />
   );

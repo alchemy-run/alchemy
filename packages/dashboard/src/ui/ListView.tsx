@@ -1,8 +1,10 @@
 import type { ListGroup } from "alchemy/Dashboard/Projections";
 import { memo, useMemo } from "react";
 import {
+  dashboardStore,
+  isDimmed,
   setSelectedFqn,
-  useIsDimmed,
+  useFilter,
   useIsSelected,
   useMeta,
   useNode,
@@ -50,6 +52,24 @@ const GROUP_COLORS: Record<ListGroup, string> = {
  */
 export const ListView = memo(function ListView() {
   const groups = useProjection("list");
+  const filter = useFilter();
+
+  // the filter REMOVES rows here (unlike the canvas, which dims); empty
+  // groups disappear with their rows
+  const visibleGroups = useMemo(() => {
+    const query = filter.trim().toLowerCase();
+    if (query === "") {
+      return groups;
+    }
+    const state = dashboardStore.getState();
+    return groups
+      .map((group) => ({
+        ...group,
+        nodes: group.nodes.filter((node) => !isDimmed(state, node.fqn)),
+      }))
+      .filter((group) => group.nodes.length > 0);
+  }, [groups, filter]);
+
   if (groups.length === 0) {
     return (
       <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
@@ -57,9 +77,16 @@ export const ListView = memo(function ListView() {
       </p>
     );
   }
+  if (visibleGroups.length === 0) {
+    return (
+      <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
+        No resources match the filter
+      </p>
+    );
+  }
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
-      {groups.map((group) => (
+      {visibleGroups.map((group) => (
         <section key={group.group}>
           <h2 className={`${EYEBROW} mb-2 flex items-center gap-2`}>
             <span
@@ -84,7 +111,6 @@ export const ListView = memo(function ListView() {
 const Row = memo(function Row({ fqn }: { fqn: string }) {
   const { node, decoration } = useNode(fqn);
   const selected = useIsSelected(fqn);
-  const dimmed = useIsDimmed(fqn);
   const meta = useMeta();
   const registry = useRegistry();
 
@@ -112,7 +138,6 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
       className={`flex w-full items-center gap-3 border-t border-[var(--alc-hairline)] px-4 py-2 text-left text-[12.5px] transition-colors duration-[var(--alc-dur-fast)] first:border-t-0 hover:bg-[var(--alc-bg-elev-2)] ${
         selected ? "bg-[var(--alc-accent-12)]" : ""
       }`}
-      style={dimmed ? { opacity: 0.35 } : undefined}
     >
       <ResourceIcon ui={ui} color={color} size={14} />
       <span className="min-w-0">
