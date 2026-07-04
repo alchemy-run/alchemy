@@ -1,10 +1,13 @@
 import type { ListGroup } from "alchemy/Dashboard/Projections";
 import { memo, useMemo } from "react";
+import { Search, X } from "lucide-react";
 import {
   dashboardStore,
   isDimmed,
+  setFilter,
   setSelectedFqn,
   useFilter,
+  useFilterCounts,
   useIsSelected,
   useMeta,
   useNode,
@@ -23,6 +26,7 @@ import {
   RESULT_LABELS,
   serviceOf,
   statusColor,
+  SUNK_INPUT,
   typeName,
 } from "../theme.ts";
 import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
@@ -77,15 +81,14 @@ export const ListView = memo(function ListView() {
       </p>
     );
   }
-  if (visibleGroups.length === 0) {
-    return (
-      <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
-        No resources match the filter
-      </p>
-    );
-  }
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
+      <FilterBar />
+      {visibleGroups.length === 0 && (
+        <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
+          No resources match the filter
+        </p>
+      )}
       {visibleGroups.map((group) => (
         <section key={group.group}>
           <h2 className={`${EYEBROW} mb-2 flex items-center gap-2`}>
@@ -193,5 +196,42 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
         </span>
       </span>
     </button>
+  );
+});
+
+/** List-local filter — the only place resources are filtered by text. */
+const FilterBar = memo(function FilterBar() {
+  const filter = useFilter();
+  const counts = useFilterCounts();
+  const active = filter.trim() !== "";
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative max-w-xs flex-1">
+        <Search
+          size={13}
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--alc-fg-4)]"
+        />
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter resources…"
+          className={`${SUNK_INPUT} w-full py-1.5 pl-8 pr-8`}
+        />
+        {active && (
+          <button
+            onClick={() => setFilter("")}
+            title="Clear filter"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-[var(--alc-radius-sm)] p-0.5 text-[var(--alc-fg-4)] transition-colors duration-[var(--alc-dur-fast)] hover:bg-[var(--alc-accent-12)] hover:text-[var(--alc-fg-1)]"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      {active && (
+        <span className="font-mono text-[11px] text-[var(--alc-fg-4)]">
+          {counts.shown} of {counts.total}
+        </span>
+      )}
+    </div>
   );
 });

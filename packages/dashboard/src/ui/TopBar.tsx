@@ -1,18 +1,15 @@
-import { Maximize, Moon, Search, Sun, X } from "lucide-react";
+import { Maximize, Moon, Search, Sun } from "lucide-react";
 import { memo, useMemo } from "react";
 import { setStage } from "../ingest.ts";
 import {
   requestFit,
-  setFilter,
+  setPaletteOpen,
   setView,
   useConnection,
-  useFilter,
-  useFilterCounts,
   useMeta,
-  useSeenStages,
   useProjection,
+  useSeenStages,
   useView,
-  type ViewKind,
 } from "../store.ts";
 import {
   CHIP,
@@ -20,21 +17,12 @@ import {
   HAIRLINE_BUTTON,
   PLAN_COLORS,
   PLAN_LABELS,
-  SUNK_INPUT,
 } from "../theme.ts";
 import { useThemeMode } from "../themeMode.ts";
 import { Yantra } from "./Brand.tsx";
 import { DeploymentPicker, HistoricalPill } from "./DeploymentPicker.tsx";
 import { StageSelect } from "./StageSelect.tsx";
-
-const VIEWS: readonly ViewKind[] = [
-  "canvas",
-  "summary",
-  "list",
-  "table",
-  "waterfall",
-  "annotations",
-];
+import { VIEW_LABELS, VIEW_ORDER } from "./views.ts";
 
 /**
  * The shell header. TopBar itself subscribes to NOTHING — each child
@@ -49,7 +37,7 @@ export const TopBar = memo(function TopBar() {
       <StageArea />
       <ConnectionDot />
       <PlanChips />
-      <FilterBox />
+      <PaletteButton />
       <div className="ml-auto flex items-center gap-2">
         <HistoricalPill />
         <DeploymentPicker />
@@ -144,54 +132,22 @@ function PlanChips() {
   );
 }
 
-/**
- * Filter box + match-count chip. Filtering is decoration-only (dims
- * non-matching nodes) — it NEVER touches layout, positions, or viewport.
- */
-const FILTER_ACTIVE_STYLE = chipStyle("var(--alc-warn)");
-
-function FilterBox() {
-  const filter = useFilter();
-  const counts = useFilterCounts();
-  const active = filter.trim() !== "";
+/** Opens the ⌘K command palette — search resources, jump between views. */
+function PaletteButton() {
   return (
-    <>
-      <div className="relative ml-4 max-w-xs flex-1">
-        <Search
-          size={13}
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--alc-fg-4)]"
-        />
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter resources…"
-          className={`${SUNK_INPUT} w-full py-1.5 pl-8 pr-8 ${
-            active
-              ? "border-[var(--alc-warn)] focus:border-[var(--alc-warn)]"
-              : ""
-          }`}
-        />
-        {active && (
-          <button
-            onClick={() => setFilter("")}
-            title="Clear filter"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-[var(--alc-radius-sm)] p-0.5 text-[var(--alc-fg-4)] transition-colors duration-[var(--alc-dur-fast)] hover:bg-[var(--alc-accent-12)] hover:text-[var(--alc-fg-1)]"
-          >
-            <X size={12} />
-          </button>
-        )}
-      </div>
-      {active && (
-        <button
-          onClick={() => setFilter("")}
-          className={`${CHIP} transition-colors duration-[var(--alc-dur-fast)]`}
-          style={FILTER_ACTIVE_STYLE}
-          title="Click to clear the filter"
-        >
-          filtered: {counts.shown} of {counts.total} shown ✕
-        </button>
-      )}
-    </>
+    <button
+      onClick={() => setPaletteOpen(true)}
+      title="Search resources and views (⌘K)"
+      className="ml-4 flex max-w-xs flex-1 items-center gap-2 rounded-[var(--alc-radius)] border border-[var(--alc-hairline)] bg-[var(--alc-bg-sunk)] px-2.5 py-1.5 text-left transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-hairline-2)]"
+    >
+      <Search size={13} className="shrink-0 text-[var(--alc-fg-4)]" />
+      <span className="flex-1 truncate font-mono text-[12px] text-[var(--alc-fg-4)]">
+        Search…
+      </span>
+      <kbd className="shrink-0 rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline-2)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--alc-fg-4)]">
+        ⌘K
+      </kbd>
+    </button>
   );
 }
 
@@ -216,17 +172,17 @@ function ViewTabs() {
   const view = useView();
   return (
     <div className="flex rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] p-0.5">
-      {VIEWS.map((v) => (
+      {VIEW_ORDER.map((v) => (
         <button
           key={v}
           onClick={() => setView(v)}
-          className={`rounded-[var(--alc-radius-sm)] px-2.5 py-1 text-[12px] capitalize transition-colors duration-[var(--alc-dur)] ${
+          className={`rounded-[var(--alc-radius-sm)] px-2.5 py-1 text-[12px] transition-colors duration-[var(--alc-dur)] ${
             view === v
               ? "bg-[var(--alc-accent-12)] font-medium text-[var(--alc-accent-deep)]"
               : "text-[var(--alc-fg-3)] hover:text-[var(--alc-fg-1)]"
           }`}
         >
-          {v}
+          {VIEW_LABELS[v]}
         </button>
       ))}
     </div>

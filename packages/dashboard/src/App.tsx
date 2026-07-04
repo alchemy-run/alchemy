@@ -14,10 +14,8 @@ import { Canvas } from "./ui/Canvas.tsx";
 import { Inspector } from "./ui/Inspector.tsx";
 import { ListView } from "./ui/ListView.tsx";
 import { TopBar } from "./ui/TopBar.tsx";
-import { AnnotationsView } from "./views/Annotations.tsx";
+import { CommandPalette } from "./ui/CommandPalette.tsx";
 import { SummaryView } from "./views/Summary.tsx";
-import { TableView } from "./views/Table.tsx";
-import { WaterfallView } from "./views/Waterfall.tsx";
 
 /**
  * v2 shell. App itself subscribes ONLY to the hydration gate; everything
@@ -40,6 +38,7 @@ export function App() {
         <ViewHost />
         <Inspector />
       </div>
+      <CommandPalette />
     </div>
   );
 }
@@ -102,17 +101,7 @@ const ViewHost = memo(function ViewHost() {
       {view === "canvas" && <CanvasEmptyState />}
       {view !== "canvas" && (
         <div className="absolute inset-0 z-10 overflow-y-auto bg-[var(--alc-bg)]">
-          {view === "summary" ? (
-            <SummaryView />
-          ) : view === "list" ? (
-            <ListView />
-          ) : view === "table" ? (
-            <TableView />
-          ) : view === "waterfall" ? (
-            <WaterfallView />
-          ) : (
-            <AnnotationsView />
-          )}
+          {view === "summary" ? <SummaryView /> : <ListView />}
         </div>
       )}
     </main>
