@@ -1,7 +1,6 @@
 import type {
   DeploymentEvent,
   DeploymentMeta,
-  DeploymentStore,
   ResourceState,
   StateService,
 } from "@/State";
