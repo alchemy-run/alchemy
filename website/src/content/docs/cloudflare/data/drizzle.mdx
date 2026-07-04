@@ -146,9 +146,8 @@ No `drizzle-kit generate` step in your CI — the deploy owns it.
 ## Open the connection with `Drizzle.postgres`
 
 `Drizzle.postgres` takes Hyperdrive's connection string and returns a
-typed `EffectPgDatabase` whose pool lives for the lifetime of the
-Worker isolate. Bind it once at init and use it directly inside
-`fetch` — no per-request `Client` setup, no `Effect.promise(...)`
+typed `EffectPgDatabase`. Bind it once at init and use it directly
+inside `fetch` — no manual `Client` setup, no `Effect.promise(...)`
 wrappers around queries:
 
 ```typescript
@@ -188,9 +187,11 @@ A few things to call out:
 - `db.select().from(Users)` is an `Effect`. You `yield*` it directly.
   The full drizzle/effect-postgres builder is supported (`select`,
   `insert`, `update`, `delete`, `with`, transactions).
-- The pool is created exactly once per Worker isolate. Subsequent
-  requests reuse the same pool — there's no per-request connection
-  setup.
+- The pool is built lazily on the first query and memoized on the
+  `ExecutionContext`, so it's created at most once per execution — a
+  `fetch`/`queue`/`scheduled` event or a Workflow run — and reused by
+  every query in that execution. It's torn down when the execution's
+  scope closes.
 - `nodejs_compat` is required because `pg` (node-postgres) powers the
   underlying transport.
 
@@ -563,3 +564,5 @@ and Container primitives from earlier tutorials.
   and passwords as resources
 - [Neon provider](/neon) — projects, branches, and
   [migrations](/neon/data/migrations)
+- [Drizzle hub](/drizzle) — where `Drizzle.Schema`'s generation and
+  diff semantics live, including [Migrations as resources](/drizzle/migrations)

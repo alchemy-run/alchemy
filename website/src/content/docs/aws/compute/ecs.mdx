@@ -60,10 +60,14 @@ Deploying a `Task` automates the whole container supply chain:
 Alchemy bundles the program, generates a Dockerfile (base image
 `public.ecr.aws/docker/library/bun:1` unless you override
 `docker.base` or supply a full `docker.dockerfile`), builds the
-image with your local Docker, pushes it to a **generated ECR
-repository**, provisions the **task and execution IAM roles**
-and a **CloudWatch log group**, and registers a Fargate task
-definition. Each deploy registers a new immutable revision.
+image with your [local Docker](/docker/setup), pushes it to a
+**generated ECR repository**, provisions the **task and
+execution IAM roles** and a **CloudWatch log group**, and
+registers a Fargate task definition. Each deploy registers a new
+immutable revision. The main image is always built this way;
+only `sidecars` take user-supplied image URIs, which you can
+produce as explicit resources with
+[`Docker.Image`](/docker/build-and-push).
 
 :::tip
 Building on Apple Silicon? Match the image architecture to the

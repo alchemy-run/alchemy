@@ -1,0 +1,133 @@
+---
+title: Migrations as resources
+description: Drizzle.Schema regenerates migration SQL as part of every deploy, and wiring its out output into a database's migrationsDir input orders generation before application.
+---
+
+`Drizzle.Schema` makes schema generation part of the deploy graph:
+drizzle-kit runs as a resource, and the migration SQL it emits is a
+resource output. Passing that output — the `out` directory — to a
+database resource's `migrationsDir` input creates a dependency edge,
+so every deploy regenerates pending migrations first and applies them
+second, in one `alchemy deploy`.
+
+This guide assumes the provider is registered — see the
+[Drizzle overview](/drizzle). `drizzle-kit` and `drizzle-orm` are
+optional peer dependencies of alchemy, so install both in your
+project.
+
+## Declare the schema
+
+```typescript
+const schema = yield* Drizzle.Schema("app-schema", {
+  schema: "./src/schema.ts",
+});
+```
+
+`schema` points at your schema module, which is loaded via dynamic
+`import()` so drizzle-kit can introspect the table definitions and
+diff them against the latest snapshot. Generated migrations land
+under `out` (default `./migrations`), each written as
+`{out}/{timestamp}_migration/` containing `migration.sql` and
+`snapshot.json`; `dialect` selects which `drizzle-kit/api-*` module
+loads and defaults to `"postgres"`.
+
+## Wire it into the graph
+
+```typescript
+/**
+ * A Drizzle schema + Neon project + feature branch. The branch's
+ * `migrationsDir` is wired to the schema resource's `out` output, so the
+ * provider order becomes:
+ *
+ *   1. `Drizzle.Schema` regenerates pending migration SQL files.
+ *   2. `Neon.Branch` scans the directory and applies any new migrations
+ *      transactionally.
+ */
+export const NeonDb = Effect.gen(function* () {
+  const schema = yield* Drizzle.Schema("app-schema", {
+    schema: "./src/schema.ts",
+    out: "./migrations",
+  });
+
+  const project = yield* Neon.Project("app-db", {
+    region: "aws-us-east-1",
+  });
+
+  const branch = yield* Neon.Branch("app-branch", {
+    project,
+    migrationsDir: schema.out,
+  });
+
+  return { project, branch, schema };
+});
+```
+
+`schema.out` is an `Output`, not a plain string — passing it to
+`migrationsDir` is what creates the dependency edge that forces the
+engine to run `Drizzle.Schema` before `Neon.Branch`, even though both
+values happen to spell `./migrations`.
+
+## What a deploy does
+
+```typescript
+{
+  out: string;          // migrations directory, cwd-relative
+  snapshotHash: string; // sha256 of the latest snapshot.json
+  migrations: string[]; // migration directory names, in order
+}
+```
+
+On each deploy the resource diffs the schema module against the
+latest snapshot and regenerates only when drizzle-kit would emit new
+SQL — an unchanged schema is a noop, not an update (a regression test
+in `Schema.test.ts` guards this: an unconditional update cascaded
+into spurious `Neon.Branch` updates downstream). The attributes above
+are what downstream consumers read: `out` is kept cwd-relative so
+state stays portable across machines, and `snapshotHash` /
+`migrations` let a `migrationsDir` consumer detect drift and reapply.
+
+## Destroy never deletes migrations
+
+```typescript
+delete: Effect.fn(function* () {
+  // Migrations are typically checked in; do not delete on resource
+  // teardown.
+}),
+```
+
+That is the provider's entire `delete` operation — a deliberate
+no-op. Removing the resource (or destroying the stack) never wipes
+the migrations directory, because migration files are source code you
+commit, not cloud state to tear down.
+
+## Dialects
+
+`postgres` is the default and the path the examples exercise
+end-to-end. `sqlite` generation works through drizzle-kit's CLI
+fallback — the provider runs `drizzle-kit generate` in a temp copy of
+`out` and fails fast if drizzle-kit asks an interactive rename
+question without a TTY (both behaviors are covered by
+`Schema.test.ts`). `mysql` schema generation is not wired through
+`Drizzle.Schema` in any example — for PlanetScale MySQL, check in the
+output of `drizzle-kit generate` and point `migrationsDir` at it, as
+[Add Drizzle ORM](/cloudflare/data/drizzle) documents.
+
+## Where next
+
+Application mechanics:
+
+- [Neon migrations](/neon/data/migrations) — how `migrationsDir`
+  files are ordered, hashed, and tracked on Neon.
+- [PlanetScale migrations](/planetscale/data/migrations) — the same
+  contract on PlanetScale branches.
+
+Related:
+
+- [D1](/cloudflare/data/d1) — `migrationsDir` and `migrationsTable`
+  on Cloudflare's serverless SQLite.
+- [Add Drizzle ORM](/cloudflare/data/drizzle) — the runtime side:
+  querying from a Worker with `Drizzle.postgres`.
+
+Reference:
+
+- [Schema API reference](/providers/drizzle/schema)

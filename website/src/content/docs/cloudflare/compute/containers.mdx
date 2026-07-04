@@ -172,7 +172,9 @@ export class Echo extends Cloudflare.Container<Echo>()("Echo", {
 ```
 
 Arbitrary images expose no RPC methods — the DO talks to them purely
-over their TCP port via `getTcpPort`.
+over their TCP port via `getTcpPort`. To build, tag, and push that
+image as part of the same Stack, see
+[Build & push images](/docker/build-and-push) in the Docker hub.
 
 ## ContainerApplication
 
