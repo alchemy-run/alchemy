@@ -44,6 +44,7 @@ import {
   setUserPanned,
   setViewport,
   useFitRequest,
+  useRestoredEpoch,
   type XY,
 } from "../store.ts";
 import { useThemeMode } from "../themeMode.ts";
@@ -104,13 +105,6 @@ const nodeDataOf = (fqn: string): { fqn: string } => {
   return data;
 };
 
-/**
- * Hashes whose first layout already auto-fit. Module-level so a Canvas
- * remount (view switch, if the host chooses to unmount) never re-fits a
- * structure the user has already seen — zero jump either way.
- */
-const fittedHashes = new Set<string>();
-
 export function Canvas() {
   return (
     <ReactFlowProvider>
@@ -126,7 +120,21 @@ function CanvasInner() {
   // just this component, never the nodes.
   const { resolved } = useThemeMode();
   const fitRequest = useFitRequest();
-  const { fitView } = useReactFlow();
+  const restoredEpoch = useRestoredEpoch();
+  const { fitView, setViewport: setRfViewport } = useReactFlow();
+
+  // Re-apply the persisted per-stage viewport whenever one is (re)loaded —
+  // stage switches and reloads restore the user's exact framing without a
+  // Canvas remount.
+  useEffect(() => {
+    if (restoredEpoch === 0) {
+      return;
+    }
+    const { viewport } = dashboardStore.getState().layout;
+    if (viewport !== undefined) {
+      void setRfViewport(viewport);
+    }
+  }, [restoredEpoch, setRfViewport]);
 
   // React Flow node array — controlled, so drags flow through
   // applyNodeChanges (which clones only the dragged node).
@@ -211,6 +219,14 @@ function CanvasInner() {
   // final framing — no zoomed-out flash followed by a fitView jump.
   const [revealed, setRevealed] = useState(false);
 
+  // Hashes already auto-fit in THIS mount. Deliberately a ref, not module
+  // state: a stage switch remounts the Canvas (the shell gates on
+  // hydration) and resets React Flow to the identity viewport — a
+  // remembered hash would then skip the fit and strand the graph at the
+  // top-left. View switches keep the Canvas mounted, so the ref survives
+  // those.
+  const fittedHashes = useRef(new Set<string>()).current;
+
   // Auto-fit exactly once per never-seen hash, when its first real layout
   // lands — never on decorations, never after the user panned.
   //
@@ -234,11 +250,16 @@ function CanvasInner() {
     if (!inSync) {
       return; // the rebuild effect hasn't committed the final positions yet
     }
-    if (!fittedHashes.has(hash)) {
+    // Auto-fit keeps the graph centered on every structural change until
+    // the user claims the framing (userPanned — persisted per stage). A
+    // restored user viewport therefore never gets re-fit, while untouched
+    // stages re-center as ghosts/plans land.
+    if (
+      !dashboardStore.getState().layout.userPanned &&
+      !fittedHashes.has(hash)
+    ) {
       fittedHashes.add(hash);
-      if (!dashboardStore.getState().layout.userPanned) {
-        void fitView(FIT_VIEW);
-      }
+      void fitView(FIT_VIEW);
     }
     setRevealed(true);
   }, [nodes, positions, layouted, hash, fitView]);
@@ -267,8 +288,11 @@ function CanvasInner() {
     }
   }, []);
 
-  const onMoveEnd = useCallback<OnMoveEnd>((_event, viewport) => {
-    setViewport(viewport);
+  const onMoveEnd = useCallback<OnMoveEnd>((event, viewport) => {
+    // programmatic moves (fitView / restored viewport) carry no event —
+    // they update the in-memory viewport but are never persisted as the
+    // user's chosen framing
+    setViewport(viewport, { persist: event !== null && event !== undefined });
   }, []);
 
   const onNodeClick = useCallback<NodeMouseHandler<CanvasNode>>(

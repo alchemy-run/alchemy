@@ -133,11 +133,24 @@ export interface LayoutSlice {
    * after each ELK layout; survives view switches AND stage switches.
    */
   positionsByHash: ReadonlyMap<string, ReadonlyMap<string, XY>>;
+  /**
+   * The user's own framing for the CURRENT stage. Only ever set by a real
+   * user gesture (or restored from localStorage) — programmatic fits never
+   * land here, so a saved viewport always means "the user chose this".
+   */
   viewport?: Viewport;
   /** true once the user pans/zooms — fitView must never fire while set */
   userPanned: boolean;
   /** bump = explicit "Fit" request for the Canvas to consume */
   fitRequest: number;
+  /**
+   * Bumped when a persisted per-stage layout has been (re)loaded — the
+   * Canvas consumes it to re-apply the restored viewport without
+   * remounting.
+   */
+  restoredEpoch: number;
+  /** every stage ever seen for this stack (persisted client-side) */
+  stagesSeen: readonly string[];
 }
 
 export interface DashboardState {
@@ -204,10 +217,142 @@ const initialState = (): DashboardState => ({
   history: initialHistory(),
   // feedExpanded starts false: the ActivityFeed opens as a one-line pill
   ui: { view: "canvas", filter: "", feedExpanded: false },
-  layout: { positionsByHash: new Map(), userPanned: false, fitRequest: 0 },
+  layout: {
+    positionsByHash: new Map(),
+    userPanned: false,
+    fitRequest: 0,
+    restoredEpoch: 0,
+    stagesSeen: [],
+  },
 });
 
 export const dashboardStore = createStore<DashboardState>(initialState);
+
+// ──────────────────────────────────────── per-stage layout persistence
+
+/**
+ * The user's framing survives reloads: viewport + pan latch + the position
+ * cache are persisted per (stack, stage) in localStorage. Only USER
+ * viewports are persisted (programmatic fits pass persist: false), so a
+ * stage the user never touched keeps auto-fitting to center.
+ */
+const layoutKey = (stack: string, stage: string): string =>
+  `alchemy-dashboard-layout:${stack}:${stage}`;
+
+const stagesKey = (stack: string): string =>
+  `alchemy-dashboard-stages:${stack}`;
+
+interface PersistedLayout {
+  viewport?: Viewport;
+  userPanned: boolean;
+  positions: Record<string, Record<string, XY>>;
+}
+
+const currentScope = (): { stack: string; stage: string } | undefined => {
+  const { document } = dashboardStore.getState();
+  return document.meta.stack !== "" && document.meta.stage !== ""
+    ? { stack: document.meta.stack, stage: document.meta.stage }
+    : undefined;
+};
+
+const persistLayout = (): void => {
+  const scope = currentScope();
+  if (scope === undefined) {
+    return;
+  }
+  const { layout } = dashboardStore.getState();
+  const positions: PersistedLayout["positions"] = {};
+  for (const [hash, byFqn] of layout.positionsByHash) {
+    positions[hash] = Object.fromEntries(byFqn);
+  }
+  const persisted: PersistedLayout = {
+    viewport: layout.viewport,
+    userPanned: layout.userPanned,
+    positions,
+  };
+  try {
+    localStorage.setItem(
+      layoutKey(scope.stack, scope.stage),
+      JSON.stringify(persisted),
+    );
+  } catch {
+    // storage full / private mode — layout just won't survive the reload
+  }
+};
+
+const readPersistedLayout = (
+  stack: string,
+  stage: string,
+): PersistedLayout | undefined => {
+  try {
+    const raw = localStorage.getItem(layoutKey(stack, stage));
+    return raw === null ? undefined : (JSON.parse(raw) as PersistedLayout);
+  } catch {
+    return undefined;
+  }
+};
+
+const readSeenStages = (stack: string): string[] => {
+  try {
+    const raw = localStorage.getItem(stagesKey(stack));
+    const parsed = raw === null ? [] : (JSON.parse(raw) as string[]);
+    return Array.isArray(parsed) ? parsed.filter((s) => s.length > 0) : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Union the given stages into the persisted + in-memory seen set. */
+const rememberStages = (stack: string, stages: readonly string[]): void => {
+  const state = dashboardStore.getState();
+  const merged = [
+    ...new Set([
+      ...readSeenStages(stack),
+      ...state.layout.stagesSeen,
+      ...stages,
+    ]),
+  ].sort();
+  try {
+    localStorage.setItem(stagesKey(stack), JSON.stringify(merged));
+  } catch {
+    // best-effort
+  }
+  if (
+    merged.length !== state.layout.stagesSeen.length ||
+    merged.some((s, i) => s !== state.layout.stagesSeen[i])
+  ) {
+    dashboardStore.setState({
+      layout: { ...dashboardStore.getState().layout, stagesSeen: merged },
+    });
+  }
+};
+
+/**
+ * Load the persisted layout for a stage into the store (merging its
+ * position cache) and bump `restoredEpoch` so the Canvas re-applies the
+ * restored viewport.
+ */
+const restoreLayoutForStage = (stack: string, stage: string): void => {
+  const persisted = readPersistedLayout(stack, stage);
+  const state = dashboardStore.getState();
+  const positionsByHash = new Map(state.layout.positionsByHash);
+  if (persisted !== undefined) {
+    for (const [hash, byFqn] of Object.entries(persisted.positions)) {
+      if (!positionsByHash.has(hash)) {
+        positionsByHash.set(hash, new Map(Object.entries(byFqn)));
+      }
+    }
+  }
+  dashboardStore.setState({
+    layout: {
+      ...state.layout,
+      positionsByHash,
+      viewport: persisted?.viewport,
+      userPanned: persisted?.userPanned ?? false,
+      restoredEpoch: state.layout.restoredEpoch + 1,
+    },
+  });
+};
 
 // ──────────────────────────────────────────────────────── document actions
 
@@ -325,6 +470,7 @@ export const ingestPatches = (
 export const applySnapshot = (snapshot: DocumentSnapshot): void => {
   const state = dashboardStore.getState();
   const doc = fromSnapshot(snapshot);
+  const firstHydration = !state.hydrated;
   let ui = state.ui;
   if (
     ui.selectedFqn !== undefined &&
@@ -343,6 +489,17 @@ export const applySnapshot = (snapshot: DocumentSnapshot): void => {
     connection: { ...state.connection, revision: doc.revision },
     ...(ui !== state.ui ? { ui } : {}),
   });
+  if (doc.meta.stack !== "") {
+    // every stage this client has ever seen stays in the picker, even if a
+    // backend's listStages forgets one
+    rememberStages(doc.meta.stack, [
+      doc.meta.stage,
+      ...(doc.meta.stages ?? []),
+    ]);
+    if (firstHydration && doc.meta.stage !== "") {
+      restoreLayoutForStage(doc.meta.stack, doc.meta.stage);
+    }
+  }
 };
 
 /**
@@ -526,6 +683,7 @@ export const setPositions = (
   dashboardStore.setState({
     layout: { ...state.layout, positionsByHash: next },
   });
+  persistLayout();
 };
 
 /** Non-hook read (e.g. from the layout effect before kicking ELK). */
@@ -534,9 +692,20 @@ export const getPositions = (
 ): ReadonlyMap<string, XY> | undefined =>
   dashboardStore.getState().layout.positionsByHash.get(structuralHash);
 
-export const setViewport = (viewport: Viewport): void => {
+/**
+ * Record the viewport. Only USER gestures persist (and count as the
+ * stage's chosen framing) — programmatic fits keep `persist: false` so an
+ * untouched stage keeps auto-fitting to center forever.
+ */
+export const setViewport = (
+  viewport: Viewport,
+  options?: { persist?: boolean },
+): void => {
   const state = dashboardStore.getState();
   dashboardStore.setState({ layout: { ...state.layout, viewport } });
+  if (options?.persist !== false) {
+    persistLayout();
+  }
 };
 
 export const setUserPanned = (userPanned: boolean): void => {
@@ -545,6 +714,7 @@ export const setUserPanned = (userPanned: boolean): void => {
     return;
   }
   dashboardStore.setState({ layout: { ...state.layout, userPanned } });
+  persistLayout();
 };
 
 /** Explicit Fit button: bump fitRequest and re-arm auto-fit. */
@@ -555,8 +725,12 @@ export const requestFit = (): void => {
       ...state.layout,
       fitRequest: state.layout.fitRequest + 1,
       userPanned: false,
+      // an explicit Fit discards the stage's saved framing — the fitted
+      // view becomes the new baseline
+      viewport: undefined,
     },
   });
+  persistLayout();
 };
 
 // ──────────────────────────────────────────────── selectors (pure, cached)
@@ -984,6 +1158,13 @@ export const useUserPanned = (): boolean =>
 
 export const useFitRequest = (): number =>
   useStore(dashboardStore, (s) => s.layout.fitRequest);
+
+export const useRestoredEpoch = (): number =>
+  useStore(dashboardStore, (s) => s.layout.restoredEpoch);
+
+/** Every stage this client has ever seen for the stack (persisted). */
+export const useSeenStages = (): readonly string[] =>
+  useStore(dashboardStore, (s) => s.layout.stagesSeen);
 
 export const useProjection = <V extends ProjectionView>(
   view: V,

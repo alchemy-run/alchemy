@@ -2,7 +2,7 @@ import type { TableRowView } from "alchemy/Dashboard/Projections";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { formatDuration } from "../format.ts";
-import { setSelectedFqn, useProjection } from "../store.ts";
+import { setSelectedFqn, useFilter, useProjection } from "../store.ts";
 import {
   CHIP,
   chipStyle,
@@ -82,9 +82,27 @@ const compareRows =
  */
 export const TableView = memo(function TableView() {
   const rows = useProjection("table");
+  const filter = useFilter();
   const [sort, setSort] = useState<Sort>({ key: "fqn", dir: 1 });
 
-  const sorted = useMemo(() => [...rows].sort(compareRows(sort)), [rows, sort]);
+  // the filter REMOVES rows here (unlike the canvas, which dims — rows
+  // carry no spatial identity worth preserving)
+  const visible = useMemo(() => {
+    const query = filter.trim().toLowerCase();
+    if (query === "") {
+      return rows;
+    }
+    return rows.filter(
+      (row) =>
+        row.fqn.toLowerCase().includes(query) ||
+        (row.type?.toLowerCase().includes(query) ?? false),
+    );
+  }, [rows, filter]);
+
+  const sorted = useMemo(
+    () => [...visible].sort(compareRows(sort)),
+    [visible, sort],
+  );
 
   const toggle = (key: SortKey) =>
     setSort((prev) =>
@@ -97,6 +115,13 @@ export const TableView = memo(function TableView() {
     return (
       <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
         This stack defines no resources
+      </p>
+    );
+  }
+  if (sorted.length === 0) {
+    return (
+      <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
+        No resources match the filter
       </p>
     );
   }
