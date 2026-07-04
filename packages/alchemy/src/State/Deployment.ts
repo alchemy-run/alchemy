@@ -45,6 +45,21 @@ export interface DeploymentStore {
      * @default 60_000
      */
     ttlMillis?: number;
+    /**
+     * Take over one specific open version: when the live open version is
+     * exactly `supersede`, it is reconciled to `"abandoned"` regardless of
+     * heartbeat freshness and the claim proceeds. Any OTHER live open still
+     * fails {@link DeploymentInProgress}.
+     *
+     * This is the targeted takeover primitive for the engine's same-host
+     * dead-pid recovery: the caller first observed `DeploymentInProgress`,
+     * proved the holder cannot be alive (same host, pid gone), and retries
+     * with the holder's version. Pinning the version (instead of a blanket
+     * `ttlMillis: 0`) makes the takeover race-free — if a different deploy
+     * claimed the stage in between, the versions no longer match and the
+     * retry fails {@link DeploymentInProgress} like any other begin.
+     */
+    supersede?: number;
   }): Effect.Effect<
     { version: number; token: string },
     DeploymentInProgress | StateStoreError
@@ -248,3 +263,135 @@ export class DeploymentNotFound extends Data.TaggedError("DeploymentNotFound")<{
 
 /** Default heartbeat TTL for stale-open reconciliation. */
 export const DEPLOYMENT_TTL_MILLIS = 60_000;
+
+// ---------------------------------------------------------------------------
+// Shared implementation helpers
+//
+// Every DeploymentStore backend (in-memory, local FS, S3, Cloudflare DO)
+// enforces the same lifecycle semantics. The pure pieces of those semantics
+// live here so the backends only implement storage mechanics.
+// ---------------------------------------------------------------------------
+
+/**
+ * Internal record shape used by plaintext backends: the public record plus
+ * the open bearer token. Backends that store the token differently (e.g.
+ * the Cloudflare DO stores only a hash) define their own stored shape.
+ */
+export interface StoredDeploymentRecord extends DeploymentRecord {
+  token: string;
+}
+
+/** Strip the token and deep-copy so callers never alias internal state. */
+export const toPublicRecord = (
+  record: StoredDeploymentRecord,
+): DeploymentRecord => {
+  const { token: _token, ...rest } = record;
+  return structuredClone(rest);
+};
+
+/**
+ * An open record whose heartbeat is at least `ttlMillis` old is stale and
+ * gets reconciled to `"abandoned"` (by the next `begin`, or server-side
+ * where the backend supports it). `ttlMillis: 0` therefore means "always
+ * stale"; an ended record is never stale.
+ */
+export const isStaleOpen = (
+  record: Pick<DeploymentRecord, "endedAt" | "heartbeatAt">,
+  now: number,
+  ttlMillis: number,
+): boolean =>
+  record.endedAt === undefined && now - record.heartbeatAt >= ttlMillis;
+
+/**
+ * May a `begin` abandon this open holder and claim the next version?
+ *
+ * Yes when the holder is stale ({@link isStaleOpen} — its heartbeat
+ * lapsed), OR when the caller passed `supersede` naming exactly this
+ * version: a targeted takeover where the caller proved out-of-band that
+ * the holder is dead (e.g. same-host pid check), so even a fresh
+ * heartbeat does not protect it. Any other live open wins and the begin
+ * fails `DeploymentInProgress`.
+ *
+ * Every store MUST use this predicate (inside whatever atomic claim
+ * primitive it has) so takeover semantics never drift between backends.
+ */
+export const shouldAbandonOpen = (
+  record: Pick<DeploymentRecord, "endedAt" | "heartbeatAt" | "version">,
+  now: number,
+  ttlMillis: number,
+  supersede: number | undefined,
+): boolean =>
+  isStaleOpen(record, now, ttlMillis) || record.version === supersede;
+
+/**
+ * The shared `end` transition: which outcome (if any) to record when the
+ * engine closes a deployment.
+ *
+ * - Still open — record the engine's outcome.
+ * - Already reconciled to `"abandoned"` — the engine finished after the
+ *   store gave up on its heartbeat; preserve that fact as
+ *   `"completed-late"`.
+ * - Already ended with a real outcome — idempotent no-op (`undefined`),
+ *   the first outcome wins.
+ */
+export const endTransition = (
+  record: Pick<DeploymentRecord, "endedAt" | "outcome">,
+  outcome: DeploymentEndOutcome,
+): DeploymentOutcome | undefined =>
+  record.endedAt === undefined
+    ? outcome
+    : record.outcome === "abandoned"
+      ? "completed-late"
+      : undefined;
+
+/** Highest seq in a batch (0 for an empty batch). */
+export const maxSeqOf = (events: readonly DeploymentEvent[]): number =>
+  events.reduce((max, event) => (event.seq > max ? event.seq : max), 0);
+
+/**
+ * Per-instance hint cache powering the blind-claim fast path in `begin`
+ * (S3 and local FS; single-arbiter stores don't need it).
+ *
+ * The invariant it encodes: versions are allocated contiguously and never
+ * deleted, so if this instance's own `end` closed version N, an atomic
+ * exclusive-create of N+1 succeeding PROVES no newer version — and
+ * therefore no live open — exists, skipping the full observe loop.
+ *
+ * Policy (identical across stores, so decided once here):
+ * - the hint is **single-shot**: `take` consumes it, so a failed claim can
+ *   never be retried blindly — the caller falls back to the observe loop,
+ *   which re-seeds nothing until the next `end`;
+ * - `noteClosed` only advances: a late `end` of an old abandoned version
+ *   never rolls the stage's high-water mark backwards;
+ * - `invalidate` clears the hint when a version is observed OPEN (the
+ *   fast path only applies after our own `end` closes it again).
+ */
+export class ClosedVersionHint {
+  private readonly newest = new Map<string, number>();
+
+  private key(ids: { stack: string; stage: string }): string {
+    return `${ids.stack}\u0000${ids.stage}`;
+  }
+
+  /** Consume the hint for `(stack, stage)` — single-shot. */
+  take(ids: { stack: string; stage: string }): number | undefined {
+    const key = this.key(ids);
+    const version = this.newest.get(key);
+    this.newest.delete(key);
+    return version;
+  }
+
+  /** Record that `version` is closed. Never rolls backwards. */
+  noteClosed(ids: { stack: string; stage: string }, version: number): void {
+    const key = this.key(ids);
+    const prev = this.newest.get(key);
+    if (prev === undefined || version > prev) {
+      this.newest.set(key, version);
+    }
+  }
+
+  /** Drop the hint — a version was observed open. */
+  invalidate(ids: { stack: string; stage: string }): void {
+    this.newest.delete(this.key(ids));
+  }
+}

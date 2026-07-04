@@ -10,6 +10,7 @@ import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
 import { decodeFqn, encodeFqn } from "../../FQN.ts";
 import { STATE_STORE_VERSION } from "../../State/HttpStateApi.ts";
 import {
+  fencedWriteRejected,
   State,
   StateStoreError,
   type PersistedState,
@@ -17,7 +18,7 @@ import {
 } from "../../State/State.ts";
 import { encodeState, reviveState } from "../../State/StateEncoding.ts";
 import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
-import { makeS3DeploymentStore } from "./Deployments.ts";
+import { makeS3DeploymentStore, recordKey } from "./Deployments.ts";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
 import * as Endpoint from "../Endpoint.ts";
@@ -176,13 +177,15 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       : "";
 
     const toError = (cause: unknown) =>
-      new StateStoreError({
-        message:
-          cause instanceof Error
-            ? cause.message
-            : `S3 state store error: ${String(cause)}`,
-        cause: cause instanceof Error ? cause : undefined,
-      });
+      cause instanceof StateStoreError
+        ? cause
+        : new StateStoreError({
+            message:
+              cause instanceof Error
+                ? cause.message
+                : `S3 state store error: ${String(cause)}`,
+            cause: cause instanceof Error ? cause : undefined,
+          });
 
     // Anything that touches AWS credentials must NOT run at layer
     // construction time. Resolving the environment (account/region),
@@ -303,6 +306,42 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         }
       });
 
+    /**
+     * Fencing check (see StateWriteFence in State.ts): a write carrying
+     * `fence: F` is rejected once any deployment version > F exists.
+     * Versions are contiguous and never deleted, so "a version above F
+     * exists" is equivalent to "F+1's record.json exists" — one HEAD per
+     * fenced write, no LIST. Check-then-write (not atomic with the PUT),
+     * so fencing is best-effort on S3 — a zombie that lost its lease is
+     * caught by its next write.
+     */
+    const checkFence = (request: {
+      stack: string;
+      stage: string;
+      fence?: number;
+    }): Effect.Effect<void, StateStoreError> =>
+      request.fence === undefined
+        ? Effect.void
+        : run((bucket) =>
+            s3
+              .headObject({
+                Bucket: bucket,
+                Key: recordKey(stagePrefix(request), request.fence! + 1),
+              })
+              .pipe(
+                Effect.flatMap(() =>
+                  Effect.fail(
+                    fencedWriteRejected({
+                      stack: request.stack,
+                      stage: request.stage,
+                      fence: request.fence!,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("NotFound", () => Effect.void),
+              ),
+          );
+
     const state: StateService = {
       id: "s3",
       getVersion: () => Effect.succeed(STATE_STORE_VERSION),
@@ -323,13 +362,23 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        run((bucket) =>
-          writeJson(bucket, resourceKey(request), request.value),
-        ).pipe(Effect.map(() => request.value)),
+        checkFence(request).pipe(
+          Effect.flatMap(() =>
+            run((bucket) =>
+              writeJson(bucket, resourceKey(request), request.value),
+            ),
+          ),
+          Effect.map(() => request.value),
+        ),
       delete: (request) =>
-        run((bucket) =>
-          s3.deleteObject({ Bucket: bucket, Key: resourceKey(request) }),
-        ).pipe(Effect.asVoid),
+        checkFence(request).pipe(
+          Effect.flatMap(() =>
+            run((bucket) =>
+              s3.deleteObject({ Bucket: bucket, Key: resourceKey(request) }),
+            ),
+          ),
+          Effect.asVoid,
+        ),
       deleteStack: ({ stack, stage }) =>
         run((bucket) =>
           deleteAll(
@@ -378,9 +427,14 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       getOutput: (request) =>
         run((bucket) => readJson(bucket, outputKey(request))),
       setOutput: (request) =>
-        run((bucket) =>
-          writeJson(bucket, outputKey(request), request.value),
-        ).pipe(Effect.map(() => request.value)),
+        checkFence(request).pipe(
+          Effect.flatMap(() =>
+            run((bucket) =>
+              writeJson(bucket, outputKey(request), request.value),
+            ),
+          ),
+          Effect.map(() => request.value),
+        ),
     };
     return state;
   });

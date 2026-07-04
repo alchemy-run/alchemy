@@ -178,6 +178,80 @@ export const deploymentStoreConformance = (
     );
 
     it.effect(
+      "begin with supersede matching the live open abandons it and allocates the next version",
+      () =>
+        Effect.gen(function* () {
+          const { deployments } = yield* makeStore();
+          const { stack, stage } = ids("supersede-match");
+
+          const first = yield* deployments.begin({
+            stack,
+            stage,
+            meta: meta("dead-holder"),
+          });
+          expect(first.version).toBe(1);
+
+          // Heartbeat is fresh (TestClock never advances), so without
+          // supersede this would fail DeploymentInProgress.
+          const second = yield* deployments.begin({
+            stack,
+            stage,
+            meta: meta("takeover"),
+            supersede: first.version,
+          });
+          expect(second.version).toBe(2);
+
+          const abandoned = yield* deployments.get({
+            stack,
+            stage,
+            version: first.version,
+          });
+          expect(abandoned?.outcome).toBe("abandoned");
+          expect(abandoned?.endedAt).not.toBeUndefined();
+        }),
+    );
+
+    it.effect(
+      "begin with a non-matching supersede still fails DeploymentInProgress",
+      () =>
+        Effect.gen(function* () {
+          const { deployments } = yield* makeStore();
+          const { stack, stage } = ids("supersede-mismatch");
+
+          const first = yield* deployments.begin({
+            stack,
+            stage,
+            meta: meta("live-holder"),
+          });
+
+          // The takeover was aimed at a version that is no longer the open
+          // one (e.g. a legitimate deploy claimed the stage in between) —
+          // it must lose like any other begin.
+          const result = yield* Effect.result(
+            deployments.begin({
+              stack,
+              stage,
+              meta: meta("stale-takeover"),
+              supersede: first.version + 41,
+            }),
+          );
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure._tag).toBe("DeploymentInProgress");
+          }
+
+          // The live holder was untouched.
+          const holder = yield* deployments.get({
+            stack,
+            stage,
+            version: first.version,
+          });
+          expect(holder?.outcome).toBeUndefined();
+          expect(holder?.endedAt).toBeUndefined();
+        }),
+    );
+
+    it.effect(
       "end sets outcome/endedAt/summary; repeat end is a no-op preserving the first outcome",
       () =>
         Effect.gen(function* () {
@@ -625,6 +699,66 @@ export const deploymentStoreConformance = (
     );
 
     (options.persistent ? it.effect : it.effect.skip)(
+      "a foreign claim after our own end still wins over a warm re-begin",
+      () =>
+        Effect.gen(function* () {
+          // Exercises the blind-claim fast path (S3 / local FS): instance A
+          // ends v1 and caches "1 is closed"; instance B claims v2; A's next
+          // begin must observe B's live open — the stale fast-path claim of
+          // v2 conflicts and falls back to the full observe loop.
+          const a = yield* makeStore();
+          const b = yield* makeStore();
+          const { stack, stage } = ids("fast-path-fallback");
+
+          const first = yield* a.deployments.begin({
+            stack,
+            stage,
+            meta: meta("instance-a"),
+          });
+          yield* a.deployments.end({
+            stack,
+            stage,
+            version: first.version,
+            token: first.token,
+            outcome: "succeeded",
+          });
+
+          const second = yield* b.deployments.begin({
+            stack,
+            stage,
+            meta: meta("instance-b"),
+          });
+          expect(second.version).toBe(2);
+
+          const blocked = yield* Effect.result(
+            a.deployments.begin({ stack, stage, meta: meta("instance-a") }),
+          );
+          expect(Result.isFailure(blocked)).toBe(true);
+          if (Result.isFailure(blocked)) {
+            expect(blocked.failure._tag).toBe("DeploymentInProgress");
+            if (blocked.failure._tag === "DeploymentInProgress") {
+              expect(blocked.failure.holder.version).toBe(2);
+            }
+          }
+
+          yield* b.deployments.end({
+            stack,
+            stage,
+            version: second.version,
+            token: second.token,
+            outcome: "succeeded",
+          });
+
+          const third = yield* a.deployments.begin({
+            stack,
+            stage,
+            meta: meta("instance-a"),
+          });
+          expect(third.version).toBe(3);
+        }),
+    );
+
+    (options.persistent ? it.effect : it.effect.skip)(
       "persists records and events across re-instantiation",
       () =>
         Effect.gen(function* () {
@@ -672,6 +806,97 @@ export const deploymentStoreConformance = (
             version,
           });
           expect(events.map((e) => e.seq)).toEqual([1, 2]);
+        }),
+    );
+
+    it.effect(
+      "a fenced write from a superseded deployment is rejected; the current holder's writes pass",
+      () =>
+        Effect.gen(function* () {
+          const { state, deployments } = yield* makeStore();
+          const { stack, stage } = ids("fencing");
+          const value = resource("fenced-resource");
+
+          // v1 opens, then is treated as stale (claimer passes ttl 0) and
+          // superseded by v2 — the classic zombie: v1 still believes it
+          // holds the lease.
+          const v1 = yield* deployments.begin({
+            stack,
+            stage,
+            meta: meta("zombie"),
+          });
+          const v2 = yield* deployments.begin({
+            stack,
+            stage,
+            meta: meta("current"),
+            ttlMillis: 0,
+          });
+          expect(v2.version).toBe(v1.version + 1);
+
+          // The zombie's fenced writes are all rejected.
+          const fencedSet = yield* Effect.result(
+            state.set({
+              stack,
+              stage,
+              fqn: value.fqn,
+              value,
+              fence: v1.version,
+            }),
+          );
+          expect(Result.isFailure(fencedSet)).toBe(true);
+          if (Result.isFailure(fencedSet)) {
+            expect(fencedSet.failure._tag).toBe("StateStoreError");
+            expect(String(fencedSet.failure.message)).toContain("fenced");
+          }
+          const fencedDelete = yield* Effect.result(
+            state.delete({ stack, stage, fqn: value.fqn, fence: v1.version }),
+          );
+          expect(Result.isFailure(fencedDelete)).toBe(true);
+          const fencedOutput = yield* Effect.result(
+            state.setOutput({
+              stack,
+              stage,
+              value: { ok: false },
+              fence: v1.version,
+            }),
+          );
+          expect(Result.isFailure(fencedOutput)).toBe(true);
+
+          // The rejected set must not have landed.
+          const afterFenced = yield* state.get({
+            stack,
+            stage,
+            fqn: value.fqn,
+          });
+          expect(afterFenced).toBeUndefined();
+
+          // The current holder's fence (== newest version) passes.
+          yield* state.set({
+            stack,
+            stage,
+            fqn: value.fqn,
+            value,
+            fence: v2.version,
+          });
+          expect(
+            yield* state.get({ stack, stage, fqn: value.fqn }),
+          ).toBeDefined();
+          yield* state.setOutput({
+            stack,
+            stage,
+            value: { ok: true },
+            fence: v2.version,
+          });
+          yield* state.delete({
+            stack,
+            stage,
+            fqn: value.fqn,
+            fence: v2.version,
+          });
+
+          // Unfenced writes (operator tooling) always bypass the check.
+          yield* state.set({ stack, stage, fqn: value.fqn, value });
+          yield* state.delete({ stack, stage, fqn: value.fqn });
         }),
     );
 

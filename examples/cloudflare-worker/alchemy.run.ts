@@ -25,7 +25,7 @@ export default Alchemy.Stack(
   "CloudflareWorkerExample",
   {
     providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const api = yield* Api;

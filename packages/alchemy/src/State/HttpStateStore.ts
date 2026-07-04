@@ -20,6 +20,7 @@ import {
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
+  fencedWriteRejected,
   StateStoreError,
   type PersistedState,
   type StateService,
@@ -144,6 +145,7 @@ export const makeHttpStateStore = ({
         stage: string;
         fqn: string;
         value: V;
+        fence?: number;
       }) =>
         state
           .setState({
@@ -152,6 +154,7 @@ export const makeHttpStateStore = ({
               stage: request.stage,
               fqn: encodeURIComponent(request.fqn),
             },
+            query: { fence: request.fence },
             payload: encodeState(request.value),
           })
           .pipe(
@@ -159,6 +162,7 @@ export const makeHttpStateStore = ({
             // has the canonical object (including any Redacted<T>
             // instances); returning the input avoids a lossy round-trip.
             Effect.map(() => request.value),
+            failFenced(request),
             mapStateStoreError,
           ),
       delete: (request) =>
@@ -169,8 +173,9 @@ export const makeHttpStateStore = ({
               stage: request.stage,
               fqn: encodeURIComponent(request.fqn),
             },
+            query: { fence: request.fence },
           })
-          .pipe(Effect.asVoid, mapStateStoreError),
+          .pipe(Effect.asVoid, failFenced(request), mapStateStoreError),
       deleteStack: (request) =>
         state
           .deleteStack({
@@ -193,10 +198,12 @@ export const makeHttpStateStore = ({
         state
           .setStackOutput({
             params: { stack: request.stack, stage: request.stage },
+            query: { fence: request.fence },
             payload: encodeState(request.value as any),
           })
           .pipe(
             Effect.map(() => request.value),
+            failFenced(request),
             mapStateStoreError,
           ),
       getAll: (request) =>
@@ -232,7 +239,11 @@ export const makeHttpStateStore = ({
           state
             .beginDeployment({
               params: { stack: request.stack, stage: request.stage },
-              payload: { meta: request.meta, ttlMillis: request.ttlMillis },
+              payload: {
+                meta: request.meta,
+                ttlMillis: request.ttlMillis,
+                supersede: request.supersede,
+              },
             })
             .pipe(
               retryTransient,
@@ -436,6 +447,30 @@ export const makeHttpStateStore = ({
     return service;
   });
 
+/**
+ * Decode the server's 412 `StateWriteFenced` wire error into the
+ * canonical {@link fencedWriteRejected} StateStoreError. Applied before
+ * {@link mapStateStoreError} so the fence refusal keeps its precise
+ * message (and is never retried — 412 isn't in the transient set).
+ */
+const failFenced =
+  (request: { stack: string; stage: string; fence?: number }) =>
+  <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
+    eff.pipe(
+      Effect.catchIf(
+        (e): e is E & { _tag: "StateWriteFenced" } =>
+          e._tag === "StateWriteFenced",
+        () =>
+          Effect.fail(
+            fencedWriteRejected({
+              stack: request.stack,
+              stage: request.stage,
+              fence: request.fence ?? 0,
+            }),
+          ),
+      ),
+    );
+
 /** Fold any residual client failure into a {@link StateStoreError}. */
 const failStateStore = (e: unknown) =>
   Effect.fail(
@@ -544,10 +579,12 @@ const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
     Effect.tapError(Effect.log),
     Effect.catch((e: E) =>
       Effect.fail(
-        new StateStoreError({
-          message: e instanceof Error ? e.message : String(e),
-          cause: e instanceof Error ? e : undefined,
-        }),
+        e instanceof StateStoreError
+          ? e
+          : new StateStoreError({
+              message: e instanceof Error ? e.message : String(e),
+              cause: e instanceof Error ? e : undefined,
+            }),
       ),
     ),
   ) as Effect.Effect<A, StateStoreError, R>;

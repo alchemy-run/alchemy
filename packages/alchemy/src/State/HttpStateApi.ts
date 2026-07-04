@@ -86,6 +86,28 @@ const ResourceKey = Schema.Struct({
   fqn: Schema.String,
 });
 
+/**
+ * Optional fencing token on head-state writes — the deployment version
+ * whose lease authorizes the write (see `StateWriteFence` in State.ts).
+ * Travels as a query param because the write payloads are the raw
+ * state values themselves.
+ */
+const FenceQuery = Schema.Struct({
+  fence: Schema.optional(Schema.Number),
+});
+
+/**
+ * A fenced head-state write lost its lease: a deployment newer than
+ * `fence` has been begun. 412 Precondition Failed — decoded by the
+ * client into the `fencedWriteRejected` StateStoreError. Never
+ * retryable: the writer's lease is gone for good.
+ */
+export const StateWriteFencedWire = Schema.TaggedStruct("StateWriteFenced", {
+  stack: Schema.String,
+  stage: Schema.String,
+  fence: Schema.Number,
+}).pipe(HttpApiSchema.status(412));
+
 export const ListStacks = HttpApiEndpoint.get("listStacks", "/state/stacks", {
   success: Schema.Array(Schema.String),
 });
@@ -122,8 +144,10 @@ export const SetState = HttpApiEndpoint.put(
   "/state/stacks/:stack/stages/:stage/resources/:fqn",
   {
     params: ResourceKey,
+    query: FenceQuery,
     payload: ResourceStateSchema,
     success: ResourceStateSchema,
+    error: StateWriteFencedWire,
   },
 );
 
@@ -132,7 +156,9 @@ export const DeleteState = HttpApiEndpoint.delete(
   "/state/stacks/:stack/stages/:stage/resources/:fqn",
   {
     params: ResourceKey,
+    query: FenceQuery,
     success: HttpApiSchema.NoContent,
+    error: StateWriteFencedWire,
   },
 );
 
@@ -169,8 +195,10 @@ export const SetStackOutput = HttpApiEndpoint.put(
   "/state/stacks/:stack/stages/:stage/output",
   {
     params: StackStage,
+    query: FenceQuery,
     payload: ResourceStateSchema,
     success: ResourceStateSchema,
+    error: StateWriteFencedWire,
   },
 );
 
@@ -272,7 +300,7 @@ export const DeploymentNotFoundWire = Schema.TaggedStruct(
 ).pipe(HttpApiSchema.status(410));
 
 /**
- * Deployment data at rest failed decryption or its integrity check.
+ * Deployment data at rest failed to decrypt (wrong key or corrupt data).
  * 422 (not 5xx) so corrupt-at-rest data fails fast instead of being
  * retried as a transient server error; the client folds it into
  * `StateStoreError`.
@@ -296,6 +324,7 @@ export const BeginDeployment = HttpApiEndpoint.post(
     payload: Schema.Struct({
       meta: DeploymentMetaWire,
       ttlMillis: Schema.optional(Schema.Number),
+      supersede: Schema.optional(Schema.Number),
     }).pipe(HttpApiSchema.asJson()),
     success: Schema.Struct({
       version: Schema.Number,
@@ -408,7 +437,7 @@ export const GetAllStates = HttpApiEndpoint.get(
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 5 as const;
+export const STATE_STORE_VERSION = 6 as const;
 
 /** Response shape for the unauthenticated `/version` probe. */
 export const VersionResponse = Schema.Struct({
