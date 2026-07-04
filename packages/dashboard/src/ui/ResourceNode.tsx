@@ -223,8 +223,20 @@ export const ResourceNode = memo(function ResourceNode({
           <Card ctx={ctx} />
         </div>
       ) : link ? (
-        <div className="mt-1 truncate font-mono text-[10.5px] text-[var(--alc-info)]">
-          {link}
+        <div className="mt-1 truncate">
+          {/* real anchor, clickable straight from the canvas: `nodrag`
+              stops React Flow from treating pointerdown as a drag start,
+              stopPropagation keeps the click from also selecting the node */}
+          <a
+            href={link}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title={link}
+            className="nodrag font-mono text-[10.5px] text-[var(--alc-info)] transition-colors duration-[var(--alc-dur-fast)] hover:text-[var(--alc-accent-deep)] hover:underline"
+          >
+            {link}
+          </a>
         </div>
       ) : null}
       {note && statusInFlight(status) && (
