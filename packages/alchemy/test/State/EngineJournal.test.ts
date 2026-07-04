@@ -26,6 +26,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import {
   TestLayers,
@@ -396,6 +397,85 @@ describe("engine deployment journaling", () => {
       // the real liveness check recognizes our own process as alive
       expect(isProcessAlive(process.pid)).toBe(true);
     }),
+  );
+
+  test.provider(
+    "a deploy superseded mid-flight is fenced on its next state write",
+    (stack) =>
+      Effect.gen(function* () {
+        const store = yield* getStore;
+        const usurper = yield* Ref.make<
+          { version: number; token: string } | undefined
+        >(undefined);
+
+        // The create hook plays the usurper: while the deploy (v1) is
+        // mid-operation, a second deployment begins with supersede: 1 —
+        // exactly what a same-host takeover of a "dead" holder does. The
+        // deploy's own post-create state write carries fence: 1, sees
+        // that v2 exists, and MUST be rejected, failing the zombie apply.
+        const result = yield* Effect.result(
+          stack.deploy(TestResource("A", { string: "a" })).pipe(
+            Effect.provide(
+              Layer.succeed(TestResourceHooks, {
+                create: () =>
+                  store
+                    .deployments!.begin({
+                      stack: stack.name,
+                      stage: "test",
+                      meta: {
+                        command: "deploy",
+                        initiator: { user: "usurper" },
+                      },
+                      supersede: 1,
+                    })
+                    .pipe(
+                      Effect.flatMap((held) => Ref.set(usurper, held)),
+                      Effect.orDie,
+                    ),
+              }),
+            ),
+          ),
+        );
+
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          const failure = result.failure as { _tag?: string; message?: string };
+          expect(failure._tag).toBe("StateStoreError");
+          expect(String(failure.message)).toContain("fenced");
+        }
+
+        // The zombie's write never landed: A is not in "created" state.
+        const state = yield* store.get({
+          stack: stack.name,
+          stage: "test",
+          fqn: "A",
+        });
+        expect((state as { status?: string } | undefined)?.status).not.toBe(
+          "created",
+        );
+
+        // v1 was reconciled to abandoned by the takeover; v2 is the
+        // usurper's live open.
+        const list = yield* store.deployments!.list({
+          stack: stack.name,
+          stage: "test",
+        });
+        expect(list.map((r) => r.version)).toEqual([2, 1]);
+        expect(["abandoned", "completed-late", "failed"]).toContain(
+          list[1].outcome,
+        );
+
+        // Close the usurper's lease so the harness teardown destroy can run.
+        const held = yield* Ref.get(usurper);
+        expect(held).toBeDefined();
+        yield* store.deployments!.end({
+          stack: stack.name,
+          stage: "test",
+          version: held!.version,
+          token: held!.token,
+          outcome: "succeeded",
+        });
+      }),
   );
 
   test(
