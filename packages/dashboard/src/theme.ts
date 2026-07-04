@@ -209,7 +209,7 @@ export const MENU_ITEM =
 
 /** Ghost/outline button chrome (Fit, theme toggle, pickers). */
 export const HAIRLINE_BUTTON =
-  "rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] text-[var(--alc-fg-3)] transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-hairline-3)] hover:text-[var(--alc-fg-1)]";
+  "rounded-[var(--alc-radius)] border border-[var(--alc-hairline-3)] text-[var(--alc-fg-2)] transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-fg-4)] hover:text-[var(--alc-fg-1)]";
 
 /** Sunk input (filter box, panel search fields). */
 export const SUNK_INPUT =

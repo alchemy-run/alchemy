@@ -110,7 +110,7 @@ function PlanChips() {
   if (entries.length === 0) {
     return (
       <span
-        className={`${CHIP} border border-[var(--alc-hairline-2)] text-[var(--alc-success)]`}
+        className={`${CHIP} border border-[var(--alc-hairline-3)] bg-[var(--alc-bg-elev-1)] text-[var(--alc-success)]`}
       >
         ✓ in sync
       </span>
@@ -138,13 +138,13 @@ function PaletteButton() {
     <button
       onClick={() => setPaletteOpen(true)}
       title="Search resources and views (⌘K)"
-      className="ml-4 flex max-w-xs flex-1 items-center gap-2 rounded-[var(--alc-radius)] border border-[var(--alc-hairline)] bg-[var(--alc-bg-sunk)] px-2.5 py-1.5 text-left transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-hairline-2)]"
+      className="ml-4 flex max-w-xs flex-1 items-center gap-2 rounded-[var(--alc-radius)] border border-[var(--alc-hairline-3)] bg-[var(--alc-bg-elev-2)] px-2.5 py-1.5 text-left shadow-[var(--alc-shadow-sm)] transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-fg-4)]"
     >
-      <Search size={13} className="shrink-0 text-[var(--alc-fg-4)]" />
-      <span className="flex-1 truncate font-mono text-[12px] text-[var(--alc-fg-4)]">
+      <Search size={13} className="shrink-0 text-[var(--alc-fg-3)]" />
+      <span className="flex-1 truncate font-mono text-[12px] text-[var(--alc-fg-3)]">
         Search…
       </span>
-      <kbd className="shrink-0 rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline-2)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--alc-fg-4)]">
+      <kbd className="shrink-0 rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--alc-fg-3)]">
         ⌘K
       </kbd>
     </button>
@@ -171,7 +171,7 @@ function FitButton() {
 function ViewTabs() {
   const view = useView();
   return (
-    <div className="flex rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] p-0.5">
+    <div className="flex rounded-[var(--alc-radius)] border border-[var(--alc-hairline-3)] bg-[var(--alc-bg-elev-1)] p-0.5 shadow-[var(--alc-shadow-sm)]">
       {VIEW_ORDER.map((v) => (
         <button
           key={v}
@@ -179,7 +179,7 @@ function ViewTabs() {
           className={`rounded-[var(--alc-radius-sm)] px-2.5 py-1 text-[12px] transition-colors duration-[var(--alc-dur)] ${
             view === v
               ? "bg-[var(--alc-accent-12)] font-medium text-[var(--alc-accent-deep)]"
-              : "text-[var(--alc-fg-3)] hover:text-[var(--alc-fg-1)]"
+              : "text-[var(--alc-fg-2)] hover:text-[var(--alc-fg-1)]"
           }`}
         >
           {VIEW_LABELS[v]}

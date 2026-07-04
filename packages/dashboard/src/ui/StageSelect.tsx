@@ -53,7 +53,7 @@ export function StageSelect({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline-2)] px-2 py-0.5 transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-hairline-3)]"
+        className="flex items-center gap-1.5 rounded-[var(--alc-radius-sm)] border border-[var(--alc-hairline-3)] bg-[var(--alc-bg-elev-1)] px-2 py-0.5 transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-fg-4)]"
       >
         <span className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--alc-accent-deep)]">
           stage
@@ -61,7 +61,7 @@ export function StageSelect({
         <span className="font-mono text-[11px] text-[var(--alc-fg-1)]">
           {stage}
         </span>
-        <ChevronDown size={11} className="text-[var(--alc-fg-3)]" />
+        <ChevronDown size={11} className="text-[var(--alc-fg-2)]" />
       </button>
       {open && (
         <div
