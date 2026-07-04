@@ -95,8 +95,10 @@ const categories = [...new Set(more.map((tab) => tab.category))];
                         set:html={TAB_ICONS[tab.label]}
                       />
                     )}
-                    <span>{tab.label}</span>
-                    {tab.hint && <span class="alc-tabs__menu-hint">{tab.hint}</span>}
+                    <span class="alc-tabs__menu-text">
+                      <span>{tab.label}</span>
+                      {tab.hint && <span class="alc-tabs__menu-hint">{tab.hint}</span>}
+                    </span>
                   </a>
                 ))}
             </div>
@@ -105,29 +107,6 @@ const categories = [...new Set(more.map((tab) => tab.category))];
       </div>
     </div>
 
-    {/* Mobile: dropdown residents render as plain tabs in the scrollable row
-        (the hover menu doesn't work with touch + overflow scrolling). */}
-    {
-      more.map((tab) => (
-        <a
-          href={tab.href}
-          class:list={["alc-tabs__tab", "alc-tabs__tab--overflow", { "alc-tabs__tab--active": tab.label === current.label }]}
-          aria-current={tab.label === current.label ? "true" : undefined}
-        >
-          {TAB_ICONS[tab.label] && (
-            <svg
-              class="alc-tabs__icon"
-              aria-hidden="true"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              set:html={TAB_ICONS[tab.label]}
-            />
-          )}
-          {tab.label}
-        </a>
-      ))
-    }
   </div>
 
   <div class="alc-tabs__group">
@@ -216,7 +195,7 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     position: absolute;
     top: 100%;
     inset-inline-start: 0;
-    min-width: 240px;
+    min-width: 280px;
     z-index: 30;
     background: var(--alc-bg);
     border: 1px solid var(--alc-hairline-2);
@@ -244,7 +223,7 @@ const categories = [...new Set(more.map((tab) => tab.category))];
   .alc-tabs__menu-item {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     padding: 6px 14px;
     font-size: 13px;
     color: var(--alc-fg-2);
@@ -258,28 +237,27 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     color: var(--alc-accent-deep);
     font-weight: 500;
   }
+  /* Stacked label + hint: every row renders the same height regardless
+     of hint length; a too-long hint ellipsizes instead of wrapping. */
+  .alc-tabs__menu-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
   .alc-tabs__menu-hint {
-    margin-inline-start: auto;
     font-size: 11px;
     color: var(--alc-fg-4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  /* Desktop shows the dropdown; the flattened overflow tabs are mobile-only. */
-  .alc-tabs__tab--overflow {
-    display: none;
-  }
+  /* The tab bar is desktop-only: on mobile, product navigation lives in
+     the hamburger drawer's MobileTabSwitcher instead of a horizontally
+     scrollable strip nothing signals you can scroll. */
   @media (max-width: 50rem) {
     .alc-tabs {
-      overflow-x: auto;
-      scrollbar-width: none;
-    }
-    .alc-tabs::-webkit-scrollbar {
       display: none;
-    }
-    .alc-tabs__more {
-      display: none;
-    }
-    .alc-tabs__tab--overflow {
-      display: inline-flex;
     }
   }
 </style>

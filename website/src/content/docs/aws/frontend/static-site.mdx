@@ -73,10 +73,11 @@ const site = yield* AWS.Website.StaticSite("Web", {
 });
 ```
 
-The build is memoized on a hash of its inputs: by default all files under
-`path` (filtered by your gitignore rules) plus the nearest package-manager
-lockfile. If nothing changed since the last deploy, the command is skipped
-entirely. Tune the hash with `build.include`, `build.exclude`, and
+The build step is a [Command.Build](/providers/command/build) resource —
+memoized, so unchanged inputs skip the build
+([details](/command/memoization)). The input hash covers, by default, all
+files under `path` (filtered by your gitignore rules) plus the nearest
+package-manager lockfile. Tune the hash with `build.include`, `build.exclude`, and
 `build.lockfile` — e.g. `include: ["src/**", "package.json"]` to re-run only
 when source files change. `environment` variables are passed to the build
 command, so outputs from other resources (like an API URL) flow straight into

@@ -28,6 +28,31 @@
   color-scheme: light;
 }
 
+/* The tab row is desktop-only (mobile navigation lives in the hamburger
+   drawer's product switcher), so collapse its reserved height on mobile —
+   otherwise the header keeps a dead 2.5rem band where the row used to be.
+   Everything offset by --sl-nav-height (sidebar pane, content top,
+   scroll-padding, menu-button centering) follows automatically. */
+@media (max-width: 50rem) {
+  :root {
+    --alc-tabs-height: 0rem;
+  }
+}
+
+/* Starlight shows the sticky "On this page" bar everywhere below 72rem —
+   including the 50–72rem range where the tab bar and left sidebar are
+   already up, which reads as stray mobile chrome on a desktop layout.
+   Align it with the rest of the chrome: mobile-only (< 50rem). The
+   right-rail TOC still appears from 72rem, as before. */
+@media (min-width: 50rem) {
+  :root {
+    --sl-mobile-toc-height: 0rem;
+  }
+  mobile-starlight-toc {
+    display: none;
+  }
+}
+
 /* Faint accent wash across the top of the whole docs page — sidebar,
    content, and TOC alike (bun.com-style), fading into the page background.
    The fixed sidebar goes transparent on desktop so the wash shows through

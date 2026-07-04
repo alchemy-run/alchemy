@@ -311,6 +311,38 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 - [Actions secrets & variables](https://v2.alchemy.run/github/actions-config) — Manage GitHub Actions secrets and variables as Stack resources — encrypted secrets, plain-text variables, bulk helpers, and CI credentials provisioned as code.
 - [Webhooks & events](https://v2.alchemy.run/github/events) — Provision GitHub repository webhooks as resources, or subscribe a Cloudflare Worker to repository events with typed payloads and verified deliveries.
 
+## Docker
+
+Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.
+
+- [Docker](https://v2.alchemy.run/docker) — Images, containers, networks, and volumes as Stack resources, driven through your active Docker CLI context.
+- [Setup](https://v2.alchemy.run/docker/setup) — Point alchemy at a Docker daemon — the active CLI context and the DOCKER_BIN override.
+- [Local services: Postgres with containers, networks, and volumes](https://v2.alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
+- [Build & push images](https://v2.alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
+
+## Kubernetes
+
+Kubernetes objects (Namespace, Deployment, Service, ConfigMap, Job, ServiceAccount) defined in TypeScript and converged onto an EKS cluster via server-side apply; cluster provisioning and workload guides live under AWS → EKS.
+
+- [Kubernetes](https://v2.alchemy.run/kubernetes) — Kubernetes objects defined in TypeScript and applied to your EKS cluster — no YAML, no kubectl, no kubeconfig.
+- [Setup](https://v2.alchemy.run/kubernetes/setup) — AWS credentials are the credentials — no kubeconfig.
+- [How objects deploy](https://v2.alchemy.run/kubernetes/objects-as-bindings) — The mechanics of Kubernetes objects as bindings — how helpers attach object definitions to the EKS Cluster, and how its reconcile server-side-applies, orders, and prunes them.
+
+## Drizzle
+
+Drizzle schemas as Stack resources — migration SQL regenerated on deploy and applied by whichever database resource consumes it; Worker runtime wiring lives under Cloudflare → Data.
+
+- [Drizzle](https://v2.alchemy.run/drizzle) — Your Drizzle schema as a Stack resource — migration SQL regenerated on deploy and applied by whichever database consumes it.
+- [Migrations as resources](https://v2.alchemy.run/drizzle/migrations) — Drizzle.Schema regenerates migration SQL as part of every deploy, and wiring its out output into a database's migrationsDir input orders generation before application.
+
+## Command
+
+Cloud-agnostic local process primitives — memoized builds, one-off commands, and dev servers; the static-site guides in each cloud hub consume them under the hood.
+
+- [Command](https://v2.alchemy.run/command) — Alchemy's cloud-agnostic primitives for local processes in the deploy graph — memoized builds, one-off commands, and dev servers.
+- [Memoization: builds & one-off commands](https://v2.alchemy.run/command/memoization) — Content-hash memoization shared by Command.Build and Command.Exec — what gets hashed, when a command re-runs, and the outdir contract on destroy.
+- [Dev servers](https://v2.alchemy.run/command/dev-servers) — Run a framework dev server as a Command.Dev resource — started by alchemy dev, a no-op on alchemy deploy, with the server's URL surfaced back into your stack.
+
 ## Providers
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags. Grouped by cloud below.

@@ -7,8 +7,10 @@ sidebar:
 
 `Cloudflare.Website.StaticSite` runs a build command, content-hashes the
 output directory, and deploys it as a Cloudflare Worker serving static
-assets. The build is a plain shell command (a `Command.Build` resource under
-the hood), so it works for anything that produces a directory of files — a
+assets. The build is a plain shell command (a
+[`Command.Build`](/providers/command/build) resource under the hood — see
+[Memoization](/command/memoization) for what gets hashed and when it
+re-runs), so it works for anything that produces a directory of files — a
 Zola or Hugo site, a bash script, or the static output of a framework the
 [Vite resource](/cloudflare/frontend/vite) doesn't support yet.
 
@@ -148,7 +150,8 @@ const site = yield* Cloudflare.Website.StaticSite("Website", {
 scope — the build is skipped and the Worker runs in external mode against
 the dev server's URL, detected from the command's stdout. `dev` also accepts
 `cwd` and `env` overrides for the dev process, and `dev.url` to pin the URL
-explicitly when stdout detection fails.
+explicitly when stdout detection fails. The sidecar mechanics — spawn, URL
+detection, teardown — are covered in [Dev servers](/command/dev-servers).
 
 ## Frameworks the Vite resource doesn't support yet
 

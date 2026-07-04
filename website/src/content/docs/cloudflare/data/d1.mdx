@@ -68,6 +68,10 @@ const db = yield* Cloudflare.D1.Database("my-db", {
 });
 ```
 
+The migration files themselves don't have to be hand-written —
+[Drizzle.Schema](/drizzle/migrations) can generate them from a
+Drizzle schema on deploy.
+
 ## Query from a Worker
 
 Bind the database into a Worker with `Cloudflare.D1.QueryDatabase`
