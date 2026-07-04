@@ -53,7 +53,7 @@ export const Yantra: React.FC<{ size: number; draw?: number }> = ({
         cx={YANTRA.dot.cx}
         cy={YANTRA.dot.cy}
         r={YANTRA.dot.r}
-        fill={t.accentBright}
+        fill={t.yantraDot}
         opacity={Math.max(0, Math.min(1, draw * 3 - 2))}
       />
     </svg>

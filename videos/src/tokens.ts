@@ -18,6 +18,8 @@ export const t = {
   accentDeep: "#5c7a3e",
   success: "#8fb15e",
   danger: "#e06c5b",
+  // bindu (yantra centroid dot) — terracotta in dark mode (--alc-yantra-dot)
+  yantraDot: "#c56e3c",
 
   // code palette (tokens.css --alc-code-*)
   code: {
