@@ -5,6 +5,9 @@ import type { Storyboard } from "../storyboard";
  * cloud in one program". Script adapted from
  * processes/Marketing/launch-content-plan.md; all code verbatim-shaped
  * from website/src/content/docs/what-is-alchemy.mdx.
+ *
+ * Code scenes are beat-driven: the file is on screen instantly, then each
+ * beat cuts the subtitle and spotlights the exact lines it talks about.
  */
 export const infrastructureAsEffects: Storyboard = {
   id: "infrastructure-as-effects",
@@ -20,28 +23,36 @@ export const infrastructureAsEffects: Storyboard = {
       kind: "code",
       file: "alchemy.run.ts",
       lines: [
-        { text: '// the whole stack — this file is all of it' },
+        { text: "// the whole stack — this file is all of it" },
         { text: 'import * as Alchemy from "alchemy";' },
         { text: 'import * as Cloudflare from "alchemy/Cloudflare";' },
         { text: 'import * as Effect from "effect/Effect";' },
-        { text: 'import Worker from "./src/worker.ts";' },
+        { text: 'import Worker from "./src/worker.ts";', focusAt: [3] },
         { text: "" },
-        { text: 'export default Alchemy.Stack(' },
-        { text: '  "my-app",' },
+        { text: "export default Alchemy.Stack(", focusAt: [1] },
+        { text: '  "my-app",', focusAt: [1] },
         {
           text: "  { providers: Cloudflare.providers(), state: Cloudflare.state() },",
+          focusAt: [2],
         },
         { text: "  Effect.gen(function* () {" },
-        { text: "    const worker = yield* Worker;", highlight: true },
+        { text: "    const worker = yield* Worker;", focusAt: [3] },
         { text: "    return { url: worker.url };" },
-        { text: "  }),", },
+        { text: "  })," },
         { text: ");" },
       ],
-      subtitles: [
-        "One file declares the infrastructure.",
-        "No YAML. No console clicking. A Stack is a TypeScript program.",
+      beats: [
+        { subtitle: "One file declares the infrastructure.", duration: 3 },
+        {
+          subtitle: "A Stack is a TypeScript program — no YAML, no console clicking.",
+          duration: 3,
+        },
+        { subtitle: "Providers plug in as values — Cloudflare here.", duration: 3 },
+        {
+          subtitle: "The app itself is imported like any other module.",
+          duration: 3.5,
+        },
       ],
-      duration: 13,
     },
     {
       kind: "code",
@@ -53,20 +64,23 @@ export const infrastructureAsEffects: Storyboard = {
         {
           text: 'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
         },
-        { text: 'import { Bucket } from "./bucket.ts";' },
+        { text: 'import { Bucket } from "./bucket.ts";', focusAt: [1] },
         { text: "" },
-        { text: 'export default Cloudflare.Worker(' },
+        { text: "export default Cloudflare.Worker(" },
         { text: '  "Worker",' },
         { text: "  { main: import.meta.url }," },
         { text: "  Effect.gen(function* () {" },
         {
           text: "    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);",
-          highlight: true,
+          focusAt: [1, 3],
         },
         { text: "" },
         { text: "    return {" },
         { text: "      fetch: Effect.gen(function* () {" },
-        { text: '        const obj = yield* bucket.get("hello.txt");' },
+        {
+          text: '        const obj = yield* bucket.get("hello.txt");',
+          focusAt: [2, 3],
+        },
         { text: "        return HttpServerResponse.text(" },
         { text: '          obj ? yield* obj.text() : "Not found",' },
         { text: "        );" },
@@ -75,46 +89,61 @@ export const infrastructureAsEffects: Storyboard = {
         { text: "  })," },
         { text: ");" },
       ],
-      subtitles: [
-        "The Worker ships its own runtime code.",
-        "One line binds the bucket — the binding IS the client.",
-        "No env.BUCKET. No wrangler.toml. No IAM file. Anywhere.",
+      beats: [
+        {
+          subtitle: "The Worker ships its own runtime code — same program, same types.",
+          duration: 3,
+        },
+        { subtitle: "One line binds the bucket.", duration: 3.5 },
+        {
+          subtitle: "The binding IS the client — typed reads, straight from R2.",
+          duration: 3.5,
+        },
+        {
+          subtitle: "No env.BUCKET. No wrangler.toml. No IAM file. Anywhere.",
+          duration: 3.5,
+        },
       ],
-      duration: 17,
     },
     {
       kind: "code",
       file: "alchemy.run.ts",
-      type: false,
       lines: [
-        { text: 'export default Alchemy.Stack(' },
+        { text: "export default Alchemy.Stack(" },
         { text: '  "my-app",' },
-        { text: "  { providers: Layer.empty },", mark: "del" },
-        { text: "  { providers: Cloudflare.providers() },", mark: "add" },
+        { text: "  { providers: Layer.empty },", focusAt: [0], delAt: 1 },
+        { text: "  { providers: Cloudflare.providers() },", appearAt: 2 },
         { text: "  Effect.gen(function* () {" },
         { text: "    const worker = yield* Worker;" },
         { text: "  })," },
         { text: ");" },
       ],
-      callouts: [
+      beats: [
+        { subtitle: "Wire it wrong…", duration: 2.5 },
         {
-          line: 2,
-          text: "Type error: Cloudflare.Worker requires Cloudflare.Providers — provided: never",
-          at: 0.6,
-          kind: "error",
+          subtitle: "…and it doesn't compile.",
+          duration: 3.5,
+          callout: {
+            line: 2,
+            text: "Type error: Cloudflare.Worker requires Cloudflare.Providers — provided: never",
+            kind: "error",
+          },
         },
         {
-          line: 3,
-          text: "Wiring checks out — the compiler sees the whole cloud",
-          at: 3.4,
-          kind: "ok",
+          subtitle: "Fix the wiring — the compiler checks the whole cloud.",
+          duration: 3,
+          callout: {
+            line: 3,
+            text: "tsc — 0 errors",
+            kind: "ok",
+          },
+        },
+        {
+          subtitle:
+            "Infrastructure mistakes are type errors — caught before anything deploys.",
+          duration: 2.5,
         },
       ],
-      subtitles: [
-        "Wire it wrong, and it doesn't compile.",
-        "Infrastructure mistakes are type errors — caught before anything deploys.",
-      ],
-      duration: 11,
     },
     {
       kind: "terminal",
@@ -141,23 +170,37 @@ export const infrastructureAsEffects: Storyboard = {
     {
       kind: "code",
       file: "src/worker.ts  (async style)",
-      type: false,
       lines: [
         { text: "// prefer async/await? same stack, plain handler" },
-        { text: 'import type { WorkerEnv } from "../alchemy.run.ts";', mark: "add" },
+        {
+          text: 'import type { WorkerEnv } from "../alchemy.run.ts";',
+          focusAt: [2],
+        },
         { text: "" },
-        { text: "export default {", mark: "add" },
-        { text: "  async fetch(req: Request, env: WorkerEnv) {", mark: "add" },
-        { text: '    const obj = await env.Bucket.get("hello.txt");', mark: "add" },
-        { text: '    return new Response(obj?.body ?? "Not found");', mark: "add" },
-        { text: "  },", mark: "add" },
-        { text: "};", mark: "add" },
+        { text: "export default {", focusAt: [1] },
+        {
+          text: "  async fetch(req: Request, env: WorkerEnv) {",
+          focusAt: [1],
+        },
+        {
+          text: '    const obj = await env.Bucket.get("hello.txt");',
+          focusAt: [2],
+        },
+        { text: '    return new Response(obj?.body ?? "Not found");' },
+        { text: "  }," },
+        { text: "};" },
       ],
-      subtitles: [
-        "Effect is optional.",
-        "The async style gets a fully typed env via InferEnv — zero codegen.",
+      beats: [
+        { subtitle: "Effect is optional.", duration: 2.5 },
+        {
+          subtitle: "A plain async handler works on the same stack.",
+          duration: 3.5,
+        },
+        {
+          subtitle: "env is fully typed — inferred from the stack file. Zero codegen.",
+          duration: 3.5,
+        },
       ],
-      duration: 11,
     },
     {
       kind: "terminal",

@@ -6,7 +6,7 @@ import {
   useCurrentFrame,
 } from "remotion";
 import type { Scene, Storyboard } from "./storyboard";
-import { FPS } from "./storyboard";
+import { FPS, sceneDuration } from "./storyboard";
 import { CodeScene } from "./scenes/Code";
 import { EndScene } from "./scenes/End";
 import { TerminalScene } from "./scenes/Terminal";
@@ -42,16 +42,7 @@ const renderScene = (scene: Scene, durationInFrames: number) => {
         <TitleScene eyebrow={scene.eyebrow} title={scene.title} sub={scene.sub} />
       );
     case "code":
-      return (
-        <CodeScene
-          file={scene.file}
-          lines={scene.lines}
-          type={scene.type}
-          callouts={scene.callouts}
-          subtitles={scene.subtitles}
-          durationInFrames={durationInFrames}
-        />
-      );
+      return <CodeScene file={scene.file} lines={scene.lines} beats={scene.beats} />;
     case "terminal":
       return (
         <TerminalScene
@@ -74,7 +65,7 @@ export const Video: React.FC<{ storyboard: Storyboard }> = ({ storyboard }) => {
   return (
     <AbsoluteFill style={{ background: t.bg }}>
       {storyboard.scenes.map((scene, i) => {
-        const durationInFrames = Math.round(scene.duration * FPS);
+        const durationInFrames = Math.round(sceneDuration(scene) * FPS);
         const el = (
           <Sequence key={i} from={from} durationInFrames={durationInFrames}>
             <Fade

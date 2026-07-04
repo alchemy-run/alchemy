@@ -6,48 +6,60 @@ import {
   useVideoConfig,
 } from "remotion";
 import { CodeText } from "../highlight";
-import type { CodeLine, ErrorCallout } from "../storyboard";
+import type { Beat, CodeLine } from "../storyboard";
 import { t } from "../tokens";
 import { Ground, Panel, SubtitleBar } from "./chrome";
 
-const CHARS_PER_SECOND = 55;
-
 /**
- * Code panel scene. Two modes:
- * - type: true  — typewriter reveal across all lines, blinking cursor.
- * - type: false — base lines render immediately; lines marked "add" animate
- *   in staggered (diff mode), "del" lines fade to struck.
+ * Beat-driven code panel. The whole file renders instantly; narration beats
+ * then steer attention: focused lines get an accent wash while the rest dim,
+ * "+" lines splice in green, "-" lines get struck red, callouts pop under
+ * their line — all cut in rhythm with the subtitle changes.
  */
 export const CodeScene: React.FC<{
   file: string;
   lines: CodeLine[];
-  type?: boolean;
-  callouts?: ErrorCallout[];
-  subtitles: string[];
-  durationInFrames: number;
-}> = ({ file, lines, type = true, callouts = [], subtitles, durationInFrames }) => {
+  beats: Beat[];
+}> = ({ file, lines, beats }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const fontSize = lines.length > 18 ? 26 : lines.length > 14 ? 30 : 33;
+  // beat boundaries in frames
+  const starts: number[] = [];
+  let acc = 0;
+  for (const b of beats) {
+    starts.push(acc);
+    acc += Math.round(b.duration * fps);
+  }
+  let beatIdx = 0;
+  for (let i = 0; i < beats.length; i++) {
+    if (frame >= starts[i]) beatIdx = i;
+  }
+  const beat = beats[beatIdx];
+  const beatFrame = frame - starts[beatIdx];
+
+  // does the current beat spotlight anything? (drives global dimming)
+  const hasFocus = lines.some((l) => l.focusAt?.includes(beatIdx));
+
+  // size by line count, then shrink until the longest line fits the panel
+  // (JetBrains Mono glyphs are ~0.6em wide; text area = 1360 minus gutter/padding)
+  const sizeByLines = lines.length > 18 ? 26 : lines.length > 14 ? 30 : 33;
+  const maxChars = Math.max(...lines.map((l) => l.text.length), 1);
+  const sizeByWidth = Math.floor(1216 / (0.6 * maxChars));
+  const fontSize = Math.min(sizeByLines, sizeByWidth);
   const lineHeight = Math.round(fontSize * 1.62);
 
-  // keep the panel clear of the subtitle bar: estimate its height and
-  // scale down anything that would collide with the bottom zone.
+  // visible-at-current-beat line count for the scale estimate
+  const visibleCount = lines.filter(
+    (l) => l.appearAt === undefined || l.appearAt <= beatIdx,
+  ).length;
   const estPanel =
-    58 + 60 + lines.length * lineHeight + callouts.length * (fontSize * 2.6);
+    58 + 60 + Math.max(visibleCount, lines.length) * lineHeight + (beat.callout ? fontSize * 2.6 : 0);
   const avail = 1080 - 210;
   const scale = Math.min(1, avail / estPanel);
 
-  // typewriter bookkeeping
-  const totalChars = lines.reduce((s, l) => s + l.text.length + 1, 0);
-  const typed = Math.min(totalChars, (frame / fps) * CHARS_PER_SECOND);
-
-  let consumed = 0;
-  const addOrder: number[] = [];
-  lines.forEach((l, i) => {
-    if (l.mark === "add") addOrder.push(i);
-  });
+  // gutter numbering skips diff rows so the file reads like a real editor
+  let gutterNo = 0;
 
   return (
     <Ground>
@@ -62,39 +74,61 @@ export const CodeScene: React.FC<{
         <Panel file={file} width={1360}>
           <div style={{ padding: "30px 0", position: "relative" }}>
             {lines.map((line, i) => {
-              // typewriter visibility
-              const start = consumed;
-              consumed += line.text.length + 1;
-              let chars: number | undefined;
-              let rowOpacity = 1;
-              let translate = 0;
-              if (type) {
-                chars = Math.max(0, Math.floor(typed - start));
-                if (chars === 0 && typed < start) chars = 0;
-              } else if (line.mark === "add") {
-                const order = addOrder.indexOf(i);
-                const appear = fps * (0.9 + order * 0.55);
-                rowOpacity = interpolate(frame, [appear, appear + 12], [0, 1], {
-                  extrapolateLeft: "clamp",
-                  extrapolateRight: "clamp",
-                });
-                translate = interpolate(frame, [appear, appear + 12], [-14, 0], {
-                  extrapolateLeft: "clamp",
-                  extrapolateRight: "clamp",
-                });
-              }
-              const done = !type || (chars !== undefined && chars >= line.text.length);
-              const showHighlight =
-                line.highlight && done && frame > fps * 1.2;
-              const bg =
-                line.mark === "add"
-                  ? "rgba(143, 177, 94, 0.13)"
-                  : line.mark === "del"
-                    ? "rgba(224, 108, 91, 0.12)"
-                    : showHighlight
-                      ? "rgba(179, 209, 136, 0.10)"
-                      : "transparent";
-              const callout = callouts.find((c) => c.line === i);
+              const isAdd = line.appearAt !== undefined;
+              const appeared = isAdd ? beatIdx >= line.appearAt! : true;
+              const deleted = line.delAt !== undefined && beatIdx >= line.delAt;
+              const focused = line.focusAt?.includes(beatIdx) ?? false;
+              if (!isAdd && !deleted) gutterNo += 1;
+              const lineNo = gutterNo;
+
+              if (isAdd && !appeared) return null;
+
+              // splice-in animation on the add line's own beat
+              const appearP =
+                isAdd && beatIdx === line.appearAt
+                  ? interpolate(beatFrame, [0, 8], [0, 1], {
+                      extrapolateLeft: "clamp",
+                      extrapolateRight: "clamp",
+                    })
+                  : 1;
+              // strike animation on the del line's own beat
+              const delP = deleted
+                ? line.delAt === beatIdx
+                  ? interpolate(beatFrame, [0, 8], [0, 1], {
+                      extrapolateLeft: "clamp",
+                      extrapolateRight: "clamp",
+                    })
+                  : 1
+                : 0;
+              // focus wash ramps in at the start of each beat
+              const focusP = focused
+                ? interpolate(beatFrame, [0, 6], [0, 1], {
+                    extrapolateLeft: "clamp",
+                    extrapolateRight: "clamp",
+                  })
+                : 0;
+
+              // everything not spotlit (and not an active diff row) recedes
+              const active =
+                focused ||
+                (isAdd && beatIdx === line.appearAt) ||
+                (deleted && line.delAt === beatIdx);
+              const dim =
+                hasFocus && !active
+                  ? interpolate(beatFrame, [0, 6], [1, 0.34], {
+                      extrapolateLeft: "clamp",
+                      extrapolateRight: "clamp",
+                    })
+                  : 1;
+
+              const bg = isAdd
+                ? `rgba(143, 177, 94, ${0.16 * appearP})`
+                : delP > 0
+                  ? `rgba(224, 108, 91, ${0.14 * delP})`
+                  : focusP > 0
+                    ? `rgba(179, 209, 136, ${0.12 * focusP})`
+                    : "transparent";
+
               return (
                 <React.Fragment key={i}>
                   <div
@@ -102,58 +136,41 @@ export const CodeScene: React.FC<{
                       display: "flex",
                       gap: 26,
                       padding: "0 34px",
-                      minHeight: lineHeight,
+                      height: isAdd ? lineHeight * appearP : lineHeight,
+                      overflow: "hidden",
                       lineHeight: `${lineHeight}px`,
                       background: bg,
-                      opacity: rowOpacity,
-                      transform: `translateX(${translate}px)`,
+                      opacity: isAdd ? appearP : dim,
+                      borderLeft:
+                        focusP > 0
+                          ? `4px solid rgba(179, 209, 136, ${focusP})`
+                          : "4px solid transparent",
                       fontFamily: t.mono,
                       fontSize,
                       whiteSpace: "pre",
-                      textDecoration:
-                        line.mark === "del" ? "line-through" : undefined,
+                      textDecoration: delP > 0.5 ? "line-through" : undefined,
                     }}
                   >
                     <span
                       style={{
-                        color:
-                          line.mark === "add"
-                            ? t.success
-                            : line.mark === "del"
-                              ? t.danger
-                              : t.fg4,
+                        color: isAdd ? t.success : delP > 0 ? t.danger : t.fg4,
                         width: 34,
                         textAlign: "right",
                         flexShrink: 0,
                         opacity: 0.8,
                       }}
                     >
-                      {line.mark === "add" ? "+" : line.mark === "del" ? "-" : i + 1}
+                      {isAdd ? "+" : delP > 0 ? "-" : lineNo}
                     </span>
                     <span>
-                      <CodeText line={line.text} chars={chars} />
-                      {type &&
-                        chars !== undefined &&
-                        chars < line.text.length &&
-                        typed >= start && (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              width: fontSize * 0.55,
-                              height: fontSize * 1.05,
-                              background: t.accentBright,
-                              verticalAlign: "text-bottom",
-                              opacity: frame % 16 < 10 ? 1 : 0.15,
-                            }}
-                          />
-                        )}
+                      <CodeText line={line.text} />
                     </span>
                   </div>
-                  {callout && (
+                  {beat.callout && beat.callout.line === i && (
                     <Callout
-                      callout={callout}
-                      frame={frame}
-                      fps={fps}
+                      text={beat.callout.text}
+                      kind={beat.callout.kind ?? "error"}
+                      beatFrame={beatFrame}
                       fontSize={fontSize}
                     />
                   )}
@@ -163,24 +180,29 @@ export const CodeScene: React.FC<{
           </div>
         </Panel>
       </AbsoluteFill>
-      <SubtitleBar subtitles={subtitles} durationInFrames={durationInFrames} />
+      <SubtitleBar
+        segments={beats.map((b, i) => ({
+          text: b.subtitle,
+          from: starts[i],
+          durationInFrames: Math.round(b.duration * fps),
+        }))}
+      />
     </Ground>
   );
 };
 
 const Callout: React.FC<{
-  callout: ErrorCallout;
-  frame: number;
-  fps: number;
+  text: string;
+  kind: "error" | "ok";
+  beatFrame: number;
   fontSize: number;
-}> = ({ callout, frame, fps, fontSize }) => {
-  const appear = fps * (callout.at ?? 1.6);
-  const p = interpolate(frame, [appear, appear + 10], [0, 1], {
+}> = ({ text, kind, beatFrame, fontSize }) => {
+  const p = interpolate(beatFrame, [4, 12], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   if (p === 0) return null;
-  const isError = (callout.kind ?? "error") === "error";
+  const isError = kind === "error";
   const color = isError ? t.danger : t.success;
   return (
     <div
@@ -202,7 +224,7 @@ const Callout: React.FC<{
       }}
     >
       {isError ? "✗ " : "✓ "}
-      {callout.text}
+      {text}
     </div>
   );
 };

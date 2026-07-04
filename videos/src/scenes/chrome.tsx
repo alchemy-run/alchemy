@@ -126,20 +126,40 @@ export const Panel: React.FC<{
   </div>
 );
 
-/** Bottom captions: one line at a time, evenly spread across the scene. */
-export const SubtitleBar: React.FC<{
-  subtitles: string[];
+export interface SubtitleSegment {
+  text: string;
+  from: number;
   durationInFrames: number;
-}> = ({ subtitles, durationInFrames }) => {
+}
+
+/**
+ * Bottom captions. Pass explicit `segments` (beat-timed), or
+ * `subtitles` + `durationInFrames` to spread lines evenly across the scene.
+ */
+export const SubtitleBar: React.FC<{
+  subtitles?: string[];
+  durationInFrames?: number;
+  segments?: SubtitleSegment[];
+}> = ({ subtitles, durationInFrames, segments }) => {
   const frame = useCurrentFrame();
-  if (subtitles.length === 0) return null;
-  const per = durationInFrames / subtitles.length;
-  const idx = Math.min(subtitles.length - 1, Math.floor(frame / per));
-  const local = frame - idx * per;
+  const segs: SubtitleSegment[] =
+    segments ??
+    (subtitles ?? []).map((text, i, arr) => {
+      const per = (durationInFrames ?? 0) / arr.length;
+      return { text, from: i * per, durationInFrames: per };
+    });
+  if (segs.length === 0) return null;
+  let idx = 0;
+  for (let i = 0; i < segs.length; i++) {
+    if (frame >= segs[i].from) idx = i;
+  }
+  const seg = segs[idx];
+  const local = frame - seg.from;
+  const per = seg.durationInFrames;
   const opacity = interpolate(
     local,
     [0, 10, per - 8, per],
-    [0, 1, 1, idx === subtitles.length - 1 ? 1 : 0],
+    [0, 1, 1, idx === segs.length - 1 ? 1 : 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const rise = interpolate(local, [0, 10], [10, 0], {
@@ -173,7 +193,7 @@ export const SubtitleBar: React.FC<{
           lineHeight: 1.4,
         }}
       >
-        {subtitles[idx]}
+        {seg.text}
       </div>
     </div>
   );

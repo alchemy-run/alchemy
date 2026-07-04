@@ -4,22 +4,33 @@
  * them into Remotion sequences. All durations are in seconds.
  */
 
-/** One line of code with an optional diff/emphasis role. */
+/**
+ * One line of code. The full file renders instantly; beat indices drive
+ * where attention goes and when diff lines splice in.
+ */
 export interface CodeLine {
   text: string;
-  /** "add" animates in (green tint); "del" renders struck (red tint). */
-  mark?: "add" | "del";
-  /** Soft accent wash to draw the eye once typing completes. */
-  highlight?: boolean;
+  /** Beat index at which this line splices in as a "+" line (green). */
+  appearAt?: number;
+  /** Beat index at which this line is struck through as a "-" line (red). */
+  delAt?: number;
+  /** Beat indices during which this line is spotlit (others dim). */
+  focusAt?: number[];
 }
 
-export interface ErrorCallout {
-  /** 0-based line the callout attaches beneath. */
-  line: number;
-  text: string;
-  /** Seconds into the scene when it appears (default 60% in). */
-  at?: number;
-  kind?: "error" | "ok";
+/**
+ * One beat of narration. The subtitle changes, focused lines light up,
+ * pending diff lines splice in — all on the same cut.
+ */
+export interface Beat {
+  subtitle: string;
+  duration: number;
+  /** Callout box pinned beneath a line (0-based, counted in final layout). */
+  callout?: {
+    line: number;
+    text: string;
+    kind?: "error" | "ok";
+  };
 }
 
 export interface TerminalRow {
@@ -42,11 +53,8 @@ export type Scene =
       kind: "code";
       file: string;
       lines: CodeLine[];
-      /** Typewriter reveal (default true). Diff scenes usually set false. */
-      type?: boolean;
-      callouts?: ErrorCallout[];
-      subtitles: string[];
-      duration: number;
+      /** Narration beats; scene duration = sum of beat durations. */
+      beats: Beat[];
     }
   | {
       kind: "terminal";
@@ -78,5 +86,8 @@ export const FPS = 30;
 export const WIDTH = 1920;
 export const HEIGHT = 1080;
 
+export const sceneDuration = (sc: Scene): number =>
+  sc.kind === "code" ? sc.beats.reduce((s, b) => s + b.duration, 0) : sc.duration;
+
 export const totalFrames = (sb: Storyboard): number =>
-  Math.round(sb.scenes.reduce((s, sc) => s + sc.duration, 0) * FPS);
+  Math.round(sb.scenes.reduce((s, sc) => s + sceneDuration(sc), 0) * FPS);
