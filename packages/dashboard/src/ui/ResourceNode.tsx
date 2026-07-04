@@ -72,8 +72,9 @@ const CARD_BASE =
   "rounded-[var(--alc-radius-lg)] border px-3.5 py-2.5 bg-[var(--alc-bg-elev-2)] transition-[border-color,box-shadow,opacity] duration-[var(--alc-dur)] ease-[var(--alc-ease)]";
 const CARD_SOLID = `${CARD_BASE} border-[var(--alc-hairline-2)] shadow-[var(--alc-shadow-sm)] hover:border-[var(--alc-hairline-3)] hover:shadow-[var(--alc-shadow)]`;
 const CARD_SOLID_SELECTED = `${CARD_BASE} border-[var(--alc-accent-60)]`;
-// structure ghosts / deleted / pending-plan cards: dashed hairline shell
-const CARD_GHOST = `${CARD_BASE} border-dashed border-[var(--alc-hairline-2)]`;
+// structure ghosts / deleted / pending-plan cards: the DASHED border is
+// what says "doesn't exist (yet/anymore)" — strong enough to read, no fade
+const CARD_GHOST = `${CARD_BASE} border-dashed border-[var(--alc-fg-4)] shadow-[var(--alc-shadow-sm)]`;
 const CARD_GHOST_SELECTED = `${CARD_BASE} border-dashed border-[var(--alc-accent-60)]`;
 
 // node-scale chip: same soft-wash recipe as the shared CHIP snippet, sized
@@ -155,13 +156,11 @@ export const ResourceNode = memo(function ResourceNode({
         width: NODE_WIDTH,
         // accent glow ring — inline so it wins over the hover shadow class
         boxShadow: selected ? "var(--alc-glow)" : undefined,
-        opacity: hidden
-          ? 0.2
-          : ghost
-            ? 0.55
-            : plan === "delete"
-              ? 0.8
-              : undefined,
+        // "doesn't exist (yet/anymore)" is carried by the DASHED BORDER and
+        // title color, never by fading the whole card — text and borders
+        // stay crisp in both themes. `hidden` is the one exception (an
+        // explicit server-side hide).
+        opacity: hidden ? 0.2 : undefined,
       }}
     >
       <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
@@ -169,11 +168,7 @@ export const ResourceNode = memo(function ResourceNode({
         <ResourceIcon ui={ui} color={color} size={16} />
         <span
           className={`truncate text-[13px] font-semibold ${
-            deleted
-              ? "text-[var(--alc-danger)]"
-              : ghost
-                ? "text-[var(--alc-fg-4)]"
-                : "text-[var(--alc-fg-1)]"
+            deleted ? "text-[var(--alc-danger)]" : "text-[var(--alc-fg-1)]"
           }`}
         >
           {node.logicalId}
