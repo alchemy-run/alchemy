@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -312,25 +313,47 @@ export const ApplicationProvider = () =>
       }
     }),
 
-    read: Effect.fn(function* ({ output }) {
+    read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      if (!output?.applicationId) return undefined;
-      const observed = yield* observeById(accountId, output.applicationId);
+      // Prefer the persisted physical id. After state loss there is no
+      // applicationId to probe, so fall back to matching an existing app
+      // by domain — without this the engine plans a blind `create`, and
+      // Cloudflare happily creates a second application on the same
+      // domain with a fresh `aud`, silently breaking existing JWT
+      // validation. Warp apps are excluded from the fallback: they are a
+      // per-account singleton that `reconcile` already recovers.
+      let observed: ObservedApp | undefined;
+      if (output?.applicationId) {
+        observed = yield* observeById(accountId, output.applicationId);
+      } else if (olds?.type !== "warp" && typeof olds?.domain === "string") {
+        observed = yield* findByDomain(accountId, olds.domain);
+      } else {
+        return undefined;
+      }
       if (!observed?.id || !observed.aud || !observed.type) {
         return undefined;
       }
-      return {
+      const domain = observed.domain ?? output?.domain ?? olds?.domain;
+      const name = observed.name ?? output?.name;
+      if (domain === undefined || name === undefined) {
+        return undefined;
+      }
+      const attrs = {
         applicationId: observed.id,
         aud: observed.aud,
-        domain: observed.domain ?? output.domain,
-        destinations: observed.destinations ?? output.destinations,
+        domain,
+        destinations: observed.destinations ?? output?.destinations,
         type: observed.type,
-        name: observed.name ?? output.name,
-        accountId: output.accountId,
-        createdAt: observed.createdAt ?? output.createdAt,
-        updatedAt: observed.updatedAt ?? output.updatedAt,
+        name,
+        accountId: output?.accountId ?? accountId,
+        createdAt: observed.createdAt ?? output?.createdAt,
+        updatedAt: observed.updatedAt ?? output?.updatedAt,
       } satisfies ApplicationAttributes;
+      // Recovered by id → positively ours. Recovered by domain scan →
+      // existence is certain but ownership is not (Access applications
+      // carry no alchemy marker), so gate takeover behind `--adopt`.
+      return output?.applicationId ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -535,6 +558,24 @@ const findWarpApp = (accountId: string) =>
     Effect.map((chunk) =>
       Array.from(chunk).find(
         (a) => (a as { type?: string | null }).type === "warp",
+      ),
+    ),
+    Effect.map((found) =>
+      found === undefined
+        ? undefined
+        : narrowApp(found as Parameters<typeof narrowApp>[0]),
+    ),
+  );
+
+// Cold-recovery scan for `read` when no applicationId was persisted:
+// match an existing application by its domain (unique per account for
+// non-warp app types).
+const findByDomain = (accountId: string, domain: string) =>
+  zeroTrust.listAccessApplicationsForAccount.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).find(
+        (a) => (a as { domain?: string | null }).domain === domain,
       ),
     ),
     Effect.map((found) =>
