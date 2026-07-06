@@ -1,4 +1,5 @@
 import { lock } from "@alchemy.run/node-utils/lockfile";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "pathe";
@@ -18,8 +19,14 @@ import { rootDir } from "./Profile.ts";
 export const sanitizeLockKey = (key: string): string =>
   key.replace(/[^A-Za-z0-9._-]/g, "_");
 
-/** File-system errors that mean "we cannot lock here at all". */
-const UNLOCKABLE_FS_CODES = new Set(["EROFS", "EACCES", "EPERM", "ENOSPC"]);
+/**
+ * `true` when running in CI (the conventional `CI` env var; an
+ * unparseable value counts as not-CI).
+ */
+const isCI = Config.boolean("CI").pipe(
+  Config.withDefault(false),
+  Effect.catch(() => Effect.succeed(false)),
+);
 
 /**
  * Serialise execution of `effect` so no two callers ever run inside the
@@ -31,12 +38,20 @@ const UNLOCKABLE_FS_CODES = new Set(["EROFS", "EACCES", "EPERM", "ENOSPC"]);
  * an OS file lock for cross-process coordination, with stale-lock
  * detection at 60s.
  *
- * Locking is best-effort: on file systems where the lock directory
- * cannot be created at all (read-only home in containers/CI), the
- * effect runs unserialised with a warning instead of failing — a
- * missed lock only risks a redundant credential refresh.
+ * In CI (the conventional `CI` env var) locking is skipped entirely:
+ * runners are ephemeral and single-tenant, so cross-process
+ * coordination buys nothing, and their file systems are often
+ * read-only (`EROFS`) — writing a lock under `~/.alchemy/lock` would
+ * itself crash. A missed lock only risks a redundant credential
+ * refresh.
  */
 export const withLock = <A, E, R>(
+  key: string,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.flatMap(isCI, (ci) => (ci ? effect : withFileLock(key, effect)));
+
+const withFileLock = <A, E, R>(
   key: string,
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> => {
@@ -66,13 +81,6 @@ export const withLock = <A, E, R>(
           },
         });
       } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code !== undefined && UNLOCKABLE_FS_CODES.has(code)) {
-          console.warn(
-            `auth lock unavailable (${code} at '${lockPath}') — continuing without cross-process locking`,
-          );
-          return async () => {};
-        }
         if (
           err instanceof Error &&
           err.message.includes("already being held")

@@ -13,11 +13,8 @@ import * as Config from "effect/Config";
 import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
-import {
-  CredentialsStore,
-  CredentialsStoreLive,
-} from "../../Auth/Credentials.ts";
-import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
+import { CredentialsStore } from "../../Auth/Credentials.ts";
+import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
@@ -37,9 +34,7 @@ import {
 } from "../../Telemetry/Metrics.ts";
 import * as Clank from "../../Util/Clank.ts";
 import * as Access from "../Access.ts";
-import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
-import * as Credentials from "../Credentials.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import { AuthToken, AuthTokenSecretName, TokenValue } from "./Token.ts";
@@ -184,18 +179,14 @@ export const state = () =>
       return yield* Effect.cached(init.pipe(Effect.provideContext(context)));
     }),
   ).pipe(
-    Layer.provideMerge(Credentials.fromAuthProvider()),
-    Layer.provideMerge(CloudflareEnvironment.fromProfile()),
-    Layer.provideMerge(CloudflareAuth),
-    Layer.provideMerge(Access.AccessLive),
-    Layer.provideMerge(ProfileLive),
-    Layer.provideMerge(CredentialsStoreLive),
-    // Same blanket retry policy `providers()` applies — without it the
-    // init-time subdomain/script/secrets probes run on the SDK default
-    // and give up early under Cloudflare rate limiting. `provide` (not
-    // `provideMerge`) so the distilled Retry tag stays out of this
-    // layer's public type.
-    Layer.provide(Cloudflare.CloudflareRetryLive()),
+    // The Cloudflare API foundation shared with `providers()` —
+    // credentials, environment, auth/access, profile + credential
+    // store, and the same blanket retry policy. Without the retry
+    // policy the init-time subdomain/script/secrets probes run on the
+    // SDK default and give up early under Cloudflare rate limiting.
+    // `provide` (not `provideMerge`) so the distilled Retry tag stays
+    // out of this layer's public type.
+    Layer.provide(Cloudflare.CloudflareApiLive()),
     Layer.orDie,
   );
 
