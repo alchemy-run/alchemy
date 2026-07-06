@@ -241,7 +241,6 @@ test.provider(
     }).pipe(logLevel),
 );
 
-
 // Regression test for the cold-recovery `read` fallback: after state loss
 // (or a stage migration rebuilding state via the adoption probe) there is
 // no persisted `applicationId`. Without the domain-match fallback the

@@ -555,6 +555,10 @@ const resolveAllowedIdps = (
 const findWarpApp = (accountId: string) =>
   zeroTrust.listAccessApplicationsForAccount.items({ accountId }).pipe(
     Stream.runCollect,
+    // A sibling app mid-teardown can transiently reject the whole
+    // enumeration (AccessReferenceNotFound), and Cloudflare 403s when
+    // throttling — same transient windows `list` rides out.
+    retryTransientAccessError,
     Effect.map((chunk) =>
       Array.from(chunk).find(
         (a) => (a as { type?: string | null }).type === "warp",
@@ -573,6 +577,12 @@ const findWarpApp = (accountId: string) =>
 const findByDomain = (accountId: string, domain: string) =>
   zeroTrust.listAccessApplicationsForAccount.items({ accountId }).pipe(
     Stream.runCollect,
+    // A sibling app mid-teardown can transiently reject the whole
+    // enumeration (AccessReferenceNotFound), and Cloudflare 403s when
+    // throttling. A missed scan here is worse than a slow one: the engine
+    // would plan a blind `create` and either duplicate the app or trip
+    // Cloudflare's `application_already_exists` Conflict.
+    retryTransientAccessError,
     Effect.map((chunk) =>
       Array.from(chunk).find(
         (a) => (a as { domain?: string | null }).domain === domain,
