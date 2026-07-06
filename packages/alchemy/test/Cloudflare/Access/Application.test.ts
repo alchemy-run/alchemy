@@ -8,6 +8,8 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as State from "@/State/State";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -234,6 +236,78 @@ test.provider(
         policies?: ReadonlyArray<unknown> | null;
       };
       expect(liveRecord.policies?.length ?? 0).toEqual(2);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+
+// Regression test for the cold-recovery `read` fallback: after state loss
+// (or a stage migration rebuilding state via the adoption probe) there is
+// no persisted `applicationId`. Without the domain-match fallback the
+// engine plans a blind `create` and Cloudflare accepts a DUPLICATE
+// application on the same domain with a fresh `aud`. With it, the app is
+// found by domain, surfaces as `Unowned`, and adopts cleanly under
+// `adopt(true)` — same applicationId/aud, no duplicate.
+test.provider(
+  "cold-recovery: read matches an existing app by domain after state loss",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const domain = `alchemy-test-cold-read.${zoneName}`;
+      const program = Effect.gen(function* () {
+        yield* Cloudflare.Zone.Zone("TestZone", {
+          name: zoneName,
+        }).pipe(AdoptPolicy.adopt(true));
+        const policy = yield* Cloudflare.Access.Policy("ColdReadAllow", {
+          name: "Allow example.com (cold read)",
+          decision: "allow",
+          include: [{ emailDomain: { domain: "example.com" } }],
+        });
+        return yield* Cloudflare.Access.Application("ColdReadApp", {
+          type: "self_hosted",
+          domain,
+          sessionDuration: "24h",
+          policies: [policy.policyId],
+        });
+      });
+
+      const first = yield* stack.deploy(program);
+      expect(first.applicationId).toBeDefined();
+      expect(first.aud.length).toBeGreaterThan(0);
+
+      // Simulate state loss for the application only: the app still
+      // exists in Cloudflare, but the engine has no applicationId.
+      const state = yield* yield* State.State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: "test",
+        fqn: "ColdReadApp",
+      });
+
+      // Without adopt, the domain-matched app is Unowned — the engine
+      // must refuse the takeover rather than create a duplicate.
+      const refused = yield* stack.deploy(program).pipe(Effect.flip);
+      expect(refused).toBeInstanceOf(AdoptPolicy.OwnedBySomeoneElse);
+
+      // With adopt, the SAME app is adopted: identity is preserved and
+      // no duplicate application appears on the domain.
+      const readopted = yield* stack.deploy(
+        program.pipe(AdoptPolicy.adopt(true)),
+      );
+      expect(readopted.applicationId).toEqual(first.applicationId);
+      expect(readopted.aud).toEqual(first.aud);
+
+      const all = yield* zeroTrust.listAccessApplicationsForAccount
+        .items({ accountId })
+        .pipe(Stream.runCollect);
+      const onDomain = Array.from(all).filter(
+        (a) => (a as { domain?: string | null }).domain === domain,
+      );
+      expect(onDomain).toHaveLength(1);
 
       yield* stack.destroy();
     }).pipe(logLevel),
