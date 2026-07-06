@@ -306,7 +306,8 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
 
 const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
   ...loader,
-  globalOutbound: loader.globalOutbound?.raw,
+  globalOutbound:
+    loader.globalOutbound === null ? null : loader.globalOutbound?.raw,
   tails: loader.tails?.map((t) => t.raw),
   streamingTails: loader.streamingTails?.map((t) => t.raw),
 });
