@@ -44,7 +44,12 @@ import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import * as Credentials from "../Credentials.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
-import { AuthToken, AuthTokenSecretName, TokenValue } from "./Token.ts";
+import {
+  AuthToken,
+  AuthTokenSecretName,
+  EncryptionKeySecretName,
+  TokenValue,
+} from "./Token.ts";
 
 const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
@@ -328,6 +333,125 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     Effect.withSpan("state_store.bootstrap", {
       attributes: {
         "alchemy.state_store.op": "bootstrap",
+        "alchemy.state_store.script_name":
+          options.workerName ?? STATE_STORE_SCRIPT_NAME,
+      },
+    }),
+  );
+
+export interface TeardownOptions {
+  /** @default "alchemy-state-store" */
+  workerName?: string;
+  /** @default "default" */
+  profile?: string;
+  /**
+   * Delete the account Secrets Store too, but only once the state-store
+   * secrets have been removed and no other secrets remain in it. A store that
+   * still holds foreign secrets is left in place.
+   * @default true
+   */
+  deleteEmptySecretsStore?: boolean;
+}
+
+/**
+ * The inverse of {@link bootstrap}: tear down the Cloudflare-deployed state
+ * store. Deletes the state-store Worker and the secrets it created in the
+ * account Secrets Store (the bearer token + the encryption key), then deletes
+ * the Secrets Store itself if it is left empty, and drops the locally cached
+ * state-store credentials for the profile.
+ *
+ * Idempotent — missing resources are treated as already-gone, so it is safe to
+ * re-run. Intended for reclaiming a throwaway account after testing; on a
+ * shared account it only removes resources alchemy created.
+ */
+export const teardownStateStore = (options: TeardownOptions = {}) =>
+  Effect.gen(function* () {
+    const profileName = options.profile ?? (yield* ALCHEMY_PROFILE);
+    const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
+    const deleteEmptyStore = options.deleteEmptySecretsStore ?? true;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+
+    yield* annotateAccountHash();
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.script_name": scriptName,
+      "alchemy.state_store.profile": profileName,
+    });
+
+    // 1. Delete the state-store Worker.
+    yield* Clank.info(`Deleting state store worker '${scriptName}'...`);
+    yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
+      Effect.asVoid,
+      Effect.catchTag("WorkerNotFound", () =>
+        Clank.info(`  Worker '${scriptName}' not found (already gone).`),
+      ),
+    );
+
+    // 2. Delete the secrets the state store created, plus any now-empty store.
+    const ourSecretNames = new Set<string>([
+      AuthTokenSecretName,
+      EncryptionKeySecretName,
+    ]);
+    const stores = yield* SecretsStore.listStores({ accountId }).pipe(
+      Effect.map((r) => r.result),
+      Effect.catchTag("InvalidAccountId", () => Effect.succeed([])),
+    );
+    for (const store of stores) {
+      const secrets = yield* SecretsStore.listStoreSecrets({
+        accountId,
+        storeId: store.id,
+      }).pipe(
+        Effect.map((r) => r.result),
+        Effect.catchTag(["StoreNotFound", "InvalidAccountId"], () =>
+          Effect.succeed([]),
+        ),
+      );
+      const ours = secrets.filter((s) => ourSecretNames.has(s.name));
+      for (const secret of ours) {
+        yield* Clank.info(`Deleting secret '${secret.name}'...`);
+        yield* SecretsStore.deleteStoreSecret({
+          accountId,
+          storeId: store.id,
+          secretId: secret.id,
+        }).pipe(
+          Effect.asVoid,
+          Effect.catchTag(
+            ["SecretNotFound", "StoreNotFound", "NotFound", "InvalidAccountId"],
+            () => Effect.void,
+          ),
+        );
+      }
+      const remaining = secrets.length - ours.length;
+      if (deleteEmptyStore && remaining === 0) {
+        yield* Clank.info(`Deleting empty secrets store '${store.id}'...`);
+        yield* SecretsStore.deleteStore({
+          accountId,
+          storeId: store.id,
+          force: true,
+        }).pipe(
+          Effect.asVoid,
+          Effect.catchTag(
+            ["StoreNotFound", "NotFound", "InvalidAccountId"],
+            () => Effect.void,
+          ),
+        );
+      } else if (remaining > 0) {
+        yield* Clank.info(
+          `Secrets store '${store.id}' still has ${remaining} other ` +
+            `secret(s); leaving it in place.`,
+        );
+      }
+    }
+
+    // 3. Drop the locally cached state-store credentials for this profile.
+    const credStore = yield* CredentialsStore;
+    yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
+
+    yield* Clank.success(`Cloudflare State Store '${scriptName}' torn down.`);
+  }).pipe(
+    Effect.withSpan("state_store.teardown", {
+      attributes: {
+        "alchemy.state_store.op": "teardown",
         "alchemy.state_store.script_name":
           options.workerName ?? STATE_STORE_SCRIPT_NAME,
       },
