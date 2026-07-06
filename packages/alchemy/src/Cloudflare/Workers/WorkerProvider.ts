@@ -185,10 +185,8 @@ type MetadataHashValue =
  * `JSON.stringify`). Redacted values contribute by value, not by reference
  * identity, so two independently-constructed secrets with the same contents
  * hash identically.
- *
- * @internal exported for unit testing.
  */
-export const resolveMetadataHashValue = (
+const resolveMetadataHashValue = (
   value: unknown,
 ): Effect.Effect<MetadataHashValue> =>
   Effect.gen(function* () {
@@ -278,10 +276,8 @@ const workerAssetConfigForHash = (assets: WorkerProps["assets"]) => {
  * detected by the diff (#745). Previously the update decision compared only
  * the bundle/vite/asset-content hashes, so a change to e.g. a compatibility
  * flag or observability config planned as a noop and silently never deployed.
- *
- * @internal exported for unit testing.
  */
-export const resolveWorkerMetadataHash = ({
+const resolveWorkerMetadataHash = ({
   props,
   bindings,
   accountId,
