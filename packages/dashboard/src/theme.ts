@@ -128,6 +128,34 @@ export const statusColor = (status: string): string => {
 export const statusInFlight = (status: string): boolean =>
   IN_FLIGHT.has(status);
 
+/**
+ * Which ACTION an in-flight status belongs to. The lifecycle tab keeps ONE
+ * color through an action's whole story (create = moss from PENDING through
+ * CREATING to CREATED); the text + spinner carry the phase.
+ */
+const STATUS_ACTION: Record<string, string> = {
+  creating: "create",
+  "pre-creating": "create",
+  updating: "update",
+  replacing: "replace",
+  "creating replacement": "replace",
+  deleting: "delete",
+  attaching: "update",
+  "post-attach": "update",
+};
+
+/** Action-consistent color for an in-flight status (tasks read as info). */
+export const inFlightColor = (status: string, planAction?: string): string => {
+  if (status === "running") {
+    return "var(--alc-info)";
+  }
+  const action = STATUS_ACTION[status] ?? planAction;
+  return (
+    (action !== undefined ? PLAN_COLORS[action] : undefined) ??
+    "var(--alc-warn)"
+  );
+};
+
 // ────────────────────────────────────────────────────────── color helpers
 
 /**
