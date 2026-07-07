@@ -100,6 +100,8 @@ export interface StackStructure {
     logicalId: string;
     type: string;
     bindingSids: string[];
+    /** actions (tasks) render as ghost nodes too @default "resource" */
+    kind?: "resource" | "action";
   }[];
 }
 

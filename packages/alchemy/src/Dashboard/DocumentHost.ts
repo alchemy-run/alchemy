@@ -11,6 +11,7 @@ import type { DeploymentSessionPayload } from "../State/DeploymentSession.ts";
 import type { PersistedState, StateService } from "../State/State.ts";
 import {
   applyDeploymentRecord,
+  restoreEdges as restoreEdgesFold,
   applyEvent as applyEventFold,
   applyPlan as applyPlanFold,
   applyStructure as applyStructureFold,
@@ -25,6 +26,7 @@ import {
   type DocumentApproval,
   type DocumentMeta,
   type DocumentPatch,
+  type DocumentEdge,
   type DocumentSnapshot,
   type Mutation,
 } from "./Document.ts";
@@ -85,6 +87,13 @@ export interface DocumentHost {
   ) => Effect.Effect<void>;
   /** Overlay a computed plan (from the server's plan worker). */
   readonly applyPlan: (plan: DashboardPlan) => Effect.Effect<void>;
+  /**
+   * Re-add previously captured edges whose endpoints still exist — keeps
+   * the topology stable across the post-destroy states rebuild.
+   */
+  readonly restoreEdges: (
+    edges: readonly DocumentEdge[],
+  ) => Effect.Effect<void>;
   /** Overlay the stack's shape (from the server's structure fast-pass). */
   readonly applyStructure: (structure: StackStructure) => Effect.Effect<void>;
   /**
@@ -344,6 +353,7 @@ export const make: (
     applyEvent,
     applyPlan: (plan) => record(applyPlanFold(doc, plan)),
     applyStructure: (structure) => record(applyStructureFold(doc, structure)),
+    restoreEdges: (edges) => record(restoreEdgesFold(doc, edges)),
     refreshStates,
     refreshDeployment,
     refreshOutputs,

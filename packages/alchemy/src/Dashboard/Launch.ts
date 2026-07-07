@@ -214,7 +214,22 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
           .map((b) => b.sid)
           .filter((sid): sid is string => typeof sid === "string"),
       }));
-      return { resources } satisfies StackStructure;
+      // actions (tasks) are part of the stack's shape too — without them
+      // the post-destroy ghost graph is missing nodes (and the structural
+      // hash shifts, forcing a relayout)
+      const actions = Object.entries(
+        (stk.actions ?? {}) as Record<
+          string,
+          { LogicalId?: string; Type?: string }
+        >,
+      ).map(([fqn, a]) => ({
+        fqn,
+        logicalId: a.LogicalId ?? fqn.split("/").at(-1) ?? fqn,
+        type: a.Type ?? "Action",
+        bindingSids: [],
+        kind: "action" as const,
+      }));
+      return { resources: [...resources, ...actions] } satisfies StackStructure;
     }).pipe(
       Effect.provide(servicesFor(stg)),
       Effect.catchCause(() =>
