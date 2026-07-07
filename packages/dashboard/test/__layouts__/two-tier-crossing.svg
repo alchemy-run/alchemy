@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 978 792" font-family="monospace" font-size="13">
+  <!-- two-tier-crossing: 930x744 aspect=1.25 -->
+  <rect width="100%" height="100%" fill="#f4efe4"/>
+  <line x1="254" y1="84" x2="374" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="240" x2="374" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="396" x2="374" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="396" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="552" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="708" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="240" x2="724" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="240" x2="724" y2="396" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="396" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="240" x2="724" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="708" stroke="#8a7a5c" stroke-width="1.5"/>
+  <rect x="24" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="52" fill="#3f3828">Src0</text>
+  <rect x="24" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="208" fill="#3f3828">Src1</text>
+  <rect x="24" y="336" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="364" fill="#3f3828">Src2</text>
+  <rect x="24" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="520" fill="#3f3828">Src3</text>
+  <rect x="24" y="648" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="676" fill="#3f3828">Src4</text>
+  <rect x="374" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="208" fill="#3f3828">MidA</text>
+  <rect x="374" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="520" fill="#3f3828">MidB</text>
+  <rect x="724" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="52" fill="#3f3828">Sink0</text>
+  <rect x="724" y="336" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="364" fill="#3f3828">Sink1</text>
+  <rect x="724" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="520" fill="#3f3828">Sink2</text>
+  <rect x="724" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="208" fill="#3f3828">Sink3</text>
+  <rect x="724" y="648" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="676" fill="#3f3828">Sink4</text>
+</svg>

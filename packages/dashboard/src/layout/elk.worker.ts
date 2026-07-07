@@ -6,6 +6,7 @@
 import ELK from "elkjs/lib/elk.bundled.js";
 import {
   positionsOf,
+  repackComponents,
   toElkGraph,
   type LayoutRequestMessage,
   type LayoutResponseMessage,
@@ -28,7 +29,11 @@ scope.onmessage = (event) => {
       scope.postMessage({
         id: request.id,
         ok: true,
-        positions: positionsOf(root),
+        positions: repackComponents(
+          positionsOf(root),
+          request.edges,
+          request.aspectRatio,
+        ),
       });
     })
     .catch((error: unknown) => {

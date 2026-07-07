@@ -11,6 +11,7 @@
 import type { XY } from "../store.ts";
 import {
   positionsOf,
+  repackComponents,
   toElkGraph,
   type LayoutEdgeInput,
   type LayoutRequestMessage,
@@ -92,7 +93,9 @@ const mainThreadLayout = (
   import("elkjs/lib/elk.bundled.js").then(({ default: ELK }) =>
     new ELK()
       .layout(toElkGraph(fqns, edges, aspectRatio))
-      .then((root) => toPositionMap(positionsOf(root))),
+      .then((root) =>
+        toPositionMap(repackComponents(positionsOf(root), edges, aspectRatio)),
+      ),
   );
 
 /**

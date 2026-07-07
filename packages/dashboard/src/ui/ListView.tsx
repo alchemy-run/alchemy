@@ -122,7 +122,13 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
   const meta = useMeta();
   const registry = useRegistry();
 
-  const status = decoration?.status ?? node?.status ?? "unknown";
+  const rawStatus = decoration?.status ?? node?.status ?? "unknown";
+  // deleted tasks are excluded from the destroy story (see ResourceNode)
+  const status =
+    node?.kind === "action" &&
+    (rawStatus === "deleting" || rawStatus === "deleted")
+      ? (node?.status ?? "unknown")
+      : rawStatus;
   const ui = node !== undefined ? registry?.get(node.type) : undefined;
   const ctx = useMemo(
     () => (node !== undefined ? uiCtxOf(node, status, meta) : undefined),
@@ -136,7 +142,10 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
   if (node === undefined) {
     return null;
   }
-  const applyResult = decoration?.applyResult;
+  const applyResult =
+    node.kind === "action" && decoration?.applyResult === "deleted"
+      ? undefined
+      : decoration?.applyResult;
   const planAction = node.planAction ?? decoration?.planAction;
   // pending plan wins over the PREVIOUS run's result (see ResourceNode);
   // a result from the CURRENT run takes over as each row completes
