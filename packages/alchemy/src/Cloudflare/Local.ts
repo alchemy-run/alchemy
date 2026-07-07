@@ -1,4 +1,5 @@
 import * as Layer from "effect/Layer";
+import { DockerLive } from "../Docker/Docker.ts";
 import * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
@@ -25,5 +26,6 @@ Layer.mergeAll(
 ).pipe(
   Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),
+  Layer.provide(DockerLive),
   RpcServer.launch,
 );

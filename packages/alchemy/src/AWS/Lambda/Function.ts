@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -36,6 +37,7 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -49,6 +51,10 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
@@ -157,6 +163,14 @@ export interface FunctionProps extends PlatformProps {
    * Omit to remove the function-level reserved concurrency limit.
    */
   reservedConcurrentExecutions?: number;
+  /**
+   * Asynchronous invocation settings (retries, event age, destinations) for
+   * the unqualified function. Omit to remove any existing config and fall
+   * back to Lambda's defaults (2 retries, 6-hour max event age, no
+   * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
+   * config to an alias instead.
+   */
+  eventInvokeConfig?: EventInvokeConfig;
 }
 
 /**
@@ -333,7 +347,7 @@ const matchesConfiguredExternal = (
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
- *   { main: import.meta.filename, url: true },
+ *   { main: import.meta.url, url: true },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const getItem = yield* AWS.DynamoDB.GetItem(table);
@@ -378,6 +392,22 @@ const matchesConfiguredExternal = (
  *   vpc: {
  *     subnetIds: ["subnet-abc123", "subnet-def456"],
  *     securityGroupIds: ["sg-xyz789"],
+ *   },
+ * });
+ * ```
+ *
+ * @example Async invocation retries and failure destination
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("AsyncFunction", {
+ *   main: "./src/handler.ts",
+ *   eventInvokeConfig: {
+ *     maximumRetryAttempts: 0,
+ *     maximumEventAgeInSeconds: 60,
+ *     destinationConfig: {
+ *       OnFailure: {
+ *         Destination: queue.queueArn,
+ *       },
+ *     },
  *   },
  * });
  * ```
@@ -803,7 +833,7 @@ export const FunctionProvider = () =>
         const sourcemap = buildOutput?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
 
-        const realMain = yield* fs.realPath(props.main);
+        const realMain = yield* TempRoot.resolveMainPath(props.main);
         const cwd = yield* TempRoot.findCwdForBundle(realMain);
 
         const rolldownSourcemap = sourcemap;
@@ -1078,7 +1108,21 @@ export default await Effect.runPromise(handlerEffect)
         );
       });
 
-      const createOrUpdateFunction = Effect.fn(function* ({
+      const createOrUpdateFunction: (input: {
+        id: string;
+        news: FunctionProps;
+        roleArn: string;
+        archive: Uint8Array<ArrayBufferLike>;
+        hash: string;
+        env: Record<string, string> | undefined;
+        functionName: string;
+        preferUpdate?: boolean;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) => Effect.Effect<
+        void,
+        any,
+        Credentials | Region | HttpClient | Stack | Stage | AWSEnvironment
+      > = Effect.fn(function* ({
         id,
         news,
         roleArn,
@@ -1240,7 +1284,7 @@ export default await Effect.runPromise(handlerEffect)
               yield* Effect.logDebug(`updated function configuration ${id}`);
             }),
           ),
-        );
+        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
         const create = Lambda.createFunction(createFunctionRequest).pipe(
           Effect.tapError((e) =>
@@ -1257,7 +1301,7 @@ export default await Effect.runPromise(handlerEffect)
           Effect.catchTags({
             ResourceConflictException: () => getAndUpdate,
           }),
-        );
+        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
         if (preferUpdate) {
           yield* getAndUpdate.pipe(
@@ -1651,6 +1695,11 @@ export default await Effect.runPromise(handlerEffect)
               reservedConcurrentExecutions: news.reservedConcurrentExecutions,
             });
 
+          yield* syncEventInvokeConfig({
+            functionName,
+            config: news.eventInvokeConfig,
+          });
+
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
             url: news.url,
@@ -1674,6 +1723,8 @@ export default await Effect.runPromise(handlerEffect)
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // The role may already be gone (e.g. deleted out-of-band or by a
+          // previous partial delete) — treat every step as idempotent.
           yield* iam
             .listRolePolicies({
               RoleName: output.roleName,
@@ -1682,13 +1733,21 @@ export default await Effect.runPromise(handlerEffect)
               Effect.flatMap((policies) =>
                 Effect.all(
                   (policies.PolicyNames ?? []).map((policyName) =>
-                    iam.deleteRolePolicy({
-                      RoleName: output.roleName,
-                      PolicyName: policyName,
-                    }),
+                    iam
+                      .deleteRolePolicy({
+                        RoleName: output.roleName,
+                        PolicyName: policyName,
+                      })
+                      .pipe(
+                        Effect.catchTag(
+                          "NoSuchEntityException",
+                          () => Effect.void,
+                        ),
+                      ),
                   ),
                 ),
               ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* iam
@@ -1713,6 +1772,7 @@ export default await Effect.runPromise(handlerEffect)
                   ),
                 ),
               ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* Lambda.deleteFunction({

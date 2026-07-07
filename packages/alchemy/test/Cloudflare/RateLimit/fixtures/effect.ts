@@ -18,7 +18,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class RateLimitEffectWorker extends Cloudflare.Worker<RateLimitEffectWorker>()(
   "RateLimitEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const throttle = yield* Cloudflare.RateLimit("THROTTLE", {

@@ -9,7 +9,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Read + write access via a scoped HTTP API token (`ReadWriteNamespaceHttp`). */
 export default class KVReadWriteHttpWorker extends Cloudflare.Worker<KVReadWriteHttpWorker>()(
   "KVReadWriteHttpWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const namespace = yield* TestNamespace;
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(namespace);

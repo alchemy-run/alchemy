@@ -7,7 +7,7 @@ import ChatBackend from "./ChatBackend.ts";
 export default class ChatPersistenceTestWorker extends Cloudflare.Worker<ChatPersistenceTestWorker>()(
   "ChatPersistenceTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     // Yielding the inline DO hosts it on this Worker and hands back the

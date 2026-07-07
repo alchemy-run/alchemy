@@ -49,7 +49,7 @@ export type VersionMetadataAccessor = Effect.Effect<
  *
  * Cloudflare.Worker(
  *   "VersionWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     // Attaches the binding to this Worker AND returns a deferred accessor.
  *     const versionMetadata = yield* Cloudflare.Workers.VersionMetadata();

@@ -11,7 +11,7 @@ export class WorkerTag extends Cloudflare.Worker<WorkerTag, {}>()(
 
 export default WorkerTag.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     compatibility: {
       flags: ["nodejs_compat"],
       date: "2026-04-26",

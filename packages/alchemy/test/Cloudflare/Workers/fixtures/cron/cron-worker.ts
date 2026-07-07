@@ -40,7 +40,7 @@ export class CronCounter extends Cloudflare.DurableObject<CronCounter>()(
 export default class CronTestWorker extends Cloudflare.Worker<CronTestWorker>()(
   "CronTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counters = yield* CronCounter;

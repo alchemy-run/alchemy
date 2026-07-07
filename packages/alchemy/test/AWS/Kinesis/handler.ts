@@ -48,7 +48,7 @@ export const StreamAndConsumerLive = Layer.effect(
 
 export const KinesisApiFunctionLive = KinesisApiFunction.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
   },
   Effect.gen(function* () {

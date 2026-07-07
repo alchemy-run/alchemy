@@ -7,7 +7,7 @@ import { Gateway } from "./Gateway.ts";
 export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
   "AiGatewayTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);

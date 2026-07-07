@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Neon from "@/Neon/index.ts";
 import * as Effect from "effect/Effect";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Neon + Cloudflare wiring for the Drizzle-in-Workflow regression test. A
@@ -11,9 +12,13 @@ import path from "node:path";
  */
 export const NeonDb = Effect.gen(function* () {
   // Resolved inside the effect (not at module scope) so it only runs at
-  // deploy time — `import.meta.filename` is undefined in the bundled worker.
+  // deploy time — `import.meta.url` is undefined in the bundled worker.
   const migrationsDir = yield* Effect.sync(() =>
-    path.join(import.meta.filename ?? ".", "..", "migrations"),
+    path.join(
+      import.meta.url ? fileURLToPath(import.meta.url) : ".",
+      "..",
+      "migrations",
+    ),
   );
 
   const project = yield* Neon.Project("DrizzleWorkflowProject", {

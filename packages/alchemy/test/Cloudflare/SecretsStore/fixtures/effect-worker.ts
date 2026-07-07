@@ -14,7 +14,7 @@ import { secretRoutes } from "./secret-routes.ts";
 export default class EffectSecretWorker extends Cloudflare.Worker<EffectSecretWorker>()(
   "EffectSecretBindingWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     subdomain: { enabled: true, previewsEnabled: false },
   },
   Effect.gen(function* () {

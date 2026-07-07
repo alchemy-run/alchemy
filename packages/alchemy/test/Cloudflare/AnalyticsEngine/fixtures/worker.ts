@@ -7,7 +7,7 @@ import { Dataset } from "./dataset.ts";
 export default class AnalyticsEngineTestWorker extends Cloudflare.Worker<AnalyticsEngineTestWorker>()(
   "AnalyticsEngineTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const analytics = yield* Cloudflare.AnalyticsEngine.WriteDataset(Dataset);

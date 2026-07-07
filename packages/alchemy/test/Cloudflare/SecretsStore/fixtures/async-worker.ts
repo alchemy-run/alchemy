@@ -17,7 +17,7 @@ import { ApiKey } from "./secret.ts";
 export default class AsyncSecretWorker extends Cloudflare.Worker<AsyncSecretWorker>()(
   "AsyncSecretBindingWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     subdomain: { enabled: true, previewsEnabled: false },
     env: {
       MY_SECRET: ApiKey,

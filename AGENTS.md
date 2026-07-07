@@ -738,7 +738,7 @@ import { Gateway } from "./gateway.ts";
 export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
   "TestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const aiGateway = yield* Cloudflare.AIbind(Gateway);

@@ -19,7 +19,7 @@ export class BucketEventSourceFunction extends Lambda.Function<BucketEventSource
 
 export default BucketEventSourceFunction.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     url: true,
   },
   Effect.gen(function* () {

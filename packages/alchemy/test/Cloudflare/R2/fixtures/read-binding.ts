@@ -8,7 +8,7 @@ import { readRoutes } from "./read-routes.ts";
 /** Read-only access via the native Worker binding (`ReadBucketBinding`). */
 export default class R2ReadBindingWorker extends Cloudflare.Worker<R2ReadBindingWorker>()(
   "R2ReadBindingWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* TestBucket;
     const r2 = yield* Cloudflare.R2.ReadBucket(bucket);

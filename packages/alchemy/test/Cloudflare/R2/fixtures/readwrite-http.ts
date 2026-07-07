@@ -9,7 +9,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Read + write access via a scoped HTTP API token (`ReadWriteBucketHttp`). */
 export default class R2ReadWriteHttpWorker extends Cloudflare.Worker<R2ReadWriteHttpWorker>()(
   "R2ReadWriteHttpWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* TestBucket;
     const r2 = yield* Cloudflare.R2.ReadWriteBucket(bucket);

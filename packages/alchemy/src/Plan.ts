@@ -1,3 +1,5 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+/** @effect-diagnostics missingEffectError:off */
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -55,8 +57,8 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
-import { hashInput } from "./Util/sha256.ts";
 import { findCycleMembers } from "./Util/scc.ts";
+import { hashInput } from "./Util/sha256.ts";
 
 export type PlanError = never;
 

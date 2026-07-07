@@ -16,7 +16,7 @@ import { DESTINATION, SendEmail, SENDER } from "./Email.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const email = yield* Cloudflare.Email.Send(SendEmail);

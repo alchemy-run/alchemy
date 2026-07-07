@@ -20,7 +20,7 @@ let counter = 0;
  */
 export default class RpcWorkerRpcHttpWorker extends Cloudflare.RpcWorker<RpcWorkerRpcHttpWorker>()(
   "RpcWorkerRpcHttpWorker",
-  { main: import.meta.filename, schema: WorkerRpcs },
+  { main: import.meta.url, schema: WorkerRpcs },
   Effect.gen(function* () {
     const objects = yield* RpcWorkerRpcHttpObject;
 

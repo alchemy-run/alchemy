@@ -19,7 +19,7 @@ export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
 // extracted into a reusable Layer.
 export default WorkerC.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counter = yield* Counter.from(WorkerC);

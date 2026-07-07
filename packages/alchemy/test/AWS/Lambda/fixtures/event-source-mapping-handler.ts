@@ -16,7 +16,7 @@ export class EventSourceMappingFunction extends Lambda.Function<EventSourceMappi
 
 export default EventSourceMappingFunction.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     url: false,
   },
   Effect.gen(function* () {

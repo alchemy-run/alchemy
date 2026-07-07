@@ -8,7 +8,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Write-only access via the native Worker binding (`WriteNamespaceBinding`). */
 export default class KVWriteBindingWorker extends Cloudflare.Worker<KVWriteBindingWorker>()(
   "KVWriteBindingWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const namespace = yield* TestNamespace;
     const kv = yield* Cloudflare.KV.WriteNamespace(namespace);

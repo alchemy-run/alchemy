@@ -5,17 +5,10 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
-import {
-  dockerBuild,
-  dockerTag,
-  materializeDockerfile,
-  pushImage,
-  runDockerCommand,
-  writeContextFiles,
-} from "../../Bundle/Docker.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
+import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -65,6 +58,7 @@ export const LiveContainerProvider = () =>
       const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+      const docker = yield* Docker;
 
       const telemetry = yield* CloudflareLogs;
 
@@ -116,7 +110,17 @@ export const LiveContainerProvider = () =>
       ) =>
         normalizeNulls({
           image: imageRef,
-          instanceType: props.instanceType,
+          // Default to wrangler's instance type ("lite") so containers schedule
+          // the same way out of the box. `instance_type` is mutually exclusive
+          // with explicit vcpu/memory/disk, so only default it when none are
+          // set. ("dev" is wrangler's deprecated alias for "lite".)
+          instanceType:
+            props.instanceType ??
+            (props.vcpu === undefined &&
+            props.memory === undefined &&
+            props.disk === undefined
+              ? "lite"
+              : undefined),
           observability: props.observability,
           sshPublicKeyIds: props.sshPublicKeyIds,
           secrets: props.secrets,
@@ -135,6 +139,28 @@ export const LiveContainerProvider = () =>
           ports: props.ports,
           checks: props.checks,
         }) as ContainerApplication.Configuration;
+
+      // Scaling/placement defaults mirror wrangler's container defaults
+      // (`wrangler-dist/cli.js`) so an Alchemy container behaves like a
+      // `wrangler deploy`d one without extra config:
+      //   - max_instances: 20            (`container.max_instances ?? 20`)
+      //   - instances: 0                 (wrangler forces 0 whenever
+      //                                    max_instances is set, which we always
+      //                                    do — pure scale-from-zero)
+      //   - scheduling_policy: "default"
+      // (wrangler also defaults `constraints.tiers` to `[1, 2]`, but the
+      // distilled SDK models constraints as singular `tier`, not the `tiers`
+      // array, so we leave constraints untouched — it's a minor placement hint
+      // next to the scaling defaults.)
+      // A maxInstances default of 1 (the previous value) silently serialised
+      // every Durable Object instance through a single container slot, which is
+      // the dominant cause of "containers are slow under load".
+      const scalingDefaults = (props: ContainerApplicationProps) => ({
+        instances: props.instances ?? 0,
+        maxInstances: props.maxInstances ?? 20,
+        schedulingPolicy: props.schedulingPolicy ?? "default",
+        constraints: props.constraints ?? {},
+      });
 
       const computeImage = Effect.fn(function* (
         id: string,
@@ -226,13 +252,8 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
-          yield* runDockerCommand([
-            "pull",
-            "--platform",
-            platform,
-            build.image,
-          ]);
-          yield* dockerTag(build.image, imageRef);
+          yield* docker.image.pull(build.image, platform);
+          yield* docker.image.tag(build.image, imageRef);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -242,11 +263,11 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Building container image ${imageRef}...`);
           }
-          yield* dockerBuild({
+          yield* docker.image.build({
             tag: imageRef,
             context: build.context,
             platform,
-            extraArgs: ["-f", build.dockerfile],
+            file: build.dockerfile,
           });
         } else {
           // Effect-native program: materialize the generated Dockerfile and
@@ -269,19 +290,15 @@ export const LiveContainerProvider = () =>
             props.external,
             props.autoInstallExternals,
           );
-          yield* materializeDockerfile(finalDockerfile, contextDir);
-          yield* writeContextFiles(
-            contextDir,
-            build.files.map((f, i) => ({
-              // Keep the entry rename to `index.mjs` so the Dockerfile
-              // ENTRYPOINT (`ENTRYPOINT ["bun", "/app/index.mjs"]`) stays
-              // valid; preserve rolldown-assigned fileNames for every other
-              // chunk so intra-bundle relative imports resolve at runtime.
+          yield* docker.materialize({
+            context: contextDir,
+            dockerfile: finalDockerfile,
+            files: build.files.map((f, i) => ({
               path: i === 0 ? "index.mjs" : f.path,
               content: f.content,
             })),
-          );
-          yield* dockerBuild({
+          });
+          yield* docker.image.build({
             tag: imageRef,
             context: contextDir,
             platform,
@@ -312,7 +329,7 @@ export const LiveContainerProvider = () =>
           );
         }
 
-        yield* pushImage(imageRef, {
+        yield* docker.image.push(imageRef, {
           username,
           password: credentials.password,
           server: registryId,
@@ -435,10 +452,7 @@ export const LiveContainerProvider = () =>
         const application = yield* Containers.createContainerApplication({
           accountId,
           name,
-          instances: news.instances ?? 1,
-          maxInstances: news.maxInstances ?? 1,
-          schedulingPolicy: news.schedulingPolicy ?? "default",
-          constraints: news.constraints ?? {},
+          ...scalingDefaults(news),
           affinities: news.affinities,
           configuration,
           durableObjects,
@@ -533,10 +547,7 @@ export const LiveContainerProvider = () =>
           Containers.updateContainerApplication({
             accountId,
             applicationId: existing.applicationId,
-            instances: news.instances ?? 1,
-            maxInstances: news.maxInstances ?? 1,
-            schedulingPolicy: news.schedulingPolicy ?? "default",
-            constraints: news.constraints ?? {},
+            ...scalingDefaults(news),
             affinities: news.affinities,
             configuration,
           }),
@@ -559,10 +570,7 @@ export const LiveContainerProvider = () =>
               return yield* Containers.createContainerApplication({
                 accountId,
                 name: existing.applicationName,
-                instances: news.instances ?? 1,
-                maxInstances: news.maxInstances ?? 1,
-                schedulingPolicy: news.schedulingPolicy ?? "default",
-                constraints: news.constraints ?? {},
+                ...scalingDefaults(news),
                 affinities: news.affinities,
                 configuration,
                 durableObjects,

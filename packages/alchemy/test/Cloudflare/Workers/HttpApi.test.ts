@@ -29,11 +29,13 @@ const requestTimeout = "5 seconds";
 // requests landing on a cold PoP return a `404` (route not resolvable) or a
 // `500` (script up, binding not ready). New DO namespaces / D1 databases are
 // the slowest, so the readiness window comfortably exceeds 15s in the tail.
-// Retry on a steady 1.5s cadence for ~30s so every first-touch request rides
-// out the convergence window regardless of which PoP it hits.
+// Retry on a steady 1.5s cadence for ~60s so every first-touch request rides
+// out the convergence window regardless of which PoP it hits. Under a
+// full-suite run (dozens of concurrent deploys) fresh DO namespaces have
+// been observed to serve 500s for well over 30s before converging.
 const readinessRetry = {
   schedule: Schedule.spaced("1500 millis"),
-  times: 20,
+  times: 40,
 } as const;
 
 const makeClient = (url: string) =>

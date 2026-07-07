@@ -147,7 +147,7 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  *   yield* Http.serve(HttpServerResponse.json({ ok: true }));
  *
  *   return {
- *     main: import.meta.filename,
+ *     main: import.meta.url,
  *     imageId,
  *     instanceType: "t3.small",
  *     securityGroupIds: [securityGroup.groupId],

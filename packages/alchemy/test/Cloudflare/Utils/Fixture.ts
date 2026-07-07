@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
@@ -66,6 +67,13 @@ export const cloneFixture = Effect.fn(function* (
   for (const entry of entries) {
     yield* copyTree(entry);
   }
+
+  yield* Effect.addFinalizer(
+    Exit.match({
+      onSuccess: () => Effect.ignore(fs.remove(dir, { recursive: true })),
+      onFailure: () => Effect.void,
+    }),
+  );
 
   return dir;
 });

@@ -43,6 +43,45 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
   readonly cause?: unknown;
 }> {}
 
+/**
+ * No container instance could be allocated within the start budget — the
+ * account is at its concurrent-instance cap (`maxInstances`) or the platform
+ * is still provisioning. Mirrors `@cloudflare/containers`'
+ * `NO_CONTAINER_INSTANCE_ERROR` (surfaced as HTTP 503 by native).
+ */
+export class NoContainerInstanceError extends Data.TaggedError(
+  "NoContainerInstanceError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * Cloudflare is rate limiting container starts ("too many containers per
+ * second"). Mirrors `@cloudflare/containers`' `RATE_LIMITED_ERROR` (HTTP 429).
+ * Hammering `start()` while rate limited only prolongs it, so callers should
+ * back off rather than retry tightly.
+ */
+export class ContainerRateLimitedError extends Data.TaggedError(
+  "ContainerRateLimitedError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * The container instance exited/crashed while we were waiting for its port —
+ * the entrypoint failed to bind or died. Mirrors native's "container exited"
+ * detection (`!this.container.running` mid-wait); not curable by continuing to
+ * poll the same instance.
+ */
+export class ContainerCrashedError extends Data.TaggedError(
+  "ContainerCrashedError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
 
 /**
@@ -50,7 +89,7 @@ export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
  * {@link main} and bakes it in as the container's entrypoint.
  */
 export interface EffectfulContainerProps extends ContainerApplicationProps {
-  /** Entrypoint file for the Effect program, typically `import.meta.filename`. */
+  /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
 }
 /**
@@ -154,7 +193,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```typescript
  * // src/Sandbox.runtime.ts — props are the first argument to `.make()`
  * export default Sandbox.make(
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const cp = yield* ChildProcessSpawner;
  *
@@ -202,7 +241,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * >()("Sandbox") {}
  *
  * export default Sandbox.make(
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     return Sandbox.of({
  *       ping: () => Effect.succeed("pong"),
@@ -265,7 +304,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```typescript
  * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
- *     main: import.meta.filename,
+ *     main: import.meta.url,
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
  *   })),

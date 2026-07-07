@@ -7,7 +7,7 @@ import { ExternalContainerObject } from "./object.ts";
 export default class ExternalContainerWorker extends Cloudflare.Worker<ExternalContainerWorker>()(
   "ExternalContainerWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const objects = yield* ExternalContainerObject;

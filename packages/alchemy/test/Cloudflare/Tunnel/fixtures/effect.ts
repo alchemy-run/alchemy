@@ -19,7 +19,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWorker>()(
   "TunnelEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const read = yield* Cloudflare.Tunnel.ReadTunnel();

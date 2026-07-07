@@ -24,7 +24,7 @@ interface QueueMessageBody {
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     observability: {
       enabled: true,
     },
@@ -163,8 +163,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
             );
           }
           const instance = yield* notifier.create({
-            roomId,
-            message: "hello from workflow",
+            params: {
+              roomId,
+              message: "hello from workflow",
+            },
           });
           return yield* HttpServerResponse.json({ instanceId: instance.id });
         } else if (request.url.startsWith("/workflow/status/")) {

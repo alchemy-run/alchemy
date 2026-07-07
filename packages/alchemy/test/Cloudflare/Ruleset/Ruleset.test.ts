@@ -7,11 +7,48 @@ import * as RemovalPolicy from "@/RemovalPolicy";
 import * as Test from "@/Test/Vitest";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import { expect } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import { MinimumLogLevel } from "effect/References";
 import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+// Cloudflare intermittently blocks *all* zone creation on an account with
+// error 1052 ("An error(zone setup) has occurred and it has been logged");
+// the block is account-level and can persist for hours. The unresolved-zone
+// test below provisions a fresh zone, so soft-skip it while the account is in
+// that state; every other failure propagates unchanged.
+const softSkipWhenZoneCreationBlocked = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A | undefined, E, R> =>
+  effect.pipe(
+    Effect.catchCause((cause) => {
+      // Match by tag rather than `instanceof zones.ZoneCreationBlocked`: the
+      // error is constructed inside the provider's copy of the distilled
+      // module, which vitest resolves as a separate module instance from this
+      // test's import, so `instanceof` across that boundary is always false.
+      const blocked = cause.reasons
+        .map((reason) =>
+          Cause.isFailReason(reason)
+            ? reason.error
+            : Cause.isDieReason(reason)
+              ? reason.defect
+              : undefined,
+        )
+        .some(
+          (value) =>
+            Predicate.hasProperty(value, "_tag") &&
+            value._tag === "ZoneCreationBlocked",
+        );
+      return blocked
+        ? Effect.logWarning(
+            "Cloudflare has zone creation blocked on this account (error 1052) — skipping zone-provisioning ruleset assertions",
+          ).pipe(Effect.as(undefined))
+        : Effect.failCause(cause);
+    }),
+  );
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -192,7 +229,7 @@ describe.sequential("Ruleset", () => {
           name: unresolvedZoneName,
         });
         expect(zoneAfter).toBeUndefined();
-      }).pipe(logLevel),
+      }).pipe(softSkipWhenZoneCreationBlocked, logLevel),
   );
 
   // Canonical `list()` test (zone-scoped collection): enumerate every zone via

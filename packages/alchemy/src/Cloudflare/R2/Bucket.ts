@@ -6,13 +6,13 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
 export const isBucket = (value: any): value is Bucket =>
-  typeof value === "object" && (value as any)?.Type === "Cloudflare.R2.Bucket";
+  isResourceOfType(value, "Cloudflare.R2.Bucket");
 
 export type BucketName = string;
 
@@ -172,7 +172,7 @@ export type Bucket = Resource<
  * @section Binding to a Worker
  * @example Reading and writing objects
  * ```typescript
- * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
  * // Write an object
  * yield* bucket.put("hello.txt", "Hello, World!");
@@ -186,7 +186,7 @@ export type Bucket = Resource<
  *
  * @example Streaming upload with content length
  * ```typescript
- * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);
  *
  * yield* bucket.put("upload.bin", request.stream, {
  *   contentLength: Number(request.headers["content-length"] ?? 0),

@@ -118,7 +118,7 @@ export interface WorkerLoaderClass extends Context.Service<
  *
  * export default class EvalWorker extends Cloudflare.Worker<EvalWorker>()(
  *   "EvalWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     // Registers the `worker_loader` binding on this Worker
  *     const loader = yield* Cloudflare.WorkerLoader("LOADER");
@@ -304,9 +304,18 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
   },
 ) as any;
 
+/**
+ * Convert the Effect-level worker code into the shape the native
+ * `env.LOADER.get()` API expects, unwrapping wrapped `Fetcher`s to their raw
+ * Cloudflare fetchers. `globalOutbound: null` (disable network access for the
+ * dynamic worker) must survive as `null` — `?.raw` alone would coerce it to
+ * `undefined`, which the runtime treats as "default outbound", silently
+ * re-enabling network access for workers meant to be sandboxed (#746).
+ */
 const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
   ...loader,
-  globalOutbound: loader.globalOutbound?.raw,
+  globalOutbound:
+    loader.globalOutbound === null ? null : loader.globalOutbound?.raw,
   tails: loader.tails?.map((t) => t.raw),
   streamingTails: loader.streamingTails?.map((t) => t.raw),
 });

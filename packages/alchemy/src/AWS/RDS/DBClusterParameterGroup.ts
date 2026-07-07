@@ -92,7 +92,11 @@ export const DBClusterParameterGroupProvider = () =>
                       g,
                     ): g is rds.DBClusterParameterGroup & {
                       DBClusterParameterGroupName: string;
-                    } => g.DBClusterParameterGroupName != null,
+                    } =>
+                      g.DBClusterParameterGroupName != null &&
+                      // AWS-managed `default.*` groups cannot be deleted
+                      // (InvalidDBParameterGroupStateFault) — don't enumerate.
+                      !g.DBClusterParameterGroupName.startsWith("default."),
                   )
                   .map((g) => ({
                     dbClusterParameterGroupName: g.DBClusterParameterGroupName,

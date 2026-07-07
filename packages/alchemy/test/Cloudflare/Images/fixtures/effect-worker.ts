@@ -14,7 +14,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export default class ImagesEffectWorker extends Cloudflare.Worker<ImagesEffectWorker>()(
   "ImagesEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const images = yield* Cloudflare.Images.Images("PIPELINE");

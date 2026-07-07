@@ -276,7 +276,7 @@ export const effect = <
   >
 > =>
   // @ts-expect-error
-  Layer.effect(Provider(cls.Type), eff);
+  Layer.effect(Provider(cls.Type), eff) as any;
 
 export const succeed = <
   R extends ResourceLike,

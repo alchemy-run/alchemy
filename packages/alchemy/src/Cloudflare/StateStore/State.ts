@@ -10,14 +10,13 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import crypto from "node:crypto";
 
 import * as Config from "effect/Config";
+import * as Option from "effect/Option";
 import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
-import {
-  CredentialsStore,
-  CredentialsStoreLive,
-} from "../../Auth/Credentials.ts";
-import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
+import { CredentialsStore } from "../../Auth/Credentials.ts";
+import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
@@ -37,12 +36,15 @@ import {
 } from "../../Telemetry/Metrics.ts";
 import * as Clank from "../../Util/Clank.ts";
 import * as Access from "../Access.ts";
-import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
-import * as Credentials from "../Credentials.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
-import { AuthToken, AuthTokenSecretName, TokenValue } from "./Token.ts";
+import {
+  AuthToken,
+  AuthTokenSecretName,
+  EncryptionKeySecretName,
+  TokenValue,
+} from "./Token.ts";
 
 const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
@@ -58,6 +60,12 @@ export const state = () =>
       const profileName = yield* ALCHEMY_PROFILE;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
+      // `deploy --yes` flows in here (via AlchemyContext.updateStateStore) to
+      // auto-accept an out-of-date state store upgrade instead of prompting.
+      // Optional so callers that don't provide AlchemyContext keep the prompt.
+      const autoUpdateStateStore =
+        Option.getOrUndefined(yield* Effect.serviceOption(AlchemyContext))
+          ?.updateStateStore ?? false;
       const context = yield* Effect.context<Effect.Services<typeof init>>();
 
       const init = Effect.gen(function* () {
@@ -84,9 +92,11 @@ export const state = () =>
               yield* checkStateStoreVersion(url);
 
             if (observed === undefined) {
-              const shouldDeploy = yield* Clank.confirm({
-                message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
-              });
+              const shouldDeploy =
+                autoUpdateStateStore ||
+                (yield* Clank.confirm({
+                  message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
+                }));
               if (shouldDeploy) {
                 return yield* bootstrap({
                   workerName: scriptName,
@@ -100,10 +110,32 @@ export const state = () =>
             const httpState = yield* ensureAccess({ url, authToken });
             if (matches) {
               return httpState;
+            }
+
+            // The store is out of date. Upgrade it in place.
+            const upgrade = Effect.gen(function* () {
+              yield* Clank.info(
+                `Cloudflare State Store '${scriptName}' is out of date ` +
+                  `(expected v${expected}, observed v${observed ?? "unknown"}); upgrading...`,
+              );
+              const stateStoreOptions = yield* deployStateStore({
+                stage: scriptName,
+                state: httpState,
+                force: false,
+              });
+              return yield* makeCloudflareStateStore(stateStoreOptions);
+            });
+
+            if (autoUpdateStateStore) {
+              // `--yes`: upgrade automatically (also unblocks CI).
+              return yield* upgrade;
             } else if (isCI) {
               return yield* Effect.die(
                 new AuthError({
-                  message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+                  message:
+                    `Cloudflare State store is out of date ` +
+                    `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
+                    `Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
                 }),
               );
             } else {
@@ -113,12 +145,7 @@ export const state = () =>
                   `(expected v${expected}, observed v${observed ?? "unknown"})`,
               });
               if (shouldDeploy) {
-                const stateStoreOptions = yield* deployStateStore({
-                  stage: scriptName,
-                  state: httpState,
-                  force: false,
-                });
-                return yield* makeCloudflareStateStore(stateStoreOptions);
+                return yield* upgrade;
               } else {
                 return yield* Effect.die(new Clank.PromptCancelled());
               }
@@ -153,17 +180,19 @@ export const state = () =>
         if (credentials) {
           return yield* ensureLatest(credentials);
         }
-        const workerExists = yield* isStateStoreAvailable(scriptName);
-        if (workerExists) {
+        const { accountId } =
+          yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+        if (yield* isStateStoreServing(accountId)) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false),
           );
+        } else if (autoUpdateStateStore) {
+          // `--yes`: deploy the missing state store automatically (also in CI).
+          return yield* bootstrap();
         } else if (isCI) {
-          // TODO(sam): do we want to support bootstrapping the state store from CI?
-          // for now - just die here
           return yield* Effect.die(
             new AuthError({
-              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
             }),
           );
         } else {
@@ -183,12 +212,14 @@ export const state = () =>
       return yield* Effect.cached(init.pipe(Effect.provideContext(context)));
     }),
   ).pipe(
-    Layer.provideMerge(Credentials.fromAuthProvider()),
-    Layer.provideMerge(CloudflareEnvironment.fromProfile()),
-    Layer.provideMerge(CloudflareAuth),
-    Layer.provideMerge(Access.AccessLive),
-    Layer.provideMerge(ProfileLive),
-    Layer.provideMerge(CredentialsStoreLive),
+    // The Cloudflare API foundation shared with `providers()` —
+    // credentials, environment, auth/access, profile + credential
+    // store, and the same blanket retry policy. Without the retry
+    // policy the init-time subdomain/script/secrets probes run on the
+    // SDK default and give up early under Cloudflare rate limiting.
+    // `provide` (not `provideMerge`) so the distilled Retry tag stays
+    // out of this layer's public type.
+    Layer.provide(Cloudflare.CloudflareApiLive()),
     Layer.orDie,
   );
 
@@ -233,9 +264,9 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         ),
       );
     }
-
-    const workerExists = yield* isStateStoreAvailable(scriptName);
-    if (workerExists) {
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    if (yield* isStateStoreServing(accountId)) {
       // this is a regular update, let's check if it needs an update and refresh credentials
       if (!force) {
         yield* Clank.info(
@@ -283,7 +314,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         return httpState;
       }
     } else {
-      // fresh deploy - deploy from local for the first time
       yield* Clank.info(`Deploying Cloudflare State Store '${scriptName}'...`);
       return yield* deployWithLocalState({
         scriptName,
@@ -300,6 +330,125 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     Effect.withSpan("state_store.bootstrap", {
       attributes: {
         "alchemy.state_store.op": "bootstrap",
+        "alchemy.state_store.script_name":
+          options.workerName ?? STATE_STORE_SCRIPT_NAME,
+      },
+    }),
+  );
+
+export interface TeardownOptions {
+  /** @default "alchemy-state-store" */
+  workerName?: string;
+  /** @default "default" */
+  profile?: string;
+  /**
+   * Delete the account Secrets Store too, but only once the state-store
+   * secrets have been removed and no other secrets remain in it. A store that
+   * still holds foreign secrets is left in place.
+   * @default true
+   */
+  deleteEmptySecretsStore?: boolean;
+}
+
+/**
+ * The inverse of {@link bootstrap}: tear down the Cloudflare-deployed state
+ * store. Deletes the state-store Worker and the secrets it created in the
+ * account Secrets Store (the bearer token + the encryption key), then deletes
+ * the Secrets Store itself if it is left empty, and drops the locally cached
+ * state-store credentials for the profile.
+ *
+ * Idempotent — missing resources are treated as already-gone, so it is safe to
+ * re-run. Intended for reclaiming a throwaway account after testing; on a
+ * shared account it only removes resources alchemy created.
+ */
+export const teardownStateStore = (options: TeardownOptions = {}) =>
+  Effect.gen(function* () {
+    const profileName = options.profile ?? (yield* ALCHEMY_PROFILE);
+    const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
+    const deleteEmptyStore = options.deleteEmptySecretsStore ?? true;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+
+    yield* annotateAccountHash();
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.script_name": scriptName,
+      "alchemy.state_store.profile": profileName,
+    });
+
+    // 1. Delete the state-store Worker.
+    yield* Clank.info(`Deleting state store worker '${scriptName}'...`);
+    yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
+      Effect.asVoid,
+      Effect.catchTag("WorkerNotFound", () =>
+        Clank.info(`  Worker '${scriptName}' not found (already gone).`),
+      ),
+    );
+
+    // 2. Delete the secrets the state store created, plus any now-empty store.
+    const ourSecretNames = new Set<string>([
+      AuthTokenSecretName,
+      EncryptionKeySecretName,
+    ]);
+    const stores = yield* SecretsStore.listStores({ accountId }).pipe(
+      Effect.map((r) => r.result),
+      Effect.catchTag("InvalidAccountId", () => Effect.succeed([])),
+    );
+    for (const store of stores) {
+      const secrets = yield* SecretsStore.listStoreSecrets({
+        accountId,
+        storeId: store.id,
+      }).pipe(
+        Effect.map((r) => r.result),
+        Effect.catchTag(["StoreNotFound", "InvalidAccountId"], () =>
+          Effect.succeed([]),
+        ),
+      );
+      const ours = secrets.filter((s) => ourSecretNames.has(s.name));
+      for (const secret of ours) {
+        yield* Clank.info(`Deleting secret '${secret.name}'...`);
+        yield* SecretsStore.deleteStoreSecret({
+          accountId,
+          storeId: store.id,
+          secretId: secret.id,
+        }).pipe(
+          Effect.asVoid,
+          Effect.catchTag(
+            ["SecretNotFound", "StoreNotFound", "NotFound", "InvalidAccountId"],
+            () => Effect.void,
+          ),
+        );
+      }
+      const remaining = secrets.length - ours.length;
+      if (deleteEmptyStore && remaining === 0) {
+        yield* Clank.info(`Deleting empty secrets store '${store.id}'...`);
+        yield* SecretsStore.deleteStore({
+          accountId,
+          storeId: store.id,
+          force: true,
+        }).pipe(
+          Effect.asVoid,
+          Effect.catchTag(
+            ["StoreNotFound", "NotFound", "InvalidAccountId"],
+            () => Effect.void,
+          ),
+        );
+      } else if (remaining > 0) {
+        yield* Clank.info(
+          `Secrets store '${store.id}' still has ${remaining} other ` +
+            `secret(s); leaving it in place.`,
+        );
+      }
+    }
+
+    // 3. Drop the locally cached state-store credentials for this profile.
+    const credStore = yield* CredentialsStore;
+    yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
+
+    yield* Clank.success(`Cloudflare State Store '${scriptName}' torn down.`);
+  }).pipe(
+    Effect.withSpan("state_store.teardown", {
+      attributes: {
+        "alchemy.state_store.op": "teardown",
         "alchemy.state_store.script_name":
           options.workerName ?? STATE_STORE_SCRIPT_NAME,
       },
@@ -426,6 +575,34 @@ const deployWithLocalState = ({
     }),
   );
 
+/**
+ * Writes against a *just-deployed* state-store worker can fail
+ * transiently while Cloudflare propagates the script, its route, and
+ * its Secrets Store bindings to the edge:
+ *
+ * - 404 — the workers.dev route isn't serving the new script yet
+ * - 401 — the worker is up but its auth-token secret binding hasn't
+ *   propagated, so token validation reads a stale/absent value
+ * - 5xx — the Store DO dies while its encryption-key secret binding
+ *   is still propagating
+ * - transport errors (no response) — cold workers.dev host blips
+ *
+ * @internal exported for unit testing.
+ */
+export const isTransientBootstrapWriteError = (error: {
+  cause?: unknown;
+}): boolean => {
+  const cause = error.cause;
+  if (cause == null) return false;
+  const tag = (cause as { _tag?: unknown })._tag;
+  if (typeof tag === "string" && tag.startsWith("Unauthorized")) return true;
+  if (isHttpClientError(cause)) {
+    const status = cause.response?.status;
+    return status === undefined || status === 404 || status >= 500;
+  }
+  return false;
+};
+
 // check if there's a local stack that wasn't properly hoisted
 const hasLocalStack = (stage: string) =>
   Effect.gen(function* () {
@@ -485,11 +662,14 @@ const hoistBootstrapStack = Effect.fn(function* ({
           })
           .pipe(
             Effect.retry({
-              while: (error) =>
-                isHttpClientError(error.cause) &&
-                // worker can 404 for a bit on first deploy, retry these
-                error.cause.response?.status === 404,
-              schedule: Schedule.fixed(200),
+              while: isTransientBootstrapWriteError,
+              // Bounded at ~30s: the freshly deployed worker (and its
+              // Secrets Store bindings) can take a while to serve
+              // consistently; anything persisting past that is a real
+              // failure to surface, not to spin on.
+              schedule: Schedule.fixed(500).pipe(
+                Schedule.both(Schedule.recurs(60)),
+              ),
             }),
           );
       }
@@ -551,8 +731,13 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
       AuthTokenSecretName,
     ).pipe(
       Effect.retry({
-        while: isWorkersPreviewConfigurationError,
+        while: (error) =>
+          isWorkersPreviewConfigurationError(error) ||
+          isTransientEdgeSessionError(error),
+        // Cap the exponential delay at 2s so 15 retries stay within
+        // ~30s instead of doubling unboundedly.
         schedule: Schedule.exponential(200).pipe(
+          Schedule.either(Schedule.spaced("2 seconds")),
           Schedule.both(Schedule.recurs(15)),
         ),
       }),
@@ -616,7 +801,31 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
       Effect.map((setting) => setting !== undefined),
       Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
       Effect.catchTag("InvalidRoute", () => Effect.succeed(false)),
+      // A worker that exists but has no versions (a previous deploy was
+      // interrupted before any content upload) can't serve — treat it
+      // as absent so bootstrap redeploys it.
+      Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(false)),
     );
+  });
+
+/**
+ * Does this account have a *functioning* state-store worker,
+ * verified by checking the /version endpoint
+ *
+ */
+const isStateStoreServing = (accountId: string) =>
+  Effect.gen(function* () {
+    const url = yield* workers.getSubdomain({ accountId }).pipe(
+      Effect.map(({ subdomain }) =>
+        subdomain
+          ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`
+          : undefined,
+      ),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (url === undefined) return false;
+    const { observed } = yield* checkStateStoreVersion(url);
+    return observed !== undefined;
   });
 
 const makeCloudflareStateStore = Effect.fn(function* ({
@@ -659,11 +868,11 @@ const waitForStateStoreVersion = (url: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error instanceof StateStoreVersionNotReady,
-      // Edge propagation is usually sub-second; poll fast and cap the
-      // overall wait at ~10s so we fail loudly if something is really
-      // wrong rather than silently hanging.
-      schedule: Schedule.spaced("200 millis").pipe(
-        Schedule.both(Schedule.recurs(50)),
+      // Edge propagation is usually sub-second but production traces
+      // show redeploys occasionally serving the old version for well
+      // over 10s. Poll for ~30s before failing loudly.
+      schedule: Schedule.spaced("500 millis").pipe(
+        Schedule.both(Schedule.recurs(60)),
       ),
     }),
     Effect.withSpan("state_store.wait_for_version", {
@@ -827,6 +1036,34 @@ const isWorkersPreviewConfigurationError = (error: unknown) =>
   error instanceof EdgeSessionError &&
   (error.message.includes("Invalid Workers Preview configuration") ||
     error.message.includes("Error 1031"));
+
+/**
+ * Edge-preview reads are flaky in ways that clear up on their own:
+ * the workers.dev edge can serve a generic Cloudflare 400/502 HTML
+ * page while preview routing propagates ("Secret probe returned
+ * ..."), the session-create call can hit transient API blips, and the
+ * probe fetch can fail at the transport level ("fetch failed").
+ * Retry everything except causes that are clearly permanent
+ * (bad credentials, invalid routes).
+ *
+ * @internal exported for unit testing.
+ */
+export const isTransientEdgeSessionError = (error: unknown): boolean => {
+  if (!(error instanceof EdgeSessionError)) return false;
+  // Non-200 probe responses are edge-propagation flakes, not client bugs.
+  if (error.message.startsWith("Secret probe returned")) return true;
+  const tag = (error.cause as { _tag?: unknown } | undefined)?._tag;
+  if (
+    typeof tag === "string" &&
+    (tag.startsWith("Unauthorized") ||
+      tag === "Forbidden" ||
+      tag === "InvalidRoute" ||
+      tag === "AuthError")
+  ) {
+    return false;
+  }
+  return true;
+};
 
 /**
  * SHA-256 hex digest of the Cloudflare account ID. Used as a stable

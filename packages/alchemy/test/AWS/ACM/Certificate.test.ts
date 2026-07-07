@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "polls Route53 validation changes returned with resource-path IDs",
   (stack) =>
     Effect.gen(function* () {
@@ -56,7 +56,7 @@ test.provider(
 // the provider from context via the typed `findProvider` helper, call `list()`,
 // and assert the deployed certificate ARN appears in the exhaustively-paginated
 // result. A PENDING certificate is fully enumerable and deletable.
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "list enumerates the deployed certificate",
   (stack) =>
     Effect.gen(function* () {

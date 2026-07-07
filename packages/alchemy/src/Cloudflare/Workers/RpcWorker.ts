@@ -317,7 +317,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  *
  * export default class Worker extends Cloudflare.RpcWorker<Worker>()(
  *   "Worker",
- *   { main: import.meta.filename, schema: TaskRpcs },
+ *   { main: import.meta.url, schema: TaskRpcs },
  *   Effect.gen(function* () {
  *     const handlers = TaskRpcs.toLayer({
  *       getTask: ({ id }) => Effect.succeed(`task-${id}`),
@@ -350,7 +350,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * ```typescript
  * export class TaskWorker extends Cloudflare.RpcWorker<TaskWorker>()(
  *   "TaskWorker",
- *   { main: import.meta.filename, schema: TaskRpcs },
+ *   { main: import.meta.url, schema: TaskRpcs },
  * ) {}
  *
  * // Only the host script imports this default export; consumers
@@ -379,7 +379,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  *
  * export class TaskWorker extends Cloudflare.RpcWorker<TaskWorker, Counter>()(
  *   "TaskWorker",
- *   { main: import.meta.filename, schema: TaskRpcs },
+ *   { main: import.meta.url, schema: TaskRpcs },
  * ) {}
  * ```
  * See {@link RpcDurableObject} for the consumer side
@@ -399,7 +399,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  *
  * export default class Caller extends Cloudflare.RpcWorker<Caller>()(
  *   "Caller",
- *   { main: import.meta.filename, schema: CallerRpcs },
+ *   { main: import.meta.url, schema: CallerRpcs },
  *   Effect.gen(function* () {
  *     // INIT: register binding, get the typed client
  *     const tasks = yield* Cloudflare.RpcWorker.bind(TaskWorker);

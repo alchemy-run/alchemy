@@ -49,6 +49,18 @@ export const createInternalTags = Effect.fn(function* (id: string) {
 });
 
 /**
+ * Strips the internal `alchemy::*` ownership tags from a tag/label map, leaving
+ * only the user-facing entries. Useful when diffing observed cloud state (which
+ * carries the internal branding) against the user's desired tags.
+ */
+export const stripInternalTags = (
+  tags: Record<string, string> | null | undefined,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(tags ?? {}).filter(([key]) => !key.startsWith("alchemy::")),
+  );
+
+/**
  * Creates AWS-compatible tag filters for finding resources by alchemy tags.
  * Use with AWS describe APIs that accept Filter parameters.
  */

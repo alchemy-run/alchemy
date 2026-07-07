@@ -1,12 +1,11 @@
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -93,12 +92,54 @@ export type DispatchNamespace = Resource<
  * ```
  *
  * @section Uploading user Workers
- * @example Upload a customer script into the namespace
+ * @example Upload a customer Worker into the namespace
+ * A {@link Cloudflare.Worker} deploys into the namespace as a "user worker"
+ * (rather than as a routable account-level script) when its `namespace` prop is
+ * set. Reference the namespace by its `name` output so it deploys first.
  * ```typescript
- * const script = yield* Cloudflare.DispatchNamespaceScript("CustomerA", {
+ * const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("Customers", {});
+ *
+ * const customerA = yield* Cloudflare.Worker("CustomerA", {
  *   namespace: namespace.name,
  *   script: `export default { fetch() { return new Response("hi"); } }`,
  * });
+ * ```
+ *
+ * @section Dispatching from a platform Worker
+ * @example Effect-native binding via `Get`
+ * `Cloudflare.WorkersForPlatforms.Get(namespace)` binds the namespace and
+ * returns an Effect-native client; `get(name)` resolves a user Worker by script
+ * name. Provide {@link GetBinding} on the Worker's runtime layer.
+ * ```typescript
+ * const dispatch = yield* Cloudflare.WorkersForPlatforms.Get(namespace);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const request = yield* HttpServerRequest;
+ *     const userWorker = yield* dispatch.get("CustomerA");
+ *     return yield* Effect.promise(() => userWorker.fetch(request));
+ *   }),
+ * };
+ * ```
+ *
+ * @example Async binding via `env` + `InferEnv`
+ * Passing the namespace on a Worker's `env` binds it as a native
+ * `dispatch_namespace` binding; `Cloudflare.InferEnv` types `env.DISPATCH` as
+ * the runtime `DispatchNamespace`, so the async handler calls `.get(name)`
+ * directly.
+ * ```typescript
+ * const platform = Cloudflare.Worker("Platform", {
+ *   main: "./handler.ts",
+ *   env: { DISPATCH: namespace },
+ * });
+ * type Env = Cloudflare.InferEnv<typeof platform>;
+ *
+ * // handler.ts
+ * export default {
+ *   async fetch(request: Request, env: Env) {
+ *     return env.DISPATCH.get("CustomerA").fetch(request);
+ *   },
+ * };
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
@@ -110,8 +151,7 @@ export const DispatchNamespace = Resource<DispatchNamespace>(TypeId);
  */
 export const isDispatchNamespace = (
   value: unknown,
-): value is DispatchNamespace =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+): value is DispatchNamespace => isResourceOfType(value, TypeId);
 
 export const DispatchNamespaceProvider = () =>
   Provider.succeed(DispatchNamespace, {

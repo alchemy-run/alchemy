@@ -24,8 +24,8 @@ const getSubscription = (accountId: string, subscriptionId: string) =>
   queues.getSubscription({ accountId, subscriptionId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
-      times: 8,
+      schedule: Schedule.fixed("500 millis"),
+      times: 20,
     }),
   );
 
@@ -40,12 +40,17 @@ const expectGone = (accountId: string, subscriptionId: string) =>
     Effect.catchTag("SubscriptionNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SubscriptionNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
+      schedule: Schedule.fixed("500 millis").pipe(
+        Schedule.both(Schedule.recurs(20)),
       ),
     }),
   );
 
+// Sequential: Cloudflare allows only ONE subscription per source per
+// account, and every test here uses the same `{ type: "r2" }` (or kv)
+// source. Run concurrently they adopt/patch/delete each other's
+// subscription via the AlreadyExists fallback and fail with queueId
+// mismatches and SubscriptionNotFound.
 describe.sequential("Subscription", () => {
   test.provider(
     "create r2 event subscription into a queue and destroy it",

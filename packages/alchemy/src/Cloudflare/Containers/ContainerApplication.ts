@@ -149,13 +149,17 @@ export interface ContainerApplicationProps extends PlatformProps {
    */
   dockerfile?: string;
   /**
-   * Initial number of instances to maintain.
-   * @default 1
+   * Initial number of instances to maintain. Matches wrangler, which forces
+   * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
+   * @default 0
    */
   instances?: number;
   /**
-   * Maximum number of instances the application may scale to.
-   * @default 1
+   * Maximum number of instances the application may scale to. Matches
+   * wrangler's default of 20. A value of 1 serializes every Durable Object
+   * instance through a single container slot, so the default lets containers
+   * scale concurrently out of the box.
+   * @default 20
    */
   maxInstances?: number;
   /**
@@ -164,8 +168,10 @@ export interface ContainerApplicationProps extends PlatformProps {
    */
   schedulingPolicy?: ContainerApplication.SchedulingPolicy;
   /**
-   * Instance type for each deployment.
-   * @default "dev"
+   * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
+   * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
+   * {@link disk} is set. (`"dev"` is wrangler's deprecated alias for `"lite"`.)
+   * @default "lite"
    */
   instanceType?: ContainerApplication.InstanceType;
   /**
@@ -285,7 +291,7 @@ export type ContainerShape = Main<ContainerServices>;
  * import * as Cloudflare from "alchemy/Cloudflare";
  *
  * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  * }) {}
  * ```
  *
@@ -297,7 +303,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Named container with a non-default handler export
  * ```typescript
  * export class Worker extends Cloudflare.Container<Worker>()("Worker", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   handler: "runWorker",
  *   name: "background-worker",
  * }) {}
@@ -346,7 +352,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Node runtime with external native deps
  * ```typescript
  * export class ImageApi extends Cloudflare.Container<ImageApi>()("ImageApi", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   runtime: "node",
  *   external: ["sharp"],
  *   autoInstallExternals: true,
@@ -360,7 +366,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Custom Dockerfile base and registry
  * ```typescript
  * export class Custom extends Cloudflare.Container<Custom>()("Custom", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   dockerfile: "FROM oven/bun:1\nRUN apt-get update && apt-get install -y ffmpeg",
  *   autoInstallExternals: false,
  *   registryId: "registry.cloudflare.com",
@@ -380,7 +386,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Autoscaling with a larger instance type
  * ```typescript
  * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   instanceType: "standard-1",
  *   instances: 1,
  *   maxInstances: 5,
@@ -394,7 +400,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Explicit CPU, memory, and disk overrides
  * ```typescript
  * export class Heavy extends Cloudflare.Container<Heavy>()("Heavy", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   vcpu: 2,
  *   memory: "4GB",
  *   disk: { size: "10GB" },
@@ -413,7 +419,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Environment variables, secrets, and a command override
  * ```typescript
  * export class Api extends Cloudflare.Container<Api>()("Api", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   environmentVariables: [{ name: "LOG_LEVEL", value: "info" }],
  *   secrets: [{ name: "API_KEY", type: "env", secret: "my-stored-secret" }],
  *   command: ["bun", "run", "start"],
@@ -429,7 +435,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Passing env and selecting runtime exports
  * ```typescript
  * export class Job extends Cloudflare.Container<Job>()("Job", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   env: { REGION: "wnam", FEATURE_FLAG: "on" },
  *   exports: ["default"],
  * }) {}
@@ -446,7 +452,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Ports, network mode, DNS, and a health check
  * ```typescript
  * export class Web extends Cloudflare.Container<Web>()("Web", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   ports: [{ name: "http", port: 8080 }],
  *   network: { assignIpv4: "predefined", mode: "public" },
  *   dns: { servers: ["1.1.1.1"], searches: ["internal"] },
@@ -466,7 +472,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Enable logs and grant SSH access
  * ```typescript
  * export class Api extends Cloudflare.Container<Api>()("Api", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   observability: { logs: { enabled: true } },
  *   sshPublicKeyIds: ["ssh-key-id-123"],
  * }) {}
@@ -484,7 +490,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Pin scheduling policy and placement
  * ```typescript
  * export class Edge extends Cloudflare.Container<Edge>()("Edge", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   schedulingPolicy: "regional",
  *   constraints: { tier: 1 },
  *   affinities: { colocation: "datacenter" },
@@ -503,7 +509,7 @@ export type ContainerShape = Main<ContainerServices>;
  * @example Progressive rollout on update
  * ```typescript
  * export class Api extends Cloudflare.Container<Api>()("Api", {
- *   main: import.meta.filename,
+ *   main: import.meta.url,
  *   instances: 4,
  *   maxInstances: 4,
  *   rollout: { strategy: "rolling", stepPercentage: 25 },

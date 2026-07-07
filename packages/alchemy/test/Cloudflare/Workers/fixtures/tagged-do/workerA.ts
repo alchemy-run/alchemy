@@ -13,7 +13,7 @@ export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
 // Layer
 export default WorkerA.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counter = yield* Counter;

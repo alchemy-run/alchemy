@@ -14,7 +14,7 @@ import { ChatRpcs } from "./ChatRpcs.ts";
 export default class ChatPersistenceRpcWorker extends Cloudflare.RpcWorker<ChatPersistenceRpcWorker>()(
   "ChatPersistenceRpcWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     schema: ChatRpcs,
   },
   Effect.gen(function* () {

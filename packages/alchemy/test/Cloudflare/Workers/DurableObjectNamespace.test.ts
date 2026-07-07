@@ -1,5 +1,8 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Vitest";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -356,4 +359,88 @@ export default { async fetch() { return new Response("v4"); } };
       yield* scratch.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
+);
+
+// Adopt a Durable Object class that already exists on a worker created
+// *outside* Alchemy (raw Cloudflare API here, standing in for Wrangler or the
+// dashboard). The worker carries no `alchemy:*` ownership tags and no
+// `alchemy:do:` logical-id→class mapping, so `read` returns `Unowned` and the
+// takeover requires `adopt(true)`. The matching `Counter` class must be reused
+// — if `putWorker` instead asked Cloudflare to create it as a *new* class the
+// migration would fail with "class already exists". This is the documented
+// limitation: on the first (adopting) deploy the binding's class name must
+// match the existing class; renames only work once Alchemy owns the worker.
+test.provider(
+  "adopts a durable object class created outside alchemy",
+  (scratch) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      // Phase 1: provision a worker + `Counter` DO class straight through the
+      // Cloudflare API — no Alchemy involvement, so none of our tags.
+      const physicalName = `alchemy-test-do-adopt-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      yield* workers.putScript({
+        accountId,
+        scriptName: physicalName,
+        metadata: {
+          mainModule: "main.js",
+          bindings: [
+            {
+              type: "durable_object_namespace",
+              name: "Counter",
+              className: "Counter",
+            },
+          ],
+          migrations: {
+            newSqliteClasses: ["Counter"],
+          },
+          // Match Alchemy's default compatibility date so adoption is a
+          // pure class-reuse with no compat-date churn. Old dates predate
+          // `DurableObjectNamespace.getByName`, which `hostWorkerScript`
+          // relies on.
+          compatibilityDate: "2026-03-17",
+        },
+        files: [
+          new File([hostWorkerScript], "main.js", {
+            type: "application/javascript+module",
+          }),
+        ],
+      });
+
+      // Phase 2: deploy an async Alchemy Worker (inline script) over the same
+      // physical name with a matching `Counter` binding, opting in to the
+      // takeover via `adopt(true)`.
+      const adopted = yield* scratch
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("AdoptDO", {
+              name: physicalName,
+              script: hostWorkerScript,
+              env: {
+                Counter: Cloudflare.DurableObject("Counter"),
+              },
+            });
+          }),
+        )
+        .pipe(adopt(true));
+
+      expect(adopted.workerName).toBe(physicalName);
+      // The existing class was adopted (and resolved to a namespace id),
+      // not recreated.
+      expect(adopted.durableObjectNamespaces.Counter).toBeDefined();
+
+      // The adopted DO is functional end-to-end: increment round-trips
+      // through the reused `Counter` class.
+      yield* fetchJsonReady<{ ok: boolean }>(`${adopted.url}/reset`);
+      const first = yield* fetchJsonReady<{ value: number }>(
+        `${adopted.url}/increment`,
+      );
+      expect(first.value).toBe(1);
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );

@@ -17,7 +17,7 @@ import { Zone } from "./zone.ts";
 export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>()(
   "DnsEffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const dns = yield* Cloudflare.DNS.ReadWriteDns(Zone);

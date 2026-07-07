@@ -18,13 +18,21 @@ const logLevel = Effect.provideService(
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
 // (`Forbidden`, declared in the distilled error union) on the test's
-// own out-of-band verification calls.
+// own out-of-band verification calls. The backoff is CAPPED at 3s: an
+// uncapped exponential balloons to 64s+ gaps within a handful of
+// attempts, polling so sparsely that a settled token is detected tens
+// of seconds late — under full-suite parallel load (when propagation
+// windows stretch) that alone can blow the test timeout.
+const propagationSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
+);
+
 const getToken = (accountId: string, id: string) =>
   aisearch.readToken({ accountId, id }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
-      times: 8,
+      schedule: propagationSchedule,
+      times: 15,
     }),
   );
 
@@ -36,9 +44,8 @@ const expectGone = (accountId: string, id: string) =>
     Effect.catchTag("TokenNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "TokenNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: propagationSchedule,
+      times: 15,
     }),
   );
 
@@ -134,8 +141,8 @@ test.provider(
       yield* aisearch.deleteToken({ accountId, id: initial.token.id }).pipe(
         Effect.retry({
           while: (e) => e._tag === "Forbidden",
-          schedule: Schedule.exponential("500 millis"),
-          times: 8,
+          schedule: propagationSchedule,
+          times: 15,
         }),
       );
       yield* expectGone(accountId, initial.token.id);
@@ -215,8 +222,8 @@ test.provider(
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
-            schedule: Schedule.exponential("500 millis"),
-            times: 8,
+            schedule: propagationSchedule,
+            times: 15,
           }),
         );
       expect(live.tokenId).toEqual(deployed.token.id);
@@ -226,5 +233,9 @@ test.provider(
       // The instance deletes before the token it references.
       yield* expectGone(accountId, deployed.token.id);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  // The instance create validates the freshly-minted service token and can
+  // legitimately ride the provider's `InvalidTokenCredentials` propagation
+  // window (~2 min under full-suite parallel load) before the deploy even
+  // returns — 240s leaves no room for the destroy + gone-poll that follow.
+  { timeout: 360_000 },
 );

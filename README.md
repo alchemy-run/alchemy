@@ -25,7 +25,7 @@ const Bucket = Cloudflare.R2Bucket("bucket");
 
 export default Cloudflare.Worker(
   "api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     return {

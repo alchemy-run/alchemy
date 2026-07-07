@@ -8,7 +8,7 @@ import Agent from "./Agent.ts";
 export const Api2 = Cloudflare.Worker(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     observability: {
       enabled: true,
     },
@@ -53,7 +53,7 @@ const _____ = Effect.gen(function* () {
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     observability: {
       enabled: true,
     },
@@ -122,7 +122,7 @@ export class Api3 extends Cloudflare.Worker<
 
 export const Api3Live = Api3.make(
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     observability: {
       enabled: true,
     },

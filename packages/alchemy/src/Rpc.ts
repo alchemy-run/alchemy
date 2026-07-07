@@ -18,7 +18,7 @@ export type Rpc<Shape> = {
 
 /**
  * Recover the user's RPC `Shape` from any of the forms a caller might pass
- * to {@link toPromiseApi}:
+ * to {@link toRpcAsync}:
  *
  *   - the Worker class value's type, e.g. `typeof Backend`, which extends
  *     `Effect.Effect<Worker & Rpc<Shape>, …>`

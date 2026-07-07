@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
+import { viteBuildOutputPlugin } from "../../Bundle/Vite.ts";
 
 export const viteDev = (
   rootDir: string = process.cwd(),
@@ -37,46 +38,26 @@ export const viteBuild = (
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
 ) =>
-  Effect.promise(async () => {
-    let serverBundle: vite.Rolldown.OutputBundle | undefined;
-    let assetsDirectory: string | undefined;
-    const vite = await loadVite(rootDir);
-    const builder = await vite.createBuilder(
-      {
-        root: rootDir,
-        define: getDefine(env),
-        plugins: [
-          cloudflare(pluginOptions),
-          {
-            name: "output:ssr",
-            applyToEnvironment(environment) {
-              return environment.name === "ssr";
-            },
-            generateBundle(_outputOptions, bundle) {
-              serverBundle = bundle;
-            },
-          },
-          {
-            name: "output:client",
-            applyToEnvironment(environment) {
-              return environment.name === "client";
-            },
-            generateBundle(outputOptions) {
-              assetsDirectory = outputOptions.dir;
-            },
-          },
-        ],
-      },
-      // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
-      // Originally we used `undefined` here, but this caused the static site build to fail.
-      // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
-      null,
-    );
-    await builder.buildApp();
-    return {
-      serverBundle,
-      assetsDirectory,
-    };
+  Effect.gen(function* () {
+    const outputPlugin = yield* viteBuildOutputPlugin({
+      entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
+    });
+    yield* Effect.promise(async () => {
+      const vite = await loadVite(rootDir);
+      const builder = await vite.createBuilder(
+        {
+          root: rootDir,
+          define: getDefine(env),
+          plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
+        },
+        // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
+        // Originally we used `undefined` here, but this caused the static site build to fail.
+        // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
+        null,
+      );
+      await builder.buildApp();
+    });
+    return yield* outputPlugin.output;
   });
 
 // Emulate `vite build` env semantics for `props.env`: only

@@ -9,7 +9,7 @@ import { writeRoutes } from "./write-routes.ts";
 /** Read + write access via the native Worker binding (`ReadWriteNamespaceBinding`). */
 export default class KVReadWriteBindingWorker extends Cloudflare.Worker<KVReadWriteBindingWorker>()(
   "KVReadWriteBindingWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const namespace = yield* TestNamespace;
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(namespace);

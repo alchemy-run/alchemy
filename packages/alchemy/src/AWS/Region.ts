@@ -21,8 +21,15 @@ export const fromEnvOrElse = (region: string) =>
     Effect.succeed(process.env.AWS_REGION ?? region),
   );
 
-export const CurrentRegion = AWSEnvironment.use((env) =>
-  Effect.flatMap(env, ({ region }) => Effect.succeed(region)),
+// Deferred with `Effect.suspend` so it does not dereference `AWSEnvironment`
+// during module evaluation. `Region.ts` and `Environment.ts` are part of an
+// import cycle (AuthProvider → Region → Environment → AuthProvider); touching
+// `AWSEnvironment` eagerly at top level hits a temporal-dead-zone error when
+// this module is evaluated mid-cycle.
+export const CurrentRegion = Effect.suspend(() =>
+  AWSEnvironment.use((env) =>
+    Effect.flatMap(env, ({ region }) => Effect.succeed(region)),
+  ),
 );
 
 /**

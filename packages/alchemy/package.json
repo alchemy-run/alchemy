@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.59",
+  "version": "2.0.0-beta.60",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -27,6 +27,7 @@
     "bundle:watch": "tsdown --watch",
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",
     "test": "vitest run",
+    "test:fast": "FAST=1 vitest run",
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts",
     "nuke": "cd ../../ && bun nuke"
   },
@@ -114,6 +115,12 @@
       "bun": "./src/Bundle/index.ts",
       "worker": "./src/Bundle/index.ts",
       "import": "./lib/Bundle/index.js"
+    },
+    "./Docker": {
+      "types": "./lib/Docker/index.d.ts",
+      "bun": "./src/Docker/index.ts",
+      "worker": "./src/Docker/index.ts",
+      "import": "./lib/Docker/index.js"
     },
     "./ContentType": {
       "types": "./lib/ContentType.d.ts",
@@ -342,22 +349,30 @@
   },
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
+    "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@oxc-project/types": "^0.127.0",
+    "@tanstack/react-router": "catalog:fixtures",
+    "@tanstack/react-start": "catalog:fixtures",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "^8.11.0",
     "@types/picomatch": "^4.0.0",
     "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
     "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "catalog:fixtures",
+    "@vitejs/plugin-rsc": "catalog:fixtures",
     "better-auth": "catalog:",
     "effect": "catalog:",
     "react-devtools-core": "^7.0.1",
+    "react-dom": "catalog:fixtures",
+    "react-router": "catalog:fixtures",
     "solid-js": "catalog:",
     "tsconfig-paths": "^4.2.0",
     "tsdown": "^0.15.4",
@@ -365,6 +380,7 @@
     "typescript": "catalog:",
     "uuid": "catalog:",
     "vitest": "catalog:",
+    "wrangler": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {

@@ -20,6 +20,8 @@ import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
+import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
@@ -66,7 +68,9 @@ export type WorkerBindingResource =
   | Worker
   | WorkerLoader
   | VersionMetadataBinding
-  | DurableObjectLike<any>;
+  | DispatchNamespace
+  | DurableObjectLike<any>
+  | WorkflowLike<any>;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;

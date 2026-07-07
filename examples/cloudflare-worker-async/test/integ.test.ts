@@ -37,6 +37,10 @@ test(
     const body = yield* response.text;
     expect(body).toBe("SOME_API_KEY");
   }),
+  // `getWhenReady` rides out the edge cold-start window with exponential
+  // backoff (up to 20 attempts), which routinely exceeds bun's default 5s
+  // test timeout on a fresh workers.dev URL. Match the other HTTP cases.
+  { timeout: 120_000 },
 );
 
 /**

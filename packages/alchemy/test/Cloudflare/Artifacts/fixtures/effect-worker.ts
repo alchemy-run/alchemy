@@ -14,7 +14,7 @@ import { artifactsRoutes } from "./routes.ts";
  */
 export default class ArtifactsEffectWorker extends Cloudflare.Worker<ArtifactsEffectWorker>()(
   "ArtifactsEffectWorker",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const repos = yield* Repos;
     const client = yield* Cloudflare.Artifacts.ReadWriteNamespace(repos);

@@ -48,7 +48,8 @@ export type ProviderServices =
   | ProviderCollectionLike
   | Provider<any>
   | EnvironmentLike
-  | CredentialsLike;
+  | CredentialsLike
+  | DockerLike;
 
 // tagged type to allow types like AWSEnvironment/AWS Region to bubble through
 export interface EnvironmentLike {
@@ -58,6 +59,10 @@ export interface EnvironmentLike {
 // tagged type to allow types like AWS Credentials to bubble through
 export interface CredentialsLike {
   readonly kind: "Credentials";
+}
+
+export interface DockerLike {
+  readonly key: "@alchemy/Docker";
 }
 
 export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
@@ -352,10 +357,13 @@ export const evalStack = <A, B, StackErr, Err, Req>(
         Effect.serviceOption(AuthProviders).pipe(
           Effect.map(Option.getOrElse(() => ({}))),
         ),
+      ).pipe(
+        Layer.provideMerge(Layer.succeed(Stage, options.stage)),
+        Layer.provideMerge(
+          Layer.provideMerge(alchemy({ dev: options.dev }), platform),
+        ),
       ),
     ),
-    Effect.provide(Layer.succeed(Stage, options.stage)),
-    Effect.provide(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
   );
 
   return options.scope === undefined

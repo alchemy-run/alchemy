@@ -21,6 +21,8 @@ import { isQueue } from "../Queues/Queue.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
+import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { isAssets } from "./Assets.ts";
 import { isBrowser } from "./Browser.ts";
 import { isDurableObjectLike } from "./DurableObject.ts";
@@ -64,6 +66,20 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             ? getHyperdriveDevOrigin(binding)
             : undefined,
         });
+
+        // A locally-hosted Workflow (no `scriptName`) must be registered with
+        // Cloudflare via `putWorkflow` once the host Worker exists. Cross-script
+        // references (with `scriptName`) are reference-only — the host owns the
+        // workflow resource. `scriptName: resource.workerName` makes the
+        // WorkflowResource depend on the Worker so it reconciles afterwards.
+        if (isWorkflowLike(binding) && !binding.scriptName) {
+          const workflowName = binding.workflowName ?? binding.name;
+          yield* WorkflowResource(workflowName, {
+            workflowName,
+            className: binding.className ?? binding.name,
+            scriptName: resource.workerName,
+          });
+        }
       } else {
         return yield* Effect.die(`Unknown binding type: ${bindingName}`);
       }
@@ -155,6 +171,14 @@ const toBinding = (
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
     };
+  } else if (isWorkflowLike(binding)) {
+    return {
+      type: "workflow",
+      name: bindingName,
+      workflowName: binding.workflowName ?? binding.name,
+      className: binding.className ?? binding.name,
+      scriptName: binding.scriptName,
+    };
   } else if (isDatabase(binding)) {
     return {
       type: "d1",
@@ -183,6 +207,12 @@ const toBinding = (
       type: "queue",
       name: bindingName,
       queueName: binding.queueName,
+    };
+  } else if (isDispatchNamespace(binding)) {
+    return {
+      type: "dispatch_namespace",
+      name: bindingName,
+      namespace: binding.name,
     };
   } else if (isAiGateway(binding)) {
     return {
@@ -254,3 +284,21 @@ const toBinding = (
 export const getCronBindings = (
   bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
 ) => Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
+
+/**
+ * Merge the Workers Cache settings contributed by `yield* Cloudflare.cache()`
+ * bindings. Commutative: the cache is enabled (and cross-version) if any
+ * contributor asked for it.
+ */
+export const getCacheBinding = (
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+) => {
+  const configs = bindings.flatMap((b) => (b.data.cache ? [b.data.cache] : []));
+  if (configs.length === 0) {
+    return undefined;
+  }
+  return {
+    enabled: configs.some((c) => c.enabled),
+    crossVersionCache: configs.some((c) => c.crossVersionCache) || undefined,
+  };
+};

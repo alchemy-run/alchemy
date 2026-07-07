@@ -68,7 +68,7 @@ const expectGone = (accountId: string, variantId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update in place, and delete a variant",
   (stack) =>
     Effect.gen(function* () {

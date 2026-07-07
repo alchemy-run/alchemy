@@ -4,6 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Redacted } from "effect/Redacted";
 import type * as Stream from "effect/Stream";
 import type { Rpc } from "../../Rpc.ts";
+import type { WorkflowLike } from "../Workflows/Workflow.ts";
 // NOTE: import the service modules directly rather than `import * as Cloudflare
 // from "../index.ts"`. Importing the whole Cloudflare barrel here creates a
 // circular re-export when the barrel does `export * from "./Workers/index.ts"`
@@ -20,6 +21,7 @@ import type * as ImagesNs from "../Images/index.ts";
 import type * as KV from "../KV/index.ts";
 import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
+import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { Assets } from "./Assets.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
@@ -53,41 +55,50 @@ export type GetBindingType<T> =
               ? R2Bucket
               : T extends KV.Namespace
                 ? KVNamespace
-                : T extends Queues.Queue
-                  ? Queue<unknown>
-                  : T extends AI.Gateway
-                    ? Ai
-                    : T extends AI.Search
-                      ? AiSearchInstance
-                      : T extends AI.SearchNamespace
-                        ? AiSearchNamespace
-                        : T extends Email.SendEmail
-                          ? SendEmail
-                          : T extends AnalyticsEngine.Dataset
-                            ? AnalyticsEngineDataset
-                            : T extends ArtifactsNs.Namespace
-                              ? Artifacts
-                              : T extends RateLimitBinding
-                                ? RateLimit
-                                : T extends ImagesNs.ImagesBinding
-                                  ? ImagesBinding
-                                  : T extends BrowserBinding
-                                    ? BrowserRun
-                                    : T extends HyperdriveNs.Connection
-                                      ? Hyperdrive
-                                      : T extends VersionMetadataBinding
-                                        ? WorkerVersionMetadata
-                                        : T extends WorkerLoaderResource
-                                          ? WorkerLoader
-                                          : T extends DurableObjectLike
-                                            ? DurableObjectNamespace<
-                                                Exclude<T["Shape"], undefined>
-                                              >
-                                            : T extends Redacted<any>
-                                              ? // redacteds are always stored as secret_text, so are always string
-                                                // we JSON.stringify when not a Redacted<string>
-                                                string
-                                              : T;
+                : T extends DispatchNamespaceResource
+                  ? DispatchNamespace
+                  : T extends Queues.Queue
+                    ? Queue<unknown>
+                    : T extends AI.Gateway
+                      ? Ai
+                      : T extends AI.Search
+                        ? AiSearchInstance
+                        : T extends AI.SearchNamespace
+                          ? AiSearchNamespace
+                          : T extends Email.SendEmail
+                            ? SendEmail
+                            : T extends AnalyticsEngine.Dataset
+                              ? AnalyticsEngineDataset
+                              : T extends ArtifactsNs.Namespace
+                                ? Artifacts
+                                : T extends RateLimitBinding
+                                  ? RateLimit
+                                  : T extends ImagesNs.ImagesBinding
+                                    ? ImagesBinding
+                                    : T extends BrowserBinding
+                                      ? BrowserRun
+                                      : T extends HyperdriveNs.Connection
+                                        ? Hyperdrive
+                                        : T extends VersionMetadataBinding
+                                          ? WorkerVersionMetadata
+                                          : T extends WorkerLoaderResource
+                                            ? WorkerLoader
+                                            : T extends WorkflowLike<
+                                                  infer Params
+                                                >
+                                              ? Workflow<Params>
+                                              : T extends DurableObjectLike
+                                                ? DurableObjectNamespace<
+                                                    Exclude<
+                                                      T["Shape"],
+                                                      undefined
+                                                    >
+                                                  >
+                                                : T extends Redacted<any>
+                                                  ? // redacteds are always stored as secret_text, so are always string
+                                                    // we JSON.stringify when not a Redacted<string>
+                                                    string
+                                                  : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
@@ -98,7 +109,7 @@ export type GetBindingType<T> =
  * shape and re-introduced via `Service` so callers get the standard
  * `(input, init?) => Promise<Response>` signature.
  *
- * Use {@link toPromiseApi} to wrap a binding into a Promise<T>-flavored view
+ * Use {@link toRpcAsync} to wrap a binding into a Promise<T>-flavored view
  * where envelopes are decoded for you.
  */
 export type RpcWireShape<Shape> = {

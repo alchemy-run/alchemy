@@ -3,6 +3,7 @@ import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -79,63 +80,80 @@ test(
   "workflow body can access WorkerEnvironment and exercise env bindings",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const roomId = `smoke-${Date.now()}`;
 
-    // Start the workflow instance.
-    const startResponse = yield* Effect.tryPromise({
-      try: () => fetch(`${url}/workflow/start/${roomId}`, { method: "POST" }),
-      catch: (cause) =>
-        cause instanceof Error ? cause : new Error(String(cause)),
-    });
-    expect(startResponse.status).toBe(200);
-
-    const { instanceId } = yield* Effect.tryPromise({
-      try: () => startResponse.json() as Promise<{ instanceId: string }>,
-      catch: (cause) =>
-        cause instanceof Error ? cause : new Error(String(cause)),
-    });
-    expect(instanceId).toBeString();
-
-    // Poll status until complete / errored / timeout (~60s).
-    const deadline = Date.now() + 60_000;
-    let lastStatus:
-      | { status: string; output?: unknown; error?: unknown }
-      | undefined;
-    while (Date.now() < deadline) {
-      const statusResponse = yield* Effect.tryPromise({
-        try: () => fetch(`${url}/workflow/status/${instanceId}`),
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
-      });
-      expect(statusResponse.status).toBe(200);
-      lastStatus = yield* Effect.tryPromise({
-        try: () =>
-          statusResponse.json() as Promise<{
-            status: string;
-            output?: unknown;
-            error?: unknown;
-          }>,
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
-      });
-      if (lastStatus.status === "complete" || lastStatus.status === "errored") {
-        break;
-      }
-      yield* Effect.sleep("2 seconds");
+    interface WorkflowStatus {
+      status: string;
+      output?: { secret?: string };
+      error?: unknown;
     }
 
-    // The workflow must have completed — if WorkerEnvironment provision breaks,
-    // the body dies on the first yield and the instance never reaches complete.
-    expect(lastStatus).toBeDefined();
-    expect(lastStatus!.status).toBe("complete");
-    expect(lastStatus!.error).toBeFalsy();
+    // Start a fresh workflow instance and poll it to a terminal state. A
+    // freshly-deployed worker occasionally errors a step while its bindings
+    // are still propagating, so this effect FAILS on any non-complete
+    // terminal state, letting the outer retry take another swing with a
+    // brand-new instance rather than flaking on a transient `errored`.
+    const runOnce = Effect.gen(function* () {
+      const roomId = `smoke-${Date.now()}`;
+
+      // A freshly-deployed worker transiently 404s (route still propagating)
+      // or 5xxs (bindings still settling) on the workflow routes, so retry
+      // through the cold-start window instead of asserting `200` on the first
+      // hit. Only a non-cold-start status reaches the `expect` below.
+      const startResponse = yield* executeWhenReady(
+        HttpClientRequest.post(`${url}/workflow/start/${roomId}`),
+      );
+      expect(startResponse.status).toBe(200);
+
+      const { instanceId } = (yield* startResponse.json) as {
+        instanceId: string;
+      };
+      expect(instanceId).toBeString();
+
+      const client = yield* HttpClient.HttpClient;
+      const lastStatus = yield* client
+        .get(`${url}/workflow/status/${instanceId}`)
+        .pipe(
+          // Only decode JSON on a 200; a transient 5xx (HTML error page) while
+          // the worker settles is treated as non-terminal so the poll keeps
+          // swinging instead of dying on a JSON decode error.
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? (res.json as Effect.Effect<unknown, unknown>).pipe(
+                  Effect.map((body) => body as WorkflowStatus),
+                )
+              : Effect.succeed({ status: "pending" } as WorkflowStatus),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (s) => s.status === "complete" || s.status === "errored",
+            times: 30,
+          }),
+        );
+
+      // Surface a non-complete terminal state as a failure so the outer retry
+      // can restart with a fresh instance.
+      if (lastStatus.status !== "complete") {
+        return yield* Effect.fail(
+          new Error(
+            `workflow ${lastStatus.status}: ${JSON.stringify(lastStatus.error)}`,
+          ),
+        );
+      }
+      return lastStatus;
+    });
+
+    const lastStatus = yield* runOnce.pipe(
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
+    );
+
+    expect(lastStatus.status).toBe("complete");
+    expect(lastStatus.error).toBeFalsy();
 
     // Prove the `Alchemy.Secret(...)` bound at plantime made it all the
     // way through to the workflow body's runtime read. The workflow body
     // unwraps `Redacted.value(secret)` and embeds it in the returned
     // `processed` payload.
-    const output = lastStatus!.output as { secret?: string } | undefined;
-    expect(output?.secret).toBe(Redacted.value(WORKFLOW_SECRET_VALUE));
+    expect(lastStatus.output?.secret).toBe(Redacted.value(WORKFLOW_SECRET_VALUE));
   }),
   { timeout: 120_000 },
 );

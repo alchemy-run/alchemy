@@ -36,7 +36,7 @@ import type { Zone } from "../Zone/Zone.ts";
  *
  * export class ReadDnserWorker extends Cloudflare.Worker<ReadDnserWorker>()(
  *   "ReadDnserWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     // Init phase — bind the read client scoped to the zone.
  *     const dns = yield* Cloudflare.DNS.ReadDns(Zone);

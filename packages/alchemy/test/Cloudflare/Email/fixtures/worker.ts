@@ -7,7 +7,7 @@ import { Email } from "./sender.ts";
 export default class SendEmailWorker extends Cloudflare.Worker<SendEmailWorker>()(
   "SendEmailTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const email = yield* Cloudflare.Email.Send(Email);

@@ -32,7 +32,7 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  *
  * export class Worker extends Cloudflare.Worker<Worker>()(
  *   "Worker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     // Init phase — bind the full CRUD client scoped to the zone.
  *     const dns = yield* Cloudflare.DNS.ReadWriteDns(Zone);

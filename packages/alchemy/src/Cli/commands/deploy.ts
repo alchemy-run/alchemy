@@ -89,6 +89,9 @@ export const execStack = Effect.fn(function* ({
           ...ctx,
           dev,
           adopt,
+          // `--yes` also auto-accepts (and performs) an out-of-date state
+          // store upgrade, instead of prompting.
+          updateStateStore: yes,
         })),
       ),
     ),
@@ -174,7 +177,7 @@ export const execStack = Effect.fn(function* ({
         }
 
         if (dev) {
-          yield* Effect.never;
+          return yield* Effect.never;
         }
       }
     }).pipe(Effect.provide(stack.services));
