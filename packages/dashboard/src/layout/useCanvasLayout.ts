@@ -21,6 +21,7 @@ import {
   getPositionMemory,
   getPositions,
   setPositions,
+  useLayoutEpoch,
   usePositions,
   useStructuralHash,
   type XY,
@@ -185,6 +186,7 @@ export interface CanvasLayout {
 
 export const useCanvasLayout = (): CanvasLayout => {
   const hash = useStructuralHash();
+  const layoutEpoch = useLayoutEpoch();
 
   // Structure content (fqn set + edge set incl. kinds) is fully covered by
   // the hash, so these derive-once memos key on the hash alone and read the
@@ -201,22 +203,27 @@ export const useCanvasLayout = (): CanvasLayout => {
 
   const cached = usePositions(hash);
 
-  // Resolve positions whenever the structural hash changes.
+  // Resolve positions whenever the structural hash (or layout epoch)
+  // changes.
   //
-  // Position CONTINUITY is the only rule: if any node of the hash already
-  // has a home (the per-node position memory — fed by ELK results, drags,
-  // seeds, and restored session layouts), those coordinates are kept
-  // VERBATIM and only genuine newcomers get neighbor-seeded. The seed is
-  // recomputed even for a hash seen earlier this session, so returning to
-  // a previous shape honors drags made since. ELK runs only when nothing
-  // has a position yet (the first layout of a stage) — a structural
-  // change can never morph the topology the user is watching.
+  // Position CONTINUITY rules: when memory (fed by ELK results, drags,
+  // seeds, and restored session layouts) covers the graph well, known
+  // coordinates are kept VERBATIM and only the few genuine newcomers get
+  // neighbor-seeded — a structural change cannot morph the topology the
+  // user is watching. The seed is recomputed even for a hash seen earlier
+  // this session, so returning to a previous shape honors drags made
+  // since. When memory coverage is POOR (a fresh stage, or most of the
+  // graph is new), neighbor-seeding would produce a tangled cascade — run
+  // a full ELK layout instead. The explicit re-layout control clears all
+  // position state and lands here too.
   useEffect(() => {
     if (structure.fqns.length === 0) {
       return;
     }
     const memory = getPositionMemory();
-    if (structure.fqns.some((fqn) => memory.has(fqn))) {
+    const known = structure.fqns.filter((fqn) => memory.has(fqn)).length;
+    const missing = structure.fqns.length - known;
+    if (known > 0 && (missing === 0 || (missing <= 2 && known >= missing))) {
       setPositions(
         hash,
         seedPositions(structure.fqns, structure.visualEdges, memory),
@@ -231,7 +238,7 @@ export const useCanvasLayout = (): CanvasLayout => {
       .catch((error: unknown) => {
         console.error("[dashboard] elk layout failed", error);
       });
-  }, [hash, structure]);
+  }, [hash, structure, layoutEpoch]);
 
   // The coordinates currently on screen — the seed source when the next
   // hash appears before its layout lands.
