@@ -311,10 +311,8 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
  * dynamic worker) must survive as `null` — `?.raw` alone would coerce it to
  * `undefined`, which the runtime treats as "default outbound", silently
  * re-enabling network access for workers meant to be sandboxed (#746).
- *
- * @internal exported for unit testing.
  */
-export const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
+const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
   ...loader,
   globalOutbound:
     loader.globalOutbound === null ? null : loader.globalOutbound?.raw,
