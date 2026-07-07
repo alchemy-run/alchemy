@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
@@ -148,6 +149,66 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   // in Stream.toReadableStream and crash the process on exit with
   // "All fibers interrupted without error".
   const closed = yield* Deferred.make<void>();
+
+  /**
+   * SSE bodies are converted to web ReadableStreams by a pump fiber WE
+   * fork, detached from the serve scope, and handed to Bun as a raw
+   * `Response`. The platform's Stream-body path parks its driver fiber in
+   * the serve scope, whose close runs in PARALLEL with our finalizers —
+   * so it interrupts in-flight bodies before the `closed` latch can halt
+   * them, and `Stream.toReadableStream` reports the interruption as
+   * `controller.error(...)`, crashing the process on exit. Here nothing
+   * ever interrupts the pump (it ends via the latch or client cancel) and
+   * an interrupt exit maps to a clean close.
+   */
+  const sseReadable = (
+    make: Effect.Effect<Stream.Stream<string>, never, Scope.Scope>,
+  ): ReadableStream<Uint8Array> => {
+    const encoder = new TextEncoder();
+    let fiber: Fiber.Fiber<void, unknown> | undefined;
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        fiber = Effect.runFork(
+          Effect.scoped(
+            Effect.flatMap(make, (stream) =>
+              Stream.runForEach(stream, (chunk) =>
+                Effect.sync(() => controller.enqueue(encoder.encode(chunk))),
+              ),
+            ),
+          ),
+        );
+        fiber.addObserver((exit) => {
+          try {
+            if (
+              exit._tag === "Failure" &&
+              !Cause.hasInterruptsOnly(exit.cause)
+            ) {
+              controller.error(Cause.squash(exit.cause));
+            } else {
+              controller.close();
+            }
+          } catch {
+            // the response was already cancelled/closed — nothing to report
+          }
+        });
+      },
+      cancel() {
+        if (fiber !== undefined) {
+          return Effect.runPromise(Effect.asVoid(Fiber.interrupt(fiber))).catch(
+            () => undefined,
+          );
+        }
+      },
+    });
+  };
+
+  const SSE_OPTIONS = {
+    contentType: "text/event-stream",
+    headers: {
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    },
+  };
 
   // ── scene inputs (server-owned, single source of truth) ───────────────
   let revision = 0;
@@ -540,19 +601,21 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       return yield* HttpServerResponse.json(scene);
     }
     if (route === "/api/events") {
-      // SSE: subscribe first, then snapshot, so nothing is lost in between.
-      // Heartbeat comments defeat idle timeouts (Bun.serve kills responses
-      // idle for >10s); EventSource ignores `:` lines.
-      const body = Stream.unwrap(
+      // SSE: subscribe first (inside the pump, so the subscription lives
+      // exactly as long as the response), then snapshot, so nothing is
+      // lost in between. Heartbeat comments defeat idle timeouts
+      // (Bun.serve kills responses idle for >10s); EventSource ignores
+      // `:` lines.
+      yield* notifyClientConnected;
+      const scene = yield* buildScene(stage);
+      // the SPA's default view loads exclusively over this stream — kick
+      // the structure/plan evaluation here, or a fresh dashboard would
+      // wait forever for a /api/scene request that never comes
+      yield* requestPlan(stage);
+      sseClients++;
+      const body = sseReadable(
         Effect.gen(function* () {
-          yield* notifyClientConnected;
-          sseClients++;
           const subscription = yield* PubSub.subscribe(pubsub);
-          const scene = yield* buildScene(stage);
-          // the SPA's default view loads exclusively over this stream —
-          // kick the structure/plan evaluation here, or a fresh dashboard
-          // would wait forever for a /api/scene request that never comes
-          yield* requestPlan(stage);
           const heartbeat = Stream.fromSchedule(
             Schedule.spaced("8 seconds"),
           ).pipe(Stream.map(() => ":ping\n\n"));
@@ -570,14 +633,8 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
             ),
           );
         }),
-      ).pipe(Stream.map((chunk) => new TextEncoder().encode(chunk)));
-      return HttpServerResponse.stream(body, {
-        contentType: "text/event-stream",
-        headers: {
-          "cache-control": "no-cache",
-          connection: "keep-alive",
-        },
-      });
+      );
+      return HttpServerResponse.raw(new Response(body), SSE_OPTIONS);
     }
 
     // ── v2: incremental document + patch protocol + history ────────────
@@ -590,13 +647,13 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       // SSE: one `snapshot` frame, then debounced `patches` frames.
       // Heartbeat comments defeat idle timeouts (same idiom as v1's
       // /api/events — Bun.serve kills responses idle for >10s).
-      const body = Stream.unwrap(
+      yield* notifyClientConnected;
+      const host = yield* hostFor(stg);
+      yield* requestPlan(stg);
+      sseClients++;
+      const body = sseReadable(
         Effect.gen(function* () {
-          yield* notifyClientConnected;
-          sseClients++;
-          const host = yield* hostFor(stg);
           const frames = yield* host.frames;
-          yield* requestPlan(stg);
           const heartbeat = Stream.fromSchedule(
             Schedule.spaced("8 seconds"),
           ).pipe(Stream.map(() => ":ping\n\n"));
@@ -611,14 +668,8 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
             ),
           );
         }),
-      ).pipe(Stream.map((chunk) => new TextEncoder().encode(chunk)));
-      return HttpServerResponse.stream(body, {
-        contentType: "text/event-stream",
-        headers: {
-          "cache-control": "no-cache",
-          connection: "keep-alive",
-        },
-      });
+      );
+      return HttpServerResponse.raw(new Response(body), SSE_OPTIONS);
     }
     if (route === "/api/v2/deployments") {
       const deployments = state.deployments;
@@ -764,10 +815,10 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
 
   yield* server.serve(handler);
 
-  // Registered AFTER server.serve so it runs BEFORE the serve finalizer
-  // (LIFO): live SSE responses end cleanly, their connections close, and
-  // Bun's graceful `server.stop()` completes immediately instead of
-  // interrupting in-flight response fibers.
+  // Fire the shutdown latch on scope close: the detached SSE pumps halt,
+  // their responses end cleanly, connections drain, and Bun's graceful
+  // `server.stop()` can complete. Without this the pumps (which nothing
+  // interrupts by design) would hold their connections open forever.
   yield* Effect.addFinalizer(() => Deferred.succeed(closed, void 0));
 
   // plan worker: computes plans sequentially on the server's scope and

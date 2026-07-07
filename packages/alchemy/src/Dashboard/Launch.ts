@@ -289,6 +289,15 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
           gracefulShutdownTimeout: "2 seconds",
         }),
       ),
+      // Bun's graceful stop() waits for the browser's idle keep-alive
+      // connections; when the 2s cap above fires, the timeout INTERRUPTS
+      // the cached shutdown effect and the HTTP layer's own finalizer then
+      // re-raises that interrupt as the region's failure ("All fibers
+      // interrupted without error"). That teardown artifact is not an
+      // error — swallow interrupt-only causes, let real ones through.
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.failCause(cause),
+      ),
     );
   }).pipe(Effect.provide(servicesFor(stage)), Effect.scoped);
 });
