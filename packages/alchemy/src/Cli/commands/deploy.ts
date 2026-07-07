@@ -137,28 +137,16 @@ export const execStack = Effect.fn(function* ({
   let launchedDashboard = false;
   if (ui) {
     yield* Dashboard.requireDistDir();
-    const openUnlessConnected = (url: string, clients: number) =>
-      clients > 0
-        ? // a tab is already attached — raise it instead of opening a
-          // duplicate (best-effort, forked so a macOS automation-permission
-          // prompt can never stall the deploy)
-          Console.log("  (existing dashboard tab is connected)").pipe(
-            Effect.andThen(
-              Effect.forkScoped(
-                Clank.focusUrl(url).pipe(
-                  Effect.catch(() => Effect.succeed(false)),
-                ),
-              ),
-            ),
-            Effect.asVoid,
-          )
-        : Clank.openUrl(url).pipe(Effect.catch(() => Effect.void));
+    // Opening is always safe: the SPA runs a same-origin BroadcastChannel
+    // takeover, so the freshly opened tab supersedes (closes) any older
+    // dashboard tab — the OS focuses the browser natively, no duplicate
+    // tabs accumulate, and no browser automation is needed.
     const existing = yield* Discovery.discover().pipe(
       Effect.orElseSucceed(() => undefined),
     );
     if (existing !== undefined) {
       dashboardUrl = existing.url;
-      yield* openUnlessConnected(existing.url, existing.clients);
+      yield* Clank.openUrl(existing.url).pipe(Effect.catch(() => Effect.void));
     } else {
       let port = Discovery.stablePort(stackEffect.stackName);
       const probe = yield* Discovery.probePort(port, stackEffect.stackName);
@@ -166,7 +154,7 @@ export const execStack = Effect.fn(function* ({
         // a dashboard from a previous run is still serving (its
         // advertisement was lost) — reuse it rather than failing to bind
         dashboardUrl = probe.url;
-        yield* openUnlessConnected(probe.url, probe.clients);
+        yield* Clank.openUrl(probe.url).pipe(Effect.catch(() => Effect.void));
       } else {
         if (probe.kind === "foreign") {
           // something else owns the stable port — fall back to a random one

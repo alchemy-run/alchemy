@@ -23,11 +23,6 @@ const advertisementFile = Effect.gen(function* () {
   return path.join(process.cwd(), ".alchemy", "dashboard.json");
 });
 
-const breadcrumbFile = Effect.gen(function* () {
-  const path = yield* Path.Path;
-  return path.join(process.cwd(), ".alchemy", "dashboard.last.json");
-});
-
 /**
  * Deterministic per-project dashboard port (42000–42999): every `--ui` run
  * of the same project lands on the SAME origin, so a browser tab from a
@@ -43,29 +38,6 @@ export const stablePort = (stack: string): number => {
   }
   return 42000 + ((hash >>> 0) % 1000);
 };
-
-/**
- * The last shutdown's breadcrumb, if any — a hint that a browser tab from
- * a previous run probably still exists and will reconnect to the stable
- * port, so the launcher should wait longer before opening a new tab.
- */
-export const lastAdvertised = Effect.fn(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const file = yield* breadcrumbFile;
-  const content = yield* fs
-    .readFileString(file)
-    .pipe(Effect.orElseSucceed(() => undefined));
-  if (content === undefined) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(content) as DashboardAdvertisement & {
-      stoppedAt: string;
-    };
-  } catch {
-    return undefined;
-  }
-});
 
 /** Shape of the dashboard's /api/health response. */
 interface HealthBody {
@@ -140,23 +112,8 @@ export const advertise = Effect.fn(function* (
     startedAt: new Date().toISOString(),
   };
   yield* fs.writeFileString(file, JSON.stringify(payload, null, 2));
-  const breadcrumb = yield* breadcrumbFile;
   yield* Effect.addFinalizer(() =>
-    Effect.gen(function* () {
-      yield* fs.remove(file).pipe(Effect.orElseSucceed(() => undefined));
-      // breadcrumb: a previous-tab hint for the next launch (see
-      // `lastAdvertised`)
-      yield* fs
-        .writeFileString(
-          breadcrumb,
-          JSON.stringify(
-            { ...payload, stoppedAt: new Date().toISOString() },
-            null,
-            2,
-          ),
-        )
-        .pipe(Effect.orElseSucceed(() => undefined));
-    }),
+    fs.remove(file).pipe(Effect.orElseSucceed(() => undefined)),
   );
 });
 
