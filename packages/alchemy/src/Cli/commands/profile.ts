@@ -16,14 +16,12 @@ import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
 import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
-import { Stack } from "../../Stack.ts";
-import { Stage } from "../../Stage.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
+  buildStackProviders,
   envFile,
-  importStack,
   instrumentCommand,
   printProfile,
   profile,
@@ -73,44 +71,29 @@ export const collectAuthProviders = Effect.fn("collectAuthProviders")(
     profile: string;
   }) {
     const authProviders: AuthProviders["Service"] = {};
-    const base = Layer.mergeAll(
-      Layer.succeed(AuthProviders, authProviders),
-      ConfigProvider.layer(
-        withProfileOverride(
-          yield* loadConfigProvider(options.envFile),
-          options.profile,
-        ),
-      ),
-      Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-    );
 
     // 1. Built-in providers first (baseline).
-    yield* Layer.build(Layer.provide(builtinAuth, base));
-
-    // 2. The user's own providers() layer on top — same-named providers
-    //    override the built-ins. Best-effort: swallow load/build failures
-    //    (including a missing entrypoint) so display still works.
-    yield* Effect.gen(function* () {
-      const stackEffect = yield* importStack(options.main);
-      yield* Layer.build(
-        (stackEffect.providers ?? Layer.empty).pipe(
-          Layer.provideMerge(stackEffect.state ?? Layer.empty),
-          Layer.provideMerge(
-            Layer.mergeAll(
-              base,
-              Layer.succeed(Stage, "placeholder"),
-              Layer.succeed(Stack, {
-                actions: {},
-                bindings: {},
-                name: stackEffect.stackName,
-                resources: {},
-                stage: "placeholder",
-              }),
+    yield* Layer.build(
+      Layer.provide(
+        builtinAuth,
+        Layer.mergeAll(
+          Layer.succeed(AuthProviders, authProviders),
+          ConfigProvider.layer(
+            withProfileOverride(
+              yield* loadConfigProvider(options.envFile),
+              options.profile,
             ),
           ),
+          Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
         ),
-      );
-    }).pipe(
+      ),
+    );
+
+    // 2. The user's own providers() layer on top — building into the same
+    //    registry overrides the built-ins by name. Best-effort: swallow
+    //    load/build failures (including a missing entrypoint) so display
+    //    still works with just the built-ins.
+    yield* buildStackProviders({ ...options, registry: authProviders }).pipe(
       Effect.catchCause((cause) =>
         Effect.logDebug("profile show: could not load user stack providers", {
           cause,
