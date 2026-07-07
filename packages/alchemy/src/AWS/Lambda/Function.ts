@@ -51,6 +51,10 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
@@ -159,6 +163,14 @@ export interface FunctionProps extends PlatformProps {
    * Omit to remove the function-level reserved concurrency limit.
    */
   reservedConcurrentExecutions?: number;
+  /**
+   * Asynchronous invocation settings (retries, event age, destinations) for
+   * the unqualified function. Omit to remove any existing config and fall
+   * back to Lambda's defaults (2 retries, 6-hour max event age, no
+   * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
+   * config to an alias instead.
+   */
+  eventInvokeConfig?: EventInvokeConfig;
 }
 
 /**
@@ -380,6 +392,22 @@ const matchesConfiguredExternal = (
  *   vpc: {
  *     subnetIds: ["subnet-abc123", "subnet-def456"],
  *     securityGroupIds: ["sg-xyz789"],
+ *   },
+ * });
+ * ```
+ *
+ * @example Async invocation retries and failure destination
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("AsyncFunction", {
+ *   main: "./src/handler.ts",
+ *   eventInvokeConfig: {
+ *     maximumRetryAttempts: 0,
+ *     maximumEventAgeInSeconds: 60,
+ *     destinationConfig: {
+ *       OnFailure: {
+ *         Destination: queue.queueArn,
+ *       },
+ *     },
  *   },
  * });
  * ```
@@ -1666,6 +1694,11 @@ export default await Effect.runPromise(handlerEffect)
               functionName,
               reservedConcurrentExecutions: news.reservedConcurrentExecutions,
             });
+
+          yield* syncEventInvokeConfig({
+            functionName,
+            config: news.eventInvokeConfig,
+          });
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,

@@ -1,28 +1,32 @@
 import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { fileURLToPath } from "node:url";
 
-const timeoutHandlerPath = new URL("./timeout-handler.ts", import.meta.url)
-  .pathname;
+const timeoutHandlerPath = fileURLToPath(
+  new URL("./timeout-handler.ts", import.meta.url),
+);
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 test.provider(
-  "create, update, list, delete event invoke config",
+  "syncs event invoke config on function and alias",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const program = ({
-        maximumRetryAttempts,
-        maximumEventAgeInSeconds,
+        functionConfig,
+        alias,
       }: {
-        maximumRetryAttempts?: number;
-        maximumEventAgeInSeconds?: number;
+        functionConfig?: AWS.Lambda.EventInvokeConfig;
+        alias?: {
+          functionVersion: string;
+          eventInvokeConfig?: AWS.Lambda.EventInvokeConfig;
+        };
       }) =>
         Effect.gen(function* () {
           const queue = yield* AWS.SQS.Queue("FailureQueue", {
@@ -34,6 +38,7 @@ test.provider(
             handler: "handler",
             isExternal: true,
             url: false,
+            eventInvokeConfig: functionConfig,
           });
 
           yield* fn.bind("AllowEventInvokeDestination", {
@@ -46,59 +51,54 @@ test.provider(
             ],
           });
 
-          const config = yield* AWS.Lambda.EventInvokeConfig("AsyncConfig", {
-            functionName: fn.functionName,
-            maximumRetryAttempts,
-            maximumEventAgeInSeconds,
-            destinationConfig: {
-              OnFailure: {
-                Destination: queue.queueArn,
-              },
-            },
-          });
+          const live = alias
+            ? yield* AWS.Lambda.Alias("LiveAlias", {
+                functionName: fn.functionName,
+                functionVersion: alias.functionVersion,
+                aliasName: "live",
+                eventInvokeConfig: alias.eventInvokeConfig,
+              })
+            : undefined;
 
-          return { fn, queue, config };
+          return { fn, queue, live };
         });
 
+      // --- create with function-level config ---
       const created = yield* stack.deploy(
         program({
-          maximumRetryAttempts: 0,
-          maximumEventAgeInSeconds: 60,
+          functionConfig: {
+            maximumRetryAttempts: 0,
+            maximumEventAgeInSeconds: 60,
+          },
         }),
       );
 
-      expect(created.config.maximumRetryAttempts).toBe(0);
-      expect(created.config.maximumEventAgeInSeconds).toBe(60);
-      expect(created.config.destinationConfig?.OnFailure?.Destination).toBe(
-        created.queue.queueArn,
-      );
-
-      const liveCreated = yield* getEventInvokeConfig(created.fn.functionName, {
+      const liveCreated = yield* expectConfig(created.fn.functionName, {
         maximumRetryAttempts: 0,
         maximumEventAgeInSeconds: 60,
-        onFailureDestination: created.queue.queueArn,
       });
       expect(liveCreated.MaximumRetryAttempts).toBe(0);
       expect(liveCreated.MaximumEventAgeInSeconds).toBe(60);
       expect(liveCreated.DestinationConfig?.OnFailure?.Destination).toBe(
-        created.queue.queueArn,
+        undefined,
       );
 
+      // --- update retry behavior and add a failure destination ---
       const updated = yield* stack.deploy(
         program({
-          maximumRetryAttempts: 1,
-          maximumEventAgeInSeconds: 120,
+          functionConfig: {
+            maximumRetryAttempts: 1,
+            maximumEventAgeInSeconds: 120,
+            destinationConfig: {
+              OnFailure: {
+                Destination: created.queue.queueArn,
+              },
+            },
+          },
         }),
       );
 
-      expect(updated.config.functionArn).toBe(created.config.functionArn);
-      expect(updated.config.maximumRetryAttempts).toBe(1);
-      expect(updated.config.maximumEventAgeInSeconds).toBe(120);
-      expect(updated.config.destinationConfig?.OnFailure?.Destination).toBe(
-        created.queue.queueArn,
-      );
-
-      const liveUpdated = yield* getEventInvokeConfig(updated.fn.functionName, {
+      const liveUpdated = yield* expectConfig(updated.fn.functionName, {
         maximumRetryAttempts: 1,
         maximumEventAgeInSeconds: 120,
         onFailureDestination: created.queue.queueArn,
@@ -109,29 +109,59 @@ test.provider(
         created.queue.queueArn,
       );
 
-      const reset = yield* stack.deploy(program({}));
+      // --- omit the prop: the config is deleted, not left behind ---
+      const removed = yield* stack.deploy(program({}));
+      yield* expectNoConfig(removed.fn.functionName);
 
-      expect(reset.config.functionArn).toBe(created.config.functionArn);
-      expect(reset.config.maximumRetryAttempts).toBe(2);
-      expect(reset.config.maximumEventAgeInSeconds).toBe(21_600);
-      expect(reset.config.destinationConfig?.OnFailure?.Destination).toBe(
+      // --- alias-scoped config ---
+      const version = yield* publishVersion(
+        removed.fn.functionName,
+        "version 1",
+      );
+      const withAlias = yield* stack.deploy(
+        program({
+          alias: {
+            functionVersion: version,
+            eventInvokeConfig: {
+              maximumRetryAttempts: 2,
+              maximumEventAgeInSeconds: 300,
+              destinationConfig: {
+                OnFailure: {
+                  Destination: created.queue.queueArn,
+                },
+              },
+            },
+          },
+        }),
+      );
+
+      const liveAliasConfig = yield* expectConfig(
+        withAlias.fn.functionName,
+        {
+          maximumRetryAttempts: 2,
+          maximumEventAgeInSeconds: 300,
+          onFailureDestination: created.queue.queueArn,
+        },
+        withAlias.live!.aliasName,
+      );
+      expect(liveAliasConfig.MaximumRetryAttempts).toBe(2);
+      expect(liveAliasConfig.MaximumEventAgeInSeconds).toBe(300);
+      expect(liveAliasConfig.DestinationConfig?.OnFailure?.Destination).toBe(
         created.queue.queueArn,
       );
+      // The unqualified function stays unconfigured.
+      yield* expectNoConfig(withAlias.fn.functionName);
 
-      const provider = yield* Provider.findProvider(
-        AWS.Lambda.EventInvokeConfig,
+      // --- omit the alias prop: the alias-scoped config is deleted ---
+      const aliasCleared = yield* stack.deploy(
+        program({ alias: { functionVersion: version } }),
       );
-      const configs = yield* provider.list();
-      expect(
-        configs.some(
-          (config) =>
-            config.functionName === reset.fn.functionName &&
-            config.maximumRetryAttempts === 2 &&
-            config.maximumEventAgeInSeconds === 21_600 &&
-            config.destinationConfig?.OnFailure?.Destination ===
-              reset.queue.queueArn,
-        ),
-      ).toBe(true);
+      yield* expectNoConfig(
+        aliasCleared.fn.functionName,
+        aliasCleared.live!.aliasName,
+      );
+
+      yield* stack.destroy();
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -139,19 +169,35 @@ test.provider(
   { timeout: 360_000 },
 );
 
-const getEventInvokeConfig = Effect.fn(function* (
+const getConfigOrUndefined = Effect.fn(function* (
+  functionName: string,
+  qualifier?: string,
+) {
+  return yield* Lambda.getFunctionEventInvokeConfig({
+    FunctionName: functionName,
+    Qualifier: qualifier,
+  }).pipe(
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed(undefined),
+    ),
+  );
+});
+
+// Reads until the config matches the expected shape (updates propagate
+// eventually), failing after a bounded number of attempts.
+const expectConfig = Effect.fn(function* (
   functionName: string,
   expected: {
     maximumRetryAttempts: number;
     maximumEventAgeInSeconds: number;
-    onFailureDestination: string;
+    onFailureDestination?: string;
   },
+  qualifier?: string,
 ) {
-  return yield* Lambda.getFunctionEventInvokeConfig({
-    FunctionName: functionName,
-  }).pipe(
+  return yield* getConfigOrUndefined(functionName, qualifier).pipe(
     Effect.filterOrFail(
-      (config) =>
+      (config): config is Lambda.FunctionEventInvokeConfig =>
+        config !== undefined &&
         config.MaximumRetryAttempts === expected.maximumRetryAttempts &&
         config.MaximumEventAgeInSeconds === expected.maximumEventAgeInSeconds &&
         config.DestinationConfig?.OnFailure?.Destination ===
@@ -164,4 +210,43 @@ const getEventInvokeConfig = Effect.fn(function* (
       ),
     }),
   );
+});
+
+const expectNoConfig = Effect.fn(function* (
+  functionName: string,
+  qualifier?: string,
+) {
+  yield* getConfigOrUndefined(functionName, qualifier).pipe(
+    Effect.filterOrFail(
+      (config) => config === undefined,
+      () => new Error("Event invoke config removal has not propagated yet"),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+});
+
+const publishVersion = Effect.fn(function* (
+  functionName: string,
+  description: string,
+) {
+  const config = yield* Lambda.publishVersion({
+    FunctionName: functionName,
+    Description: description,
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ResourceConflictException",
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+    Effect.filterOrFail(
+      (config) => config.Version !== undefined,
+      () => new Error("Published Lambda version was missing Version."),
+    ),
+  );
+  return config.Version!;
 });
