@@ -220,9 +220,30 @@ export const make: (
   const refreshStates = () =>
     Effect.gen(function* () {
       const states = yield* readStates;
-      if (states !== undefined) {
-        yield* record(applyStates(doc, states));
+      if (states === undefined) {
+        return;
       }
+      // Nodes whose FRESH verdict this run says they exist (created,
+      // updated, replaced, ran) must survive the rebuild even when the
+      // readback misses them — remote stores are eventually consistent
+      // and can lag the writes the run just made. Deleted/retained/
+      // skipped verdicts don't protect: retiring those is the point.
+      const keep = new Set<string>();
+      const startedAt = doc.deployment?.startedAt;
+      if (startedAt !== undefined) {
+        for (const [fqn, decoration] of doc.decorations) {
+          if (
+            decoration.at >= startedAt &&
+            (decoration.applyResult === "created" ||
+              decoration.applyResult === "updated" ||
+              decoration.applyResult === "replaced" ||
+              decoration.applyResult === "ran")
+          ) {
+            keep.add(fqn);
+          }
+        }
+      }
+      yield* record(applyStates(doc, states, keep));
     });
 
   const newestRecord = Effect.gen(function* () {

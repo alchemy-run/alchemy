@@ -1,5 +1,5 @@
 import { Check, Loader2, ShieldQuestion, X } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { decideApproval } from "../ingest.ts";
 import { useApproval, useDeployment, useProjection } from "../store.ts";
 import {
@@ -39,23 +39,33 @@ export const DeploymentBanner = memo(function DeploymentBanner() {
     }
   }, [deciding, deployment?.live, approval]);
 
-  // settled flash: only on a live→ended transition seen in this session
-  const prevLive = useRef(false);
+  // Settled flash: only on a live→ended transition seen in this session.
+  // Derived DURING render (not in an effect): an effect fires after the
+  // commit, so the live→ended frame would render neither "deploying" nor
+  // "settled" — the banner unmounts for one frame and pops back in, a
+  // visible flicker. Render-phase adjustment re-renders before painting,
+  // so the shell stays mounted and the content morphs in place.
+  const live = deployment?.live === true;
+  const [prevLive, setPrevLive] = useState(live);
   const [settled, setSettled] = useState<
     { outcome: string; command: string } | undefined
   >();
-  useEffect(() => {
-    const wasLive = prevLive.current;
-    prevLive.current = deployment?.live === true;
-    if (wasLive && deployment !== undefined && deployment.live === false) {
+  if (live !== prevLive) {
+    setPrevLive(live);
+    if (!live && deployment !== undefined) {
       setSettled({
         outcome: deployment.outcome ?? "succeeded",
         command: deployment.meta.command,
       });
-      const timer = setTimeout(() => setSettled(undefined), 6000);
-      return () => clearTimeout(timer);
     }
-  }, [deployment]);
+  }
+  useEffect(() => {
+    if (settled === undefined) {
+      return;
+    }
+    const timer = setTimeout(() => setSettled(undefined), 6000);
+    return () => clearTimeout(timer);
+  }, [settled]);
 
   if (deployment?.live === true) {
     return (
