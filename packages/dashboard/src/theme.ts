@@ -67,6 +67,8 @@ export const PLAN_COLORS: Record<string, string> = {
   update: "var(--alc-warn)",
   replace: "var(--alc-danger)",
   delete: "var(--alc-danger)",
+  // tasks read as info — the same hue carries running/ran
+  run: "var(--alc-info)",
 };
 
 export const PLAN_LABELS: Record<string, string> = {
@@ -74,6 +76,7 @@ export const PLAN_LABELS: Record<string, string> = {
   update: "~ update",
   replace: "↻ replace",
   delete: "− delete",
+  run: "▸ run",
 };
 
 /**

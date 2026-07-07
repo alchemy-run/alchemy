@@ -46,7 +46,7 @@ export type ApplyResult =
   | "skipped"
   | "failed";
 
-export type PlanAction = "create" | "update" | "replace" | "delete";
+export type PlanAction = "create" | "update" | "replace" | "delete" | "run";
 
 /**
  * Why a node exists in the structure without a persisted-state row:
@@ -686,6 +686,37 @@ export const applyPlan = (
     }
   }
 
+  // Actions (tasks) are part of the plan too: a "run" task participates
+  // in the deployment exactly like a resource (pending -> running -> ran),
+  // so it must be visible from the review screen onward — not pop into
+  // existence when its terminal status lands at the end of the run. Noop
+  // tasks are skipped (their persisted state feeds the baseline); destroy
+  // plans carry no runnable actions, so nothing shows there beyond the
+  // state-drop deletions.
+  for (const planAction of Object.values(plan.actions ?? {})) {
+    if (planAction.action === "noop") {
+      continue;
+    }
+    let node = nodes.get(planAction.fqn);
+    if (node === undefined) {
+      node = {
+        fqn: planAction.fqn,
+        logicalId: planAction.logicalId,
+        path: planAction.fqn.split("/").slice(0, -1),
+        kind: "action",
+        type: planAction.type,
+        status: planAction.action === "delete" ? "ran" : "pending",
+        bindings: [],
+        downstream: [...planAction.downstream],
+      };
+      if (planAction.action === "delete") {
+        node.ghost = "deleted";
+      }
+      nodes.set(node.fqn, node);
+    }
+    node.planAction = planAction.action === "delete" ? "delete" : "run";
+  }
+
   const planNodes = [
     ...Object.values(plan.resources),
     ...Object.values(plan.deletions),
@@ -727,6 +758,16 @@ export const applyPlan = (
       edges.set(key, edge);
     }
   };
+  for (const planAction of Object.values(plan.actions ?? {})) {
+    if (planAction.action === "noop") {
+      continue;
+    }
+    for (const d of planAction.downstream) {
+      if (nodes.has(d)) {
+        push({ source: planAction.fqn, target: d, kind: "dependency" });
+      }
+    }
+  }
   for (const planNode of planNodes) {
     for (const d of planNode.downstream) {
       if (nodes.has(d)) {

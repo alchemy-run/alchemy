@@ -21,7 +21,11 @@ export interface DashboardPlanNode {
 
 export interface DashboardPlanAction {
   fqn: string;
+  logicalId: string;
+  /** action (task) type, e.g. "AnnounceDeploy" */
+  type: string;
   action: "run" | "noop" | "delete";
+  downstream: string[];
 }
 
 export interface DashboardPlan {
@@ -84,11 +88,23 @@ export const toPlanJson = (plan: Plan.Plan): DashboardPlan => {
 
   const actions: Record<string, DashboardPlanAction> = {};
   for (const [fqn, node] of Object.entries(plan.actions)) {
-    actions[fqn] = { fqn, action: node.action };
+    actions[fqn] = {
+      fqn,
+      logicalId: node.def.LogicalId,
+      type: node.def.Type,
+      action: node.action,
+      downstream: [...(node.downstream ?? [])],
+    };
   }
   for (const [fqn, node] of Object.entries(plan.actionDeletions ?? {})) {
     if (node !== undefined) {
-      actions[fqn] = { fqn, action: "delete" };
+      actions[fqn] = {
+        fqn,
+        logicalId: node.def.LogicalId,
+        type: node.def.Type,
+        action: "delete",
+        downstream: [...(node.downstream ?? [])],
+      };
     }
   }
 

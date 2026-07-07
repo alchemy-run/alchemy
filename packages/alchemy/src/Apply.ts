@@ -1746,6 +1746,16 @@ const converge = Effect.fn(function* (
 
       anyUpdated = true;
 
+      // live status for reporters (TUI, dashboard tee): without these the
+      // action only appears when the end-of-run terminal batch lands
+      yield* emit(session, {
+        kind: "status-change",
+        id: node.def.LogicalId,
+        fqn,
+        type: node.def.Type,
+        status: "running",
+      });
+
       yield* state.set({
         stack: stackName,
         stage,
@@ -1781,6 +1791,14 @@ const converge = Effect.fn(function* (
           output: result,
           downstream: node.downstream,
         } satisfies RanActionState,
+      });
+
+      yield* emit(session, {
+        kind: "status-change",
+        id: node.def.LogicalId,
+        fqn,
+        type: node.def.Type,
+        status: "ran",
       });
 
       tracker[fqn] = {
