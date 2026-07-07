@@ -131,6 +131,14 @@ export interface LayoutSlice {
    */
   positionsByHash: ReadonlyMap<string, ReadonlyMap<string, XY>>;
   /**
+   * Per-NODE position memory, folded from every positions write (ELK,
+   * drags, seeds). Positions belong to nodes, not to graph versions: when
+   * the structural hash changes mid-session, existing nodes keep these
+   * coordinates verbatim and only genuine newcomers get placed — a
+   * structural change can never morph the topology the user is watching.
+   */
+  positionMemory: ReadonlyMap<string, XY>;
+  /**
    * The user's own framing for the CURRENT stage. Only ever set by a real
    * user gesture (or restored from localStorage) — programmatic fits never
    * land here, so a saved viewport always means "the user chose this".
@@ -216,6 +224,7 @@ const initialState = (): DashboardState => ({
   ui: { view: "canvas", filter: "", paletteOpen: false, feedExpanded: false },
   layout: {
     positionsByHash: new Map(),
+    positionMemory: new Map(),
     userPanned: false,
     fitRequest: 0,
     restoredEpoch: 0,
@@ -335,10 +344,14 @@ const restoreLayoutForStage = (stack: string, stage: string): void => {
   const persisted = readPersistedLayout(stack, stage);
   const state = dashboardStore.getState();
   const positionsByHash = new Map(state.layout.positionsByHash);
+  const positionMemory = new Map(state.layout.positionMemory);
   if (persisted !== undefined) {
     for (const [hash, byFqn] of Object.entries(persisted.positions)) {
       if (!positionsByHash.has(hash)) {
         positionsByHash.set(hash, new Map(Object.entries(byFqn)));
+      }
+      for (const [fqn, xy] of Object.entries(byFqn)) {
+        positionMemory.set(fqn, xy);
       }
     }
   }
@@ -346,6 +359,7 @@ const restoreLayoutForStage = (stack: string, stage: string): void => {
     layout: {
       ...state.layout,
       positionsByHash,
+      positionMemory,
       viewport: persisted?.viewport,
       userPanned: persisted?.userPanned ?? false,
       restoredEpoch: state.layout.restoredEpoch + 1,
@@ -687,11 +701,19 @@ export const setPositions = (
     }
     next.delete(oldest);
   }
+  const positionMemory = new Map(state.layout.positionMemory);
+  for (const [fqn, xy] of positions) {
+    positionMemory.set(fqn, xy);
+  }
   dashboardStore.setState({
-    layout: { ...state.layout, positionsByHash: next },
+    layout: { ...state.layout, positionsByHash: next, positionMemory },
   });
   persistLayout();
 };
+
+/** Non-hook read of the per-node position memory. */
+export const getPositionMemory = (): ReadonlyMap<string, XY> =>
+  dashboardStore.getState().layout.positionMemory;
 
 /** Non-hook read (e.g. from the layout effect before kicking ELK). */
 export const getPositions = (
