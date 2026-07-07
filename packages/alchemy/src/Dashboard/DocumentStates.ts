@@ -20,6 +20,12 @@ import { toGraph } from "./Graph.ts";
  * `applyStructure`). Decorations/timelines/op-spans are left untouched:
  * they belong to the deployment, not the baseline.
  *
+ * `keep` names nodes that must SURVIVE the rebuild even when `states`
+ * lacks them: remote state stores are eventually consistent, so the
+ * done-path readback can momentarily miss resources the run just wrote —
+ * dropping them here would morph the topology for a beat and snap back
+ * once the follow-up passes re-add them.
+ *
  * Lives in its own module (not Document.ts) because `toGraph` →
  * `encodeState` → `Resource` drags the whole engine into the import graph —
  * this pass is server-only, while Document.ts is part of the browser-safe
@@ -28,9 +34,12 @@ import { toGraph } from "./Graph.ts";
 export const applyStates = (
   doc: DeploymentDocument,
   states: ReadonlyMap<string, PersistedState> | readonly PersistedState[],
+  keep?: ReadonlySet<string>,
 ): Mutation => {
   const patches: DocumentPatch[] = [];
   const before = structureSignature(doc.structure);
+  const previousNodes = doc.structure.nodes;
+  const previousEdges = doc.structure.edges;
   const list = Array.isArray(states)
     ? (states as PersistedState[])
     : [...(states as ReadonlyMap<string, PersistedState>).values()];
@@ -41,6 +50,22 @@ export const applyStates = (
   doc.structure.edges = new Map(
     edges.map((e) => [edgeKeyOf(e), { ...e } as DocumentEdge]),
   );
+  if (keep !== undefined && keep.size > 0) {
+    for (const [fqn, node] of previousNodes) {
+      if (keep.has(fqn) && !doc.structure.nodes.has(fqn)) {
+        doc.structure.nodes.set(fqn, node);
+      }
+    }
+    for (const [key, edge] of previousEdges) {
+      if (
+        !doc.structure.edges.has(key) &&
+        doc.structure.nodes.has(edge.source) &&
+        doc.structure.nodes.has(edge.target)
+      ) {
+        doc.structure.edges.set(key, edge);
+      }
+    }
+  }
   finishStructure(doc, before, patches);
   return commit(doc, patches);
 };
