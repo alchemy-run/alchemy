@@ -495,7 +495,10 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       return yield* HttpServerResponse.json({ ok: true });
     }
     if (route === "/api/apply/done" && request.method === "POST") {
-      const body = (yield* request.json) as unknown as { sessionId: string };
+      const body = (yield* request.json) as unknown as {
+        sessionId: string;
+        outcome?: "succeeded" | "failed";
+      };
       if (session?.sessionId === body.sessionId) {
         session.done = true;
         // the world changed: refresh state now and recompute the plan
@@ -520,7 +523,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
             }
             yield* host.restoreEdges(previousEdges);
             yield* host.refreshOutputs();
-            yield* host.deploymentDone();
+            yield* host.deploymentDone(body.outcome);
           }),
         );
         yield* broadcast(stage);

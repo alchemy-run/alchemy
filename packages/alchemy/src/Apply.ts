@@ -343,8 +343,6 @@ export const apply = <P extends Plan>(
           { concurrency: "unbounded" },
         );
 
-        yield* session.done();
-
         if (!plan.output) {
           return undefined;
         }
@@ -362,13 +360,17 @@ export const apply = <P extends Plan>(
         return resolved;
       });
 
-      // Map the run's exit onto the deployment record. Interruption is left
-      // to the session's scope-finalizer backstop (which closes the version
-      // as "interrupted"), covering Ctrl-C and dev-mode teardown uniformly.
+      // Map the run's exit onto the deployment record AND the status
+      // session — done fires with the outcome on success and failure alike,
+      // so every reporter (TUI, logging, dashboard tee) sees the run
+      // settle. Interruption is left to the session's scope-finalizer
+      // backstop (which closes the version as "interrupted"), covering
+      // Ctrl-C and dev-mode teardown uniformly.
       const exit = yield* Effect.exit(run);
       const counts = planActionCounts(plan);
       if (Exit.isSuccess(exit)) {
         yield* deployment.end("succeeded", { counts });
+        yield* session.done("succeeded");
         return exit.value;
       }
       if (!Cause.hasInterruptsOnly(exit.cause)) {
@@ -376,6 +378,7 @@ export const apply = <P extends Plan>(
           counts,
           error: causeDigest(exit.cause),
         });
+        yield* session.done("failed").pipe(Effect.ignore);
       }
       return yield* Effect.failCause(exit.cause);
     }),

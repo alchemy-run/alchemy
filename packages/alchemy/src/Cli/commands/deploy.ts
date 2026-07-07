@@ -4,6 +4,7 @@ import * as Console from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -319,7 +320,16 @@ export const execStack = Effect.fn(function* ({
               ),
             )
           : applyStack;
-        const outputs = yield* applyPlan;
+        const applyExit = yield* Effect.exit(applyPlan);
+        if (Exit.isFailure(applyExit)) {
+          if (ui && !dev && launchedDashboard) {
+            // give the dashboard a beat to flush the failure verdict to
+            // the tab before teardown ends the SSE streams
+            yield* Effect.sleep(Duration.seconds(2));
+          }
+          return yield* Effect.failCause(applyExit.cause);
+        }
+        const outputs = applyExit.value;
 
         if (outputs !== undefined) {
           yield* Console.log(outputs);

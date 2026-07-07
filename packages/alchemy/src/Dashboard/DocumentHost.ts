@@ -115,9 +115,14 @@ export interface DocumentHost {
   ) => Effect.Effect<void>;
   /**
    * A live apply session finished (`/api/apply/done`): refresh the record,
-   * waiting briefly for the engine's `deployments.end` to land.
+   * waiting briefly for the engine's `deployments.end` to land; if the
+   * persisted end still hasn't surfaced (remote stores are eventually
+   * consistent and the CLI exits shortly after done), synthesize the end
+   * with the tee-reported `outcome` so the run settles NOW.
    */
-  readonly deploymentDone: () => Effect.Effect<void>;
+  readonly deploymentDone: (
+    outcome?: "succeeded" | "failed",
+  ) => Effect.Effect<void>;
   readonly setApproval: (approval: { plan: unknown }) => Effect.Effect<void>;
   readonly clearApproval: () => Effect.Effect<void>;
   readonly setMeta: (meta: Partial<DocumentMeta>) => Effect.Effect<void>;
@@ -310,15 +315,32 @@ export const make: (
       yield* refreshDeployment();
     });
 
-  const deploymentDone = () =>
+  const deploymentDone = (outcome?: "succeeded" | "failed") =>
     Effect.gen(function* () {
       yield* refreshDeployment();
       if (doc.deployment !== undefined && doc.deployment.live) {
         // the engine's `deployments.end` races the reporter's done post —
-        // give it one beat, then leave whatever the store says (a record
-        // that stays open is the store's truth, not ours to invent)
+        // give it one beat
         yield* Effect.sleep("500 millis");
         yield* refreshDeployment();
+      }
+      if (doc.deployment !== undefined && doc.deployment.live) {
+        // The persisted end never surfaced: remote stores are eventually
+        // consistent and the CLI exits ~2s after done, so waiting longer
+        // loses the race anyway. The done post itself is authoritative
+        // that the run ENDED — synthesize the end bookend. Outcome comes
+        // from the tee; fall back to what the decorations say.
+        const at = yield* Clock.currentTimeMillis;
+        const derived =
+          outcome ??
+          ([...doc.decorations.values()].some(
+            (d) => d.applyResult === "failed" || d.status === "fail",
+          )
+            ? "failed"
+            : "succeeded");
+        yield* record(
+          applyEventFold(doc, { kind: "deployment-end", outcome: derived }, at),
+        );
       }
     });
 
