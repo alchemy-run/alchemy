@@ -22,6 +22,7 @@ import { Loader2 } from "lucide-react";
 import { memo, useMemo, type CSSProperties } from "react";
 import { NODE_HEIGHT, NODE_WIDTH } from "../layout/elkGraph.ts";
 import {
+  badgeStyle,
   chipStyle,
   CLOUD_COLORS,
   cloudOf,
@@ -36,7 +37,12 @@ import {
   typeName,
 } from "../theme.ts";
 import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
-import { useIsSelected, useMeta, useNode } from "../store.ts";
+import {
+  useDeploymentLive,
+  useIsSelected,
+  useMeta,
+  useNode,
+} from "../store.ts";
 import { ResourceIcon } from "./Icon.tsx";
 
 export type CanvasNode = Node<{ fqn: string }, "resource">;
@@ -103,6 +109,7 @@ export const ResourceNode = memo(function ResourceNode({
   const selected = useIsSelected(fqn);
   const meta = useMeta();
   const registry = useRegistry();
+  const live = useDeploymentLive();
 
   // live overlay wins over the structural baseline
   const status = decoration?.status ?? node?.status ?? "unknown";
@@ -145,6 +152,9 @@ export const ResourceNode = memo(function ResourceNode({
   const hidden = decoration?.hidden === true;
   const planColor = plan ? PLAN_COLORS[plan] : undefined;
   const resultColor = result ? RESULT_COLORS[result] : undefined;
+  // pending plan wins over the PREVIOUS deploy's result; during a live
+  // apply the fresh result takes over as each node completes
+  const showPlanChip = plan !== undefined && (!live || result === undefined);
   // terminated / declared-only resources render "dead": dashed ghost shell
   const deleted = result === "deleted" || status === "deleted";
   const ghost = node.ghost !== undefined || deleted;
@@ -248,7 +258,19 @@ export const ResourceNode = memo(function ResourceNode({
         </div>
       )}
       <div className="flex gap-1">
-        {result && resultColor && (
+        {/* Pending plan wins over the previous deploy's result: while a
+            plan awaits approval, every affected node shows what WILL
+            happen (outlined chip = future). During the live apply each
+            node flips to its result as it completes (filled chip = done). */}
+        {showPlanChip && plan && planColor ? (
+          <span
+            className={`${NODE_CHIP} border`}
+            style={badgeStyle(planColor)}
+            title={`pending: ${plan}`}
+          >
+            {PLAN_LABELS[plan]}
+          </span>
+        ) : result && resultColor ? (
           <span
             className={NODE_CHIP}
             style={chipStyle(resultColor)}
@@ -256,12 +278,7 @@ export const ResourceNode = memo(function ResourceNode({
           >
             {RESULT_LABELS[result]}
           </span>
-        )}
-        {plan && !result && planColor && (
-          <span className={NODE_CHIP} style={chipStyle(planColor)}>
-            {PLAN_LABELS[plan]}
-          </span>
-        )}
+        ) : null}
         {node.bindings.length > 0 && (
           <span className={NODE_CHIP} style={chipStyle(BINDING_CHIP_COLOR)}>
             {node.bindings.length} binding{node.bindings.length > 1 ? "s" : ""}

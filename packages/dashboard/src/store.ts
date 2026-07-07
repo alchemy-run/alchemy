@@ -1100,6 +1100,13 @@ export const useFeed = (): FeedSlice => useStore(dashboardStore, selectFeed);
 
 export const useMeta = (): DocumentMeta => useStore(dashboardStore, selectMeta);
 
+/**
+ * Just the live flag — a stable boolean, so per-node subscribers don't
+ * re-render on heartbeat-driven record identity changes.
+ */
+export const useDeploymentLive = (): boolean =>
+  useStore(dashboardStore, (s) => s.document.deployment?.live === true);
+
 export const useDeployment = (): LiveDeploymentRecord | undefined =>
   useStore(dashboardStore, selectDeploymentRecord);
 

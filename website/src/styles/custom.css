@@ -536,8 +536,7 @@ h1.hero-title,
 
 /* Larger gap between visual rows via empty tracks 4 and 8. */
 .features {
-  grid-template-rows:
-    auto auto auto /* row 1: h, p, code */
+  grid-template-rows: auto auto auto /* row 1: h, p, code */
     3rem /* gap */
     auto auto auto /* row 2 */
     3rem /* gap */
