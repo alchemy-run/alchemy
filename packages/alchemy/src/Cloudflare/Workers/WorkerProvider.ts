@@ -1242,7 +1242,7 @@ export const LiveWorkerProvider = () =>
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
-          cacheOptions: news.cache ?? getCacheBinding(bindings),
+          cache: news.cache ?? getCacheBinding(bindings),
           compatibilityDate: compatibility.date,
           compatibilityFlags: compatibility.flags,
           containers:
