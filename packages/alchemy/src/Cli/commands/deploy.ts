@@ -183,6 +183,7 @@ export const execStack = Effect.fn(function* ({
         port,
         open: true,
         ready,
+        command: dryRun ? "plan" : destroy ? "destroy" : "deploy",
       }).pipe(
         Effect.catchCause((cause) =>
           Console.error(`dashboard failed:\n${Cause.pretty(cause)}`),
@@ -272,6 +273,13 @@ export const execStack = Effect.fn(function* ({
               node.action !== "noop" ||
               node.bindings.some((b) => b.action !== "noop"),
           );
+        if (destroy && !hasChanges) {
+          // an empty destroy plan means the stage holds nothing —
+          // skipping the apply avoids a pointless deployment version (and
+          // a "Destroying…" banner over a graph of ghosts)
+          yield* Console.log("Nothing to destroy — the stage is empty.");
+          return;
+        }
         if (!yes && hasChanges) {
           // --ui delegates approval to the browser: the dashboard shows the
           // plan with an approve/reject choice and the terminal just points
