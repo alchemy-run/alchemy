@@ -343,13 +343,16 @@ const rememberStages = (stack: string, stages: readonly string[]): void => {
 const restoreLayoutForStage = (stack: string, stage: string): void => {
   const persisted = readPersistedLayout(stack, stage);
   const state = dashboardStore.getState();
-  const positionsByHash = new Map(state.layout.positionsByHash);
+  // Persisted layouts feed the per-NODE memory ONLY — never the per-hash
+  // cache. A hash the session hasn't rendered yet must resolve through
+  // memory continuity (seedPositions), or a stale hash-keyed layout from
+  // a PREVIOUS session (e.g. the post-destroy ghost graph, whose hash is
+  // stable across sessions) would override the arrangement the user is
+  // currently looking at and morph the whole canvas. The fold iterates in
+  // LRU order, so the newest layout's coordinates win per node.
   const positionMemory = new Map(state.layout.positionMemory);
   if (persisted !== undefined) {
-    for (const [hash, byFqn] of Object.entries(persisted.positions)) {
-      if (!positionsByHash.has(hash)) {
-        positionsByHash.set(hash, new Map(Object.entries(byFqn)));
-      }
+    for (const byFqn of Object.values(persisted.positions)) {
       for (const [fqn, xy] of Object.entries(byFqn)) {
         positionMemory.set(fqn, xy);
       }
@@ -358,7 +361,6 @@ const restoreLayoutForStage = (stack: string, stage: string): void => {
   dashboardStore.setState({
     layout: {
       ...state.layout,
-      positionsByHash,
       positionMemory,
       viewport: persisted?.viewport,
       userPanned: persisted?.userPanned ?? false,

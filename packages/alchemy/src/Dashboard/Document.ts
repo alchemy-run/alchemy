@@ -261,6 +261,13 @@ export interface DeploymentDocument {
   opSpans: Map<string, OpSpan[]>;
   /** @internal logicalId → fqns index for the event identity join */
   byLogicalId: Map<string, string[]>;
+  /**
+   * Edges retired with a delete-action node (see {@link applyPlan}) —
+   * transient (never serialized): {@link restoreEdges} re-adds them when
+   * the post-run ghost rebuild brings the action back, so the topology
+   * (and therefore the layout) is identical before and after the run.
+   */
+  retiredEdges: Map<string, DocumentEdge>;
   /** @internal next feed key */
   feedSeq: number;
   /** @internal fqns whose timeline was reset in the current deployment */
@@ -449,6 +456,7 @@ export const fromSnapshot = (
     ...(snap.approval !== undefined ? { approval: snap.approval } : {}),
     opSpans: new Map(Object.entries(snap.opSpans)),
     byLogicalId: new Map(),
+    retiredEdges: new Map(),
     feedSeq: snap.feed.reduce((max, e) => Math.max(max, e.key + 1), 0),
     timelineResets: new Set(),
     pendingSince: new Map(),
@@ -650,6 +658,7 @@ export const makeDocument = (init: DocumentMeta): DeploymentDocument => {
     annotations: new Map(),
     opSpans: new Map(),
     byLogicalId: new Map(),
+    retiredEdges: new Map(),
     feedSeq: 0,
     timelineResets: new Set(),
     pendingSince: new Map(),
@@ -705,6 +714,8 @@ export const applyPlan = (
             edge.source === planAction.fqn ||
             edge.target === planAction.fqn
           ) {
+            // stash for the post-run ghost rebuild (see restoreEdges)
+            doc.retiredEdges.set(key, edge);
             edges.delete(key);
           }
         }
@@ -888,7 +899,9 @@ export const restoreEdges = (
 ): Mutation => {
   const patches: DocumentPatch[] = [];
   const before = structureSignature(doc.structure);
-  for (const edge of edges) {
+  const retired = [...doc.retiredEdges.values()];
+  doc.retiredEdges.clear();
+  for (const edge of [...edges, ...retired]) {
     const key = edgeKeyOf(edge);
     if (
       !doc.structure.edges.has(key) &&
