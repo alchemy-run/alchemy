@@ -728,7 +728,17 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           Effect.ensuring(Effect.sync(() => planInFlight.delete(stg))),
         );
         lastPlans.set(stg, result);
-        yield* withHost(stg, (host) => host.applyPlan(result));
+        // Precedence (as in v1's scene build): a pending approval or a live
+        // deployment OWNS the document's plan overlay. The worker's lazily
+        // computed deploy plan must never clobber it — otherwise a destroy
+        // approval's DELETE tabs flicker into the background deploy plan
+        // moments after the review screen renders.
+        yield* withHost(stg, (host) =>
+          host.document.approval !== undefined ||
+          host.document.deployment?.live === true
+            ? Effect.void
+            : host.applyPlan(result),
+        );
         yield* broadcast(stg);
       }
     }).pipe(Effect.ignore),
