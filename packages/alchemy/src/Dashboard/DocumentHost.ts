@@ -30,7 +30,7 @@ import {
   type DocumentSnapshot,
   type Mutation,
 } from "./Document.ts";
-import { applyStates } from "./DocumentStates.ts";
+import { applyStates, upsertNodeFromState } from "./DocumentStates.ts";
 import type { DashboardPlan } from "./PlanJson.ts";
 import type { StackStructure } from "./Scene.ts";
 
@@ -249,10 +249,36 @@ export const make: (
       }
     });
 
+  // statuses whose arrival means the resource's persisted state (attrs,
+  // bindings) just changed — worth a targeted re-read so outputs appear
+  // the moment EACH node completes, not when the whole run refreshes
+  const TERMINAL_STATUSES = new Set([
+    "created",
+    "updated",
+    "replaced",
+    "ran",
+    "retained",
+  ]);
+
   const applyEvent = (event: ApplyEvent | DeploymentSessionPayload) =>
     Effect.gen(function* () {
       const at = yield* Clock.currentTimeMillis;
       yield* record(applyEventFold(doc, event, at));
+      // progressive convergence: merge this one resource's fresh state
+      // (best-effort — a flaky read just means the final refresh covers it)
+      if (
+        event.kind === "status-change" &&
+        typeof (event as { fqn?: unknown }).fqn === "string" &&
+        TERMINAL_STATUSES.has((event as { status: string }).status)
+      ) {
+        const fqn = (event as { fqn: string }).fqn;
+        const fresh = yield* state
+          .get({ stack, stage, fqn })
+          .pipe(Effect.orElseSucceed(() => undefined));
+        if (fresh !== undefined) {
+          yield* record(upsertNodeFromState(doc, fresh));
+        }
+      }
     });
 
   const deploymentStarted = (command: DeploymentMeta["command"] = "deploy") =>
