@@ -20,8 +20,8 @@ covered on [Workflows](/cloudflare/compute/workflows).
 
 Create `src/NotifyWorkflow.ts` with a typed workflow body. The
 `Effect.fn` takes the `input` payload directly, so `notifier.create({
-roomId, message })` is type-checked end to end — and the workflow's
-return value flows through to `instance.status().output`:
+params: { roomId, message } })` is type-checked end to end — and the
+workflow's return value flows through to `instance.status().output`:
 
 ```typescript
 // src/NotifyWorkflow.ts
@@ -362,8 +362,10 @@ export default Cloudflare.Worker(
 +       ) {
 +         const roomId = request.url.split("/").pop()!;
 +         const instance = yield* notifier.create({
-+           roomId,
-+           message: "hello from workflow",
++           params: {
++             roomId,
++             message: "hello from workflow",
++           },
 +         });
 +         return yield* HttpServerResponse.json({ instanceId: instance.id });
 +       }
@@ -382,11 +384,12 @@ export default Cloudflare.Worker(
 );
 ```
 
-`notifier.create({ ... })` immediately returns an instance id — the
-workflow runs asynchronously on Cloudflare's side. `instance.status()`
-returns one of `"queued"`, `"running"`, `"paused"`, `"complete"`, or
-`"errored"` along with the `output` (what the body Effect returned)
-or `error`.
+`notifier.create({ params })` immediately returns an instance id —
+the workflow runs asynchronously on Cloudflare's side.
+`instance.status()` returns one of `"queued"`, `"running"`,
+`"paused"`, `"waiting"`, `"complete"`, `"errored"`, or
+`"terminated"` along with the `output` (what the body Effect
+returned) or `error`.
 
 Deploy:
 

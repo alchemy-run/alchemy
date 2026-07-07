@@ -510,10 +510,10 @@ export class WorkflowScope extends Context.Service<
  *
  * @example Configuring retries and reading step context
  * ```typescript
- * const result = yield* Cloudflare.task(
+ * const result = yield* Cloudflare.Workflows.task(
  *   "call-api",
  *   Effect.gen(function* () {
- *     const context = yield* Cloudflare.WorkflowStepContext;
+ *     const context = yield* Cloudflare.Workflows.WorkflowStepContext;
  *     return { attempt: context.attempt };
  *   }),
  *   { retries: { limit: 3, delay: "5 seconds", backoff: "linear" } },
@@ -522,7 +522,7 @@ export class WorkflowScope extends Context.Service<
  *
  * @example Registering rollback
  * ```typescript
- * yield* Cloudflare.task("reserve-inventory", reserveInventory, {
+ * yield* Cloudflare.Workflows.task("reserve-inventory", reserveInventory, {
  *   rollback: ({ output }) =>
  *     output ? releaseInventory(output.reservationId) : Effect.void,
  *   rollbackConfig: { retries: { limit: 3, delay: "10 seconds" } },
@@ -536,7 +536,7 @@ export class WorkflowScope extends Context.Service<
  *
  * @example Waiting for an external event
  * ```typescript
- * const event = yield* Cloudflare.waitForEvent<{ approved: boolean }>(
+ * const event = yield* Cloudflare.Workflows.waitForEvent<{ approved: boolean }>(
  *   "approval",
  *   { type: "approval", timeout: "1 day" },
  * );

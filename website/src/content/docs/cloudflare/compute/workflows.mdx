@@ -50,6 +50,21 @@ const greeted = yield* Cloudflare.Workflows.task(
 );
 ```
 
+An optional third argument configures the step's retry policy, a
+timeout, and a rollback handler that runs if the workflow later
+fails:
+
+```typescript
+const charged = yield* Cloudflare.Workflows.task("charge-card", chargeCard, {
+  retries: { limit: 3, delay: "5 seconds", backoff: "exponential" },
+  timeout: "1 minute",
+  rollback: ({ output }) => (output ? refund(output.chargeId) : Effect.void),
+});
+```
+
+Inside a step, `yield* Cloudflare.Workflows.WorkflowStepContext`
+exposes the current attempt number and resolved config.
+
 ## Sleep between steps
 
 `sleep` parks the instance for a duration; `sleepUntil` parks it
@@ -60,6 +75,32 @@ needs a stable one:
 yield* Cloudflare.Workflows.sleep("cooldown", "30 seconds");
 yield* Cloudflare.Workflows.sleepUntil("deadline", new Date("2026-08-01"));
 ```
+
+## Wait for external events
+
+`waitForEvent` parks the instance until a caller delivers a matching
+event with `instance.sendEvent` — the human-approval shape. It
+resolves with the same `{ payload, timestamp, type }` event object as
+the native `step.waitForEvent`:
+
+```typescript
+const approval = yield* Cloudflare.Workflows.waitForEvent<{
+  approved: boolean;
+}>("approval", { type: "approval", timeout: "1 day" });
+
+if (approval.payload.approved) {
+  // ...
+}
+```
+
+```typescript
+// from a Worker route
+const instance = yield* workflow.get(instanceId);
+yield* instance.sendEvent({ type: "approval", payload: { approved: true } });
+```
+
+An instance parked in `waitForEvent` still reports `running` from
+`status()` — Cloudflare reserves `waiting` for sleeps.
 
 ## Replay semantics
 
@@ -124,7 +165,7 @@ export default Cloudflare.Worker(
 
         if (request.url.startsWith("/workflow/start/")) {
           const value = request.url.split("/workflow/start/")[1] ?? "world";
-          const instance = yield* workflow.create({ value });
+          const instance = yield* workflow.create({ params: { value } });
           return yield* HttpServerResponse.json({ instanceId: instance.id });
         }
 
@@ -135,8 +176,12 @@ export default Cloudflare.Worker(
 );
 ```
 
-`create(input)` returns the instance id immediately — the workflow
-runs asynchronously on Cloudflare's side.
+`create` mirrors the native Workflow API: the input payload goes in
+`params`, an optional `id` pins a deterministic instance ID, and
+`retention` controls how long finished instances are kept. It
+returns the instance immediately — the workflow runs asynchronously
+on Cloudflare's side. `createBatch([...])` starts several instances
+in one call.
 
 ## Observe an instance
 
@@ -152,10 +197,11 @@ if (request.url.startsWith("/workflow/status/")) {
 }
 ```
 
-`status()` yields `{ status, output, error }` — `status` is one of
-`queued`, `running`, `paused`, `complete`, or `errored`, and
-`output` is what the body returned. Instances also expose `pause()`,
-`resume()`, and `terminate()` — see the
+`status()` yields `{ status, output, error, rollback }` — `status`
+is one of `queued`, `running`, `paused`, `waiting`, `complete`,
+`errored`, or `terminated`, and `output` is what the body returned.
+Instances also expose `pause()`, `resume()`, `restart()`,
+`terminate()`, and `sendEvent()` — see the
 [Workflow API reference](/providers/cloudflare/workflows/workflow).
 
 ## Poll to completion
