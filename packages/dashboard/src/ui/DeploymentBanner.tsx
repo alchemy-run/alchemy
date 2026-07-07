@@ -67,17 +67,22 @@ export const DeploymentBanner = memo(function DeploymentBanner() {
     return () => clearTimeout(timer);
   }, [settled]);
 
-  if (deployment?.live === true) {
-    return (
-      <Shell>
-        <Deploying command={deployment.meta.command} />
-      </Shell>
-    );
-  }
+  // Approval FIRST: a pending approval means the next run is being
+  // reviewed — a deployment record that still reads as live at that point
+  // is a leftover from an interrupted run (Ctrl+C before its end
+  // committed), and masking the approve prompt behind its phantom
+  // "Deploying…" would strand the user.
   if (approval !== undefined) {
     return (
       <Shell>
         <Reviewing deciding={deciding} setDeciding={setDeciding} />
+      </Shell>
+    );
+  }
+  if (live && deployment !== undefined) {
+    return (
+      <Shell>
+        <Deploying command={deployment.meta.command} />
       </Shell>
     );
   }
