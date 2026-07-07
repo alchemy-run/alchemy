@@ -1,7 +1,12 @@
 import { Check, Loader2, ShieldQuestion, X } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { decideApproval } from "../ingest.ts";
-import { useApproval, useDeployment, useProjection } from "../store.ts";
+import {
+  requestFit,
+  useApproval,
+  useDeployment,
+  useProjection,
+} from "../store.ts";
 import {
   CHIP,
   chipStyle,
@@ -25,6 +30,17 @@ import {
 export const DeploymentBanner = memo(function DeploymentBanner() {
   const approval = useApproval();
   const deployment = useDeployment();
+
+  // A fresh approval re-frames the canvas: the fit's reserved top padding
+  // (see Canvas FIT_VIEW) guarantees the highest row of nodes clears this
+  // floating banner, regardless of any restored viewport or pan state
+  // from a previous session.
+  const hasApproval = approval !== undefined;
+  useEffect(() => {
+    if (hasApproval) {
+      requestFit();
+    }
+  }, [hasApproval]);
 
   // approve/reject latch — lives here (not in the reviewing sub-view) so
   // the "starting" phase survives the approval overlay being replaced by
