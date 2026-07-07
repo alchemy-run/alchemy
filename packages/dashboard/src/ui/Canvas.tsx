@@ -270,13 +270,14 @@ function CanvasInner() {
     if (!inSync) {
       return; // the rebuild effect hasn't committed the final positions yet
     }
-    // Auto-fit keeps the graph centered on every structural change until
-    // the user claims the framing (userPanned — persisted per stage). A
-    // restored user viewport therefore never gets re-fit, while untouched
-    // stages re-center as ghosts/plans land.
+    // Auto-fit ONLY the first layout this Canvas shows (unless the user
+    // already claimed the framing — userPanned, persisted per stage).
+    // Later structural changes keep every node's position verbatim (the
+    // per-node position memory in useCanvasLayout), so re-fitting would
+    // move the camera under the user for no reason.
     if (
       !dashboardStore.getState().layout.userPanned &&
-      !fittedHashes.has(hash)
+      fittedHashes.size === 0
     ) {
       fittedHashes.add(hash);
       void fitView(FIT_VIEW);

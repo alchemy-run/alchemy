@@ -18,6 +18,7 @@ import type { DocumentEdge } from "alchemy/Dashboard/Document";
 import { useEffect, useMemo, useRef } from "react";
 import {
   dashboardStore,
+  getPositionMemory,
   getPositions,
   setPositions,
   usePositions,
@@ -200,11 +201,26 @@ export const useCanvasLayout = (): CanvasLayout => {
 
   const cached = usePositions(hash);
 
-  // Kick ELK exactly once per never-seen hash. The result is cached under
-  // the REQUEST's hash (layout is deterministic per hash), so out-of-order
-  // completions are harmless and no cancellation is needed.
+  // Resolve positions exactly once per never-seen hash.
+  //
+  // Position CONTINUITY comes first: if any node of the new hash already
+  // has a home this session (the per-node position memory — fed by ELK
+  // results, drags, and previous seeds), those coordinates are kept
+  // VERBATIM and only genuine newcomers get neighbor-seeded. ELK never
+  // re-runs for a structural change mid-session, so plan overlays, run
+  // convergence, and post-destroy rebuilds physically cannot morph the
+  // topology the user is watching. ELK runs only when nothing has a
+  // position yet (first layout of a stage).
   useEffect(() => {
     if (structure.fqns.length === 0 || getPositions(hash) !== undefined) {
+      return;
+    }
+    const memory = getPositionMemory();
+    if (structure.fqns.some((fqn) => memory.has(fqn))) {
+      setPositions(
+        hash,
+        seedPositions(structure.fqns, structure.visualEdges, memory),
+      );
       return;
     }
     requestLayout(hash, structure.fqns, structure.visualEdges)
