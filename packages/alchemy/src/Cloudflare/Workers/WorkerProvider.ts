@@ -105,10 +105,8 @@ const getScriptSettings = (
  * retrying converges, or a genuine misconfiguration that keeps
  * failing and surfaces as the typed error once the bounded budget is
  * exhausted.
- *
- * @internal exported for unit testing
  */
-export const isBindingTargetNotFound = (
+const isBindingTargetNotFound = (
   e:
     | Effect.Error<ReturnType<typeof workers.putScript>>
     | Effect.Error<ReturnType<typeof wfp.putDispatchNamespaceScript>>,
