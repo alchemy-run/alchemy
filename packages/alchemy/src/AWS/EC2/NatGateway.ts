@@ -261,7 +261,7 @@ export const NatGatewayProvider = () =>
           ),
         );
 
-      const toAttrs = Effect.fnUntraced(function* (gw: ec2.NatGateway) {
+      const toAttrs = Effect.fn(function* (gw: ec2.NatGateway) {
         const { accountId, region } = yield* AWSEnvironment.current;
         const primaryAddress =
           gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??

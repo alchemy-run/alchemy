@@ -49,16 +49,16 @@ test.provider(
       yield* stack.destroy();
 
       const program = (
-        mitigationAction: Cloudflare.SchemaValidationOperationMitigationAction,
+        mitigationAction: Cloudflare.SchemaValidation.OperationMitigationAction,
       ) =>
         Effect.gen(function* () {
-          const op = yield* Cloudflare.ApiShieldOperation("TestOp", {
+          const op = yield* Cloudflare.ApiShield.Operation("TestOp", {
             zoneId,
             method: "GET",
             host: zoneName,
             endpoint: "/alchemy-sv-operation-setting-test",
           });
-          const override = yield* Cloudflare.SchemaValidationOperationSetting(
+          const override = yield* Cloudflare.SchemaValidation.OperationSetting(
             "TestOverride",
             {
               zoneId,
@@ -115,13 +115,13 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const op = yield* Cloudflare.ApiShieldOperation("ListOp", {
+          const op = yield* Cloudflare.ApiShield.Operation("ListOp", {
             zoneId,
             method: "GET",
             host: zoneName,
             endpoint: "/alchemy-sv-operation-setting-list-test",
           });
-          const override = yield* Cloudflare.SchemaValidationOperationSetting(
+          const override = yield* Cloudflare.SchemaValidation.OperationSetting(
             "ListOverride",
             {
               zoneId,
@@ -134,7 +134,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SchemaValidationOperationSetting,
+        Cloudflare.SchemaValidation.OperationSetting,
       );
       const all = yield* provider.list();
 

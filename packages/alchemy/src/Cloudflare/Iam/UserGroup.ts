@@ -9,15 +9,15 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IamUserGroupTypeId = "Cloudflare.Iam.UserGroup" as const;
-type IamUserGroupTypeId = typeof IamUserGroupTypeId;
+const TypeId = "Cloudflare.Iam.UserGroup" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A fine-grained policy attached to a user group: an allow/deny decision
  * over a set of permission groups (what actions) and resource groups
  * (which resources).
  */
-export interface IamUserGroupPolicyInput {
+export interface UserGroupPolicyInput {
   /**
    * Whether the policy allows or denies the combined permission/resource
    * groups. Note: Cloudflare currently rejects `deny` user-group policies
@@ -32,7 +32,7 @@ export interface IamUserGroupPolicyInput {
   permissionGroups: string[];
   /**
    * IDs of the resource groups (which resources the permissions apply
-   * to) — e.g. from {@link IamResourceGroup}.
+   * to) — e.g. from {@link ResourceGroup}.
    */
   resourceGroups: string[];
 }
@@ -41,7 +41,7 @@ export interface IamUserGroupPolicyInput {
  * A fully-resolved user group policy as observed on Cloudflare, including
  * the server-assigned policy id.
  */
-export interface IamUserGroupPolicy {
+export interface UserGroupPolicy {
   /**
    * Server-assigned identifier of the policy. Not stable — Cloudflare
    * assigns fresh policy ids on every policy update.
@@ -55,7 +55,7 @@ export interface IamUserGroupPolicy {
   resourceGroups: string[];
 }
 
-export interface IamUserGroupProps {
+export interface UserGroupProps {
   /**
    * Name of the user group. If omitted, a unique name is generated from
    * the app, stage, and logical ID.
@@ -66,10 +66,10 @@ export interface IamUserGroupProps {
    * Fine-grained policies attached to the user group. Mutable in place —
    * the full set is replaced on update.
    */
-  policies?: IamUserGroupPolicyInput[];
+  policies?: UserGroupPolicyInput[];
 }
 
-export interface IamUserGroupAttributes {
+export interface UserGroupAttributes {
   /** Cloudflare-assigned identifier of the user group. */
   userGroupId: string;
   /** The Cloudflare account the user group belongs to. */
@@ -77,17 +77,17 @@ export interface IamUserGroupAttributes {
   /** Name of the user group. */
   name: string;
   /** Policies attached to the user group (with server-assigned ids). */
-  policies: IamUserGroupPolicy[];
+  policies: UserGroupPolicy[];
   /** ISO8601 creation timestamp. */
   createdOn: string;
   /** ISO8601 last-modified timestamp. */
   modifiedOn: string;
 }
 
-export type IamUserGroup = Resource<
-  IamUserGroupTypeId,
-  IamUserGroupProps,
-  IamUserGroupAttributes,
+export type UserGroup = Resource<
+  TypeId,
+  UserGroupProps,
+  UserGroupAttributes,
   never,
   Providers
 >;
@@ -98,7 +98,7 @@ export type IamUserGroup = Resource<
  *
  * Both `name` and `policies` are mutable in place; updating policies
  * replaces the full set. Add members with
- * {@link IamUserGroupMembership}.
+ * {@link UserGroupMembership}.
  *
  * Account-scoped IAM (resource groups, user groups) is an Enterprise
  * feature.
@@ -108,12 +108,12 @@ export type IamUserGroup = Resource<
  * @section Creating a User Group
  * @example Empty group
  * ```typescript
- * const group = yield* Cloudflare.IamUserGroup("Operators", {});
+ * const group = yield* Cloudflare.Iam.UserGroup("Operators", {});
  * ```
  *
  * @example Group with a policy
  * ```typescript
- * const readers = yield* Cloudflare.IamUserGroup("Readers", {
+ * const readers = yield* Cloudflare.Iam.UserGroup("Readers", {
  *   name: "zone-readers",
  *   policies: [
  *     {
@@ -128,7 +128,7 @@ export type IamUserGroup = Resource<
  * @section Managing Members
  * @example Add an account member to the group
  * ```typescript
- * yield* Cloudflare.IamUserGroupMembership("SamInReaders", {
+ * yield* Cloudflare.Iam.UserGroupMembership("SamInReaders", {
  *   userGroup: readers.userGroupId,
  *   memberId: accountMember.memberId,
  * });
@@ -136,16 +136,16 @@ export type IamUserGroup = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/user-groups/
  */
-export const IamUserGroup = Resource<IamUserGroup>(IamUserGroupTypeId);
+export const UserGroup = Resource<UserGroup>(TypeId);
 
 /**
- * Returns true if the given value is an IamUserGroup resource.
+ * Returns true if the given value is an UserGroup resource.
  */
-export const isIamUserGroup = (value: unknown): value is IamUserGroup =>
-  Predicate.hasProperty(value, "Type") && value.Type === IamUserGroupTypeId;
+export const isUserGroup = (value: unknown): value is UserGroup =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const IamUserGroupProvider = () =>
-  Provider.succeed(IamUserGroup, {
+export const UserGroupProvider = () =>
+  Provider.succeed(UserGroup, {
     stables: ["userGroupId", "accountId", "createdOn"],
 
     // Account-scoped collection: exhaustively paginate the account's
@@ -299,7 +299,7 @@ const createGroupName = (id: string, name: string | undefined) =>
   });
 
 /** Resolve `Input<string>` policy ids to concrete strings (post-Plan). */
-const resolvePolicies = (policies: IamUserGroupPolicyInput[]) =>
+const resolvePolicies = (policies: UserGroupPolicyInput[]) =>
   policies.map((p) => ({
     access: p.access,
     permissionGroups: p.permissionGroups.map((id) => ({ id: id as string })),
@@ -308,7 +308,7 @@ const resolvePolicies = (policies: IamUserGroupPolicyInput[]) =>
 
 const parsePolicies = (
   policies: ObservedUserGroup["policies"],
-): IamUserGroupPolicy[] =>
+): UserGroupPolicy[] =>
   (policies ?? []).map((p) => ({
     id: p.id ?? undefined,
     access: p.access === "deny" ? "deny" : "allow",
@@ -331,7 +331,7 @@ const policyKey = (p: {
 };
 
 const samePolicies = (
-  observed: IamUserGroupPolicy[],
+  observed: UserGroupPolicy[],
   desired: ReturnType<typeof resolvePolicies>,
 ) =>
   observed.length === desired.length &&
@@ -344,7 +344,7 @@ const toAttributes = (
     | iam.CreateUserGroupResponse
     | iam.UpdateUserGroupResponse,
   accountId: string,
-): IamUserGroupAttributes => ({
+): UserGroupAttributes => ({
   userGroupId: group.id,
   accountId,
   name: group.name,

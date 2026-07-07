@@ -9,10 +9,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AddressingPrefixTypeId = "Cloudflare.Addressing.Prefix" as const;
-type AddressingPrefixTypeId = typeof AddressingPrefixTypeId;
+const TypeId = "Cloudflare.Addressing.Prefix" as const;
+type TypeId = typeof TypeId;
 
-export interface AddressingPrefixProps {
+export interface PrefixProps {
   /**
    * IP Prefix in Classless Inter-Domain Routing format (e.g.
    * `192.0.2.0/24`). Immutable — changing it forces a replacement.
@@ -41,7 +41,7 @@ export interface AddressingPrefixProps {
   delegateLoaCreation?: boolean;
 }
 
-export interface AddressingPrefixAttributes {
+export interface PrefixAttributes {
   /** Cloudflare-assigned identifier of the IP Prefix. */
   prefixId: string;
   /** The Cloudflare account the prefix belongs to. */
@@ -70,10 +70,10 @@ export interface AddressingPrefixAttributes {
   modifiedAt: string | undefined;
 }
 
-export type AddressingPrefix = Resource<
-  AddressingPrefixTypeId,
-  AddressingPrefixProps,
-  AddressingPrefixAttributes,
+export type Prefix = Resource<
+  TypeId,
+  PrefixProps,
+  PrefixAttributes,
   never,
   Providers
 >;
@@ -94,7 +94,7 @@ export type AddressingPrefix = Resource<
  * @section Creating a Prefix
  * @example Onboard a prefix with a pre-uploaded LOA
  * ```typescript
- * const prefix = yield* Cloudflare.AddressingPrefix("byoip", {
+ * const prefix = yield* Cloudflare.Addressing.Prefix("byoip", {
  *   cidr: "192.0.2.0/24",
  *   asn: 64496,
  *   description: "production ingress",
@@ -104,7 +104,7 @@ export type AddressingPrefix = Resource<
  *
  * @example Delegate LOA creation to Cloudflare
  * ```typescript
- * const prefix = yield* Cloudflare.AddressingPrefix("byoip", {
+ * const prefix = yield* Cloudflare.Addressing.Prefix("byoip", {
  *   cidr: "192.0.2.0/24",
  *   asn: 64496,
  *   delegateLoaCreation: true,
@@ -114,7 +114,7 @@ export type AddressingPrefix = Resource<
  * @section Advertising the Prefix
  * @example Advertise via a BGP prefix
  * ```typescript
- * const bgp = yield* Cloudflare.AddressingBgpPrefix("advertise", {
+ * const bgp = yield* Cloudflare.Addressing.BgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
  *   cidr: prefix.cidr,
  *   advertised: true,
@@ -123,18 +123,16 @@ export type AddressingPrefix = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/
  */
-export const AddressingPrefix = Resource<AddressingPrefix>(
-  AddressingPrefixTypeId,
-);
+export const Prefix = Resource<Prefix>(TypeId);
 
 /**
- * Returns true if the given value is an AddressingPrefix resource.
+ * Returns true if the given value is an Prefix resource.
  */
-export const isAddressingPrefix = (value: unknown): value is AddressingPrefix =>
-  Predicate.hasProperty(value, "Type") && value.Type === AddressingPrefixTypeId;
+export const isPrefix = (value: unknown): value is Prefix =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const AddressingPrefixProvider = () =>
-  Provider.succeed(AddressingPrefix, {
+export const PrefixProvider = () =>
+  Provider.succeed(Prefix, {
     stables: [
       "prefixId",
       "accountId",
@@ -275,7 +273,7 @@ const findByCidr = (accountId: string, cidr: string) =>
 const toAttributes = (
   prefix: addressing.GetPrefixResponse,
   accountId: string,
-): AddressingPrefixAttributes => ({
+): PrefixAttributes => ({
   prefixId: prefix.id ?? "",
   accountId,
   cidr: prefix.cidr ?? "",

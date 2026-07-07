@@ -11,16 +11,15 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LoadBalancerMonitorGroupTypeId =
-  "Cloudflare.LoadBalancer.MonitorGroup" as const;
-type LoadBalancerMonitorGroupTypeId = typeof LoadBalancerMonitorGroupTypeId;
+const TypeId = "Cloudflare.LoadBalancer.MonitorGroup" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A monitor membership within a monitor group.
  */
-export interface LoadBalancerMonitorGroupMember {
+export interface MonitorGroupMember {
   /**
-   * The ID of the {@link LoadBalancerMonitor} to include in the group.
+   * The ID of the {@link Monitor} to include in the group.
    */
   monitorId: string;
   /**
@@ -41,7 +40,7 @@ export interface LoadBalancerMonitorGroupMember {
   mustBeHealthy?: boolean;
 }
 
-export interface LoadBalancerMonitorGroupProps {
+export interface MonitorGroupProps {
   /**
    * A short description of the monitor group. Monitor groups have no name
    * field, so the description doubles as the group's identity for state
@@ -53,10 +52,10 @@ export interface LoadBalancerMonitorGroupProps {
   /**
    * List of monitors in this group.
    */
-  members: ReadonlyArray<LoadBalancerMonitorGroupMember>;
+  members: ReadonlyArray<MonitorGroupMember>;
 }
 
-export interface LoadBalancerMonitorGroupAttributes {
+export interface MonitorGroupAttributes {
   /** Cloudflare-assigned monitor group identifier. */
   monitorGroupId: string;
   /** The Cloudflare account the monitor group belongs to. */
@@ -69,18 +68,18 @@ export interface LoadBalancerMonitorGroupAttributes {
   modifiedOn: string | undefined;
 }
 
-export type LoadBalancerMonitorGroup = Resource<
-  LoadBalancerMonitorGroupTypeId,
-  LoadBalancerMonitorGroupProps,
-  LoadBalancerMonitorGroupAttributes,
+export type MonitorGroup = Resource<
+  TypeId,
+  MonitorGroupProps,
+  MonitorGroupAttributes,
   never,
   Providers
 >;
 
 /**
  * A Cloudflare Load Balancing monitor group — aggregates several
- * {@link LoadBalancerMonitor}s into one health signal that a
- * {@link LoadBalancerPool} can reference via `monitorGroup` (mutually
+ * {@link Monitor}s into one health signal that a
+ * {@link Pool} can reference via `monitorGroup` (mutually
  * exclusive with `monitor`).
  *
  * Monitor groups are an Enterprise-only feature; on non-entitled accounts
@@ -91,7 +90,7 @@ export type LoadBalancerMonitorGroup = Resource<
  * @section Creating a Monitor Group
  * @example Group of two monitors
  * ```typescript
- * const group = yield* Cloudflare.LoadBalancerMonitorGroup("ApiChecks", {
+ * const group = yield* Cloudflare.LoadBalancer.MonitorGroup("ApiChecks", {
  *   members: [
  *     { monitorId: httpsMonitor.monitorId },
  *     { monitorId: tcpMonitor.monitorId, mustBeHealthy: false },
@@ -102,7 +101,7 @@ export type LoadBalancerMonitorGroup = Resource<
  * @section Using with a Pool
  * @example Attach the group to a pool
  * ```typescript
- * yield* Cloudflare.LoadBalancerPool("ApiPool", {
+ * yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  *   monitorGroup: group.monitorGroupId,
  * });
@@ -110,24 +109,19 @@ export type LoadBalancerMonitorGroup = Resource<
  *
  * @see https://developers.cloudflare.com/load-balancing/monitors/
  */
-export const LoadBalancerMonitorGroup = Resource<LoadBalancerMonitorGroup>(
-  LoadBalancerMonitorGroupTypeId,
-);
+export const MonitorGroup = Resource<MonitorGroup>(TypeId);
 
 /**
- * Returns true if the given value is a LoadBalancerMonitorGroup resource.
+ * Returns true if the given value is a MonitorGroup resource.
  */
-export const isLoadBalancerMonitorGroup = (
-  value: unknown,
-): value is LoadBalancerMonitorGroup =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LoadBalancerMonitorGroupTypeId;
+export const isMonitorGroup = (value: unknown): value is MonitorGroup =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const LoadBalancerMonitorGroupProvider = () =>
-  Provider.succeed(LoadBalancerMonitorGroup, {
+export const MonitorGroupProvider = () =>
+  Provider.succeed(MonitorGroup, {
     stables: ["monitorGroupId", "accountId", "createdOn"],
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
@@ -272,7 +266,7 @@ const createDescription = (id: string, description: string | undefined) =>
     return description ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const buildMembers = (news: LoadBalancerMonitorGroupProps) =>
+const buildMembers = (news: MonitorGroupProps) =>
   news.members.map((m) => ({
     // Inputs are resolved to concrete strings by Plan.
     monitorId: m.monitorId as string,
@@ -284,7 +278,7 @@ const buildMembers = (news: LoadBalancerMonitorGroupProps) =>
 const toAttributes = (
   group: ObservedMonitorGroup,
   accountId: string,
-): LoadBalancerMonitorGroupAttributes => ({
+): MonitorGroupAttributes => ({
   monitorGroupId: group.id,
   accountId,
   description: group.description,

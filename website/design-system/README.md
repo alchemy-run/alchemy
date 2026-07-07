@@ -91,7 +91,7 @@ emphasis, and never uses emoji outside the occasional Discord context.
 - Headings: **Sentence case** — "Getting started", "What is alchemy?",
   "Plan, deploy, destroy"
 - `alchemy deploy`, `alchemy dev`, `alchemy destroy` — CLI verbs lowercase
-- TypeScript identifiers verbatim (`Cloudflare.R2Bucket`, `Effect.gen`)
+- TypeScript identifiers verbatim (`Cloudflare.R2.Bucket`, `Effect.gen`)
 
 **Don't**
 

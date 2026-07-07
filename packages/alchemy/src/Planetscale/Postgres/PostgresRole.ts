@@ -113,8 +113,10 @@ export interface PostgresRoleAttributes {
   database: string;
   /** The Postgres database name inside the branch. */
   databaseName: string;
-  /** Parsed connection components ready to feed into Cloudflare Hyperdrive. */
+  /** Parsed direct (port 5432) connection components ready to feed into Cloudflare Hyperdrive. */
   origin: PostgresOrigin;
+  /** Parsed pooled (PSBouncer, port 6432) connection components, e.g. for a Hyperdrive `dev` origin. */
+  pooledOrigin: PostgresOrigin;
   /** Direct connection URL for the database (Redacted). */
   connectionUrl: Redacted.Redacted<string>;
   /** Pooled connection URL via PSBouncer (port 6432, Redacted). */
@@ -528,6 +530,14 @@ const buildAttributes = (
       scheme: "postgres",
       host: role.access_host_url,
       port: 5432,
+      database: role.database_name,
+      user: role.username,
+      password,
+    },
+    pooledOrigin: {
+      scheme: "postgres",
+      host: role.access_host_url,
+      port: 6432,
       database: role.database_name,
       user: role.username,
       password,

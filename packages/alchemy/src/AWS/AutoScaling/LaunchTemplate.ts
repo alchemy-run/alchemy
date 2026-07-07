@@ -147,7 +147,7 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  *   yield* Http.serve(HttpServerResponse.json({ ok: true }));
  *
  *   return {
- *     main: import.meta.filename,
+ *     main: import.meta.url,
  *     imageId,
  *     instanceType: "t3.small",
  *     securityGroupIds: [securityGroup.groupId],
@@ -303,7 +303,7 @@ export const LaunchTemplateProvider = () =>
         return Number(versionNumber);
       });
 
-      const toAttributes = Effect.fnUntraced(function* (
+      const toAttributes = Effect.fn(function* (
         template: ec2.LaunchTemplate,
         runtime: Partial<LaunchTemplate["Attributes"]> = {},
       ) {

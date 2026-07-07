@@ -47,7 +47,7 @@ test.provider("create, update, delete webhook destination", (stack) =>
     const webhook = yield* stack.deploy(
       Effect.gen(function* () {
         const worker = yield* Receiver();
-        return yield* Cloudflare.NotificationWebhook("AlertWebhook", {
+        return yield* Cloudflare.Alerting.NotificationWebhook("AlertWebhook", {
           url: worker.url.as<string>(),
         });
       }),
@@ -70,7 +70,7 @@ test.provider("create, update, delete webhook destination", (stack) =>
     const renamed = yield* stack.deploy(
       Effect.gen(function* () {
         const worker = yield* Receiver();
-        return yield* Cloudflare.NotificationWebhook("AlertWebhook", {
+        return yield* Cloudflare.Alerting.NotificationWebhook("AlertWebhook", {
           name: "alchemy-test-alerting-webhook-renamed",
           url: worker.url.as<string>(),
         });
@@ -106,14 +106,14 @@ test.provider("list enumerates the deployed webhook destination", (stack) =>
     const webhook = yield* stack.deploy(
       Effect.gen(function* () {
         const worker = yield* Receiver();
-        return yield* Cloudflare.NotificationWebhook("ListWebhook", {
+        return yield* Cloudflare.Alerting.NotificationWebhook("ListWebhook", {
           url: worker.url.as<string>(),
         });
       }),
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.NotificationWebhook,
+      Cloudflare.Alerting.NotificationWebhook,
     );
     const all = yield* provider.list();
 

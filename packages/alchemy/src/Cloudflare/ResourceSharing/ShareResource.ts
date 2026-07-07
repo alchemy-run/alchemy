@@ -10,8 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { ShareableResourceType, ShareStatus } from "./Share.ts";
 
-const ShareResourceTypeId = "Cloudflare.ResourceSharing.ShareResource" as const;
-type ShareResourceTypeId = typeof ShareResourceTypeId;
+const TypeId = "Cloudflare.ResourceSharing.ShareResource" as const;
+type TypeId = typeof TypeId;
 
 export type ShareResourceProps = {
   /**
@@ -91,7 +91,7 @@ export type ShareResourceAttributes = {
 };
 
 export type ShareResource = Resource<
-  ShareResourceTypeId,
+  TypeId,
   ShareResourceProps,
   ShareResourceAttributes,
   never,
@@ -113,7 +113,7 @@ export type ShareResource = Resource<
  * @section Adding a Resource to a Share
  * @example Share an additional gateway policy
  * ```typescript
- * const entry = yield* Cloudflare.ShareResource("ExtraPolicy", {
+ * const entry = yield* Cloudflare.ResourceSharing.ShareResource("ExtraPolicy", {
  *   shareId: share.shareId,
  *   resourceType: "gateway-policy",
  *   resourceId: policy.ruleId,
@@ -123,7 +123,7 @@ export type ShareResource = Resource<
  * @section Updating Metadata
  * @example Update `meta` in place
  * ```typescript
- * const entry = yield* Cloudflare.ShareResource("ExtraPolicy", {
+ * const entry = yield* Cloudflare.ResourceSharing.ShareResource("ExtraPolicy", {
  *   shareId: share.shareId,
  *   resourceType: "gateway-policy",
  *   resourceId: policy.ruleId,
@@ -133,13 +133,13 @@ export type ShareResource = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-account-resources/
  */
-export const ShareResource = Resource<ShareResource>(ShareResourceTypeId);
+export const ShareResource = Resource<ShareResource>(TypeId);
 
 /**
  * Returns true if the given value is a ShareResource resource.
  */
 export const isShareResource = (value: unknown): value is ShareResource =>
-  Predicate.hasProperty(value, "Type") && value.Type === ShareResourceTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ShareResourceProvider = () =>
   Provider.succeed(ShareResource, {

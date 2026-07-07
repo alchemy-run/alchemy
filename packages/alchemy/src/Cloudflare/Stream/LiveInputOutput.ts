@@ -9,14 +9,13 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamLiveInputOutputTypeId =
-  "Cloudflare.Stream.LiveInputOutput" as const;
-type StreamLiveInputOutputTypeId = typeof StreamLiveInputOutputTypeId;
+const TypeId = "Cloudflare.Stream.LiveInputOutput" as const;
+type TypeId = typeof TypeId;
 
-export type StreamLiveInputOutputProps = {
+export type LiveInputOutputProps = {
   /**
    * The unique identifier (`uid`) of the live input the output restreams
-   * from. Usually a reference to a `StreamLiveInput`'s `liveInputId`
+   * from. Usually a reference to a `LiveInput`'s `liveInputId`
    * attribute.
    *
    * Immutable — an output belongs to exactly one live input, so changing
@@ -48,7 +47,7 @@ export type StreamLiveInputOutputProps = {
   enabled?: boolean;
 };
 
-export type StreamLiveInputOutputAttributes = {
+export type LiveInputOutputAttributes = {
   /**
    * The unique identifier for the output (Cloudflare `uid`).
    */
@@ -76,17 +75,17 @@ export type StreamLiveInputOutputAttributes = {
   enabled: boolean;
 };
 
-export type StreamLiveInputOutput = Resource<
-  StreamLiveInputOutputTypeId,
-  StreamLiveInputOutputProps,
-  StreamLiveInputOutputAttributes,
+export type LiveInputOutput = Resource<
+  TypeId,
+  LiveInputOutputProps,
+  LiveInputOutputAttributes,
   never,
   Providers
 >;
 
 /**
  * A Cloudflare Stream live input output — restreams (simulcasts) live
- * video received by a `StreamLiveInput` to another RTMP(S) destination
+ * video received by a `LiveInput` to another RTMP(S) destination
  * such as YouTube Live or Twitch.
  *
  * The destination (`url` + `streamKey`) is immutable: Cloudflare's update
@@ -100,9 +99,9 @@ export type StreamLiveInputOutput = Resource<
  * @section Creating an output
  * @example Restream a live input to YouTube
  * ```typescript
- * const input = yield* Cloudflare.StreamLiveInput("Broadcast", {});
+ * const input = yield* Cloudflare.Stream.LiveInput("Broadcast", {});
  *
- * const youtube = yield* Cloudflare.StreamLiveInputOutput("YouTube", {
+ * const youtube = yield* Cloudflare.Stream.LiveInputOutput("YouTube", {
  *   liveInputId: input.liveInputId,
  *   url: "rtmps://a.rtmps.youtube.com/live2",
  *   streamKey: youtubeStreamKey,
@@ -112,7 +111,7 @@ export type StreamLiveInputOutput = Resource<
  * @section Managing an output
  * @example Pause restreaming without deleting the output
  * ```typescript
- * const youtube = yield* Cloudflare.StreamLiveInputOutput("YouTube", {
+ * const youtube = yield* Cloudflare.Stream.LiveInputOutput("YouTube", {
  *   liveInputId: input.liveInputId,
  *   url: "rtmps://a.rtmps.youtube.com/live2",
  *   streamKey: youtubeStreamKey,
@@ -122,21 +121,16 @@ export type StreamLiveInputOutput = Resource<
  *
  * @see https://developers.cloudflare.com/stream/stream-live/simulcasting/
  */
-export const StreamLiveInputOutput = Resource<StreamLiveInputOutput>(
-  StreamLiveInputOutputTypeId,
-);
+export const LiveInputOutput = Resource<LiveInputOutput>(TypeId);
 
 /**
- * Returns true if the given value is a StreamLiveInputOutput resource.
+ * Returns true if the given value is a LiveInputOutput resource.
  */
-export const isStreamLiveInputOutput = (
-  value: unknown,
-): value is StreamLiveInputOutput =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === StreamLiveInputOutputTypeId;
+export const isLiveInputOutput = (value: unknown): value is LiveInputOutput =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const StreamLiveInputOutputProvider = () =>
-  Provider.succeed(StreamLiveInputOutput, {
+export const LiveInputOutputProvider = () =>
+  Provider.succeed(LiveInputOutput, {
     stables: ["outputId", "liveInputId", "accountId", "url", "streamKey"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -313,7 +307,7 @@ const toAttributes = (
     | ObservedOutput,
   accountId: string,
   liveInputId: string,
-): StreamLiveInputOutputAttributes => ({
+): LiveInputOutputAttributes => ({
   outputId: output.uid ?? "",
   liveInputId,
   accountId,

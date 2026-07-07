@@ -68,7 +68,7 @@ test.provider(
       // Create — scoped to the whole account.
       const v1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.IamResourceGroup("Rg", {
+          return yield* Cloudflare.Iam.ResourceGroup("Rg", {
             name: RG_NAME,
             scope: {
               key: accountScopeKey,
@@ -92,7 +92,7 @@ test.provider(
       // Same resource group (no replacement).
       const v2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.IamResourceGroup("Rg", {
+          return yield* Cloudflare.Iam.ResourceGroup("Rg", {
             name: RG_NAME_RENAMED,
             scope: {
               key: accountScopeKey,
@@ -113,7 +113,7 @@ test.provider(
       // observes the in-sync state and applies nothing.
       const v3 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.IamResourceGroup("Rg", {
+          return yield* Cloudflare.Iam.ResourceGroup("Rg", {
             name: RG_NAME_RENAMED,
             scope: {
               key: accountScopeKey,
@@ -142,7 +142,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.IamResourceGroup("ListRg", {
+          return yield* Cloudflare.Iam.ResourceGroup("ListRg", {
             name: "alchemy-iam-rg-list",
             scope: {
               key: accountScopeKey,
@@ -153,7 +153,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.IamResourceGroup,
+        Cloudflare.Iam.ResourceGroup,
       );
       const all = yield* provider.list();
 

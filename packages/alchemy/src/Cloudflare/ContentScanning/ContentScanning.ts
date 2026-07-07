@@ -9,13 +9,13 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ContentScanningTypeId = "Cloudflare.ContentScanning" as const;
-type ContentScanningTypeId = typeof ContentScanningTypeId;
+const TypeId = "Cloudflare.ContentScanning.ContentScanning" as const;
+type TypeId = typeof TypeId;
 
 /** The wire status values Cloudflare uses for Content Scanning. */
 type ContentScanningStatus = "enabled" | "disabled";
 
-export interface ContentScanningProps {
+export interface Props {
   /**
    * Zone to manage WAF Content Scanning on. Stable — changing the zone
    * triggers a replacement (the old zone's status is restored to the
@@ -35,7 +35,7 @@ export interface ContentScanningProps {
   enabled?: boolean;
 }
 
-export interface ContentScanningAttributes {
+export interface Attributes {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** Whether Content Scanning is currently enabled. */
@@ -51,9 +51,9 @@ export interface ContentScanningAttributes {
 }
 
 export type ContentScanning = Resource<
-  ContentScanningTypeId,
-  ContentScanningProps,
-  ContentScanningAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -77,16 +77,16 @@ export type ContentScanning = Resource<
  * @section Enabling Content Scanning
  * @example Turn on malicious-upload scanning for a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.ContentScanning("UploadScanning", {
+ * yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Pin Content Scanning off
  * ```typescript
- * yield* Cloudflare.ContentScanning("UploadScanning", {
+ * yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -95,11 +95,11 @@ export type ContentScanning = Resource<
  * @section Custom scan expressions
  * @example Scan a JSON-embedded file field
  * ```typescript
- * const scanning = yield* Cloudflare.ContentScanning("UploadScanning", {
+ * const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.ContentScanningExpression("ScanJsonFile", {
+ * yield* Cloudflare.ContentScanning.Expression("ScanJsonFile", {
  *   zoneId: scanning.zoneId,
  *   payload: 'lookup_json_string(http.request.body.raw, "file")',
  * });
@@ -107,13 +107,13 @@ export type ContentScanning = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/
  */
-export const ContentScanning = Resource<ContentScanning>(ContentScanningTypeId);
+export const ContentScanning = Resource<ContentScanning>(TypeId);
 
 /**
  * Returns true if the given value is a ContentScanning resource.
  */
 export const isContentScanning = (value: unknown): value is ContentScanning =>
-  Predicate.hasProperty(value, "Type") && value.Type === ContentScanningTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ContentScanningProvider = () =>
   Provider.succeed(ContentScanning, {
@@ -137,9 +137,7 @@ export const ContentScanningProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ContentScanningAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -234,7 +232,7 @@ const toAttributes = (
     | contentScanning.GetContentScanningResponse
     | contentScanning.PutContentScanningResponse,
   initialValue: string,
-): ContentScanningAttributes => ({
+): Attributes => ({
   zoneId,
   enabled: statusOf(setting) === "enabled",
   modified: setting.modified ?? undefined,

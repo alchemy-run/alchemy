@@ -5,23 +5,23 @@ import * as Effect from "effect/Effect";
  * Fixture workflow used by `Workflow.test.ts`.
  *
  * Exercises:
- *  - `Cloudflare.task` durable steps with retry config and step context
- *  - `Cloudflare.sleep` between steps
- *  - `Cloudflare.waitForEvent` external event delivery
- *  - `Cloudflare.WorkerEnvironment` access from inside the body — regression
+ *  - `Cloudflare.Workflows.task` durable steps with retry config and step context
+ *  - `Cloudflare.Workflows.sleep` between steps
+ *  - `Cloudflare.Workflows.waitForEvent` external event delivery
+ *  - `Cloudflare.Workers.WorkerEnvironment` access from inside the body — regression
  *    guard for https://github.com/alchemy-run/alchemy-effect/pull/71
  */
 export default class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
   "TestWorkflow",
   Effect.gen(function* () {
     return Effect.fn(function* (input: { value: string; wait?: boolean }) {
-      const env = yield* Cloudflare.WorkerEnvironment;
-      const event = yield* Cloudflare.WorkflowEvent;
+      const env = yield* Cloudflare.Workers.WorkerEnvironment;
+      const event = yield* Cloudflare.Workflows.WorkflowEvent;
 
-      const greeted = yield* Cloudflare.task(
+      const greeted = yield* Cloudflare.Workflows.task(
         "greet",
         Effect.gen(function* () {
-          const context = yield* Cloudflare.WorkflowStepContext;
+          const context = yield* Cloudflare.Workflows.WorkflowStepContext;
           return {
             text: `Hello, ${input.value}!`,
             attempt: context.attempt,
@@ -34,10 +34,9 @@ export default class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
       );
 
       if (input.wait) {
-        const external = yield* Cloudflare.waitForEvent<{ message: string }>(
-          "external-event",
-          { type: "test-event", timeout: "5 minutes" },
-        );
+        const external = yield* Cloudflare.Workflows.waitForEvent<{
+          message: string;
+        }>("external-event", { type: "test-event", timeout: "5 minutes" });
 
         return {
           greeting: external.message,
@@ -48,9 +47,9 @@ export default class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
         };
       }
 
-      yield* Cloudflare.sleep("cooldown", "1 second");
+      yield* Cloudflare.Workflows.sleep("cooldown", "1 second");
 
-      const finalized = yield* Cloudflare.task(
+      const finalized = yield* Cloudflare.Workflows.task(
         "finalize",
         Effect.succeed({
           greeting: greeted.text,

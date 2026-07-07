@@ -14,12 +14,12 @@ import {
   policyFingerprint,
   resolvePolicies,
   type ApiTokenBinding,
-  type ApiTokenProps,
+  type Props,
 } from "./Common.ts";
 
 export type UserApiToken = Resource<
-  "Cloudflare.UserApiToken",
-  ApiTokenProps,
+  "Cloudflare.ApiToken.UserApiToken",
+  Props,
   {
     tokenId: string;
     name: string;
@@ -54,7 +54,7 @@ export type UserApiToken = Resource<
  * @section Creating a Token
  * @example A token bound to the authenticated user
  * ```typescript
- * const token = yield* Cloudflare.UserApiToken("personal-token", {
+ * const token = yield* Cloudflare.ApiToken.UserApiToken("personal-token", {
  *   name: "my-personal-token",
  *   policies: [
  *     {
@@ -71,7 +71,7 @@ export type UserApiToken = Resource<
  * A token can be created with no `policies` of its own; the policies are
  * supplied through its binding contract (see {@link ApiTokenBinding}).
  * ```typescript
- * const token = yield* Cloudflare.UserApiToken("scoped-token");
+ * const token = yield* Cloudflare.ApiToken.UserApiToken("scoped-token");
  *
  * yield* token.bind("MyCapability", {
  *   policies: [
@@ -102,7 +102,9 @@ export type UserApiToken = Resource<
  * };
  * ```
  */
-export const UserApiToken = Resource<UserApiToken>("Cloudflare.UserApiToken");
+export const UserApiToken = Resource<UserApiToken>(
+  "Cloudflare.ApiToken.UserApiToken",
+);
 
 type UserApiTokenAttributes = UserApiToken["Attributes"];
 

@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { MagicTunnelBgp, MagicTunnelHealthCheck } from "./GreTunnel.ts";
 
-const IpsecTunnelTypeId = "Cloudflare.MagicTransit.IpsecTunnel" as const;
-type IpsecTunnelTypeId = typeof IpsecTunnelTypeId;
+const TypeId = "Cloudflare.MagicTransit.IpsecTunnel" as const;
+type TypeId = typeof TypeId;
 
 export interface IpsecTunnelProps {
   /**
@@ -111,7 +111,7 @@ export interface IpsecTunnelAttributes {
 }
 
 export type IpsecTunnel = Resource<
-  IpsecTunnelTypeId,
+  TypeId,
   IpsecTunnelProps,
   IpsecTunnelAttributes,
   never,
@@ -135,7 +135,7 @@ export type IpsecTunnel = Resource<
  * @section Creating an IPsec tunnel
  * @example Basic tunnel with a provided PSK
  * ```typescript
- * const tunnel = yield* Cloudflare.IpsecTunnel("branch", {
+ * const tunnel = yield* Cloudflare.MagicTransit.IpsecTunnel("branch", {
  *   name: "branch-ipsec-1",
  *   cloudflareEndpoint: "203.0.113.1",
  *   customerEndpoint: "198.51.100.1",
@@ -146,7 +146,7 @@ export type IpsecTunnel = Resource<
  *
  * @example Tunnel with replay protection and health checks
  * ```typescript
- * const tunnel = yield* Cloudflare.IpsecTunnel("branch", {
+ * const tunnel = yield* Cloudflare.MagicTransit.IpsecTunnel("branch", {
  *   name: "branch-ipsec-1",
  *   cloudflareEndpoint: "203.0.113.1",
  *   interfaceAddress: "10.213.0.10/31",
@@ -157,13 +157,13 @@ export type IpsecTunnel = Resource<
  *
  * @see https://developers.cloudflare.com/magic-wan/reference/tunnels/
  */
-export const IpsecTunnel = Resource<IpsecTunnel>(IpsecTunnelTypeId);
+export const IpsecTunnel = Resource<IpsecTunnel>(TypeId);
 
 /**
  * Returns true if the given value is an IpsecTunnel resource.
  */
 export const isIpsecTunnel = (value: unknown): value is IpsecTunnel =>
-  Predicate.hasProperty(value, "Type") && value.Type === IpsecTunnelTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IpsecTunnelProvider = () =>
   Provider.succeed(IpsecTunnel, {

@@ -18,16 +18,25 @@ import { relations, Widgets } from "./schema.ts";
 export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker>()(
   "PlanetscaleHyperdriveWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
-    const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.postgres(conn.connectionString, { relations });
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
+
+        if (request.method === "GET" && url.pathname === "/hyperdrive") {
+          return yield* HttpServerResponse.json({
+            host: yield* conn.host,
+            port: yield* conn.port,
+            user: yield* conn.user,
+            database: yield* conn.database,
+          });
+        }
 
         if (request.method === "GET" && url.pathname === "/widgets") {
           const widgets = yield* db.select().from(Widgets);
@@ -67,5 +76,5 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
         ),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.HyperdriveBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.Hyperdrive.ConnectBinding))),
 ) {}

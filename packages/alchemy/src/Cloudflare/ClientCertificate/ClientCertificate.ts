@@ -11,14 +11,14 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ClientCertificateTypeId = "Cloudflare.ClientCertificate" as const;
-type ClientCertificateTypeId = typeof ClientCertificateTypeId;
+const TypeId = "Cloudflare.ClientCertificate.ClientCertificate" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Lifecycle status of a client certificate. `pending_reactivation` and
  * `pending_revocation` are in-progress asynchronous transitions.
  */
-export type ClientCertificateStatus =
+export type Status =
   | "active"
   | "pending_reactivation"
   | "pending_revocation"
@@ -27,7 +27,7 @@ export type ClientCertificateStatus =
   // types.
   | (string & {});
 
-export interface ClientCertificateProps {
+export interface Props {
   /**
    * Zone the client certificate is issued under. Client certificates are a
    * zone-level API Shield feature.
@@ -54,7 +54,7 @@ export interface ClientCertificateProps {
   validityDays: number;
 }
 
-export interface ClientCertificateAttributes {
+export interface Attributes {
   /** Cloudflare-assigned identifier of the client certificate. */
   clientCertificateId: string;
   /** Zone the certificate was issued under. */
@@ -88,7 +88,7 @@ export interface ClientCertificateAttributes {
   /** Subject Key Identifier. */
   ski: string | undefined;
   /** Current lifecycle status of the certificate. */
-  status: ClientCertificateStatus;
+  status: Status;
   /** The number of days the certificate is valid after `issuedOn`. */
   validityDays: number;
   /** Identifier of the Certificate Authority that issued the certificate. */
@@ -98,9 +98,9 @@ export interface ClientCertificateAttributes {
 }
 
 export type ClientCertificate = Resource<
-  ClientCertificateTypeId,
-  ClientCertificateProps,
-  ClientCertificateAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -128,7 +128,7 @@ export type ClientCertificate = Resource<
  * @section Issuing a client certificate
  * @example Sign a CSR with the Cloudflare Managed CA
  * ```typescript
- * const cert = yield* Cloudflare.ClientCertificate("ApiClient", {
+ * const cert = yield* Cloudflare.ClientCertificate.ClientCertificate("ApiClient", {
  *   zoneId: zone.zoneId,
  *   csr: clientCsrPem,
  *   validityDays: 365,
@@ -141,7 +141,7 @@ export type ClientCertificate = Resource<
  * const fs = yield* FileSystem.FileSystem;
  * const csr = yield* fs.readFileString("certs/client.csr");
  *
- * const cert = yield* Cloudflare.ClientCertificate("ApiClient", {
+ * const cert = yield* Cloudflare.ClientCertificate.ClientCertificate("ApiClient", {
  *   zoneId: zone.zoneId,
  *   csr,
  *   validityDays: 90,
@@ -153,7 +153,7 @@ export type ClientCertificate = Resource<
  * ```typescript
  * // csr and validityDays are immutable — changing either replaces the
  * // certificate: a new one is signed and the old one is revoked.
- * const cert = yield* Cloudflare.ClientCertificate("ApiClient", {
+ * const cert = yield* Cloudflare.ClientCertificate.ClientCertificate("ApiClient", {
  *   zoneId: zone.zoneId,
  *   csr: rotatedCsrPem,
  *   validityDays: 365,
@@ -162,9 +162,7 @@ export type ClientCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  */
-export const ClientCertificate = Resource<ClientCertificate>(
-  ClientCertificateTypeId,
-);
+export const ClientCertificate = Resource<ClientCertificate>(TypeId);
 
 /**
  * Returns true if the given value is a ClientCertificate resource.
@@ -172,8 +170,7 @@ export const ClientCertificate = Resource<ClientCertificate>(
 export const isClientCertificate = (
   value: unknown,
 ): value is ClientCertificate =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ClientCertificateTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ClientCertificateProvider = () =>
   Provider.succeed(ClientCertificate, {
@@ -220,11 +217,8 @@ export const ClientCertificateProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.result ?? [])
-                    .filter((cert) => cert.status !== "revoked")
-                    .map(
-                      (cert): ClientCertificateAttributes =>
-                        toAttributes(cert, zone.id),
-                    ),
+                    .filter((cert) => !isGone(cert.status))
+                    .map((cert): Attributes => toAttributes(cert, zone.id)),
                 ),
               ),
               Effect.catchTag("Forbidden", () => Effect.succeed([])),
@@ -235,8 +229,8 @@ export const ClientCertificateProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as ClientCertificateProps;
-      const n = news as ClientCertificateProps;
+      const o = olds as Props;
+      const n = news as Props;
       // No prior props to compare against — let the engine decide.
       if (o.csr === undefined) return undefined;
       // The API has no update for csr/validityDays — every change replaces.
@@ -261,15 +255,15 @@ export const ClientCertificateProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (zoneId === undefined) return undefined;
 
-      // Owned path: refresh by our persisted certificate id. A revoked
-      // certificate stays listed on the zone forever — revocation is the
-      // delete semantic, so report it as gone.
+      // Owned path: refresh by our persisted certificate id. A revoked (or
+      // asynchronously revoking) certificate stays listed on the zone forever
+      // — revocation is the delete semantic, so report it as gone.
       if (output?.clientCertificateId) {
         const observed = yield* getCertificate(
           zoneId,
           output.clientCertificateId,
         );
-        if (observed && observed.status !== "revoked") {
+        if (observed && !isGone(observed.status)) {
           return toAttributes(observed, zoneId);
         }
         return undefined;
@@ -298,7 +292,7 @@ export const ClientCertificateProvider = () =>
       let observed = output?.clientCertificateId
         ? yield* getCertificate(zoneId, output.clientCertificateId)
         : undefined;
-      if (observed?.status === "revoked") observed = undefined;
+      if (observed && isGone(observed.status)) observed = undefined;
 
       // 2. Fall back to scanning the zone for a non-revoked certificate
       //    issued from the same CSR with the same validity. Matching on
@@ -336,11 +330,7 @@ export const ClientCertificateProvider = () =>
         output.zoneId,
         output.clientCertificateId,
       );
-      if (
-        !observed ||
-        observed.status === "revoked" ||
-        observed.status === "pending_revocation"
-      ) {
+      if (!observed || isGone(observed.status)) {
         return;
       }
       yield* clientCertificates
@@ -390,7 +380,7 @@ const findByCsr = (zoneId: string, csr: string, validityDays: number) =>
     .pipe(
       Stream.filter(
         (cert) =>
-          cert.status !== "revoked" &&
+          !isGone(cert.status) &&
           cert.validityDays === validityDays &&
           typeof cert.csr === "string" &&
           normalizePem(cert.csr) === normalizePem(csr),
@@ -400,6 +390,17 @@ const findByCsr = (zoneId: string, csr: string, validityDays: number) =>
       Effect.map((cert): ObservedCertificate | undefined => cert),
     );
 
+/**
+ * A certificate is "gone" once it is `revoked` or asynchronously transitioning
+ * to it (`pending_revocation`). Revocation is the delete semantic, and a
+ * revoking certificate can no longer serve mTLS — so it must never be adopted,
+ * reused, listed, or treated as live. Without this, a prior run's async revoke
+ * leaves a `pending_revocation` certificate that a fresh deploy would otherwise
+ * mistake for an existing live certificate matching the CSR.
+ */
+const isGone = (status: string | null | undefined): boolean =>
+  status === "revoked" || status === "pending_revocation";
+
 /** Normalize PEM content for comparison (CRLF + trailing-newline noise). */
 const normalizePem = (pem: string | undefined): string | undefined =>
   pem?.replace(/\r\n/g, "\n").trim();
@@ -407,7 +408,7 @@ const normalizePem = (pem: string | undefined): string | undefined =>
 const toAttributes = (
   cert: ObservedCertificate,
   zoneId: string,
-): ClientCertificateAttributes => ({
+): Attributes => ({
   clientCertificateId: cert.id!,
   zoneId,
   certificate: cert.certificate ?? "",
@@ -424,7 +425,7 @@ const toAttributes = (
   serialNumber: cert.serialNumber ?? undefined,
   signature: cert.signature ?? undefined,
   ski: cert.ski ?? undefined,
-  status: (cert.status ?? "active") as ClientCertificateStatus,
+  status: (cert.status ?? "active") as Status,
   validityDays: cert.validityDays ?? 0,
   certificateAuthorityId: cert.certificateAuthority?.id ?? undefined,
   certificateAuthorityName: cert.certificateAuthority?.name ?? undefined,

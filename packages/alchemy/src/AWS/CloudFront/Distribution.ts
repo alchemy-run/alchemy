@@ -570,7 +570,7 @@ export const DistributionProvider = () =>
         ).pipe(
           Effect.andThen(() => getCurrent(distributionId)),
           Effect.flatMap(
-            Effect.fnUntraced(function* (current) {
+            Effect.fn(function* (current) {
               if (!current) {
                 yield* Effect.logInfo(
                   `CloudFront Distribution delete: ${distributionId} already absent while waiting`,

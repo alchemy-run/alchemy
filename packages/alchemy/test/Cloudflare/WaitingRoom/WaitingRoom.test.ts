@@ -110,7 +110,7 @@ test.provider.skipIf(!entitledZoneId)(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.WaitingRoom("Room", {
+          return yield* Cloudflare.WaitingRoom.WaitingRoom("Room", {
             zoneId,
             name: NAME_LIFECYCLE,
             host: entitledZoneHost,
@@ -145,7 +145,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Update mutable fields in place — same physical room.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.WaitingRoom("Room", {
+          return yield* Cloudflare.WaitingRoom.WaitingRoom("Room", {
             zoneId,
             name: NAME_LIFECYCLE,
             host: entitledZoneHost,
@@ -193,12 +193,14 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.WaitingRoom);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.WaitingRoom.WaitingRoom,
+      );
 
       if (entitledZoneId) {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.WaitingRoom("ListRoom", {
+            return yield* Cloudflare.WaitingRoom.WaitingRoom("ListRoom", {
               zoneId: entitledZoneId,
               name: "alchemy-waitingroom-list",
               host: entitledZoneHost,

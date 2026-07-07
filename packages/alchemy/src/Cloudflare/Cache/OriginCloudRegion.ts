@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const OriginCloudRegionTypeId = "Cloudflare.Cache.OriginCloudRegion" as const;
-type OriginCloudRegionTypeId = typeof OriginCloudRegionTypeId;
+const TypeId = "Cloudflare.Cache.OriginCloudRegion" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud vendor hosting an origin. Region identifiers are
@@ -64,7 +64,7 @@ export interface OriginCloudRegionAttributes {
 }
 
 export type OriginCloudRegion = Resource<
-  OriginCloudRegionTypeId,
+  TypeId,
   OriginCloudRegionProps,
   OriginCloudRegionAttributes,
   never,
@@ -91,9 +91,9 @@ export type OriginCloudRegion = Resource<
  * @section Mapping origins to cloud regions
  * @example Map an origin IP to an AWS region
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.OriginCloudRegion("ApiOrigin", {
+ * yield* Cloudflare.Cache.OriginCloudRegion("ApiOrigin", {
  *   zoneId: zone.zoneId,
  *   ip: "192.0.2.10",
  *   vendor: "aws",
@@ -104,13 +104,13 @@ export type OriginCloudRegion = Resource<
  * @example Map several origins of the same zone
  * ```typescript
  * // One resource per origin IP — the IP is the mapping's identity.
- * yield* Cloudflare.OriginCloudRegion("UsOrigin", {
+ * yield* Cloudflare.Cache.OriginCloudRegion("UsOrigin", {
  *   zoneId: zone.zoneId,
  *   ip: "192.0.2.10",
  *   vendor: "gcp",
  *   region: "us-central1",
  * });
- * yield* Cloudflare.OriginCloudRegion("EuOrigin", {
+ * yield* Cloudflare.Cache.OriginCloudRegion("EuOrigin", {
  *   zoneId: zone.zoneId,
  *   ip: "192.0.2.20",
  *   vendor: "gcp",
@@ -120,9 +120,7 @@ export type OriginCloudRegion = Resource<
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/
  */
-export const OriginCloudRegion = Resource<OriginCloudRegion>(
-  OriginCloudRegionTypeId,
-);
+export const OriginCloudRegion = Resource<OriginCloudRegion>(TypeId);
 
 /**
  * Returns true if the given value is an OriginCloudRegion resource.
@@ -130,8 +128,7 @@ export const OriginCloudRegion = Resource<OriginCloudRegion>(
 export const isOriginCloudRegion = (
   value: unknown,
 ): value is OriginCloudRegion =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === OriginCloudRegionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Compare two origin IPs for identity. Cloudflare canonicalizes stored IPs

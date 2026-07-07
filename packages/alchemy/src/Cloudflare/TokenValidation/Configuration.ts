@@ -12,15 +12,14 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TokenConfigurationTypeId =
-  "Cloudflare.TokenValidation.Configuration" as const;
-type TokenConfigurationTypeId = typeof TokenConfigurationTypeId;
+const TypeId = "Cloudflare.TokenValidation.Configuration" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A JSON Web Key (JWK) in a token configuration's key set. These are public
  * keys (the public half of a JWKS), not secrets.
  */
-export type TokenValidationJwkKey =
+export type JwkKey =
   | {
       /** Key type — RSA. */
       kty: "RSA";
@@ -89,7 +88,7 @@ export interface TokenConfigurationProps {
    * The JWKS key set used to validate token signatures. Replacing entries
    * rotates the key set in place via the credentials endpoint.
    */
-  keys: TokenValidationJwkKey[];
+  keys: JwkKey[];
   /**
    * The token format. Only JWT is supported today. Cannot be changed after
    * creation — updating this property triggers a replacement.
@@ -112,7 +111,7 @@ export interface TokenConfigurationAttributes {
   /** The token format. */
   tokenType: "JWT";
   /** The JWKS key set currently active on the configuration. */
-  keys: TokenValidationJwkKey[];
+  keys: JwkKey[];
   /** ISO8601 creation timestamp. */
   createdAt: string;
   /** ISO8601 last-modified timestamp. */
@@ -120,7 +119,7 @@ export interface TokenConfigurationAttributes {
 }
 
 export type TokenConfiguration = Resource<
-  TokenConfigurationTypeId,
+  TypeId,
   TokenConfigurationProps,
   TokenConfigurationAttributes,
   never,
@@ -133,7 +132,7 @@ export type TokenConfiguration = Resource<
  *
  * A configuration holds a set of public JWKs (`keys`) plus the request
  * fields where the token is found (`tokenSources`). Rules
- * ({@link TokenValidationRule}) then reference the configuration by UUID in
+ * ({@link Rule}) then reference the configuration by UUID in
  * their expression (e.g. `is_jwt_valid("<configId>")`) to enforce
  * validation on selected hosts/operations.
  *
@@ -150,7 +149,7 @@ export type TokenConfiguration = Resource<
  * @section Creating a Configuration
  * @example JWT configuration with an RSA key
  * ```typescript
- * const config = yield* Cloudflare.TokenConfiguration("ApiJwt", {
+ * const config = yield* Cloudflare.TokenValidation.TokenConfiguration("ApiJwt", {
  *   zoneId: zone.zoneId,
  *   tokenSources: ['http.request.headers["authorization"][0]'],
  *   keys: [
@@ -170,7 +169,7 @@ export type TokenConfiguration = Resource<
  * ```typescript
  * // Changing `keys` PUTs the full key set to the credentials endpoint —
  * // the configuration (and its UUID) stays in place.
- * const config = yield* Cloudflare.TokenConfiguration("ApiJwt", {
+ * const config = yield* Cloudflare.TokenValidation.TokenConfiguration("ApiJwt", {
  *   zoneId: zone.zoneId,
  *   tokenSources: ['http.request.headers["authorization"][0]'],
  *   keys: [oldKey, newKey],
@@ -180,7 +179,7 @@ export type TokenConfiguration = Resource<
  * @section Enforcing Validation
  * @example Reference the configuration from a rule
  * ```typescript
- * yield* Cloudflare.TokenValidationRule("RequireJwt", {
+ * yield* Cloudflare.TokenValidation.Rule("RequireJwt", {
  *   zoneId: zone.zoneId,
  *   action: "block",
  *   expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
@@ -190,9 +189,7 @@ export type TokenConfiguration = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/jwt-validation/
  */
-export const TokenConfiguration = Resource<TokenConfiguration>(
-  TokenConfigurationTypeId,
-);
+export const TokenConfiguration = Resource<TokenConfiguration>(TypeId);
 
 /**
  * Returns true if the given value is a TokenConfiguration resource.
@@ -200,8 +197,7 @@ export const TokenConfiguration = Resource<TokenConfiguration>(
 export const isTokenConfiguration = (
   value: unknown,
 ): value is TokenConfiguration =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TokenConfigurationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TokenConfigurationProvider = () =>
   Provider.succeed(TokenConfiguration, {
@@ -378,18 +374,16 @@ const sameStrings = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(" ") === [...desired].sort().join(" ");
 
-const keyIdentity = (key: TokenValidationJwkKey) =>
+const keyIdentity = (key: JwkKey) =>
   key.kty === "RSA"
     ? `RSA:${key.alg}:${key.kid}:${key.n}:${key.e}`
     : `EC:${key.alg}:${key.crv}:${key.kid}:${key.x}:${key.y}`;
 
 const sameKeys = (
   observed: ObservedConfiguration["credentials"]["keys"],
-  desired: readonly TokenValidationJwkKey[],
+  desired: readonly JwkKey[],
 ) => {
-  const observedIds = observed
-    .map((key) => keyIdentity(key as TokenValidationJwkKey))
-    .sort();
+  const observedIds = observed.map((key) => keyIdentity(key as JwkKey)).sort();
   const desiredIds = desired.map(keyIdentity).sort();
   return (
     observedIds.length === desiredIds.length &&
@@ -408,9 +402,7 @@ const toAttributes = (
   tokenSources: [...configuration.tokenSources],
   tokenType: configuration.tokenType,
   // Distilled widens the RSA `alg` enum to an open union (`string & {}`).
-  keys: configuration.credentials.keys.map(
-    (key) => ({ ...key }) as TokenValidationJwkKey,
-  ),
+  keys: configuration.credentials.keys.map((key) => ({ ...key }) as JwkKey),
   createdAt: configuration.createdAt,
   lastUpdated: configuration.lastUpdated,
 });

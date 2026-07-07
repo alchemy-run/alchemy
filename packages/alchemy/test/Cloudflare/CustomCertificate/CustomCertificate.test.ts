@@ -110,7 +110,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.CustomCertificate,
+        Cloudflare.CustomCertificate.CustomCertificate,
       );
       const all = yield* provider.list();
 
@@ -128,13 +128,16 @@ test.provider(
         const key1 = yield* readFixture("key1.pem");
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CustomCertificate("ListEdgeCert", {
-              zoneId: entitledZoneId,
-              certificate: cert1,
-              privateKey: Redacted.make(key1),
-              type: "sni_custom",
-              bundleMethod: "force",
-            });
+            return yield* Cloudflare.CustomCertificate.CustomCertificate(
+              "ListEdgeCert",
+              {
+                zoneId: entitledZoneId,
+                certificate: cert1,
+                privateKey: Redacted.make(key1),
+                type: "sni_custom",
+                bundleMethod: "force",
+              },
+            );
           }),
         );
         const after = yield* provider.list();
@@ -163,13 +166,16 @@ test.provider.skipIf(!entitledZoneId)(
       // Create — upload the first certificate/key pair.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomCertificate("EdgeCert", {
-            zoneId,
-            certificate: cert1,
-            privateKey: Redacted.make(key1),
-            type: "sni_custom",
-            bundleMethod: "force",
-          });
+          return yield* Cloudflare.CustomCertificate.CustomCertificate(
+            "EdgeCert",
+            {
+              zoneId,
+              certificate: cert1,
+              privateKey: Redacted.make(key1),
+              type: "sni_custom",
+              bundleMethod: "force",
+            },
+          );
         }),
       );
 
@@ -186,13 +192,16 @@ test.provider.skipIf(!entitledZoneId)(
       // Rotate in place — a new cert/key pair PATCHes the same id.
       const rotated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomCertificate("EdgeCert", {
-            zoneId,
-            certificate: cert2,
-            privateKey: Redacted.make(key2),
-            type: "sni_custom",
-            bundleMethod: "force",
-          });
+          return yield* Cloudflare.CustomCertificate.CustomCertificate(
+            "EdgeCert",
+            {
+              zoneId,
+              certificate: cert2,
+              privateKey: Redacted.make(key2),
+              type: "sni_custom",
+              bundleMethod: "force",
+            },
+          );
         }),
       );
       expect(rotated.certificateId).toEqual(created.certificateId);
@@ -203,13 +212,16 @@ test.provider.skipIf(!entitledZoneId)(
       // Changing the immutable `type` triggers a replacement.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomCertificate("EdgeCert", {
-            zoneId,
-            certificate: cert2,
-            privateKey: Redacted.make(key2),
-            type: "legacy_custom",
-            bundleMethod: "force",
-          });
+          return yield* Cloudflare.CustomCertificate.CustomCertificate(
+            "EdgeCert",
+            {
+              zoneId,
+              certificate: cert2,
+              privateKey: Redacted.make(key2),
+              type: "legacy_custom",
+              bundleMethod: "force",
+            },
+          );
         }),
       );
       expect(replaced.certificateId).not.toEqual(rotated.certificateId);

@@ -92,7 +92,7 @@ describe.sequential("Dnssec", () => {
 
         const dnssec = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dnssec("ZoneDnssec", { zoneId });
+            return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", { zoneId });
           }),
         );
 
@@ -142,7 +142,7 @@ describe.sequential("Dnssec", () => {
 
         const enabled = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dnssec("ZoneDnssec", {
+            return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
               zoneId,
               status: "active",
             });
@@ -156,7 +156,7 @@ describe.sequential("Dnssec", () => {
         // replacing it.
         const disabled = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dnssec("ZoneDnssec", {
+            return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
               zoneId,
               status: "disabled",
             });
@@ -194,11 +194,11 @@ describe.sequential("Dnssec", () => {
 
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Dnssec("ZoneDnssec", { zoneId });
+            return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", { zoneId });
           }),
         );
 
-        const provider = yield* Provider.findProvider(Cloudflare.Dnssec);
+        const provider = yield* Provider.findProvider(Cloudflare.DNS.Dnssec);
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

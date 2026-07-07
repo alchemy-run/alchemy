@@ -14,7 +14,7 @@ const decode = (content: string | Uint8Array<ArrayBufferLike>) =>
  * Write `files` (paths relative to a fresh temp directory) and return
  * the temp directory's absolute path.
  */
-const writeFixture = Effect.fnUntraced(function* (
+const writeFixture = Effect.fn(function* (
   files: Record<string, string | Uint8Array>,
 ) {
   const fs = yield* FileSystem.FileSystem;

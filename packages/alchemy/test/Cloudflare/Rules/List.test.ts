@@ -61,7 +61,7 @@ test.provider("create and delete an ip list with default name", (stack) =>
     yield* stack.destroy();
 
     const list = yield* stack.deploy(
-      Cloudflare.RulesList("DefaultList", {
+      Cloudflare.Rules.List("DefaultList", {
         kind: "ip",
         description: "alchemy rules list create test",
         items: [
@@ -102,7 +102,7 @@ test.provider("update description and items in place (same listId)", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.RulesList("UpdateList", {
+      Cloudflare.Rules.List("UpdateList", {
         name: "alchemy_rules_list_update",
         kind: "ip",
         description: "v1",
@@ -115,7 +115,7 @@ test.provider("update description and items in place (same listId)", (stack) =>
     expect(initial.numItems).toEqual(2);
 
     const updated = yield* stack.deploy(
-      Cloudflare.RulesList("UpdateList", {
+      Cloudflare.Rules.List("UpdateList", {
         name: "alchemy_rules_list_update",
         kind: "ip",
         description: "v2",
@@ -142,7 +142,7 @@ test.provider("update description and items in place (same listId)", (stack) =>
 
     // Redeploying identical props is a no-op (still the same list).
     const noop = yield* stack.deploy(
-      Cloudflare.RulesList("UpdateList", {
+      Cloudflare.Rules.List("UpdateList", {
         name: "alchemy_rules_list_update",
         kind: "ip",
         description: "v2",
@@ -164,7 +164,7 @@ test.provider("changing kind replaces the list", (stack) =>
     yield* stack.destroy();
 
     const ipList = yield* stack.deploy(
-      Cloudflare.RulesList("ReplaceList", {
+      Cloudflare.Rules.List("ReplaceList", {
         name: "alchemy_rules_list_replace",
         kind: "ip",
         items: [{ ip: "203.0.113.9" }],
@@ -173,7 +173,7 @@ test.provider("changing kind replaces the list", (stack) =>
     expect(ipList.kind).toEqual("ip");
 
     const hostnameList = yield* stack.deploy(
-      Cloudflare.RulesList("ReplaceList", {
+      Cloudflare.Rules.List("ReplaceList", {
         name: "alchemy_rules_list_replace",
         kind: "hostname",
         items: [{ hostname: { urlHostname: "example.com" } }],
@@ -202,7 +202,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     const list = yield* stack.deploy(
-      Cloudflare.RulesList("HealList", {
+      Cloudflare.Rules.List("HealList", {
         name: "alchemy_rules_list_heal",
         kind: "ip",
         items: [{ ip: "203.0.113.11" }],
@@ -221,7 +221,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     );
 
     const healed = yield* stack.deploy(
-      Cloudflare.RulesList("HealList", {
+      Cloudflare.Rules.List("HealList", {
         name: "alchemy_rules_list_heal",
         kind: "ip",
         description: "healed",
@@ -271,7 +271,7 @@ test.provider("adopts an existing list with the same name", (stack) =>
       );
 
     const adopted = yield* stack.deploy(
-      Cloudflare.RulesList("AdoptList", {
+      Cloudflare.Rules.List("AdoptList", {
         name: "alchemy_rules_list_adopt",
         kind: "ip",
         description: "adopted",

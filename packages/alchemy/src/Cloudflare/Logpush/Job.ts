@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LogpushJobTypeId = "Cloudflare.Logpush.Job" as const;
-type LogpushJobTypeId = typeof LogpushJobTypeId;
+const TypeId = "Cloudflare.Logpush.Job" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Name of the dataset a Logpush job pushes. The available datasets depend
@@ -20,7 +20,7 @@ type LogpushJobTypeId = typeof LogpushJobTypeId;
  * `workers_trace_events` and `audit_logs` are account-scoped, while
  * `http_requests` and `firewall_events` are zone-scoped (Enterprise).
  */
-export type LogpushDataset = Exclude<
+export type Dataset = Exclude<
   NonNullable<logpush.CreateJobForAccountRequest["dataset"]>,
   null
 >;
@@ -29,7 +29,7 @@ export type LogpushDataset = Exclude<
  * Structured output configuration for a Logpush job — the replacement for
  * the deprecated `logpull_options` string.
  */
-export interface LogpushOutputOptions {
+export interface OutputOptions {
   /**
    * String prepended to each batch (e.g. `[` to build a JSON array).
    */
@@ -91,7 +91,7 @@ export interface LogpushOutputOptions {
   timestampFormat?: "unixnano" | "unix" | "rfc3339" | "rfc3339ms" | "rfc3339ns";
 }
 
-export interface LogpushJobProps {
+export interface JobProps {
   /**
    * Zone the job is scoped to. When omitted, the job is account-scoped
    * (using the account from the active Cloudflare credentials).
@@ -106,7 +106,7 @@ export interface LogpushJobProps {
    * Stable — the dataset is fixed at creation, so changing it triggers
    * a replacement.
    */
-  dataset: LogpushDataset;
+  dataset: Dataset;
   /**
    * Destination URI, including any credentials the destination needs —
    * e.g. `r2://bucket/{DATE}?account-id=…&access-key-id=…&secret-access-key=…`
@@ -147,7 +147,7 @@ export interface LogpushJobProps {
   /**
    * Structured output configuration (fields, format, delimiters, sampling).
    */
-  outputOptions?: LogpushOutputOptions;
+  outputOptions?: OutputOptions;
   /**
    * Maximum uncompressed file size of a batch, in bytes. Between 5 MB and
    * 1 GB, or `0` to disable the limit.
@@ -177,7 +177,7 @@ export interface LogpushJobProps {
   ownershipChallenge?: string;
 }
 
-export interface LogpushJobAttributes {
+export interface JobAttributes {
   /** Cloudflare-assigned numeric job id. */
   jobId: number;
   /** Account that owns the job. */
@@ -187,7 +187,7 @@ export interface LogpushJobAttributes {
   /** Job name. */
   name: string;
   /** Dataset the job pushes. */
-  dataset: LogpushDataset;
+  dataset: Dataset;
   /**
    * Destination URI. Note Cloudflare redacts embedded secrets (e.g. the
    * R2 `secret-access-key`) when echoing this back.
@@ -205,13 +205,7 @@ export interface LogpushJobAttributes {
   lastError: string | undefined;
 }
 
-export type LogpushJob = Resource<
-  LogpushJobTypeId,
-  LogpushJobProps,
-  LogpushJobAttributes,
-  never,
-  Providers
->;
+export type Job = Resource<TypeId, JobProps, JobAttributes, never, Providers>;
 
 /**
  * A Cloudflare Logpush job that pushes batches of logs (HTTP requests,
@@ -229,9 +223,9 @@ export type LogpushJob = Resource<
  * The R2 destination authenticates with S3-compatible credentials embedded
  * in the destination URI, so no ownership challenge is required.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("logs", {});
+ * const bucket = yield* Cloudflare.R2.Bucket("logs", {});
  *
- * const job = yield* Cloudflare.LogpushJob("worker-logs", {
+ * const job = yield* Cloudflare.Logpush.Job("worker-logs", {
  *   dataset: "workers_trace_events",
  *   destinationConf: Output.interpolate`r2://${bucket.bucketName}/{DATE}?account-id=${accountId}&access-key-id=${r2AccessKeyId}&secret-access-key=${r2SecretAccessKey}`,
  *   enabled: true,
@@ -241,7 +235,7 @@ export type LogpushJob = Resource<
  * @section Zone-scoped jobs
  * @example HTTP requests dataset on a zone (Enterprise)
  * ```typescript
- * const job = yield* Cloudflare.LogpushJob("http-logs", {
+ * const job = yield* Cloudflare.Logpush.Job("http-logs", {
  *   zoneId: zone.zoneId,
  *   dataset: "http_requests",
  *   destinationConf: "s3://my-bucket/logs?region=us-east-1",
@@ -252,7 +246,7 @@ export type LogpushJob = Resource<
  * @section Output configuration
  * @example Selecting fields and batching limits
  * ```typescript
- * const job = yield* Cloudflare.LogpushJob("worker-logs", {
+ * const job = yield* Cloudflare.Logpush.Job("worker-logs", {
  *   dataset: "workers_trace_events",
  *   destinationConf,
  *   outputOptions: {
@@ -266,22 +260,22 @@ export type LogpushJob = Resource<
  *
  * @see https://developers.cloudflare.com/logs/logpush/
  */
-export const LogpushJob = Resource<LogpushJob>(LogpushJobTypeId);
+export const Job = Resource<Job>(TypeId);
 
 /**
- * Returns true if the given value is a LogpushJob resource.
+ * Returns true if the given value is a Job resource.
  */
-export const isLogpushJob = (value: unknown): value is LogpushJob =>
-  Predicate.hasProperty(value, "Type") && value.Type === LogpushJobTypeId;
+export const isJob = (value: unknown): value is Job =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const LogpushJobProvider = () =>
-  Provider.succeed(LogpushJob, {
+export const JobProvider = () =>
+  Provider.succeed(Job, {
     stables: ["jobId", "accountId", "zoneId", "dataset", "kind"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const o = olds as LogpushJobProps;
-      const n = news as LogpushJobProps;
+      const o = olds as JobProps;
+      const n = news as JobProps;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -349,9 +343,7 @@ export const LogpushJobProvider = () =>
                 .map((job) =>
                   toAttributes(job, { accountId, zoneId: undefined }),
                 )
-                .filter(
-                  (attrs): attrs is LogpushJobAttributes => attrs !== undefined,
-                ),
+                .filter((attrs): attrs is JobAttributes => attrs !== undefined),
             ),
           ),
         );
@@ -370,8 +362,7 @@ export const LogpushJobProvider = () =>
                     toAttributes(job, { accountId, zoneId: zone.id }),
                   )
                   .filter(
-                    (attrs): attrs is LogpushJobAttributes =>
-                      attrs !== undefined,
+                    (attrs): attrs is JobAttributes => attrs !== undefined,
                   ),
               ),
             ),
@@ -486,11 +477,7 @@ const observeById = (scope: Scope, jobId: number) =>
     Effect.catchTag("JobNotFound", () => Effect.succeed(undefined)),
   );
 
-const findByName = (
-  scope: Scope,
-  name: string,
-  dataset: LogpushDataset | undefined,
-) =>
+const findByName = (scope: Scope, name: string, dataset: Dataset | undefined) =>
   (scope.zoneId !== undefined
     ? logpush.listJobsForZone.items({ zoneId: scope.zoneId })
     : logpush.listJobsForAccount.items({ accountId: scope.accountId })
@@ -520,12 +507,12 @@ interface JobMutableBody {
   maxUploadIntervalSeconds: number | undefined;
   maxUploadRecords: number | undefined;
   name: string;
-  outputOptions: LogpushOutputOptions | undefined;
+  outputOptions: OutputOptions | undefined;
   ownershipChallenge: string | undefined;
 }
 
 const buildMutableBody = (
-  news: LogpushJobProps,
+  news: JobProps,
   name: string,
   destinationConf: string,
 ): JobMutableBody => ({
@@ -541,11 +528,7 @@ const buildMutableBody = (
   ownershipChallenge: news.ownershipChallenge,
 });
 
-const createJob = (
-  scope: Scope,
-  dataset: LogpushDataset,
-  body: JobMutableBody,
-) =>
+const createJob = (scope: Scope, dataset: Dataset, body: JobMutableBody) =>
   (scope.zoneId !== undefined
     ? logpush.createJobForZone({ zoneId: scope.zoneId, dataset, ...body })
     : logpush.createJobForAccount({
@@ -577,8 +560,8 @@ const asNumber = (v: "0" | number | null | undefined): number | undefined =>
  */
 const needsUpdate = (
   desired: JobMutableBody,
-  news: LogpushJobProps,
-  olds: LogpushJobProps | undefined,
+  news: JobProps,
+  olds: JobProps | undefined,
   observed: logpush.GetJobResponse,
 ): boolean => {
   if (olds === undefined) return true;
@@ -621,11 +604,11 @@ const needsUpdate = (
  * defaults we must not fight.
  */
 const outputOptionsEqual = (
-  desired: LogpushOutputOptions,
+  desired: OutputOptions,
   observed: logpush.GetJobResponse["outputOptions"],
 ): boolean => {
   const o = observed ?? {};
-  for (const key of Object.keys(desired) as (keyof LogpushOutputOptions)[]) {
+  for (const key of Object.keys(desired) as (keyof OutputOptions)[]) {
     const want = desired[key];
     if (want === undefined) continue;
     const have = o[key] ?? undefined;
@@ -650,7 +633,7 @@ const undef = <T>(v: T | null | undefined): T | undefined =>
 const toAttributes = (
   observed: logpush.GetJobResponse | undefined,
   scope: Scope,
-): LogpushJobAttributes | undefined => {
+): JobAttributes | undefined => {
   if (
     observed?.id == null ||
     observed.dataset == null ||

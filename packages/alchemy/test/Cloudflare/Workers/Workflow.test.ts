@@ -55,8 +55,16 @@ const waitForStatus = (
   until: (status: WorkflowStatus) => boolean = isTerminal,
 ) =>
   client.get(`${url}/workflow/status/${id}`).pipe(
-    Effect.flatMap((res) => res.json),
-    Effect.map((json) => json as unknown as WorkflowStatus),
+    // The status endpoint transiently returns a 500 (HTML error page, not
+    // JSON) while the freshly-deployed worker's Workflow binding is still
+    // propagating. Only decode JSON on a 200; treat any other status as a
+    // non-terminal "pending" so the poll keeps swinging instead of dying
+    // on a JSON decode error.
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? res.json.pipe(Effect.map((json) => json as unknown as WorkflowStatus))
+        : Effect.succeed({ status: "pending" } as WorkflowStatus),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until,
@@ -82,7 +90,11 @@ const runWorkflowToCompletion = (url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
+        // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
+        // sleep after only six attempts and blow the test timeout.
+        schedule: Schedule.exponential("500 millis").pipe(
+          Schedule.either(Schedule.spaced("3 seconds")),
+        ),
         times: 15,
       }),
     );
@@ -202,7 +214,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.WorkflowResource,
+        Cloudflare.Workflows.WorkflowResource,
       );
       const all = yield* provider.list();
 

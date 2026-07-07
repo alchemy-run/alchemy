@@ -63,7 +63,7 @@ export type ApiToken = Resource<
  * @section Consuming the Token
  * @example Forward the token via Cloudflare Secrets
  * ```typescript
- * const secret = yield* Cloudflare.Secret("axiom-token", {
+ * const secret = yield* Cloudflare.SecretsStore.Secret("axiom-token", {
  *   value: ingest.token,
  * });
  * ```

@@ -115,10 +115,13 @@ describe.sequential("ManagedTransforms", () => {
           // 1. Create (adopt the singleton) — enable one response transform.
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ManagedTransforms("Transforms", {
-                zoneId,
-                responseHeaders: { [MANAGED_ID]: true },
-              });
+              return yield* Cloudflare.ManagedTransforms.ManagedTransforms(
+                "Transforms",
+                {
+                  zoneId,
+                  responseHeaders: { [MANAGED_ID]: true },
+                },
+              );
             }),
           );
           expect(created.zoneId).toEqual(zoneId);
@@ -140,13 +143,16 @@ describe.sequential("ManagedTransforms", () => {
           //    snapshot must remain sticky across updates.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ManagedTransforms("Transforms", {
-                zoneId,
-                responseHeaders: {
-                  [MANAGED_ID]: false,
-                  [UNMANAGED_ID]: true,
+              return yield* Cloudflare.ManagedTransforms.ManagedTransforms(
+                "Transforms",
+                {
+                  zoneId,
+                  responseHeaders: {
+                    [MANAGED_ID]: false,
+                    [UNMANAGED_ID]: true,
+                  },
                 },
-              });
+              );
             }),
           );
           expect(updated.zoneId).toEqual(zoneId);
@@ -209,10 +215,13 @@ describe.sequential("ManagedTransforms", () => {
           // Manage it to disabled.
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.ManagedTransforms("Transforms", {
-                zoneId,
-                responseHeaders: { [MANAGED_ID]: false },
-              });
+              return yield* Cloudflare.ManagedTransforms.ManagedTransforms(
+                "Transforms",
+                {
+                  zoneId,
+                  responseHeaders: { [MANAGED_ID]: false },
+                },
+              );
             }),
           );
           expect(created.initialResponseHeaders[MANAGED_ID]).toBe(true);
@@ -250,9 +259,12 @@ describe.sequential("ManagedTransforms", () => {
 
         const adopted = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.ManagedTransforms("Transforms", {
-              zoneId,
-            });
+            return yield* Cloudflare.ManagedTransforms.ManagedTransforms(
+              "Transforms",
+              {
+                zoneId,
+              },
+            );
           }),
         );
         expect(adopted.zoneId).toEqual(zoneId);
@@ -295,7 +307,7 @@ describe.sequential("ManagedTransforms", () => {
         const zoneId = yield* resolveZoneId;
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.ManagedTransforms,
+          Cloudflare.ManagedTransforms.ManagedTransforms,
         );
         const all = yield* provider.list();
 

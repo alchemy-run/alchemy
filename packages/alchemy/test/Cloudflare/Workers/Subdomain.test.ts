@@ -55,7 +55,7 @@ test.provider(
       // observed === news.subdomain and never issues a PUT.
       const sub = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.WorkersSubdomain("Subdomain", {
+          return yield* Cloudflare.Workers.Subdomain("Subdomain", {
             subdomain: liveBefore,
           });
         }),
@@ -68,7 +68,7 @@ test.provider(
       // Re-deploy unchanged — still converged, still no mutation.
       const again = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.WorkersSubdomain("Subdomain", {
+          return yield* Cloudflare.Workers.Subdomain("Subdomain", {
             subdomain: liveBefore,
           });
         }),
@@ -102,7 +102,7 @@ test.provider(
       expect(liveBefore.length).toBeGreaterThan(0);
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.WorkersSubdomain,
+        Cloudflare.Workers.Subdomain,
       );
       const all = yield* provider.list();
 

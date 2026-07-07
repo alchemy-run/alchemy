@@ -12,8 +12,8 @@ import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ZoneResourceTagsTypeId = "Cloudflare.Tags.ZoneResourceTags" as const;
-type ZoneResourceTagsTypeId = typeof ZoneResourceTagsTypeId;
+const TypeId = "Cloudflare.Tags.ZoneResourceTags" as const;
+type TypeId = typeof TypeId;
 
 // A target resource (e.g. a freshly-created DNS record) propagates
 // eventually-consistently to Cloudflare's tag index; the tag API answers
@@ -98,7 +98,7 @@ export interface ZoneResourceTagsAttributes {
 }
 
 export type ZoneResourceTags = Resource<
-  ZoneResourceTagsTypeId,
+  TypeId,
   ZoneResourceTagsProps,
   ZoneResourceTagsAttributes,
   never,
@@ -124,14 +124,14 @@ export type ZoneResourceTags = Resource<
  * @section Tagging a resource
  * @example Tag a DNS record
  * ```typescript
- * const record = yield* Cloudflare.DnsRecord("api", {
+ * const record = yield* Cloudflare.DNS.Record("api", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   type: "A",
  *   content: "203.0.113.42",
  * });
  *
- * yield* Cloudflare.ZoneResourceTags("api-tags", {
+ * yield* Cloudflare.Tags.ZoneResourceTags("api-tags", {
  *   zoneId: zone.zoneId,
  *   resourceType: "dns_record",
  *   resourceId: record.recordId,
@@ -141,7 +141,7 @@ export type ZoneResourceTags = Resource<
  *
  * @example Tag the zone itself
  * ```typescript
- * yield* Cloudflare.ZoneResourceTags("zone-tags", {
+ * yield* Cloudflare.Tags.ZoneResourceTags("zone-tags", {
  *   zoneId: zone.zoneId,
  *   resourceType: "zone",
  *   resourceId: zone.zoneId,
@@ -151,15 +151,13 @@ export type ZoneResourceTags = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/account/tags/
  */
-export const ZoneResourceTags = Resource<ZoneResourceTags>(
-  ZoneResourceTagsTypeId,
-);
+export const ZoneResourceTags = Resource<ZoneResourceTags>(TypeId);
 
 /**
  * Returns true if the given value is a ZoneResourceTags resource.
  */
 export const isZoneResourceTags = (value: unknown): value is ZoneResourceTags =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneResourceTagsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneResourceTagsProvider = () =>
   Provider.succeed(ZoneResourceTags, {

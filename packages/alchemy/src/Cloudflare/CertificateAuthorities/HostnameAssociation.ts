@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const HostnameAssociationTypeId =
-  "Cloudflare.CertificateAuthorities.HostnameAssociation" as const;
-type HostnameAssociationTypeId = typeof HostnameAssociationTypeId;
+const TypeId = "Cloudflare.CertificateAuthorities.HostnameAssociation" as const;
+type TypeId = typeof TypeId;
 
 export type HostnameAssociationProps = {
   /**
@@ -22,7 +21,7 @@ export type HostnameAssociationProps = {
   zoneId: string;
   /**
    * UUID of an uploaded CA certificate from the account-level mTLS
-   * Certificate Management store (`Cloudflare.MtlsCertificate` with
+   * Certificate Management store (`Cloudflare.MtlsCertificate.MtlsCertificate` with
    * `ca: true`). When omitted, the hostnames are associated with the zone's
    * active Cloudflare Managed CA instead.
    *
@@ -53,7 +52,7 @@ export type HostnameAssociationAttributes = {
 };
 
 export type HostnameAssociation = Resource<
-  HostnameAssociationTypeId,
+  TypeId,
   HostnameAssociationProps,
   HostnameAssociationAttributes,
   never,
@@ -87,7 +86,7 @@ export type HostnameAssociation = Resource<
  * @section Cloudflare Managed CA
  * @example Enforce mTLS on a hostname with the Managed CA
  * ```typescript
- * yield* Cloudflare.HostnameAssociation("MtlsHosts", {
+ * yield* Cloudflare.CertificateAuthorities.HostnameAssociation("MtlsHosts", {
  *   zoneId: zone.zoneId,
  *   hostnames: ["api.example.com"],
  * });
@@ -96,12 +95,12 @@ export type HostnameAssociation = Resource<
  * @section Uploaded CA certificate
  * @example Associate hostnames with an uploaded CA
  * ```typescript
- * const ca = yield* Cloudflare.MtlsCertificate("ClientCa", {
+ * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("ClientCa", {
  *   ca: true,
  *   certificates: caPem,
  * });
  *
- * yield* Cloudflare.HostnameAssociation("ClientCaHosts", {
+ * yield* Cloudflare.CertificateAuthorities.HostnameAssociation("ClientCaHosts", {
  *   zoneId: zone.zoneId,
  *   mtlsCertificateId: ca.mtlsCertificateId,
  *   hostnames: ["api.example.com", "admin.example.com"],
@@ -110,9 +109,7 @@ export type HostnameAssociation = Resource<
  *
  * @see https://developers.cloudflare.com/api/resources/certificate_authorities/subresources/hostname_associations/
  */
-export const HostnameAssociation = Resource<HostnameAssociation>(
-  HostnameAssociationTypeId,
-);
+export const HostnameAssociation = Resource<HostnameAssociation>(TypeId);
 
 /**
  * Returns true if the given value is a HostnameAssociation resource.
@@ -120,8 +117,7 @@ export const HostnameAssociation = Resource<HostnameAssociation>(
 export const isHostnameAssociation = (
   value: unknown,
 ): value is HostnameAssociation =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === HostnameAssociationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameAssociationProvider = () =>
   Provider.succeed(HostnameAssociation, {

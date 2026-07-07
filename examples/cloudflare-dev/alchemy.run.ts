@@ -5,11 +5,12 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Counter, QueueMessages } from "./src/AsyncWorker.ts";
 import EffectWorker from "./src/EffectWorker.ts";
+import { SandboxLive } from "./src/SandboxContainer.ts";
 
 export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 const AsyncWorker = Effect.gen(function* () {
-  const queue = yield* Cloudflare.Queue("AsyncWorkerQueue");
+  const queue = yield* Cloudflare.Queues.Queue("AsyncWorkerQueue");
   const worker = yield* Cloudflare.Worker("AsyncWorker", {
     main: "./src/AsyncWorker.ts",
     assets: {
@@ -17,21 +18,20 @@ const AsyncWorker = Effect.gen(function* () {
       runWorkerFirst: true,
     },
     env: {
-      COUNTER: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+      COUNTER: Cloudflare.DurableObject<Counter>("Counter", {
         className: "Counter",
       }),
       QUEUE: queue,
-      MESSAGES: Cloudflare.DurableObjectNamespace<QueueMessages>(
-        "QueueMessages",
-        { className: "QueueMessages" },
-      ),
+      MESSAGES: Cloudflare.DurableObject<QueueMessages>("QueueMessages", {
+        className: "QueueMessages",
+      }),
       MY_VARIABLE: "my-variable-abc123",
       MY_SECRET: Config.redacted("MY_SECRET").pipe(
         Config.withDefault(Redacted.make("my-secret-abc123")),
       ),
     },
   });
-  yield* Cloudflare.QueueConsumer("QueueConsumer", {
+  yield* Cloudflare.Queues.Consumer("Consumer", {
     queueId: queue.queueId,
     scriptName: worker.workerName,
   });
@@ -52,5 +52,5 @@ export default Alchemy.Stack(
       asyncWorker: asyncWorker.url,
       effectWorker: effectWorker.url,
     };
-  }),
+  }).pipe(Effect.provide(SandboxLive)),
 );

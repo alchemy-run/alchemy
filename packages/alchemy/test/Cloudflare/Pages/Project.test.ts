@@ -70,7 +70,7 @@ test.provider("create and delete a project with generated name", (stack) =>
     yield* stack.destroy();
 
     const project = yield* stack.deploy(
-      Cloudflare.PagesProject("DefaultProject", {}),
+      Cloudflare.Pages.Project("DefaultProject", {}),
     );
 
     expect(project.projectId).toBeDefined();
@@ -100,7 +100,7 @@ test.provider("update mutable props in place (same project id)", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PagesProject("UpdateProject", {
+        return yield* Cloudflare.Pages.Project("UpdateProject", {
           name: NAME_UPDATE,
           productionBranch: "main",
           buildConfig: {
@@ -132,7 +132,7 @@ test.provider("update mutable props in place (same project id)", (stack) =>
 
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PagesProject("UpdateProject", {
+        return yield* Cloudflare.Pages.Project("UpdateProject", {
           name: NAME_UPDATE,
           productionBranch: "develop",
           buildConfig: {
@@ -175,7 +175,7 @@ test.provider("update mutable props in place (same project id)", (stack) =>
     // Redeploying identical props is a no-op (still the same project).
     const noop = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PagesProject("UpdateProject", {
+        return yield* Cloudflare.Pages.Project("UpdateProject", {
           name: NAME_UPDATE,
           productionBranch: "develop",
           buildConfig: {
@@ -211,13 +211,13 @@ test.provider("list enumerates the deployed project", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PagesProject("ListProject", {
+        return yield* Cloudflare.Pages.Project("ListProject", {
           name: NAME_LIST,
         }).pipe(adopt(true));
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.PagesProject);
+    const provider = yield* Provider.findProvider(Cloudflare.Pages.Project);
     const all = yield* provider.list();
 
     const match = all.find((p) => p.projectId === deployed.projectId);
@@ -242,7 +242,7 @@ test.provider("changing the name triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PagesProject("ReplaceProject", {
+        return yield* Cloudflare.Pages.Project("ReplaceProject", {
           name: NAME_REPLACE_A,
         }).pipe(adopt(true));
       }),
@@ -252,7 +252,7 @@ test.provider("changing the name triggers replacement", (stack) =>
 
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.PagesProject("ReplaceProject", {
+        return yield* Cloudflare.Pages.Project("ReplaceProject", {
           name: NAME_REPLACE_B,
         }).pipe(adopt(true));
       }),

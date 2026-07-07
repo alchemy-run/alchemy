@@ -515,13 +515,20 @@ export const SecurityGroupRuleProvider = () =>
 
         delete: Effect.fn(function* ({ olds, output, session }) {
           const ruleId = output.securityGroupRuleId;
+          const groupId = (output.groupId ?? olds?.groupId) as string;
+          // Prefer the observed attribute (`isEgress`) — `olds` may be the
+          // listed Attributes (e.g. during nuke) rather than the Props shape,
+          // in which case `olds.type` is undefined.
+          const isEgress = output.isEgress ?? olds?.type !== "ingress";
 
           yield* session.note(`Deleting Security Group Rule: ${ruleId}`);
 
-          if (olds.type === "ingress") {
+          // The whole security group may already be gone, taking its rules
+          // with it (InvalidGroup.NotFound) — the rule is deleted either way.
+          if (isEgress) {
             yield* ec2
-              .revokeSecurityGroupIngress({
-                GroupId: olds.groupId as string,
+              .revokeSecurityGroupEgress({
+                GroupId: groupId,
                 SecurityGroupRuleIds: [ruleId],
                 DryRun: false,
               })
@@ -530,11 +537,12 @@ export const SecurityGroupRuleProvider = () =>
                   "InvalidPermission.NotFound",
                   () => Effect.void,
                 ),
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
               );
           } else {
             yield* ec2
-              .revokeSecurityGroupEgress({
-                GroupId: olds.groupId as string,
+              .revokeSecurityGroupIngress({
+                GroupId: groupId,
                 SecurityGroupRuleIds: [ruleId],
                 DryRun: false,
               })
@@ -543,6 +551,7 @@ export const SecurityGroupRuleProvider = () =>
                   "InvalidPermission.NotFound",
                   () => Effect.void,
                 ),
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
               );
           }
 

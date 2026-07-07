@@ -13,16 +13,15 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccessIdentityProviderTypeId =
-  "Cloudflare.Access.IdentityProvider" as const;
-type AccessIdentityProviderTypeId = typeof AccessIdentityProviderTypeId;
+const TypeId = "Cloudflare.Access.IdentityProvider" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The type of identity provider. Determines which `config` fields are
  * meaningful — see Cloudflare's IdP integration docs for the per-type
  * shapes. Immutable — changing the type triggers a replacement.
  */
-export type AccessIdentityProviderType =
+export type IdentityProviderType =
   | "onetimepin"
   | "azureAD"
   | "saml"
@@ -46,13 +45,13 @@ export type AccessIdentityProviderType =
  * …) is available without re-declaring the structure. Which fields apply
  * depends on `type` — `onetimepin` takes an empty `{}`.
  */
-export type AccessIdentityProviderConfig =
+export type IdentityProviderConfig =
   zeroTrust.CreateIdentityProviderForAccountRequest["config"];
 
 /**
  * SCIM provisioning configuration for an identity provider.
  */
-export interface AccessIdentityProviderScimConfig {
+export interface IdentityProviderScimConfig {
   /**
    * Enable SCIM provisioning from the IdP into Cloudflare Access.
    * @default false
@@ -74,7 +73,7 @@ export interface AccessIdentityProviderScimConfig {
   userDeprovision?: boolean;
 }
 
-export interface AccessIdentityProviderProps {
+export interface IdentityProviderProps {
   /**
    * Display name shown to users on the Access login page. Used as a
    * stable identifier so the provider can locate the IdP by name during
@@ -88,21 +87,21 @@ export interface AccessIdentityProviderProps {
    * The identity provider type. Immutable — config shapes are disjoint
    * per type, so changing it triggers a replacement.
    */
-  type: AccessIdentityProviderType;
+  type: IdentityProviderType;
   /**
    * Per-type configuration (client credentials, endpoints, certificates).
    * Pass `{}` for `onetimepin`. Secret fields (e.g. `clientSecret`) are
    * masked by Cloudflare on read, so they diff against the previously
    * declared props rather than observed cloud state. Mutable.
    */
-  config: AccessIdentityProviderConfig;
+  config: IdentityProviderConfig;
   /**
    * SCIM provisioning configuration. Mutable.
    */
-  scimConfig?: AccessIdentityProviderScimConfig;
+  scimConfig?: IdentityProviderScimConfig;
 }
 
-export interface AccessIdentityProviderAttributes {
+export interface IdentityProviderAttributes {
   /** UUID of the identity provider, assigned by Cloudflare. */
   identityProviderId: string;
   /** Cloudflare account that owns the identity provider. */
@@ -110,7 +109,7 @@ export interface AccessIdentityProviderAttributes {
   /** Display name of the identity provider. */
   name: string;
   /** The identity provider type. */
-  type: AccessIdentityProviderType;
+  type: IdentityProviderType;
   /** Server-generated SCIM base URL (when SCIM is enabled). */
   scimBaseUrl: string | undefined;
   /**
@@ -122,10 +121,10 @@ export interface AccessIdentityProviderAttributes {
   scimEnabled: boolean;
 }
 
-export type AccessIdentityProvider = Resource<
-  AccessIdentityProviderTypeId,
-  AccessIdentityProviderProps,
-  AccessIdentityProviderAttributes,
+export type IdentityProvider = Resource<
+  TypeId,
+  IdentityProviderProps,
+  IdentityProviderAttributes,
   never,
   Providers
 >;
@@ -147,7 +146,7 @@ export type AccessIdentityProvider = Resource<
  * @section Creating an Identity Provider
  * @example One-time PIN (no external dependencies)
  * ```typescript
- * const otp = yield* Cloudflare.AccessIdentityProvider("Pin", {
+ * const otp = yield* Cloudflare.Access.IdentityProvider("Pin", {
  *   type: "onetimepin",
  *   config: {},
  * });
@@ -155,7 +154,7 @@ export type AccessIdentityProvider = Resource<
  *
  * @example Generic OIDC provider
  * ```typescript
- * const oidc = yield* Cloudflare.AccessIdentityProvider("Sso", {
+ * const oidc = yield* Cloudflare.Access.IdentityProvider("Sso", {
  *   type: "oidc",
  *   config: {
  *     clientId: "my-client-id",
@@ -171,7 +170,7 @@ export type AccessIdentityProvider = Resource<
  * @section Restricting an Application to an IdP
  * @example Allow only this IdP on an Access application
  * ```typescript
- * yield* Cloudflare.AccessApplication("Admin", {
+ * yield* Cloudflare.Access.Application("Admin", {
  *   domain: "admin.example.com",
  *   allowedIdps: [oidc.identityProviderId],
  * });
@@ -179,21 +178,16 @@ export type AccessIdentityProvider = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/idp-integration/
  */
-export const AccessIdentityProvider = Resource<AccessIdentityProvider>(
-  AccessIdentityProviderTypeId,
-);
+export const IdentityProvider = Resource<IdentityProvider>(TypeId);
 
 /**
- * Returns true if the given value is an AccessIdentityProvider resource.
+ * Returns true if the given value is an IdentityProvider resource.
  */
-export const isAccessIdentityProvider = (
-  value: unknown,
-): value is AccessIdentityProvider =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AccessIdentityProviderTypeId;
+export const isIdentityProvider = (value: unknown): value is IdentityProvider =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const AccessIdentityProviderProvider = () =>
-  Provider.succeed(AccessIdentityProvider, {
+export const IdentityProviderProvider = () =>
+  Provider.succeed(IdentityProvider, {
     stables: ["identityProviderId", "accountId", "type"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
@@ -204,8 +198,7 @@ export const AccessIdentityProviderProvider = () =>
       }
       // Config shapes are disjoint per type — model a type change as a
       // replacement even though the API technically allows the PUT.
-      const oldType =
-        output?.type ?? (olds as AccessIdentityProviderProps).type;
+      const oldType = output?.type ?? (olds as IdentityProviderProps).type;
       if (oldType !== undefined && oldType !== news.type) {
         return { action: "replace" } as const;
       }
@@ -383,7 +376,7 @@ const resolveName = (id: string, name: string | undefined) =>
 
 const sameScim = (
   observed: ObservedIdp["scimConfig"],
-  desired: AccessIdentityProviderScimConfig,
+  desired: IdentityProviderScimConfig,
 ): boolean => {
   const o = observed ?? {};
   const sameBool = (a: boolean | null | undefined, b: boolean | undefined) =>
@@ -402,11 +395,11 @@ const toAttributes = (
   idp: ObservedIdp,
   accountId: string,
   priorSecret: Redacted.Redacted<string> | undefined,
-): AccessIdentityProviderAttributes => ({
+): IdentityProviderAttributes => ({
   identityProviderId: idp.id ?? "",
   accountId,
   name: idp.name,
-  type: idp.type as AccessIdentityProviderType,
+  type: idp.type as IdentityProviderType,
   scimBaseUrl: idp.scimConfig?.scimBaseUrl ?? undefined,
   // The SCIM secret is returned once when SCIM is enabled; afterwards the
   // API masks it — carry the prior value forward.

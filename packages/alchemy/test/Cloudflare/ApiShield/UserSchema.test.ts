@@ -99,7 +99,7 @@ test.provider(
 
       const schema = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("DefaultSchema", {
+          return yield* Cloudflare.ApiShield.UserSchema("DefaultSchema", {
             zoneId,
             name: NAME_DEFAULT,
             schema: source,
@@ -121,7 +121,7 @@ test.provider(
       // Enable validation — same identity, patched in place.
       const enabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("DefaultSchema", {
+          return yield* Cloudflare.ApiShield.UserSchema("DefaultSchema", {
             zoneId,
             name: NAME_DEFAULT,
             schema: source,
@@ -156,7 +156,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("ReplaceSchema", {
+          return yield* Cloudflare.ApiShield.UserSchema("ReplaceSchema", {
             zoneId,
             name: NAME_REPLACE,
             schema: sourceV1,
@@ -167,7 +167,7 @@ test.provider(
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("ReplaceSchema", {
+          return yield* Cloudflare.ApiShield.UserSchema("ReplaceSchema", {
             zoneId,
             name: NAME_REPLACE,
             schema: sourceV2,
@@ -209,7 +209,7 @@ test.provider(
 
       const schema = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShieldUserSchema("ListSchema", {
+          return yield* Cloudflare.ApiShield.UserSchema("ListSchema", {
             zoneId,
             name: NAME_LIST,
             schema: source,
@@ -218,7 +218,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ApiShieldUserSchema,
+        Cloudflare.ApiShield.UserSchema,
       );
       const all = yield* provider.list();
 

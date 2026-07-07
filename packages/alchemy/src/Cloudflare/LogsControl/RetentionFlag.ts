@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LogsRetentionFlagTypeId = "Cloudflare.Logs.RetentionFlag" as const;
-type LogsRetentionFlagTypeId = typeof LogsRetentionFlagTypeId;
+const TypeId = "Cloudflare.Logs.RetentionFlag" as const;
+type TypeId = typeof TypeId;
 
 export type LogsRetentionFlagProps = {
   /**
@@ -41,7 +41,7 @@ export type LogsRetentionFlagAttributes = {
 };
 
 export type LogsRetentionFlag = Resource<
-  LogsRetentionFlagTypeId,
+  TypeId,
   LogsRetentionFlagProps,
   LogsRetentionFlagAttributes,
   never,
@@ -67,7 +67,7 @@ export type LogsRetentionFlag = Resource<
  * @section Managing log retention
  * @example Enable Logpull retention on a zone
  * ```typescript
- * const retention = yield* Cloudflare.LogsRetentionFlag("Retention", {
+ * const retention = yield* Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
  *   zoneId: zone.zoneId,
  *   flag: true,
  * });
@@ -75,7 +75,7 @@ export type LogsRetentionFlag = Resource<
  *
  * @example Explicitly disable retention
  * ```typescript
- * yield* Cloudflare.LogsRetentionFlag("Retention", {
+ * yield* Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
  *   zoneId: zone.zoneId,
  *   flag: false,
  * });
@@ -83,9 +83,7 @@ export type LogsRetentionFlag = Resource<
  *
  * @see https://developers.cloudflare.com/logs/logpull/enabling-log-retention/
  */
-export const LogsRetentionFlag = Resource<LogsRetentionFlag>(
-  LogsRetentionFlagTypeId,
-);
+export const LogsRetentionFlag = Resource<LogsRetentionFlag>(TypeId);
 
 /**
  * Returns true if the given value is a LogsRetentionFlag resource.
@@ -93,8 +91,7 @@ export const LogsRetentionFlag = Resource<LogsRetentionFlag>(
 export const isLogsRetentionFlag = (
   value: unknown,
 ): value is LogsRetentionFlag =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LogsRetentionFlagTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LogsRetentionFlagProvider = () =>
   Provider.succeed(LogsRetentionFlag, {

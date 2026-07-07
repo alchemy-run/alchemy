@@ -112,7 +112,9 @@ test.provider(
       // exact `read` Attributes shape for each advanced pack. The standard
       // testing zone has no ACM subscription (so no advanced packs), but
       // list() must still return a well-typed, exhaustively-paginated array.
-      const provider = yield* Provider.findProvider(Cloudflare.CertificatePack);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Ssl.CertificatePack,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -139,7 +141,7 @@ test.provider.skipIf(!acmZoneName)(
 
       const pack = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CertificatePack("ListPack", {
+          return yield* Cloudflare.Ssl.CertificatePack("ListPack", {
             zoneId,
             certificateAuthority: "google",
             hosts,
@@ -149,7 +151,9 @@ test.provider.skipIf(!acmZoneName)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.CertificatePack);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Ssl.CertificatePack,
+      );
       const all = yield* provider.list();
 
       expect(
@@ -175,7 +179,7 @@ test.provider.skipIf(!acmZoneName)(
       // resource returns as soon as the order is placed.
       const pack = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CertificatePack("Pack", {
+          return yield* Cloudflare.Ssl.CertificatePack("Pack", {
             zoneId,
             certificateAuthority: "google",
             hosts,
@@ -199,7 +203,7 @@ test.provider.skipIf(!acmZoneName)(
       // verification API; the pack id must not change.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CertificatePack("Pack", {
+          return yield* Cloudflare.Ssl.CertificatePack("Pack", {
             zoneId,
             certificateAuthority: "google",
             hosts,

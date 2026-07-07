@@ -23,15 +23,17 @@ test.provider("list enumerates the deployed secret across stores", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const store = yield* Cloudflare.SecretsStore("ListSecretStore");
-        return yield* Cloudflare.Secret("ListSecret", {
+        const store = yield* Cloudflare.SecretsStore.Store("ListSecretStore");
+        return yield* Cloudflare.SecretsStore.Secret("ListSecret", {
           store,
           value: Redacted.make("sk-list-test-value"),
         });
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.Secret);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.SecretsStore.Secret,
+    );
     const all = yield* provider.list();
 
     expect(all.some((s) => s.secretId === deployed.secretId)).toBe(true);

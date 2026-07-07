@@ -12,23 +12,19 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicNetworkMonitoringRuleTypeId =
-  "Cloudflare.MagicNetworkMonitoring.Rule" as const;
-type MagicNetworkMonitoringRuleTypeId = typeof MagicNetworkMonitoringRuleTypeId;
+const TypeId = "Cloudflare.MagicNetworkMonitoring.Rule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * MNM rule type: `threshold` (static bits/packets-per-second limits),
  * `zscore` (anomaly detection), or `advanced_ddos` (requires Magic Transit).
  */
-export type MagicNetworkMonitoringRuleType =
-  | "threshold"
-  | "zscore"
-  | "advanced_ddos";
+export type RuleType = "threshold" | "zscore" | "advanced_ddos";
 
 /**
  * How long a threshold must be exceeded before an alert fires.
  */
-export type MagicNetworkMonitoringRuleDuration =
+export type RuleDuration =
   | "1m"
   | "5m"
   | "10m"
@@ -38,7 +34,7 @@ export type MagicNetworkMonitoringRuleDuration =
   | "45m"
   | "60m";
 
-export interface MagicNetworkMonitoringRuleProps {
+export interface RuleProps {
   /**
    * The Cloudflare account the rule belongs to. Defaults to the profile's
    * account. Pass the owning MNM Config's `accountId` output to sequence
@@ -58,7 +54,7 @@ export interface MagicNetworkMonitoringRuleProps {
    * MNM rule type. Immutable — the rule's alerting semantics differ
    * entirely per type, so changing it triggers a replacement.
    */
-  type: MagicNetworkMonitoringRuleType;
+  type: RuleType;
   /**
    * IPv4 CIDR prefixes the rule monitors. Mutable in place.
    */
@@ -84,7 +80,7 @@ export interface MagicNetworkMonitoringRuleProps {
    * How long the threshold must be exceeded before an alert fires.
    * @default "1m"
    */
-  duration?: MagicNetworkMonitoringRuleDuration;
+  duration?: RuleDuration;
   /**
    * Sensitivity of the anomaly detection (zscore rules).
    */
@@ -100,7 +96,7 @@ export interface MagicNetworkMonitoringRuleProps {
   prefixMatch?: "exact" | "subnet" | "supernet";
 }
 
-export interface MagicNetworkMonitoringRuleAttributes {
+export interface RuleAttributes {
   /** Cloudflare-assigned identifier of the rule. */
   ruleId: string;
   /** The Cloudflare account the rule belongs to. */
@@ -108,7 +104,7 @@ export interface MagicNetworkMonitoringRuleAttributes {
   /** The rule's unique name. */
   name: string;
   /** MNM rule type. */
-  type: MagicNetworkMonitoringRuleType;
+  type: RuleType;
   /** IPv4 CIDR prefixes the rule monitors. */
   prefixes: string[];
   /** Whether prefixes are auto-advertised via Magic Transit on trigger. */
@@ -129,10 +125,10 @@ export interface MagicNetworkMonitoringRuleAttributes {
   prefixMatch: "exact" | "subnet" | "supernet" | undefined;
 }
 
-export type MagicNetworkMonitoringRule = Resource<
-  MagicNetworkMonitoringRuleTypeId,
-  MagicNetworkMonitoringRuleProps,
-  MagicNetworkMonitoringRuleAttributes,
+export type Rule = Resource<
+  TypeId,
+  RuleProps,
+  RuleAttributes,
   never,
   Providers
 >;
@@ -153,11 +149,11 @@ export type MagicNetworkMonitoringRule = Resource<
  * @section Threshold rules
  * @example Alert when bandwidth exceeds 1 Mbps for 5 minutes
  * ```typescript
- * const config = yield* Cloudflare.MagicNetworkMonitoringConfig("Mnm", {
+ * const config = yield* Cloudflare.MagicNetworkMonitoring.Config("Mnm", {
  *   name: "my-network",
  *   defaultSampling: 1,
  * });
- * yield* Cloudflare.MagicNetworkMonitoringRule("BandwidthAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.Rule("BandwidthAlert", {
  *   accountId: config.accountId,
  *   type: "threshold",
  *   prefixes: ["10.0.0.0/24"],
@@ -168,7 +164,7 @@ export type MagicNetworkMonitoringRule = Resource<
  *
  * @example Packet-rate alert
  * ```typescript
- * yield* Cloudflare.MagicNetworkMonitoringRule("PacketAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.Rule("PacketAlert", {
  *   accountId: config.accountId,
  *   type: "threshold",
  *   prefixes: ["10.0.1.0/24"],
@@ -179,7 +175,7 @@ export type MagicNetworkMonitoringRule = Resource<
  * @section Anomaly detection
  * @example Zscore rule on bits
  * ```typescript
- * yield* Cloudflare.MagicNetworkMonitoringRule("AnomalyAlert", {
+ * yield* Cloudflare.MagicNetworkMonitoring.Rule("AnomalyAlert", {
  *   accountId: config.accountId,
  *   type: "zscore",
  *   prefixes: ["10.0.2.0/24"],
@@ -190,21 +186,16 @@ export type MagicNetworkMonitoringRule = Resource<
  *
  * @see https://developers.cloudflare.com/magic-network-monitoring/rules/
  */
-export const MagicNetworkMonitoringRule = Resource<MagicNetworkMonitoringRule>(
-  MagicNetworkMonitoringRuleTypeId,
-);
+export const Rule = Resource<Rule>(TypeId);
 
 /**
- * Returns true if the given value is a MagicNetworkMonitoringRule resource.
+ * Returns true if the given value is a Rule resource.
  */
-export const isMagicNetworkMonitoringRule = (
-  value: unknown,
-): value is MagicNetworkMonitoringRule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === MagicNetworkMonitoringRuleTypeId;
+export const isRule = (value: unknown): value is Rule =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const MagicNetworkMonitoringRuleProvider = () =>
-  Provider.succeed(MagicNetworkMonitoringRule, {
+export const RuleProvider = () =>
+  Provider.succeed(Rule, {
     stables: ["ruleId", "accountId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -432,7 +423,7 @@ const samePrefixes = (
  */
 const normalizeDuration = (
   duration: string | null | undefined,
-): MagicNetworkMonitoringRuleDuration | undefined => {
+): RuleDuration | undefined => {
   switch (duration) {
     case "1m0s":
     case "1m":
@@ -466,12 +457,12 @@ const normalizeDuration = (
 const toAttributes = (
   rule: ObservedRule | (Omit<mnm.PatchRuleResponse, "id"> & { id: string }),
   accountId: string,
-): MagicNetworkMonitoringRuleAttributes => ({
+): RuleAttributes => ({
   ruleId: rule.id,
   accountId,
   name: rule.name,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  type: rule.type as MagicNetworkMonitoringRuleType,
+  type: rule.type as RuleType,
   prefixes: [...rule.prefixes],
   automaticAdvertisement: rule.automaticAdvertisement ?? false,
   bandwidthThreshold: rule.bandwidthThreshold ?? undefined,

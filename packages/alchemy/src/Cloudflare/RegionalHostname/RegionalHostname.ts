@@ -10,10 +10,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const RegionalHostnameTypeId = "Cloudflare.RegionalHostname" as const;
-type RegionalHostnameTypeId = typeof RegionalHostnameTypeId;
+const TypeId = "Cloudflare.RegionalHostname.RegionalHostname" as const;
+type TypeId = typeof TypeId;
 
-export interface RegionalHostnameProps {
+export interface Props {
   /**
    * The zone the regional hostname belongs to. Changing it forces a
    * replacement.
@@ -38,7 +38,7 @@ export interface RegionalHostnameProps {
   routing?: string;
 }
 
-export interface RegionalHostnameAttributes {
+export interface Attributes {
   /** The zone the regional hostname belongs to. */
   zoneId: string;
   /** The regionalized DNS hostname. */
@@ -52,9 +52,9 @@ export interface RegionalHostnameAttributes {
 }
 
 export type RegionalHostname = Resource<
-  RegionalHostnameTypeId,
-  RegionalHostnameProps,
-  RegionalHostnameAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -65,7 +65,7 @@ export type RegionalHostname = Resource<
  * Services).
  *
  * A DNS record for the hostname must exist in the zone for regionalization
- * to take effect (soft dependency on `Cloudflare.DnsRecord`). Only
+ * to take effect (soft dependency on `Cloudflare.DNS.Record`). Only
  * `regionKey` is mutable; `hostname` is the path identifier and `routing`
  * is create-only, so both force a replacement.
  *
@@ -77,7 +77,7 @@ export type RegionalHostname = Resource<
  * @section Regionalizing a Hostname
  * @example Pin a hostname to the EU
  * ```typescript
- * const regional = yield* Cloudflare.RegionalHostname("eu-only", {
+ * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.example.com",
  *   regionKey: "eu",
@@ -86,7 +86,7 @@ export type RegionalHostname = Resource<
  *
  * @example Move it to the US in place
  * ```typescript
- * const regional = yield* Cloudflare.RegionalHostname("eu-only", {
+ * const regional = yield* Cloudflare.RegionalHostname.RegionalHostname("eu-only", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.example.com",
  *   regionKey: "us",
@@ -95,15 +95,13 @@ export type RegionalHostname = Resource<
  *
  * @see https://developers.cloudflare.com/data-localization/regional-services/
  */
-export const RegionalHostname = Resource<RegionalHostname>(
-  RegionalHostnameTypeId,
-);
+export const RegionalHostname = Resource<RegionalHostname>(TypeId);
 
 /**
  * Returns true if the given value is a RegionalHostname resource.
  */
 export const isRegionalHostname = (value: unknown): value is RegionalHostname =>
-  Predicate.hasProperty(value, "Type") && value.Type === RegionalHostnameTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const RegionalHostnameProvider = () =>
   Provider.succeed(RegionalHostname, {
@@ -123,7 +121,7 @@ export const RegionalHostnameProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? []).map(
-                  (item): RegionalHostnameAttributes => ({
+                  (item): Attributes => ({
                     zoneId: zone.id,
                     hostname: item.hostname,
                     regionKey: item.regionKey,
@@ -184,7 +182,7 @@ export const RegionalHostnameProvider = () =>
       return observed ? toAttributes(observed, zoneId) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
@@ -249,7 +247,7 @@ const getHostname = (zoneId: string, hostname: string) =>
 const toAttributes = (
   hostname: addressing.GetRegionalHostnameResponse,
   zoneId: string,
-): RegionalHostnameAttributes => ({
+): Attributes => ({
   zoneId,
   hostname: hostname.hostname,
   regionKey: hostname.regionKey,

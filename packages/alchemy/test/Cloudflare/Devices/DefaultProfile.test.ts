@@ -35,7 +35,10 @@ describe.sequential("DefaultProfile", () => {
 
         const profile = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.DeviceDefaultProfile("Default", {});
+            return yield* Cloudflare.Devices.DeviceDefaultProfile(
+              "Default",
+              {},
+            );
           }),
         );
 
@@ -72,7 +75,7 @@ describe.sequential("DefaultProfile", () => {
         // Step 1 — set to 180 seconds.
         const a = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.DeviceDefaultProfile("Default", {
+            return yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
               captivePortal: 180,
             });
           }),
@@ -84,7 +87,7 @@ describe.sequential("DefaultProfile", () => {
         // Step 2 — flip to 360.
         const b = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.DeviceDefaultProfile("Default", {
+            return yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
               captivePortal: 360,
             });
           }),
@@ -96,7 +99,7 @@ describe.sequential("DefaultProfile", () => {
         // Restore via a final deploy so the account is not left mutated.
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.DeviceDefaultProfile("Default", {
+            return yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
               captivePortal: originalCaptive,
             });
           }),
@@ -118,7 +121,7 @@ describe.sequential("DefaultProfile", () => {
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.DeviceDefaultProfile,
+        Cloudflare.Devices.DeviceDefaultProfile,
       );
       const all = yield* provider.list();
 

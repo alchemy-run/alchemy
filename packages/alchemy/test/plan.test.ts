@@ -1,7 +1,7 @@
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
-import * as Construct from "@/Construct";
 import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
+import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import { UnsatisfiedResourceCycle } from "@/Plan";
@@ -160,12 +160,10 @@ test(
         downstream: [],
       },
     });
-    const Site = Construct.fn(function* (
-      _id: string,
-      props: { value: string },
-    ) {
-      return yield* ArtifactProbe("Shared", { value: props.value });
-    });
+    const Site = (id: string, props: { value: string }) =>
+      Effect.gen(function* () {
+        return yield* ArtifactProbe("Shared", { value: props.value });
+      }).pipe(Namespace.push(id));
 
     const plan = yield* Effect.gen(function* () {
       const left = yield* Site("Left", { value: "left-v2" });
@@ -1164,21 +1162,22 @@ describe("construct namespaces", () => {
   test(
     "namespaced construct bindings resolve into the plan graph",
     Effect.gen(function* () {
-      const Site = Construct.fn(function* (_id: string, _props: {}) {
-        const bucket = yield* BindingTarget("Bucket", {
-          name: "bucket",
-        });
-        const distribution = yield* BindingTarget("Distribution", {
-          name: "distribution",
-        });
-        yield* bucket.bind("Policy", {
-          env: {
-            BUCKET: bucket.string,
-            DISTRIBUTION: distribution.string,
-          },
-        });
-        return { bucket, distribution };
-      });
+      const Site = (id: string, _props: {}) =>
+        Effect.gen(function* () {
+          const bucket = yield* BindingTarget("Bucket", {
+            name: "bucket",
+          });
+          const distribution = yield* BindingTarget("Distribution", {
+            name: "distribution",
+          });
+          yield* bucket.bind("Policy", {
+            env: {
+              BUCKET: bucket.string,
+              DISTRIBUTION: distribution.string,
+            },
+          });
+          return { bucket, distribution };
+        }).pipe(Namespace.push(id));
 
       const plan = yield* Effect.gen(function* () {
         yield* Site("MarketingSite", {});
@@ -1232,14 +1231,12 @@ describe("construct namespaces", () => {
   test(
     "same child logical ids in different constructs do not collide",
     Effect.gen(function* () {
-      const Site = Construct.fn(function* (
-        _id: string,
-        props: { name: string },
-      ) {
-        return yield* Bucket("Bucket", {
-          name: props.name,
-        });
-      });
+      const Site = (id: string, props: { name: string }) =>
+        Effect.gen(function* () {
+          return yield* Bucket("Bucket", {
+            name: props.name,
+          });
+        }).pipe(Namespace.push(id));
 
       const plan = yield* Effect.gen(function* () {
         yield* Site("MarketingSite", {
@@ -1276,27 +1273,28 @@ describe("construct namespaces", () => {
   test(
     "binding-only cycles inside a construct do not become downstream edges",
     Effect.gen(function* () {
-      const Site = Construct.fn(function* (_id: string, _props: {}) {
-        const A = yield* BindingTarget("A", {
-          string: "a-value",
-        });
-        const B = yield* BindingTarget("B", {
-          string: "b-value",
-        });
+      const Site = (id: string, _props: {}) =>
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", {
+            string: "a-value",
+          });
+          const B = yield* BindingTarget("B", {
+            string: "b-value",
+          });
 
-        yield* A.bind("FromB", {
-          env: {
-            PEER: B.string,
-          },
-        });
-        yield* B.bind("FromA", {
-          env: {
-            PEER: A.string,
-          },
-        });
+          yield* A.bind("FromB", {
+            env: {
+              PEER: B.string,
+            },
+          });
+          yield* B.bind("FromA", {
+            env: {
+              PEER: A.string,
+            },
+          });
 
-        return { A, B };
-      });
+          return { A, B };
+        }).pipe(Namespace.push(id));
 
       const plan = yield* Effect.gen(function* () {
         yield* Site("MarketingSite", {});

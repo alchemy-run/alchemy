@@ -12,19 +12,19 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TokenValidationRuleTypeId = "Cloudflare.TokenValidation.Rule" as const;
-type TokenValidationRuleTypeId = typeof TokenValidationRuleTypeId;
+const TypeId = "Cloudflare.TokenValidation.Rule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Action applied to requests that match the selector and fail the rule's
  * expression.
  */
-export type TokenValidationRuleAction = "log" | "block";
+export type RuleAction = "log" | "block";
 
 /**
  * Selects the operations covered by a token validation rule.
  */
-export interface TokenValidationRuleSelector {
+export interface RuleSelector {
   /**
    * Operations to include, by host.
    */
@@ -45,12 +45,12 @@ export interface TokenValidationRuleSelector {
  * Desired ordering of a rule among the zone's token validation rules.
  * Applied via PATCH whenever set; ordering is not tracked in attributes.
  */
-export type TokenValidationRulePosition =
+export type RulePosition =
   | { /** Absolute position in the rule list. */ index: number }
   | { /** Place the rule before this rule ID. */ before: string }
   | { /** Place the rule after this rule ID. */ after: string };
 
-export interface TokenValidationRuleProps {
+export interface RuleProps {
   /**
    * Zone the rule applies to.
    *
@@ -77,7 +77,7 @@ export interface TokenValidationRuleProps {
    * Action to take on requests that match the selector and fail the
    * expression: `log` or `block`.
    */
-  action: TokenValidationRuleAction;
+  action: RuleAction;
   /**
    * Rule expression — requests that fail it are subject to `action`,
    * e.g. `is_jwt_valid("<configId>")`. Reference a
@@ -88,15 +88,15 @@ export interface TokenValidationRuleProps {
    * Which operations the rule covers (include by host, exclude by API
    * Shield operation ID).
    */
-  selector: TokenValidationRuleSelector;
+  selector: RuleSelector;
   /**
    * Desired ordering among the zone's rules. Applied via PATCH on every
    * deploy it is set; omit to leave ordering untouched (new rules append).
    */
-  position?: TokenValidationRulePosition;
+  position?: RulePosition;
 }
 
-export interface TokenValidationRuleAttributes {
+export interface RuleAttributes {
   /** Cloudflare-assigned UUID of the rule. */
   ruleId: string;
   /** Zone the rule belongs to. */
@@ -108,7 +108,7 @@ export interface TokenValidationRuleAttributes {
   /** Whether the rule is enabled. */
   enabled: boolean;
   /** Action applied to matching requests that fail the expression. */
-  action: TokenValidationRuleAction;
+  action: RuleAction;
   /** The rule's expression. */
   expression: string;
   /** Which operations the rule covers. */
@@ -122,10 +122,10 @@ export interface TokenValidationRuleAttributes {
   lastUpdated: string | undefined;
 }
 
-export type TokenValidationRule = Resource<
-  TokenValidationRuleTypeId,
-  TokenValidationRuleProps,
-  TokenValidationRuleAttributes,
+export type Rule = Resource<
+  TypeId,
+  RuleProps,
+  RuleAttributes,
   never,
   Providers
 >;
@@ -151,7 +151,7 @@ export type TokenValidationRule = Resource<
  * @section Creating a Rule
  * @example Log requests with invalid JWTs
  * ```typescript
- * const rule = yield* Cloudflare.TokenValidationRule("LogInvalidJwt", {
+ * const rule = yield* Cloudflare.TokenValidation.Rule("LogInvalidJwt", {
  *   zoneId: zone.zoneId,
  *   action: "log",
  *   expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
@@ -161,7 +161,7 @@ export type TokenValidationRule = Resource<
  *
  * @example Block invalid JWTs, excluding a public operation
  * ```typescript
- * yield* Cloudflare.TokenValidationRule("BlockInvalidJwt", {
+ * yield* Cloudflare.TokenValidation.Rule("BlockInvalidJwt", {
  *   zoneId: zone.zoneId,
  *   action: "block",
  *   expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
@@ -175,7 +175,7 @@ export type TokenValidationRule = Resource<
  * @section Updating a Rule
  * @example Disable a rule in place
  * ```typescript
- * yield* Cloudflare.TokenValidationRule("BlockInvalidJwt", {
+ * yield* Cloudflare.TokenValidation.Rule("BlockInvalidJwt", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  *   action: "block",
@@ -186,21 +186,16 @@ export type TokenValidationRule = Resource<
  *
  * @see https://developers.cloudflare.com/api-shield/security/jwt-validation/
  */
-export const TokenValidationRule = Resource<TokenValidationRule>(
-  TokenValidationRuleTypeId,
-);
+export const Rule = Resource<Rule>(TypeId);
 
 /**
- * Returns true if the given value is a TokenValidationRule resource.
+ * Returns true if the given value is a Rule resource.
  */
-export const isTokenValidationRule = (
-  value: unknown,
-): value is TokenValidationRule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TokenValidationRuleTypeId;
+export const isRule = (value: unknown): value is Rule =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const TokenValidationRuleProvider = () =>
-  Provider.succeed(TokenValidationRule, {
+export const RuleProvider = () =>
+  Provider.succeed(Rule, {
     stables: ["ruleId", "zoneId", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -323,8 +318,7 @@ export const TokenValidationRuleProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? []).map(
-                  (rule): TokenValidationRuleAttributes =>
-                    toAttributes(rule, zone.id),
+                  (rule): RuleAttributes => toAttributes(rule, zone.id),
                 ),
               ),
             ),
@@ -332,7 +326,7 @@ export const TokenValidationRuleProvider = () =>
             // without the entitlement, or with partial permissions, reject
             // the route — skip them rather than failing the whole listing.
             Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
-              Effect.succeed([] as TokenValidationRuleAttributes[]),
+              Effect.succeed([] as RuleAttributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -381,7 +375,7 @@ const createRuleTitle = (id: string, title: string | undefined) =>
  * Convert resolved props' selector to the API request shape (the
  * `Input<string>` operation IDs have been resolved by Plan).
  */
-const toApiSelector = (selector: TokenValidationRuleSelector): ApiSelector => ({
+const toApiSelector = (selector: RuleSelector): ApiSelector => ({
   ...(selector.include !== undefined
     ? { include: selector.include.map((entry) => ({ host: entry.host })) }
     : {}),
@@ -417,14 +411,14 @@ const toAttributes = (
     | tokenValidation.PatchRuleResponse
     | tokenValidation.ListRulesResponse["result"][number],
   zoneId: string,
-): TokenValidationRuleAttributes => ({
+): RuleAttributes => ({
   ruleId: rule.id ?? "",
   zoneId,
   title: rule.title,
   description: rule.description,
   enabled: rule.enabled,
   // Distilled widens the action enum to an open union (`string & {}`).
-  action: rule.action as TokenValidationRuleAction,
+  action: rule.action as RuleAction,
   expression: rule.expression,
   selector: {
     ...(rule.selector.include != null

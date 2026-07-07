@@ -9,8 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const PageRuleTypeId = "Cloudflare.PageRule" as const;
-type PageRuleTypeId = typeof PageRuleTypeId;
+const TypeId = "Cloudflare.PageRule.PageRule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A single Page Rule action — a discriminated union over every setting a
@@ -21,15 +21,15 @@ type PageRuleTypeId = typeof PageRuleTypeId;
  * Note: `forwarding_url` cannot be combined with most other actions —
  * a rule either redirects or overrides settings, not both.
  */
-export type PageRuleAction = pageRules.CreatePageRuleRequest["actions"][number];
+export type Action = pageRules.CreatePageRuleRequest["actions"][number];
 
 /**
  * Whether the rule is evaluated (`active`) or kept but ignored
  * (`disabled`).
  */
-export type PageRuleStatus = "active" | "disabled";
+export type Status = "active" | "disabled";
 
-export interface PageRuleProps {
+export interface Props {
   /**
    * Zone the Page Rule applies to. Stable — moving a rule between zones
    * triggers a replacement.
@@ -48,7 +48,7 @@ export interface PageRuleProps {
    * redirect to another URL (`forwarding_url`) or override settings,
    * but not both. Mutable — synced in place via PUT.
    */
-  actions: ReadonlyArray<PageRuleAction>;
+  actions: ReadonlyArray<Action>;
   /**
    * The priority of the rule relative to other Page Rules on the zone.
    * A higher number indicates a higher priority. Mutable.
@@ -68,10 +68,10 @@ export interface PageRuleProps {
    *
    * @default "active"
    */
-  status?: PageRuleStatus;
+  status?: Status;
 }
 
-export interface PageRuleAttributes {
+export interface Attributes {
   /** Cloudflare-assigned identifier of the Page Rule. */
   pageRuleId: string;
   /** Zone the rule belongs to. */
@@ -79,24 +79,18 @@ export interface PageRuleAttributes {
   /** The URL pattern the rule matches. */
   target: string;
   /** The actions the rule performs, as echoed by Cloudflare. */
-  actions: ReadonlyArray<PageRuleAction>;
+  actions: ReadonlyArray<Action>;
   /** The rule's priority relative to other Page Rules on the zone. */
   priority: number;
   /** Whether the rule is evaluated (`active`) or ignored (`disabled`). */
-  status: PageRuleStatus;
+  status: Status;
   /** ISO8601 creation timestamp. */
   createdOn: string;
   /** ISO8601 last-modified timestamp. */
   modifiedOn: string;
 }
 
-export type PageRule = Resource<
-  PageRuleTypeId,
-  PageRuleProps,
-  PageRuleAttributes,
-  never,
-  Providers
->;
+export type PageRule = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare **Page Rule** — a legacy zone-level rule that matches a URL
@@ -106,8 +100,8 @@ export type PageRule = Resource<
  * :::caution[Legacy]
  * Page Rules are a legacy product superseded by Cloudflare's modern Rules
  * platform (Rulesets — Cache Rules, Redirect Rules, Configuration Rules,
- * Origin Rules, Transform Rules). Prefer `Cloudflare.Ruleset` for new
- * projects; use `Cloudflare.PageRule` only for existing setups or
+ * Origin Rules, Transform Rules). Prefer `Cloudflare.Ruleset.Ruleset` for new
+ * projects; use `Cloudflare.PageRule.PageRule` only for existing setups or
  * migrations. Page Rules are also plan-limited (Free 3, Pro 20,
  * Business 50, Enterprise 125).
  * :::
@@ -123,7 +117,7 @@ export type PageRule = Resource<
  * @section Caching
  * @example Cache everything under a path
  * ```typescript
- * yield* Cloudflare.PageRule("CacheImages", {
+ * yield* Cloudflare.PageRule.PageRule("CacheImages", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/images/*`,
  *   actions: [
@@ -137,7 +131,7 @@ export type PageRule = Resource<
  * @example Permanent redirect with forwarding_url
  * ```typescript
  * // forwarding_url cannot be combined with most other actions.
- * yield* Cloudflare.PageRule("RedirectOldBlog", {
+ * yield* Cloudflare.PageRule.PageRule("RedirectOldBlog", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/blog/*`,
  *   actions: [
@@ -152,7 +146,7 @@ export type PageRule = Resource<
  * @section Security
  * @example Force HTTPS and raise the security level
  * ```typescript
- * yield* Cloudflare.PageRule("SecureAdmin", {
+ * yield* Cloudflare.PageRule.PageRule("SecureAdmin", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/admin/*`,
  *   actions: [
@@ -166,7 +160,7 @@ export type PageRule = Resource<
  * @section Staged rollout
  * @example Create the rule disabled, flip to active later
  * ```typescript
- * yield* Cloudflare.PageRule("BypassCacheBeta", {
+ * yield* Cloudflare.PageRule.PageRule("BypassCacheBeta", {
  *   zoneId: zone.zoneId,
  *   target: `${zone.name}/beta/*`,
  *   actions: [{ id: "cache_level", value: "bypass" }],
@@ -176,13 +170,13 @@ export type PageRule = Resource<
  *
  * @see https://developers.cloudflare.com/rules/page-rules/
  */
-export const PageRule = Resource<PageRule>(PageRuleTypeId);
+export const PageRule = Resource<PageRule>(TypeId);
 
 /**
  * Returns true if the given value is a PageRule resource.
  */
 export const isPageRule = (value: unknown): value is PageRule =>
-  Predicate.hasProperty(value, "Type") && value.Type === PageRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const PageRuleProvider = () =>
   Provider.succeed(PageRule, {
@@ -217,8 +211,8 @@ export const PageRuleProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as PageRuleProps;
-      const n = news as PageRuleProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both are concrete.
       if (
         typeof o.zoneId === "string" &&
@@ -353,7 +347,7 @@ const findByTarget = (zoneId: string, target: string) =>
     );
 
 /** The desired request body (everything except path params). */
-const desiredBody = (news: PageRuleProps) => ({
+const desiredBody = (news: Props) => ({
   targets: [
     {
       target: "url" as const,
@@ -391,7 +385,7 @@ const canonical = (v: unknown): unknown => {
   return v;
 };
 
-const canonicalActions = (actions: ReadonlyArray<PageRuleAction>): string =>
+const canonicalActions = (actions: ReadonlyArray<Action>): string =>
   JSON.stringify(
     actions
       .map((a) => canonical(a) as { id?: string })
@@ -401,26 +395,20 @@ const canonicalActions = (actions: ReadonlyArray<PageRuleAction>): string =>
   );
 
 /** True when the observed rule already matches every desired aspect. */
-const ruleMatchesDesired = (
-  observed: ObservedRule,
-  news: PageRuleProps,
-): boolean =>
+const ruleMatchesDesired = (observed: ObservedRule, news: Props): boolean =>
   targetOf(observed) === news.target &&
   observed.priority === (news.priority ?? 1) &&
   observed.status === (news.status ?? "active") &&
-  canonicalActions(observed.actions as ReadonlyArray<PageRuleAction>) ===
+  canonicalActions(observed.actions as ReadonlyArray<Action>) ===
     canonicalActions(news.actions);
 
-const toAttributes = (
-  rule: ObservedRule,
-  zoneId: string,
-): PageRuleAttributes => ({
+const toAttributes = (rule: ObservedRule, zoneId: string): Attributes => ({
   pageRuleId: rule.id,
   zoneId,
   target: targetOf(rule) ?? "",
-  actions: rule.actions as ReadonlyArray<PageRuleAction>,
+  actions: rule.actions as ReadonlyArray<Action>,
   priority: rule.priority,
-  status: rule.status as PageRuleStatus,
+  status: rule.status as Status,
   createdOn: rule.createdOn,
   modifiedOn: rule.modifiedOn,
 });

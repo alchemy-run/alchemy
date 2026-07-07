@@ -54,7 +54,7 @@ describe.sequential("LeakedCredentialDetection", () => {
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.LeakedCredentialDetection,
+        Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection,
       );
 
       if (detectionZoneId) {
@@ -65,11 +65,15 @@ describe.sequential("LeakedCredentialDetection", () => {
 
         const detection = yield* stack.deploy(
           Effect.gen(function* () {
-            const check = yield* Cloudflare.LeakedCredentialCheck("Lcc", {
-              zoneId: detectionZoneId,
-              enabled: true,
-            });
-            return yield* Cloudflare.LeakedCredentialDetection(
+            const check =
+              yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
+                "Lcc",
+                {
+                  zoneId: detectionZoneId,
+                  enabled: true,
+                },
+              );
+            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection(
               "ListDetection",
               {
                 zoneId: check.zoneId,

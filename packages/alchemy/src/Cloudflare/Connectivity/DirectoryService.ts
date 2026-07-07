@@ -12,9 +12,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DirectoryServiceTypeId =
-  "Cloudflare.Connectivity.DirectoryService" as const;
-type DirectoryServiceTypeId = typeof DirectoryServiceTypeId;
+const TypeId = "Cloudflare.Connectivity.DirectoryService" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Protocol of a Connectivity Directory service.
@@ -34,7 +33,7 @@ export declare namespace DirectoryService {
   export interface Network {
     /**
      * UUID of the `cfd_tunnel` that provides connectivity to the host.
-     * Accepts a reference to a `Cloudflare.Tunnel` output.
+     * Accepts a reference to a `Cloudflare.Tunnel.Tunnel` output.
      */
     tunnelId: string;
   }
@@ -45,7 +44,7 @@ export declare namespace DirectoryService {
   export interface ResolverNetwork {
     /**
      * UUID of the `cfd_tunnel` that provides connectivity to the host.
-     * Accepts a reference to a `Cloudflare.Tunnel` output.
+     * Accepts a reference to a `Cloudflare.Tunnel.Tunnel` output.
      */
     tunnelId: string;
     /**
@@ -215,7 +214,7 @@ export type DirectoryServiceAttributes = {
 };
 
 export type DirectoryService = Resource<
-  DirectoryServiceTypeId,
+  TypeId,
   DirectoryServiceProps,
   DirectoryServiceAttributes,
   never,
@@ -241,10 +240,10 @@ export type DirectoryService = Resource<
  * @section Creating a Directory Service
  * @example TCP database service through a tunnel
  * ```typescript
- * const tunnel = yield* Cloudflare.Tunnel("DbTunnel", {
+ * const tunnel = yield* Cloudflare.Tunnel.Tunnel("DbTunnel", {
  *   ingress: [{ service: "tcp://localhost:5432" }],
  * });
- * const db = yield* Cloudflare.DirectoryService("Postgres", {
+ * const db = yield* Cloudflare.Connectivity.DirectoryService("Postgres", {
  *   type: "tcp",
  *   tcpPort: 5432,
  *   appProtocol: "postgresql",
@@ -254,7 +253,7 @@ export type DirectoryService = Resource<
  *
  * @example HTTP service on a private hostname
  * ```typescript
- * const api = yield* Cloudflare.DirectoryService("InternalApi", {
+ * const api = yield* Cloudflare.Connectivity.DirectoryService("InternalApi", {
  *   type: "http",
  *   httpPort: 8080,
  *   httpsPort: 8443,
@@ -270,7 +269,7 @@ export type DirectoryService = Resource<
  * ```typescript
  * // Host, ports, name, and TLS settings are all mutable — the service
  * // keeps its serviceId across updates.
- * const db = yield* Cloudflare.DirectoryService("Postgres", {
+ * const db = yield* Cloudflare.Connectivity.DirectoryService("Postgres", {
  *   type: "tcp",
  *   tcpPort: 5432,
  *   host: {
@@ -282,15 +281,13 @@ export type DirectoryService = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/
  */
-export const DirectoryService = Resource<DirectoryService>(
-  DirectoryServiceTypeId,
-);
+export const DirectoryService = Resource<DirectoryService>(TypeId);
 
 /**
  * Returns true if the given value is a DirectoryService resource.
  */
 export const isDirectoryService = (value: unknown): value is DirectoryService =>
-  Predicate.hasProperty(value, "Type") && value.Type === DirectoryServiceTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DirectoryServiceProvider = () =>
   Provider.succeed(DirectoryService, {

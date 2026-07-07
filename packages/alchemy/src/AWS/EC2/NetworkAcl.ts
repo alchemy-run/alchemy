@@ -180,7 +180,7 @@ export const NetworkAclProvider = () =>
           ),
         );
 
-      const toAttrs = Effect.fnUntraced(function* (acl: ec2.NetworkAcl) {
+      const toAttrs = Effect.fn(function* (acl: ec2.NetworkAcl) {
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
           networkAclId: acl.NetworkAclId as NetworkAclId,
@@ -234,7 +234,10 @@ export const NetworkAclProvider = () =>
                 Array.from(chunk).flatMap((page) =>
                   (page.NetworkAcls ?? []).filter(
                     (acl): acl is ec2.NetworkAcl & { NetworkAclId: string } =>
-                      acl.NetworkAclId != null,
+                      acl.NetworkAclId != null &&
+                      // Each VPC's default NACL is AWS-managed and cannot be
+                      // deleted (InvalidParameterValue) — don't enumerate it.
+                      acl.IsDefault !== true,
                   ),
                 ),
               ),

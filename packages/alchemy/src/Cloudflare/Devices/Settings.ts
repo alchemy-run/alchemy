@@ -7,8 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DeviceSettingsTypeId = "Cloudflare.Devices.Settings" as const;
-type DeviceSettingsTypeId = typeof DeviceSettingsTypeId;
+const TypeId = "Cloudflare.Devices.Settings" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A snapshot of the account's WARP device settings, as observed on
@@ -94,7 +94,7 @@ export type DeviceSettingsAttributes = DeviceSettingsSnapshot & {
 };
 
 export type DeviceSettings = Resource<
-  DeviceSettingsTypeId,
+  TypeId,
   DeviceSettingsProps,
   DeviceSettingsAttributes,
   never,
@@ -117,7 +117,7 @@ export type DeviceSettings = Resource<
  * @section Managing device settings
  * @example Enable the Gateway proxy
  * ```typescript
- * yield* Cloudflare.DeviceSettings("Devices", {
+ * yield* Cloudflare.Devices.DeviceSettings("Devices", {
  *   gatewayProxyEnabled: true,
  *   gatewayUdpProxyEnabled: true,
  * });
@@ -125,20 +125,20 @@ export type DeviceSettings = Resource<
  *
  * @example Allow one-hour WARP override codes
  * ```typescript
- * yield* Cloudflare.DeviceSettings("Devices", {
+ * yield* Cloudflare.Devices.DeviceSettings("Devices", {
  *   disableForTime: 3600,
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/warp/
  */
-export const DeviceSettings = Resource<DeviceSettings>(DeviceSettingsTypeId);
+export const DeviceSettings = Resource<DeviceSettings>(TypeId);
 
 /**
  * Returns true if the given value is a DeviceSettings resource.
  */
 export const isDeviceSettings = (value: unknown): value is DeviceSettings =>
-  Predicate.hasProperty(value, "Type") && value.Type === DeviceSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DeviceSettingsProvider = () =>
   Provider.succeed(DeviceSettings, {

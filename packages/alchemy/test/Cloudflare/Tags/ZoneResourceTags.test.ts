@@ -80,13 +80,13 @@ test.provider("create, update, and clear tags on a DNS record", (stack) =>
 
     const v1 = yield* stack.deploy(
       Effect.gen(function* () {
-        const record = yield* Cloudflare.DnsRecord("CrudTaggedRecord", {
+        const record = yield* Cloudflare.DNS.Record("CrudTaggedRecord", {
           zoneId,
           name: CRUD_RECORD_NAME,
           type: "A",
           content: "203.0.113.50",
         }).pipe(adopt(true));
-        const tags = yield* Cloudflare.ZoneResourceTags("CrudRecordTags", {
+        const tags = yield* Cloudflare.Tags.ZoneResourceTags("CrudRecordTags", {
           zoneId,
           resourceType: "dns_record",
           resourceId: record.recordId,
@@ -109,13 +109,13 @@ test.provider("create, update, and clear tags on a DNS record", (stack) =>
     // `team`, add `owner`.
     const v2 = yield* stack.deploy(
       Effect.gen(function* () {
-        const record = yield* Cloudflare.DnsRecord("CrudTaggedRecord", {
+        const record = yield* Cloudflare.DNS.Record("CrudTaggedRecord", {
           zoneId,
           name: CRUD_RECORD_NAME,
           type: "A",
           content: "203.0.113.50",
         }).pipe(adopt(true));
-        const tags = yield* Cloudflare.ZoneResourceTags("CrudRecordTags", {
+        const tags = yield* Cloudflare.Tags.ZoneResourceTags("CrudRecordTags", {
           zoneId,
           resourceType: "dns_record",
           resourceId: record.recordId,
@@ -151,7 +151,7 @@ test.provider("tag the zone itself and clear on destroy", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.ZoneResourceTags("ZoneTags", {
+        return yield* Cloudflare.Tags.ZoneResourceTags("ZoneTags", {
           zoneId,
           resourceType: "zone",
           resourceId: zoneId,
@@ -179,13 +179,13 @@ test.provider("list enumerates tagged zone-scoped resources", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const record = yield* Cloudflare.DnsRecord("ListTaggedRecord", {
+        const record = yield* Cloudflare.DNS.Record("ListTaggedRecord", {
           zoneId,
           name: LIST_RECORD_NAME,
           type: "A",
           content: "203.0.113.50",
         }).pipe(adopt(true));
-        const tags = yield* Cloudflare.ZoneResourceTags("ListRecordTags", {
+        const tags = yield* Cloudflare.Tags.ZoneResourceTags("ListRecordTags", {
           zoneId,
           resourceType: "dns_record",
           resourceId: record.recordId,
@@ -195,7 +195,9 @@ test.provider("list enumerates tagged zone-scoped resources", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.ZoneResourceTags);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.Tags.ZoneResourceTags,
+    );
 
     // The account-wide tag index is eventually consistent — poll until the
     // freshly-tagged record shows up (bounded so it fails fast).

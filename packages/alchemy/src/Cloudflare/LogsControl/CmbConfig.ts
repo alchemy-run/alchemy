@@ -8,10 +8,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LogsCmbConfigTypeId = "Cloudflare.Logs.CmbConfig" as const;
-type LogsCmbConfigTypeId = typeof LogsCmbConfigTypeId;
+const TypeId = "Cloudflare.Logs.CmbConfig" as const;
+type TypeId = typeof TypeId;
 
-export type LogsCmbConfigProps = {
+export type CmbConfigProps = {
   /**
    * The Cloudflare account whose Customer Metadata Boundary (CMB) log
    * configuration is managed. The config is an account-level singleton, so
@@ -35,7 +35,7 @@ export type LogsCmbConfigProps = {
   allowOutOfRegionAccess?: boolean;
 };
 
-export type LogsCmbConfigAttributes = {
+export type CmbConfigAttributes = {
   /** The Cloudflare account the CMB config belongs to. */
   accountId: string;
   /** Name of the region log data is restricted to. */
@@ -44,10 +44,10 @@ export type LogsCmbConfigAttributes = {
   allowOutOfRegionAccess: boolean | undefined;
 };
 
-export type LogsCmbConfig = Resource<
-  LogsCmbConfigTypeId,
-  LogsCmbConfigProps,
-  LogsCmbConfigAttributes,
+export type CmbConfig = Resource<
+  TypeId,
+  CmbConfigProps,
+  CmbConfigAttributes,
   never,
   Providers
 >;
@@ -76,14 +76,14 @@ export type LogsCmbConfig = Resource<
  * @section Restricting logs to a region
  * @example Keep all account logs in the EU
  * ```typescript
- * const cmb = yield* Cloudflare.LogsCmbConfig("EuLogs", {
+ * const cmb = yield* Cloudflare.LogsControl.CmbConfig("EuLogs", {
  *   regions: "eu",
  * });
  * ```
  *
  * @example Allow out-of-region access
  * ```typescript
- * const cmb = yield* Cloudflare.LogsCmbConfig("EuLogs", {
+ * const cmb = yield* Cloudflare.LogsControl.CmbConfig("EuLogs", {
  *   regions: "eu",
  *   allowOutOfRegionAccess: true,
  * });
@@ -91,16 +91,16 @@ export type LogsCmbConfig = Resource<
  *
  * @see https://developers.cloudflare.com/data-localization/metadata-boundary/
  */
-export const LogsCmbConfig = Resource<LogsCmbConfig>(LogsCmbConfigTypeId);
+export const CmbConfig = Resource<CmbConfig>(TypeId);
 
 /**
- * Returns true if the given value is a LogsCmbConfig resource.
+ * Returns true if the given value is a CmbConfig resource.
  */
-export const isLogsCmbConfig = (value: unknown): value is LogsCmbConfig =>
-  Predicate.hasProperty(value, "Type") && value.Type === LogsCmbConfigTypeId;
+export const isCmbConfig = (value: unknown): value is CmbConfig =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const LogsCmbConfigProvider = () =>
-  Provider.succeed(LogsCmbConfig, {
+export const CmbConfigProvider = () =>
+  Provider.succeed(CmbConfig, {
     stables: ["accountId"],
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -209,7 +209,7 @@ const toAttributes = (
   config:
     | logs.GetControlCmbConfigResponse
     | logs.CreateControlCmbConfigResponse,
-): LogsCmbConfigAttributes => ({
+): CmbConfigAttributes => ({
   accountId,
   regions: config.regions ?? undefined,
   allowOutOfRegionAccess: config.allowOutOfRegionAccess ?? undefined,

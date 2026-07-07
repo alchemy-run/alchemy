@@ -8,7 +8,7 @@ import RpcCounterObject from "./object.ts";
 /**
  * Plain {@link Cloudflare.Worker} that drives the
  * {@link RpcCounterObject} via the typed `getByName(id)` client returned
- * from {@link Cloudflare.RpcDurableObjectNamespace}. Each route maps to
+ * from {@link Cloudflare.RpcDurableObject}. Each route maps to
  * one RPC, so the integ test can assert the round-trip end to end:
  *
  * - `POST /counter/:id/increment` → `Increment`
@@ -18,7 +18,7 @@ import RpcCounterObject from "./object.ts";
 export default class RpcCounterWorker extends Cloudflare.Worker<RpcCounterWorker>()(
   "RpcCounterWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counters = yield* RpcCounterObject;

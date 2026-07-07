@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicSiteLanTypeId = "Cloudflare.MagicTransit.SiteLan" as const;
-type MagicSiteLanTypeId = typeof MagicSiteLanTypeId;
+const TypeId = "Cloudflare.MagicTransit.SiteLan" as const;
+type TypeId = typeof TypeId;
 
 /**
  * NAT configuration for a Magic WAN site LAN.
@@ -136,7 +136,7 @@ export interface MagicSiteLanAttributes {
 }
 
 export type MagicSiteLan = Resource<
-  MagicSiteLanTypeId,
+  TypeId,
   MagicSiteLanProps,
   MagicSiteLanAttributes,
   never,
@@ -159,7 +159,7 @@ export type MagicSiteLan = Resource<
  * @section Creating a LAN
  * @example Untagged LAN with DHCP
  * ```typescript
- * const lan = yield* Cloudflare.MagicSiteLan("hq-lan", {
+ * const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("hq-lan", {
  *   siteId: site.siteId,
  *   physport: 2,
  *   vlanTag: 0,
@@ -168,7 +168,7 @@ export type MagicSiteLan = Resource<
  *
  * @example LAN with static addressing and a routed subnet
  * ```typescript
- * const lan = yield* Cloudflare.MagicSiteLan("hq-lan", {
+ * const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("hq-lan", {
  *   siteId: site.siteId,
  *   physport: 2,
  *   vlanTag: 10,
@@ -181,13 +181,13 @@ export type MagicSiteLan = Resource<
  *
  * @see https://developers.cloudflare.com/magic-wan/configuration/connector/
  */
-export const MagicSiteLan = Resource<MagicSiteLan>(MagicSiteLanTypeId);
+export const MagicSiteLan = Resource<MagicSiteLan>(TypeId);
 
 /**
  * Returns true if the given value is a MagicSiteLan resource.
  */
 export const isMagicSiteLan = (value: unknown): value is MagicSiteLan =>
-  Predicate.hasProperty(value, "Type") && value.Type === MagicSiteLanTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MagicSiteLanProvider = () =>
   Provider.succeed(MagicSiteLan, {

@@ -87,7 +87,7 @@ export const AxiomAuth = AuthProviderLayer<
   Effect.gen(function* () {
     const store = yield* CredentialsStore;
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const credentialType = yield* Clank.select({
         message: "Axiom credential type",
         options: [
@@ -201,7 +201,7 @@ export const AxiomAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when(
           { method: "env" },
-          Effect.fnUntraced(function* () {
+          Effect.fn(function* () {
             const apiToken =
               (yield* getEnvRedacted("AXIOM_TOKEN")) ??
               (yield* getEnvRedacted("AXIOM_API_KEY"));

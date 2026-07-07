@@ -11,8 +11,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const CertificatePackTypeId = "Cloudflare.Ssl.CertificatePack" as const;
-type CertificatePackTypeId = typeof CertificatePackTypeId;
+const TypeId = "Cloudflare.Ssl.CertificatePack" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Certificate Authorities available for Advanced Certificate Manager orders.
@@ -163,7 +163,7 @@ export interface CertificatePackAttributes {
 }
 
 export type CertificatePack = Resource<
-  CertificatePackTypeId,
+  TypeId,
   CertificatePackProps,
   CertificatePackAttributes,
   never,
@@ -193,7 +193,7 @@ export type CertificatePack = Resource<
  * @section Ordering a certificate pack
  * @example Order an advanced certificate for the apex and a wildcard
  * ```typescript
- * const pack = yield* Cloudflare.CertificatePack("ApexCert", {
+ * const pack = yield* Cloudflare.Ssl.CertificatePack("ApexCert", {
  *   zoneId: zone.zoneId,
  *   certificateAuthority: "google",
  *   hosts: ["example.com", "*.example.com"],
@@ -204,7 +204,7 @@ export type CertificatePack = Resource<
  *
  * @example Order from Let's Encrypt with a short validity
  * ```typescript
- * yield* Cloudflare.CertificatePack("ShortLivedCert", {
+ * yield* Cloudflare.Ssl.CertificatePack("ShortLivedCert", {
  *   zoneId: zone.zoneId,
  *   certificateAuthority: "lets_encrypt",
  *   hosts: ["example.com", "api.example.com"],
@@ -216,7 +216,7 @@ export type CertificatePack = Resource<
  * @section Completing validation
  * @example Create the DCV TXT records the order asks for
  * ```typescript
- * const pack = yield* Cloudflare.CertificatePack("ApexCert", {
+ * const pack = yield* Cloudflare.Ssl.CertificatePack("ApexCert", {
  *   zoneId: zone.zoneId,
  *   certificateAuthority: "google",
  *   hosts: ["example.com"],
@@ -229,13 +229,13 @@ export type CertificatePack = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/edge-certificates/advanced-certificate-manager/
  */
-export const CertificatePack = Resource<CertificatePack>(CertificatePackTypeId);
+export const CertificatePack = Resource<CertificatePack>(TypeId);
 
 /**
  * Returns true if the given value is a CertificatePack resource.
  */
 export const isCertificatePack = (value: unknown): value is CertificatePack =>
-  Predicate.hasProperty(value, "Type") && value.Type === CertificatePackTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CertificatePackProvider = () =>
   Provider.succeed(CertificatePack, {

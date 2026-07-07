@@ -81,7 +81,7 @@ test.provider(
       // Create a disabled map with a description.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AddressMap("Map", {
+          return yield* Cloudflare.Addressing.AddressMap("Map", {
             description: "alchemy-addressmap v1",
             enabled: false,
           });
@@ -99,7 +99,7 @@ test.provider(
       // Update the description in place — same physical map.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AddressMap("Map", {
+          return yield* Cloudflare.Addressing.AddressMap("Map", {
             description: "alchemy-addressmap v2",
             enabled: false,
           });
@@ -164,7 +164,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AddressMap("ListMap", {
+          return yield* Cloudflare.Addressing.AddressMap("ListMap", {
             description: "alchemy-addressmap-list",
             enabled: false,
           });
@@ -172,7 +172,9 @@ test.provider(
       );
       expect(deployed.addressMapId).toBeDefined();
 
-      const provider = yield* Provider.findProvider(Cloudflare.AddressMap);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Addressing.AddressMap,
+      );
       const all = yield* provider.list();
 
       // The deployed map appears in the exhaustively-paginated result, fully

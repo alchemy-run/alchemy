@@ -10,10 +10,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RumSiteTypeId = "Cloudflare.Rum.Site" as const;
-type RumSiteTypeId = typeof RumSiteTypeId;
+const TypeId = "Cloudflare.Rum.Site" as const;
+type TypeId = typeof TypeId;
 
-export type RumSiteProps = {
+export type SiteProps = {
   /**
    * The hostname to measure, for gray-clouded sites (sites that are not
    * proxied through Cloudflare). Embed the produced `snippet` (or the
@@ -51,7 +51,7 @@ export type RumSiteProps = {
   lite?: boolean;
 };
 
-export type RumSiteAttributes = {
+export type SiteAttributes = {
   /**
    * The Web Analytics site identifier. Stable for the lifetime of the site.
    */
@@ -92,10 +92,10 @@ export type RumSiteAttributes = {
   created: string | undefined;
 };
 
-export type RumSite = Resource<
-  RumSiteTypeId,
-  RumSiteProps,
-  RumSiteAttributes,
+export type Site = Resource<
+  TypeId,
+  SiteProps,
+  SiteAttributes,
   never,
   Providers
 >;
@@ -117,7 +117,7 @@ export type RumSite = Resource<
  * @section Measuring a hostname
  * @example Gray-clouded site (manual snippet embed)
  * ```typescript
- * const site = yield* Cloudflare.RumSite("Analytics", {
+ * const site = yield* Cloudflare.Rum.Site("Analytics", {
  *   host: "example.com",
  * });
  *
@@ -128,9 +128,9 @@ export type RumSite = Resource<
  * @section Measuring a zone
  * @example Orange-clouded site with automatic snippet injection
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Zone", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
  *
- * yield* Cloudflare.RumSite("ZoneAnalytics", {
+ * yield* Cloudflare.Rum.Site("ZoneAnalytics", {
  *   zoneTag: zone.zoneId,
  *   autoInstall: true,
  * });
@@ -138,7 +138,7 @@ export type RumSite = Resource<
  *
  * @example Skip injection for EU visitors
  * ```typescript
- * yield* Cloudflare.RumSite("ZoneAnalytics", {
+ * yield* Cloudflare.Rum.Site("ZoneAnalytics", {
  *   zoneTag: zone.zoneId,
  *   autoInstall: true,
  *   lite: true,
@@ -147,22 +147,22 @@ export type RumSite = Resource<
  *
  * @see https://developers.cloudflare.com/web-analytics/
  */
-export const RumSite = Resource<RumSite>(RumSiteTypeId);
+export const Site = Resource<Site>(TypeId);
 
 /**
- * Returns true if the given value is a RumSite resource.
+ * Returns true if the given value is a Site resource.
  */
-export const isRumSite = (value: unknown): value is RumSite =>
-  Predicate.hasProperty(value, "Type") && value.Type === RumSiteTypeId;
+export const isSite = (value: unknown): value is Site =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const RumSiteProvider = () =>
-  Provider.succeed(RumSite, {
+export const SiteProvider = () =>
+  Provider.succeed(Site, {
     stables: ["siteTag", "siteToken", "accountId", "rulesetId", "created"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const o = olds as RumSiteProps;
-      const n = news as RumSiteProps;
+      const o = olds as SiteProps;
+      const n = news as SiteProps;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -340,7 +340,7 @@ const findSite = (
 const toAttributes = (
   site: ObservedSite,
   accountId: string,
-): RumSiteAttributes => ({
+): SiteAttributes => ({
   siteTag: site.siteTag ?? "",
   siteToken: site.siteToken ?? "",
   snippet: site.snippet ?? undefined,

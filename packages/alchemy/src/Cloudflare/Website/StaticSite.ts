@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
+import { cast } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { Command, type CommandProps } from "../../Build/Command.ts";
-import { DevServer } from "../../Build/DevServer.ts";
+import * as Command from "../../Command/index.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
@@ -21,7 +21,7 @@ import {
 export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   extends
     Omit<WorkerProps<Bindings, WorkerAssetsConfig>, "assets" | "dev">,
-    Omit<CommandProps, "env"> {
+    Omit<Command.BuildProps, "env"> {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -37,7 +37,7 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    *
    * @example
    * ```typescript
-   * Cloudflare.StaticSite("App", {
+   * Cloudflare.Website.StaticSite("App", {
    *   command: "npm run build",
    *   outdir: "dist",
    *   main: "./src/worker.ts",
@@ -51,8 +51,9 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
      */
     command: string;
     /**
-     * Working directory for {@link command}. Defaults to {@link CommandProps.cwd}
-     * (the build command's `cwd`), or `process.cwd()` if neither is set.
+     * Working directory for {@link command}. Defaults to
+     * {@link Command.BuildProps.cwd} (the build command's `cwd`), or
+     * `process.cwd()` if neither is set.
      */
     cwd?: string;
     /**
@@ -86,7 +87,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * produces a directory of files — Hugo, Zola, Eleventy, or any custom
  * pipeline.
  *
- * For Vite-based projects, prefer `Cloudflare.Vite` which handles
+ * For Vite-based projects, prefer `Cloudflare.Website.Vite` which handles
  * building automatically.
  *
  * @resource
@@ -112,7 +113,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Deploying a Hugo site
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("Blog", {
+ * const site = yield* Cloudflare.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
  *   outdir: "public",
  *   main: "./src/worker.ts",
@@ -125,7 +126,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example SPA-style routing
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("App", {
+ * const site = yield* Cloudflare.Website.StaticSite("App", {
  *   command: "npm run build",
  *   outdir: "dist",
  *   main: "./src/worker.ts",
@@ -142,7 +143,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Building a frontend in a monorepo
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("Web", {
+ * const site = yield* Cloudflare.Website.StaticSite("Web", {
  *   cwd: "apps/web",
  *   command: "npm run build",
  *   outdir: "dist",
@@ -156,7 +157,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Narrowing the memo scope
  * ```typescript
- * const site = yield* Cloudflare.StaticSite("Docs", {
+ * const site = yield* Cloudflare.Website.StaticSite("Docs", {
  *   command: "npm run build",
  *   outdir: "dist",
  *   main: "./src/worker.ts",
@@ -174,7 +175,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * @example Declaring a Worker class
  * ```typescript
- * class Blog extends Cloudflare.StaticSite<Blog>()("Blog", {
+ * class Blog extends Cloudflare.Website.StaticSite<Blog>()("Blog", {
  *   command: "hugo --minify",
  *   outdir: "public",
  *   main: "./src/worker.ts",
@@ -227,7 +228,7 @@ const makeStaticSite = <
     // skip the build, and tell Worker not to start a local instance.
     const dev =
       ctx.dev && props.dev
-        ? yield* DevServer("Dev", {
+        ? yield* Command.Dev("Dev", {
             command: props.dev.command,
             cwd:
               props.dev.cwd ??
@@ -244,7 +245,7 @@ const makeStaticSite = <
 
     const build = dev
       ? undefined
-      : yield* Command("Build", {
+      : yield* Command.Build("Build", {
           command: props.command,
           cwd: props.cwd,
           memo: props.memo,
@@ -263,11 +264,11 @@ const makeStaticSite = <
     return yield* Worker<Bindings, WorkerAssetsConfig, Req>("Worker", {
       ...props,
       assets: build
-        ? {
+        ? cast({
             directory: build.outdir,
             hash: build.hash,
             ...props.assets,
-          }
+          })
         : undefined,
       // Opt out of the local Worker in dev when the external DevCommand
       // is serving the content. The Worker resource still exists in

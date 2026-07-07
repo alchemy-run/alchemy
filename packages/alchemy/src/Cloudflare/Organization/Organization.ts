@@ -10,14 +10,14 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
-const OrganizationTypeId = "Cloudflare.Organization" as const;
-type OrganizationTypeId = typeof OrganizationTypeId;
+const TypeId = "Cloudflare.Organization.Organization" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Business profile attached to an organization. All fields are required
  * when a profile is present — the API stores the profile as a unit.
  */
-export interface OrganizationProfile {
+export interface Profile {
   /**
    * Street address of the business that owns the organization.
    */
@@ -44,7 +44,7 @@ export interface OrganizationProfile {
  * Feature flags Cloudflare sets on an organization. Read-only —
  * controlled by the organization's entitlements.
  */
-export interface OrganizationFlags {
+export interface Flags {
   /**
    * Whether accounts may be created under this organization.
    */
@@ -67,7 +67,7 @@ export interface OrganizationFlags {
   subOrgCreation: string;
 }
 
-export interface OrganizationProps {
+export interface Props {
   /**
    * Display name of the organization. Mutable in place. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
@@ -84,10 +84,10 @@ export interface OrganizationProps {
   /**
    * Business profile of the organization. Mutable in place.
    */
-  profile?: OrganizationProfile;
+  profile?: Profile;
 }
 
-export interface OrganizationAttributes {
+export interface Attributes {
   /**
    * Cloudflare-assigned identifier of the organization.
    */
@@ -107,7 +107,7 @@ export interface OrganizationAttributes {
   /**
    * Feature flags controlled by the organization's entitlements.
    */
-  flags: OrganizationFlags | undefined;
+  flags: Flags | undefined;
   /**
    * Parent organization, if this organization is part of a hierarchy.
    */
@@ -115,13 +115,13 @@ export interface OrganizationAttributes {
   /**
    * Business profile of the organization, if one is set.
    */
-  profile: OrganizationProfile | undefined;
+  profile: Profile | undefined;
 }
 
 export type Organization = Resource<
-  OrganizationTypeId,
-  OrganizationProps,
-  OrganizationAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -149,14 +149,14 @@ export type Organization = Resource<
  * @section Creating an Organization
  * @example Basic organization
  * ```typescript
- * const org = yield* Cloudflare.Organization("Platform", {
+ * const org = yield* Cloudflare.Organization.Organization("Platform", {
  *   name: "acme-platform",
  * });
  * ```
  *
  * @example Organization with a business profile
  * ```typescript
- * const org = yield* Cloudflare.Organization("Platform", {
+ * const org = yield* Cloudflare.Organization.Organization("Platform", {
  *   name: "acme-platform",
  *   profile: {
  *     businessName: "Acme Corp",
@@ -171,11 +171,11 @@ export type Organization = Resource<
  * @section Hierarchies
  * @example Sub-organization under a parent
  * ```typescript
- * const parent = yield* Cloudflare.Organization("Root", {
+ * const parent = yield* Cloudflare.Organization.Organization("Root", {
  *   name: "acme-root",
  * });
  * // Changing `parent` later replaces the sub-organization.
- * const sub = yield* Cloudflare.Organization("Emea", {
+ * const sub = yield* Cloudflare.Organization.Organization("Emea", {
  *   name: "acme-emea",
  *   parent: parent.organizationId,
  * });
@@ -183,13 +183,13 @@ export type Organization = Resource<
  *
  * @see https://developers.cloudflare.com/fundamentals/setup/manage-organizations/
  */
-export const Organization = Resource<Organization>(OrganizationTypeId);
+export const Organization = Resource<Organization>(TypeId);
 
 /**
  * Returns true if the given value is an Organization resource.
  */
 export const isOrganization = (value: unknown): value is Organization =>
-  Predicate.hasProperty(value, "Type") && value.Type === OrganizationTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
@@ -353,8 +353,8 @@ const createOrganizationName = (id: string, name: string | undefined) =>
  * desired profile is "keep whatever is there" — never a diff.
  */
 const sameProfile = (
-  observed: OrganizationProfile | null | undefined,
-  desired: OrganizationProfile | undefined,
+  observed: Profile | null | undefined,
+  desired: Profile | undefined,
 ) =>
   desired === undefined ||
   (observed != null &&
@@ -370,7 +370,7 @@ const toAttributes = (
     | organizations.CreateOrganizationResponse
     | organizations.UpdateOrganizationResponse
     | organizations.ListOrganizationsResponse["result"][number],
-): OrganizationAttributes => ({
+): Attributes => ({
   organizationId: org.id,
   name: org.name,
   createTime: org.createTime,

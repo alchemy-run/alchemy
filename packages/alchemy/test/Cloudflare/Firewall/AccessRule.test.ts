@@ -141,7 +141,7 @@ test.provider("create and delete a zone-scoped ip rule", (stack) =>
 
     const rule = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.FirewallAccessRule("DefaultRule", {
+        return yield* Cloudflare.Firewall.AccessRule("DefaultRule", {
           zoneId,
           configuration: { target: "ip", value: IP_DEFAULT },
           mode: "challenge",
@@ -178,7 +178,7 @@ test.provider("update mode and notes in place (same ruleId)", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.FirewallAccessRule("UpdateRule", {
+        return yield* Cloudflare.Firewall.AccessRule("UpdateRule", {
           zoneId,
           configuration: { target: "ip", value: IP_UPDATE },
           mode: "challenge",
@@ -192,7 +192,7 @@ test.provider("update mode and notes in place (same ruleId)", (stack) =>
 
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.FirewallAccessRule("UpdateRule", {
+        return yield* Cloudflare.Firewall.AccessRule("UpdateRule", {
           zoneId,
           configuration: { target: "ip", value: IP_UPDATE },
           mode: "managed_challenge",
@@ -213,7 +213,7 @@ test.provider("update mode and notes in place (same ruleId)", (stack) =>
     // Redeploying identical props is a no-op (still the same rule).
     const noop = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.FirewallAccessRule("UpdateRule", {
+        return yield* Cloudflare.Firewall.AccessRule("UpdateRule", {
           zoneId,
           configuration: { target: "ip", value: IP_UPDATE },
           mode: "managed_challenge",
@@ -239,7 +239,7 @@ test.provider("changing the configuration triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.FirewallAccessRule("ReplaceRule", {
+        return yield* Cloudflare.Firewall.AccessRule("ReplaceRule", {
           zoneId,
           configuration: { target: "ip", value: IP_REPLACE_OLD },
           mode: "challenge",
@@ -251,7 +251,7 @@ test.provider("changing the configuration triggers replacement", (stack) =>
 
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.FirewallAccessRule("ReplaceRule", {
+        return yield* Cloudflare.Firewall.AccessRule("ReplaceRule", {
           zoneId,
           configuration: { target: "ip", value: IP_REPLACE_NEW },
           mode: "challenge",
@@ -284,7 +284,7 @@ test.provider("list enumerates the deployed zone-scoped rule", (stack) =>
 
     const rule = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.FirewallAccessRule("ListRule", {
+        return yield* Cloudflare.Firewall.AccessRule("ListRule", {
           zoneId,
           configuration: { target: "ip", value: IP_LIST },
           mode: "challenge",
@@ -294,7 +294,7 @@ test.provider("list enumerates the deployed zone-scoped rule", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.FirewallAccessRule,
+      Cloudflare.Firewall.AccessRule,
     );
     const all = yield* provider.list();
 
@@ -321,7 +321,7 @@ test.provider(
 
       const rule = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.FirewallAccessRule("AccountRule", {
+          return yield* Cloudflare.Firewall.AccessRule("AccountRule", {
             configuration: { target: "ip", value: IP_ACCOUNT },
             mode: "challenge",
             notes: "alchemy firewall test (account)",
@@ -341,7 +341,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.FirewallAccessRule("AccountRule", {
+          return yield* Cloudflare.Firewall.AccessRule("AccountRule", {
             configuration: { target: "ip", value: IP_ACCOUNT },
             mode: "managed_challenge",
             notes: "alchemy firewall test (account, v2)",

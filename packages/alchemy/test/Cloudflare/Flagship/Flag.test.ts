@@ -44,10 +44,10 @@ test.provider("create, update, delete a flag in an app", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("FlagApp", {
+        const app = yield* Cloudflare.Flagship.App("FlagApp", {
           name: "alchemy-test-flagship-flags",
         });
-        const flag = yield* Cloudflare.FlagshipFlag("Flag", {
+        const flag = yield* Cloudflare.Flagship.Flag("Flag", {
           appId: app.appId,
           key: "alchemy-test-flag",
           defaultVariation: "off",
@@ -78,10 +78,10 @@ test.provider("create, update, delete a flag in an app", (stack) =>
     // Update mutable props in place — same key, same app.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("FlagApp", {
+        const app = yield* Cloudflare.Flagship.App("FlagApp", {
           name: "alchemy-test-flagship-flags",
         });
-        const flag = yield* Cloudflare.FlagshipFlag("Flag", {
+        const flag = yield* Cloudflare.Flagship.Flag("Flag", {
           appId: app.appId,
           key: "alchemy-test-flag",
           enabled: false,
@@ -129,10 +129,10 @@ test.provider("create, update, delete a flag in an app", (stack) =>
     // Redeploying identical props is a no-op.
     const noop = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("FlagApp", {
+        const app = yield* Cloudflare.Flagship.App("FlagApp", {
           name: "alchemy-test-flagship-flags",
         });
-        const flag = yield* Cloudflare.FlagshipFlag("Flag", {
+        const flag = yield* Cloudflare.Flagship.Flag("Flag", {
           appId: app.appId,
           key: "alchemy-test-flag",
           enabled: false,
@@ -169,10 +169,10 @@ test.provider("replaces the flag when the key changes", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("ReplaceApp", {
+        const app = yield* Cloudflare.Flagship.App("ReplaceApp", {
           name: "alchemy-test-flagship-replace",
         });
-        const flag = yield* Cloudflare.FlagshipFlag("ReplaceFlag", {
+        const flag = yield* Cloudflare.Flagship.Flag("ReplaceFlag", {
           appId: app.appId,
           key: "alchemy-test-flag-a",
           defaultVariation: "off",
@@ -187,10 +187,10 @@ test.provider("replaces the flag when the key changes", (stack) =>
     // one is deleted.
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("ReplaceApp", {
+        const app = yield* Cloudflare.Flagship.App("ReplaceApp", {
           name: "alchemy-test-flagship-replace",
         });
-        const flag = yield* Cloudflare.FlagshipFlag("ReplaceFlag", {
+        const flag = yield* Cloudflare.Flagship.Flag("ReplaceFlag", {
           appId: app.appId,
           key: "alchemy-test-flag-b",
           defaultVariation: "off",
@@ -217,10 +217,10 @@ test.provider("recreates a flag after out-of-band delete", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("HealApp", {
+        const app = yield* Cloudflare.Flagship.App("HealApp", {
           name: "alchemy-test-flagship-heal-flag",
         });
-        const flag = yield* Cloudflare.FlagshipFlag("HealFlag", {
+        const flag = yield* Cloudflare.Flagship.Flag("HealFlag", {
           appId: app.appId,
           key: "alchemy-test-flag-heal",
           defaultVariation: "off",
@@ -241,10 +241,10 @@ test.provider("recreates a flag after out-of-band delete", (stack) =>
 
     const healed = yield* stack.deploy(
       Effect.gen(function* () {
-        const app = yield* Cloudflare.FlagshipApp("HealApp", {
+        const app = yield* Cloudflare.Flagship.App("HealApp", {
           name: "alchemy-test-flagship-heal-flag",
         });
-        const flag = yield* Cloudflare.FlagshipFlag("HealFlag", {
+        const flag = yield* Cloudflare.Flagship.Flag("HealFlag", {
           appId: app.appId,
           key: "alchemy-test-flag-heal",
           enabled: false,
@@ -283,10 +283,10 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.FlagshipApp("ListApp", {
+          const app = yield* Cloudflare.Flagship.App("ListApp", {
             name: "alchemy-test-flagship-list",
           });
-          const flag = yield* Cloudflare.FlagshipFlag("ListFlag", {
+          const flag = yield* Cloudflare.Flagship.Flag("ListFlag", {
             appId: app.appId,
             key: "alchemy-test-flag-list",
             defaultVariation: "off",
@@ -296,7 +296,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.FlagshipFlag);
+      const provider = yield* Provider.findProvider(Cloudflare.Flagship.Flag);
 
       // The flag itself is readable immediately (see the other tests' direct
       // `getAppFlag` right after deploy). What lags is the account-wide

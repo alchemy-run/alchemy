@@ -70,9 +70,12 @@ test.provider(
 
       const settings = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.NetworkInterconnectSettings("CniSettings", {
-            defaultAsn: 65000,
-          });
+          return yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings(
+            "CniSettings",
+            {
+              defaultAsn: 65000,
+            },
+          );
         }),
       );
 
@@ -88,9 +91,12 @@ test.provider(
       // Update in place — same singleton, initialDefaultAsn survives.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.NetworkInterconnectSettings("CniSettings", {
-            defaultAsn: 64999,
-          });
+          return yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings(
+            "CniSettings",
+            {
+              defaultAsn: 64999,
+            },
+          );
         }),
       );
       expect(updated.defaultAsn).toEqual(64999);
@@ -124,7 +130,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.NetworkInterconnectSettings,
+        Cloudflare.NetworkInterconnects.NetworkInterconnectSettings,
       );
       const all = yield* provider.list();
 

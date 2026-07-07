@@ -121,7 +121,7 @@ test.provider(
 
       // Create — engine-generated name, default http/workerBinding.
       const initial = yield* retryAuthBlip(
-        stack.deploy(Cloudflare.PipelineStream("Stream", {})),
+        stack.deploy(Cloudflare.Pipelines.Stream("Stream", {})),
       );
 
       expect(initial.streamId).toBeTruthy();
@@ -138,7 +138,7 @@ test.provider(
       // Patch http in place — same streamId.
       const updated = yield* retryAuthBlip(
         stack.deploy(
-          Cloudflare.PipelineStream("Stream", {
+          Cloudflare.Pipelines.Stream("Stream", {
             http: {
               enabled: true,
               authentication: true,
@@ -159,7 +159,7 @@ test.provider(
       // The schema is immutable — declaring one triggers a replacement.
       const replaced = yield* retryAuthBlip(
         stack.deploy(
-          Cloudflare.PipelineStream("Stream", {
+          Cloudflare.Pipelines.Stream("Stream", {
             schema: {
               fields: [
                 { type: "string", name: "url", required: true },
@@ -200,9 +200,9 @@ const etl = (
   opts: EtlOpts = {},
 ) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("SinkBucket", {});
-    const stream = yield* Cloudflare.PipelineStream("Stream", {});
-    const sink = yield* Cloudflare.PipelineSink("Sink", {
+    const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
+    const stream = yield* Cloudflare.Pipelines.Stream("Stream", {});
+    const sink = yield* Cloudflare.Pipelines.Sink("Sink", {
       type: "r2",
       config: {
         bucket: bucket.bucketName,
@@ -211,7 +211,7 @@ const etl = (
         rollingPolicy: { intervalSeconds: 10 },
       },
     });
-    const pipeline = yield* Cloudflare.Pipeline("Etl", {
+    const pipeline = yield* Cloudflare.Pipelines.Pipeline("Etl", {
       sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}${opts.where ? ` WHERE ${opts.where}` : ""}`,
     });
     return { bucket, stream, sink, pipeline };

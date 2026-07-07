@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { Subnet, VpcId } from "@/AWS/EC2";
+import { Subnet } from "@/AWS/EC2";
 import { Listener, ListenerRule, LoadBalancer, TargetGroup } from "@/AWS/ELBv2";
 import * as Test from "@/Test/Vitest";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
@@ -7,6 +7,7 @@ import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,7 +18,7 @@ const logLevel = Effect.provideService(
 
 // Create a path-pattern rule and a host-header rule on a listener, update the
 // path rule's condition + action in place, change its priority via
-// setRulePriorities, then destroy. Reuses an existing VPC + carved subnets.
+// setRulePriorities, then destroy. Reuses the default VPC + carved subnets.
 test.provider(
   "listener rules: path + host conditions, in-place update, priority change",
   (stack) =>
@@ -33,15 +34,7 @@ test.provider(
       expect(az1).toBeTruthy();
       expect(az2).toBeTruthy();
 
-      const vpcs = yield* EC2.describeVpcs({});
-      const vpc = (vpcs.Vpcs ?? []).find((v) => {
-        if (v.State !== "available" || !v.VpcId || !v.CidrBlock) return false;
-        const prefix = Number(v.CidrBlock.split("/")[1]);
-        return Number.isFinite(prefix) && prefix <= 23;
-      });
-      const vpcId = VpcId(vpc?.VpcId!);
-      expect(vpcId).toBeTruthy();
-      const [a, b] = vpc!.CidrBlock!.split("/")[0].split(".");
+      const defaultVpc = yield* getDefaultVpc;
 
       const stage = (
         pathPriority: number,
@@ -51,13 +44,13 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             const subnet1 = yield* Subnet("RSubnet1", {
-              vpcId,
-              cidrBlock: `${a}.${b}.226.0/24`,
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(226),
               availabilityZone: az1,
             });
             const subnet2 = yield* Subnet("RSubnet2", {
-              vpcId,
-              cidrBlock: `${a}.${b}.227.0/24`,
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(227),
               availabilityZone: az2,
             });
             const lb = yield* LoadBalancer("RLb", {
@@ -66,7 +59,7 @@ test.provider(
               type: "application",
             });
             const tg = yield* TargetGroup("RTg", {
-              vpcId,
+              vpcId: defaultVpc.vpcId,
               port: 80,
               protocol: "HTTP",
               targetType: "ip",

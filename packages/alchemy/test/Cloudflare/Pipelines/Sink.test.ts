@@ -70,8 +70,8 @@ test.provider(
       const deployed = yield* retryAuthBlip(
         stack.deploy(
           Effect.gen(function* () {
-            const bucket = yield* Cloudflare.R2Bucket("SinkBucket", {});
-            return yield* Cloudflare.PipelineSink("ListSink", {
+            const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
+            return yield* Cloudflare.Pipelines.Sink("ListSink", {
               type: "r2",
               config: {
                 bucket: bucket.bucketName,
@@ -87,7 +87,7 @@ test.provider(
 
       // Account collection: list() exhaustively paginates every sink in
       // the account and hydrates each into the read Attributes shape.
-      const provider = yield* Provider.findProvider(Cloudflare.PipelineSink);
+      const provider = yield* Provider.findProvider(Cloudflare.Pipelines.Sink);
       const all = yield* provider.list();
 
       const match = all.find((s) => s.sinkId === deployed.sinkId);

@@ -96,7 +96,7 @@ const retryingQuota = <A, R>(deploy: Effect.Effect<A, any, R>) =>
 const quotaExhausted = (stack: { destroy: () => Effect.Effect<void, any> }) =>
   Effect.gen(function* () {
     yield* Effect.logWarning(
-      "skipping RumRule assertions: account-wide Web Analytics rule quota " +
+      "skipping Rule assertions: account-wide Web Analytics rule quota " +
         "is exhausted (MaxRulesExceeded, code 10012, " +
         "web_analytics.configuration.api.maxRulesError)",
     );
@@ -132,13 +132,13 @@ const cleanupLeftoverSites = (accountId: string, zoneTag: string) =>
 // destroy).
 const program = (
   zoneId: string,
-  rule: Omit<Cloudflare.RumRuleProps, "rulesetId">,
+  rule: Omit<Cloudflare.Rum.RuleProps, "rulesetId">,
 ) =>
   Effect.gen(function* () {
-    const site = yield* Cloudflare.RumSite("RuleSite", {
+    const site = yield* Cloudflare.Rum.Site("RuleSite", {
       zoneTag: zoneId,
     });
-    const ruleResource = yield* Cloudflare.RumRule("Rule", {
+    const ruleResource = yield* Cloudflare.Rum.Rule("Rule", {
       rulesetId: site.rulesetId.as<string>(),
       ...rule,
     });
@@ -147,7 +147,7 @@ const program = (
 
 // These cases all manage the single account-unique zone-based site +
 // ruleset on `alchemy-test-3.us`, so they must not run concurrently.
-describe.sequential("RumRule", () => {
+describe.sequential("Rule", () => {
   test.provider("create, update in place, and delete a rule", (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -231,7 +231,7 @@ describe.sequential("RumRule", () => {
     }).pipe(logLevel),
   );
 
-  // Canonical `list()` test: rules live under a RumSite's implicit ruleset and
+  // Canonical `list()` test: rules live under a Site's implicit ruleset and
   // there is no account-wide rule list, so `list()` enumerates every site
   // (paginated) and fans out the per-ruleset rule list. Deploy a real rule,
   // then assert it appears in the exhaustively-enumerated result. Gated behind
@@ -260,7 +260,7 @@ describe.sequential("RumRule", () => {
       );
       if (deployed === undefined) return yield* quotaExhausted(stack);
 
-      const provider = yield* Provider.findProvider(Cloudflare.RumRule);
+      const provider = yield* Provider.findProvider(Cloudflare.Rum.Rule);
       const all = yield* provider.list();
 
       expect(

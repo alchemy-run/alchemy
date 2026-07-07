@@ -1,7 +1,7 @@
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import type { SpeedTestScheduleAttributes } from "@/Cloudflare/Speed/TestSchedule";
+import type { TestScheduleAttributes } from "@/Cloudflare/Speed/TestSchedule";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
@@ -102,14 +102,14 @@ const purgeSchedule = (
 const deployUnlessQuotaReached = (
   stack: Test.ScratchStack,
   eff: Effect.Effect<any, any, any>,
-): Effect.Effect<SpeedTestScheduleAttributes | undefined, any, any> =>
+): Effect.Effect<TestScheduleAttributes | undefined, any, any> =>
   stack
     .deploy(eff)
     .pipe(
       Effect.catchCause(
         (
           cause,
-        ): Effect.Effect<SpeedTestScheduleAttributes | undefined, any, never> =>
+        ): Effect.Effect<TestScheduleAttributes | undefined, any, never> =>
           findQuotaError(cause)
             ? Effect.succeed(undefined)
             : Effect.failCause(cause),
@@ -133,7 +133,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       const schedule = yield* deployUnlessQuotaReached(
         stack,
         Effect.gen(function* () {
-          return yield* Cloudflare.SpeedTestSchedule("DefaultSchedule", {
+          return yield* Cloudflare.Speed.TestSchedule("DefaultSchedule", {
             zoneId,
             url: URL_CREATE,
             frequency: "WEEKLY",
@@ -177,7 +177,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       const initial = yield* deployUnlessQuotaReached(
         stack,
         Effect.gen(function* () {
-          return yield* Cloudflare.SpeedTestSchedule("UpdateSchedule", {
+          return yield* Cloudflare.Speed.TestSchedule("UpdateSchedule", {
             zoneId,
             url: URL_FREQ,
             frequency: "WEEKLY",
@@ -194,7 +194,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       const updated = yield* deployUnlessQuotaReached(
         stack,
         Effect.gen(function* () {
-          return yield* Cloudflare.SpeedTestSchedule("UpdateSchedule", {
+          return yield* Cloudflare.Speed.TestSchedule("UpdateSchedule", {
             zoneId,
             url: URL_FREQ,
             frequency: "DAILY",
@@ -243,7 +243,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       const initial = yield* deployUnlessQuotaReached(
         stack,
         Effect.gen(function* () {
-          return yield* Cloudflare.SpeedTestSchedule("ReplaceSchedule", {
+          return yield* Cloudflare.Speed.TestSchedule("ReplaceSchedule", {
             zoneId,
             url: URL_REGION,
             region: "us-central1",
@@ -261,7 +261,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       const replaced = yield* deployUnlessQuotaReached(
         stack,
         Effect.gen(function* () {
-          return yield* Cloudflare.SpeedTestSchedule("ReplaceSchedule", {
+          return yield* Cloudflare.Speed.TestSchedule("ReplaceSchedule", {
             zoneId,
             url: URL_REGION,
             region: "us-east1",
@@ -338,7 +338,7 @@ test.provider(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SpeedTestSchedule("AdoptedSchedule", {
+            return yield* Cloudflare.Speed.TestSchedule("AdoptedSchedule", {
               zoneId,
               url: URL_TAKEOVER,
               frequency: "WEEKLY",
@@ -355,7 +355,7 @@ test.provider(
       // (a no-op reconcile — no extra creation, so no quota concern).
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SpeedTestSchedule("AdoptedSchedule", {
+          return yield* Cloudflare.Speed.TestSchedule("AdoptedSchedule", {
             zoneId,
             url: URL_TAKEOVER,
             frequency: "WEEKLY",
@@ -389,7 +389,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       const schedule = yield* deployUnlessQuotaReached(
         stack,
         Effect.gen(function* () {
-          return yield* Cloudflare.SpeedTestSchedule("ListSchedule", {
+          return yield* Cloudflare.Speed.TestSchedule("ListSchedule", {
             zoneId,
             url: URL_LIST,
             frequency: "WEEKLY",
@@ -404,7 +404,7 @@ test.provider.skipIf(!runSpeedScheduleTests)(
       }
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SpeedTestSchedule,
+        Cloudflare.Speed.TestSchedule,
       );
       // Ride out fresh-token 403 blips on the account-wide enumeration.
       const all = yield* provider.list().pipe(

@@ -6,23 +6,23 @@ import * as Stream from "effect/Stream";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 // Minimal host Function for the EventSourceMapping `list()` test: it owns an
-// SQS Queue and subscribes to it via `messages(queue).subscribe(...)`, which
+// SQS Queue and subscribes to it via `consumeQueueMessages(queue, ...)`, which
 // (through the Lambda `QueueEventSource` layer + registered
 // `QueueEventSourcePolicy`) creates the `AWS.Lambda.EventSourceMapping`
 // resource and grants the role the SQS read permissions the mapping needs.
 export class EventSourceMappingFunction extends Lambda.Function<EventSourceMappingFunction>()(
   "EventSourceMappingFunction",
-  {
-    main: import.meta.filename,
-    url: false,
-  },
 ) {}
 
 export default EventSourceMappingFunction.make(
+  {
+    main: import.meta.url,
+    url: false,
+  },
   Effect.gen(function* () {
     const queue = yield* SQS.Queue("EventSourceMappingQueue");
 
-    yield* SQS.messages(queue).subscribe((stream) =>
+    yield* SQS.consumeQueueMessages(queue, (stream) =>
       stream.pipe(Stream.runDrain),
     );
 

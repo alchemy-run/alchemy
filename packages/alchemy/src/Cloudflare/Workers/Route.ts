@@ -81,14 +81,14 @@ export type WorkerRoute = Resource<
  *   main: "./src/api.ts",
  * });
  *
- * yield* Cloudflare.WorkerRoute("ApiRoute", {
+ * yield* Cloudflare.Workers.WorkerRoute("ApiRoute", {
  *   zoneId: zone.zoneId,
  *   pattern: "api.example.com/*",
  *   script: worker.workerName,
  * });
  *
  * // Workers only run on proxied hostnames — give the host an origin.
- * yield* Cloudflare.DnsRecord("ApiPlaceholder", {
+ * yield* Cloudflare.DNS.Record("ApiPlaceholder", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
  *   type: "AAAA",
@@ -101,7 +101,7 @@ export type WorkerRoute = Resource<
  * @example Opt a path out of a wildcard route
  * ```typescript
  * // No `script` — matching requests bypass Workers entirely.
- * yield* Cloudflare.WorkerRoute("AssetsBypass", {
+ * yield* Cloudflare.Workers.WorkerRoute("AssetsBypass", {
  *   zoneId: zone.zoneId,
  *   pattern: "example.com/assets/*",
  * });

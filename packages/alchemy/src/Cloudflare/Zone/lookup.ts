@@ -14,9 +14,9 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
  *   - a `{ zoneId, name? }` object (e.g. the output of a `Zone` resource or
  *     {@link importZone}).
  */
-export type ZoneReference = string | { zoneId: string; name?: string };
+export type Reference = string | { zoneId: string; name?: string };
 
-export const isZoneId = (zone: string): boolean => /^[a-f0-9]{32}$/i.test(zone);
+export const isId = (zone: string): boolean => /^[a-f0-9]{32}$/i.test(zone);
 
 export const matchesZoneHostname = (
   zoneName: string,
@@ -29,12 +29,12 @@ export const resolveZoneId = ({
   hostname,
 }: {
   accountId: string;
-  zone: ZoneReference | undefined;
+  zone: Reference | undefined;
   hostname: string;
 }) =>
   Effect.gen(function* () {
     if (typeof zone === "object") return zone.zoneId;
-    if (typeof zone === "string" && isZoneId(zone)) return zone;
+    if (typeof zone === "string" && isId(zone)) return zone;
 
     const lookup = zone ?? hostname;
     for (const candidate of zoneNameCandidates(lookup)) {
