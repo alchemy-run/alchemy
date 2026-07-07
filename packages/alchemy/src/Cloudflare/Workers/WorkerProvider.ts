@@ -116,12 +116,25 @@ const putWorkerScript = (params: {
         files: params.files,
       });
     }
-    return yield* workers.putScript({
-      accountId: params.accountId,
-      scriptName: params.scriptName,
-      metadata: params.metadata,
-      files: params.files,
-    });
+    return yield* workers
+      .putScript({
+        accountId: params.accountId,
+        scriptName: params.scriptName,
+        metadata: params.metadata,
+        files: params.files,
+      })
+      .pipe(
+        Effect.retry({
+          // A Secrets Store secret referenced by a binding can take a few
+          // seconds after creation before Cloudflare's deploy-time
+          // validation sees it; a genuinely missing secret keeps failing
+          // and surfaces after the (bounded) budget.
+          while: (e) => e._tag === "SecretsStoreBindingNotFound",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
   });
 
 /**
@@ -179,23 +192,28 @@ type MetadataHashValue =
 
 /**
  * Deeply materialize an arbitrary value into a JSON-stable shape for hashing:
- * run nested Effects, unwrap `Redacted` secrets by value, ISO-stringify
- * `Date`s, keep plain objects/arrays/primitives, and drop functions,
- * `undefined`, and class instances (which don't round-trip through
- * `JSON.stringify`). Redacted values contribute by value, not by reference
- * identity, so two independently-constructed secrets with the same contents
- * hash identically.
+ * unwrap `Redacted` secrets by value, ISO-stringify `Date`s, keep plain
+ * objects/arrays/primitives, and drop Effects, functions, `undefined`, and
+ * class instances (which don't round-trip through `JSON.stringify`). Redacted
+ * values contribute by value, not by reference identity, so two
+ * independently-constructed secrets with the same contents hash identically.
+ *
+ * Effects are dropped, never executed: resource-typed `env` entries (Worker
+ * effect-classes, R2 buckets, Provider/Context tags, ...) are all Effects
+ * whose evaluation requires plan-phase context that is not available inside
+ * lifecycle operations (running one here fails with `Service not found:
+ * Cloudflare.Worker`). Their deploy-time identity is already captured by the
+ * resolved `bindings` data hashed alongside `env`, so skipping them loses no
+ * change-detection.
  */
 const resolveMetadataHashValue = (
   value: unknown,
 ): Effect.Effect<MetadataHashValue> =>
   Effect.gen(function* () {
-    const materialized = Effect.isEffect(value)
-      ? yield* value as Effect.Effect<unknown>
-      : value;
-    const resolved = Redacted.isRedacted(materialized)
-      ? Redacted.value(materialized)
-      : materialized;
+    if (Effect.isEffect(value)) {
+      return undefined;
+    }
+    const resolved = Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
     if (
       resolved === null ||

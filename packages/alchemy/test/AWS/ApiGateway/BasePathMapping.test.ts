@@ -33,7 +33,9 @@ test.provider.skipIf(!!process.env.FAST)(
     }),
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(
+  !!process.env.FAST || !testDomainName || !testCertificateArn,
+)(
   "list includes a deployed base path mapping",
   (stack) =>
     Effect.gen(function* () {
