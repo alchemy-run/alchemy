@@ -76,9 +76,12 @@ const runWorkflowToCompletion = (url: string) =>
             : Effect.succeed({ status: "pending" } as WorkflowStatus),
         ),
         Effect.repeat({
+          // Under full-suite load a fresh workflow instance can sit in
+          // `pending`/`queued` well past 24s before its first step runs;
+          // give each attempt ~60s before handing back to the outer retry.
           schedule: Schedule.spaced("2 seconds"),
           until: (s) => s.status === "complete" || s.status === "errored",
-          times: 12,
+          times: 30,
         }),
       );
 
@@ -111,8 +114,8 @@ test(
     expect(lastStatus.output?.greeting).toBe("Hello, world!");
   }).pipe(logLevel),
   // Budget covers the full retry envelope: up to 3 attempts, each with a
-  // capped start-retry (~30s worst case) + status polling (12 × 2s).
-  { timeout: 120_000 },
+  // capped start-retry (~30s worst case) + status polling (30 × 2s).
+  { timeout: 300_000 },
 );
 
 // ---------------------------------------------------------------------------

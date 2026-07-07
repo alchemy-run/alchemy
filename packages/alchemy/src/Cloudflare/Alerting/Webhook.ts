@@ -234,13 +234,24 @@ export const NotificationWebhookProvider = () =>
         olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
       const secretChanged = secret !== oldSecret;
       if (observed.name !== name || observed.url !== url || secretChanged) {
-        yield* alerting.updateDestinationWebhook({
-          accountId,
-          webhookId: observed.id,
-          name,
-          url,
-          secret,
-        });
+        // The update PUT fires the same test POST as create — ride out edge
+        // propagation of a just-deployed destination URL the same way.
+        yield* alerting
+          .updateDestinationWebhook({
+            accountId,
+            webhookId: observed.id,
+            name,
+            url,
+            secret,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "WebhookTestFailed",
+              schedule: Schedule.exponential("1 second").pipe(
+                Schedule.both(Schedule.recurs(5)),
+              ),
+            }),
+          );
         const fresh = yield* observeWebhook(accountId, observed.id);
         return toWebhookAttributes(fresh ?? observed, accountId);
       }
