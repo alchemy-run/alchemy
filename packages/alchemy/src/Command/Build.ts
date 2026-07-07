@@ -2,9 +2,11 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { sha256Object } from "../Util/sha256.ts";
 import {
   CommandError,
   CommandExecutor,
@@ -109,6 +111,21 @@ export interface Build extends Resource<
  */
 export const Build = Resource<Build>("Command.Build");
 
+/**
+ * Resolves `Redacted` env values to their plain string so that a change in a
+ * secret's value still busts the memo hash (the hash is one-way, so the secret
+ * itself is never recoverable from state).
+ */
+const resolveEnv = (env: CommandProps["env"]) =>
+  env
+    ? Object.fromEntries(
+        Object.entries(env).map(([key, value]) => [
+          key,
+          Redacted.isRedacted(value) ? Redacted.value(value) : value,
+        ]),
+      )
+    : undefined;
+
 export const BuildProvider = () =>
   Provider.effect(
     Build,
@@ -135,10 +152,24 @@ export const BuildProvider = () =>
               ? { input: undefined, output: undefined }
               : yield* Effect.all(
                   {
+                    // Fold the resolved command + env into the input hash so
+                    // two builds that share the same source tree + `outdir`
+                    // but differ in their command or environment (e.g.
+                    // per-stage builds baking different `EXPO_PUBLIC_*` /
+                    // API ids) are never judged reusable. Without this the
+                    // second build silently reuses the first's stale output.
                     input: hashDirectory({
                       cwd,
                       memo: props.memo === true ? {} : props.memo,
-                    }),
+                    }).pipe(
+                      Effect.flatMap((files) =>
+                        sha256Object({
+                          files,
+                          command: props.command,
+                          env: resolveEnv(props.env),
+                        }),
+                      ),
+                    ),
                     output: hashDirectory({
                       cwd: outdir,
                       memo: {

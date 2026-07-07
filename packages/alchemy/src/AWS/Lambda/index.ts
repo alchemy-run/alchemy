@@ -7,6 +7,7 @@ export * from "./CreateShellAuthTokenHttp.ts";
 export * from "./DeleteMicrovmImageVersion.ts";
 export * from "./DeleteMicrovmImageVersionHttp.ts";
 export * from "./EventBridgeEventSource.ts";
+export * from "./EventInvokeConfig.ts";
 export * from "./EventSourceMapping.ts";
 export * from "./Function.ts";
 export * from "./GetMicrovm.ts";

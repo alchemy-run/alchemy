@@ -1,12 +1,11 @@
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -182,7 +181,7 @@ export const SearchNamespace = Resource<SearchNamespace>(TypeId);
  * Returns true if the given value is a SearchNamespace resource.
  */
 export const isSearchNamespace = (value: unknown): value is SearchNamespace =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+  isResourceOfType(value, TypeId);
 
 export const SearchNamespaceProvider = () =>
   Provider.succeed(SearchNamespace, {

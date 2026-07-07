@@ -46,7 +46,12 @@ const expectGone = (accountId: string, subscriptionId: string) =>
     }),
   );
 
-describe("Subscription", () => {
+// Sequential: Cloudflare allows only ONE subscription per source per
+// account, and every test here uses the same `{ type: "r2" }` (or kv)
+// source. Run concurrently they adopt/patch/delete each other's
+// subscription via the AlreadyExists fallback and fail with queueId
+// mismatches and SubscriptionNotFound.
+describe.sequential("Subscription", () => {
   test.provider(
     "create r2 event subscription into a queue and destroy it",
     (stack) =>

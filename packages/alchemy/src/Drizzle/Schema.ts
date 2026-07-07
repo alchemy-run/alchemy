@@ -189,15 +189,18 @@ export const SchemaProvider = () =>
           const nodeExecPath = yield* Effect.sync(() => process.execPath);
           const nodeModulesPath = path.join(process.cwd(), "node_modules");
 
+          // drizzle-kit globs the --schema/--out values; Windows backslashes
+          // are treated as glob escapes and match nothing, so pass forward
+          // slashes.
           const args = [
             bin,
             "generate",
             "--dialect",
             dialect === "postgres" ? "postgresql" : dialect,
             "--schema",
-            schemaPath,
+            schemaPath.replaceAll("\\", "/"),
             "--out",
-            out,
+            out.replaceAll("\\", "/"),
           ];
 
           const commandOptions = {
@@ -433,9 +436,13 @@ export const SchemaProvider = () =>
               ? drift.changed
               : drift.sqlStatements.length > 0;
           // Originally `output.out` was an absolute path, which is not portable.
-          // So, we trigger an update to migrate existing resources.
-          // This is safe because `regenerate` is idempotent.
-          return changed || path.isAbsolute(output.out)
+          // So, we trigger an update to migrate existing resources to the
+          // canonical (cwd-relative) form. This is safe because `regenerate`
+          // is idempotent. Compare against the canonical form rather than
+          // testing `isAbsolute`: on Windows a cross-drive `out` can never be
+          // relativized, so its canonical form IS absolute and an isAbsolute
+          // check would flag an update on every deploy.
+          return changed || output.out !== relativeOut(resolveOut(news))
             ? { action: "update" }
             : undefined;
         }),

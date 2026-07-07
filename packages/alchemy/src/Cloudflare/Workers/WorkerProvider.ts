@@ -18,6 +18,7 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
+import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { readAssets, uploadAssets } from "./Assets.ts";
@@ -115,12 +116,25 @@ const putWorkerScript = (params: {
         files: params.files,
       });
     }
-    return yield* workers.putScript({
-      accountId: params.accountId,
-      scriptName: params.scriptName,
-      metadata: params.metadata,
-      files: params.files,
-    });
+    return yield* workers
+      .putScript({
+        accountId: params.accountId,
+        scriptName: params.scriptName,
+        metadata: params.metadata,
+        files: params.files,
+      })
+      .pipe(
+        Effect.retry({
+          // A Secrets Store secret referenced by a binding can take a few
+          // seconds after creation before Cloudflare's deploy-time
+          // validation sees it; a genuinely missing secret keeps failing
+          // and surfaces after the (bounded) budget.
+          while: (e) => e._tag === "SecretsStoreBindingNotFound",
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
   });
 
 /**
@@ -166,6 +180,145 @@ export const normalizeStateDomains = (
     const hostname = (u as { hostname?: unknown } | null)?.hostname;
     return typeof hostname === "string" ? [`https://${hostname}`] : [];
   });
+
+type MetadataHashValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly MetadataHashValue[]
+  | { readonly [key: string]: MetadataHashValue };
+
+/**
+ * Deeply materialize an arbitrary value into a JSON-stable shape for hashing:
+ * unwrap `Redacted` secrets by value, ISO-stringify `Date`s, keep plain
+ * objects/arrays/primitives, and drop Effects, functions, `undefined`, and
+ * class instances (which don't round-trip through `JSON.stringify`). Redacted
+ * values contribute by value, not by reference identity, so two
+ * independently-constructed secrets with the same contents hash identically.
+ *
+ * Effects are dropped, never executed: resource-typed `env` entries (Worker
+ * effect-classes, R2 buckets, Provider/Context tags, ...) are all Effects
+ * whose evaluation requires plan-phase context that is not available inside
+ * lifecycle operations (running one here fails with `Service not found:
+ * Cloudflare.Worker`). Their deploy-time identity is already captured by the
+ * resolved `bindings` data hashed alongside `env`, so skipping them loses no
+ * change-detection.
+ */
+const resolveMetadataHashValue = (
+  value: unknown,
+): Effect.Effect<MetadataHashValue> =>
+  Effect.gen(function* () {
+    if (Effect.isEffect(value)) {
+      return undefined;
+    }
+    const resolved = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+    if (
+      resolved === null ||
+      Predicate.isString(resolved) ||
+      Predicate.isNumber(resolved) ||
+      Predicate.isBoolean(resolved)
+    ) {
+      return resolved;
+    }
+    if (resolved === undefined || Predicate.isFunction(resolved)) {
+      return undefined;
+    }
+    if (Predicate.isDate(resolved)) {
+      return resolved.toISOString();
+    }
+    if (Array.isArray(resolved)) {
+      return yield* Effect.all(
+        resolved.map((item) => resolveMetadataHashValue(item)),
+        { concurrency: "unbounded" },
+      );
+    }
+    if (Predicate.isObject(resolved)) {
+      // Only plain objects round-trip predictably. A class instance would
+      // serialize to `{}` (or throw), so drop it rather than hash a lie.
+      const prototype = Object.getPrototypeOf(resolved);
+      if (prototype !== Object.prototype && prototype !== null) {
+        return undefined;
+      }
+      const entries = yield* Effect.all(
+        Object.entries(resolved).map(([key, nested]) =>
+          resolveMetadataHashValue(nested).pipe(
+            Effect.map(
+              (materializedNested) => [key, materializedNested] as const,
+            ),
+          ),
+        ),
+        { concurrency: "unbounded" },
+      );
+      return Object.fromEntries(
+        entries.filter(([, nested]) => nested !== undefined),
+      );
+    }
+    return undefined;
+  });
+
+/**
+ * The deploy-time metadata surface of a Worker whose changes must trigger an
+ * update but that never touch the bundle/vite/asset-content hashes:
+ * compatibility, env literals, bindings, asset routing config, limits,
+ * logpush, observability, placement, subdomain, and tags. See #745.
+ */
+interface WorkerMetadataHashInput {
+  readonly props: WorkerProps;
+  readonly bindings: readonly ResourceBinding<Worker["Binding"]>[];
+  readonly accountId: string;
+  readonly stack: { readonly name: string; readonly stage: string };
+}
+
+// The asset router config the resource declares (htmlHandling,
+// notFoundHandling, ...), minus the local `directory` path (machine-specific,
+// would break hash stability across machines) and the precomputed `hash`
+// (already compared via `output.hash.assets`). A bare string `assets` is just
+// a directory path, so it contributes nothing here.
+const workerAssetConfigForHash = (assets: WorkerProps["assets"]) => {
+  if (!assets || typeof assets === "string") {
+    return undefined;
+  }
+  const { directory: _directory, ...config } = assets;
+  if (Predicate.hasProperty(config, "hash")) {
+    const { hash: _hash, ...configWithoutHash } = config;
+    return configWithoutHash;
+  }
+  return config;
+};
+
+/**
+ * Hash a Worker's deploy-time metadata surface so metadata-only edits are
+ * detected by the diff (#745). Previously the update decision compared only
+ * the bundle/vite/asset-content hashes, so a change to e.g. a compatibility
+ * flag or observability config planned as a noop and silently never deployed.
+ */
+const resolveWorkerMetadataHash = ({
+  props,
+  bindings,
+  accountId,
+  stack,
+}: WorkerMetadataHashInput): Effect.Effect<string> =>
+  resolveMetadataHashValue({
+    accountId,
+    stack: { name: stack.name, stage: stack.stage },
+    compatibility: getCompatibility(props),
+    env: props.env,
+    bindings: bindings.map((binding) => ({
+      sid: binding.sid,
+      data: binding.data,
+    })),
+    assets: workerAssetConfigForHash(props.assets),
+    limits: props.limits,
+    logpush: props.logpush,
+    observability: props.observability,
+    placement: props.placement,
+    subdomain: props.subdomain,
+    tags: props.tags,
+    url: props.url,
+  }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
 
 export const WorkerProvider = () =>
   ProviderLayer.select({
@@ -794,9 +947,16 @@ export const LiveWorkerProvider = () =>
         // hash that `readAssets` produces is the manifest-derived
         // hash, which is shaped differently from any upstream
         // build-input hash and will never match it on the next pass.
+        const metadataHash = yield* resolveWorkerMetadataHash({
+          props: news,
+          bindings,
+          accountId,
+          stack: { name: stack.name, stage: stack.stage },
+        });
         const hash = {
           ...preparedHash,
           assets: prebuiltAssets?.hash ?? preparedHash.assets,
+          metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
         const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
         const expectedDurableObjectClassNames =
@@ -1255,7 +1415,26 @@ export const LiveWorkerProvider = () =>
         id: string,
         props: WorkerProps,
         output: Worker["Attributes"],
+        bindings: readonly ResourceBinding<Worker["Binding"]>[] | undefined,
+        accountId: string,
       ) {
+        // #745: metadata-only edits (compatibility, observability, placement,
+        // limits, logpush, env literals, bindings, subdomain config, tags)
+        // don't touch the bundle/vite/asset-content hashes below, so compare a
+        // hash of that surface first. Skipped when bindings are still
+        // unresolved: the hash can't be computed deterministically here, and
+        // the eventual apply stores it once bindings resolve.
+        if (bindings) {
+          const metadataHash = yield* resolveWorkerMetadataHash({
+            props,
+            bindings,
+            accountId,
+            stack: { name: stack.name, stage: stack.stage },
+          });
+          if (metadataHash !== output.hash?.metadata) {
+            return true;
+          }
+        }
         if (props.script !== undefined) {
           const scriptHash = yield* hashScript(props.script);
           if (scriptHash !== output.hash?.bundle) {
@@ -1466,7 +1645,15 @@ export const LiveWorkerProvider = () =>
           if (
             domainsChanged ||
             cronsChanged ||
-            (yield* hasChanged(id, news, output))
+            (yield* hasChanged(
+              id,
+              news,
+              output,
+              Array.isArray(newBindings)
+                ? (newBindings as ResourceBinding<Worker["Binding"]>[])
+                : undefined,
+              accountId,
+            ))
           ) {
             // `workerId` is always stable across an update; seed it so it
             // survives now that `diff.stables` overrides `provider.stables`

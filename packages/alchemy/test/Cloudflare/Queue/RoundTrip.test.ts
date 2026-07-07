@@ -87,7 +87,11 @@ test.provider(
       const messages = ["alpha", "beta", "gamma", "delta"];
       const secondaryMessages = ["one", "two"];
 
-      const sendMessage = (pathname: string, counterName: string, text: string) =>
+      const sendMessage = (
+        pathname: string,
+        counterName: string,
+        text: string,
+      ) =>
         HttpClient.execute(
           HttpClientRequest.post(
             `${baseUrl}${pathname}?name=${encodeURIComponent(counterName)}`,
@@ -99,7 +103,11 @@ test.provider(
               : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
           ),
           Effect.retry({
+            // Cap the exponential at 3s — uncapped, the sleeps double each
+            // attempt and a handful of misses burns minutes of the test
+            // timeout on a single send.
             schedule: Schedule.exponential("500 millis").pipe(
+              Schedule.either(Schedule.spaced("3 seconds")),
               Schedule.both(Schedule.recurs(15)),
             ),
           }),
@@ -154,16 +162,18 @@ test.provider(
                 );
           }),
           Effect.retry({
+            // Cap the exponential at 4s so 40 attempts sample for ~2.5 minutes.
+            // Uncapped, the doubling sleeps pass the whole 240s test budget
+            // after ~9 attempts and the test dies in a single long sleep even
+            // though the consumer would have caught up moments later.
             schedule: Schedule.exponential("500 millis").pipe(
+              Schedule.either(Schedule.spaced("4 seconds")),
               Schedule.both(Schedule.recurs(40)),
             ),
           }),
         );
 
-      // Poll the DO snapshot until each consumer has caught up. The
-      // exponential schedule + recurs cap gives Cloudflare ~60s to
-      // dispatch and ack — comfortably above the typical 1–5s
-      // dispatch latency we saw in practice without flaking.
+      // Poll the DO snapshot until each consumer has caught up.
       const snapshot = yield* readSnapshot(name, messages.length);
       const secondarySnapshot = yield* readSnapshot(
         secondaryName,

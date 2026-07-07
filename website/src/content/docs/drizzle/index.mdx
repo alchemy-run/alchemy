@@ -1,0 +1,111 @@
+---
+title: Drizzle
+description: Your Drizzle schema as a Stack resource — migration SQL regenerated on deploy and applied by whichever database consumes it.
+---
+
+The Drizzle provider manages your Drizzle schema as a resource:
+`Drizzle.Schema` wraps drizzle-kit so `alchemy deploy` regenerates
+pending migration SQL whenever the schema module changes, and the
+database resource downstream — [Neon.Branch](/neon/guides/drizzle),
+[Planetscale.PostgresBranch](/planetscale/guides/drizzle), or
+[Cloudflare.D1.Database](/cloudflare/data/d1) — applies it via
+`migrationsDir`. There is no setup page because there is nothing to
+set up: the provider has no credentials — it just needs `drizzle-kit`
+and `drizzle-orm` installed (optional peers of alchemy). The runtime
+client additionally needs `@effect/sql-pg` and `pg`.
+
+## Resources
+
+`Schema` is the only resource. Its `out` output feeds the database's
+`migrationsDir` input, so the engine orders schema generation before
+migration apply in the same deploy:
+
+```typescript
+export default Alchemy.Stack(
+  "MyStack",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      Drizzle.providers(),
+      Neon.providers(),
+    ),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const schema = yield* Drizzle.Schema("app-schema", {
+      schema: "./src/schema.ts",
+    });
+    const project = yield* Neon.Project("app-db");
+    const branch = yield* Neon.Branch("app-branch", {
+      project,
+      migrationsDir: schema.out,
+    });
+    return { branchId: branch.branchId };
+  }),
+);
+```
+
+[Migrations in the deploy graph](/drizzle/migrations) walks through
+the full pattern. The lifecycle is deliberately conservative: `diff`
+returns an update only when drizzle-kit would actually emit new SQL,
+so no-drift deploys are a noop that never cascades into the database
+resource — and `delete` is a deliberate no-op, because migration
+files are typically checked in and removing the resource should
+never wipe them.
+
+## The runtime client
+
+`Drizzle.postgres` turns a connection string into a drizzle-orm
+client whose queries are Effects — yield them directly inside a
+Worker:
+
+```typescript
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const db = yield* Drizzle.postgres(conn.connectionString, {
+      relations,
+    });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* db.select().from(Users);
+        const user = yield* db.query.Users.findFirst({
+          where: { id },
+          with: { posts: true },
+        });
+        return yield* HttpServerResponse.json({ users, user });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+) {}
+```
+
+The connection is deferred until the first query and memoized per
+execution — a `fetch`/`queue`/`scheduled` event or a Workflow run —
+on the `ExecutionContext`, then torn down when that execution's
+scope closes; plan- and deploy-time evaluation never opens a
+connection, and passing `relations` unlocks the typed `db.query.*`
+API. For the Worker wiring itself — Hyperdrive, `ConnectBinding`,
+`nodejs_compat`, and the exact install commands — follow
+[Drizzle on Workers](/cloudflare/data/drizzle).
+
+## Compose with your cloud
+
+[Drizzle on Workers](/cloudflare/data/drizzle) is the canonical
+Worker wiring guide. On the database side,
+[Neon](/neon/guides/drizzle) and
+[PlanetScale](/planetscale/guides/drizzle) each wire `schema.out`
+into their branch resources, while
+[Neon migrations](/neon/data/migrations) and
+[PlanetScale migrations](/planetscale/data/migrations) explain how
+each provider orders, hashes, and applies the generated files. For
+per-stage database tiering built on the same schema resource, see
+[Branch from a shared database](/cloudflare/data/branch-from-shared-database).
+
+## Reference
+
+[Schema](/providers/drizzle/schema) ·
+[postgres](/providers/drizzle/postgres)

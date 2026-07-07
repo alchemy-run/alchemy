@@ -7,14 +7,15 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { fileURLToPath } from "node:url";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
-const timeoutHandlerPath = new URL("./timeout-handler.ts", import.meta.url)
-  .pathname;
-const externalPackageHandlerPath = new URL(
-  "./external-package-handler.ts",
-  import.meta.url,
-).pathname;
+const timeoutHandlerPath = fileURLToPath(
+  new URL("./timeout-handler.ts", import.meta.url),
+);
+const externalPackageHandlerPath = fileURLToPath(
+  new URL("./external-package-handler.ts", import.meta.url),
+);
 
 const { test } = Test.make({ providers: AWS.providers() });
 

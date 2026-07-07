@@ -1607,7 +1607,7 @@ const collectGarbage = Effect.fn(function* (
                   stage,
                   fqn,
                 });
-                yield* report("deleted");
+                yield* report("retained");
                 return;
               }
               yield* commit<DeletingResourceState>({
