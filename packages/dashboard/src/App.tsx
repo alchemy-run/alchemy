@@ -20,14 +20,18 @@ import { CommandPalette } from "./ui/CommandPalette.tsx";
 import { SummaryView } from "./views/Summary.tsx";
 
 /**
- * v2 shell. App itself subscribes ONLY to the hydration gate; everything
- * else (top bar, views, inspector, feed, approval) subscribes to its own
- * store slice, so live patches re-render exactly the affected leaves.
- * Data flows exclusively through store hooks — no scene objects, no
- * prop-drilled meta.
+ * v2 shell. App itself subscribes ONLY to the hydration gate and the
+ * (rarely-changing) connection status; everything else (top bar, views,
+ * inspector, feed, approval) subscribes to its own store slice, so live
+ * patches re-render exactly the affected leaves. Data flows exclusively
+ * through store hooks — no scene objects, no prop-drilled meta.
  */
 export function App() {
   const hydrated = useHydrated();
+  const connection = useConnection();
+  if (connection.status === "superseded") {
+    return <SupersededScreen />;
+  }
   if (!hydrated) {
     return <BootScreen />;
   }
@@ -41,6 +45,29 @@ export function App() {
         <Inspector />
       </div>
       <CommandPalette />
+    </div>
+  );
+}
+
+/**
+ * A newer dashboard tab took over (BroadcastChannel takeover) and the
+ * browser refused to script-close this one — make it read as dead so
+ * exactly one tab looks live.
+ */
+function SupersededScreen() {
+  return (
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-[var(--alc-bg)]">
+      <Yantra
+        size={44}
+        strokeWidth={1.1}
+        className="text-[var(--alc-fg-4)] opacity-60"
+      />
+      <h1 className={`${SERIF_HEADING} mt-5 text-[22px]`}>
+        Moved to a newer tab
+      </h1>
+      <p className="mt-3 text-sm text-[var(--alc-fg-3)]">
+        Another dashboard tab took over — you can close this one.
+      </p>
     </div>
   );
 }

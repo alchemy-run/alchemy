@@ -58,7 +58,7 @@ export type DeploymentRecord = Omit<LiveDeploymentRecord, "live">;
 
 export type ViewKind = "canvas" | "summary" | "list";
 
-export type ConnectionStatus = "connecting" | "live" | "error";
+export type ConnectionStatus = "connecting" | "live" | "error" | "superseded";
 
 /** Server-computed projections for a historical deployment version. */
 export interface HistoricalProjections {
