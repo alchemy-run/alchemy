@@ -103,6 +103,14 @@ export interface ProviderService<
    */
   version?: number;
   /**
+   * Legacy type names this provider also answers to. Copied from the
+   * resource class's `aliases` option by {@link succeed}/{@link effect} so
+   * state persisted under a pre-rename type (e.g. `"Cloudflare.Queue"`
+   * before the `"Cloudflare.Queues.Queue"` rename) still resolves to this
+   * provider via {@link tryFindProviderByType}.
+   */
+  aliases?: readonly string[];
+  /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
    * report an endless "deleted but still there" loop. `read`/import are
@@ -275,8 +283,14 @@ export const effect = <
     LifecycleServices
   >
 > =>
-  // @ts-expect-error
-  Layer.effect(Provider(cls.Type), eff) as any;
+  Layer.effect(
+    // @ts-expect-error
+    Provider(cls.Type),
+    Effect.map(eff, (service) => ({
+      aliases: "Aliases" in cls ? cls.Aliases : undefined,
+      ...service,
+    })),
+  ) as any;
 
 export const succeed = <
   R extends ResourceLike,
@@ -310,7 +324,10 @@ export const succeed = <
   >
 > =>
   // @ts-expect-error
-  Layer.succeed(Provider(cls.Type), service);
+  Layer.succeed(Provider(cls.Type), {
+    aliases: "Aliases" in cls ? cls.Aliases : undefined,
+    ...service,
+  });
 
 export interface ProviderCollectionLike {
   kind: "ProviderCollection";
@@ -399,32 +416,18 @@ const isProviderCollectionService = (
 };
 
 /**
- * Legacy resource type names mapped to their canonical (current) type.
- *
- * Populated at module-load time by `Resource(type, { aliases })` — resource
- * classes are module-level constants, so every alias is registered before any
- * plan/apply runs. Lets state persisted under a renamed type (e.g.
- * `"Cloudflare.Queue"` from before the `"Cloudflare.Queues.Queue"` rename)
- * keep resolving to the provider registered under the canonical type.
+ * Structural check for a {@link ProviderService} living in the Effect
+ * context. Providers are keyed by their canonical resource type; when
+ * searching for a legacy alias, the tag key won't match, so lookup has to
+ * recognize provider services by shape.
  */
-const typeAliases = new Map<string, string>();
-
-/** @internal registers legacy type-name aliases for a canonical resource type. */
-export const registerTypeAliases = (
-  canonicalType: string,
-  aliases: readonly string[],
-) => {
-  for (const alias of aliases) {
-    typeAliases.set(alias, canonicalType);
-  }
-};
-
-/**
- * Resolves a possibly-legacy resource type name to its canonical type.
- * Returns the input unchanged when it is not a registered alias.
- */
-export const resolveTypeAlias = (resourceType: string): string =>
-  typeAliases.get(resourceType) ?? resourceType;
+const isProviderService = (value: unknown): value is ProviderService =>
+  typeof value === "object" &&
+  value !== null &&
+  "reconcile" in value &&
+  typeof (value as ProviderService).reconcile === "function" &&
+  "delete" in value &&
+  typeof (value as ProviderService).delete === "function";
 
 export const findProviderByType: {
   <R extends ResourceLike>(
@@ -458,38 +461,42 @@ export const tryFindProviderByType: {
     resourceType: R["Type"],
   ): Effect.Effect<Option.Option<ProviderService<R>>>;
 } = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
-  const lookup = Effect.fn(function* (type: string) {
-    const Tag = Provider<R>(type) as unknown as Context.Service<
-      Provider<R>,
-      any
-    >;
-    const direct = yield* Effect.serviceOption(Tag);
-    if (Option.isSome(direct)) {
-      return direct;
-    }
+  const Tag = Provider<R>(resourceType) as unknown as Context.Service<
+    Provider<R>,
+    any
+  >;
+  const direct = yield* Effect.serviceOption(Tag);
+  if (Option.isSome(direct)) {
+    return direct;
+  }
 
-    const context = yield* Effect.context<never>();
-    for (const value of context.mapUnsafe.values()) {
-      if (isProviderCollectionService(value)) {
-        const provider = value.get(type);
-        if (provider) {
+  const context = yield* Effect.context<never>();
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      const provider = value.get(resourceType);
+      if (provider) {
+        return Option.some(provider);
+      }
+    }
+  }
+
+  // State persisted before a type rename carries the legacy name, so no
+  // provider is keyed under it. Fall back to a provider that declares the
+  // name in its `aliases` — scanning both bare Provider layers and the
+  // members of every ProviderCollection.
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      for (const provider of Object.values(value.providers)) {
+        if (provider.aliases?.includes(resourceType)) {
           return Option.some(provider);
         }
       }
+    } else if (
+      isProviderService(value) &&
+      value.aliases?.includes(resourceType)
+    ) {
+      return Option.some(value);
     }
-    return Option.none<ProviderService>();
-  });
-
-  const found = yield* lookup(resourceType);
-  if (Option.isSome(found)) {
-    return found;
-  }
-  // State persisted before a type rename carries the legacy name — fall back
-  // to the canonical type it aliases (works for both bare Provider layers and
-  // ProviderCollections, since both are retried by `lookup`).
-  const canonical = resolveTypeAlias(resourceType);
-  if (canonical !== resourceType) {
-    return yield* lookup(canonical);
   }
   return Option.none();
 }) as any;

@@ -8,7 +8,7 @@ import { toFqn } from "./FQN.ts";
 import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
-import { Provider, registerTypeAliases } from "./Provider.ts";
+import { Provider } from "./Provider.ts";
 import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
@@ -45,6 +45,13 @@ export interface ResourceClassLike<R extends ResourceLike> {
   Props: R["Props"];
   Self: Self<R>;
   Provider: Provider<R>;
+  /**
+   * Legacy type names this resource was previously registered under
+   * (see {@link ResourceOptions.aliases}). Copied onto the
+   * `ProviderService` by `Provider.succeed`/`Provider.effect` so provider
+   * lookup can resolve state persisted under a pre-rename type.
+   */
+  Aliases?: readonly string[];
 }
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
@@ -54,6 +61,7 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    Aliases: readonly string[] | undefined;
     ref(
       id: string,
       options?: { stage?: string; stack?: string },
@@ -70,6 +78,7 @@ export type ResourceClassWithMethods<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    Aliases: readonly string[] | undefined;
     ref(
       id: string,
       options?: { stage?: string; stack?: string },
@@ -216,9 +225,6 @@ export function Resource<R extends ResourceLike>(
   options?: ResourceOptions,
 ): ResourceClass<R> {
   const defaultRemovalPolicy = options?.defaultRemovalPolicy ?? "destroy";
-  if (options?.aliases?.length) {
-    registerTypeAliases(type, options.aliases);
-  }
   type Props = Input<R["Props"]>;
   const self = Self<R>(type);
   const constructor = (
@@ -359,6 +365,7 @@ export function Resource<R extends ResourceLike>(
     Type: type,
     Provider: ProviderTag,
     Self: self,
+    Aliases: options?.aliases,
   };
 
   const ResourceClass = Object.assign(
