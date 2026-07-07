@@ -11,9 +11,8 @@ import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
-import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -636,7 +635,7 @@ export const LiveWorkerProvider = () =>
                           isWorkerLoader(value)
                           ? undefined
                           : Effect.isEffect(value)
-                            ? yield* value as Effect.Effect<any>
+                            ? yield* value as any as Effect.Effect<any>
                             : undefined,
                   ];
                 }),
@@ -772,7 +771,7 @@ export const LiveWorkerProvider = () =>
         // uploaded into a dispatch namespace rather than a routable
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
-        const dispatchNamespace = resolveNamespaceName(news.namespace);
+        const dispatchNamespace = resolveNamespaceName(news?.namespace);
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
@@ -995,8 +994,28 @@ export const LiveWorkerProvider = () =>
         const newSqliteClasses: string[] = [];
         const renamedClasses: { from: string; to: string }[] = [];
         for (const binding of currentDoBindings) {
-          const previousClassName =
+          let previousClassName: string | undefined =
             oldDoClassNameByLogicalId[binding.logicalId];
+          if (!previousClassName) {
+            // No `alchemy:do:` tag maps this logical id to a class — the
+            // worker was created outside Alchemy (raw API / Wrangler) or
+            // before these tags existed. Fall back to matching the observed
+            // cloud binding by binding name so adoption reuses the existing
+            // class instead of asking Cloudflare to create one that already
+            // exists (which fails the migration). This is the "first deploy
+            // must match the existing class name" path; once we write the
+            // `alchemy:do:` tag, subsequent renames are driven by logical id.
+            const observed = oldBindings.find(
+              (old) =>
+                old.type === "durable_object_namespace" &&
+                "className" in old &&
+                old.className &&
+                old.name === binding.bindingName,
+            );
+            if (observed && "className" in observed && observed.className) {
+              previousClassName = observed.className;
+            }
+          }
           if (!previousClassName) {
             // Default all new Durable Object classes to SQLite. Cloudflare
             // recommends SQLite for new namespaces, and container-backed
@@ -1121,6 +1140,7 @@ export const LiveWorkerProvider = () =>
                 files: bundle.files,
               });
             }
+            // @effect-diagnostics-next-line anyUnknownInErrorContext:off
             return Effect.fail(err as any);
           }),
         );
@@ -1861,6 +1881,7 @@ export const LiveWorkerProvider = () =>
               ),
             )}`,
           );
+
           return yield* putWorker(
             id,
             news,

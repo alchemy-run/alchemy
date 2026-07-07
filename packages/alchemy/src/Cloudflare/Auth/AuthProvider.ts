@@ -105,7 +105,7 @@ const selectAccount = (accessToken: string) =>
     const response = yield* list({});
     const accounts = response.result;
     if (accounts.length === 0) {
-      yield* new AuthError({
+      return yield* new AuthError({
         message: "Cloudflare: no accounts found for this credential.",
       });
     }

@@ -476,7 +476,10 @@ export const SecurityGroupProvider = () =>
                 Array.from(chunk).flatMap((page) =>
                   (page.SecurityGroups ?? []).filter(
                     (sg): sg is ec2.SecurityGroup & { GroupId: string } =>
-                      sg.GroupId != null,
+                      sg.GroupId != null &&
+                      // Every VPC's `default` group is AWS-managed and can
+                      // never be deleted (CannotDelete) — don't enumerate it.
+                      sg.GroupName !== "default",
                   ),
                 ),
               ),

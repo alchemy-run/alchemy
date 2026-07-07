@@ -1,3 +1,4 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Effect from "effect/Effect";
 
 type Op =

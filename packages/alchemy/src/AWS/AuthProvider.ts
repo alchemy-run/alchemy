@@ -17,7 +17,6 @@ import {
   type ConfigureContext,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
-import * as Region from "./Region.ts";
 import {
   getEnv,
   getEnvRedacted,
@@ -26,6 +25,7 @@ import {
   retryOnce,
 } from "../Auth/Env.ts";
 import * as Clank from "../Util/Clank.ts";
+import * as Region from "./Region.ts";
 
 export const AWS_AUTH_PROVIDER_NAME = "AWS";
 
@@ -470,11 +470,9 @@ const runSsoCommand = (command: "login" | "logout", ssoProfile: string) =>
     );
     const exit = yield* handle.exitCode;
     if (exit !== 0) {
-      yield* Effect.fail(
-        new AuthError({
-          message: `aws sso ${command} exited with code ${exit}`,
-        }),
-      );
+      return yield* new AuthError({
+        message: `aws sso ${command} exited with code ${exit}`,
+      });
     }
   }).pipe(Effect.scoped);
 

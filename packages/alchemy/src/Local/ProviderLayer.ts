@@ -1,3 +1,5 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+
 import * as Layer from "effect/Layer";
 import { AlchemyContext } from "../AlchemyContext.ts";
 

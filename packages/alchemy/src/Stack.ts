@@ -357,10 +357,13 @@ export const evalStack = <A, B, StackErr, Err, Req>(
         Effect.serviceOption(AuthProviders).pipe(
           Effect.map(Option.getOrElse(() => ({}))),
         ),
+      ).pipe(
+        Layer.provideMerge(Layer.succeed(Stage, options.stage)),
+        Layer.provideMerge(
+          Layer.provideMerge(alchemy({ dev: options.dev }), platform),
+        ),
       ),
     ),
-    Effect.provide(Layer.succeed(Stage, options.stage)),
-    Effect.provide(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
   );
 
   return options.scope === undefined

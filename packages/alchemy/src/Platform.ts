@@ -1,3 +1,5 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+
 import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -11,6 +13,7 @@ import type { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
@@ -21,7 +24,6 @@ import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
-import { ServerHost, type ProcessContext } from "./Server/Process.ts";
 import {
   CurrentRuntimeContext,
   RuntimeContext,
@@ -29,6 +31,7 @@ import {
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
+import { ServerHost, type ProcessContext } from "./Server/Process.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
@@ -378,17 +381,34 @@ export const Platform = <
               );
 
               yield* impl.pipe(
-                Effect.flatMap((impl) =>
-                  impl?.fetch
-                    ? // Hand the full impl to `serve` so the runtime can
-                      // expose any non-handler methods on the impl shape
-                      // (e.g. RPC methods on a Cloudflare Worker) alongside
-                      // the standard `fetch` handler.
-                      (runtimeContext.serve?.(impl.fetch, {
-                        shape: impl as Record<string, unknown>,
-                      }) ?? Effect.die("No serve handler"))
-                    : Effect.void,
-                ),
+                Effect.flatMap((impl) => {
+                  if (!impl) return Effect.void;
+                  const shape = impl as Record<string, unknown>;
+                  // Serve when there's a `fetch` handler OR any RPC shape
+                  // methods. A pure-RPC impl (methods, no `fetch`) still needs
+                  // the server to boot — hand `serveRpc` a default 404 fallback
+                  // so `/__rpc__/*` is dispatched to the shape methods and
+                  // everything else 404s.
+                  // May be an `HttpEffect` or an Effect resolving to one (the
+                  // `Main.fetch` shape); `serve` accepts both.
+                  const fetch = shape.fetch as any;
+                  const hasRpcMethods = Object.keys(shape).some(
+                    (key) => key !== "fetch",
+                  );
+                  if (!fetch && !hasRpcMethods) return Effect.void;
+                  // Hand the full impl to `serve` so the runtime can expose any
+                  // non-handler methods on the impl shape (RPC methods)
+                  // alongside the standard `fetch` handler.
+                  return (
+                    runtimeContext.serve?.(
+                      fetch ??
+                        Effect.succeed(
+                          HttpServerResponse.text("Not Found", { status: 404 }),
+                        ),
+                      { shape },
+                    ) ?? Effect.die("No serve handler")
+                  );
+                }),
                 Effect.provide(
                   Layer.effect(
                     ConfigProvider.ConfigProvider,

@@ -8,6 +8,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
 import crypto from "node:crypto";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import {
   BearerTokenValidator,
   StateApi,
@@ -115,13 +116,14 @@ export default Worker(
     const bearerTokenValidator = Layer.succeed(
       BearerTokenValidator,
       BearerTokenValidator.of({
-        // @ts-expect-error - TODO(sam): fix RuntimeContext color here
         validate: Effect.fn(function* (token) {
-          const expected = yield* remoteSecret.get();
+          const expected = yield* remoteSecret
+            .get()
+            .pipe(Effect.orDie, Effect.provide(RuntimeContext.phantom));
           return !!expected &&
             timingSafeEqual(token.trim(), Redacted.value(expected).trim())
             ? yield* Effect.void
-            : yield* Effect.fail(new HttpApiError.Unauthorized());
+            : yield* new HttpApiError.Unauthorized();
         }),
       }),
     );

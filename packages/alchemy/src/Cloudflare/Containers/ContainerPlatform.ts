@@ -5,7 +5,7 @@ import * as Redacted from "effect/Redacted";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { Platform } from "../../Platform.ts";
-import { type Rpc, serveRpc } from "../../Rpc.ts";
+import { serveRpc, type Rpc } from "../../Rpc.ts";
 import * as Server from "../../Server/index.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
@@ -53,7 +53,7 @@ export const ContainerPlatform: Platform<
               );
               if (httpServer) {
                 yield* httpServer.serve(finalHandler);
-                yield* Effect.never;
+                return yield* Effect.never;
               } else {
                 // this should only happen at plantime, validate?
               }
@@ -192,7 +192,7 @@ export const ContainerPlatform: Platform<
               fromCloudflareFetcher(state.container!.getTcpPort(port)),
             ),
           setInactivityTimeout: (durationMs: number | bigint) =>
-            Effect.sync(() =>
+            Effect.promise(() =>
               state.container!.setInactivityTimeout(durationMs),
             ),
           interceptOutboundHttp: (addr: string, binding: Fetcher) =>

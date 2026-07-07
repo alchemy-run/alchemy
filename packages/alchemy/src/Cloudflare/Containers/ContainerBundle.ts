@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Self } from "../../Self.ts";
@@ -146,11 +145,10 @@ export const bundleContainerProgram = Effect.fn(function* ({
   external?: string[];
   outdir?: string;
 }) {
-  const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
-  const realMain = yield* fs.realPath(main);
+  const realMain = yield* resolveMainPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
   const buildBundle = Effect.fn(function* (

@@ -24,8 +24,8 @@ const getSubscription = (accountId: string, subscriptionId: string) =>
   queues.getSubscription({ accountId, subscriptionId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
-      times: 8,
+      schedule: Schedule.fixed("500 millis"),
+      times: 20,
     }),
   );
 
@@ -40,13 +40,13 @@ const expectGone = (accountId: string, subscriptionId: string) =>
     Effect.catchTag("SubscriptionNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SubscriptionNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
+      schedule: Schedule.fixed("500 millis").pipe(
+        Schedule.both(Schedule.recurs(20)),
       ),
     }),
   );
 
-describe.sequential("Subscription", () => {
+describe("Subscription", () => {
   test.provider(
     "create r2 event subscription into a queue and destroy it",
     (stack) =>

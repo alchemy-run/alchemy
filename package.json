@@ -11,10 +11,11 @@
   "module": "./lib/index.js",
   "scripts": {
     "audit:service": "bun scripts/audit-service.ts",
+    "bench:containers": "cd benchmark/container && bun run bench",
     "build:clean:shallow": "bun clean:shallow . && bun run build",
     "build:clean": "bun clean . && bun i && bun run build && bun download:env",
     "build:packages": "bun tsc -b && bun run --filter './packages/*' build",
-    "build": "bun tsc -b && bun run --filter ./website --filter './packages/*' build",
+    "build": "bun tsc -b && bun run --filter ./website --filter './packages/*' build && bun lint:providers",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
     "clear:state": "alchemy state clear ./stacks/nuke.ts",
@@ -39,18 +40,20 @@
     "format:check": "bun run format ./packages ./website -- --check",
     "format": "oxfmt ./packages ./website",
     "install:clean": "rm -rf node_modules examples/**/node_modules alchemy/node_modules && bun i",
+    "lint:providers": "bun scripts/lint-providers.ts",
     "logs:otel:prod": "bun logs:otel --profile prod --stage prod",
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
     "nuke": "bash scripts/nuke.sh",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
-    "prepare": "husky",
+    "prepare": "husky && effect-tsgo patch && node scripts/link-native-preview-tsgo.mjs",
     "publish:npm": "bun run build && bun run --filter alchemy publish:npm",
-    "setup": "effect-language-service patch && bun run download:external",
+    "setup": "effect-tsgo patch && node scripts/link-native-preview-tsgo.mjs && bun run download:external",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:canary": "SMOKE_CANARY=1 bun test --only-failures ./test/smoke.test.ts",
     "test:examples": "bun scripts/test-examples.ts",
     "test": "cd ./packages/alchemy && bun vitest run",
-    "test:fast": "FAST=1 cd ./packages/alchemy && bun vitest run"
+    "test:slow": "cd ./packages/alchemy && bun vitest run",
+    "test:fast": "bun run --filter alchemy test:fast"
   },
   "workspaces": {
     "packages": [
@@ -59,6 +62,7 @@
       "examples/*",
       "examples/monorepo-single-stack/*",
       "examples/monorepo-multi-stack/*",
+      "benchmark/*",
       "distilled/packages/*"
     ],
     "catalog": {
@@ -139,8 +143,10 @@
     "@effect/language-service": "^0.77.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/tsgo": "^0.14.6",
     "@types/bun": "latest",
     "@types/node": "latest",
+    "@typescript/native-preview": "7.0.0-dev.20260618.1",
     "@vitest/ui": "^4.1.0",
     "alchemy": "workspace:*",
     "bun-types": "^1.3.8",

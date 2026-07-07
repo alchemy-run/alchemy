@@ -55,12 +55,15 @@ describe("Docker.Container", { concurrent: false }, () => {
         expect(container.status).toBe("running");
 
         const runtime = yield* docker.container.inspect(container.name);
-        expect(runtime.NetworkSettings.Ports).toMatchObject({
-          "80/tcp": [
+        // Docker always publishes the IPv4 (`0.0.0.0`) binding; whether it also
+        // adds an IPv6 (`::`) binding depends on the daemon's IPv6 config, so
+        // assert the guaranteed IPv4 mapping is present rather than requiring
+        // both.
+        expect(runtime?.NetworkSettings.Ports?.["80/tcp"]).toEqual(
+          expect.arrayContaining([
             { HostIp: "0.0.0.0", HostPort: `${hostPort}` },
-            { HostIp: "::", HostPort: `${hostPort}` },
-          ],
-        });
+          ]),
+        );
       }),
   );
 

@@ -20,7 +20,20 @@
     // Solid is the default JSX runtime in this package; React files opt in per-file.
     "jsx": "react-jsx",
     "jsxImportSource": "@opentui/solid",
-    "lib": ["DOM", "DOM.Iterable", "ES2023"]
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // enable this to get effect diangostics in tsc
+        "diagnostics": false,
+        "ignoreEffectErrorsInTscExitCode": true,
+        "ignoreEffectWarningsInTscExitCode": true,
+        "ignoreEffectSuggestionsInTscExitCode": true,
+        "diagnosticSeverity": {
+          "floatingEffect": "off"
+        }
+      }
+    ]
   },
   "references": [
     {

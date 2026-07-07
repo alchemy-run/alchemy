@@ -127,6 +127,12 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
     Stream.filter((c): c is ObservedConsumer => c !== undefined),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
+    // A queue created earlier in the same plan is eventually consistent:
+    // listConsumers can transiently 404 (`QueueNotFound`, code 11000) before
+    // the fresh queue is visible to the consumers API. Treat that as "no
+    // consumer yet" — the caller falls through to createConsumer, which
+    // retries QueueNotFound until the queue propagates.
+    Effect.catchTag("QueueNotFound", () => Effect.succeed(undefined)),
   );
 
 export const ConsumerProviderLive = () =>
@@ -349,22 +355,25 @@ export const ConsumerProviderLive = () =>
             settings: news.settings,
           })
           .pipe(
-            // The sibling Worker resource pre-creates a placeholder
-            // script with no `queue` handler; Cloudflare returns
-            // code 11001 until the real reconcile uploads the
-            // handler. Retry until the upload propagates (capped),
-            // then surface a real failure if it never does.
+            // Two eventual-consistency races on a fresh deploy, both
+            // retried on the same bounded schedule:
+            //  - QueueHandlerMissing (11001): the sibling Worker resource
+            //    pre-creates a placeholder script with no `queue` handler;
+            //    Cloudflare returns 11001 until the real reconcile uploads
+            //    the handler.
+            //  - QueueNotFound (11000): the queue was created earlier in
+            //    this same plan but isn't yet visible to the consumers API.
             Effect.tapError((e) =>
-              e._tag === "QueueHandlerMissing"
+              e._tag === "QueueHandlerMissing" || e._tag === "QueueNotFound"
                 ? Effect.logDebug(
-                    `Consumer create: worker ` +
-                      `"${news.scriptName}" has no queue handler ` +
-                      `yet (code 11001), retrying`,
+                    `Consumer create: not ready for worker ` +
+                      `"${news.scriptName}" (${e._tag}), retrying`,
                   )
                 : Effect.void,
             ),
             Effect.retry({
-              while: (e) => e._tag === "QueueHandlerMissing",
+              while: (e) =>
+                e._tag === "QueueHandlerMissing" || e._tag === "QueueNotFound",
               schedule: queueHandlerReadinessSchedule,
             }),
             Effect.catchTag("ConsumerAlreadyExists", (cause) =>

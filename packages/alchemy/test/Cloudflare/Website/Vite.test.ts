@@ -522,19 +522,22 @@ devTest.provider(
           stack.deploy(
             Effect.gen(function* () {
               const bucket = yield* Cloudflare.R2.Bucket(bucketId);
-              const worker = yield* Cloudflare.Website.Vite("TanStackDevBindings", {
-                ...viteProps(rootDir, memoInclude),
-                assets: {
-                  runWorkerFirst: true,
+              const worker = yield* Cloudflare.Website.Vite(
+                "TanStackDevBindings",
+                {
+                  ...viteProps(rootDir, memoInclude),
+                  assets: {
+                    runWorkerFirst: true,
+                  },
+                  dev: {
+                    port: 0,
+                  },
+                  env: {
+                    BUCKET: bucket,
+                    DEV_MARKER: marker,
+                  },
                 },
-                dev: {
-                  port: 0,
-                },
-                env: {
-                  BUCKET: bucket,
-                  DEV_MARKER: marker,
-                },
-              });
+              );
               return { bucket, worker };
             }),
           );

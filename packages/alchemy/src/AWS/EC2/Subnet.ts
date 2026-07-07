@@ -9,7 +9,12 @@ import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
@@ -388,7 +393,7 @@ export const SubnetProvider = () =>
 
           // Ensure — create the subnet when missing.
           if (subnet === undefined) {
-            const createResult = yield* ec2
+            const newSubnetId = yield* ec2
               .createSubnet({
                 VpcId: news.vpcId,
                 CidrBlock: news.cidrBlock,
@@ -413,9 +418,49 @@ export const SubnetProvider = () =>
                   while: (e) => e._tag === "InvalidVpcID.NotFound",
                   schedule: Schedule.exponential(100),
                 }),
+                Effect.map((createResult) => {
+                  const newSubnetId = createResult.Subnet!
+                    .SubnetId! as SubnetId;
+                  return newSubnetId;
+                }),
+                Effect.tap((newSubnetId) =>
+                  session.note(`Subnet created: ${newSubnetId}`),
+                ),
+                Effect.catchTag("InvalidSubnet.Conflict", (error) =>
+                  Effect.gen(function* () {
+                    // The CIDR is occupied. A prior interrupted run may have
+                    // created this subnet but failed to persist state —
+                    // observe by VPC + CIDR and take it over only when it
+                    // carries our ownership tags; a foreign subnet re-fails
+                    // with the typed conflict.
+                    if (news.cidrBlock === undefined) {
+                      return yield* Effect.fail(error);
+                    }
+                    const lookup = yield* ec2.describeSubnets({
+                      Filters: [
+                        { Name: "vpc-id", Values: [news.vpcId] },
+                        { Name: "cidr-block", Values: [news.cidrBlock] },
+                      ],
+                    });
+                    const existing = lookup.Subnets?.find((s) =>
+                      hasTags(
+                        alchemyTags,
+                        Object.fromEntries(
+                          (s.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
+                        ),
+                      ),
+                    );
+                    if (existing?.SubnetId === undefined) {
+                      return yield* Effect.fail(error);
+                    }
+                    const existingId = existing.SubnetId as SubnetId;
+                    yield* session.note(
+                      `Recovered subnet ${existingId} at ${news.cidrBlock} owned by this stack (left by an interrupted run)`,
+                    );
+                    return existingId;
+                  }),
+                ),
               );
-            const newSubnetId = createResult.Subnet!.SubnetId! as SubnetId;
-            yield* session.note(`Subnet created: ${newSubnetId}`);
             subnet = yield* waitForSubnetAvailable(newSubnetId, session);
           }
 

@@ -751,6 +751,57 @@ export class DurableObjectScope extends Context.Service<
  *   },
  * });
  * ```
+ *
+ * @section Adopting an Existing Durable Object
+ * When you adopt a Worker that already exists on Cloudflare — created
+ * outside Alchemy via Wrangler, the dashboard, or the raw API — its
+ * Durable Object classes are adopted along with it. You opt in to the
+ * takeover the same way you adopt any foreign resource: with
+ * `adopt(true)` (or the `--adopt` CLI flag), since `Worker.read` reports
+ * a worker with no Alchemy ownership tags as `Unowned`.
+ *
+ * Alchemy normally tracks which class backs each binding through an
+ * `alchemy:do:<logicalId>:<className>` tag it writes on the script. A
+ * foreign worker has no such tag, so on the **adopting deploy** Alchemy
+ * falls back to matching your binding to the live class **by binding
+ * name**. The class is then reused in place — not recreated — so
+ * Cloudflare's migration engine doesn't reject the upload for creating a
+ * class that already exists.
+ *
+ * The consequence is a one-time constraint: **on the adopting deploy the
+ * binding's `className` must match the class that already exists on the
+ * worker.** You cannot rename the class in the same deploy that adopts
+ * it. Once the deploy completes, Alchemy owns the worker and has written
+ * the `alchemy:do:` tag, so subsequent renames are driven by logical id
+ * and work normally.
+ *
+ * @example Adopting a worker whose `Counter` class already exists
+ * ```typescript
+ * // The worker + `Counter` class were created outside Alchemy.
+ * // `className` must match the existing class on this first deploy.
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   name: "existing-worker",
+ *   main: "./src/worker.ts",
+ *   bindings: {
+ *     Counter: Cloudflare.DurableObject<Counter>("Counter"),
+ *   },
+ * }).pipe(adopt(true));
+ * ```
+ *
+ * @example Renaming the class — only after adoption
+ * ```typescript
+ * // A SECOND deploy, after the one above. Alchemy now owns the worker
+ * // and maps the binding by logical id, so the class can be renamed.
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   name: "existing-worker",
+ *   main: "./src/worker.ts",
+ *   bindings: {
+ *     Counter: Cloudflare.DurableObject<Counter>("Counter", {
+ *       className: "CounterV2",
+ *     }),
+ *   },
+ * });
+ * ```
  */
 export const DurableObject: DurableObjectClass = taggedFunction(
   DurableObjectScope,

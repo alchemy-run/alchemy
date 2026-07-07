@@ -255,6 +255,10 @@ export const AccountApiTokenProvider = () =>
           // `TokenNotFound`. Either is fine; we just want the resource gone.
           Effect.catchTag("InvalidRoute", () => Effect.void),
           Effect.catchTag("TokenNotFound", () => Effect.void),
+          // Cloudflare-managed tokens (e.g. "Cloudflare Resource Tagging
+          // System") can never be deleted (code 1001). We don't own them, so
+          // treat the refusal as a no-op rather than a failure.
+          Effect.catchTag("TokenManagedByCloudflare", () => Effect.void),
         );
     }),
     list: Effect.fn(function* () {
