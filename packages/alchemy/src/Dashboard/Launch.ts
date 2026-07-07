@@ -299,10 +299,22 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
       }
       yield* Effect.never;
     }).pipe(
+      // Scope the server region SO ITS OWN scope (holding the SSE request
+      // fibers and the serve finalizer) closes before the HTTP layer below
+      // unwinds. Without this the layer's finalizer (Bun's graceful
+      // `server.stop()`, which waits for in-flight connections) deadlocks
+      // against SSE streams that only die when the outer scope closes —
+      // and the outer scope is blocked behind that very finalizer.
+      Effect.scoped,
       Effect.provide(stack.services),
       // plan evaluation can hold a request open for a long time — give it
       // headroom past Bun's 10s default idle timeout
-      Effect.provide(httpServer(port, "127.0.0.1", { idleTimeout: 240 })),
+      Effect.provide(
+        httpServer(port, "127.0.0.1", {
+          idleTimeout: 240,
+          gracefulShutdownTimeout: "2 seconds",
+        }),
+      ),
     );
   }).pipe(Effect.provide(servicesFor(stage)), Effect.scoped);
 });
