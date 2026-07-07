@@ -50,11 +50,16 @@ test(
 
     // Fire both background writes: one from the Worker's ExecutionContext,
     // one from inside the DO via DurableObjectState.waitUntil. Both routes
-    // respond before the journal entry is persisted.
-    const bg = yield* getText(client, `${url}/bg`);
-    expect(bg).toBe("scheduled");
-    const bgDo = yield* getText(client, `${url}/bg-do`);
-    expect(bgDo).toBe("scheduled");
+    // respond before the journal entry is persisted. Probed via
+    // expectUrlContains so transient placeholders/5xx during propagation
+    // are retried (a duplicate journal entry from a retry is harmless —
+    // the assertions below use `toContain`).
+    yield* expectUrlContains(`${url}/bg`, "bg-scheduled", {
+      label: "waitUntil /bg",
+    });
+    yield* expectUrlContains(`${url}/bg-do`, "bg-do-scheduled", {
+      label: "waitUntil /bg-do",
+    });
 
     // The entries only appear if waitUntil kept the invocations alive until
     // the delayed writes completed.
@@ -97,10 +102,15 @@ test(
     });
 
     // Both routes respond before their finalizers persist the entries.
-    const fin = yield* getText(client, `${url}/finalizer`);
-    expect(fin).toBe("ok");
-    const finDo = yield* getText(client, `${url}/finalizer-do`);
-    expect(finDo).toBe("scheduled");
+    // Probed via expectUrlContains so transient placeholders/5xx during
+    // propagation are retried (duplicate journal entries are harmless —
+    // the assertions below use `toContain`).
+    yield* expectUrlContains(`${url}/finalizer`, "finalizer-scheduled", {
+      label: "finalizer /finalizer",
+    });
+    yield* expectUrlContains(`${url}/finalizer-do`, "do-finalizer-scheduled", {
+      label: "finalizer /finalizer-do",
+    });
 
     const entries = yield* Effect.gen(function* () {
       const body = JSON.parse(yield* getText(client, `${url}/entries`)) as {

@@ -94,12 +94,12 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
               Effect.andThen(journal.record("from-worker-wait-until")),
             ),
           );
-          return HttpServerResponse.text("scheduled");
+          return HttpServerResponse.text("bg-scheduled");
         }
 
         if (url.pathname === "/bg-do") {
           return HttpServerResponse.text(
-            yield* journal.recordLater("from-do-wait-until"),
+            `bg-do-${yield* journal.recordLater("from-do-wait-until")}`,
           );
         }
 
@@ -113,12 +113,12 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
               Effect.ignore,
             ),
           );
-          return HttpServerResponse.text("ok");
+          return HttpServerResponse.text("finalizer-scheduled");
         }
 
         if (url.pathname === "/finalizer-do") {
           return HttpServerResponse.text(
-            yield* journal.recordOnClose("from-do-finalizer"),
+            `do-finalizer-${yield* journal.recordOnClose("from-do-finalizer")}`,
           );
         }
 
