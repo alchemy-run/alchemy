@@ -103,6 +103,11 @@ export interface WorkerLimits extends Exclude<
   undefined
 > {}
 
+export interface WorkerCache extends Exclude<
+  workers.PutScriptRequest["metadata"]["cacheOptions"],
+  undefined
+> {}
+
 export type WorkerPlacement = Exclude<
   workers.PutScriptRequest["metadata"]["placement"],
   undefined
@@ -226,6 +231,23 @@ export interface WorkerProps<
    * `traces: { enabled: true, ... }`.
    */
   observability?: WorkerObservability;
+  /**
+   * Workers Cache settings. When `enabled` is `true`, Cloudflare checks a
+   * regionally tiered cache in front of the Worker on every HTTP request —
+   * cache hits are served from the edge without invoking the Worker at all.
+   * The Worker controls what gets cached via standard response headers
+   * (`Cache-Control`, `Cache-Tag`, `Vary`), including
+   * `stale-while-revalidate`.
+   *
+   * Set `crossVersionCache: true` to share cached responses across Worker
+   * versions (by default the cache is scoped to a single version, so every
+   * deploy starts cold).
+   *
+   * If omitted, Workers Cache is disabled.
+   *
+   * @see https://blog.cloudflare.com/workers-cache/
+   */
+  cache?: WorkerCache;
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
@@ -678,6 +700,43 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     },
  *   },
  * }
+ * ```
+ *
+ * @section Workers Cache
+ * Workers Cache puts a regionally tiered cache in front of the Worker —
+ * cache hits are served from the edge without invoking the Worker (and
+ * without billing CPU time). Enable it with the `cache` prop, then control
+ * what gets cached from your handlers via standard response headers:
+ * `Cache-Control` (including `stale-while-revalidate`), `Cache-Tag` for
+ * tag-based purging, and `Vary` for content negotiation.
+ *
+ * The cache is scoped to a single Worker version by default, so every
+ * deploy starts cold. Set `crossVersionCache: true` to share cached
+ * responses across versions.
+ *
+ * @example Enabling Workers Cache
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   cache: {
+ *     enabled: true,
+ *     crossVersionCache: true,
+ *   },
+ * }
+ * ```
+ *
+ * @example Caching responses from a handler
+ * ```typescript
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     return HttpServerResponse.text("hello", {
+ *       headers: {
+ *         "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+ *         "Cache-Tag": "products,product:123",
+ *       },
+ *     });
+ *   }),
+ * };
  * ```
  *
  * @section R2 Bucket
