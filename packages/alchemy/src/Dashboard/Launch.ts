@@ -276,9 +276,19 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
       if (open) {
         // Give a previously-open tab a moment to reconnect before opening
         // a new one — the browser can't be asked to reuse a tab from the
-        // CLI, but a reconnected tab makes opening one unnecessary.
+        // CLI, but a reconnected tab makes opening one unnecessary. A
+        // shutdown breadcrumb from a previous run means a tab very likely
+        // still exists and is polling (the SPA retries every ≤4s against
+        // the same stable port), so wait past a full retry interval.
+        const breadcrumb = yield* Discovery.lastAdvertised().pipe(
+          Effect.orElseSucceed(() => undefined),
+        );
         const reconnected = yield* Deferred.await(clientConnected).pipe(
-          Effect.timeout("2500 millis"),
+          Effect.timeout(
+            breadcrumb?.stack === stackEffect.stackName
+              ? "6 seconds"
+              : "2500 millis",
+          ),
           Effect.result,
         );
         if (Result.isSuccess(reconnected)) {

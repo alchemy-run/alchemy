@@ -128,43 +128,65 @@ export const execStack = Effect.fn(function* ({
   // --ui: make sure the dashboard is up before any planning so the run
   // streams into it from the first event (via the DashboardReporter tee).
   // Reuse an already-running dashboard for this project; otherwise launch
-  // one in-process on a random port. Fails fast (with install
-  // instructions) when the optional @alchemy.run/dashboard peer is
+  // one in-process on the project's STABLE port (deterministic from
+  // cwd+stack) so a browser tab from the previous run reconnects to the
+  // same origin instead of a new tab opening every run. Fails fast (with
+  // install instructions) when the optional @alchemy.run/dashboard peer is
   // missing — before any cloud interaction.
   let dashboardUrl: string | undefined;
+  let launchedDashboard = false;
   if (ui) {
     yield* Dashboard.requireDistDir();
+    const openUnlessConnected = (url: string, clients: number) =>
+      clients > 0
+        ? Console.log("  (existing dashboard tab is connected)")
+        : Clank.openUrl(url).pipe(Effect.catch(() => Effect.void));
     const existing = yield* Discovery.discover().pipe(
       Effect.orElseSucceed(() => undefined),
     );
     if (existing !== undefined) {
       dashboardUrl = existing.url;
-      yield* Clank.openUrl(existing.url).pipe(Effect.catch(() => Effect.void));
+      yield* openUnlessConnected(existing.url, existing.clients);
     } else {
-      const ready = yield* Deferred.make<string>();
-      yield* Effect.forkScoped(
-        Dashboard.launchDashboard({
-          stackEffect,
-          stage,
-          envFile,
-          profile: profile ?? "default",
-          port: 0,
-          open: true,
-          ready,
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Console.error(`dashboard failed:\n${Cause.pretty(cause)}`),
+      let port = Discovery.stablePort(stackEffect.stackName);
+      const probe = yield* Discovery.probePort(port, stackEffect.stackName);
+      if (probe.kind === "ours") {
+        // a dashboard from a previous run is still serving (its
+        // advertisement was lost) — reuse it rather than failing to bind
+        dashboardUrl = probe.url;
+        yield* openUnlessConnected(probe.url, probe.clients);
+      } else {
+        if (probe.kind === "foreign") {
+          // something else owns the stable port — fall back to a random one
+          port = 0;
+        }
+        const ready = yield* Deferred.make<string>();
+        yield* Effect.forkScoped(
+          Dashboard.launchDashboard({
+            stackEffect,
+            stage,
+            envFile,
+            profile: profile ?? "default",
+            port,
+            open: true,
+            ready,
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Console.error(`dashboard failed:\n${Cause.pretty(cause)}`),
+            ),
           ),
-        ),
-      );
-      dashboardUrl = yield* Deferred.await(ready).pipe(
-        Effect.timeout(Duration.seconds(30)),
-        Effect.orElseSucceed(() => undefined),
-      );
-      if (dashboardUrl === undefined) {
-        yield* Console.error(
-          "dashboard did not start in time; continuing without --ui",
         );
+        dashboardUrl = yield* Deferred.await(ready).pipe(
+          Effect.timeout(Duration.seconds(30)),
+          Effect.orElseSucceed(() => undefined),
+        );
+        if (dashboardUrl === undefined) {
+          yield* Console.error(
+            "dashboard did not start in time; continuing without --ui",
+          );
+        } else {
+          launchedDashboard = true;
+        }
       }
     }
   }
@@ -307,13 +329,23 @@ export const execStack = Effect.fn(function* ({
       }
     }).pipe(Effect.provide(stack.services));
 
-    // keep the in-process dashboard serving after the run so the settled
-    // graph can be inspected; Ctrl+C exits.
+    // `plan --ui` exists to LOOK at the plan — keep serving until Ctrl+C.
+    // deploy/destroy exit when the run settles: give the SSE stream a beat
+    // to flush the final patch frames, then let the scope close, which
+    // stops the in-process dashboard and leaves the breadcrumb the next
+    // run's tab-reuse wait keys off.
     if (ui && !dev && dashboardUrl !== undefined) {
-      yield* Console.log(
-        `\ndashboard serving at ${dashboardUrl} — press Ctrl+C to exit`,
-      );
-      yield* Effect.never;
+      if (dryRun) {
+        yield* Console.log(
+          `\ndashboard serving at ${dashboardUrl} — press Ctrl+C to exit`,
+        );
+        yield* Effect.never;
+      } else if (launchedDashboard) {
+        yield* Effect.sleep(Duration.seconds(2));
+        yield* Console.log(
+          "\ndashboard stopped — the tab reconnects on the next --ui run",
+        );
+      }
     }
   }).pipe(Effect.provide(services));
 });

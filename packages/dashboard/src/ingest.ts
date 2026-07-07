@@ -64,7 +64,7 @@ let resnapshotting = false;
 let lastResnapshotAt = 0;
 
 const RECONNECT_BASE_MS = 500;
-const RECONNECT_CAP_MS = 10_000;
+const RECONNECT_CAP_MS = 4_000;
 /** minimum spacing between gap-triggered snapshot re-fetches */
 const RESNAPSHOT_SPACING_MS = 1_000;
 
