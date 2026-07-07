@@ -218,22 +218,14 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
           .map((b) => b.sid)
           .filter((sid): sid is string => typeof sid === "string"),
       }));
-      // actions (tasks) are part of the stack's shape too — without them
-      // the post-destroy ghost graph is missing nodes (and the structural
-      // hash shifts, forcing a relayout)
-      const actions = Object.entries(
-        (stk.actions ?? {}) as Record<
-          string,
-          { LogicalId?: string; Type?: string }
-        >,
-      ).map(([fqn, a]) => ({
-        fqn,
-        logicalId: a.LogicalId ?? fqn.split("/").at(-1) ?? fqn,
-        type: a.Type ?? "Action",
-        bindingSids: [],
-        kind: "action" as const,
-      }));
-      return { resources: [...resources, ...actions] } satisfies StackStructure;
+      // Actions (tasks) are deliberately NOT part of the ghost shape: a
+      // task exists in the graph only when it RAN (persisted state feeds
+      // the baseline) or WILL run (the plan overlay synthesizes a "run"
+      // node). A "defined but not deployed" ghost is meaningless for
+      // something that has no cloud presence — and after a destroy, the
+      // task must not resurface at all. Node positions survive its
+      // exit/return via the per-node position memory.
+      return { resources } satisfies StackStructure;
     }).pipe(
       Effect.provide(servicesFor(stg)),
       Effect.catchCause(() =>
