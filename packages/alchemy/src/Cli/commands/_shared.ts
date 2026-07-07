@@ -296,7 +296,19 @@ export const printProfile = Effect.fn(function* (
       }
       continue;
     }
-    yield* provider.prettyPrint(profile, cfg);
+    // A provider's `prettyPrint` catches its own credential-resolution
+    // failures, but some resolve paths `Effect.orDie` (e.g. AWS SSO with an
+    // expired token), which escapes as a defect. Contain it here — via
+    // `Console.log` so the message stays on stdout under this provider's
+    // header instead of interleaving on stderr — so one broken provider
+    // can't abort rendering the rest of the profile.
+    yield* provider.prettyPrint(profile, cfg).pipe(
+      Effect.catchCause((cause) => {
+        const error = Cause.squash(cause);
+        const message = error instanceof Error ? error.message : String(error);
+        return Console.log(`  Failed to retrieve credentials: ${message}`);
+      }),
+    );
   }
 });
 

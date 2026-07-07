@@ -3,7 +3,9 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
+import * as Argument from "effect/unstable/cli/Argument";
 
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
@@ -14,23 +16,119 @@ import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
 import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
+import { Stack } from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
   envFile,
+  importStack,
   instrumentCommand,
   printProfile,
   profile,
 } from "./_shared.ts";
 
+/**
+ * The auth providers Alchemy ships with. Built into the registry as a
+ * baseline so `profile show` can pretty-print any provider a profile
+ * mentions, even one the current stack doesn't wire up.
+ */
+const builtinAuth = Layer.mergeAll(
+  AwsAuth,
+  AxiomAuth,
+  CloudflareAuth,
+  GitHubAuth,
+  NeonAuth,
+  PlanetscaleAuth,
+);
+
+/**
+ * Entrypoint whose `providers()` layer contributes the user's own auth
+ * providers. Optional and best-effort — if it's missing or fails to load,
+ * `profile show` still renders the built-in providers.
+ */
+const mainFile = Argument.file("main").pipe(
+  Argument.withDescription(
+    "Stack entrypoint whose providers() should be used, defaults to alchemy.run.ts",
+  ),
+  Argument.withDefault("alchemy.run.ts"),
+);
+
+/**
+ * Populate an {@link AuthProviders} registry for display: the built-in
+ * providers first, then the user's stack `providers()` layer on top so a
+ * customized provider (same name) overrides the built-in one. Loading the
+ * user's stack is best-effort — a missing or invalid entrypoint leaves the
+ * built-ins in place.
+ *
+ * Registration happens as a side effect of building each layer (see
+ * `AuthProviderLayer`), and later builds overwrite earlier entries by name,
+ * so build order is what gives the user's providers precedence.
+ */
+export const collectAuthProviders = Effect.fn("collectAuthProviders")(
+  function* (options: {
+    main: string;
+    envFile: Option.Option<string>;
+    profile: string;
+  }) {
+    const authProviders: AuthProviders["Service"] = {};
+    const base = Layer.mergeAll(
+      Layer.succeed(AuthProviders, authProviders),
+      ConfigProvider.layer(
+        withProfileOverride(
+          yield* loadConfigProvider(options.envFile),
+          options.profile,
+        ),
+      ),
+      Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+    );
+
+    // 1. Built-in providers first (baseline).
+    yield* Layer.build(Layer.provide(builtinAuth, base));
+
+    // 2. The user's own providers() layer on top — same-named providers
+    //    override the built-ins. Best-effort: swallow load/build failures
+    //    (including a missing entrypoint) so display still works.
+    yield* Effect.gen(function* () {
+      const stackEffect = yield* importStack(options.main);
+      yield* Layer.build(
+        (stackEffect.providers ?? Layer.empty).pipe(
+          Layer.provideMerge(stackEffect.state ?? Layer.empty),
+          Layer.provideMerge(
+            Layer.mergeAll(
+              base,
+              Layer.succeed(Stage, "placeholder"),
+              Layer.succeed(Stack, {
+                actions: {},
+                bindings: {},
+                name: stackEffect.stackName,
+                resources: {},
+                stage: "placeholder",
+              }),
+            ),
+          ),
+        ),
+      );
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logDebug("profile show: could not load user stack providers", {
+          cause,
+        }),
+      ),
+    );
+
+    return authProviders;
+  },
+);
+
 const showCommand = Command.make(
   "show",
-  { profile, envFile },
+  { profile, envFile, main: mainFile },
   instrumentCommand("profile.show", (a: { profile: string }) => ({
     "alchemy.profile": a.profile,
   }))(
-    Effect.fn(function* ({ profile, envFile }) {
+    Effect.fn(function* ({ profile, envFile, main }) {
       const profiles = yield* AlchemyProfile;
       const stored = yield* profiles.getProfile(profile);
       if (stored == null) {
@@ -45,32 +143,13 @@ const showCommand = Command.make(
         return;
       }
 
-      const authProviders: AuthProviders["Service"] = {};
-      const authRegistry = Layer.succeed(AuthProviders, authProviders);
-      const services = Layer.mergeAll(
-        authRegistry,
-        ConfigProvider.layer(
-          withProfileOverride(yield* loadConfigProvider(envFile), profile),
-        ),
-        Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-        // Building these layers triggers their AuthProviderLayer effect, which
-        // registers the provider into the shared `authProviders` registry.
-        Layer.provide(
-          Layer.mergeAll(
-            AwsAuth,
-            AxiomAuth,
-            CloudflareAuth,
-            GitHubAuth,
-            NeonAuth,
-            PlanetscaleAuth,
-          ),
-          authRegistry,
-        ),
-      );
+      const authProviders = yield* collectAuthProviders({
+        main,
+        envFile,
+        profile,
+      });
 
-      yield* printProfile(profile, stored, authProviders).pipe(
-        Effect.provide(services),
-      );
+      yield* printProfile(profile, stored, authProviders);
     }),
   ),
 );
