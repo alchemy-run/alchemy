@@ -22,13 +22,11 @@ import { Loader2 } from "lucide-react";
 import { memo, useMemo, type CSSProperties } from "react";
 import { NODE_HEIGHT, NODE_WIDTH } from "../layout/elkGraph.ts";
 import {
-  badgeStyle,
   chipStyle,
   CLOUD_COLORS,
   cloudOf,
   NEUTRAL_COLOR,
   PLAN_COLORS,
-  PLAN_LABELS,
   RESULT_COLORS,
   RESULT_LABELS,
   serviceOf,
@@ -38,7 +36,8 @@ import {
 } from "../theme.ts";
 import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
 import {
-  useDeploymentLive,
+  useApproval,
+  useDeploymentStartedAt,
   useIsSelected,
   useMeta,
   useNode,
@@ -60,12 +59,12 @@ const bgOf = (color: string): CSSProperties => {
   return style;
 };
 
-const fgCache = new Map<string, CSSProperties>();
-const fgOf = (color: string): CSSProperties => {
-  let style = fgCache.get(color);
+const tabCache = new Map<string, CSSProperties>();
+const tabStyleOf = (color: string): CSSProperties => {
+  let style = tabCache.get(color);
   if (style === undefined) {
-    style = { color };
-    fgCache.set(color, style);
+    style = { background: color, color: "var(--alc-fg-on-accent)" };
+    tabCache.set(color, style);
   }
   return style;
 };
@@ -109,7 +108,8 @@ export const ResourceNode = memo(function ResourceNode({
   const selected = useIsSelected(fqn);
   const meta = useMeta();
   const registry = useRegistry();
-  const live = useDeploymentLive();
+  const approval = useApproval();
+  const deployStartedAt = useDeploymentStartedAt();
 
   // live overlay wins over the structural baseline
   const status = decoration?.status ?? node?.status ?? "unknown";
@@ -152,9 +152,32 @@ export const ResourceNode = memo(function ResourceNode({
   const hidden = decoration?.hidden === true;
   const planColor = plan ? PLAN_COLORS[plan] : undefined;
   const resultColor = result ? RESULT_COLORS[result] : undefined;
-  // pending plan wins over the PREVIOUS deploy's result; during a live
-  // apply the fresh result takes over as each node completes
-  const showPlanChip = plan !== undefined && (!live || result === undefined);
+  // Pending plan wins over the PREVIOUS run's result: while approval is
+  // pending, or while the node's result predates the current deployment
+  // record, show what WILL happen. A result landed by the current run
+  // (decoration newer than the run's start) takes over as each node
+  // completes.
+  const resultIsFresh =
+    result !== undefined &&
+    deployStartedAt !== undefined &&
+    (decoration?.at ?? 0) >= deployStartedAt;
+  const showPlanChip =
+    plan !== undefined && (approval !== undefined || !resultIsFresh);
+  // The bookmark tab is the node's single lifecycle indicator:
+  //   running now (spinner) > result from the current run > pending plan.
+  // Historical results (previous runs) stay as the muted in-card chip.
+  const inFlight = statusInFlight(status);
+  const tab = inFlight
+    ? { label: status, color: statusColor(status), spinner: true }
+    : resultIsFresh && result !== undefined && resultColor !== undefined
+      ? {
+          label: result,
+          color: resultColor,
+          spinner: false,
+        }
+      : showPlanChip && plan !== undefined && planColor !== undefined
+        ? { label: plan, color: planColor, spinner: false }
+        : undefined;
   // terminated / declared-only resources render "dead": dashed ghost shell
   const deleted = result === "deleted" || status === "deleted";
   const ghost = node.ghost !== undefined || deleted;
@@ -170,11 +193,14 @@ export const ResourceNode = memo(function ResourceNode({
 
   return (
     <div
-      className={cardClass}
+      className={`relative ${cardClass}`}
       style={{
         width: NODE_WIDTH,
         // accent glow ring — inline so it wins over the hover shadow class
         boxShadow: selected ? "var(--alc-glow)" : undefined,
+        // the lifecycle tab outlines the whole card in its color
+        // (selection still wins)
+        borderColor: !selected && tab !== undefined ? tab.color : undefined,
         // "doesn't exist (yet/anymore)" is carried by the DASHED BORDER and
         // title color, never by fading the whole card — text and borders
         // stay crisp in both themes. `hidden` is the one exception (an
@@ -182,6 +208,18 @@ export const ResourceNode = memo(function ResourceNode({
         opacity: hidden ? 0.2 : undefined,
       }}
     >
+      {/* bookmark tab: the node's lifecycle at a glance, flush on the
+          card's top edge like an index tab — "update" (pending) →
+          "updating" + spinner (running) → "updated"/"failed" (this run) */}
+      {tab !== undefined && (
+        <div
+          className="absolute -top-[19px] left-3 flex items-center gap-1 rounded-t-[var(--alc-radius-sm)] px-2 pb-[3px] pt-[2px] font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em]"
+          style={tabStyleOf(tab.color)}
+        >
+          {tab.spinner && <Loader2 size={9} className="animate-spin" />}
+          {tab.label}
+        </div>
+      )}
       <Handle
         id="in"
         type="target"
@@ -205,20 +243,13 @@ export const ResourceNode = memo(function ResourceNode({
         >
           {node.logicalId}
         </span>
-        {statusInFlight(status) ? (
-          <Loader2
-            size={13}
-            className="ml-auto shrink-0 animate-spin"
-            style={fgOf(statusColor(status))}
-            aria-label={status}
-          />
-        ) : (
-          <span
-            className="ml-auto h-2 w-2 shrink-0 rounded-full"
-            style={bgOf(statusColor(status))}
-            title={status}
-          />
-        )}
+        <span
+          className={`ml-auto h-2 w-2 shrink-0 rounded-full ${
+            inFlight ? "status-pulse" : ""
+          }`}
+          style={bgOf(statusColor(status))}
+          title={status}
+        />
       </div>
       <div className="mt-1 truncate font-mono text-[10.5px] text-[var(--alc-fg-3)]">
         {serviceOf(node.type)
@@ -258,19 +289,9 @@ export const ResourceNode = memo(function ResourceNode({
         </div>
       )}
       <div className="flex gap-1">
-        {/* Pending plan wins over the previous deploy's result: while a
-            plan awaits approval, every affected node shows what WILL
-            happen (outlined chip = future). During the live apply each
-            node flips to its result as it completes (filled chip = done). */}
-        {showPlanChip && plan && planColor ? (
-          <span
-            className={`${NODE_CHIP} border`}
-            style={badgeStyle(planColor)}
-            title={`pending: ${plan}`}
-          >
-            {PLAN_LABELS[plan]}
-          </span>
-        ) : result && resultColor ? (
+        {/* the bookmark tab carries live state; the in-card chip keeps
+            only HISTORICAL results (previous runs, idle graph) */}
+        {tab === undefined && result && resultColor ? (
           <span
             className={NODE_CHIP}
             style={chipStyle(resultColor)}

@@ -320,6 +320,22 @@ export const make: (
   // audience and every future subscriber's snapshot already includes them
   pending.splice(0, pending.length);
 
+  // Live-record watcher: while the document shows an open deployment, poll
+  // the store until it closes. The apply/done tee can race the engine's
+  // `deployments.end` (or the deploy may not be teeing at all — another
+  // host, a killed process), and a record that ends out-of-band would
+  // otherwise stay `live: true` in the document forever.
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      for (;;) {
+        yield* Effect.sleep("3 seconds");
+        if (doc.deployment !== undefined && doc.deployment.live) {
+          yield* refreshDeployment().pipe(Effect.ignore);
+        }
+      }
+    }).pipe(Effect.ignore),
+  );
+
   const host: DocumentHost = {
     stage,
     document: doc,
