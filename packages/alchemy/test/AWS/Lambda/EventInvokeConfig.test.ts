@@ -29,7 +29,7 @@ test.provider(
             visibilityTimeout: 30,
           });
 
-          const fn = yield* AWS.Lambda.Function<{}>()("AsyncFn", {
+          const fn = yield* AWS.Lambda.Function("AsyncFn", {
             main: timeoutHandlerPath,
             handler: "handler",
             isExternal: true,
