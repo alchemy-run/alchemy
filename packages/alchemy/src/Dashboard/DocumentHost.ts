@@ -234,9 +234,25 @@ export const make: (
   const refreshDeployment = () =>
     Effect.gen(function* () {
       const record_ = yield* newestRecord;
-      if (record_ !== undefined) {
-        yield* record(applyDeploymentRecord(doc, record_));
+      if (record_ === undefined) {
+        return;
       }
+      // While the document says a run is underway (the synthetic bookend
+      // from apply-start), the store may still be returning the PREVIOUS
+      // deployment — the engine's `deployments.begin` commits concurrently
+      // with the reporter's start post. Folding that older ended record in
+      // would flip live→false mid-run (a phantom "run finished") and stop
+      // the live-record watcher for good. A record that ended BEFORE our
+      // run began is definitionally not this run — skip it; the real
+      // record is picked up on a later poll.
+      if (
+        doc.deployment?.live === true &&
+        record_.endedAt !== undefined &&
+        record_.endedAt < doc.deployment.startedAt
+      ) {
+        return;
+      }
+      yield* record(applyDeploymentRecord(doc, record_));
     });
 
   const refreshOutputs = () =>
