@@ -37,6 +37,34 @@ const fetchCached = (url: string) =>
     };
   });
 
+// Poll `url` until two consecutive responses carry the same worker-stamped
+// body ("id:<uuid>"), proving the second was served from the Workers Cache
+// without invoking the worker. Only marker-carrying bodies participate:
+// workers.dev placeholder pages also serve identical 200 bodies, so an
+// unanchored comparison would count two placeholders as a false "hit".
+// Bounded so a broken cache fails fast instead of hitting the vitest
+// timeout.
+const pollForCacheHit = (url: string) => {
+  let previous: string | undefined;
+  return fetchCached(url).pipe(
+    Effect.map((res) => {
+      const isWorkerBody = res.status === 200 && res.body.startsWith("id:");
+      const isHit =
+        (isWorkerBody && previous !== undefined && res.body === previous) ||
+        res.cacheStatus === "HIT";
+      if (isWorkerBody) {
+        previous = res.body;
+      }
+      return { ...res, isHit };
+    }),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (res) => res.isHit,
+      times: 20,
+    }),
+  );
+};
+
 test.provider(
   "worker with Workers Cache enabled serves repeat requests from cache",
   (stack) =>
@@ -63,27 +91,7 @@ test.provider(
         label: "cached worker propagation",
       });
 
-      // Repeatedly fetch the same URL until two consecutive responses carry
-      // the same invocation id (i.e. the second was a cache hit). Bounded so
-      // a broken cache fails fast instead of running into the vitest timeout.
-      const url = `${worker.url}/cached`;
-      let previous: string | undefined;
-      const hit = yield* fetchCached(url).pipe(
-        Effect.map((res) => {
-          const isHit =
-            (res.status === 200 &&
-              previous !== undefined &&
-              res.body === previous) ||
-            res.cacheStatus === "HIT";
-          previous = res.body;
-          return { ...res, isHit };
-        }),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (res) => res.isHit,
-          times: 20,
-        }),
-      );
+      const hit = yield* pollForCacheHit(`${worker.url}/cached`);
       expect(hit.isHit).toBe(true);
 
       // Metadata-only update: same script, cache turned off. The metadata
@@ -130,41 +138,40 @@ test.provider(
       // Poll the same URL until a repeat body proves the binding actually
       // enabled the cache.
       const url = `${worker.url}/item`;
-      let previous: string | undefined;
-      const hit = yield* fetchCached(url).pipe(
-        Effect.map((res) => {
-          const isHit =
-            res.status === 200 &&
-            previous !== undefined &&
-            res.body === previous;
-          previous = res.body;
-          return { ...res, isHit };
-        }),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (res) => res.isHit,
-          times: 20,
-        }),
-      );
+      const hit = yield* pollForCacheHit(url);
       expect(hit.isHit).toBe(true);
       const cachedBody = hit.body;
 
-      // Purge by Cache-Tag through the runtime client.
-      const purged = yield* fetchCached(`${worker.url}/purge`);
-      expect(purged.status).toBe(200);
-      expect((JSON.parse(purged.body) as { success: boolean }).success).toBe(
-        true,
+      // Purge by Cache-Tag through the runtime client. Retried until the
+      // response parses as JSON — transient placeholders/5xx bodies throw
+      // and retry; a parsed `success: false` is a genuine failure and
+      // surfaces via the assertion.
+      const purged = yield* fetchCached(`${worker.url}/purge`).pipe(
+        Effect.flatMap((res) =>
+          Effect.try(() => JSON.parse(res.body) as { success: boolean }),
+        ),
+        Effect.retry({
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        }),
       );
+      expect(purged.success).toBe(true);
 
-      // A fresh invocation id proves the tag purge evicted the entry.
+      // A fresh invocation id proves the tag purge evicted the entry. The
+      // marker check keeps a placeholder page (also ≠ cachedBody) from
+      // passing as "fresh".
       const fresh = yield* fetchCached(url).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
-          until: (res) => res.status === 200 && res.body !== cachedBody,
+          until: (res) =>
+            res.status === 200 &&
+            res.body.startsWith("id:") &&
+            res.body !== cachedBody,
           times: 20,
         }),
       );
       expect(fresh.body).not.toBe(cachedBody);
+      expect(fresh.body.startsWith("id:")).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
