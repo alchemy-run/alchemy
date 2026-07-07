@@ -23,6 +23,105 @@ const advertisementFile = Effect.gen(function* () {
   return path.join(process.cwd(), ".alchemy", "dashboard.json");
 });
 
+const breadcrumbFile = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  return path.join(process.cwd(), ".alchemy", "dashboard.last.json");
+});
+
+/**
+ * Deterministic per-project dashboard port (42000–42999): every `--ui` run
+ * of the same project lands on the SAME origin, so a browser tab from a
+ * previous run simply reconnects instead of a new tab opening on a random
+ * port.
+ */
+export const stablePort = (stack: string): number => {
+  const key = `${process.cwd()}#${stack}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return 42000 + ((hash >>> 0) % 1000);
+};
+
+/**
+ * The last shutdown's breadcrumb, if any — a hint that a browser tab from
+ * a previous run probably still exists and will reconnect to the stable
+ * port, so the launcher should wait longer before opening a new tab.
+ */
+export const lastAdvertised = Effect.fn(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const file = yield* breadcrumbFile;
+  const content = yield* fs
+    .readFileString(file)
+    .pipe(Effect.orElseSucceed(() => undefined));
+  if (content === undefined) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(content) as DashboardAdvertisement & {
+      stoppedAt: string;
+    };
+  } catch {
+    return undefined;
+  }
+});
+
+/** Shape of the dashboard's /api/health response. */
+interface HealthBody {
+  ok?: boolean;
+  stack?: string;
+  /** live SSE subscriber count — 0 means no tab is currently connected */
+  clients?: number;
+}
+
+const fetchHealth = (url: string) =>
+  Effect.tryPromise(async () => {
+    const res = await fetch(`${url}/api/health`, {
+      signal: AbortSignal.timeout(300),
+    });
+    if (!res.ok) {
+      return undefined;
+    }
+    return (await res.json().catch(() => undefined)) as HealthBody | undefined;
+  }).pipe(
+    Effect.timeout(Duration.millis(500)),
+    Effect.orElseSucceed(() => undefined),
+  );
+
+/**
+ * What is listening on a candidate port:
+ * - `free` — nothing (connection refused): safe to bind
+ * - `ours` — an alchemy dashboard for this stack: reuse it (`clients` says
+ *   whether a browser tab is already attached)
+ * - `foreign` — some other process: fall back to a random port
+ */
+export const probePort = Effect.fn(function* (port: number, stack: string) {
+  const listening = yield* Effect.tryPromise(async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
+      signal: AbortSignal.timeout(300),
+    });
+    if (!res.ok) {
+      return { kind: "foreign" } as const;
+    }
+    const body = (await res.json().catch(() => undefined)) as
+      | HealthBody
+      | undefined;
+    return body?.ok === true && body.stack === stack
+      ? ({
+          kind: "ours",
+          url: `http://127.0.0.1:${port}`,
+          clients: body.clients ?? 0,
+        } as const)
+      : ({ kind: "foreign" } as const);
+  }).pipe(
+    Effect.timeout(Duration.millis(500)),
+    // fetch throwing = connection refused = nothing is listening
+    Effect.orElseSucceed(() => ({ kind: "free" }) as const),
+  );
+  return listening;
+});
+
 /**
  * Advertise a running dashboard for the lifetime of the current scope.
  */
@@ -41,8 +140,23 @@ export const advertise = Effect.fn(function* (
     startedAt: new Date().toISOString(),
   };
   yield* fs.writeFileString(file, JSON.stringify(payload, null, 2));
+  const breadcrumb = yield* breadcrumbFile;
   yield* Effect.addFinalizer(() =>
-    fs.remove(file).pipe(Effect.orElseSucceed(() => undefined)),
+    Effect.gen(function* () {
+      yield* fs.remove(file).pipe(Effect.orElseSucceed(() => undefined));
+      // breadcrumb: a previous-tab hint for the next launch (see
+      // `lastAdvertised`)
+      yield* fs
+        .writeFileString(
+          breadcrumb,
+          JSON.stringify(
+            { ...payload, stoppedAt: new Date().toISOString() },
+            null,
+            2,
+          ),
+        )
+        .pipe(Effect.orElseSucceed(() => undefined));
+    }),
   );
 });
 
@@ -66,14 +180,9 @@ export const discover = Effect.fn(function* () {
   if (ad === undefined) {
     return undefined;
   }
-  const healthy = yield* Effect.tryPromise(async () => {
-    const res = await fetch(`${ad.url}/api/health`, {
-      signal: AbortSignal.timeout(250),
-    });
-    return res.ok;
-  }).pipe(
-    Effect.timeout(Duration.millis(400)),
-    Effect.orElseSucceed(() => false),
-  );
-  return healthy ? ad : undefined;
+  const health = yield* fetchHealth(ad.url);
+  if (health?.ok !== true) {
+    return undefined;
+  }
+  return { ...ad, clients: health.clients ?? 0 };
 });

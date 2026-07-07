@@ -57,7 +57,13 @@ import {
 
 const nodeTypes = { resource: ResourceNode };
 
-const FIT_VIEW = { padding: 0.2, maxZoom: 1.25 };
+// Extra top padding keeps the highest row of nodes clear of the floating
+// approval banner (absolute top-4 over the canvas) — the initial framing
+// of a `deploy --ui` run is exactly when that banner is showing.
+const FIT_VIEW = {
+  padding: { top: "96px", bottom: "12%", left: "12%", right: "12%" },
+  maxZoom: 1.25,
+};
 const PRO_OPTIONS = { hideAttribution: true };
 const ORIGIN: XY = { x: 0, y: 0 };
 

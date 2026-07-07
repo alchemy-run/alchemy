@@ -143,6 +143,9 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
 
   // ── scene inputs (server-owned, single source of truth) ───────────────
   let revision = 0;
+  // Live SSE subscriber count, exposed on /api/health — launchers use it
+  // to decide whether opening a browser tab would be a duplicate.
+  let sseClients = 0;
   let session: SessionInput | undefined;
   let approval: PendingApproval | undefined;
 
@@ -365,7 +368,12 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
     const stg = url.searchParams.get("stage") ?? stage;
 
     if (route === "/api/health") {
-      return yield* HttpServerResponse.json({ ok: true, stack, stage });
+      return yield* HttpServerResponse.json({
+        ok: true,
+        stack,
+        stage,
+        clients: sseClients,
+      });
     }
 
     // ── apply session ingest (from the DashboardReporter tee) ──────────
@@ -530,6 +538,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       const body = Stream.unwrap(
         Effect.gen(function* () {
           yield* notifyClientConnected;
+          sseClients++;
           const subscription = yield* PubSub.subscribe(pubsub);
           const scene = yield* buildScene(stage);
           // the SPA's default view loads exclusively over this stream —
@@ -544,6 +553,11 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
               Stream.fromSubscription(subscription).pipe(
                 Stream.merge(heartbeat),
               ),
+            ),
+            Stream.ensuring(
+              Effect.sync(() => {
+                sseClients--;
+              }),
             ),
           );
         }),
@@ -570,6 +584,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       const body = Stream.unwrap(
         Effect.gen(function* () {
           yield* notifyClientConnected;
+          sseClients++;
           const host = yield* hostFor(stg);
           const frames = yield* host.frames;
           yield* requestPlan(stg);
@@ -579,6 +594,11 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           return frames.pipe(
             Stream.map((frame) => `data: ${JSON.stringify(frame)}\n\n`),
             Stream.merge(heartbeat),
+            Stream.ensuring(
+              Effect.sync(() => {
+                sseClients--;
+              }),
+            ),
           );
         }),
       ).pipe(Stream.map((chunk) => new TextEncoder().encode(chunk)));
