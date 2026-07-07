@@ -33,12 +33,13 @@ import {
   type OnMoveStart,
 } from "@xyflow/react";
 import { edgeKeyOf } from "alchemy/Dashboard/Document";
-import { Maximize } from "lucide-react";
+import { LayoutGrid, Maximize } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCanvasLayout } from "../layout/useCanvasLayout.ts";
 import {
   dashboardStore,
   requestFit,
+  requestRelayout,
   setPositions,
   setSelectedFqn,
   setUserPanned,
@@ -354,6 +355,18 @@ function CanvasInner() {
         <Controls showInteractive={false} showFitView={false}>
           <ControlButton onClick={requestFit} title="fit view">
             <Maximize size={12} />
+          </ControlButton>
+          <ControlButton
+            onClick={() => {
+              // fresh ELK from scratch; clearing the fitted set re-arms
+              // the first-layout auto-fit so the new arrangement frames
+              // itself when it lands
+              fittedHashes.clear();
+              requestRelayout();
+            }}
+            title="re-layout (recompute all positions)"
+          >
+            <LayoutGrid size={12} />
           </ControlButton>
         </Controls>
       </ReactFlow>

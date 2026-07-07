@@ -148,6 +148,8 @@ export interface LayoutSlice {
   userPanned: boolean;
   /** bump = explicit "Fit" request for the Canvas to consume */
   fitRequest: number;
+  /** bump = explicit "re-layout" request (position caches were cleared) */
+  layoutEpoch: number;
   /**
    * Bumped when a persisted per-stage layout has been (re)loaded — the
    * Canvas consumes it to re-apply the restored viewport without
@@ -225,6 +227,7 @@ const initialState = (): DashboardState => ({
   layout: {
     positionsByHash: new Map(),
     positionMemory: new Map(),
+    layoutEpoch: 0,
     userPanned: false,
     fitRequest: 0,
     restoredEpoch: 0,
@@ -749,6 +752,31 @@ export const setUserPanned = (userPanned: boolean): void => {
 };
 
 /** Explicit Fit button: bump fitRequest and re-arm auto-fit. */
+/**
+ * Explicit re-layout: wipe every position (memory, hash cache, persisted
+ * layout, saved framing) so the next layout pass runs ELK from scratch.
+ * The escape hatch for an arrangement that went bad — position continuity
+ * deliberately preserves whatever exists, including a mess.
+ */
+export const requestRelayout = (): void => {
+  const state = dashboardStore.getState();
+  dashboardStore.setState({
+    layout: {
+      ...state.layout,
+      positionsByHash: new Map(),
+      positionMemory: new Map(),
+      layoutEpoch: state.layout.layoutEpoch + 1,
+      userPanned: false,
+      // the fresh layout's auto-fit becomes the new framing
+      ...(state.layout.viewport !== undefined ? { viewport: undefined } : {}),
+    },
+  });
+  persistLayout();
+};
+
+export const useLayoutEpoch = (): number =>
+  useStore(dashboardStore, (s) => s.layout.layoutEpoch);
+
 export const requestFit = (): void => {
   const state = dashboardStore.getState();
   dashboardStore.setState({
