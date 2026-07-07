@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RegistrarDomainTypeId = "Cloudflare.Registrar.Domain" as const;
-type RegistrarDomainTypeId = typeof RegistrarDomainTypeId;
+const TypeId = "Cloudflare.Registrar.Domain" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The mutable Cloudflare Registrar settings on a registered domain. These
@@ -18,7 +18,7 @@ type RegistrarDomainTypeId = typeof RegistrarDomainTypeId;
  * a registration (contacts, nameservers, renewal) is managed in the
  * Cloudflare dashboard.
  */
-export interface RegistrarDomainSettings {
+export interface DomainSettings {
   /**
    * Whether the registration auto-renews before it expires.
    */
@@ -34,7 +34,7 @@ export interface RegistrarDomainSettings {
   privacy?: boolean;
 }
 
-export interface RegistrarDomainProps {
+export interface DomainProps {
   /**
    * The fully-qualified domain name of a domain that is **already
    * registered** with Cloudflare Registrar on this account (e.g.
@@ -63,7 +63,7 @@ export interface RegistrarDomainProps {
   privacy?: boolean;
 }
 
-export interface RegistrarDomainAttributes {
+export interface DomainAttributes {
   /** The fully-qualified domain name. */
   domainName: string;
   /** Account the domain is registered under. */
@@ -95,13 +95,13 @@ export interface RegistrarDomainAttributes {
    * on destroy, so deleting the resource puts the registration back the
    * way it was found — the domain itself is never released.
    */
-  initialSettings: RegistrarDomainSettings;
+  initialSettings: DomainSettings;
 }
 
-export type RegistrarDomain = Resource<
-  RegistrarDomainTypeId,
-  RegistrarDomainProps,
-  RegistrarDomainAttributes,
+export type Domain = Resource<
+  TypeId,
+  DomainProps,
+  DomainAttributes,
   never,
   Providers
 >;
@@ -131,7 +131,7 @@ export type RegistrarDomain = Resource<
  * @section Managing a registered domain
  * @example Pin auto-renew and the transfer lock
  * ```typescript
- * yield* Cloudflare.RegistrarDomain("ApexDomain", {
+ * yield* Cloudflare.Registrar.Domain("ApexDomain", {
  *   domainName: "example.com",
  *   autoRenew: true,
  *   locked: true,
@@ -141,7 +141,7 @@ export type RegistrarDomain = Resource<
  * @example Enable WHOIS privacy only
  * ```typescript
  * // autoRenew and locked are omitted, so they are left untouched.
- * yield* Cloudflare.RegistrarDomain("ApexDomain", {
+ * yield* Cloudflare.Registrar.Domain("ApexDomain", {
  *   domainName: "example.com",
  *   privacy: true,
  * });
@@ -150,7 +150,7 @@ export type RegistrarDomain = Resource<
  * @section Reading registration state
  * @example Use the registration expiry downstream
  * ```typescript
- * const domain = yield* Cloudflare.RegistrarDomain("ApexDomain", {
+ * const domain = yield* Cloudflare.Registrar.Domain("ApexDomain", {
  *   domainName: "example.com",
  *   autoRenew: true,
  * });
@@ -159,16 +159,16 @@ export type RegistrarDomain = Resource<
  *
  * @see https://developers.cloudflare.com/registrar/
  */
-export const RegistrarDomain = Resource<RegistrarDomain>(RegistrarDomainTypeId);
+export const Domain = Resource<Domain>(TypeId);
 
 /**
- * Returns true if the given value is a RegistrarDomain resource.
+ * Returns true if the given value is a Domain resource.
  */
-export const isRegistrarDomain = (value: unknown): value is RegistrarDomain =>
-  Predicate.hasProperty(value, "Type") && value.Type === RegistrarDomainTypeId;
+export const isDomain = (value: unknown): value is Domain =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const RegistrarDomainProvider = () =>
-  Provider.succeed(RegistrarDomain, {
+export const DomainProvider = () =>
+  Provider.succeed(Domain, {
     // `delete` never releases the registration (it only restores settings), so
     // a domain can never be removed by teardown and would re-appear on every
     // `nuke` scan. Skip it in account-wide teardown.
@@ -215,7 +215,7 @@ export const RegistrarDomainProvider = () =>
         return yield* Effect.fail(
           new Error(
             `Domain "${domainName}" is not registered with Cloudflare Registrar ` +
-              `on account ${accountId}. Cloudflare.RegistrarDomain only manages ` +
+              `on account ${accountId}. Cloudflare.Registrar.Domain only manages ` +
               `settings on an existing registration — register or transfer the ` +
               `domain in the Cloudflare dashboard first.`,
           ),
@@ -315,9 +315,7 @@ const findDomain = (accountId: string, domainName: string) =>
   );
 
 /** Snapshot the mutable registrar settings of an observed domain. */
-const captureSettings = (
-  observed: ObservedDomain,
-): RegistrarDomainSettings => ({
+const captureSettings = (observed: ObservedDomain): DomainSettings => ({
   autoRenew: observed.autoRenew ?? undefined,
   locked: observed.locked ?? undefined,
   privacy: observed.privacy ?? undefined,
@@ -330,9 +328,9 @@ const captureSettings = (
  */
 const settingsDelta = (
   observed: ObservedDomain,
-  desired: RegistrarDomainSettings,
-): RegistrarDomainSettings | undefined => {
-  const delta: RegistrarDomainSettings = {};
+  desired: DomainSettings,
+): DomainSettings | undefined => {
+  const delta: DomainSettings = {};
   let dirty = false;
   if (
     desired.autoRenew !== undefined &&
@@ -362,9 +360,9 @@ const toAttributes = (
   domainName: string,
   accountId: string,
   observed: ObservedDomain,
-  initialSettings: RegistrarDomainSettings,
-  desired?: RegistrarDomainSettings,
-): RegistrarDomainAttributes => ({
+  initialSettings: DomainSettings,
+  desired?: DomainSettings,
+): DomainAttributes => ({
   domainName,
   accountId,
   // Registrar setting updates can apply asynchronously — overlay the

@@ -13,7 +13,7 @@ interface AddInstance {
     add(a: number, b: number): number;
   };
 }
-interface QueueMessage {
+interface Message {
   id: string;
   body: {
     text: string;
@@ -24,20 +24,21 @@ interface QueueMessage {
 export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   "EffectWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     dev: {
       port: Config.number("PORT").pipe(Config.withDefault(1338)),
     },
   },
   Effect.gen(function* () {
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
-    const queue = yield* Cloudflare.Queue("EffectWorkerQueue");
-    const queueBinding = yield* Cloudflare.Queue.bind(queue);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
+    const queue = yield* Cloudflare.Queues.Queue("EffectWorkerQueue");
+    const queueBinding = yield* Cloudflare.Queues.WriteQueue(queue);
     const sandbox = yield* SandboxDO;
     const queueMessages = yield* QueueMessages;
     const workflow = yield* NotifyWorkflow;
 
-    yield* Cloudflare.messages<QueueMessage["body"]>(queue).subscribe(
+    yield* Cloudflare.Queues.consumeQueueMessages<Message["body"]>(
+      queue,
       (stream) =>
         Stream.runForEach(stream, (msg) =>
           queueMessages
@@ -72,8 +73,10 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
             );
           }
           const instance = yield* workflow.create({
-            roomId,
-            message: "hello from workflow",
+            params: {
+              roomId,
+              message: "hello from workflow",
+            },
           });
           return yield* HttpServerResponse.json({ instanceId: instance.id });
         } else if (url.pathname.startsWith("/workflow/status/")) {
@@ -101,25 +104,25 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     };
   }).pipe(
     Effect.provide([
-      Cloudflare.KVNamespaceBindingLive,
-      Cloudflare.QueueBindingLive,
-      Cloudflare.QueueEventSourceLive,
+      Cloudflare.KV.ReadWriteNamespaceBinding,
+      Cloudflare.Queues.WriteQueueBinding,
+      Cloudflare.Queues.EventSourceLive,
     ]),
   ),
 ) {}
 
-export class QueueMessages extends Cloudflare.DurableObjectNamespace<QueueMessages>()(
+export class QueueMessages extends Cloudflare.DurableObject<QueueMessages>()(
   "QueueMessages",
   Effect.succeed(
     Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       return {
-        put: Effect.fn(function* (message: QueueMessage) {
+        put: Effect.fn(function* (message: Message) {
           yield* state.storage.put(message.id, message);
         }),
         list: Effect.fn(function* () {
-          const messages = new Map<string, QueueMessage>(
-            state.storage.kv.list<QueueMessage>(),
+          const messages = new Map<string, Message>(
+            state.storage.kv.list<Message>(),
           );
           return Array.from(messages.values());
         }),

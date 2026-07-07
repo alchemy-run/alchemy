@@ -7,10 +7,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const WorkersSubdomainTypeId = "Cloudflare.Workers.Subdomain" as const;
-type WorkersSubdomainTypeId = typeof WorkersSubdomainTypeId;
+const TypeId = "Cloudflare.Workers.Subdomain" as const;
+type TypeId = typeof TypeId;
 
-export type WorkersSubdomainProps = {
+export type SubdomainProps = {
   /**
    * The account's `workers.dev` subdomain name (the `<subdomain>` in
    * `https://<script>.<subdomain>.workers.dev`). Must contain only
@@ -23,7 +23,7 @@ export type WorkersSubdomainProps = {
   subdomain: string;
 };
 
-export type WorkersSubdomainAttributes = {
+export type SubdomainAttributes = {
   /** The Cloudflare account the subdomain belongs to. */
   accountId: string;
   /** The account's current `workers.dev` subdomain name. */
@@ -37,10 +37,10 @@ export type WorkersSubdomainAttributes = {
   initialSubdomain: string | undefined;
 };
 
-export type WorkersSubdomain = Resource<
-  WorkersSubdomainTypeId,
-  WorkersSubdomainProps,
-  WorkersSubdomainAttributes,
+export type Subdomain = Resource<
+  TypeId,
+  SubdomainProps,
+  SubdomainAttributes,
   never,
   Providers
 >;
@@ -70,7 +70,7 @@ export type WorkersSubdomain = Resource<
  * @section Managing the subdomain
  * @example Pin the account's workers.dev subdomain
  * ```typescript
- * const sub = yield* Cloudflare.WorkersSubdomain("Subdomain", {
+ * const sub = yield* Cloudflare.Workers.Subdomain("Subdomain", {
  *   subdomain: "my-team",
  * });
  * // Workers are now served from https://<script>.my-team.workers.dev
@@ -78,18 +78,16 @@ export type WorkersSubdomain = Resource<
  *
  * @see https://developers.cloudflare.com/workers/configuration/routing/workers-dev/
  */
-export const WorkersSubdomain = Resource<WorkersSubdomain>(
-  WorkersSubdomainTypeId,
-);
+export const Subdomain = Resource<Subdomain>(TypeId);
 
 /**
- * Returns true if the given value is a WorkersSubdomain resource.
+ * Returns true if the given value is a Subdomain resource.
  */
-export const isWorkersSubdomain = (value: unknown): value is WorkersSubdomain =>
-  Predicate.hasProperty(value, "Type") && value.Type === WorkersSubdomainTypeId;
+export const isSubdomain = (value: unknown): value is Subdomain =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const WorkersSubdomainProvider = () =>
-  Provider.succeed(WorkersSubdomain, {
+export const SubdomainProvider = () =>
+  Provider.succeed(Subdomain, {
     nuke: { singleton: true },
     stables: ["accountId", "initialSubdomain"],
 

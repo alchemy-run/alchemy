@@ -104,7 +104,11 @@ export const DBParameterGroupProvider = () =>
                       g,
                     ): g is rds.DBParameterGroup & {
                       DBParameterGroupName: string;
-                    } => g.DBParameterGroupName != null,
+                    } =>
+                      g.DBParameterGroupName != null &&
+                      // AWS-managed `default.*` groups cannot be deleted
+                      // (InvalidDBParameterGroupStateFault) — don't enumerate.
+                      !g.DBParameterGroupName.startsWith("default."),
                   )
                   .map((g) => ({
                     dbParameterGroupName: g.DBParameterGroupName,

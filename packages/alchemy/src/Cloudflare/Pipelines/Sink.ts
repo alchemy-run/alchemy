@@ -13,14 +13,14 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const PipelineSinkTypeId = "Cloudflare.Pipelines.Sink" as const;
-type PipelineSinkTypeId = typeof PipelineSinkTypeId;
+const TypeId = "Cloudflare.Pipelines.Sink" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Batching policy controlling when the sink rolls (closes and uploads)
  * the current output file.
  */
-export interface PipelineSinkRollingPolicy {
+export interface SinkRollingPolicy {
   /**
    * Roll the file once it reaches this size in bytes.
    */
@@ -39,7 +39,7 @@ export interface PipelineSinkRollingPolicy {
 /**
  * Configuration of an `r2` sink writing raw files to an R2 bucket.
  */
-export interface PipelineSinkR2Config {
+export interface SinkR2Config {
   /**
    * Name of the destination R2 bucket. The bucket must already exist.
    */
@@ -84,7 +84,7 @@ export interface PipelineSinkR2Config {
   /**
    * When the sink rolls output files.
    */
-  rollingPolicy?: PipelineSinkRollingPolicy;
+  rollingPolicy?: SinkRollingPolicy;
   /**
    * Jurisdiction the bucket was created in (`eu`, `fedramp`), when not
    * the default.
@@ -96,7 +96,7 @@ export interface PipelineSinkR2Config {
  * Configuration of an `r2_data_catalog` sink writing Iceberg tables via
  * the R2 Data Catalog.
  */
-export interface PipelineSinkR2DataCatalogConfig {
+export interface SinkR2DataCatalogConfig {
   /**
    * Name of the R2 bucket backing the catalog. The bucket must already
    * exist and have the Data Catalog enabled.
@@ -119,13 +119,13 @@ export interface PipelineSinkR2DataCatalogConfig {
   /**
    * When the sink rolls output files.
    */
-  rollingPolicy?: PipelineSinkRollingPolicy;
+  rollingPolicy?: SinkRollingPolicy;
 }
 
 /**
  * Output file format written by the sink.
  */
-export type PipelineSinkFormat =
+export type SinkFormat =
   | {
       /** Newline-delimited JSON output. */
       type: "json";
@@ -142,7 +142,7 @@ export type PipelineSinkFormat =
       rowGroupBytes?: number;
     };
 
-interface PipelineSinkBaseProps {
+interface SinkBaseProps {
   /**
    * Name of the sink. Unique per account; must be alphanumeric and
    * underscores only (it is referenced as a SQL table name). If omitted,
@@ -157,11 +157,11 @@ interface PipelineSinkBaseProps {
    * Output file format.
    * @default { type: "json" }
    */
-  format?: PipelineSinkFormat;
+  format?: SinkFormat;
 }
 
-export type PipelineSinkProps =
-  | (PipelineSinkBaseProps & {
+export type SinkProps =
+  | (SinkBaseProps & {
       /**
        * Sink type — `r2` writes raw files to an R2 bucket.
        */
@@ -169,9 +169,9 @@ export type PipelineSinkProps =
       /**
        * R2 destination configuration.
        */
-      config: PipelineSinkR2Config;
+      config: SinkR2Config;
     })
-  | (PipelineSinkBaseProps & {
+  | (SinkBaseProps & {
       /**
        * Sink type — `r2_data_catalog` writes Iceberg tables via the R2
        * Data Catalog.
@@ -180,10 +180,10 @@ export type PipelineSinkProps =
       /**
        * R2 Data Catalog destination configuration.
        */
-      config: PipelineSinkR2DataCatalogConfig;
+      config: SinkR2DataCatalogConfig;
     });
 
-export interface PipelineSinkAttributes {
+export interface SinkAttributes {
   /** Cloudflare-assigned sink identifier. */
   sinkId: string;
   /** Account that owns the sink. */
@@ -202,17 +202,17 @@ export interface PipelineSinkAttributes {
   modifiedAt: string;
 }
 
-export type PipelineSink = Resource<
-  PipelineSinkTypeId,
-  PipelineSinkProps,
-  PipelineSinkAttributes,
+export type Sink = Resource<
+  TypeId,
+  SinkProps,
+  SinkAttributes,
   never,
   Providers
 >;
 
 /**
  * A Cloudflare Pipelines sink — the destination of the Pipelines product.
- * A SQL {@link Pipeline} reads events from a {@link PipelineStream} and
+ * A SQL {@link Pipeline} reads events from a {@link Stream} and
  * writes them to a sink, which stores them in R2 either as raw files
  * (`r2`) or as Iceberg tables via the R2 Data Catalog
  * (`r2_data_catalog`).
@@ -231,9 +231,9 @@ export type PipelineSink = Resource<
  * the access key id is the token id and the secret is the SHA-256 hex
  * digest of the token value.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("events", {});
+ * const bucket = yield* Cloudflare.R2.Bucket("events", {});
  *
- * const sink = yield* Cloudflare.PipelineSink("events-sink", {
+ * const sink = yield* Cloudflare.Pipelines.Sink("events-sink", {
  *   type: "r2",
  *   config: {
  *     bucket: bucket.bucketName,
@@ -249,7 +249,7 @@ export type PipelineSink = Resource<
  *
  * @example Parquet output
  * ```typescript
- * const sink = yield* Cloudflare.PipelineSink("parquet-sink", {
+ * const sink = yield* Cloudflare.Pipelines.Sink("parquet-sink", {
  *   type: "r2",
  *   config: { bucket: bucket.bucketName, credentials },
  *   format: { type: "parquet", compression: "zstd" },
@@ -259,7 +259,7 @@ export type PipelineSink = Resource<
  * @section R2 Data Catalog
  * @example Iceberg table sink
  * ```typescript
- * const sink = yield* Cloudflare.PipelineSink("iceberg-sink", {
+ * const sink = yield* Cloudflare.Pipelines.Sink("iceberg-sink", {
  *   type: "r2_data_catalog",
  *   config: {
  *     bucket: bucket.bucketName,
@@ -272,16 +272,16 @@ export type PipelineSink = Resource<
  *
  * @see https://developers.cloudflare.com/pipelines/
  */
-export const PipelineSink = Resource<PipelineSink>(PipelineSinkTypeId);
+export const Sink = Resource<Sink>(TypeId);
 
 /**
- * Returns true if the given value is a PipelineSink resource.
+ * Returns true if the given value is a Sink resource.
  */
-export const isPipelineSink = (value: unknown): value is PipelineSink =>
-  Predicate.hasProperty(value, "Type") && value.Type === PipelineSinkTypeId;
+export const isSink = (value: unknown): value is Sink =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const PipelineSinkProvider = () =>
-  Provider.succeed(PipelineSink, {
+export const SinkProvider = () =>
+  Provider.succeed(Sink, {
     stables: ["sinkId", "accountId", "name", "type", "createdAt"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -290,7 +290,7 @@ export const PipelineSinkProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const o = olds as PipelineSinkProps | undefined;
+      const o = olds as SinkProps | undefined;
       if (o === undefined) return undefined;
       // Sinks have no update API — any change is a replacement.
       const newName = yield* sinkName(id, news.name);
@@ -472,10 +472,7 @@ const deleteSink = (accountId: string, sinkId: string) =>
  * catalog token are write-only); only user-declared optional fields are
  * diffed so we don't fight server-side defaults.
  */
-const sinkDrifted = (
-  observed: ObservedSink,
-  news: PipelineSinkProps,
-): boolean => {
+const sinkDrifted = (observed: ObservedSink, news: SinkProps): boolean => {
   if (observed.type !== news.type) return true;
   const cfg = observed.config;
   if (!cfg) return false;
@@ -509,7 +506,7 @@ const findSinkByName = (accountId: string, name: string) =>
  * Build the distilled create request `config` body from props,
  * unwrapping write-only secrets.
  */
-const toRequestConfig = (accountId: string, news: PipelineSinkProps) => {
+const toRequestConfig = (accountId: string, news: SinkProps) => {
   if (news.type === "r2") {
     const c = news.config;
     return {
@@ -541,7 +538,7 @@ const toRequestConfig = (accountId: string, news: PipelineSinkProps) => {
  * Normalize props for change detection: unwrap redacted secrets so two
  * `Redacted` wrappers holding the same value compare equal.
  */
-const normalizeProps = (props: PipelineSinkProps): unknown => {
+const normalizeProps = (props: SinkProps): unknown => {
   if (props.type === "r2") {
     return {
       type: props.type,
@@ -588,7 +585,7 @@ const stableStringify = (value: unknown): string =>
 const toAttributes = (
   observed: ObservedSink,
   accountId: string,
-): PipelineSinkAttributes => ({
+): SinkAttributes => ({
   sinkId: observed.id,
   accountId,
   name: observed.name,

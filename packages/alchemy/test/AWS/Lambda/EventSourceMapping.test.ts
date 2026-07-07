@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // minimal Lambda Function + SQS Queue + EventSourceMapping (wired via the
-// `messages(queue).subscribe(...)` event source), resolve the provider from
+// `consumeQueueMessages(queue, ...)` event source), resolve the provider from
 // context with the typed `Provider.findProvider(EventSourceMapping)`, call
 // `list()`, and assert the deployed mapping appears in the exhaustively
 // paginated result.

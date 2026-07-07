@@ -10,8 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TotalTlsTypeId = "Cloudflare.Acm.TotalTls" as const;
-type TotalTlsTypeId = typeof TotalTlsTypeId;
+const TypeId = "Cloudflare.Acm.TotalTls" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The Certificate Authority Total TLS certificates are issued through.
@@ -71,7 +71,7 @@ export interface TotalTlsAttributes {
 }
 
 export type TotalTls = Resource<
-  TotalTlsTypeId,
+  TypeId,
   TotalTlsProps,
   TotalTlsAttributes,
   never,
@@ -104,9 +104,9 @@ export type TotalTls = Resource<
  * @section Managing Total TLS
  * @example Enable Total TLS on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.TotalTls("TotalTls", {
+ * yield* Cloudflare.Acm.TotalTls("TotalTls", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  * });
@@ -114,7 +114,7 @@ export type TotalTls = Resource<
  *
  * @example Pin the issuing Certificate Authority
  * ```typescript
- * yield* Cloudflare.TotalTls("TotalTls", {
+ * yield* Cloudflare.Acm.TotalTls("TotalTls", {
  *   zoneId: zone.zoneId,
  *   enabled: true,
  *   certificateAuthority: "lets_encrypt",
@@ -123,13 +123,13 @@ export type TotalTls = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/edge-certificates/additional-options/total-tls/
  */
-export const TotalTls = Resource<TotalTls>(TotalTlsTypeId);
+export const TotalTls = Resource<TotalTls>(TypeId);
 
 /**
  * Returns true if the given value is a TotalTls resource.
  */
 export const isTotalTls = (value: unknown): value is TotalTls =>
-  Predicate.hasProperty(value, "Type") && value.Type === TotalTlsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TotalTlsProvider = () =>
   Provider.succeed(TotalTls, {

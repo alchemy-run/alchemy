@@ -111,7 +111,7 @@ test.provider("list enumerates the hold state across all zones", (stack) =>
 
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.ZoneHold);
+    const provider = yield* Provider.findProvider(Cloudflare.Zone.Hold);
     const all = yield* provider.list();
 
     expect(all.length).toBeGreaterThan(0);
@@ -133,7 +133,7 @@ test.provider.skipIf(!enterpriseZoneId)(
 
       const hold = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneHold("Hold", {
+          return yield* Cloudflare.Zone.Hold("Hold", {
             zoneId,
           });
         }),
@@ -151,7 +151,7 @@ test.provider.skipIf(!enterpriseZoneId)(
       // Update in place — extend the hold to subdomains via patchHold.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ZoneHold("Hold", {
+          return yield* Cloudflare.Zone.Hold("Hold", {
             zoneId,
             includeSubdomains: true,
           });

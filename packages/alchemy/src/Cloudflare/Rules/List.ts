@@ -13,20 +13,20 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const RulesListTypeId = "Cloudflare.Rules.List" as const;
-type RulesListTypeId = typeof RulesListTypeId;
+const TypeId = "Cloudflare.Rules.List" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The type of a list. Each kind supports specific list items: IP addresses,
  * ASNs, hostnames, or URL redirects. Cannot be changed after creation.
  */
-export type RulesListKind = "ip" | "asn" | "hostname" | "redirect";
+export type ListKind = "ip" | "asn" | "hostname" | "redirect";
 
 /**
  * An item in an `ip` list — an IPv4/IPv6 address or CIDR range
  * (IPv4 prefixes /8–/32, IPv6 prefixes /4–/64).
  */
-export type RulesListIpItem = {
+export type ListIpItem = {
   /**
    * An IPv4 address, IPv4 CIDR, IPv6 address, or IPv6 CIDR.
    */
@@ -40,7 +40,7 @@ export type RulesListIpItem = {
 /**
  * An item in an `asn` list — an autonomous system number.
  */
-export type RulesListAsnItem = {
+export type ListAsnItem = {
   /**
    * A non-negative 32 bit integer.
    */
@@ -54,7 +54,7 @@ export type RulesListAsnItem = {
 /**
  * An item in a `hostname` list.
  */
-export type RulesListHostnameItem = {
+export type ListHostnameItem = {
   /**
    * Valid characters for hostnames are ASCII(7) letters from a to z, the
    * digits from 0 to 9, wildcards (*), and the hyphen (-).
@@ -82,7 +82,7 @@ export type RulesListHostnameItem = {
  * An item in a `redirect` list — a source/target URL pair used by Bulk
  * Redirect rules.
  */
-export type RulesListRedirectItem = {
+export type ListRedirectItem = {
   /**
    * The definition of the redirect.
    */
@@ -132,13 +132,13 @@ export type RulesListRedirectItem = {
  * `{ ip }` for `ip` lists, `{ asn }` for `asn` lists, `{ hostname }` for
  * `hostname` lists, and `{ redirect }` for `redirect` lists.
  */
-export type RulesListItem =
-  | RulesListIpItem
-  | RulesListAsnItem
-  | RulesListHostnameItem
-  | RulesListRedirectItem;
+export type ListItem =
+  | ListIpItem
+  | ListAsnItem
+  | ListHostnameItem
+  | ListRedirectItem;
 
-export type RulesListProps = {
+export type ListProps = {
   /**
    * An informative name for the list, used in filter and rule expressions
    * (e.g. `ip.src in $my_list`). Must contain only letters, numbers, and
@@ -153,7 +153,7 @@ export type RulesListProps = {
    * (IP addresses, ASNs, hostnames, or redirects). Cannot be changed after
    * creation — updating this property triggers a replacement.
    */
-  kind: RulesListKind;
+  kind: ListKind;
   /**
    * An informative summary of the list.
    */
@@ -165,10 +165,10 @@ export type RulesListProps = {
    * polls the asynchronous bulk operation to completion.
    * @default []
    */
-  items?: RulesListItem[];
+  items?: ListItem[];
 };
 
-export type RulesListAttributes = {
+export type ListAttributes = {
   /**
    * The unique ID of the list.
    */
@@ -184,7 +184,7 @@ export type RulesListAttributes = {
   /**
    * The type of the list.
    */
-  kind: RulesListKind;
+  kind: ListKind;
   /**
    * An informative summary of the list.
    */
@@ -207,10 +207,10 @@ export type RulesListAttributes = {
   modifiedOn: string;
 };
 
-export type RulesList = Resource<
-  RulesListTypeId,
-  RulesListProps,
-  RulesListAttributes,
+export type List = Resource<
+  TypeId,
+  ListProps,
+  ListAttributes,
   never,
   Providers
 >;
@@ -230,7 +230,7 @@ export type RulesList = Resource<
  * @section Creating a List
  * @example IP list with items
  * ```typescript
- * const blocklist = yield* Cloudflare.RulesList("blocklist", {
+ * const blocklist = yield* Cloudflare.Rules.List("blocklist", {
  *   kind: "ip",
  *   description: "Known bad actors",
  *   items: [
@@ -242,7 +242,7 @@ export type RulesList = Resource<
  *
  * @example ASN list with an explicit name
  * ```typescript
- * const asns = yield* Cloudflare.RulesList("bad-asns", {
+ * const asns = yield* Cloudflare.Rules.List("bad-asns", {
  *   name: "bad_asns",
  *   kind: "asn",
  *   items: [{ asn: 64496 }, { asn: 64511, comment: "spam network" }],
@@ -251,7 +251,7 @@ export type RulesList = Resource<
  *
  * @example Redirect list for Bulk Redirects
  * ```typescript
- * const redirects = yield* Cloudflare.RulesList("redirects", {
+ * const redirects = yield* Cloudflare.Rules.List("redirects", {
  *   kind: "redirect",
  *   items: [
  *     {
@@ -268,7 +268,7 @@ export type RulesList = Resource<
  * @section Referencing a List from rules
  * @example Use the list name in a Ruleset expression
  * ```typescript
- * const list = yield* Cloudflare.RulesList("blocklist", { kind: "ip" });
+ * const list = yield* Cloudflare.Rules.List("blocklist", { kind: "ip" });
  *
  * // The stable `name` attribute interpolates into rule expressions:
  * // `ip.src in $<name>`
@@ -277,28 +277,28 @@ export type RulesList = Resource<
  *
  * @see https://developers.cloudflare.com/waf/tools/lists/
  */
-export const RulesList = Resource<RulesList>(RulesListTypeId);
+export const List = Resource<List>(TypeId);
 
 /**
- * Returns true if the given value is a RulesList resource.
+ * Returns true if the given value is a List resource.
  */
-export const isRulesList = (value: unknown): value is RulesList =>
-  Predicate.hasProperty(value, "Type") && value.Type === RulesListTypeId;
+export const isList = (value: unknown): value is List =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * The asynchronous bulk items operation finished in a non-`completed`
  * state (or never completed within the polling budget).
  */
-export class RulesListBulkOperationError extends Data.TaggedError(
-  "RulesListBulkOperationError",
+export class ListBulkOperationError extends Data.TaggedError(
+  "ListBulkOperationError",
 )<{
   readonly operationId: string;
   readonly status: string;
   readonly message?: string;
 }> {}
 
-export const RulesListProvider = () =>
-  Provider.succeed(RulesList, {
+export const ListProvider = () =>
+  Provider.succeed(List, {
     stables: ["listId", "accountId", "name", "kind", "createdOn"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -476,7 +476,7 @@ const listAllItems = (accountId: string, listId: string) =>
     Effect.map((chunk) => Array.from(chunk)),
   );
 
-type ComparableItem = RulesListItem | rules.GetListItemResponse;
+type ComparableItem = ListItem | rules.GetListItemResponse;
 
 /**
  * Canonicalize an item (desired prop or observed response) into a stable
@@ -548,7 +548,7 @@ const awaitBulkOperation = (accountId: string, operationId: string) =>
       );
     if (operation.status !== "completed") {
       return yield* Effect.fail(
-        new RulesListBulkOperationError({
+        new ListBulkOperationError({
           operationId,
           status: operation.status,
           message: "error" in operation ? operation.error : undefined,
@@ -560,12 +560,12 @@ const awaitBulkOperation = (accountId: string, operationId: string) =>
 const toAttributes = (
   list: ObservedList,
   accountId: string,
-): RulesListAttributes => ({
+): ListAttributes => ({
   listId: list.id,
   accountId,
   name: list.name,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  kind: list.kind as RulesListKind,
+  kind: list.kind as ListKind,
   description: list.description ?? undefined,
   numItems: list.numItems,
   numReferencingFilters: list.numReferencingFilters,

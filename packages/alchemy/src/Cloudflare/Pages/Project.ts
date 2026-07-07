@@ -13,13 +13,13 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const PagesProjectTypeId = "Cloudflare.Pages.Project" as const;
-type PagesProjectTypeId = typeof PagesProjectTypeId;
+const TypeId = "Cloudflare.Pages.Project" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Build configuration for a Pages project. All fields are mutable in place.
  */
-export interface PagesBuildConfig {
+export interface BuildConfig {
   /**
    * Enable build caching for the project.
    */
@@ -41,7 +41,7 @@ export interface PagesBuildConfig {
 /**
  * A single environment variable on a Pages deployment environment.
  */
-export interface PagesEnvVar {
+export interface EnvVar {
   /**
    * Whether the value is stored as plain text or encrypted as a secret.
    * @default "plain_text"
@@ -61,11 +61,11 @@ export interface PagesEnvVar {
  * deep-merges, so keys observed on the project but absent from the desired
  * config are explicitly removed.
  */
-export interface PagesDeploymentConfig {
+export interface DeploymentConfig {
   /**
    * Environment variables, keyed by variable name.
    */
-  envVars?: Record<string, PagesEnvVar>;
+  envVars?: Record<string, EnvVar>;
   /**
    * KV namespace bindings, keyed by binding name. The value is the KV
    * namespace id (e.g. `kvNamespace.namespaceId`).
@@ -103,18 +103,18 @@ export interface PagesDeploymentConfig {
 /**
  * Deployment configuration for both Pages environments.
  */
-export interface PagesDeploymentConfigs {
+export interface DeploymentConfigs {
   /**
    * Configuration applied to preview (non-production-branch) deployments.
    */
-  preview?: PagesDeploymentConfig;
+  preview?: DeploymentConfig;
   /**
    * Configuration applied to production deployments.
    */
-  production?: PagesDeploymentConfig;
+  production?: DeploymentConfig;
 }
 
-export interface PagesProjectProps {
+export interface ProjectProps {
   /**
    * Name of the project. Forms the `<name>.pages.dev` subdomain, so it must
    * be unique across all of Cloudflare Pages and contain only lowercase
@@ -133,15 +133,15 @@ export interface PagesProjectProps {
   /**
    * Configs for the project build process. Mutable in place.
    */
-  buildConfig?: PagesBuildConfig;
+  buildConfig?: BuildConfig;
   /**
    * Per-environment deployment configuration (env vars, bindings,
    * compatibility settings). Mutable in place.
    */
-  deploymentConfigs?: PagesDeploymentConfigs;
+  deploymentConfigs?: DeploymentConfigs;
 }
 
-export interface PagesProjectAttributes {
+export interface ProjectAttributes {
   /**
    * Cloudflare-assigned UUID of the project.
    */
@@ -174,10 +174,10 @@ export interface PagesProjectAttributes {
   createdOn: string;
 }
 
-export type PagesProject = Resource<
-  PagesProjectTypeId,
-  PagesProjectProps,
-  PagesProjectAttributes,
+export type Project = Resource<
+  TypeId,
+  ProjectProps,
+  ProjectAttributes,
   never,
   Providers
 >;
@@ -199,13 +199,13 @@ export type PagesProject = Resource<
  * @section Creating a Project
  * @example Minimal project (generated name)
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {});
+ * const project = yield* Cloudflare.Pages.Project("site", {});
  * // project.subdomain === "<generated-name>.pages.dev"
  * ```
  *
  * @example Named project with a build config
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {
+ * const project = yield* Cloudflare.Pages.Project("site", {
  *   name: "my-site",
  *   productionBranch: "main",
  *   buildConfig: {
@@ -218,7 +218,7 @@ export type PagesProject = Resource<
  * @section Deployment Configuration
  * @example Environment variables and bindings
  * ```typescript
- * const project = yield* Cloudflare.PagesProject("site", {
+ * const project = yield* Cloudflare.Pages.Project("site", {
  *   deploymentConfigs: {
  *     production: {
  *       compatibilityDate: "2025-01-01",
@@ -237,7 +237,7 @@ export type PagesProject = Resource<
  * @section Custom Domains
  * @example Attach a custom domain
  * ```typescript
- * const domain = yield* Cloudflare.PagesDomain("site-domain", {
+ * const domain = yield* Cloudflare.Pages.Domain("site-domain", {
  *   projectName: project.name,
  *   name: "www.example.com",
  * });
@@ -245,16 +245,16 @@ export type PagesProject = Resource<
  *
  * @see https://developers.cloudflare.com/pages/
  */
-export const PagesProject = Resource<PagesProject>(PagesProjectTypeId);
+export const Project = Resource<Project>(TypeId);
 
 /**
- * Returns true if the given value is a PagesProject resource.
+ * Returns true if the given value is a Project resource.
  */
-export const isPagesProject = (value: unknown): value is PagesProject =>
-  Predicate.hasProperty(value, "Type") && value.Type === PagesProjectTypeId;
+export const isProject = (value: unknown): value is Project =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const PagesProjectProvider = () =>
-  Provider.succeed(PagesProject, {
+export const ProjectProvider = () =>
+  Provider.succeed(Project, {
     stables: ["projectId", "accountId", "name", "subdomain", "createdOn"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -356,7 +356,7 @@ export const PagesProjectProvider = () =>
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? []).map(
-              (project): PagesProjectAttributes => ({
+              (project): ProjectAttributes => ({
                 projectId: project.id,
                 accountId,
                 name: project.name,
@@ -405,7 +405,7 @@ const createProjectName = (id: string, name?: string) =>
 const toAttributes = (
   project: ObservedProject,
   accountId: string,
-): PagesProjectAttributes => ({
+): ProjectAttributes => ({
   projectId: project.id,
   accountId,
   name: project.name,
@@ -428,7 +428,7 @@ type ObservedEnvConfig =
   pages.GetProjectResponse["deploymentConfigs"]["production"];
 
 const toApiBuildConfig = (
-  config: PagesBuildConfig | undefined,
+  config: BuildConfig | undefined,
 ): ApiBuildConfig | undefined =>
   config === undefined
     ? undefined
@@ -446,7 +446,7 @@ const toApiBuildConfig = (
  * PATCH endpoint deep-merges, so this is how keys are removed.
  */
 const toApiEnvConfig = (
-  desired: PagesDeploymentConfig,
+  desired: DeploymentConfig,
   observed: ObservedEnvConfig | undefined,
 ): ApiEnvConfig => ({
   envVars: mergeRecord(
@@ -513,7 +513,7 @@ const mergeRecord = (
 };
 
 const toApiDeploymentConfigs = (
-  desired: PagesDeploymentConfigs | undefined,
+  desired: DeploymentConfigs | undefined,
   observed: pages.GetProjectResponse["deploymentConfigs"] | undefined,
 ): ApiDeploymentConfigs | undefined => {
   if (desired === undefined) return undefined;
@@ -545,7 +545,7 @@ type ProjectPatchBody = Pick<
  * Props left `undefined` are unmanaged and never touched.
  */
 const buildProjectPatch = (
-  news: PagesProjectProps,
+  news: ProjectProps,
   observed: ObservedProject,
 ): ProjectPatchBody | undefined => {
   const patch: ProjectPatchBody = {};
@@ -587,10 +587,10 @@ const observedDeploymentConfigs = (
 ): pages.GetProjectResponse["deploymentConfigs"] => observed.deploymentConfigs;
 
 const buildConfigDirty = (
-  desired: PagesBuildConfig,
+  desired: BuildConfig,
   observed: ObservedProject["buildConfig"],
 ): boolean => {
-  const fields: (keyof PagesBuildConfig)[] = [
+  const fields: (keyof BuildConfig)[] = [
     "buildCaching",
     "buildCommand",
     "destinationDir",

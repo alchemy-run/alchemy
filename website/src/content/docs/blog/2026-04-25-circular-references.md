@@ -57,7 +57,7 @@ Here's the Cloudflare `Worker` provider's `precreate`
 (abbreviated from [`Worker.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)):
 
 ```typescript
-precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+precreate: Effect.fn(function* ({ id, news, session }) {
   const name = yield* createWorkerName(id, news.name);
 
   // Upload a placeholder script. Just enough to reserve the
@@ -291,7 +291,7 @@ only invokes it when a cycle is actually present.
 
 ## Where to go next
 
-- [Guides › Circular Bindings](/guides/circular-bindings) —
+- [Guides › Circular Bindings](/infrastructure-as-effects/circular-bindings) —
   the step-by-step Worker A ↔ Worker B walkthrough.
 - [`Cloudflare/Workers/Worker.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)
   — the canonical `precreate` reference, including Durable

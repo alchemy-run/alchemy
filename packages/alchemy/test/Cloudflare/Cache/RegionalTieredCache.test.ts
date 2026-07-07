@@ -96,9 +96,12 @@ describe.sequential("RegionalTieredCache", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegionalTieredCache("RegionalCache", {
-              zoneId,
-            });
+            return yield* Cloudflare.Cache.RegionalTieredCache(
+              "RegionalCache",
+              {
+                zoneId,
+              },
+            );
           }),
         );
 
@@ -114,10 +117,13 @@ describe.sequential("RegionalTieredCache", () => {
         // Update in place — same singleton, initialValue survives.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegionalTieredCache("RegionalCache", {
-              zoneId,
-              enabled: false,
-            });
+            return yield* Cloudflare.Cache.RegionalTieredCache(
+              "RegionalCache",
+              {
+                zoneId,
+                enabled: false,
+              },
+            );
           }),
         );
         expect(updated.value).toEqual("off");
@@ -143,7 +149,7 @@ describe.sequential("RegionalTieredCache", () => {
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.RegionalTieredCache,
+        Cloudflare.Cache.RegionalTieredCache,
       );
       const all = yield* provider.list();
 

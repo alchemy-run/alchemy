@@ -11,29 +11,25 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const WaitingRoomTypeId = "Cloudflare.WaitingRoom" as const;
-type WaitingRoomTypeId = typeof WaitingRoomTypeId;
+const TypeId = "Cloudflare.WaitingRoom.WaitingRoom" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Queueing method used by a waiting room. Changing this from the default
  * `fifo` requires the Waiting Room Advanced subscription.
  */
-export type WaitingRoomQueueingMethod =
-  | "fifo"
-  | "random"
-  | "passthrough"
-  | "reject";
+export type QueueingMethod = "fifo" | "random" | "passthrough" | "reject";
 
 /**
  * HTTP status code returned to a user while in the queue.
  */
-export type WaitingRoomQueueingStatusCode = "200" | "202" | "429";
+export type QueueingStatusCode = "200" | "202" | "429";
 
 /**
  * Which Turnstile widget type the waiting room uses for detecting bot
  * traffic.
  */
-export type WaitingRoomTurnstileMode =
+export type TurnstileMode =
   | "off"
   | "invisible"
   | "visible_non_interactive"
@@ -44,12 +40,12 @@ export type WaitingRoomTurnstileMode =
  * analytics; `infinite_queue` sends the bot to a queue that never lets it
  * through.
  */
-export type WaitingRoomTurnstileAction = "log" | "infinite_queue";
+export type TurnstileAction = "log" | "infinite_queue";
 
 /**
  * Cookie attributes for the waiting room cookie (`__cf_waitingroom`).
  */
-export interface WaitingRoomCookieAttributes {
+export interface CookieAttributes {
   /**
    * SameSite attribute of the waiting room cookie.
    * @default "auto"
@@ -66,7 +62,7 @@ export interface WaitingRoomCookieAttributes {
  * An additional hostname + path combination the waiting room is applied to.
  * Only available with the Waiting Room Advanced subscription.
  */
-export interface WaitingRoomRoute {
+export interface Route {
   /**
    * Hostname (no scheme, no wildcards).
    */
@@ -78,7 +74,7 @@ export interface WaitingRoomRoute {
   path?: string;
 }
 
-export interface WaitingRoomProps {
+export interface Props {
   /**
    * Zone the waiting room belongs to. Stable — changing the zone triggers
    * a replacement.
@@ -141,12 +137,12 @@ export interface WaitingRoomProps {
    * subscription. Mutable.
    * @default "fifo"
    */
-  queueingMethod?: WaitingRoomQueueingMethod;
+  queueingMethod?: QueueingMethod;
   /**
    * HTTP status code returned to a user while in the queue. Mutable.
    * @default "200"
    */
-  queueingStatusCode?: WaitingRoomQueueingStatusCode;
+  queueingStatusCode?: QueueingStatusCode;
   /**
    * Suspends the waiting room — traffic flows straight to the route.
    * Mutable.
@@ -176,12 +172,12 @@ export interface WaitingRoomProps {
   /**
    * Cookie attributes for the waiting room cookie. Mutable.
    */
-  cookieAttributes?: WaitingRoomCookieAttributes;
+  cookieAttributes?: CookieAttributes;
   /**
    * Additional hostname/path combinations the waiting room applies to
    * (Waiting Room Advanced only). Mutable.
    */
-  additionalRoutes?: WaitingRoomRoute[];
+  additionalRoutes?: Route[];
   /**
    * Enabled origin commands (currently only `revoke`). Mutable.
    * @default []
@@ -191,15 +187,15 @@ export interface WaitingRoomProps {
    * Turnstile widget type used for detecting bot traffic. Mutable.
    * @default "off"
    */
-  turnstileMode?: WaitingRoomTurnstileMode;
+  turnstileMode?: TurnstileMode;
   /**
    * Action taken when Turnstile detects a bot. Mutable.
    * @default "log"
    */
-  turnstileAction?: WaitingRoomTurnstileAction;
+  turnstileAction?: TurnstileAction;
 }
 
-export interface WaitingRoomAttributes {
+export interface Attributes {
   /** Cloudflare-assigned identifier of the waiting room. */
   waitingRoomId: string;
   /** Zone the waiting room belongs to. */
@@ -221,9 +217,9 @@ export interface WaitingRoomAttributes {
   /** Whether all traffic is sent to the waiting room. */
   queueAll: boolean;
   /** Queueing method in effect. */
-  queueingMethod: WaitingRoomQueueingMethod;
+  queueingMethod: QueueingMethod;
   /** HTTP status code returned to queued users. */
-  queueingStatusCode: WaitingRoomQueueingStatusCode;
+  queueingStatusCode: QueueingStatusCode;
   /** Whether the waiting room is suspended. */
   suspended: boolean;
   /** ISO8601 creation timestamp. */
@@ -232,13 +228,7 @@ export interface WaitingRoomAttributes {
   modifiedOn: string | undefined;
 }
 
-export type WaitingRoom = Resource<
-  WaitingRoomTypeId,
-  WaitingRoomProps,
-  WaitingRoomAttributes,
-  never,
-  Providers
->;
+export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare Waiting Room — places visitors in a virtual queue when
@@ -262,7 +252,7 @@ export type WaitingRoom = Resource<
  * @section Creating a Waiting Room
  * @example Basic waiting room on a host
  * ```typescript
- * const room = yield* Cloudflare.WaitingRoom("checkout", {
+ * const room = yield* Cloudflare.WaitingRoom.WaitingRoom("checkout", {
  *   zoneId: zone.zoneId,
  *   host: "shop.example.com",
  *   path: "/checkout",
@@ -273,7 +263,7 @@ export type WaitingRoom = Resource<
  *
  * @example Queue all traffic during an incident
  * ```typescript
- * yield* Cloudflare.WaitingRoom("incident-gate", {
+ * yield* Cloudflare.WaitingRoom.WaitingRoom("incident-gate", {
  *   zoneId: zone.zoneId,
  *   host: "example.com",
  *   totalActiveUsers: 500,
@@ -286,7 +276,7 @@ export type WaitingRoom = Resource<
  * @section Customizing behavior
  * @example Short sessions with a custom cookie suffix
  * ```typescript
- * yield* Cloudflare.WaitingRoom("flash-sale", {
+ * yield* Cloudflare.WaitingRoom.WaitingRoom("flash-sale", {
  *   zoneId: zone.zoneId,
  *   host: "example.com",
  *   path: "/sale",
@@ -300,21 +290,21 @@ export type WaitingRoom = Resource<
  *
  * @see https://developers.cloudflare.com/waiting-room/
  */
-export const WaitingRoom = Resource<WaitingRoom>(WaitingRoomTypeId);
+export const WaitingRoom = Resource<WaitingRoom>(TypeId);
 
 /**
  * Returns true if the given value is a WaitingRoom resource.
  */
 export const isWaitingRoom = (value: unknown): value is WaitingRoom =>
-  Predicate.hasProperty(value, "Type") && value.Type === WaitingRoomTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const WaitingRoomProvider = () =>
   Provider.succeed(WaitingRoom, {
     stables: ["waitingRoomId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as WaitingRoomProps;
-      const n = news as WaitingRoomProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
@@ -419,10 +409,10 @@ export const WaitingRoomProvider = () =>
             // Plan-gated / partial-permission zones reject the route, and a
             // zone deleted out-of-band has no rooms; skip both.
             Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as WaitingRoomAttributes[]),
+              Effect.succeed([] as Attributes[]),
             ),
             Effect.catchTag("InvalidRoute", () =>
-              Effect.succeed([] as WaitingRoomAttributes[]),
+              Effect.succeed([] as Attributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -475,7 +465,7 @@ const createRoomName = (id: string, name: string | undefined) =>
  * defaults — sending Advanced-only fields explicitly would fail on
  * non-Advanced plans.
  */
-const desiredBody = (news: WaitingRoomProps) => ({
+const desiredBody = (news: Props) => ({
   host: news.host,
   totalActiveUsers: news.totalActiveUsers,
   newUsersPerMinute: news.newUsersPerMinute,
@@ -615,7 +605,7 @@ const toAttributes = (
     | waitingRooms.UpdateWaitingRoomResponse
     | waitingRooms.ListWaitingRoomsResponse["result"][number],
   zoneId: string,
-): WaitingRoomAttributes => ({
+): Attributes => ({
   // Cloudflare always echoes an id for a persisted room; distilled types it
   // optional/nullable.
   waitingRoomId: room.id ?? "",
@@ -628,9 +618,8 @@ const toAttributes = (
   description: room.description ?? "",
   sessionDuration: room.sessionDuration ?? 5,
   queueAll: room.queueAll ?? false,
-  queueingMethod: (room.queueingMethod ?? "fifo") as WaitingRoomQueueingMethod,
-  queueingStatusCode: (room.queueingStatusCode ??
-    "200") as WaitingRoomQueueingStatusCode,
+  queueingMethod: (room.queueingMethod ?? "fifo") as QueueingMethod,
+  queueingStatusCode: (room.queueingStatusCode ?? "200") as QueueingStatusCode,
   suspended: room.suspended ?? false,
   createdOn: room.createdOn ?? undefined,
   modifiedOn: room.modifiedOn ?? undefined,

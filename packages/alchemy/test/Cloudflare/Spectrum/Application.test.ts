@@ -137,7 +137,7 @@ test.provider.skipIf(!entitledZoneId)(
 
       const app = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SpectrumApplication("Ssh", {
+          return yield* Cloudflare.Spectrum.Application("Ssh", {
             zoneId,
             dns: { type: "CNAME", name: dnsName },
             protocol: "tcp/22",
@@ -163,7 +163,7 @@ test.provider.skipIf(!entitledZoneId)(
       // not a replacement.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SpectrumApplication("Ssh", {
+          return yield* Cloudflare.Spectrum.Application("Ssh", {
             zoneId,
             dns: { type: "CNAME", name: dnsName },
             protocol: "tcp/22",
@@ -224,7 +224,7 @@ test.provider.skipIf(!entitledZoneId)(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SpectrumApplication("Adopted", {
+            return yield* Cloudflare.Spectrum.Application("Adopted", {
               zoneId,
               dns: { type: "CNAME", name: dnsName },
               protocol: "tcp/22",
@@ -242,7 +242,7 @@ test.provider.skipIf(!entitledZoneId)(
       // (same physical id) and converges it to the desired origin.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SpectrumApplication("Adopted", {
+          return yield* Cloudflare.Spectrum.Application("Adopted", {
             zoneId,
             dns: { type: "CNAME", name: dnsName },
             protocol: "tcp/22",
@@ -278,7 +278,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SpectrumApplication,
+        Cloudflare.Spectrum.Application,
       );
       const all = yield* provider.list();
 
@@ -311,7 +311,7 @@ test.provider.skipIf(!entitledZoneId)(
 
       const app = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SpectrumApplication("Listed", {
+          return yield* Cloudflare.Spectrum.Application("Listed", {
             zoneId,
             dns: { type: "CNAME", name: dnsName },
             protocol: "tcp/22",
@@ -321,7 +321,7 @@ test.provider.skipIf(!entitledZoneId)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SpectrumApplication,
+        Cloudflare.Spectrum.Application,
       );
       const all = yield* provider.list();
 

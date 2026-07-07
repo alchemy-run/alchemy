@@ -208,7 +208,7 @@ export interface Stream extends Resource<
  * @example Put a record from a handler
  * ```typescript
  * // init
- * const putRecord = yield* Kinesis.PutRecord.bind(stream);
+ * const putRecord = yield* AWS.Kinesis.PutRecord(stream);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -229,7 +229,9 @@ export interface Stream extends Resource<
  * @example Process stream records
  * ```typescript
  * // init
- * yield* Kinesis.records(stream).process(
+ * yield* Kinesis.consumeStreamRecords(
+ *   stream,
+ *   {},
  *   Effect.fn(function* (record) {
  *     const data = new TextDecoder().decode(record.data);
  *     yield* Effect.log(`Received: ${data}`);

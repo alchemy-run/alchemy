@@ -14,7 +14,9 @@ import {
 export class CloudflareEnvironment extends Context.Service<
   CloudflareEnvironment,
   Effect.Effect<CloudflareResolvedCredentials>
->()("Cloudflare::CloudflareEnvironment") {}
+>()("Cloudflare::CloudflareEnvironment") {
+  readonly kind = "Environment" as const;
+}
 
 const CLOUDFLARE_ACCOUNT_ID = Config.string("CLOUDFLARE_ACCOUNT_ID");
 

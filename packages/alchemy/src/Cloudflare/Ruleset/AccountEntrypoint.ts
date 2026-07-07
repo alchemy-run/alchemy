@@ -9,11 +9,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { RulesetOutputRule, RulesetPhase } from "./Ruleset.ts";
+import type { OutputRule, Phase } from "./Ruleset.ts";
 
-const RulesetAccountEntrypointTypeId =
-  "Cloudflare.Rulesets.AccountEntrypoint" as const;
-type RulesetAccountEntrypointTypeId = typeof RulesetAccountEntrypointTypeId;
+const TypeId = "Cloudflare.Rulesets.AccountEntrypoint" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A rule inside an account phase entrypoint — same shape Cloudflare accepts
@@ -23,19 +22,19 @@ export type AccountEntrypointRule = NonNullable<
   rulesets.PutPhasForAccountRequest["rules"]
 >[number];
 
-export type RulesetAccountEntrypointProps = {
+export type AccountEntrypointProps = {
   /**
    * Ruleset phase entrypoint to own (e.g. `http_request_firewall_custom`,
    * `ddos_l4`, `magic_transit`). Changing the phase triggers a
    * replacement. Account-level phases are Enterprise-gated — on lower
    * plans, deploys fail with the typed `PhaseNotEntitled` error.
    */
-  phase: RulesetPhase;
+  phase: Phase;
   /**
    * The full list of rules in the phase entrypoint. This resource owns the
    * entire entrypoint — rules managed elsewhere in the same phase are
    * overwritten on deploy. For the Enterprise WAF deployment workflow, use
-   * `execute` rules referencing `Cloudflare.CustomRuleset` ids.
+   * `execute` rules referencing `Cloudflare.Ruleset.CustomRuleset` ids.
    */
   rules: AccountEntrypointRule[];
   /**
@@ -49,7 +48,7 @@ export type RulesetAccountEntrypointProps = {
   description?: string;
 };
 
-export type RulesetAccountEntrypointAttributes = {
+export type AccountEntrypointAttributes = {
   /** The unique ID of the entrypoint ruleset (Cloudflare `id`). */
   rulesetId: string;
   /**
@@ -62,21 +61,21 @@ export type RulesetAccountEntrypointAttributes = {
   /** The human-readable name of the ruleset. */
   name: string;
   /** The phase of the ruleset. */
-  phase: RulesetPhase;
+  phase: Phase;
   /** An informative description of the ruleset. */
   description: string | undefined;
   /** The list of rules in the entrypoint. */
-  rules: RulesetOutputRule[];
+  rules: OutputRule[];
   /** The timestamp of when the ruleset was last modified. */
   lastUpdated: string;
   /** The version of the ruleset. */
   version: string;
 };
 
-export type RulesetAccountEntrypoint = Resource<
-  RulesetAccountEntrypointTypeId,
-  RulesetAccountEntrypointProps,
-  RulesetAccountEntrypointAttributes,
+export type AccountEntrypoint = Resource<
+  TypeId,
+  AccountEntrypointProps,
+  AccountEntrypointAttributes,
   never,
   Providers
 >;
@@ -84,7 +83,7 @@ export type RulesetAccountEntrypoint = Resource<
 /**
  * A Cloudflare Ruleset phase entrypoint for an account.
  *
- * The account-level counterpart of `Cloudflare.Ruleset`: it owns the entire
+ * The account-level counterpart of `Cloudflare.Ruleset.Ruleset`: it owns the entire
  * ruleset for an account phase entrypoint (e.g. deploying custom WAF
  * rulesets across zones with `execute` rules, or configuring `ddos_l4` /
  * `magic_transit` rules). The entrypoint is a per-phase singleton — destroy
@@ -98,7 +97,7 @@ export type RulesetAccountEntrypoint = Resource<
  * @section Account WAF Deployment
  * @example Deploy a custom ruleset across all zones
  * ```typescript
- * const ruleset = yield* Cloudflare.CustomRuleset("SharedWafRules", {
+ * const ruleset = yield* Cloudflare.Ruleset.CustomRuleset("SharedWafRules", {
  *   phase: "http_request_firewall_custom",
  *   rules: [
  *     {
@@ -109,7 +108,7 @@ export type RulesetAccountEntrypoint = Resource<
  *   ],
  * });
  *
- * yield* Cloudflare.RulesetAccountEntrypoint("WafDeployment", {
+ * yield* Cloudflare.Ruleset.AccountEntrypoint("WafDeployment", {
  *   phase: "http_request_firewall_custom",
  *   rules: [
  *     {
@@ -124,21 +123,18 @@ export type RulesetAccountEntrypoint = Resource<
  *
  * @see https://developers.cloudflare.com/waf/account/
  */
-export const RulesetAccountEntrypoint = Resource<RulesetAccountEntrypoint>(
-  RulesetAccountEntrypointTypeId,
-);
+export const AccountEntrypoint = Resource<AccountEntrypoint>(TypeId);
 
 /**
- * Returns true if the given value is a RulesetAccountEntrypoint resource.
+ * Returns true if the given value is a AccountEntrypoint resource.
  */
-export const isRulesetAccountEntrypoint = (
+export const isAccountEntrypoint = (
   value: unknown,
-): value is RulesetAccountEntrypoint =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === RulesetAccountEntrypointTypeId;
+): value is AccountEntrypoint =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const RulesetAccountEntrypointProvider = () =>
-  Provider.succeed(RulesetAccountEntrypoint, {
+export const AccountEntrypointProvider = () =>
+  Provider.succeed(AccountEntrypoint, {
     stables: ["rulesetId", "accountId", "kind", "phase"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -195,7 +191,7 @@ export const RulesetAccountEntrypointProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is RulesetAccountEntrypointAttributes => row !== undefined,
+        (row): row is AccountEntrypointAttributes => row !== undefined,
       );
     }),
 
@@ -206,7 +202,7 @@ export const RulesetAccountEntrypointProvider = () =>
       if (phase === undefined) return undefined;
       // The entrypoint is a per-phase singleton that Cloudflare creates
       // lazily — there is nothing to "own", so a cold read adopts freely
-      // (mirrors the zone-level `Cloudflare.Ruleset`).
+      // (mirrors the zone-level `Cloudflare.Ruleset.Ruleset`).
       return yield* rulesets
         .getPhasForAccount({ accountId, rulesetPhase: phase })
         .pipe(
@@ -251,7 +247,7 @@ export const RulesetAccountEntrypointProvider = () =>
 const toAttributes = (
   accountId: string,
   ruleset: rulesets.GetPhasResponse | rulesets.PutPhasResponse,
-): RulesetAccountEntrypointAttributes => ({
+): AccountEntrypointAttributes => ({
   rulesetId: ruleset.id,
   accountId,
   kind: ruleset.kind,

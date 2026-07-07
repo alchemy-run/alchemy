@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SmartTieredCacheTypeId = "Cloudflare.Cache.SmartTieredCache" as const;
-type SmartTieredCacheTypeId = typeof SmartTieredCacheTypeId;
+const TypeId = "Cloudflare.Cache.SmartTieredCache" as const;
+type TypeId = typeof TypeId;
 
 export interface SmartTieredCacheProps {
   /**
@@ -47,7 +47,7 @@ export interface SmartTieredCacheAttributes {
 }
 
 export type SmartTieredCache = Resource<
-  SmartTieredCacheTypeId,
+  TypeId,
   SmartTieredCacheProps,
   SmartTieredCacheAttributes,
   never,
@@ -74,16 +74,16 @@ export type SmartTieredCache = Resource<
  * @section Managing Smart Tiered Cache
  * @example Enable Smart Tiered Cache on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.SmartTieredCache("SmartCache", {
+ * yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Smart Tiered Cache
  * ```typescript
- * yield* Cloudflare.SmartTieredCache("SmartCache", {
+ * yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -91,15 +91,13 @@ export type SmartTieredCache = Resource<
  *
  * @see https://developers.cloudflare.com/cache/how-to/tiered-cache/
  */
-export const SmartTieredCache = Resource<SmartTieredCache>(
-  SmartTieredCacheTypeId,
-);
+export const SmartTieredCache = Resource<SmartTieredCache>(TypeId);
 
 /**
  * Returns true if the given value is a SmartTieredCache resource.
  */
 export const isSmartTieredCache = (value: unknown): value is SmartTieredCache =>
-  Predicate.hasProperty(value, "Type") && value.Type === SmartTieredCacheTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const desiredValue = (props: SmartTieredCacheProps): "on" | "off" =>
   (props.enabled ?? true) ? "on" : "off";

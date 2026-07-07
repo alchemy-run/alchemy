@@ -48,7 +48,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SCALING_POLICY_LIST)(
             vpcId: vpc.vpcId,
             cidrBlock: "10.0.1.0/24",
           });
-          const template = yield* LaunchTemplate<{}>()("ListPolicyTemplate", {
+          const template = yield* LaunchTemplate("ListPolicyTemplate", {
             launchTemplateName: "alchemy-test-policy-lt-list",
             imageId,
             instanceType: "t3.micro",

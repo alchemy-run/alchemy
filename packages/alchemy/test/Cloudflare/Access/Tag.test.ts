@@ -25,7 +25,7 @@ test.provider("create, verify out-of-band, and destroy tag", (stack) =>
 
     const tag = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessTag("BasicTag", {});
+        return yield* Cloudflare.Access.Tag("BasicTag", {});
       }),
     );
 
@@ -42,7 +42,7 @@ test.provider("create, verify out-of-band, and destroy tag", (stack) =>
     // without churn.
     const again = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessTag("BasicTag", {});
+        return yield* Cloudflare.Access.Tag("BasicTag", {});
       }),
     );
     expect(again.name).toEqual(tag.name);
@@ -66,7 +66,7 @@ test.provider("rename replaces the tag", (stack) =>
 
     const tag = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessTag("RenameTag", {
+        return yield* Cloudflare.Access.Tag("RenameTag", {
           name: "alchemy-test-access-tag-a",
         });
       }),
@@ -75,7 +75,7 @@ test.provider("rename replaces the tag", (stack) =>
 
     const renamed = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessTag("RenameTag", {
+        return yield* Cloudflare.Access.Tag("RenameTag", {
           name: "alchemy-test-access-tag-b",
         });
       }),
@@ -115,13 +115,13 @@ test.provider("list enumerates the deployed access tag", (stack) =>
 
     const tag = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.AccessTag("ListTag", {
+        return yield* Cloudflare.Access.Tag("ListTag", {
           name: "alchemy-test-access-tag-list",
         });
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.AccessTag);
+    const provider = yield* Provider.findProvider(Cloudflare.Access.Tag);
     const all = yield* provider.list();
 
     const found = all.find((t) => t.name === tag.name);

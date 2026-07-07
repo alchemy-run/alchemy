@@ -47,13 +47,13 @@ const bucketProvider = () =>
   });
 
 // Queue
-export type QueueProps = {
+export type Props = {
   name?: string;
 };
 
 export interface Queue extends Resource<
   "Test.Queue",
-  QueueProps,
+  Props,
   {
     name: string;
     queueUrl: string;
@@ -845,6 +845,112 @@ export const durationResourceProvider = () =>
     delete: Effect.fn(function* () {}),
   });
 
+// DeleteFirstResource — exercises `{ action: "replace", deleteFirst: true }`.
+//
+// Models a resource whose replacement cannot coexist with the original (a
+// fixed physical name / singleton). When `replaceString` changes it asks the
+// engine to tear the old generation down BEFORE creating the new one.
+//
+// Two test affordances:
+//   - create/update/delete route through `TestResourceHooks` so a test can
+//     record the order the engine invokes them in.
+//   - if a `CollisionRegistry` is in context, create fails when an instance
+//     with the same physical `name` is still live. Under create-first ordering
+//     a same-name replacement would collide here (reproducing the real Docker
+//     "network already exists" / no-op `volume create` bug); under delete-first
+//     it succeeds.
+
+export class CollisionRegistry extends Context.Service<
+  CollisionRegistry,
+  { readonly live: Set<string> }
+>()("CollisionRegistry") {}
+
+export class CollisionError extends Data.TaggedError("CollisionError")<{
+  name: string;
+}> {}
+
+export type DeleteFirstResourceProps = {
+  string?: string;
+  replaceString?: string;
+  name?: string;
+};
+
+export interface DeleteFirstResource extends Resource<
+  "Test.DeleteFirstResource",
+  DeleteFirstResourceProps,
+  {
+    name: string;
+    string: string;
+    replaceString: DeleteFirstResourceProps["replaceString"];
+  }
+> {}
+
+export const DeleteFirstResource = Resource<DeleteFirstResource>(
+  "Test.DeleteFirstResource",
+);
+
+export const deleteFirstResourceProvider = () =>
+  Provider.succeed(DeleteFirstResource, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+      if (!isResolved(news)) return undefined;
+      const n = news as DeleteFirstResourceProps;
+      const o = olds as DeleteFirstResourceProps;
+      if (n.replaceString !== o.replaceString) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (n.string !== o.string) {
+        return { action: "update" } as const;
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, olds }) {
+      const name = news.name ?? id;
+      const hooks = Option.getOrUndefined(
+        yield* Effect.serviceOption(TestResourceHooks),
+      );
+      const registry = Option.getOrUndefined(
+        yield* Effect.serviceOption(CollisionRegistry),
+      );
+      // `olds === undefined` ⇒ create (greenfield OR replacement-create); the
+      // engine clears `olds` when minting the new replacement generation.
+      if (olds === undefined) {
+        if (registry?.live.has(name)) {
+          return yield* Effect.fail(new CollisionError({ name }));
+        }
+        registry?.live.add(name);
+        if (hooks?.create) {
+          yield* hooks.create(id, {
+            string: news.string,
+            replaceString: news.replaceString,
+          });
+        }
+      } else if (hooks?.update) {
+        yield* hooks.update(id, {
+          string: news.string,
+          replaceString: news.replaceString,
+        });
+      }
+      return {
+        name,
+        string: news.string ?? id,
+        replaceString: news.replaceString,
+      };
+    }),
+    delete: Effect.fn(function* ({ id, output }) {
+      const hooks = Option.getOrUndefined(
+        yield* Effect.serviceOption(TestResourceHooks),
+      );
+      const registry = Option.getOrUndefined(
+        yield* Effect.serviceOption(CollisionRegistry),
+      );
+      registry?.live.delete(output.name);
+      if (hooks?.delete) {
+        yield* hooks.delete(id);
+      }
+    }),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -861,6 +967,7 @@ export const TestLayers = () =>
     phasedTargetProvider(),
     noPrecreateBindingTargetProvider(),
     durationResourceProvider(),
+    deleteFirstResourceProvider(),
   );
 
 export const InMemoryTestLayers = () =>

@@ -5,7 +5,7 @@ import RpcWorkerRpcHttpWorker from "./worker.ts";
 
 /**
  * Stack for the {@link Cloudflare.RpcWorker} +
- * {@link Cloudflare.RpcDurableObjectNamespace} combined fixture.
+ * {@link Cloudflare.RpcDurableObject} combined fixture.
  */
 export default Alchemy.Stack(
   "RpcWorkerRpcHttpStack",

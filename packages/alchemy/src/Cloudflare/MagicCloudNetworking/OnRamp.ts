@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const OnRampTypeId = "Cloudflare.MagicCloudNetworking.OnRamp" as const;
-type OnRampTypeId = typeof OnRampTypeId;
+const TypeId = "Cloudflare.MagicCloudNetworking.OnRamp" as const;
+type TypeId = typeof TypeId;
 
 /**
  * The cloud provider an on-ramp connects to Magic WAN.
@@ -167,7 +167,7 @@ export interface OnRampAttributes {
 }
 
 export type OnRamp = Resource<
-  OnRampTypeId,
+  TypeId,
   OnRampProps,
   OnRampAttributes,
   never,
@@ -198,7 +198,7 @@ export type OnRamp = Resource<
  * @section Connecting a single VPC
  * @example AWS VPC on-ramp
  * ```typescript
- * const onramp = yield* Cloudflare.OnRamp("ProdVpc", {
+ * const onramp = yield* Cloudflare.MagicCloudNetworking.OnRamp("ProdVpc", {
  *   cloudType: "AWS",
  *   type: "OnrampTypeSingle",
  *   region: "us-east-1",
@@ -212,7 +212,7 @@ export type OnRamp = Resource<
  * @section Hub topologies
  * @example Transit Gateway hub with attached VPCs
  * ```typescript
- * yield* Cloudflare.OnRamp("TgwHub", {
+ * yield* Cloudflare.MagicCloudNetworking.OnRamp("TgwHub", {
  *   cloudType: "AWS",
  *   type: "OnrampTypeHub",
  *   region: "us-east-1",
@@ -227,7 +227,7 @@ export type OnRamp = Resource<
  * @section Destroy behavior
  * @example Tear down cloud-side resources on destroy
  * ```typescript
- * yield* Cloudflare.OnRamp("ProdVpc", {
+ * yield* Cloudflare.MagicCloudNetworking.OnRamp("ProdVpc", {
  *   cloudType: "AWS",
  *   type: "OnrampTypeSingle",
  *   region: "us-east-1",
@@ -241,13 +241,13 @@ export type OnRamp = Resource<
  *
  * @see https://developers.cloudflare.com/magic-cloud-networking/
  */
-export const OnRamp = Resource<OnRamp>(OnRampTypeId);
+export const OnRamp = Resource<OnRamp>(TypeId);
 
 /**
  * Returns true if the given value is an OnRamp resource.
  */
 export const isOnRamp = (value: unknown): value is OnRamp =>
-  Predicate.hasProperty(value, "Type") && value.Type === OnRampTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OnRampProvider = () =>
   Provider.succeed(OnRamp, {

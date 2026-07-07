@@ -150,11 +150,14 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.RegionalHostname("Regional", {
-            zoneId,
-            hostname: HOSTNAME,
-            regionKey: "eu",
-          });
+          return yield* Cloudflare.RegionalHostname.RegionalHostname(
+            "Regional",
+            {
+              zoneId,
+              hostname: HOSTNAME,
+              regionKey: "eu",
+            },
+          );
         }),
       );
       expect(created.zoneId).toEqual(zoneId);
@@ -169,11 +172,14 @@ test.provider(
       // Move the hostname to another region in place — same identifier.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.RegionalHostname("Regional", {
-            zoneId,
-            hostname: HOSTNAME,
-            regionKey: "us",
-          });
+          return yield* Cloudflare.RegionalHostname.RegionalHostname(
+            "Regional",
+            {
+              zoneId,
+              hostname: HOSTNAME,
+              regionKey: "us",
+            },
+          );
         }),
       );
       expect(updated.hostname).toEqual(HOSTNAME);
@@ -239,17 +245,20 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_REGIONAL_HOSTNAME_LIST)(
         yield* deleteRegionalHostname(zoneId, HOSTNAME);
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegionalHostname("Regional", {
-              zoneId,
-              hostname: HOSTNAME,
-              regionKey: "eu",
-            });
+            return yield* Cloudflare.RegionalHostname.RegionalHostname(
+              "Regional",
+              {
+                zoneId,
+                hostname: HOSTNAME,
+                regionKey: "eu",
+              },
+            );
           }),
         );
       }
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.RegionalHostname,
+        Cloudflare.RegionalHostname.RegionalHostname,
       );
       const all = yield* provider.list();
 

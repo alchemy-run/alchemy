@@ -10,10 +10,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const CallsTurnKeyTypeId = "Cloudflare.Calls.TurnKey" as const;
-type CallsTurnKeyTypeId = typeof CallsTurnKeyTypeId;
+const TypeId = "Cloudflare.Calls.TurnKey" as const;
+type TypeId = typeof TypeId;
 
-export type CallsTurnKeyProps = {
+export type TurnKeyProps = {
   /**
    * A short description of the TURN key, not shown to end users and not
    * unique. Mutable in place. If omitted, a unique name is generated from
@@ -23,7 +23,7 @@ export type CallsTurnKeyProps = {
   name?: string;
 };
 
-export type CallsTurnKeyAttributes = {
+export type TurnKeyAttributes = {
   /**
    * Cloudflare-generated unique identifier for the TURN key. Used in the
    * credential-minting API path
@@ -54,10 +54,10 @@ export type CallsTurnKeyAttributes = {
   modified: string;
 };
 
-export type CallsTurnKey = Resource<
-  CallsTurnKeyTypeId,
-  CallsTurnKeyProps,
-  CallsTurnKeyAttributes,
+export type TurnKey = Resource<
+  TypeId,
+  TurnKeyProps,
+  TurnKeyAttributes,
   never,
   Providers
 >;
@@ -76,12 +76,12 @@ export type CallsTurnKey = Resource<
  * @section Creating a TURN key
  * @example TURN key with a generated name
  * ```typescript
- * const turnKey = yield* Cloudflare.CallsTurnKey("turn", {});
+ * const turnKey = yield* Cloudflare.Calls.TurnKey("turn", {});
  * ```
  *
  * @example TURN key with an explicit name
  * ```typescript
- * const turnKey = yield* Cloudflare.CallsTurnKey("turn", {
+ * const turnKey = yield* Cloudflare.Calls.TurnKey("turn", {
  *   name: "my-turn-key",
  * });
  * ```
@@ -99,16 +99,16 @@ export type CallsTurnKey = Resource<
  *
  * @see https://developers.cloudflare.com/realtime/turn/
  */
-export const CallsTurnKey = Resource<CallsTurnKey>(CallsTurnKeyTypeId);
+export const TurnKey = Resource<TurnKey>(TypeId);
 
 /**
- * Returns true if the given value is a CallsTurnKey resource.
+ * Returns true if the given value is a TurnKey resource.
  */
-export const isCallsTurnKey = (value: unknown): value is CallsTurnKey =>
-  Predicate.hasProperty(value, "Type") && value.Type === CallsTurnKeyTypeId;
+export const isTurnKey = (value: unknown): value is TurnKey =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const CallsTurnKeyProvider = () =>
-  Provider.succeed(CallsTurnKey, {
+export const TurnKeyProvider = () =>
+  Provider.succeed(TurnKey, {
     stables: ["keyId", "accountId", "key", "created"],
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -207,7 +207,7 @@ const toAttributes = (
     | calls.UpdateTurnResponse,
   accountId: string,
   key: Redacted.Redacted<string>,
-): CallsTurnKeyAttributes => ({
+): TurnKeyAttributes => ({
   keyId: turnKey.uid ?? "",
   accountId,
   key,

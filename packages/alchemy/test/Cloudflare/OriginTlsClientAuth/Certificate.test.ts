@@ -45,7 +45,14 @@ const resolveZoneId = Effect.gen(function* () {
 // with "Unable to authenticate request". Ride out the blips on the test's
 // own out-of-band calls by retrying the typed `Forbidden` error (part of
 // each operation's error union via distilled patches).
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+//
+// CAPPED at 3s: a bare `Schedule.exponential("500 millis")` reaches a 64s
+// single delay by the 8th retry (~127s total), so a token blip would sleep
+// for over a minute between attempts and blow the test budget even though the
+// blip itself clears in seconds. Capping keeps the cadence steady.
+const forbiddenRetrySchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
+);
 
 const getCertificate = (zoneId: string, certificateId: string) =>
   originTls.getOriginTlsClientAuth({ zoneId, certificateId }).pipe(
@@ -69,8 +76,15 @@ const waitForGone = (zoneId: string, certificateId: string) =>
     Effect.catchTag("CertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
+      // STEADY 3s cadence, bounded ~60s. The previous
+      // `Schedule.exponential("500 millis")` (capped only by `recurs(10)`)
+      // ramped to 64s/128s/256s single delays — so once a tombstone lagged a
+      // little, the poll would *sleep* far past the deadline before noticing
+      // the cert was already gone. That overshoot — not genuinely-slow CF —
+      // was what blew the test budget. A fixed interval detects the tombstone
+      // within one poll of it actually happening.
+      schedule: Schedule.spaced("3 seconds").pipe(
+        Schedule.both(Schedule.recurs(45)),
       ),
     }),
   );
@@ -123,7 +137,7 @@ const purgeCertificates = (zoneId: string) =>
 // delete lifecycle is eventually consistent, so two cases uploading the same
 // `CERT_1` concurrently churn each other (collisions + stale list views).
 // Run the cases one at a time so each owns its certificate content.
-describe.sequential("OriginTlsClientAuthCertificate", () => {
+describe.sequential("Certificate", () => {
   test.provider(
     "uploads and deletes a zone client certificate",
     (stack) =>
@@ -134,7 +148,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         yield* purgeCertificates(zoneId);
 
         const cert = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
+          Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
             zoneId,
             certificate: CERT_1,
             privateKey: Redacted.make(KEY_1),
@@ -156,7 +170,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
 
         yield* waitForGone(zoneId, cert.certificateId);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    { timeout: 120_000 },
+    { timeout: 200_000 },
   );
 
   test.provider(
@@ -169,7 +183,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         yield* purgeCertificates(zoneId);
 
         const original = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("ReplaceCert", {
+          Cloudflare.OriginTlsClientAuth.Certificate("ReplaceCert", {
             zoneId,
             certificate: CERT_1,
             privateKey: Redacted.make(KEY_1),
@@ -177,7 +191,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         );
 
         const replaced = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("ReplaceCert", {
+          Cloudflare.OriginTlsClientAuth.Certificate("ReplaceCert", {
             zoneId,
             certificate: CERT_2,
             privateKey: Redacted.make(KEY_2),
@@ -198,7 +212,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
 
         yield* waitForGone(zoneId, replaced.certificateId);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    { timeout: 120_000 },
+    { timeout: 200_000 },
   );
 
   // Canonical `list()` test (zone-scoped collection): `list()` fans out over
@@ -215,7 +229,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         yield* purgeCertificates(zoneId);
 
         const cert = yield* stack.deploy(
-          Cloudflare.OriginTlsClientAuthCertificate("ListCert", {
+          Cloudflare.OriginTlsClientAuth.Certificate("ListCert", {
             zoneId,
             // Dedicated PEM (see fixtures/certs.ts): keeps this certificate out
             // of the upload/delete churn the sibling tests put CERT_1 through,
@@ -226,7 +240,7 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
         );
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.OriginTlsClientAuthCertificate,
+          Cloudflare.OriginTlsClientAuth.Certificate,
         );
         // A freshly uploaded certificate can lag the zone list endpoint by tens
         // of seconds — especially when the same PEM was recently deleted and
@@ -254,6 +268,13 @@ describe.sequential("OriginTlsClientAuthCertificate", () => {
 
         yield* waitForGone(zoneId, cert.certificateId);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
-    { timeout: 120_000 },
+    // With the poll backoffs now CAPPED (steady cadence, see
+    // `waitForGone`/`forbiddenRetrySchedule`), this test's three sequential
+    // eventual-consistency waits are each bounded to ~60s — the list-appear
+    // poll, the destroy's pending-deployment delete retry, and `waitForGone` —
+    // for a deterministic worst case of ~200s. The timeout matches that bound;
+    // 120s was below the legitimate maximum (the acute flake was the old
+    // uncapped exponential sleeping past the deadline, now fixed).
+    { timeout: 240_000 },
   );
 });

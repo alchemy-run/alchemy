@@ -101,7 +101,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const app = yield* stack.deploy(
-        Cloudflare.MagicApp("App", {
+        Cloudflare.MagicTransit.MagicApp("App", {
           name: "alchemy-magic-app",
           type: "Collaboration",
           hostnames: ["crm.alchemy.test"],
@@ -120,7 +120,7 @@ test.provider.skipIf(!entitled)(
 
       // Update mutable props in place — same appId.
       const updated = yield* stack.deploy(
-        Cloudflare.MagicApp("App", {
+        Cloudflare.MagicTransit.MagicApp("App", {
           name: "alchemy-magic-app-v2",
           type: "Collaboration",
           hostnames: ["crm.alchemy.test", "erp.alchemy.test"],
@@ -150,7 +150,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicApp);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicApp,
+      );
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -173,14 +175,16 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.MagicApp("ListApp", {
+        Cloudflare.MagicTransit.MagicApp("ListApp", {
           name: "alchemy-magic-list-app",
           type: "Collaboration",
           hostnames: ["list.alchemy.test"],
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicApp);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicApp,
+      );
       const all = yield* provider.list();
 
       expect(all.some((app) => app.appId === deployed.appId)).toBe(true);

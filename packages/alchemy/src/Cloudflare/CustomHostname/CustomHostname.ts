@@ -15,12 +15,12 @@ import { listAllZones } from "../Zone/lookup.ts";
  * Domain control validation (DCV) method used to prove control over the
  * custom hostname before a certificate is issued.
  */
-export type CustomHostnameDcvMethod = "http" | "txt" | "email";
+export type DcvMethod = "http" | "txt" | "email";
 
 /**
  * Certificate authority that issues the managed certificate.
  */
-export type CustomHostnameCertificateAuthority =
+export type CertificateAuthority =
   | "digicert"
   | "google"
   | "lets_encrypt"
@@ -29,7 +29,7 @@ export type CustomHostnameCertificateAuthority =
 /**
  * Per-hostname TLS settings applied to the edge certificate.
  */
-export type CustomHostnameSslSettings = {
+export type SslSettings = {
   /** Allowed cipher suites. */
   ciphers?: string[];
   /** Whether Early Hints (HTTP 103) is enabled. */
@@ -45,12 +45,12 @@ export type CustomHostnameSslSettings = {
 /**
  * SSL configuration for a custom hostname's managed certificate.
  */
-export type CustomHostnameSsl = {
+export type Ssl = {
   /**
    * Domain control validation method.
    * @default "txt"
    */
-  method?: CustomHostnameDcvMethod;
+  method?: DcvMethod;
   /**
    * Level of validation for the certificate. Only domain validation
    * (`dv`) is supported.
@@ -61,7 +61,7 @@ export type CustomHostnameSsl = {
    * Certificate authority that issues the certificate. Omit to let
    * Cloudflare choose.
    */
-  certificateAuthority?: CustomHostnameCertificateAuthority;
+  certificateAuthority?: CertificateAuthority;
   /**
    * How the intermediate chain is bundled with the leaf certificate.
    */
@@ -91,10 +91,10 @@ export type CustomHostnameSsl = {
   /**
    * Per-hostname TLS settings.
    */
-  settings?: CustomHostnameSslSettings;
+  settings?: SslSettings;
 };
 
-export interface CustomHostnameProps {
+export interface Props {
   /**
    * Zone the custom hostname is onboarded onto (the SaaS zone). Stable —
    * changing the zone triggers replacement.
@@ -116,7 +116,7 @@ export interface CustomHostnameProps {
    *
    * @default { method: "txt", type: "dv" }
    */
-  ssl?: CustomHostnameSsl;
+  ssl?: Ssl;
   /**
    * Unique key/value metadata for this hostname, available to Workers
    * via the request. Requires the Enterprise Cloudflare for SaaS
@@ -141,7 +141,7 @@ export interface CustomHostnameProps {
  * TXT record the customer must create to prove ownership of the
  * hostname (pre-validation).
  */
-export interface CustomHostnameOwnershipVerification {
+export interface OwnershipVerification {
   /** TXT record name. */
   name: string | undefined;
   /** Record type (always `txt`). */
@@ -153,7 +153,7 @@ export interface CustomHostnameOwnershipVerification {
 /**
  * HTTP token alternative for ownership verification.
  */
-export interface CustomHostnameOwnershipVerificationHttp {
+export interface OwnershipVerificationHttp {
   /** URL the token must be served from. */
   httpUrl: string | undefined;
   /** Token body to serve. */
@@ -164,7 +164,7 @@ export interface CustomHostnameOwnershipVerificationHttp {
  * A DCV record the customer must create/serve for certificate
  * validation.
  */
-export interface CustomHostnameValidationRecord {
+export interface ValidationRecord {
   /** CNAME validation record name. */
   cname: string | undefined;
   /** CNAME validation record target. */
@@ -183,7 +183,7 @@ export interface CustomHostnameValidationRecord {
   txtValue: string | undefined;
 }
 
-export interface CustomHostnameAttributes {
+export interface Attributes {
   /** Cloudflare-assigned custom hostname UUID. */
   customHostnameId: string;
   /** Zone that owns this custom hostname. */
@@ -199,19 +199,17 @@ export interface CustomHostnameAttributes {
   /** Certificate status (`initializing`, `pending_validation`, `active`, …). */
   sslStatus: string | undefined;
   /** TXT record the customer must create to verify ownership. */
-  ownershipVerification: CustomHostnameOwnershipVerification | undefined;
+  ownershipVerification: OwnershipVerification | undefined;
   /** HTTP token alternative for ownership verification. */
-  ownershipVerificationHttp:
-    | CustomHostnameOwnershipVerificationHttp
-    | undefined;
+  ownershipVerificationHttp: OwnershipVerificationHttp | undefined;
   /** DCV records the customer must satisfy for certificate issuance. */
-  validationRecords: CustomHostnameValidationRecord[] | undefined;
+  validationRecords: ValidationRecord[] | undefined;
 }
 
 export type CustomHostname = Resource<
-  "Cloudflare.CustomHostname",
-  CustomHostnameProps,
-  CustomHostnameAttributes,
+  "Cloudflare.CustomHostname.CustomHostname",
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -239,7 +237,7 @@ export type CustomHostname = Resource<
  * @section Creating a Custom Hostname
  * @example Basic custom hostname with TXT validation
  * ```typescript
- * const hostname = yield* Cloudflare.CustomHostname("CustomerApp", {
+ * const hostname = yield* Cloudflare.CustomHostname.CustomHostname("CustomerApp", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.customer.com",
  * });
@@ -249,7 +247,7 @@ export type CustomHostname = Resource<
  *
  * @example HTTP validation with a specific certificate authority
  * ```typescript
- * yield* Cloudflare.CustomHostname("CustomerApp", {
+ * yield* Cloudflare.CustomHostname.CustomHostname("CustomerApp", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.customer.com",
  *   ssl: {
@@ -263,30 +261,30 @@ export type CustomHostname = Resource<
  * @section Pairing with a Fallback Origin
  * @example Route custom hostname traffic to your origin
  * ```typescript
- * const record = yield* Cloudflare.DnsRecord("Origin", {
+ * const record = yield* Cloudflare.DNS.Record("Origin", {
  *   zoneId: zone.zoneId,
  *   name: "origin.my-saas.com",
  *   type: "A",
  *   content: "203.0.113.1",
  *   proxied: true,
  * });
- * yield* Cloudflare.FallbackOrigin("Fallback", {
+ * yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
  *   zoneId: zone.zoneId,
  *   origin: record.name,
  * });
- * yield* Cloudflare.CustomHostname("CustomerApp", {
+ * yield* Cloudflare.CustomHostname.CustomHostname("CustomerApp", {
  *   zoneId: zone.zoneId,
  *   hostname: "app.customer.com",
  * });
  * ```
  */
 export const CustomHostname = Resource<CustomHostname>(
-  "Cloudflare.CustomHostname",
+  "Cloudflare.CustomHostname.CustomHostname",
 );
 
 export const isCustomHostname = (value: unknown): value is CustomHostname =>
   Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.CustomHostname";
+  value.Type === "Cloudflare.CustomHostname.CustomHostname";
 
 export const CustomHostnameProvider = () =>
   Provider.succeed(CustomHostname, {
@@ -308,7 +306,7 @@ export const CustomHostnameProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? []).map(
-                  (raw): CustomHostnameAttributes =>
+                  (raw): Attributes =>
                     toAttributes(narrowHostname(raw), zone.id),
                 ),
               ),
@@ -322,8 +320,8 @@ export const CustomHostnameProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as CustomHostnameProps;
-      const n = news as CustomHostnameProps;
+      const o = olds as Props;
+      const n = news as Props;
       if (o.hostname !== undefined && o.hostname !== n.hostname) {
         return { action: "replace" } as const;
       }
@@ -613,7 +611,7 @@ const narrowHostname = (raw: RawHostname): ObservedHostname => ({
 const toAttributes = (
   observed: ObservedHostname,
   zoneId: string,
-): CustomHostnameAttributes => ({
+): Attributes => ({
   customHostnameId: observed.id,
   zoneId,
   hostname: observed.hostname,
@@ -653,7 +651,7 @@ const toAttributes = (
 // Body construction + drift detection
 // ---------------------------------------------------------------------------
 
-const buildSslBody = (ssl: CustomHostnameSsl | undefined) => ({
+const buildSslBody = (ssl: Ssl | undefined) => ({
   method: ssl?.method ?? "txt",
   type: ssl?.type ?? ("dv" as const),
   certificateAuthority: ssl?.certificateAuthority,
@@ -673,7 +671,7 @@ const buildSslBody = (ssl: CustomHostnameSsl | undefined) => ({
  * patch is needed.
  */
 const sslEqualsObserved = (
-  desired: CustomHostnameSsl,
+  desired: Ssl,
   observed: ObservedSsl | undefined,
 ): boolean => {
   if (observed === undefined) return false;

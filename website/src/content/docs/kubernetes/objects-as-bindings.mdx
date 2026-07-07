@@ -1,0 +1,147 @@
+---
+title: How objects deploy
+description: The mechanics of Kubernetes objects as bindings — how helpers attach object definitions to the EKS Cluster, and how its reconcile server-side-applies, orders, and prunes them.
+---
+
+Kubernetes objects in Alchemy are not standalone resources — every
+helper (`Namespace`, `Deployment`, `Job`, …) builds a plain object
+definition and attaches it to an `AWS.EKS.Cluster` as a binding. The
+Cluster's reconcile then converges all of them against the live API
+server in one pass. This page explains that machinery: what a
+binding carries, how server-side apply converges it, the order
+objects are applied and pruned in, and the `Object` escape hatch.
+
+It assumes you already have a cluster and working AWS credentials —
+see [setup](/kubernetes/setup) and the
+[Kubernetes overview](/kubernetes) if not.
+
+## Objects are bindings on the cluster
+
+Every helper bottoms out in the same call — build the object
+definition, then bind it onto the cluster:
+
+```typescript
+// packages/alchemy/src/Kubernetes/Object.ts
+const object = {
+  apiVersion: props.apiVersion,
+  kind: props.kind,
+  metadata: {
+    name: props.metadata?.name ?? id,
+    namespace: props.metadata?.namespace,
+    labels: props.metadata?.labels,
+    annotations: props.metadata?.annotations,
+  },
+  ...props.body,
+} satisfies KubernetesObjectDefinition;
+
+yield* props.cluster.bind(kubernetesBindingSid(object), {
+  type: "kubernetes-object",
+  object,
+});
+```
+
+There is no per-object Provider and no per-object state entry: the
+Stack collects these bindings during plan, and the EKS Cluster's
+reconcile receives them all and converges them as part of its own
+lifecycle. Deleting a `Kubernetes.Namespace("x", …)` line from your
+program doesn't delete a resource — it removes a binding, and the
+Cluster notices on the next deploy.
+
+## Server-side apply
+
+Each desired object is converged with a single Kubernetes
+[server-side apply](https://kubernetes.io/docs/reference/using-api/server-side-apply/)
+request under the `alchemy` field manager:
+
+```typescript
+// packages/alchemy/src/Kubernetes/client.ts
+const path = `${buildKubernetesObjectPath(toKubernetesObjectRef(object))}?fieldManager=alchemy&force=true`;
+
+return yield* requestJson({
+  connection,
+  method: "PATCH",
+  path,
+  body: object, // Content-Type: application/apply-patch+yaml
+});
+```
+
+Server-side apply makes deploys converge live objects the same way
+the rest of the Stack converges cloud resources — the API server
+diffs the submitted definition against the live object and takes
+ownership of the fields you declare (`force=true` reclaims fields
+another manager grabbed), so re-running a deploy with no changes is
+a no-op and drift in managed fields is corrected. Note that apply
+returns as soon as the API server accepts the patch — it does not
+wait for a Deployment to roll out or a Job to complete.
+
+## Ordering and pruning
+
+Objects are applied in dependency-safe rank order, each rank chunk
+in parallel:
+
+```typescript
+// packages/alchemy/src/Kubernetes/types.ts
+const supportedKinds = {
+  "v1/Namespace": { plural: "namespaces", scope: "Cluster", applyRank: 10 },
+  "v1/ServiceAccount": { plural: "serviceaccounts", scope: "Namespaced", applyRank: 20 },
+  "v1/ConfigMap": { plural: "configmaps", scope: "Namespaced", applyRank: 30 },
+  "v1/Service": { plural: "services", scope: "Namespaced", applyRank: 40 },
+  "apps/v1/Deployment": { plural: "deployments", scope: "Namespaced", applyRank: 50 },
+  "batch/v1/Job": { plural: "jobs", scope: "Namespaced", applyRank: 60 },
+};
+```
+
+Namespaces land before the ServiceAccounts and ConfigMaps inside
+them, and Services before the Deployments and Jobs that back them.
+Pruning is the mirror image: the Cluster reconcile compares the
+previously applied refs (stored on its `kubernetesObjects`
+attribute) against the desired set, and objects that dropped out of
+the program are `DELETE`d in reverse rank order first — a 404
+response is tolerated, so an already-gone object is not an error. On
+`stack destroy`, the Cluster's delete removes every bound object
+before the cluster itself is deleted.
+
+## The Object escape hatch
+
+When the six typed helpers don't model the shape you need,
+`Kubernetes.Object` binds a raw definition — you supply
+`apiVersion`, `kind`, `metadata`, and any extra top-level fields via
+`body`:
+
+```typescript
+const object = yield* Kubernetes.Object("demo", {
+  cluster,
+  apiVersion: "v1",
+  kind: "ConfigMap",
+  metadata: {
+    namespace: "default",
+  },
+  body: {
+    data: {
+      EXAMPLE: "true",
+    },
+  },
+});
+```
+
+The honest limit: `Object` is an escape hatch for *shapes*, not
+*kinds*. It is still restricted to the same six supported kinds in
+the table above — `getKubernetesKindSpec` throws
+`Unsupported Kubernetes object {apiVersion}/{kind}` for anything
+else, so it cannot create Secrets, Ingresses, CRDs, or custom
+resources today.
+
+## Where next
+
+- [EKS on AWS](/aws/compute/eks) — cluster provisioning, load-balanced
+  workloads, and Pod Identity, built on these bindings.
+- [Kubernetes overview](/kubernetes) — the hub index.
+
+Reference:
+
+- [Namespace](/providers/kubernetes/namespace)
+- [ServiceAccount](/providers/kubernetes/serviceaccount)
+- [ConfigMap](/providers/kubernetes/configmap)
+- [Service](/providers/kubernetes/service)
+- [Deployment](/providers/kubernetes/deployment)
+- [Job](/providers/kubernetes/job)

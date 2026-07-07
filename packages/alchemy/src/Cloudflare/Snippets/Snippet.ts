@@ -86,7 +86,7 @@ export type Snippet = Resource<
  * @section Creating a Snippet
  * @example Add a response header
  * ```typescript
- * const snippet = yield* Cloudflare.Snippet("HeaderSnippet", {
+ * const snippet = yield* Cloudflare.Snippets.Snippet("HeaderSnippet", {
  *   zoneId: zone.zoneId,
  *   code: `
  *     export default {
@@ -104,7 +104,7 @@ export type Snippet = Resource<
  * @section Activating with Snippet Rules
  * @example Route traffic through the snippet
  * ```typescript
- * yield* Cloudflare.SnippetRules("Rules", {
+ * yield* Cloudflare.Snippets.SnippetRules("Rules", {
  *   zoneId: zone.zoneId,
  *   rules: [
  *     {

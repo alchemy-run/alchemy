@@ -62,10 +62,10 @@ test.provider("create, update, and clear tags on a KV namespace", (stack) =>
 
     const v1 = yield* stack.deploy(
       Effect.gen(function* () {
-        const kv = yield* Cloudflare.KVNamespace("TagsKv", {
+        const kv = yield* Cloudflare.KV.Namespace("TagsKv", {
           title: KV_TITLE_CRUD,
         });
-        const tags = yield* Cloudflare.AccountResourceTags("KvTags", {
+        const tags = yield* Cloudflare.Tags.AccountResourceTags("KvTags", {
           resourceType: "kv_namespace",
           resourceId: kv.namespaceId,
           tags: { env: "test", team: "alchemy" },
@@ -87,10 +87,10 @@ test.provider("create, update, and clear tags on a KV namespace", (stack) =>
     // `team`, add `owner`.
     const v2 = yield* stack.deploy(
       Effect.gen(function* () {
-        const kv = yield* Cloudflare.KVNamespace("TagsKv", {
+        const kv = yield* Cloudflare.KV.Namespace("TagsKv", {
           title: KV_TITLE_CRUD,
         });
-        const tags = yield* Cloudflare.AccountResourceTags("KvTags", {
+        const tags = yield* Cloudflare.Tags.AccountResourceTags("KvTags", {
           resourceType: "kv_namespace",
           resourceId: kv.namespaceId,
           tags: { env: "prod", owner: "qa" },
@@ -124,13 +124,13 @@ test.provider("changing resourceId triggers replacement", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const a = yield* Cloudflare.KVNamespace("KvA", {
+        const a = yield* Cloudflare.KV.Namespace("KvA", {
           title: KV_TITLE_REPLACE_A,
         });
-        const b = yield* Cloudflare.KVNamespace("KvB", {
+        const b = yield* Cloudflare.KV.Namespace("KvB", {
           title: KV_TITLE_REPLACE_B,
         });
-        const tags = yield* Cloudflare.AccountResourceTags("ReplaceTags", {
+        const tags = yield* Cloudflare.Tags.AccountResourceTags("ReplaceTags", {
           resourceType: "kv_namespace",
           resourceId: a.namespaceId,
           tags: { pinned: "yes" },
@@ -152,13 +152,13 @@ test.provider("changing resourceId triggers replacement", (stack) =>
     // tagged, and the old set on A is cleared by the replacement delete.
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        const a = yield* Cloudflare.KVNamespace("KvA", {
+        const a = yield* Cloudflare.KV.Namespace("KvA", {
           title: KV_TITLE_REPLACE_A,
         });
-        const b = yield* Cloudflare.KVNamespace("KvB", {
+        const b = yield* Cloudflare.KV.Namespace("KvB", {
           title: KV_TITLE_REPLACE_B,
         });
-        const tags = yield* Cloudflare.AccountResourceTags("ReplaceTags", {
+        const tags = yield* Cloudflare.Tags.AccountResourceTags("ReplaceTags", {
           resourceType: "kv_namespace",
           resourceId: b.namespaceId,
           tags: { pinned: "yes" },
@@ -220,7 +220,7 @@ test.provider(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.AccountResourceTags("AccountTags", {
+            return yield* Cloudflare.Tags.AccountResourceTags("AccountTags", {
               resourceType: "account",
               resourceId: accountId,
               tags: { "alchemy-adopt-probe": "managed" },
@@ -237,7 +237,7 @@ test.provider(
       // set and converges it to the desired tags.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccountResourceTags("AccountTags", {
+          return yield* Cloudflare.Tags.AccountResourceTags("AccountTags", {
             resourceType: "account",
             resourceId: accountId,
             tags: { "alchemy-adopt-probe": "managed" },
@@ -266,10 +266,10 @@ test.provider("list enumerates account-wide tagged resources", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const kv = yield* Cloudflare.KVNamespace("ListKv", {
+        const kv = yield* Cloudflare.KV.Namespace("ListKv", {
           title: KV_TITLE_LIST,
         });
-        const tags = yield* Cloudflare.AccountResourceTags("ListTags", {
+        const tags = yield* Cloudflare.Tags.AccountResourceTags("ListTags", {
           resourceType: "kv_namespace",
           resourceId: kv.namespaceId,
           tags: { env: "list-test", team: "alchemy" },
@@ -279,7 +279,7 @@ test.provider("list enumerates account-wide tagged resources", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.AccountResourceTags,
+      Cloudflare.Tags.AccountResourceTags,
     );
     const all = yield* provider.list();
 

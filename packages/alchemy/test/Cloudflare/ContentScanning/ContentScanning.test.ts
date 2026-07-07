@@ -103,10 +103,13 @@ describe.sequential("ContentScanning", () => {
 
         const scanning = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.ContentScanning("UploadScanning", {
-              zoneId,
-              enabled: false,
-            });
+            return yield* Cloudflare.ContentScanning.ContentScanning(
+              "UploadScanning",
+              {
+                zoneId,
+                enabled: false,
+              },
+            );
           }),
         );
 
@@ -124,10 +127,13 @@ describe.sequential("ContentScanning", () => {
         // also proves reconcile only calls the API on a delta.
         const again = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.ContentScanning("UploadScanning", {
-              zoneId,
-              enabled: false,
-            });
+            return yield* Cloudflare.ContentScanning.ContentScanning(
+              "UploadScanning",
+              {
+                zoneId,
+                enabled: false,
+              },
+            );
           }),
         );
         expect(again.enabled).toEqual(false);
@@ -151,7 +157,9 @@ describe.sequential("ContentScanning", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.ContentScanning);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ContentScanning.ContentScanning,
+      );
       // The freshly-minted scoped token propagates eventually-consistently, so
       // the account-wide enumeration intermittently 403s (`Forbidden`) or 401s
       // (`Unauthorized`). Both are transient here — ride out the blip like
@@ -185,9 +193,12 @@ describe.sequential("ContentScanning", () => {
 
         const scanning = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.ContentScanning("UploadScanning", {
-              zoneId,
-            });
+            return yield* Cloudflare.ContentScanning.ContentScanning(
+              "UploadScanning",
+              {
+                zoneId,
+              },
+            );
           }),
         );
 
@@ -201,10 +212,13 @@ describe.sequential("ContentScanning", () => {
         // Update in place — same singleton, initialValue survives.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.ContentScanning("UploadScanning", {
-              zoneId,
-              enabled: false,
-            });
+            return yield* Cloudflare.ContentScanning.ContentScanning(
+              "UploadScanning",
+              {
+                zoneId,
+                enabled: false,
+              },
+            );
           }),
         );
         expect(updated.enabled).toEqual(false);

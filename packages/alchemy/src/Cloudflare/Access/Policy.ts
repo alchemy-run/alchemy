@@ -19,8 +19,7 @@ import type { Providers } from "../Providers.ts";
  * `CreateAccessPolicyRequest` so the full Cloudflare rule surface is available
  * without re-declaring the union.
  */
-export type AccessPolicyRule =
-  zeroTrust.CreateAccessPolicyRequest["include"][number];
+export type PolicyRule = zeroTrust.CreateAccessPolicyRequest["include"][number];
 
 /**
  * Decision Cloudflare Access takes when a request matches this policy.
@@ -30,7 +29,7 @@ export type AccessPolicyRule =
  * - `"non_identity"` — admit without requiring an identity provider login.
  * - `"bypass"` — skip Access entirely.
  */
-export type AccessPolicyDecision =
+export type PolicyDecision =
   | "allow"
   | "deny"
   | "non_identity"
@@ -39,7 +38,7 @@ export type AccessPolicyDecision =
   // outside the closed set still narrow cleanly.
   | (string & {});
 
-export type AccessPolicyProps = {
+export type PolicyProps = {
   /**
    * Display name for the policy. Treated as a stable identifier so the
    * provider can locate the policy by name during adoption / state recovery.
@@ -52,22 +51,22 @@ export type AccessPolicyProps = {
    * Decision the policy enforces when its rules match. Changing the decision
    * triggers replacement.
    */
-  decision: AccessPolicyDecision;
+  decision: PolicyDecision;
   /**
    * Rules combined with logical OR. A request must satisfy at least one
    * include rule for the policy to match. Required and must be non-empty.
    */
-  include: AccessPolicy.RuleGroup[];
+  include: Policy.RuleGroup[];
   /**
    * Rules combined with logical NOT. A request matching any exclude rule is
    * rejected by the policy even if it satisfied an include rule.
    */
-  exclude?: AccessPolicy.RuleGroup[];
+  exclude?: Policy.RuleGroup[];
   /**
    * Rules combined with logical AND. A request must satisfy every require
    * rule in addition to an include rule.
    */
-  require?: AccessPolicy.RuleGroup[];
+  require?: Policy.RuleGroup[];
   /**
    * Duration of issued session tokens. Format: `300ms`, `2h45m`, etc. When
    * unset, applications using this policy fall back to their own configured
@@ -97,19 +96,19 @@ export type AccessPolicyProps = {
   adopt?: boolean;
 };
 
-export declare namespace AccessPolicy {
+export declare namespace Policy {
   /**
-   * A single Access policy rule. See {@link AccessPolicyRule} for the full
+   * A single Access policy rule. See {@link PolicyRule} for the full
    * discriminated union (email, emailDomain, everyone, ip, ipList, group,
    * gsuite, githubOrganization, okta, azureAD, saml, oidc, deviceCheck via
    * `devicePosture`, externalEvaluation, etc.).
    */
-  export type RuleGroup = AccessPolicyRule;
+  export type RuleGroup = PolicyRule;
 }
 
-export type AccessPolicy = Resource<
-  "Cloudflare.AccessPolicy",
-  AccessPolicyProps,
+export type Policy = Resource<
+  "Cloudflare.Access.Policy",
+  PolicyProps,
   {
     /** UUID of the policy assigned by Cloudflare. */
     policyId: string;
@@ -130,7 +129,7 @@ export type AccessPolicy = Resource<
 
 /**
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
- * inline policies attached directly to an `AccessApplication` — a reusable
+ * inline policies attached directly to an `Application` — a reusable
  * policy can be referenced by multiple applications by id.
  * @resource
  * @product Access
@@ -138,7 +137,7 @@ export type AccessPolicy = Resource<
  * @section Creating a Policy
  * @example Allow a single email domain
  * ```typescript
- * const policy = yield* Cloudflare.AccessPolicy("AllowExampleDomain", {
+ * const policy = yield* Cloudflare.Access.Policy("AllowExampleDomain", {
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
@@ -146,7 +145,7 @@ export type AccessPolicy = Resource<
  *
  * @example Allow everyone but require purpose justification
  * ```typescript
- * const policy = yield* Cloudflare.AccessPolicy("OpenWithJustification", {
+ * const policy = yield* Cloudflare.Access.Policy("OpenWithJustification", {
  *   decision: "allow",
  *   include: [{ everyone: {} }],
  *   purposeJustificationRequired: true,
@@ -157,7 +156,7 @@ export type AccessPolicy = Resource<
  * @section Combining rule groups
  * @example Include + exclude + require
  * ```typescript
- * const policy = yield* Cloudflare.AccessPolicy("EngineersExceptInterns", {
+ * const policy = yield* Cloudflare.Access.Policy("EngineersExceptInterns", {
  *   decision: "allow",
  *   include: [{ emailDomain: { domain: "example.com" } }],
  *   exclude: [{ email: { email: "intern@example.com" } }],
@@ -165,10 +164,10 @@ export type AccessPolicy = Resource<
  * });
  * ```
  */
-export const AccessPolicy = Resource<AccessPolicy>("Cloudflare.AccessPolicy");
+export const Policy = Resource<Policy>("Cloudflare.Access.Policy");
 
-export const AccessPolicyProvider = () =>
-  Provider.succeed(AccessPolicy, {
+export const PolicyProvider = () =>
+  Provider.succeed(Policy, {
     stables: ["policyId", "accountId", "decision"],
     diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -188,11 +187,7 @@ export const AccessPolicyProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({
-      id,
-      news = {} as AccessPolicyProps,
-      output,
-    }) {
+    reconcile: Effect.fn(function* ({ id, news = {} as PolicyProps, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createPolicyName(id, news.name);
       const acct = output?.accountId ?? accountId;
@@ -274,7 +269,7 @@ export const AccessPolicyProvider = () =>
 
       if (!ensured.id) {
         return yield* Effect.fail(
-          new Error("AccessPolicy: ensured policy missing id"),
+          new Error("Policy: ensured policy missing id"),
         );
       }
       return {
@@ -379,7 +374,7 @@ const findPolicyByName = (acct: string, name: string) =>
 type ObservedPolicy = {
   id?: string | null;
   name?: string | null;
-  decision?: AccessPolicyDecision | null;
+  decision?: PolicyDecision | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -390,7 +385,7 @@ type ObservedPolicy = {
 type RawPolicy = {
   id?: string | null;
   name?: string | null;
-  decision?: AccessPolicyDecision | null | string;
+  decision?: PolicyDecision | null | string;
   createdAt?: string | null;
   updatedAt?: string | null;
 };

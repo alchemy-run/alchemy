@@ -64,7 +64,7 @@ export const isYieldableEffect = (
   value: unknown,
 ): value is Effect.Effect<unknown, unknown, unknown> =>
   Effect.isEffect(value) &&
-  typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
+  typeof (value as any as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
     "function";
 
 export type YieldableEffectLike<A = unknown, E = unknown, R = unknown> =
@@ -83,7 +83,8 @@ export const isEffectClassLike = (
 export const isYieldableEffectLike = (
   value: unknown,
 ): value is YieldableEffectLike =>
-  isYieldableEffect(value) || isEffectClassLike(value);
+  (isYieldableEffect(value) || isEffectClassLike(value)) &&
+  !("~alchemy/Kind" in value);
 
 export type UnwrapEffect<T> =
   T extends Effect.Effect<infer A, any, any> ? A : T;

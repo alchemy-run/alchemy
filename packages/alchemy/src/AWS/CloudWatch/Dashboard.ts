@@ -253,11 +253,14 @@ export const DashboardProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // `DeleteDashboards` is idempotent: AWS returns success (not
+          // `DashboardNotFoundError`) for names that don't exist, so a
+          // re-delete after a state-persistence failure is a safe no-op.
           yield* retryConcurrent(
             cloudwatch.deleteDashboards({
               DashboardNames: [output.dashboardName],
             }),
-          ).pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.void));
+          );
         }),
         list: () =>
           Effect.gen(function* () {

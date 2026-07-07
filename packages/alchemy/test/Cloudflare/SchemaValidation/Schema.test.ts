@@ -65,11 +65,14 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidationSchema("TestSchema", {
-            zoneId,
-            source: v1,
-            validationEnabled: false,
-          });
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
+            "TestSchema",
+            {
+              zoneId,
+              source: v1,
+              validationEnabled: false,
+            },
+          );
         }),
       );
 
@@ -86,11 +89,14 @@ test.provider(
       // Enabling (false → true) is the one in-place update.
       const enabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidationSchema("TestSchema", {
-            zoneId,
-            source: v1,
-            validationEnabled: true,
-          });
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
+            "TestSchema",
+            {
+              zoneId,
+              source: v1,
+              validationEnabled: true,
+            },
+          );
         }),
       );
       expect(enabled.schemaId).toEqual(created.schemaId);
@@ -104,11 +110,14 @@ test.provider(
       // schema (new id, old one deleted).
       const disabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidationSchema("TestSchema", {
-            zoneId,
-            source: v1,
-            validationEnabled: false,
-          });
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
+            "TestSchema",
+            {
+              zoneId,
+              source: v1,
+              validationEnabled: false,
+            },
+          );
         }),
       );
       expect(disabled.schemaId).not.toEqual(created.schemaId);
@@ -123,10 +132,13 @@ test.provider(
       // schema (new id) and deletes the old one.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidationSchema("TestSchema", {
-            zoneId,
-            source: v2,
-          });
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
+            "TestSchema",
+            {
+              zoneId,
+              source: v2,
+            },
+          );
         }),
       );
       expect(replaced.schemaId).not.toEqual(disabled.schemaId);
@@ -161,16 +173,19 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidationSchema("ListSchema", {
-            zoneId,
-            source: v1,
-            validationEnabled: false,
-          });
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
+            "ListSchema",
+            {
+              zoneId,
+              source: v1,
+              validationEnabled: false,
+            },
+          );
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SchemaValidationSchema,
+        Cloudflare.SchemaValidation.SchemaValidationSchema,
       );
       const all = yield* provider.list();
 

@@ -49,20 +49,32 @@ export type WorkerLoader = {
   ): Effect.Effect<WorkerStub, never, RuntimeContext>;
 };
 
+/**
+ * Effect returned by `WorkerLoader(name)`.
+ *
+ * It is a real `Effect` — `yield* WorkerLoader(name)` inside a Worker init
+ * attaches the binding and resolves the runtime handle — but it also carries
+ * the `~alchemy/Kind` marker statically, so when it is declared on a Worker's
+ * `env` the binding machinery recognises it as a `worker_loader` binding
+ * (`isWorkerLoader`) instead of running it. Every env-resolution site that
+ * branches on "is this a runnable Effect?" therefore checks `~alchemy/Kind`
+ * (via `isWorkerLoader` or `isYieldableEffectLike`) before `Effect.isEffect`.
+ */
 export interface WorkerLoaderEffect extends Effect.Effect<
   WorkerLoader,
   never,
   WorkerEnvironment | Worker
 > {
-  "alchemy/Kind": WorkerLoaderTypeId;
+  "~alchemy/Kind": WorkerLoaderTypeId;
+  "~alchemy/Name": string;
   name: string;
 }
 
 export const isWorkerLoader = (value: unknown): value is WorkerLoader =>
   typeof value === "object" &&
   value !== null &&
-  "alchemy/Kind" in value &&
-  (value as WorkerLoaderEffect)["alchemy/Kind"] === WorkerLoaderTypeId;
+  "~alchemy/Kind" in value &&
+  (value as WorkerLoaderEffect)["~alchemy/Kind"] === WorkerLoaderTypeId;
 
 export interface WorkerLoaderClass extends Context.Service<
   WorkerLoader,
@@ -106,10 +118,9 @@ export interface WorkerLoaderClass extends Context.Service<
  *
  * export default class EvalWorker extends Cloudflare.Worker<EvalWorker>()(
  *   "EvalWorker",
- *   { main: import.meta.filename },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // Registers the `worker_loader` binding on this Worker and returns the
- *     // runtime handle in one step — no separate `.bind(...)`.
+ *     // Registers the `worker_loader` binding on this Worker
  *     const loader = yield* Cloudflare.WorkerLoader("LOADER");
  *
  *     return {
@@ -281,7 +292,8 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
           } satisfies WorkerLoader;
         }),
         {
-          kind: WorkerLoaderTypeId,
+          "~alchemy/Name": name,
+          "~alchemy/Kind": WorkerLoaderTypeId,
           name,
         },
       ),
@@ -292,9 +304,18 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
   },
 ) as any;
 
+/**
+ * Convert the Effect-level worker code into the shape the native
+ * `env.LOADER.get()` API expects, unwrapping wrapped `Fetcher`s to their raw
+ * Cloudflare fetchers. `globalOutbound: null` (disable network access for the
+ * dynamic worker) must survive as `null` — `?.raw` alone would coerce it to
+ * `undefined`, which the runtime treats as "default outbound", silently
+ * re-enabling network access for workers meant to be sandboxed (#746).
+ */
 const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
   ...loader,
-  globalOutbound: loader.globalOutbound?.raw,
+  globalOutbound:
+    loader.globalOutbound === null ? null : loader.globalOutbound?.raw,
   tails: loader.tails?.map((t) => t.raw),
   streamingTails: loader.streamingTails?.map((t) => t.raw),
 });

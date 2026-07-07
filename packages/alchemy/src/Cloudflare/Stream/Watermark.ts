@@ -10,20 +10,20 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const StreamWatermarkTypeId = "Cloudflare.Stream.Watermark" as const;
-type StreamWatermarkTypeId = typeof StreamWatermarkTypeId;
+const TypeId = "Cloudflare.Stream.Watermark" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Location of the watermark image on the video.
  */
-export type StreamWatermarkPosition =
+export type WatermarkPosition =
   | "upperRight"
   | "upperLeft"
   | "lowerLeft"
   | "lowerRight"
   | "center";
 
-export type StreamWatermarkProps = {
+export type WatermarkProps = {
   /**
    * A short description of the watermark profile. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Watermark
@@ -57,7 +57,7 @@ export type StreamWatermarkProps = {
    * parameter. Changing the position triggers a replacement.
    * @default "upperRight"
    */
-  position?: StreamWatermarkPosition;
+  position?: WatermarkPosition;
   /**
    * The size of the image relative to the overall size of the video.
    * `0.0` means no scaling, `1.0` fills the entire video. Changing the
@@ -67,7 +67,7 @@ export type StreamWatermarkProps = {
   scale?: number;
 };
 
-export type StreamWatermarkAttributes = {
+export type WatermarkAttributes = {
   /**
    * The unique identifier for the watermark profile (Cloudflare `uid`).
    */
@@ -99,7 +99,7 @@ export type StreamWatermarkAttributes = {
   /**
    * The location of the image.
    */
-  position: StreamWatermarkPosition;
+  position: WatermarkPosition;
   /**
    * The size of the image relative to the overall size of the video.
    */
@@ -118,10 +118,10 @@ export type StreamWatermarkAttributes = {
   width: number | undefined;
 };
 
-export type StreamWatermark = Resource<
-  StreamWatermarkTypeId,
-  StreamWatermarkProps,
-  StreamWatermarkAttributes,
+export type Watermark = Resource<
+  TypeId,
+  WatermarkProps,
+  WatermarkAttributes,
   never,
   Providers
 >;
@@ -142,14 +142,14 @@ export type StreamWatermark = Resource<
  * @section Creating a watermark
  * @example Default watermark from an image URL
  * ```typescript
- * const watermark = yield* Cloudflare.StreamWatermark("Logo", {
+ * const watermark = yield* Cloudflare.Stream.Watermark("Logo", {
  *   url: "https://example.com/logo.png",
  * });
  * ```
  *
  * @example Centered semi-transparent watermark
  * ```typescript
- * const watermark = yield* Cloudflare.StreamWatermark("Logo", {
+ * const watermark = yield* Cloudflare.Stream.Watermark("Logo", {
  *   url: "https://example.com/logo.png",
  *   position: "center",
  *   opacity: 0.5,
@@ -159,16 +159,16 @@ export type StreamWatermark = Resource<
  *
  * @see https://developers.cloudflare.com/stream/edit-videos/applying-watermarks/
  */
-export const StreamWatermark = Resource<StreamWatermark>(StreamWatermarkTypeId);
+export const Watermark = Resource<Watermark>(TypeId);
 
 /**
- * Returns true if the given value is a StreamWatermark resource.
+ * Returns true if the given value is a Watermark resource.
  */
-export const isStreamWatermark = (value: unknown): value is StreamWatermark =>
-  Predicate.hasProperty(value, "Type") && value.Type === StreamWatermarkTypeId;
+export const isWatermark = (value: unknown): value is Watermark =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const StreamWatermarkProvider = () =>
-  Provider.succeed(StreamWatermark, {
+export const WatermarkProvider = () =>
+  Provider.succeed(Watermark, {
     stables: [
       "watermarkId",
       "accountId",
@@ -319,7 +319,7 @@ const toAttributes = (
     | stream.CreateWatermarkResponse
     | stream.ListWatermarksResponse["result"][number],
   accountId: string,
-): StreamWatermarkAttributes => ({
+): WatermarkAttributes => ({
   watermarkId: watermark.uid ?? "",
   accountId,
   name: watermark.name ?? "",
@@ -327,7 +327,7 @@ const toAttributes = (
   downloadedFrom: watermark.downloadedFrom ?? undefined,
   opacity: watermark.opacity ?? 1.0,
   padding: watermark.padding ?? 0.05,
-  position: (watermark.position ?? "upperRight") as StreamWatermarkPosition,
+  position: (watermark.position ?? "upperRight") as WatermarkPosition,
   scale: watermark.scale ?? 0.15,
   size: watermark.size ?? undefined,
   height: watermark.height ?? undefined,

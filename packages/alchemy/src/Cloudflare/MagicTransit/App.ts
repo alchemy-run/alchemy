@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicAppTypeId = "Cloudflare.MagicTransit.App" as const;
-type MagicAppTypeId = typeof MagicAppTypeId;
+const TypeId = "Cloudflare.MagicTransit.App" as const;
+type TypeId = typeof TypeId;
 
 export interface MagicAppProps {
   /**
@@ -48,7 +48,7 @@ export interface MagicAppAttributes {
 }
 
 export type MagicApp = Resource<
-  MagicAppTypeId,
+  TypeId,
   MagicAppProps,
   MagicAppAttributes,
   never,
@@ -70,7 +70,7 @@ export type MagicApp = Resource<
  * @section Creating an app
  * @example App matching hostnames
  * ```typescript
- * const app = yield* Cloudflare.MagicApp("crm", {
+ * const app = yield* Cloudflare.MagicTransit.MagicApp("crm", {
  *   name: "Internal CRM",
  *   type: "Business",
  *   hostnames: ["crm.example.com"],
@@ -79,7 +79,7 @@ export type MagicApp = Resource<
  *
  * @example App matching IP subnets
  * ```typescript
- * const app = yield* Cloudflare.MagicApp("voip", {
+ * const app = yield* Cloudflare.MagicTransit.MagicApp("voip", {
  *   name: "VoIP",
  *   type: "Communication",
  *   ipSubnets: ["192.0.2.0/24", "198.51.100.0/24"],
@@ -88,13 +88,13 @@ export type MagicApp = Resource<
  *
  * @see https://developers.cloudflare.com/magic-wan/configuration/apps/
  */
-export const MagicApp = Resource<MagicApp>(MagicAppTypeId);
+export const MagicApp = Resource<MagicApp>(TypeId);
 
 /**
  * Returns true if the given value is a MagicApp resource.
  */
 export const isMagicApp = (value: unknown): value is MagicApp =>
-  Predicate.hasProperty(value, "Type") && value.Type === MagicAppTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const MagicAppProvider = () =>
   Provider.succeed(MagicApp, {

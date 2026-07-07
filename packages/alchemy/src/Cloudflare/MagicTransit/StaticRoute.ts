@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const MagicStaticRouteTypeId = "Cloudflare.MagicTransit.StaticRoute" as const;
-type MagicStaticRouteTypeId = typeof MagicStaticRouteTypeId;
+const TypeId = "Cloudflare.MagicTransit.StaticRoute" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Scope of an ECMP static route — restricts the route to specific
@@ -76,7 +76,7 @@ export interface MagicStaticRouteAttributes {
 }
 
 export type MagicStaticRoute = Resource<
-  MagicStaticRouteTypeId,
+  TypeId,
   MagicStaticRouteProps,
   MagicStaticRouteAttributes,
   never,
@@ -101,14 +101,14 @@ export type MagicStaticRoute = Resource<
  * @section Creating a static route
  * @example Route a prefix over a GRE tunnel
  * ```typescript
- * const tunnel = yield* Cloudflare.GreTunnel("office", {
+ * const tunnel = yield* Cloudflare.MagicTransit.GreTunnel("office", {
  *   name: "office-gre-1",
  *   cloudflareGreEndpoint: "203.0.113.1",
  *   customerGreEndpoint: "198.51.100.1",
  *   interfaceAddress: "10.213.0.8/31",
  * });
  *
- * yield* Cloudflare.MagicStaticRoute("office-route", {
+ * yield* Cloudflare.MagicTransit.MagicStaticRoute("office-route", {
  *   prefix: "10.100.0.0/24",
  *   nexthop: "10.213.0.9",
  *   priority: 100,
@@ -117,7 +117,7 @@ export type MagicStaticRoute = Resource<
  *
  * @example ECMP route scoped to a region
  * ```typescript
- * yield* Cloudflare.MagicStaticRoute("ecmp-route", {
+ * yield* Cloudflare.MagicTransit.MagicStaticRoute("ecmp-route", {
  *   prefix: "10.100.0.0/24",
  *   nexthop: "10.213.0.9",
  *   priority: 100,
@@ -128,15 +128,13 @@ export type MagicStaticRoute = Resource<
  *
  * @see https://developers.cloudflare.com/magic-transit/how-to/configure-static-routes/
  */
-export const MagicStaticRoute = Resource<MagicStaticRoute>(
-  MagicStaticRouteTypeId,
-);
+export const MagicStaticRoute = Resource<MagicStaticRoute>(TypeId);
 
 /**
  * Returns true if the given value is a MagicStaticRoute resource.
  */
 export const isMagicStaticRoute = (value: unknown): value is MagicStaticRoute =>
-  Predicate.hasProperty(value, "Type") && value.Type === MagicStaticRouteTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const DEFAULT_PRIORITY = 100;
 

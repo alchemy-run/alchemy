@@ -8,11 +8,11 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * The test polls `snapshot()` via the worker's `GET /times` route to verify
  * the cron actually fired.
  */
-export class CronCounter extends Cloudflare.DurableObjectNamespace<CronCounter>()(
+export class CronCounter extends Cloudflare.DurableObject<CronCounter>()(
   "CronCounter",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       let times = (yield* state.storage.get<number[]>("times")) ?? [];
       return {
         record: Effect.fn(function* (time: number) {
@@ -40,12 +40,12 @@ export class CronCounter extends Cloudflare.DurableObjectNamespace<CronCounter>(
 export default class CronTestWorker extends Cloudflare.Worker<CronTestWorker>()(
   "CronTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const counters = yield* CronCounter;
 
-    yield* Cloudflare.cron("* * * * *").subscribe((controller) =>
+    yield* Cloudflare.Workers.cron("* * * * *", (controller) =>
       counters.getByName("default").record(controller.scheduledTime),
     );
 
@@ -67,5 +67,5 @@ export default class CronTestWorker extends Cloudflare.Worker<CronTestWorker>()(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.CronEventSourceLive)),
+  }).pipe(Effect.provide(Cloudflare.Workers.CronEventSourceLive)),
 ) {}

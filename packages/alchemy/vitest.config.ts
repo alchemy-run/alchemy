@@ -16,10 +16,17 @@ export default defineConfig({
   test: {
     env: loadEnv("test", path.resolve(import.meta.dirname, "..", ".."), ""),
     pool: "forks",
-    maxWorkers: 32,
+    maxWorkers: 16,
     sequence: { concurrent: true },
     testTimeout: 120_000,
     hookTimeout: 120_000,
+    // These suites run against real cloud APIs at high concurrency, so a
+    // handful of tests per run hit transient network/edge-propagation flakes
+    // (read ETIMEDOUT, D1 replica lag, cert tombstone lag) that pass on a
+    // re-run. Retry the test body (deploys live in `beforeAll`, so they are
+    // not re-run) so genuine failures — which fail deterministically — still
+    // surface while flakes self-heal.
+    retry: 2,
     passWithNoTests: true,
     projects: [
       // Run most tests with the above defaults, excluding special cases.

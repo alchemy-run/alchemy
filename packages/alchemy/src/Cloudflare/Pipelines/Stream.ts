@@ -2,7 +2,7 @@ import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
+import * as EffectStream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -12,13 +12,13 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const PipelineStreamTypeId = "Cloudflare.Pipelines.Stream" as const;
-type PipelineStreamTypeId = typeof PipelineStreamTypeId;
+const StreamTypeId = "Cloudflare.Pipelines.Stream" as const;
+type StreamTypeId = typeof StreamTypeId;
 
 /**
  * Scalar field types accepted by a structured stream schema.
  */
-export type PipelineStreamFieldType =
+export type StreamFieldType =
   | "int32"
   | "int64"
   | "float32"
@@ -32,10 +32,10 @@ export type PipelineStreamFieldType =
  * A single field of a structured stream schema. `timestamp` fields
  * additionally accept a `unit`.
  */
-export type PipelineStreamField =
+export type StreamField =
   | {
       /** Field type. */
-      type: PipelineStreamFieldType;
+      type: StreamFieldType;
       /** Field name as it appears in ingested events. */
       name: string;
       /** Whether the field must be present in every event. */
@@ -66,7 +66,7 @@ export type PipelineStreamField =
 /**
  * Input format of events ingested by the stream.
  */
-export interface PipelineStreamFormat {
+export interface StreamFormat {
   /** Only JSON ingestion is supported. */
   type: "json";
   /**
@@ -85,7 +85,7 @@ export interface PipelineStreamFormat {
 /**
  * HTTP ingest endpoint configuration. Mutable in place.
  */
-export interface PipelineStreamHttp {
+export interface StreamHttp {
   /**
    * Whether the stream exposes an HTTP ingest endpoint.
    * @default true
@@ -104,7 +104,7 @@ export interface PipelineStreamHttp {
   };
 }
 
-export interface PipelineStreamProps {
+export interface StreamProps {
   /**
    * Name of the stream. Unique per account; must be alphanumeric and
    * underscores only (it is referenced as a SQL table name). If omitted,
@@ -120,19 +120,19 @@ export interface PipelineStreamProps {
    */
   schema?: {
     /** Fields of the structured schema. */
-    fields: PipelineStreamField[];
+    fields: StreamField[];
   };
   /**
    * Input format configuration. Immutable — changing it triggers a
    * replacement.
    * @default { type: "json" }
    */
-  format?: PipelineStreamFormat;
+  format?: StreamFormat;
   /**
    * HTTP ingest endpoint configuration. Mutable in place.
    * @default { enabled: true, authentication: false }
    */
-  http?: PipelineStreamHttp;
+  http?: StreamHttp;
   /**
    * Whether Workers can send events to this stream via a `pipelines`
    * binding. Mutable in place.
@@ -144,7 +144,7 @@ export interface PipelineStreamProps {
   };
 }
 
-export interface PipelineStreamAttributes {
+export interface StreamAttributes {
   /** Cloudflare-assigned stream identifier. */
   streamId: string;
   /** Account that owns the stream. */
@@ -169,10 +169,10 @@ export interface PipelineStreamAttributes {
   modifiedAt: string;
 }
 
-export type PipelineStream = Resource<
-  PipelineStreamTypeId,
-  PipelineStreamProps,
-  PipelineStreamAttributes,
+export type Stream = Resource<
+  StreamTypeId,
+  StreamProps,
+  StreamAttributes,
   never,
   Providers
 >;
@@ -181,7 +181,7 @@ export type PipelineStream = Resource<
  * A Cloudflare Pipelines stream — the ingestion endpoint of the Pipelines
  * product. Events are sent to a stream over HTTP (and/or from Workers via
  * a binding), transformed by a SQL {@link Pipeline}, and written to a
- * {@link PipelineSink}.
+ * {@link Sink}.
  *
  * The stream's `schema` and `format` are fixed at creation (changing them
  * triggers a replacement); the HTTP endpoint and Worker-binding toggles
@@ -192,12 +192,12 @@ export type PipelineStream = Resource<
  * @section Creating a Stream
  * @example Unstructured stream with default settings
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("events", {});
+ * const stream = yield* Cloudflare.Pipelines.Stream("events", {});
  * ```
  *
  * @example Structured stream with a typed schema
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("clicks", {
+ * const stream = yield* Cloudflare.Pipelines.Stream("clicks", {
  *   schema: {
  *     fields: [
  *       { type: "string", name: "url", required: true },
@@ -210,7 +210,7 @@ export type PipelineStream = Resource<
  * @section HTTP ingestion
  * @example Authenticated endpoint with CORS
  * ```typescript
- * const stream = yield* Cloudflare.PipelineStream("events", {
+ * const stream = yield* Cloudflare.Pipelines.Stream("events", {
  *   http: {
  *     enabled: true,
  *     authentication: true,
@@ -223,23 +223,23 @@ export type PipelineStream = Resource<
  * @section Wiring into a Pipeline
  * @example Stream → SQL Pipeline → R2 Sink
  * ```typescript
- * const pipeline = yield* Cloudflare.Pipeline("etl", {
+ * const pipeline = yield* Cloudflare.Pipelines.Pipeline("etl", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/pipelines/
  */
-export const PipelineStream = Resource<PipelineStream>(PipelineStreamTypeId);
+export const Stream = Resource<Stream>(StreamTypeId);
 
 /**
- * Returns true if the given value is a PipelineStream resource.
+ * Returns true if the given value is a Stream resource.
  */
-export const isPipelineStream = (value: unknown): value is PipelineStream =>
-  Predicate.hasProperty(value, "Type") && value.Type === PipelineStreamTypeId;
+export const isStream = (value: unknown): value is Stream =>
+  Predicate.hasProperty(value, "Type") && value.Type === StreamTypeId;
 
-export const PipelineStreamProvider = () =>
-  Provider.succeed(PipelineStream, {
+export const StreamProvider = () =>
+  Provider.succeed(Stream, {
     stables: ["streamId", "accountId", "name", "createdAt"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -248,7 +248,7 @@ export const PipelineStreamProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const o = olds as PipelineStreamProps | undefined;
+      const o = olds as StreamProps | undefined;
       const newName = yield* streamName(id, news.name);
       const oldName = output?.name ?? (yield* streamName(id, o?.name));
       if (newName !== oldName) {
@@ -383,7 +383,7 @@ export const PipelineStreamProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* pipelines.listStreams.pages({ accountId }).pipe(
-        Stream.runCollect,
+        EffectStream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? []).map((s) => toAttributes(s, accountId)),
@@ -439,13 +439,13 @@ const getStream = (accountId: string, streamId: string) =>
 
 const findStreamByName = (accountId: string, name: string) =>
   pipelines.listStreams.items({ accountId }).pipe(
-    Stream.runCollect,
+    EffectStream.runCollect,
     Effect.map((chunk): ObservedStream | undefined =>
       Array.from(chunk).find((s) => s.name === name),
     ),
   );
 
-const desiredHttp = (http: PipelineStreamHttp) => ({
+const desiredHttp = (http: StreamHttp) => ({
   enabled: http.enabled ?? true,
   authentication: http.authentication ?? false,
   cors: http.cors?.origins ? { origins: http.cors.origins } : undefined,
@@ -486,7 +486,7 @@ const stableStringify = (value: unknown): string =>
 const toAttributes = (
   observed: ObservedStream,
   accountId: string,
-): PipelineStreamAttributes => ({
+): StreamAttributes => ({
   streamId: observed.id,
   accountId,
   name: observed.name,

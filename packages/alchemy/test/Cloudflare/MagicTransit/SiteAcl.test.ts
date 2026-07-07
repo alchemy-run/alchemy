@@ -37,7 +37,9 @@ test.provider(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicSiteAcl);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicSiteAcl,
+      );
 
       if (!entitled) {
         // Unentitled: list() swallows the typed entitlement tag and yields [].
@@ -47,13 +49,13 @@ test.provider(
       }
 
       const site = yield* stack.deploy(
-        Cloudflare.MagicSite("ListSite", {
+        Cloudflare.MagicTransit.MagicSite("ListSite", {
           name: "alch-acl-list-site",
           description: "alchemy site acl list test",
         }),
       );
       const lan1 = yield* stack.deploy(
-        Cloudflare.MagicSiteLan("ListLan1", {
+        Cloudflare.MagicTransit.MagicSiteLan("ListLan1", {
           siteId: site.siteId,
           physport: 2,
           name: "alch-acl-list-lan1",
@@ -62,7 +64,7 @@ test.provider(
         }),
       );
       const lan2 = yield* stack.deploy(
-        Cloudflare.MagicSiteLan("ListLan2", {
+        Cloudflare.MagicTransit.MagicSiteLan("ListLan2", {
           siteId: site.siteId,
           physport: 3,
           name: "alch-acl-list-lan2",
@@ -71,7 +73,7 @@ test.provider(
         }),
       );
       const acl = yield* stack.deploy(
-        Cloudflare.MagicSiteAcl("ListAcl", {
+        Cloudflare.MagicTransit.MagicSiteAcl("ListAcl", {
           siteId: site.siteId,
           name: "alch-acl-list",
           lan1: { lanId: lan1.lanId, ports: [443] },
@@ -122,7 +124,9 @@ test.provider(
       expect(["MagicWanUnauthorized", "Forbidden"]).toContain(error._tag);
 
       // Despite the gating, list() degrades to an empty array.
-      const provider = yield* Provider.findProvider(Cloudflare.MagicSiteAcl);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicSiteAcl,
+      );
       expect(yield* provider.list()).toEqual([]);
 
       yield* stack.destroy();

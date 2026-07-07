@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const BotManagementTypeId = "Cloudflare.BotManagement" as const;
-type BotManagementTypeId = typeof BotManagementTypeId;
+const TypeId = "Cloudflare.BotManagement.BotManagement" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Action for AI scrapers and crawlers.
@@ -50,7 +50,7 @@ export type SbfmVerifiedBotsAction = "allow" | "block";
  * Only fields you explicitly set are ever sent to Cloudflare — sending a
  * field outside the zone's plan shape fails validation server-side.
  */
-export interface BotManagementSettings {
+export interface Settings {
   /**
    * Action for AI scrapers and crawlers ("block AI bots"). Note
    * `only_on_ad_pages` is not available for Enterprise zones.
@@ -127,7 +127,7 @@ export interface BotManagementSettings {
   suppressSessionScore?: boolean;
 }
 
-export interface BotManagementProps extends BotManagementSettings {
+export interface Props extends Settings {
   /**
    * Zone whose bot-management configuration is managed. Stable — changing
    * the zone triggers a replacement (which simply re-adopts the new
@@ -136,7 +136,7 @@ export interface BotManagementProps extends BotManagementSettings {
   zoneId: string;
 }
 
-export interface BotManagementAttributes extends BotManagementSettings {
+export interface Attributes extends Settings {
   /**
    * Zone that owns this bot-management configuration.
    */
@@ -151,13 +151,13 @@ export interface BotManagementAttributes extends BotManagementSettings {
    * first wrote to the zone. `delete` restores these values for the
    * fields this resource managed.
    */
-  initialSettings: BotManagementSettings;
+  initialSettings: Settings;
 }
 
 export type BotManagement = Resource<
-  BotManagementTypeId,
-  BotManagementProps,
-  BotManagementAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -170,7 +170,7 @@ export type BotManagement = Resource<
  * set, leaving every other field untouched.
  *
  * Which fields are writable depends on the zone's plan (see
- * {@link BotManagementSettings}). Setting a field outside the zone's plan
+ * {@link Settings}). Setting a field outside the zone's plan
  * shape fails validation on Cloudflare's side.
  *
  * On destroy, the resource restores the fields it managed to the values
@@ -184,7 +184,7 @@ export type BotManagement = Resource<
  * @section Super Bot Fight Mode
  * @example Challenge definitely automated traffic (Pro and above)
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   sbfmDefinitelyAutomated: "managed_challenge",
  *   sbfmVerifiedBots: "allow",
@@ -193,7 +193,7 @@ export type BotManagement = Resource<
  *
  * @example Static resource protection and WordPress optimization
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   sbfmDefinitelyAutomated: "block",
  *   sbfmStaticResourceProtection: true,
@@ -204,7 +204,7 @@ export type BotManagement = Resource<
  * @section AI bot protection
  * @example Block AI scrapers and crawlers
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   aiBotsProtection: "block",
  *   crawlerProtection: "enabled",
@@ -214,7 +214,7 @@ export type BotManagement = Resource<
  * @section Bot Fight Mode (Free plans)
  * @example Enable Bot Fight Mode
  * ```typescript
- * yield* Cloudflare.BotManagement("Bots", {
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
  *   fightMode: true,
  * });
@@ -222,13 +222,13 @@ export type BotManagement = Resource<
  *
  * @see https://developers.cloudflare.com/bots/
  */
-export const BotManagement = Resource<BotManagement>(BotManagementTypeId);
+export const BotManagement = Resource<BotManagement>(TypeId);
 
 /**
  * Returns true if the given value is a BotManagement resource.
  */
 export const isBotManagement = (value: unknown): value is BotManagement =>
-  Predicate.hasProperty(value, "Type") && value.Type === BotManagementTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 /**
  * Every writable settings key, used to project observed cloud state and
@@ -280,14 +280,12 @@ export const BotManagementProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is BotManagementAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as BotManagementProps;
-      const n = news as BotManagementProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only when both sides are concrete.
       const oldZone = output?.zoneId ?? o.zoneId;
       if (
@@ -348,7 +346,7 @@ export const BotManagementProvider = () =>
       if (!observed) return; // zone is gone — nothing to restore
       const managed = pickSettings(olds ?? {});
       const current = pickSettings(observed);
-      const restore: BotManagementSettings = {};
+      const restore: Settings = {};
       for (const key of SETTINGS_KEYS) {
         const snapshot = output.initialSettings?.[key];
         if (
@@ -408,26 +406,21 @@ const undef = <T>(v: T | null | undefined): T | undefined =>
  * Project any source (observed union member, props, attrs) onto the
  * writable settings keys, dropping `null`/`undefined` values.
  */
-const pickSettings = (
-  source: ObservedBotManagement | BotManagementSettings,
-): BotManagementSettings => {
+const pickSettings = (source: ObservedBotManagement | Settings): Settings => {
   const bag = source as Record<SettingsKey, unknown>;
   const out: Record<string, unknown> = {};
   for (const key of SETTINGS_KEYS) {
     const value = undef(bag[key]);
     if (value !== undefined) out[key] = value;
   }
-  return out as BotManagementSettings;
+  return out as Settings;
 };
 
 /**
  * True when every field set in `desired` matches `observed`. Unset
  * desired fields are ignored — they are dashboard/plan-managed.
  */
-const settingsEqual = (
-  desired: BotManagementSettings,
-  observed: BotManagementSettings,
-): boolean =>
+const settingsEqual = (desired: Settings, observed: Settings): boolean =>
   SETTINGS_KEYS.every(
     (key) => desired[key] === undefined || desired[key] === observed[key],
   );
@@ -435,8 +428,8 @@ const settingsEqual = (
 const toAttributes = (
   zoneId: string,
   observed: ObservedBotManagement,
-  initialSettings: BotManagementSettings,
-): BotManagementAttributes => ({
+  initialSettings: Settings,
+): Attributes => ({
   zoneId,
   ...pickSettings(observed),
   usingLatestModel: undef(observed.usingLatestModel),

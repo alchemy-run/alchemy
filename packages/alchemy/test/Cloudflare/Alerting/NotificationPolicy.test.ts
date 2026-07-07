@@ -24,7 +24,7 @@ test.provider("create, update, delete notification policy", (stack) =>
     yield* stack.destroy();
 
     const policy = yield* stack.deploy(
-      Cloudflare.NotificationPolicy("SslPolicy", {
+      Cloudflare.Alerting.NotificationPolicy("SslPolicy", {
         alertType: "universal_ssl_event_type",
         mechanisms: { email: [{ id: EMAIL }] },
       }),
@@ -46,7 +46,7 @@ test.provider("create, update, delete notification policy", (stack) =>
 
     // Update mutable props in place — same id.
     const updated = yield* stack.deploy(
-      Cloudflare.NotificationPolicy("SslPolicy", {
+      Cloudflare.Alerting.NotificationPolicy("SslPolicy", {
         alertType: "universal_ssl_event_type",
         enabled: false,
         description: "paused during migration",
@@ -76,7 +76,7 @@ test.provider("replaces policy when alertType changes", (stack) =>
     yield* stack.destroy();
 
     const policy = yield* stack.deploy(
-      Cloudflare.NotificationPolicy("ReplacePolicy", {
+      Cloudflare.Alerting.NotificationPolicy("ReplacePolicy", {
         alertType: "universal_ssl_event_type",
         mechanisms: { email: [{ id: EMAIL }] },
       }),
@@ -84,7 +84,7 @@ test.provider("replaces policy when alertType changes", (stack) =>
     expect(policy.alertType).toEqual("universal_ssl_event_type");
 
     const replaced = yield* stack.deploy(
-      Cloudflare.NotificationPolicy("ReplacePolicy", {
+      Cloudflare.Alerting.NotificationPolicy("ReplacePolicy", {
         alertType: "incident_alert",
         mechanisms: { email: [{ id: EMAIL }] },
       }),
@@ -114,14 +114,14 @@ test.provider("list enumerates the deployed notification policy", (stack) =>
     yield* stack.destroy();
 
     const deployed = yield* stack.deploy(
-      Cloudflare.NotificationPolicy("ListPolicy", {
+      Cloudflare.Alerting.NotificationPolicy("ListPolicy", {
         alertType: "universal_ssl_event_type",
         mechanisms: { email: [{ id: EMAIL }] },
       }),
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.NotificationPolicy,
+      Cloudflare.Alerting.NotificationPolicy,
     );
     const all = yield* provider.list();
 

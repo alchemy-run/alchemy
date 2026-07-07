@@ -6,7 +6,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type SecretsStore = Resource<
+export type Store = Resource<
   "Cloudflare.SecretsStore",
   {},
   {
@@ -37,20 +37,20 @@ export type SecretsStore = Resource<
  * @section Creating a Store
  * @example Basic Secrets Store (adopts existing or creates one)
  * ```typescript
- * const store = yield* Cloudflare.SecretsStore("MyStore");
+ * const store = yield* Cloudflare.SecretsStore.Store("MyStore");
  * ```
  *
  * @example Adopt a specific named store
  * ```typescript
- * const store = yield* Cloudflare.SecretsStore("MyStore", {
+ * const store = yield* Cloudflare.SecretsStore.Store("MyStore", {
  *   name: "production-secrets",
  * });
  * ```
  */
-export const SecretsStore = Resource<SecretsStore>("Cloudflare.SecretsStore");
+export const Store = Resource<Store>("Cloudflare.SecretsStore");
 
 export const SecretsStoreProvider = () =>
-  Provider.succeed(SecretsStore, {
+  Provider.succeed(Store, {
     stables: ["storeId", "storeName", "accountId"],
     // The engine calls `read` whenever there's no prior state. Cloudflare
     // allows exactly one Secrets Store per account, so any account that's

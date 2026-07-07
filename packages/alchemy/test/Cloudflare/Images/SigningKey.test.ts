@@ -57,7 +57,7 @@ test.provider("list enumerates the account's signing keys", (stack) =>
 
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.ImagesSigningKey);
+    const provider = yield* Provider.findProvider(Cloudflare.Images.SigningKey);
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
@@ -103,7 +103,7 @@ test.provider.skipIf(!keysEntitled)(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
-        Cloudflare.ImagesSigningKey("TestSigningKey", {
+        Cloudflare.Images.SigningKey("TestSigningKey", {
           name: keyName,
         }),
       );
@@ -121,7 +121,7 @@ test.provider.skipIf(!keysEntitled)(
       // Redeploying identical props must NOT re-PUT (a re-PUT would rotate
       // the key material) — the value stays byte-identical.
       const noop = yield* stack.deploy(
-        Cloudflare.ImagesSigningKey("TestSigningKey", {
+        Cloudflare.Images.SigningKey("TestSigningKey", {
           name: keyName,
         }),
       );

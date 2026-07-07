@@ -1,3 +1,121 @@
+## v2.0.0-beta.60
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - **ec2**: KeyPair resource + hosted Instance HTTP serving &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/714 [<samp>(62f05)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/62f05d39)
+  - **lambda**: MicroVM images and CF vs AWS container benchmarks &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/712 [<samp>(7f238)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7f238498)
+- **cli**:
+  - --yes auto-upgrades the Cloudflare state store &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/728 [<samp>(c0ced)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c0cedf76)
+- **cloudflare**:
+  - Custom vite environments and rsc &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/685 [<samp>(7b866)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7b866200)
+  - Bind Workflows to async Workers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/707 [<samp>(9c7b8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9c7b8232)
+  - **workers-for-platforms**: Dispatch namespace binding + deploy workers into namespaces &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/715 [<samp>(c9f89)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c9f8961d)
+- **docker**:
+  - Add Docker resources &nbsp;-&nbsp; by **Austin** and **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/649 [<samp>(968bb)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/968bb10f)
+- **neon**:
+  - Expose pooled origin &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/718 [<samp>(0b60c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0b60c38a)
+- **planetscale**:
+  - Expose pooledOrigin on PostgresRole &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/717 [<samp>(9641b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9641be02)
+  - Persist PlanetScale branch replica intent &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/719 [<samp>(cfb72)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/cfb72d01)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **aws**:
+  - Remove dead DashboardsNotFound invalid tag handling code &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(86b04)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/86b04fe1)
+  - Provide Region to STS GetCallerIdentity during login &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/709 [<samp>(3c3e8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3c3e852b)
+  - Break Region/AWSEnvironment layer cycle in env auth account-id lookup &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/710 [<samp>(351c3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/351c3f56)
+  - **ecs**: Fix effectful ECS containers and add e2e smoke test that actually deploys &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/713 [<samp>(8cd7a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8cd7a2e5)
+- **cli**:
+  - Load the stack entry via a file:// URL so the CLI works on Windows &nbsp;-&nbsp; by **d3lay** in https://github.com/alchemy-run/alchemy-effect/issues/696 [<samp>(2ced8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2ced8e0c)
+  - Report retained resources during destroy &nbsp;-&nbsp; by **bjorntechTobbe** in https://github.com/alchemy-run/alchemy-effect/issues/739 [<samp>(48021)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/48021c42)
+- **cloudflare**:
+  - Detect and recover cf state store partial deploy &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/700 [<samp>(37584)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3758460f)
+  - Adopt durable object classes created outside alchemy &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/495 [<samp>(3d063)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3d06359e)
+  - Fold command + env into the memo hash for StaticSite &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/738 [<samp>(36b49)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/36b494dd)
+  - Cold-recovery read for Access Application &nbsp;-&nbsp; by **Andy Jefferson** in https://github.com/alchemy-run/alchemy-effect/issues/742 [<samp>(ed44f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ed44f238)
+  - **containers**:
+    - Wrangler-parity defaults and readiness for fast, reliable starts &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/708 [<samp>(c740f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c740f0fb)
+    - Auto-restart stopped/crashed containers, fail fast on crash &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/711 [<samp>(c1906)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c1906298)
+- **test**:
+  - Deflake live test suite and harden Cloudflare providers &nbsp;-&nbsp; by **Sam Goodwin** and **Cursor** [<samp>(6965b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6965bf7e)
+- **website**:
+  - Collapse the tab-row height on mobile &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/734 [<samp>(c85e2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c85e2342)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.59...HEAD)
+
+---
+
+## v2.0.0-beta.59
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **bindings**: Remove Binding.Policy and align all bindings to a single convention &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/690 [<samp>(35b04)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/35b04361)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**: Export ALCHEMY_DEV config and fix ALCHEMY_PHASE docs &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/684 [<samp>(5c606)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5c60600f)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - **worker**: Tolerate legacy custom-domain state in Worker diff &nbsp;-&nbsp; by **Nicolas Fléron** in https://github.com/alchemy-run/alchemy-effect/issues/546 and https://github.com/alchemy-run/alchemy-effect/issues/694 [<samp>(f17fa)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f17fab02)
+- **engine**:
+  - Honor deleteFirst on replace &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/692 [<samp>(ef6f8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ef6f8e4d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.58...HEAD)
+
+---
+
+## v2.0.0-beta.58
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- Command provider &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/673 [<samp>(e7127)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e7127f2e)
+- **neon**: Replace branch when project changes &nbsp;-&nbsp; by **Harry Solovay** and **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/654 [<samp>(b21d2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b21d2129)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - Add Lambda function memory size &nbsp;-&nbsp; by **Joaquín Pérez** in https://github.com/alchemy-run/alchemy-effect/issues/676 [<samp>(57ce8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/57ce8300)
+  - **lambda**:
+    - Support AWS Lambda function architecture &nbsp;-&nbsp; by **Joaquín Pérez** in https://github.com/alchemy-run/alchemy-effect/issues/662 [<samp>(bfa21)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/bfa2181a)
+    - Add build.install for native packages &nbsp;-&nbsp; by **Joaquín Pérez** in https://github.com/alchemy-run/alchemy-effect/issues/682 [<samp>(46e48)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/46e484fd)
+- **cloudflare**:
+  - Allow DurableObjectState and other DO dependencies at plan level, move Tag Props to Layer &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/650 [<samp>(c0ecf)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c0ecfbe8)
+  - **workers**: Rename DynamicWorkerLoader to WorkerLoader + service tag, layer, typed client &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/653 [<samp>(ef336)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ef336146)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **all**:
+  - Use Effect.fn instead of Effect.fnUntraced for better stack traces &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(b9676)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b9676c58)
+- **auth**:
+  - Bail when configuring a missing profile non-interactively &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/663 [<samp>(3d2cb)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3d2cbbe4)
+- **aws**:
+  - Route53 change ID normalization &nbsp;-&nbsp; by **Joaquín Pérez** in https://github.com/alchemy-run/alchemy-effect/issues/675 [<samp>(acf5f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/acf5fc3d)
+- **build**:
+  - Key DevServer instances by instanceId, not logical id &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/665 [<samp>(c33f3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c33f3b84)
+  - Set dev server process to `detached: false` &nbsp;-&nbsp; by **Harry Solovay** in https://github.com/alchemy-run/alchemy-effect/issues/655 [<samp>(c5500)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c5500e2b)
+- **cloudflare**:
+  - Re-export dev container image type &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/666 [<samp>(60c56)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/60c56e15)
+  - Update workerd to fix dev container bug &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/664 [<samp>(e8630)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e8630490)
+  - Add Workers Observability write OAuth scope &nbsp;-&nbsp; by **Leonardo Trapani** in https://github.com/alchemy-run/alchemy-effect/issues/660 [<samp>(87ed4)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/87ed4a47)
+  - StaticSite precreate fails in alchemy dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/671 [<samp>(884eb)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/884eb3fd)
+  - Retry InvalidRoute when checking if state store available &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(34a07)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/34a0767f)
+- **core**:
+  - Use persisted FQN when deleting resources &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/669 [<samp>(5ef57)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5ef57925)
+  - Resolve stable attributes of whole-resource references &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/670 [<samp>(933d2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/933d2a09)
+- **drizzle**:
+  - Fall back to drizzle-kit CLI &nbsp;-&nbsp; by **utopy** in https://github.com/alchemy-run/alchemy-effect/issues/632 [<samp>(27262)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/27262f5d)
+- **github**:
+  - Resolve lazy secret values &nbsp;-&nbsp; by **Harry Solovay** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/652 [<samp>(351b9)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/351b9a8d)
+- **neon**:
+  - Project replaces unexpectedly due to default region mismatch &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/667 [<samp>(55597)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/55597d41)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.57...HEAD)
+
+---
+
 ## v2.0.0-beta.57
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

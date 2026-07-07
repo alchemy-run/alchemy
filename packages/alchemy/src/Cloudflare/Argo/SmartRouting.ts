@@ -8,8 +8,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const SmartRoutingTypeId = "Cloudflare.Argo.SmartRouting" as const;
-type SmartRoutingTypeId = typeof SmartRoutingTypeId;
+const TypeId = "Cloudflare.Argo.SmartRouting" as const;
+type TypeId = typeof TypeId;
 
 export type SmartRoutingProps = {
   /**
@@ -47,7 +47,7 @@ export type SmartRoutingAttributes = {
 };
 
 export type SmartRouting = Resource<
-  SmartRoutingTypeId,
+  TypeId,
   SmartRoutingProps,
   SmartRoutingAttributes,
   never,
@@ -78,16 +78,16 @@ export type SmartRouting = Resource<
  * @section Enabling Smart Routing
  * @example Enable Argo Smart Routing on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.SmartRouting("SmartRouting", {
+ * yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly disable Argo Smart Routing
  * ```typescript
- * yield* Cloudflare.SmartRouting("SmartRouting", {
+ * yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -95,13 +95,13 @@ export type SmartRouting = Resource<
  *
  * @see https://developers.cloudflare.com/argo-smart-routing/
  */
-export const SmartRouting = Resource<SmartRouting>(SmartRoutingTypeId);
+export const SmartRouting = Resource<SmartRouting>(TypeId);
 
 /**
  * Returns true if the given value is a SmartRouting resource.
  */
 export const isSmartRouting = (value: unknown): value is SmartRouting =>
-  Predicate.hasProperty(value, "Type") && value.Type === SmartRoutingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SmartRoutingProvider = () =>
   Provider.succeed(SmartRouting, {

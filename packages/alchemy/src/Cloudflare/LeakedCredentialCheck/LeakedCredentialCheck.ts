@@ -8,10 +8,11 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LeakedCredentialCheckTypeId = "Cloudflare.LeakedCredentialCheck" as const;
-type LeakedCredentialCheckTypeId = typeof LeakedCredentialCheckTypeId;
+const TypeId =
+  "Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck" as const;
+type TypeId = typeof TypeId;
 
-export interface LeakedCredentialCheckProps {
+export interface Props {
   /**
    * Zone whose Leaked Credential Checks setting is managed. Stable —
    * changing the zone triggers a replacement (the old zone's setting is
@@ -26,7 +27,7 @@ export interface LeakedCredentialCheckProps {
   enabled?: boolean;
 }
 
-export interface LeakedCredentialCheckAttributes {
+export interface Attributes {
   /** Zone the setting belongs to. */
   zoneId: string;
   /** Whether Leaked Credential Checks are currently enabled. */
@@ -40,9 +41,9 @@ export interface LeakedCredentialCheckAttributes {
 }
 
 export type LeakedCredentialCheck = Resource<
-  LeakedCredentialCheckTypeId,
-  LeakedCredentialCheckProps,
-  LeakedCredentialCheckAttributes,
+  TypeId,
+  Props,
+  Attributes,
   never,
   Providers
 >;
@@ -73,16 +74,16 @@ export type LeakedCredentialCheck = Resource<
  * @section Managing the check
  * @example Enable Leaked Credential Checks on a zone
  * ```typescript
- * const zone = yield* Cloudflare.Zone("Site", { name: "example.com" });
+ * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
- * yield* Cloudflare.LeakedCredentialCheck("Lcc", {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
  *   zoneId: zone.zoneId,
  * });
  * ```
  *
  * @example Explicitly pin the check off
  * ```typescript
- * yield* Cloudflare.LeakedCredentialCheck("Lcc", {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
  *   zoneId: zone.zoneId,
  *   enabled: false,
  * });
@@ -90,9 +91,7 @@ export type LeakedCredentialCheck = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/leaked-credentials/
  */
-export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(
-  LeakedCredentialCheckTypeId,
-);
+export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(TypeId);
 
 /**
  * Returns true if the given value is a LeakedCredentialCheck resource.
@@ -100,11 +99,9 @@ export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(
 export const isLeakedCredentialCheck = (
   value: unknown,
 ): value is LeakedCredentialCheck =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LeakedCredentialCheckTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-const desiredEnabled = (props: LeakedCredentialCheckProps): boolean =>
-  props.enabled ?? true;
+const desiredEnabled = (props: Props): boolean => props.enabled ?? true;
 
 export const LeakedCredentialCheckProvider = () =>
   Provider.succeed(LeakedCredentialCheck, {
@@ -128,21 +125,19 @@ export const LeakedCredentialCheckProvider = () =>
                 zoneId,
                 enabled,
                 initialEnabled: enabled,
-              } satisfies LeakedCredentialCheckAttributes;
+              } satisfies Attributes;
             }),
             // Zone deleted out-of-band or plan-gated route; skip it.
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is LeakedCredentialCheckAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is Attributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as LeakedCredentialCheckProps;
-      const n = news as LeakedCredentialCheckProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
         output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);

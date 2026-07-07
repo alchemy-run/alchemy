@@ -91,7 +91,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicSite);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicSite,
+      );
 
       if (!entitled) {
         // Unentitled account — `list()` swallows the typed entitlement /
@@ -103,7 +105,7 @@ test.provider(
       }
 
       const site = yield* stack.deploy(
-        Cloudflare.MagicSite("ListSite", {
+        Cloudflare.MagicTransit.MagicSite("ListSite", {
           name: "alchemy-magic-site-list",
           description: "alchemy magic site list test",
         }),
@@ -127,7 +129,7 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const site = yield* stack.deploy(
-        Cloudflare.MagicSite("Site", {
+        Cloudflare.MagicTransit.MagicSite("Site", {
           name: "alchemy-magic-site",
           description: "alchemy magic site test",
           location: { lat: "37.7749", lon: "-122.4194" },
@@ -144,7 +146,7 @@ test.provider.skipIf(!entitled)(
       expect(live.name).toEqual("alchemy-magic-site");
 
       const wan = yield* stack.deploy(
-        Cloudflare.MagicSiteWan("Wan", {
+        Cloudflare.MagicTransit.MagicSiteWan("Wan", {
           siteId: site.siteId,
           physport: 1,
           name: "alchemy-site-wan",
@@ -155,7 +157,7 @@ test.provider.skipIf(!entitled)(
       expect(wan.siteId).toEqual(site.siteId);
 
       const lan1 = yield* stack.deploy(
-        Cloudflare.MagicSiteLan("Lan1", {
+        Cloudflare.MagicTransit.MagicSiteLan("Lan1", {
           siteId: site.siteId,
           physport: 2,
           name: "alchemy-site-lan1",
@@ -164,7 +166,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
       const lan2 = yield* stack.deploy(
-        Cloudflare.MagicSiteLan("Lan2", {
+        Cloudflare.MagicTransit.MagicSiteLan("Lan2", {
           siteId: site.siteId,
           physport: 3,
           name: "alchemy-site-lan2",
@@ -176,7 +178,7 @@ test.provider.skipIf(!entitled)(
       expect(lan2.lanId).toBeTruthy();
 
       const acl = yield* stack.deploy(
-        Cloudflare.MagicSiteAcl("Acl", {
+        Cloudflare.MagicTransit.MagicSiteAcl("Acl", {
           siteId: site.siteId,
           name: "alchemy-site-acl",
           lan1: { lanId: lan1.lanId, ports: [443] },
@@ -190,7 +192,7 @@ test.provider.skipIf(!entitled)(
 
       // Update the site description in place — same siteId.
       const updated = yield* stack.deploy(
-        Cloudflare.MagicSite("Site", {
+        Cloudflare.MagicTransit.MagicSite("Site", {
           name: "alchemy-magic-site",
           description: "alchemy magic site test v2",
           location: { lat: "37.7749", lon: "-122.4194" },

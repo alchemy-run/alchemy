@@ -15,10 +15,14 @@ export interface TopicEventSourceProps {
 }
 
 /** @binding */
-export class TopicEventSource extends Binding.Service<
+export interface TopicEventSource extends Binding.Service<
   TopicEventSource,
+  "AWS.SNS.TopicEventSource",
   TopicEventSourceService
->()("AWS.SNS.TopicEventSource") {}
+> {}
+export const TopicEventSource = Binding.Service<TopicEventSource>(
+  "AWS.SNS.TopicEventSource",
+);
 
 export type TopicEventSourceService = <StreamReq = never, Req = never>(
   topic: Topic,
@@ -28,13 +32,62 @@ export type TopicEventSourceService = <StreamReq = never, Req = never>(
   ) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
 
-export const notifications = <T extends Topic>(
+type TopicEventSourceHandler<Req, StreamReq> = (
+  stream: Stream.Stream<TopicNotification, never, StreamReq>,
+) => Effect.Effect<void, never, Req>;
+
+/**
+ * Subscribe a Lambda Function to an SNS {@link Topic}, processing published
+ * notifications as a stream.
+ *
+ * @example
+ * ```typescript
+ * yield* consumeTopicNotifications(topic, (stream) =>
+ *   stream.pipe(Stream.runForEach((message) => Effect.log(message.Message))),
+ * );
+ * ```
+ *
+ * @example With subscription attributes
+ * ```typescript
+ * yield* consumeTopicNotifications(
+ *   topic,
+ *   { attributes: { FilterPolicy: JSON.stringify({ type: ["order"] }) } },
+ *   (stream) =>
+ *     stream.pipe(Stream.runForEach((message) => Effect.log(message.Message))),
+ * );
+ * ```
+ */
+export function consumeTopicNotifications<
+  T extends Topic,
+  Req = never,
+  StreamReq = never,
+>(
   topic: T,
-  props: TopicEventSourceProps = {},
-) => ({
-  subscribe: <Req = never, StreamReq = never>(
-    process: (
-      stream: Stream.Stream<TopicNotification, never, StreamReq>,
-    ) => Effect.Effect<void, never, Req>,
-  ) => TopicEventSource.use((source) => source(topic, props, process)),
-});
+  process: TopicEventSourceHandler<Req, StreamReq>,
+): Effect.Effect<void, never, TopicEventSource>;
+export function consumeTopicNotifications<
+  T extends Topic,
+  Req = never,
+  StreamReq = never,
+>(
+  topic: T,
+  props: TopicEventSourceProps,
+  process: TopicEventSourceHandler<Req, StreamReq>,
+): Effect.Effect<void, never, TopicEventSource>;
+export function consumeTopicNotifications<
+  T extends Topic,
+  Req = never,
+  StreamReq = never,
+>(
+  topic: T,
+  propsOrProcess:
+    | TopicEventSourceProps
+    | TopicEventSourceHandler<Req, StreamReq>,
+  maybeProcess?: TopicEventSourceHandler<Req, StreamReq>,
+) {
+  const [props, process] =
+    typeof propsOrProcess === "function"
+      ? [{} as TopicEventSourceProps, propsOrProcess]
+      : [propsOrProcess, maybeProcess!];
+  return TopicEventSource.use((source) => source(topic, props, process));
+}

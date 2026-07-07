@@ -9,11 +9,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AddressingServiceBindingTypeId =
-  "Cloudflare.Addressing.ServiceBinding" as const;
-type AddressingServiceBindingTypeId = typeof AddressingServiceBindingTypeId;
+const TypeId = "Cloudflare.Addressing.ServiceBinding" as const;
+type TypeId = typeof TypeId;
 
-export interface AddressingServiceBindingProps {
+export interface ServiceBindingProps {
   /**
    * Identifier of the parent BYOIP prefix. Changing it forces a
    * replacement.
@@ -32,7 +31,7 @@ export interface AddressingServiceBindingProps {
   serviceId: string;
 }
 
-export interface AddressingServiceBindingAttributes {
+export interface ServiceBindingAttributes {
   /** Cloudflare-assigned identifier of the service binding. */
   bindingId: string;
   /** Identifier of the parent BYOIP prefix. */
@@ -53,10 +52,10 @@ export interface AddressingServiceBindingAttributes {
   provisioning: { state: string | undefined };
 }
 
-export type AddressingServiceBinding = Resource<
-  AddressingServiceBindingTypeId,
-  AddressingServiceBindingProps,
-  AddressingServiceBindingAttributes,
+export type ServiceBinding = Resource<
+  TypeId,
+  ServiceBindingProps,
+  ServiceBindingAttributes,
   never,
   Providers
 >;
@@ -75,7 +74,7 @@ export type AddressingServiceBinding = Resource<
  * @section Binding a Prefix to a Service
  * @example Bind a /24 to the CDN
  * ```typescript
- * const binding = yield* Cloudflare.AddressingServiceBinding("cdn", {
+ * const binding = yield* Cloudflare.Addressing.ServiceBinding("cdn", {
  *   prefixId: prefix.prefixId,
  *   cidr: "192.0.2.0/24",
  *   serviceId: cdnServiceId,
@@ -84,21 +83,16 @@ export type AddressingServiceBinding = Resource<
  *
  * @see https://developers.cloudflare.com/byoip/concepts/service-bindings/
  */
-export const AddressingServiceBinding = Resource<AddressingServiceBinding>(
-  AddressingServiceBindingTypeId,
-);
+export const ServiceBinding = Resource<ServiceBinding>(TypeId);
 
 /**
- * Returns true if the given value is an AddressingServiceBinding resource.
+ * Returns true if the given value is an ServiceBinding resource.
  */
-export const isAddressingServiceBinding = (
-  value: unknown,
-): value is AddressingServiceBinding =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AddressingServiceBindingTypeId;
+export const isServiceBinding = (value: unknown): value is ServiceBinding =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const AddressingServiceBindingProvider = () =>
-  Provider.succeed(AddressingServiceBinding, {
+export const ServiceBindingProvider = () =>
+  Provider.succeed(ServiceBinding, {
     stables: ["bindingId", "prefixId", "accountId", "cidr", "serviceId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -175,7 +169,7 @@ export const AddressingServiceBindingProvider = () =>
               ),
               // The parent prefix vanished between enumeration and listing.
               Effect.catchTag("PrefixNotFound", () =>
-                Effect.succeed<AddressingServiceBindingAttributes[]>([]),
+                Effect.succeed<ServiceBindingAttributes[]>([]),
               ),
             ),
         { concurrency: 10 },
@@ -258,7 +252,7 @@ const toAttributes = (
   binding: ObservedBinding,
   prefixId: string,
   accountId: string,
-): AddressingServiceBindingAttributes => ({
+): ServiceBindingAttributes => ({
   bindingId: binding.id ?? "",
   prefixId,
   accountId,

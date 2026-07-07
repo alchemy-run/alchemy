@@ -138,7 +138,9 @@ test.provider(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.Share);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ResourceSharing.Share,
+      );
 
       // Reads (list) succeed without the Resource Sharing Edit permission,
       // so the read-only assertion always runs: list() returns the full,
@@ -160,7 +162,7 @@ test.provider(
       // deploy would fail with the typed `Forbidden` (HTTP 403, code 10000).
       if (recipientAccountId) {
         const policy = yield* stack.deploy(
-          Cloudflare.GatewayRule("ListSharePolicy", {
+          Cloudflare.Gateway.Rule("ListSharePolicy", {
             action: "block",
             traffic: 'dns.fqdn == "list-share.alchemy-test.example"',
             filters: ["dns"],
@@ -168,7 +170,7 @@ test.provider(
           }),
         );
         const deployed = yield* stack.deploy(
-          Cloudflare.Share("ListShare", {
+          Cloudflare.ResourceSharing.Share("ListShare", {
             name: "alchemy-list-share",
             recipients: [{ accountId: recipientAccountId }],
             resources: [
@@ -201,7 +203,7 @@ test.provider.skipIf(!recipientAccountId)(
       // A shareable resource: gateway policies are sharable on the test
       // account's Zero Trust setup.
       const policyA = yield* stack.deploy(
-        Cloudflare.GatewayRule("SharePolicyA", {
+        Cloudflare.Gateway.Rule("SharePolicyA", {
           action: "block",
           traffic: 'dns.fqdn == "share-a.alchemy-test.example"',
           filters: ["dns"],
@@ -209,7 +211,7 @@ test.provider.skipIf(!recipientAccountId)(
         }),
       );
       const policyB = yield* stack.deploy(
-        Cloudflare.GatewayRule("SharePolicyB", {
+        Cloudflare.Gateway.Rule("SharePolicyB", {
           action: "block",
           traffic: 'dns.fqdn == "share-b.alchemy-test.example"',
           filters: ["dns"],
@@ -218,7 +220,7 @@ test.provider.skipIf(!recipientAccountId)(
       );
 
       const share = yield* stack.deploy(
-        Cloudflare.Share("Share", {
+        Cloudflare.ResourceSharing.Share("Share", {
           name: "alchemy-resource-share",
           recipients: [{ accountId: recipient }],
           resources: [
@@ -239,7 +241,7 @@ test.provider.skipIf(!recipientAccountId)(
       // Rename in place — same shareId; also converge resources to
       // include policy B (delta add through the resource sub-API).
       const renamed = yield* stack.deploy(
-        Cloudflare.Share("Share", {
+        Cloudflare.ResourceSharing.Share("Share", {
           name: "alchemy-resource-share-v2",
           recipients: [{ accountId: recipient }],
           resources: [
@@ -263,7 +265,7 @@ test.provider.skipIf(!recipientAccountId)(
 
       // Drop policy B again — delta remove through the resource sub-API.
       const reduced = yield* stack.deploy(
-        Cloudflare.Share("Share", {
+        Cloudflare.ResourceSharing.Share("Share", {
           name: "alchemy-resource-share-v2",
           recipients: [{ accountId: recipient }],
           resources: [
@@ -290,7 +292,7 @@ test.provider.skipIf(!recipientAccountId)(
       yield* stack.destroy();
 
       const policyA = yield* stack.deploy(
-        Cloudflare.GatewayRule("ChildPolicyA", {
+        Cloudflare.Gateway.Rule("ChildPolicyA", {
           action: "block",
           traffic: 'dns.fqdn == "child-a.alchemy-test.example"',
           filters: ["dns"],
@@ -298,7 +300,7 @@ test.provider.skipIf(!recipientAccountId)(
         }),
       );
       const policyB = yield* stack.deploy(
-        Cloudflare.GatewayRule("ChildPolicyB", {
+        Cloudflare.Gateway.Rule("ChildPolicyB", {
           action: "block",
           traffic: 'dns.fqdn == "child-b.alchemy-test.example"',
           filters: ["dns"],
@@ -307,7 +309,7 @@ test.provider.skipIf(!recipientAccountId)(
       );
 
       const share = yield* stack.deploy(
-        Cloudflare.Share("ChildShare", {
+        Cloudflare.ResourceSharing.Share("ChildShare", {
           name: "alchemy-child-share",
           recipients: [{ accountId: recipient }],
           resources: [
@@ -318,7 +320,7 @@ test.provider.skipIf(!recipientAccountId)(
 
       // Standalone resource entry — adds policy B incrementally.
       const entry = yield* stack.deploy(
-        Cloudflare.ShareResource("ChildEntry", {
+        Cloudflare.ResourceSharing.ShareResource("ChildEntry", {
           shareId: share.shareId,
           resourceType: "gateway-policy",
           resourceId: policyB.ruleId,

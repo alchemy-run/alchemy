@@ -13,19 +13,19 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const HealthcheckTypeId = "Cloudflare.Healthcheck" as const;
-type HealthcheckTypeId = typeof HealthcheckTypeId;
+const TypeId = "Cloudflare.Healthcheck.Healthcheck" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Protocol used by a standalone health check probe.
  */
-export type HealthcheckType = "HTTP" | "HTTPS" | "TCP";
+export type Type = "HTTP" | "HTTPS" | "TCP";
 
 /**
  * Region a health check can probe from. `null`/omitted lets Cloudflare pick
  * a default region; multiple regions require a Business or Enterprise plan.
  */
-export type HealthcheckRegion =
+export type Region =
   | "WNAM"
   | "ENAM"
   | "WEU"
@@ -45,16 +45,12 @@ export type HealthcheckRegion =
  * Health status Cloudflare reports for the monitored origin. New checks
  * start as `unknown` until the first probes complete.
  */
-export type HealthcheckStatus =
-  | "unknown"
-  | "healthy"
-  | "unhealthy"
-  | "suspended";
+export type Status = "unknown" | "healthy" | "unhealthy" | "suspended";
 
 /**
  * Parameters specific to an HTTP or HTTPS health check.
  */
-export interface HealthcheckHttpConfig {
+export interface HttpConfig {
   /**
    * Do not validate the certificate when the health check uses HTTPS.
    * @default false
@@ -102,7 +98,7 @@ export interface HealthcheckHttpConfig {
 /**
  * Parameters specific to a TCP health check.
  */
-export interface HealthcheckTcpConfig {
+export interface TcpConfig {
   /**
    * The TCP connection method to use for the health check.
    * @default "connection_established"
@@ -115,7 +111,7 @@ export interface HealthcheckTcpConfig {
   port?: number;
 }
 
-export interface HealthcheckProps {
+export interface Props {
   /**
    * Zone the health check belongs to. Stable — changing the zone triggers
    * a replacement.
@@ -140,7 +136,7 @@ export interface HealthcheckProps {
    * protocols are `HTTP`, `HTTPS` and `TCP`.
    * @default "HTTP"
    */
-  type?: HealthcheckType;
+  type?: Type;
   /**
    * A human-readable description of the health check.
    */
@@ -150,7 +146,7 @@ export interface HealthcheckProps {
    * Cloudflare pick a default region. Multiple regions require a Business
    * or Enterprise plan.
    */
-  checkRegions?: HealthcheckRegion[];
+  checkRegions?: Region[];
   /**
    * The number of consecutive fails required from a health check before
    * changing the health to unhealthy.
@@ -190,15 +186,15 @@ export interface HealthcheckProps {
    * Parameters specific to an HTTP or HTTPS health check. Only valid when
    * `type` is `HTTP` or `HTTPS`.
    */
-  httpConfig?: HealthcheckHttpConfig;
+  httpConfig?: HttpConfig;
   /**
    * Parameters specific to a TCP health check. Only valid when `type` is
    * `TCP`.
    */
-  tcpConfig?: HealthcheckTcpConfig;
+  tcpConfig?: TcpConfig;
 }
 
-export interface HealthcheckAttributes {
+export interface Attributes {
   /** Cloudflare-assigned health check identifier. */
   healthcheckId: string;
   /** Zone that owns this health check. */
@@ -208,9 +204,9 @@ export interface HealthcheckAttributes {
   /** The hostname or IP address being monitored. */
   address: string;
   /** Probe protocol (`HTTP`, `HTTPS` or `TCP`). */
-  type: HealthcheckType;
+  type: Type;
   /** Current origin status according to the health check. */
-  status: HealthcheckStatus;
+  status: Status;
   /** The current failure reason if status is unhealthy. */
   failureReason: string | undefined;
   /** Whether probing is suspended. */
@@ -227,13 +223,7 @@ export interface HealthcheckAttributes {
   modifiedOn: string | undefined;
 }
 
-export type Healthcheck = Resource<
-  HealthcheckTypeId,
-  HealthcheckProps,
-  HealthcheckAttributes,
-  never,
-  Providers
->;
+export type Healthcheck = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare standalone Health Check — monitors an origin server from
@@ -257,7 +247,7 @@ export type Healthcheck = Resource<
  * @section Creating a Health Check
  * @example Basic HTTP health check
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("origin-check", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("origin-check", {
  *   zoneId: zone.zoneId,
  *   address: "origin.example.com",
  * });
@@ -265,7 +255,7 @@ export type Healthcheck = Resource<
  *
  * @example HTTPS health check with custom path and expected codes
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("api-health", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("api-health", {
  *   zoneId: zone.zoneId,
  *   address: "api.example.com",
  *   type: "HTTPS",
@@ -283,7 +273,7 @@ export type Healthcheck = Resource<
  * @section TCP health checks
  * @example Probe a TCP port
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("db-port", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("db-port", {
  *   zoneId: zone.zoneId,
  *   address: "db.example.com",
  *   type: "TCP",
@@ -294,7 +284,7 @@ export type Healthcheck = Resource<
  * @section Suspending a check
  * @example Temporarily stop probing the origin
  * ```typescript
- * const check = yield* Cloudflare.Healthcheck("origin-check", {
+ * const check = yield* Cloudflare.Healthcheck.Healthcheck("origin-check", {
  *   zoneId: zone.zoneId,
  *   address: "origin.example.com",
  *   suspended: true,
@@ -303,21 +293,21 @@ export type Healthcheck = Resource<
  *
  * @see https://developers.cloudflare.com/health-checks/
  */
-export const Healthcheck = Resource<Healthcheck>(HealthcheckTypeId);
+export const Healthcheck = Resource<Healthcheck>(TypeId);
 
 /**
  * Returns true if the given value is a Healthcheck resource.
  */
 export const isHealthcheck = (value: unknown): value is Healthcheck =>
-  Predicate.hasProperty(value, "Type") && value.Type === HealthcheckTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HealthcheckProvider = () =>
   Provider.succeed(Healthcheck, {
     stables: ["healthcheckId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as HealthcheckProps;
-      const n = news as HealthcheckProps;
+      const o = olds as Props;
+      const n = news as Props;
       // zoneId is Input<string>; by diff time both sides are concrete
       // strings when statically known.
       if (
@@ -450,7 +440,7 @@ export const HealthcheckProvider = () =>
               ),
             ),
             Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as HealthcheckAttributes[]),
+              Effect.succeed([] as Attributes[]),
             ),
           ),
         { concurrency: 10 },
@@ -493,17 +483,17 @@ const createHealthcheckName = (id: string, name: string | undefined) =>
 interface DesiredBody {
   name: string;
   address: string;
-  type: HealthcheckType;
+  type: Type;
   description?: string;
-  checkRegions?: HealthcheckRegion[];
+  checkRegions?: Region[];
   consecutiveFails: number;
   consecutiveSuccesses: number;
   interval: number;
   retries: number;
   timeout: number;
   suspended: boolean;
-  httpConfig?: HealthcheckHttpConfig;
-  tcpConfig?: HealthcheckTcpConfig;
+  httpConfig?: HttpConfig;
+  tcpConfig?: TcpConfig;
 }
 
 /**
@@ -511,10 +501,7 @@ interface DesiredBody {
  * Cloudflare defaults are filled in so the observed-vs-desired diff is
  * exact and removing a prop converges back to the default.
  */
-const buildDesiredBody = (
-  news: HealthcheckProps,
-  name: string,
-): DesiredBody => ({
+const buildDesiredBody = (news: Props, name: string): DesiredBody => ({
   name,
   address: news.address,
   type: news.type ?? "HTTP",
@@ -575,7 +562,7 @@ const desiredEqualsObserved = (
  * not fight.
  */
 const httpConfigEquals = (
-  desired: HealthcheckHttpConfig,
+  desired: HttpConfig,
   observed: NonNullable<ObservedHealthcheck["httpConfig"]> | undefined,
 ): boolean => {
   if (observed === undefined) return false;
@@ -637,7 +624,7 @@ const headerEquals = (
 };
 
 const tcpConfigEquals = (
-  desired: HealthcheckTcpConfig,
+  desired: TcpConfig,
   observed: NonNullable<ObservedHealthcheck["tcpConfig"]> | undefined,
 ): boolean => {
   if (observed === undefined) return false;
@@ -656,7 +643,7 @@ const tcpConfigEquals = (
 const toAttributes = (
   observed: ObservedHealthcheck,
   zoneId: string,
-): HealthcheckAttributes | undefined => {
+): Attributes | undefined => {
   if (!observed.id || !observed.name || !observed.address || !observed.type) {
     return undefined;
   }
@@ -665,8 +652,8 @@ const toAttributes = (
     zoneId,
     name: observed.name,
     address: observed.address,
-    type: observed.type as HealthcheckType,
-    status: (observed.status ?? "unknown") as HealthcheckStatus,
+    type: observed.type as Type,
+    status: (observed.status ?? "unknown") as Status,
     failureReason: observed.failureReason ?? undefined,
     suspended: observed.suspended ?? false,
     interval: observed.interval ?? 60,

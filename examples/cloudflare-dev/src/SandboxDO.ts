@@ -3,16 +3,12 @@ import * as Effect from "effect/Effect";
 import { HttpClientRequest, HttpServerResponse } from "effect/unstable/http";
 import { SandboxContainer } from "./SandboxContainer.ts";
 
-export default class SandboxDO extends Cloudflare.DurableObjectNamespace<SandboxDO>()(
+export default class SandboxDO extends Cloudflare.DurableObject<SandboxDO>()(
   "SandboxDO",
   Effect.gen(function* () {
-    const sandbox = yield* Cloudflare.Container.bind(SandboxContainer);
+    const container = yield* SandboxContainer;
 
     return Effect.gen(function* () {
-      const container = yield* Cloudflare.start(sandbox, {
-        enableInternet: true,
-      });
-
       return {
         fetch: Effect.gen(function* () {
           const { fetch } = yield* container.getTcpPort(3000);
@@ -26,5 +22,11 @@ export default class SandboxDO extends Cloudflare.DurableObjectNamespace<Sandbox
         }),
       };
     });
-  }),
+  }).pipe(
+    Effect.provide(
+      Cloudflare.Containers.layer(SandboxContainer, {
+        enableInternet: true,
+      }),
+    ),
+  ),
 ) {}

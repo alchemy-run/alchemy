@@ -9,14 +9,14 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DlpProfileTypeId = "Cloudflare.Dlp.Profile" as const;
-type DlpProfileTypeId = typeof DlpProfileTypeId;
+const TypeId = "Cloudflare.Dlp.Profile" as const;
+type TypeId = typeof TypeId;
 
 /**
  * A detection entry defined inline on the profile — a regular expression
  * the DLP engine scans for.
  */
-export interface DlpProfileEntry {
+export interface ProfileEntry {
   /** Name of the entry. Unique within the profile. */
   name: string;
   /** Whether the entry participates in scans. */
@@ -32,7 +32,7 @@ export interface DlpProfileEntry {
   description?: string;
 }
 
-export interface DlpProfileProps {
+export interface ProfileProps {
   /**
    * Name of the profile. If omitted, a unique name is generated from the
    * app, stage, and logical ID.
@@ -63,10 +63,10 @@ export interface DlpProfileProps {
    * entries are matched to observed entries by name; entries removed from
    * this list are deleted from the profile.
    */
-  entries?: DlpProfileEntry[];
+  entries?: ProfileEntry[];
 }
 
-export type DlpProfileAttributes = {
+export type ProfileAttributes = {
   /** API UUID of the profile. */
   profileId: string;
   /** Account that owns the profile. */
@@ -83,10 +83,10 @@ export type DlpProfileAttributes = {
   entryIds: Record<string, string>;
 };
 
-export type DlpProfile = Resource<
-  DlpProfileTypeId,
-  DlpProfileProps,
-  DlpProfileAttributes,
+export type Profile = Resource<
+  TypeId,
+  ProfileProps,
+  ProfileAttributes,
   never,
   Providers
 >;
@@ -104,7 +104,7 @@ export type DlpProfile = Resource<
  * @section Creating a DLP profile
  * @example Profile with a custom regex entry
  * ```typescript
- * const profile = yield* Cloudflare.DlpProfile("EmployeeIds", {
+ * const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
  *   description: "Detects internal employee identifiers",
  *   allowedMatchCount: 0,
  *   entries: [
@@ -119,7 +119,7 @@ export type DlpProfile = Resource<
  *
  * @example Credit-card-like entry with Luhn validation
  * ```typescript
- * const cards = yield* Cloudflare.DlpProfile("Cards", {
+ * const cards = yield* Cloudflare.Dlp.Profile("Cards", {
  *   entries: [
  *     {
  *       name: "card-number",
@@ -132,16 +132,16 @@ export type DlpProfile = Resource<
  *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/data-loss-prevention/dlp-profiles/
  */
-export const DlpProfile = Resource<DlpProfile>(DlpProfileTypeId);
+export const Profile = Resource<Profile>(TypeId);
 
 /**
- * Returns true if the given value is a DlpProfile resource.
+ * Returns true if the given value is a Profile resource.
  */
-export const isDlpProfile = (value: unknown): value is DlpProfile =>
-  Predicate.hasProperty(value, "Type") && value.Type === DlpProfileTypeId;
+export const isProfile = (value: unknown): value is Profile =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const DlpProfileProvider = () =>
-  Provider.succeed(DlpProfile, {
+export const ProfileProvider = () =>
+  Provider.succeed(Profile, {
     stables: ["profileId", "accountId"],
 
     read: Effect.fn(function* ({ output }) {
@@ -272,9 +272,7 @@ export const DlpProfileProvider = () =>
         { concurrency: 10 },
       );
 
-      return rows.filter(
-        (row): row is DlpProfileAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is ProfileAttributes => row !== undefined);
     }),
   });
 
@@ -313,7 +311,7 @@ const createProfileName = (id: string, name: string | undefined) =>
   });
 
 const encodeNewEntry = (
-  entry: DlpProfileEntry,
+  entry: ProfileEntry,
 ): {
   enabled: boolean;
   name: string;
@@ -348,7 +346,7 @@ const entryIdsByName = (
 
 const sameEntries = (
   observed: ObservedCustomProfile,
-  desired: DlpProfileEntry[] | undefined,
+  desired: ProfileEntry[] | undefined,
 ): boolean => {
   if (desired === undefined) return true;
   const observedByName = new Map(
@@ -369,7 +367,7 @@ const sameEntries = (
 const toAttributes = (
   profile: ObservedCustomProfile | undefined,
   accountId: string,
-): DlpProfileAttributes => ({
+): ProfileAttributes => ({
   profileId: profile?.id ?? "",
   accountId,
   name: profile?.name ?? "",

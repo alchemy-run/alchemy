@@ -9,11 +9,11 @@ import { DoRpcs } from "./group.ts";
 /**
  * Typed Durable Object backing the `*DO` variants on the
  * {@link RpcWorkerRpcHttpWorker}. Built with
- * {@link Cloudflare.RpcDurableObjectNamespace} so the worker can call
+ * {@link Cloudflare.RpcDurableObject} so the worker can call
  * `objects.getByName(id).PingDO(...)` directly — no `RpcClient.make`,
  * no `Cloudflare.toHttpClient`, no manual transport plumbing.
  */
-export default class RpcWorkerRpcHttpObject extends Cloudflare.RpcDurableObjectNamespace<RpcWorkerRpcHttpObject>()(
+export default class RpcWorkerRpcHttpObject extends Cloudflare.RpcDurableObject<RpcWorkerRpcHttpObject>()(
   "RpcWorkerRpcHttpObject",
   { schema: DoRpcs },
   Effect.gen(function* () {

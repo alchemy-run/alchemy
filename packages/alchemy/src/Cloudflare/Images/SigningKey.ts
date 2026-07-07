@@ -11,10 +11,10 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ImagesSigningKeyTypeId = "Cloudflare.Images.SigningKey" as const;
-type ImagesSigningKeyTypeId = typeof ImagesSigningKeyTypeId;
+const TypeId = "Cloudflare.Images.SigningKey" as const;
+type TypeId = typeof TypeId;
 
-export interface ImagesSigningKeyProps {
+export interface SigningKeyProps {
   /**
    * Account the signing key is created in. Defaults to the ambient
    * Cloudflare account. Changing it triggers a replacement.
@@ -30,7 +30,7 @@ export interface ImagesSigningKeyProps {
   name?: string;
 }
 
-export interface ImagesSigningKeyAttributes {
+export interface SigningKeyAttributes {
   /** The signing key's name (its API path identifier). */
   keyName: string;
   /** Account the key belongs to. */
@@ -39,10 +39,10 @@ export interface ImagesSigningKeyAttributes {
   value: Redacted.Redacted<string>;
 }
 
-export type ImagesSigningKey = Resource<
-  ImagesSigningKeyTypeId,
-  ImagesSigningKeyProps,
-  ImagesSigningKeyAttributes,
+export type SigningKey = Resource<
+  TypeId,
+  SigningKeyProps,
+  SigningKeyAttributes,
   never,
   Providers
 >;
@@ -65,12 +65,12 @@ export type ImagesSigningKey = Resource<
  * @section Creating a Signing Key
  * @example Key with a generated name
  * ```typescript
- * const key = yield* Cloudflare.ImagesSigningKey("UrlSigner", {});
+ * const key = yield* Cloudflare.Images.SigningKey("UrlSigner", {});
  * ```
  *
  * @example Key with an explicit name
  * ```typescript
- * const key = yield* Cloudflare.ImagesSigningKey("UrlSigner", {
+ * const key = yield* Cloudflare.Images.SigningKey("UrlSigner", {
  *   name: "my-app-signer",
  * });
  * ```
@@ -84,18 +84,16 @@ export type ImagesSigningKey = Resource<
  *
  * @see https://developers.cloudflare.com/images/manage-images/serve-images/serve-private-images/
  */
-export const ImagesSigningKey = Resource<ImagesSigningKey>(
-  ImagesSigningKeyTypeId,
-);
+export const SigningKey = Resource<SigningKey>(TypeId);
 
 /**
- * Returns true if the given value is an ImagesSigningKey resource.
+ * Returns true if the given value is an SigningKey resource.
  */
-export const isImagesSigningKey = (value: unknown): value is ImagesSigningKey =>
-  Predicate.hasProperty(value, "Type") && value.Type === ImagesSigningKeyTypeId;
+export const isSigningKey = (value: unknown): value is SigningKey =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const ImagesSigningKeyProvider = () =>
-  Provider.succeed(ImagesSigningKey, {
+export const SigningKeyProvider = () =>
+  Provider.succeed(SigningKey, {
     stables: ["keyName", "accountId", "value"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -155,16 +153,16 @@ export const ImagesSigningKeyProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* images.listV1Keys({ accountId }).pipe(
-        Effect.map((response): ImagesSigningKeyAttributes[] =>
+        Effect.map((response): SigningKeyAttributes[] =>
           (response.keys ?? []).map((key) => toAttributes(key, accountId)),
         ),
         Effect.catchTag("ImagesAccessNotEnabled", () =>
-          Effect.succeed<ImagesSigningKeyAttributes[]>([]),
+          Effect.succeed<SigningKeyAttributes[]>([]),
         ),
       );
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const acct = (news.accountId as string | undefined) ?? accountId;
@@ -239,7 +237,7 @@ const createKeyName = (id: string, name: string | undefined) =>
 const toAttributes = (
   key: ObservedKey,
   accountId: string,
-): ImagesSigningKeyAttributes => ({
+): SigningKeyAttributes => ({
   keyName: key.name ?? "",
   accountId,
   value: Redacted.make(key.value ?? ""),

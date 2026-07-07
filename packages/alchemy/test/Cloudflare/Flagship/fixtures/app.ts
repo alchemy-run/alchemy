@@ -6,6 +6,6 @@ import * as Cloudflare from "alchemy/Cloudflare";
  * registers the resource with the stack and wires the Worker's `flagship`
  * binding to the app's id.
  */
-export const App = Cloudflare.FlagshipApp("FlagshipTestApp", {
+export const App = Cloudflare.Flagship.App("FlagshipTestApp", {
   name: "alchemy-test-flagship-binding",
 });

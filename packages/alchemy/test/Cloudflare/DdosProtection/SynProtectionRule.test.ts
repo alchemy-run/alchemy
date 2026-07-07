@@ -36,7 +36,7 @@ test.provider.skipIf(!magicTransit)(
       // Create.
       const rule = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SynProtectionRule("Rule", {
+          return yield* Cloudflare.DdosProtection.SynProtectionRule("Rule", {
             scope: "global",
             mode: "monitoring",
             burstSensitivity: "medium",
@@ -59,7 +59,7 @@ test.provider.skipIf(!magicTransit)(
       // In-place update — mode and sensitivities are patched, id is stable.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SynProtectionRule("Rule", {
+          return yield* Cloudflare.DdosProtection.SynProtectionRule("Rule", {
             scope: "global",
             mode: "disabled",
             burstSensitivity: "high",
@@ -96,7 +96,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const provider = yield* Provider.findProvider(
-        Cloudflare.SynProtectionRule,
+        Cloudflare.DdosProtection.SynProtectionRule,
       );
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
@@ -118,17 +118,20 @@ test.provider.skipIf(!magicTransit)(
 
       const rule = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SynProtectionRule("ListRule", {
-            scope: "global",
-            mode: "monitoring",
-            burstSensitivity: "medium",
-            rateSensitivity: "medium",
-          });
+          return yield* Cloudflare.DdosProtection.SynProtectionRule(
+            "ListRule",
+            {
+              scope: "global",
+              mode: "monitoring",
+              burstSensitivity: "medium",
+              rateSensitivity: "medium",
+            },
+          );
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.SynProtectionRule,
+        Cloudflare.DdosProtection.SynProtectionRule,
       );
       const all = yield* provider.list();
       expect(all.some((r) => r.ruleId === rule.ruleId)).toBe(true);
