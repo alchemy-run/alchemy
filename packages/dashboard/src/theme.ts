@@ -77,16 +77,16 @@ export const PLAN_LABELS: Record<string, string> = {
 };
 
 /**
- * What the last apply DID (terminal results), vs PLAN_* (pending intent).
- * Success always settles to moss regardless of the action — the in-flight
- * phase carried the action's color; the RESULT's color answers only
- * "did it work?".
+ * What the last apply DID (terminal results). Color = the ACTION, same as
+ * the plan/in-flight phases (one hue per story; deletions stay brick even
+ * when they succeed). The PHASE is carried by the tab's treatment: hollow
+ * (pending) → filled + spinner (doing) → filled + ✓/✗ (complete).
  */
 export const RESULT_COLORS: Record<string, string> = {
   created: "var(--alc-success)",
-  updated: "var(--alc-success)",
-  replaced: "var(--alc-success)",
-  deleted: "var(--alc-success)",
+  updated: "var(--alc-warn)",
+  replaced: "var(--alc-danger)",
+  deleted: "var(--alc-danger)",
   failed: "var(--alc-danger)",
 };
 

@@ -18,7 +18,7 @@
  */
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { ResourceUIContext } from "alchemy/UI/UIProvider";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import { memo, useMemo, type CSSProperties } from "react";
 import { NODE_HEIGHT, NODE_WIDTH } from "../layout/elkGraph.ts";
 import {
@@ -67,6 +67,22 @@ const tabStyleOf = (color: string): CSSProperties => {
   if (style === undefined) {
     style = { background: color, color: "var(--alc-fg-on-accent)" };
     tabCache.set(color, style);
+  }
+  return style;
+};
+
+// hollow variant: a PENDING phase is a promise, not yet real — outlined
+// tab with a soft wash of the action color
+const tabOutlineCache = new Map<string, CSSProperties>();
+const tabOutlineStyleOf = (color: string): CSSProperties => {
+  let style = tabOutlineCache.get(color);
+  if (style === undefined) {
+    style = {
+      color,
+      borderColor: color,
+      background: `color-mix(in srgb, ${color} 12%, var(--alc-bg-elev-2))`,
+    };
+    tabOutlineCache.set(color, style);
   }
   return style;
 };
@@ -185,19 +201,35 @@ export const ResourceNode = memo(function ResourceNode({
   const inFlight = runStatus !== undefined && statusInFlight(runStatus);
   // queued this run: waiting for its turn — spins in the plan's color
   const queued = runStatus === "pending";
+  // Phase treatment (color is ALWAYS the action's):
+  //   pending  → hollow tab (a promise; queued adds a spinner)
+  //   doing    → filled tab + spinner
+  //   complete → filled tab + ✓ (✗ for failed)
   const planTab =
     showPlanChip && plan !== undefined && planColor !== undefined
-      ? { label: plan, color: planColor, spinner: false }
+      ? {
+          label: plan,
+          color: planColor,
+          hollow: true,
+          spinner: false,
+          glyph: undefined,
+        }
       : undefined;
   const tab = inFlight
-    ? // action-consistent color: CREATING stays moss like the CREATE plan
-      // and CREATED result — the phase changes, the color doesn't
-      { label: status, color: inFlightColor(status, plan), spinner: true }
+    ? {
+        label: status,
+        color: inFlightColor(status, plan),
+        hollow: false,
+        spinner: true,
+        glyph: undefined,
+      }
     : queued
       ? {
           label: "pending",
           color: planColor ?? statusColor("pending"),
+          hollow: true,
           spinner: true,
+          glyph: undefined,
         }
       : approval !== undefined
         ? // the review screen shows ONLY what WILL happen: plan tabs on
@@ -205,7 +237,14 @@ export const ResourceNode = memo(function ResourceNode({
           // read as pending work)
           planTab
         : resultIsFresh && result !== undefined && resultColor !== undefined
-          ? { label: result, color: resultColor, spinner: false }
+          ? {
+              label: result,
+              color: resultColor,
+              hollow: false,
+              spinner: false,
+              glyph:
+                result === "failed" ? ("cross" as const) : ("check" as const),
+            }
           : planTab;
   // terminated / declared-only resources render "dead": dashed ghost shell
   const deleted = result === "deleted" || status === "deleted";
@@ -242,10 +281,16 @@ export const ResourceNode = memo(function ResourceNode({
           "updating" + spinner (running) → "updated"/"failed" (this run) */}
       {tab !== undefined && (
         <div
-          className="absolute -top-[19px] left-3 flex items-center gap-1 rounded-t-[var(--alc-radius-sm)] px-2 pb-[3px] pt-[2px] font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em]"
-          style={tabStyleOf(tab.color)}
+          className={`absolute -top-[19px] left-3 flex items-center gap-1 rounded-t-[var(--alc-radius-sm)] px-2 pb-[3px] pt-[2px] font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] ${
+            tab.hollow ? "border border-b-0" : ""
+          }`}
+          style={
+            tab.hollow ? tabOutlineStyleOf(tab.color) : tabStyleOf(tab.color)
+          }
         >
           {tab.spinner && <Loader2 size={9} className="animate-spin" />}
+          {tab.glyph === "check" && <Check size={9} strokeWidth={3} />}
+          {tab.glyph === "cross" && <X size={9} strokeWidth={3} />}
           {tab.label}
         </div>
       )}
