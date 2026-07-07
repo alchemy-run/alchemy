@@ -185,7 +185,9 @@ export type ConfigAttributes = {
  * ```
  */
 export const Config = Object.assign(
-  Resource<Config>("Cloudflare.Zaraz.Config"),
+  Resource<Config>("Cloudflare.Zaraz.Config", {
+    aliases: ["Cloudflare.ZarazConfig"],
+  }),
   {
     /**
      * Define a type-only contract for the events sent through this Zaraz config.

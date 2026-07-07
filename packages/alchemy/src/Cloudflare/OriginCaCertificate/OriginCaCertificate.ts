@@ -145,7 +145,9 @@ export type OriginCaCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/
  */
-export const OriginCaCertificate = Resource<OriginCaCertificate>(TypeId);
+export const OriginCaCertificate = Resource<OriginCaCertificate>(TypeId, {
+  aliases: ["Cloudflare.OriginCaCertificate"],
+});
 
 /**
  * Returns true if the given value is an OriginCaCertificate resource.

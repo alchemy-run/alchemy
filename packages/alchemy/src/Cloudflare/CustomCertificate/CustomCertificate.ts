@@ -244,7 +244,9 @@ export type CustomCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/edge-certificates/custom-certificates/
  */
-export const CustomCertificate = Resource<CustomCertificate>(TypeId);
+export const CustomCertificate = Resource<CustomCertificate>(TypeId, {
+  aliases: ["Cloudflare.CustomCertificate"],
+});
 
 /**
  * Returns true if the given value is a CustomCertificate resource.

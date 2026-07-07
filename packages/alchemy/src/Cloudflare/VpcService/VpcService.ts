@@ -122,6 +122,7 @@ export type VpcService = Resource<
  */
 export const VpcService = Resource<VpcService>(
   "Cloudflare.VpcService.VpcService",
+  { aliases: ["Cloudflare.VpcService"] },
 );
 
 const createServiceName = (id: string, name: string | undefined) =>

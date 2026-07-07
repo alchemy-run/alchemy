@@ -94,6 +94,9 @@ export type SecuritySettings = Resource<
  */
 export const SecuritySettings = Resource<SecuritySettings>(
   AiSecuritySettingsTypeId,
+  {
+    aliases: ["Cloudflare.AiSecurity.Settings"],
+  },
 );
 
 export const SecuritySettingsProvider = () =>

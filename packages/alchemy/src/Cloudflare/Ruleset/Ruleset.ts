@@ -98,7 +98,9 @@ export type Ruleset = Resource<
  * });
  * ```
  */
-export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset")({});
+export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset", {
+  aliases: ["Cloudflare.Ruleset"],
+})({});
 
 export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {

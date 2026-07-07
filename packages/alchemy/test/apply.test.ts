@@ -1,6 +1,7 @@
 import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
@@ -16,6 +17,9 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  AliasedWidget,
+  aliasedWidgetDeletes,
+  aliasedWidgetProvider,
   ArtifactProbe,
   BindingTarget,
   CollisionRegistry,
@@ -4813,4 +4817,123 @@ describe("Duration round-trip through state", () => {
         expect(Duration.toMillis(persisted.attr.computedTimeout)).toBe(16_000);
       }),
   );
+});
+
+describe("type aliases", () => {
+  // Simulate state written before a type rename: rewrite the persisted row's
+  // resourceType to the legacy name ("Test.Widget") that the canonical type
+  // ("Test.Widgets.Widget") carries as an alias.
+  const rewriteTypeToLegacy = Effect.fn(function* (fqn: string) {
+    const state = yield* yield* State;
+    const stk = yield* Stack;
+    const row = (yield* state.get({
+      stack: stk.name,
+      stage: stk.stage,
+      fqn,
+    })) as ResourceState;
+    expect(row.resourceType).toEqual("Test.Widgets.Widget");
+    yield* state.set({
+      stack: stk.name,
+      stage: stk.stage,
+      fqn,
+      value: { ...row, resourceType: "Test.Widget" },
+    });
+  });
+
+  describe("bare provider layer", () => {
+    const { test } = Test.make({
+      providers: Layer.mergeAll(TestLayers(), aliasedWidgetProvider()),
+    });
+
+    test.provider(
+      "a noop deploy migrates legacy-typed state to the canonical type",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W1", { name: "w1" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W1");
+
+          // Unchanged props plan as a noop — Apply must still rewrite the
+          // state row to the canonical type name.
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W1", { name: "w1" });
+          }).pipe(stack.deploy);
+
+          const row = yield* getState("W1");
+          expect(row.resourceType).toEqual("Test.Widgets.Widget");
+          expect(row.status).toEqual("created");
+          expect(row.attr).toEqual({ name: "w1" });
+        }),
+    );
+
+    test.provider(
+      "orphan persisted under a legacy type name is deleted via alias",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W2", { name: "w2" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W2");
+
+          // Remove the resource from the stack — the orphan-deletion path
+          // resolves the provider from the legacy type via its alias.
+          yield* Effect.void.pipe(stack.deploy);
+
+          expect(aliasedWidgetDeletes).toContain("W2");
+          expect(yield* getState("W2")).toBeUndefined();
+        }),
+    );
+
+    test.provider(
+      "destroy resolves the provider for legacy-typed state via alias",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W3", { name: "w3" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W3");
+
+          yield* stack.destroy();
+
+          expect(aliasedWidgetDeletes).toContain("W3");
+          expect(yield* getState("W3")).toBeUndefined();
+        }),
+    );
+  });
+
+  describe("provider collection", () => {
+    class AliasApplyProviders extends Provider.ProviderCollection<AliasApplyProviders>()(
+      "Test.AliasApplyProviders",
+    ) {}
+
+    // The bare provider layer is consumed while building the collection and
+    // is NOT exported — lookup can only succeed through the collection.
+    const { test } = Test.make({
+      providers: Layer.effect(
+        AliasApplyProviders,
+        Provider.collection([AliasedWidget]),
+      ).pipe(Layer.provide(aliasedWidgetProvider())),
+    });
+
+    test.provider(
+      "orphan persisted under a legacy type name is deleted via alias",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* AliasedWidget("W4", { name: "w4" });
+          }).pipe(stack.deploy);
+
+          yield* rewriteTypeToLegacy("W4");
+
+          yield* Effect.void.pipe(stack.deploy);
+
+          expect(aliasedWidgetDeletes).toContain("W4");
+          expect(yield* getState("W4")).toBeUndefined();
+        }),
+    );
+  });
 });

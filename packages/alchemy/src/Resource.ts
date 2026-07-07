@@ -8,7 +8,7 @@ import { toFqn } from "./FQN.ts";
 import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
-import { Provider } from "./Provider.ts";
+import { Provider, registerTypeAliases } from "./Provider.ts";
 import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
@@ -184,6 +184,23 @@ export interface ResourceOptions {
    * @default "destroy"
    */
   defaultRemovalPolicy?: RemovalPolicy["Service"];
+  /**
+   * Legacy type names this resource was previously registered under.
+   *
+   * When a resource type is renamed (e.g. `"Cloudflare.Queue"` →
+   * `"Cloudflare.Queues.Queue"`), state persisted under the old name must
+   * still resolve to this resource's provider. Listing the old names here
+   * makes provider lookup fall back from the legacy name to this type, so
+   * existing stacks keep planning, updating, and deleting cleanly across
+   * the rename. The state row migrates to the new type on its next write.
+   *
+   * ```ts
+   * export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
+   *   aliases: ["Cloudflare.Queue"],
+   * });
+   * ```
+   */
+  aliases?: string[];
 }
 
 /**
@@ -199,6 +216,9 @@ export function Resource<R extends ResourceLike>(
   options?: ResourceOptions,
 ): ResourceClass<R> {
   const defaultRemovalPolicy = options?.defaultRemovalPolicy ?? "destroy";
+  if (options?.aliases?.length) {
+    registerTypeAliases(type, options.aliases);
+  }
   type Props = Input<R["Props"]>;
   const self = Self<R>(type);
   const constructor = (

@@ -951,6 +951,38 @@ export const deleteFirstResourceProvider = () =>
     }),
   });
 
+// AliasedWidget — a resource whose type was "renamed" from `Test.Widget` to
+// `Test.Widgets.Widget`. The legacy name is carried as an alias so state
+// persisted under the old type still resolves to this provider. Its provider
+// is intentionally NOT part of `TestLayers` — alias tests provide it as a
+// bare layer or wrapped in a `ProviderCollection` to exercise both lookup
+// paths in isolation.
+export interface AliasedWidget extends Resource<
+  "Test.Widgets.Widget",
+  { name?: string },
+  {
+    name: string;
+  }
+> {}
+
+export const AliasedWidget = Resource<AliasedWidget>("Test.Widgets.Widget", {
+  aliases: ["Test.Widget"],
+});
+
+/** Logical IDs whose provider `delete` ran — proves deletion went through the provider. */
+export const aliasedWidgetDeletes: string[] = [];
+
+export const aliasedWidgetProvider = () =>
+  Provider.succeed(AliasedWidget, {
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      return { name: news?.name ?? id };
+    }),
+    delete: Effect.fn(function* ({ id }) {
+      aliasedWidgetDeletes.push(id);
+    }),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(

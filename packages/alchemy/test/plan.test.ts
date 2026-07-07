@@ -4,6 +4,7 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
+import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
@@ -25,6 +26,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import {
+  AliasedWidget,
+  aliasedWidgetProvider,
   ArtifactProbe,
   BindingTarget,
   Bucket,
@@ -3221,4 +3224,106 @@ describe("StackRefExpr resolution", () => {
       }
     }),
   );
+});
+
+describe("type aliases", () => {
+  // State rows persisted before a type rename carry the legacy name
+  // ("Test.Widget"). Provider lookup must fall back to the canonical type
+  // ("Test.Widgets.Widget") via the alias declared on the resource.
+  const legacyWidgetState = (fqn: string): ResourceState => ({
+    instanceId,
+    providerVersion: 0,
+    logicalId: fqn,
+    fqn,
+    namespace: undefined,
+    resourceType: "Test.Widget",
+    status: "created",
+    props: {
+      name: "widget",
+    },
+    attr: {
+      name: "widget",
+    },
+    bindings: [],
+    downstream: [],
+  });
+
+  test(
+    "orphan persisted under a legacy type name plans a delete via alias",
+    Effect.gen(function* () {
+      yield* seed({ LegacyOrphan: legacyWidgetState("LegacyOrphan") });
+      expect(
+        yield* makePlan(Effect.void).pipe(
+          Effect.provide(aliasedWidgetProvider()),
+        ),
+      ).toMatchObject({
+        deletions: {
+          LegacyOrphan: {
+            action: "delete",
+            resource: {
+              LogicalId: "LegacyOrphan",
+              Type: "Test.Widget",
+            },
+          },
+        },
+      });
+    }),
+  );
+
+  test(
+    "declared resource with legacy-typed state plans as a noop update",
+    Effect.gen(function* () {
+      yield* seed({ MyWidget: legacyWidgetState("MyWidget") });
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* AliasedWidget("MyWidget", { name: "widget" });
+        }),
+      ).pipe(Effect.provide(aliasedWidgetProvider()));
+      expect(plan).toMatchObject({
+        resources: {
+          MyWidget: {
+            action: "noop",
+            state: {
+              resourceType: "Test.Widget",
+            },
+          },
+        },
+      });
+      expect(Object.keys(plan.deletions)).toEqual([]);
+    }),
+  );
+
+  describe("via provider collection", () => {
+    class AliasPlanProviders extends Provider.ProviderCollection<AliasPlanProviders>()(
+      "Test.AliasPlanProviders",
+    ) {}
+
+    // The bare provider layer is consumed while building the collection and
+    // is NOT exported — lookup can only succeed through the collection.
+    const widgetCollection = () =>
+      Layer.effect(
+        AliasPlanProviders,
+        Provider.collection([AliasedWidget]),
+      ).pipe(Layer.provide(aliasedWidgetProvider()));
+
+    test(
+      "orphan persisted under a legacy type name plans a delete via alias",
+      Effect.gen(function* () {
+        yield* seed({ LegacyOrphan: legacyWidgetState("LegacyOrphan") });
+        expect(
+          yield* makePlan(Effect.void).pipe(Effect.provide(widgetCollection())),
+        ).toMatchObject({
+          deletions: {
+            LegacyOrphan: {
+              action: "delete",
+              resource: {
+                LogicalId: "LegacyOrphan",
+                Type: "Test.Widget",
+              },
+            },
+          },
+        });
+      }),
+    );
+  });
 });

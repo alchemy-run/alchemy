@@ -228,7 +228,9 @@ export type AccountDnsSettings = Resource<
  * });
  * ```
  */
-export const AccountDnsSettings = Resource<AccountDnsSettings>(TypeId);
+export const AccountDnsSettings = Resource<AccountDnsSettings>(TypeId, {
+  aliases: ["Cloudflare.Dns.AccountSettings"],
+});
 
 /**
  * Returns true if the given value is an AccountDnsSettings resource.

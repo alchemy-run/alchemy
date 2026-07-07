@@ -164,7 +164,9 @@ export type Policy = Resource<
  * });
  * ```
  */
-export const Policy = Resource<Policy>("Cloudflare.Access.Policy");
+export const Policy = Resource<Policy>("Cloudflare.Access.Policy", {
+  aliases: ["Cloudflare.AccessPolicy"],
+});
 
 export const PolicyProvider = () =>
   Provider.succeed(Policy, {

@@ -119,7 +119,9 @@ export type UrlNormalization = Resource<
  *
  * @see https://developers.cloudflare.com/rules/normalization/
  */
-export const UrlNormalization = Resource<UrlNormalization>(TypeId);
+export const UrlNormalization = Resource<UrlNormalization>(TypeId, {
+  aliases: ["Cloudflare.UrlNormalization"],
+});
 
 /**
  * Returns true if the given value is a UrlNormalization resource.

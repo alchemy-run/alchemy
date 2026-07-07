@@ -143,7 +143,9 @@ export type Hostname = Resource<
  *
  * @see https://developers.cloudflare.com/web3/
  */
-export const Hostname = Resource<Hostname>(TypeId);
+export const Hostname = Resource<Hostname>(TypeId, {
+  aliases: ["Cloudflare.Web3Hostname"],
+});
 
 /**
  * Returns true if the given value is a Hostname resource.
