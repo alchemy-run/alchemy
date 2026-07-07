@@ -74,8 +74,11 @@ export const makeWorkerBridge = (
           eff.pipe(
             // Per-event services take precedence over the captured init
             // context: the init context carries the *deferred*
-            // WorkerExecutionContext (yieldable in the top-level closure),
-            // which must be shadowed by the real per-event one here.
+            // WorkerExecutionContext (yieldable in the top-level closure)
+            // and the isolate-lifetime instance Scope, both of which must
+            // be shadowed by the real per-event ones here so that
+            // `Effect.addFinalizer` in a handler attaches to the request
+            // scope (closed into `ctx.waitUntil` below).
             Effect.provide(
               Layer.mergeAll(
                 Layer.succeed(
@@ -86,14 +89,13 @@ export const makeWorkerBridge = (
                   scope,
                   cache: {},
                 }),
+                Layer.succeed(Scope.Scope, scope),
               ),
             ),
             Effect.provide(Layer.succeedContext(context)),
           ),
         ),
-        Effect.provide(
-          Layer.provideMerge(globalContext, Layer.succeed(Scope.Scope, scope)),
-        ),
+        Effect.provide(globalContext),
         Effect.runPromiseExit,
       )
       .finally(() =>
@@ -227,6 +229,16 @@ export const getWorkerExport = <Export = any>({
     Logger.layer([Logger.consolePretty()]),
   );
 
+  // Fallback Scope for init-phase code paths where the Layer machinery
+  // doesn't provide a build scope of its own. Never closed (workerd has no
+  // isolate-teardown hook). Note the entrypoint layer is rebuilt per event
+  // (each event runs in a fresh runtime with its own memo map), and a layer
+  // build provides its own scope to the init effect — so init-level
+  // finalizers actually attach to that build scope and fire at the end of
+  // each event, not here. Handlers get the request scope from
+  // `processEvent`, which closes into `ctx.waitUntil` after the response.
+  const instanceScope = Scope.makeUnsafe();
+
   const globalContext = Layer.unwrap(
     cloudflare_workers.pipe(
       Effect.map(({ env }) =>
@@ -274,6 +286,7 @@ export const getWorkerExport = <Export = any>({
               (env as any).DEBUG ? "Debug" : "Info",
             ),
           ),
+          Layer.provideMerge(Layer.succeed(Scope.Scope, instanceScope)),
         ),
       ),
     ),

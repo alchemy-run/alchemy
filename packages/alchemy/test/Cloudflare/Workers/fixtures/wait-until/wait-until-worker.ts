@@ -28,6 +28,18 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
           );
           return "scheduled" as const;
         }),
+        // Scope finalizers added inside a DO method run after the method
+        // returns: the bridge closes the per-call scope and registers the
+        // close promise with `state.waitUntil`.
+        recordOnClose: Effect.fn(function* (entry: string) {
+          yield* Effect.addFinalizer(() =>
+            Effect.sleep("100 millis").pipe(
+              Effect.andThen(append(entry)),
+              Effect.ignore,
+            ),
+          );
+          return "scheduled" as const;
+        }),
         snapshot: Effect.fn(function* () {
           return {
             entries: (yield* state.storage.get<string[]>("entries")) ?? [],
@@ -56,6 +68,19 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
     // Yielded from the init closure (deferred instance) — its methods
     // resolve the live per-event context when invoked inside a handler.
     const exec = yield* Cloudflare.WorkerExecutionContext;
+    // Probes: observe how often the init closure itself runs and if/when a
+    // finalizer added in the init closure runs. Counted on globalThis and
+    // exposed via /init-runs and /init-finalizer-runs.
+    yield* Effect.sync(() => {
+      (globalThis as any).__initRuns =
+        ((globalThis as any).__initRuns ?? 0) + 1;
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        (globalThis as any).__initFinalizerRuns =
+          ((globalThis as any).__initFinalizerRuns ?? 0) + 1;
+      }),
+    );
 
     return {
       fetch: Effect.gen(function* () {
@@ -78,8 +103,39 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
           );
         }
 
+        // Scope finalizers added in a fetch handler run after the response
+        // is sent: the bridge closes the request scope and registers the
+        // close promise with `ctx.waitUntil`.
+        if (url.pathname === "/finalizer") {
+          yield* Effect.addFinalizer(() =>
+            Effect.sleep("100 millis").pipe(
+              Effect.andThen(journal.record("from-request-finalizer")),
+              Effect.ignore,
+            ),
+          );
+          return HttpServerResponse.text("ok");
+        }
+
+        if (url.pathname === "/finalizer-do") {
+          return HttpServerResponse.text(
+            yield* journal.recordOnClose("from-do-finalizer"),
+          );
+        }
+
         if (url.pathname === "/entries") {
           return yield* HttpServerResponse.json(yield* journal.snapshot());
+        }
+
+        if (url.pathname === "/init-finalizer-runs") {
+          return HttpServerResponse.text(
+            String((globalThis as any).__initFinalizerRuns ?? 0),
+          );
+        }
+
+        if (url.pathname === "/init-runs") {
+          return HttpServerResponse.text(
+            String((globalThis as any).__initRuns ?? 0),
+          );
         }
 
         if (url.pathname === "/raw") {

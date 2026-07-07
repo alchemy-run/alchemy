@@ -884,6 +884,52 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * }
  * ```
  *
+ * @section Background Work & Scopes
+ * Each incoming event (fetch, RPC call, scheduled run) gets its own Effect
+ * `Scope`. When the handler finishes, the bridge closes that scope and
+ * registers the close promise with workerd's `ctx.waitUntil` — so
+ * finalizers added with `Effect.addFinalizer` inside a handler run *after*
+ * the response is sent, without blocking it, and the Worker stays alive
+ * until they settle. Streaming responses transfer the scope to the stream,
+ * so those finalizers run when the stream completes instead.
+ *
+ * For ad-hoc background work, `WorkerExecutionContext.waitUntil(effect)`
+ * forks an Effect with the caller's full context and keeps the invocation
+ * alive until it settles. The context can be yielded once in the init
+ * closure and used from any handler; its methods are `RuntimeContext`-
+ * colored, so they can only run inside a handler.
+ *
+ * The init closure itself is evaluated per event (its Layer is rebuilt for
+ * each event's runtime), so treat it as stateless setup: bind resources and
+ * build handlers there, but attach cleanup to handler scopes — a finalizer
+ * added in the init closure runs at the end of every event, not once per
+ * Worker.
+ *
+ * @example Post-response cleanup with a scope finalizer
+ * ```typescript
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runs after this response is sent, kept alive by waitUntil
+ *     yield* Effect.addFinalizer(() => flushMetrics().pipe(Effect.ignore));
+ *     return HttpServerResponse.text("ok");
+ *   }),
+ * };
+ * ```
+ *
+ * @example Background work with waitUntil
+ * ```typescript
+ * // init
+ * const exec = yield* Cloudflare.WorkerExecutionContext;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // respond now; the audit write completes in the background
+ *     yield* exec.waitUntil(writeAuditLog(event));
+ *     return HttpServerResponse.text("accepted", { status: 202 });
+ *   }),
+ * };
+ * ```
+ *
  * @section R2 Bucket
  * Bind an R2 bucket in the init phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
