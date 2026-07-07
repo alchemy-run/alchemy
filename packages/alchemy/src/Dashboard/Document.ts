@@ -690,11 +690,25 @@ export const applyPlan = (
   // in the deployment exactly like a resource (pending -> running -> ran),
   // so it must be visible from the review screen onward — not pop into
   // existence when its terminal status lands at the end of the run. Noop
-  // tasks are skipped (their persisted state feeds the baseline); destroy
-  // plans carry no runnable actions, so nothing shows there beyond the
-  // state-drop deletions.
+  // tasks are skipped (their persisted state feeds the baseline). A task
+  // being DELETED never runs — its "deletion" is a pure state drop, so it
+  // has no place in the review graph or the run display: remove it (the
+  // one deliberate exception to this pass's never-removes rule).
   for (const planAction of Object.values(plan.actions ?? {})) {
     if (planAction.action === "noop") {
+      continue;
+    }
+    if (planAction.action === "delete") {
+      if (nodes.delete(planAction.fqn)) {
+        for (const [key, edge] of edges) {
+          if (
+            edge.source === planAction.fqn ||
+            edge.target === planAction.fqn
+          ) {
+            edges.delete(key);
+          }
+        }
+      }
       continue;
     }
     let node = nodes.get(planAction.fqn);
@@ -705,16 +719,13 @@ export const applyPlan = (
         path: planAction.fqn.split("/").slice(0, -1),
         kind: "action",
         type: planAction.type,
-        status: planAction.action === "delete" ? "ran" : "pending",
+        status: "pending",
         bindings: [],
         downstream: [...planAction.downstream],
       };
-      if (planAction.action === "delete") {
-        node.ghost = "deleted";
-      }
       nodes.set(node.fqn, node);
     }
-    node.planAction = planAction.action === "delete" ? "delete" : "run";
+    node.planAction = "run";
   }
 
   const planNodes = [
@@ -759,7 +770,7 @@ export const applyPlan = (
     }
   };
   for (const planAction of Object.values(plan.actions ?? {})) {
-    if (planAction.action === "noop") {
+    if (planAction.action !== "run") {
       continue;
     }
     for (const d of planAction.downstream) {
