@@ -1107,6 +1107,10 @@ export const useMeta = (): DocumentMeta => useStore(dashboardStore, selectMeta);
 export const useDeploymentLive = (): boolean =>
   useStore(dashboardStore, (s) => s.document.deployment?.live === true);
 
+/** startedAt of the newest deployment record (stable number). */
+export const useDeploymentStartedAt = (): number | undefined =>
+  useStore(dashboardStore, (s) => s.document.deployment?.startedAt);
+
 export const useDeployment = (): LiveDeploymentRecord | undefined =>
   useStore(dashboardStore, selectDeploymentRecord);
 

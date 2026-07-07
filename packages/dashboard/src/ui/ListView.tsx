@@ -6,7 +6,8 @@ import {
   isDimmed,
   setFilter,
   setSelectedFqn,
-  useDeploymentLive,
+  useApproval,
+  useDeploymentStartedAt,
   useFilter,
   useFilterCounts,
   useIsSelected,
@@ -116,7 +117,8 @@ export const ListView = memo(function ListView() {
 const Row = memo(function Row({ fqn }: { fqn: string }) {
   const { node, decoration } = useNode(fqn);
   const selected = useIsSelected(fqn);
-  const live = useDeploymentLive();
+  const approval = useApproval();
+  const deployStartedAt = useDeploymentStartedAt();
   const meta = useMeta();
   const registry = useRegistry();
 
@@ -136,10 +138,14 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
   }
   const applyResult = decoration?.applyResult;
   const planAction = node.planAction ?? decoration?.planAction;
-  // pending plan wins over the PREVIOUS deploy's result; during a live
-  // apply the fresh result takes over as each row completes
+  // pending plan wins over the PREVIOUS run's result (see ResourceNode);
+  // a result from the CURRENT run takes over as each row completes
+  const resultIsFresh =
+    applyResult !== undefined &&
+    deployStartedAt !== undefined &&
+    (decoration?.at ?? 0) >= deployStartedAt;
   const showPlanChip =
-    planAction !== undefined && (!live || applyResult === undefined);
+    planAction !== undefined && (approval !== undefined || !resultIsFresh);
   const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? NEUTRAL_COLOR;
 
   return (
