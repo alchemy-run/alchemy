@@ -75,21 +75,23 @@ const workerLayout = (
   target: Worker,
   fqns: readonly string[],
   edges: readonly LayoutEdgeInput[],
+  aspectRatio: number,
 ): Promise<Map<string, XY>> =>
   new Promise<Map<string, XY>>((resolve, reject) => {
     const id = nextId++;
     pending.set(id, { resolve, reject });
-    const message: LayoutRequestMessage = { id, fqns, edges };
+    const message: LayoutRequestMessage = { id, fqns, edges, aspectRatio };
     target.postMessage(message);
   });
 
 const mainThreadLayout = (
   fqns: readonly string[],
   edges: readonly LayoutEdgeInput[],
+  aspectRatio: number,
 ): Promise<Map<string, XY>> =>
   import("elkjs/lib/elk.bundled.js").then(({ default: ELK }) =>
     new ELK()
-      .layout(toElkGraph(fqns, edges))
+      .layout(toElkGraph(fqns, edges, aspectRatio))
       .then((root) => toPositionMap(positionsOf(root))),
   );
 
@@ -109,11 +111,16 @@ export const requestLayout = (
   if (worker === undefined) {
     worker = spawnWorker();
   }
+  // component packing targets the screen the user is actually looking at
+  const aspectRatio =
+    typeof window !== "undefined" && window.innerHeight > 0
+      ? window.innerWidth / window.innerHeight
+      : 1.8;
   const run =
     worker === null
-      ? mainThreadLayout(fqns, edges)
-      : workerLayout(worker, fqns, edges).catch(() =>
-          mainThreadLayout(fqns, edges),
+      ? mainThreadLayout(fqns, edges, aspectRatio)
+      : workerLayout(worker, fqns, edges, aspectRatio).catch(() =>
+          mainThreadLayout(fqns, edges, aspectRatio),
         );
   const request = run.finally(() => inFlight.delete(hash));
   inFlight.set(hash, request);

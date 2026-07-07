@@ -171,6 +171,25 @@ export const seedPositions = (
   return out;
 };
 
+/**
+ * Two cards closer than a card's footprint = a broken arrangement (the
+ * signature of a poisoned/legacy seed) — continuity must not preserve it.
+ */
+const hasOverlap = (positions: ReadonlyMap<string, XY>): boolean => {
+  const list = [...positions.values()];
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      if (
+        Math.abs(list[i].x - list[j].x) < NODE_WIDTH - 8 &&
+        Math.abs(list[i].y - list[j].y) < NODE_HEIGHT - 8
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
 export interface CanvasLayout {
   /** the LIVE structural hash — node/edge arrays and position caches key on it */
   hash: string;
@@ -224,11 +243,19 @@ export const useCanvasLayout = (): CanvasLayout => {
     const known = structure.fqns.filter((fqn) => memory.has(fqn)).length;
     const missing = structure.fqns.length - known;
     if (known > 0 && (missing === 0 || (missing <= 2 && known >= missing))) {
-      setPositions(
-        hash,
-        seedPositions(structure.fqns, structure.visualEdges, memory),
+      const seeded = seedPositions(
+        structure.fqns,
+        structure.visualEdges,
+        memory,
       );
-      return;
+      // continuity preserves ARRANGEMENTS, not accidents: a seed with
+      // overlapping cards means the memory itself is broken (poisoned by
+      // an old bug or a degenerate seed) — auto-heal with a fresh ELK
+      // layout instead of faithfully reproducing the mess
+      if (!hasOverlap(seeded)) {
+        setPositions(hash, seeded);
+        return;
+      }
     }
     if (getPositions(hash) !== undefined) {
       return;
