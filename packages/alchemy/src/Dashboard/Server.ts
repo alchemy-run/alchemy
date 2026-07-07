@@ -1,5 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -140,6 +141,13 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   const server = yield* HttpServer.HttpServer;
 
   const pubsub = yield* PubSub.unbounded<string>();
+
+  // Shutdown latch for the SSE streams: they halt (end normally, so the
+  // response's ReadableStream CLOSES) when this fires. Ending them by
+  // fiber interruption instead would surface as `controller.error(...)`
+  // in Stream.toReadableStream and crash the process on exit with
+  // "All fibers interrupted without error".
+  const closed = yield* Deferred.make<void>();
 
   // ── scene inputs (server-owned, single source of truth) ───────────────
   let revision = 0;
@@ -554,6 +562,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
                 Stream.merge(heartbeat),
               ),
             ),
+            Stream.haltWhen(Deferred.await(closed)),
             Stream.ensuring(
               Effect.sync(() => {
                 sseClients--;
@@ -594,6 +603,7 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           return frames.pipe(
             Stream.map((frame) => `data: ${JSON.stringify(frame)}\n\n`),
             Stream.merge(heartbeat),
+            Stream.haltWhen(Deferred.await(closed)),
             Stream.ensuring(
               Effect.sync(() => {
                 sseClients--;
@@ -753,6 +763,12 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
   );
 
   yield* server.serve(handler);
+
+  // Registered AFTER server.serve so it runs BEFORE the serve finalizer
+  // (LIFO): live SSE responses end cleanly, their connections close, and
+  // Bun's graceful `server.stop()` completes immediately instead of
+  // interrupting in-flight response fibers.
+  yield* Effect.addFinalizer(() => Deferred.succeed(closed, void 0));
 
   // plan worker: computes plans sequentially on the server's scope and
   // re-broadcasts the scene when each lands
