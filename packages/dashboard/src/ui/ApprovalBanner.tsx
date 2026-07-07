@@ -1,5 +1,5 @@
 import { ShieldQuestion } from "lucide-react";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { decideApproval } from "../ingest.ts";
 import { useApproval, useProjection } from "../store.ts";
 import {
@@ -26,6 +26,11 @@ export const ApprovalBanner = memo(function ApprovalBanner() {
 
 function Banner() {
   const summary = useProjection("summary");
+  // The approval overlay deliberately stays in the document after approving
+  // (until the deploy's apply-start replaces it) so the review graph can't
+  // flicker — this local latch disables the buttons and relabels while the
+  // deploy spins up.
+  const [deciding, setDeciding] = useState<"approve" | "reject" | undefined>();
   const entries = Object.entries(summary.counts.byPlanAction).filter(
     ([, count]) => count > 0,
   );
@@ -57,16 +62,24 @@ function Banner() {
       </div>
       <div className="ml-2 flex gap-2">
         <button
-          onClick={() => void decideApproval(false)}
-          className="rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] px-3 py-1 text-[12px] text-[var(--alc-fg-3)] transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-danger)] hover:text-[var(--alc-danger)]"
+          disabled={deciding !== undefined}
+          onClick={() => {
+            setDeciding("reject");
+            void decideApproval(false);
+          }}
+          className="rounded-[var(--alc-radius)] border border-[var(--alc-hairline-2)] px-3 py-1 text-[12px] text-[var(--alc-fg-3)] transition-colors duration-[var(--alc-dur)] hover:border-[var(--alc-danger)] hover:text-[var(--alc-danger)] disabled:opacity-50"
         >
-          Reject
+          {deciding === "reject" ? "Rejecting…" : "Reject"}
         </button>
         <button
-          onClick={() => void decideApproval(true)}
-          className="rounded-[var(--alc-radius)] bg-[var(--alc-accent)] px-3 py-1 text-[12px] font-medium text-[var(--alc-fg-on-accent)] transition-colors duration-[var(--alc-dur)] hover:bg-[var(--alc-accent-deep)]"
+          disabled={deciding !== undefined}
+          onClick={() => {
+            setDeciding("approve");
+            void decideApproval(true);
+          }}
+          className="rounded-[var(--alc-radius)] bg-[var(--alc-accent)] px-3 py-1 text-[12px] font-medium text-[var(--alc-fg-on-accent)] transition-colors duration-[var(--alc-dur)] hover:bg-[var(--alc-accent-deep)] disabled:opacity-60"
         >
-          Approve &amp; deploy
+          {deciding === "approve" ? "Starting…" : "Approve & deploy"}
         </button>
       </div>
     </div>

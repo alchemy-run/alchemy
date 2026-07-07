@@ -482,7 +482,13 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       };
       if (approval?.id === body.id && approval.approved === undefined) {
         approval.approved = body.approved;
-        yield* withHost(stage, (host) => host.clearApproval());
+        if (!body.approved) {
+          // rejected: back to idle — the computed plan may own the overlay
+          // again. On APPROVE the overlay stays until /api/apply/start
+          // replaces it, so the review graph can't flash the background
+          // deploy plan in the decide→start window.
+          yield* withHost(stage, (host) => host.clearApproval());
+        }
         yield* broadcast(stage);
       }
       return yield* HttpServerResponse.json({ ok: true });
@@ -718,7 +724,12 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           const shape = yield* structure(stg);
           lastStructures.set(stg, shape);
           // the same fast-pass feeds both the v1 scene and the v2 document
-          yield* withHost(stg, (host) => host.applyStructure(shape));
+          yield* withHost(stg, (host) =>
+            host.document.approval !== undefined ||
+            host.document.deployment?.live === true
+              ? Effect.void
+              : host.applyStructure(shape),
+          );
           yield* broadcast(stg);
         }
         if (plan === undefined) {
