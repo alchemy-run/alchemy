@@ -93,8 +93,46 @@ const getScriptSettings = (
   });
 
 /**
+ * Deploy-time binding validation rejects an upload whose bindings
+ * reference a resource Cloudflare can't see (each resource type has
+ * its own typed not-found error, verified against the live API).
+ * Every bound resource is provisioned before the Worker deploys —
+ * dependency order for KV/R2/D1/queues/etc., a pre-created stub
+ * (which exports the Durable Object classes) for circular
+ * Worker↔Worker references — so a not-found here is either
+ * propagation lag on a just-created resource (a Secrets Store secret
+ * still `pending`, a stub script not yet in the registry) that
+ * retrying converges, or a genuine misconfiguration that keeps
+ * failing and surfaces as the typed error once the bounded budget is
+ * exhausted.
+ *
+ * @internal exported for unit testing
+ */
+export const isBindingTargetNotFound = (
+  e:
+    | Effect.Error<ReturnType<typeof workers.putScript>>
+    | Effect.Error<ReturnType<typeof wfp.putDispatchNamespaceScript>>,
+): boolean =>
+  e._tag === "SecretsStoreBindingNotFound" ||
+  e._tag === "KVNamespaceNotFound" ||
+  e._tag === "R2BucketNotFound" ||
+  e._tag === "D1DatabaseNotFound" ||
+  e._tag === "QueueNotFound" ||
+  e._tag === "ServiceBindingNotFound" ||
+  e._tag === "DurableObjectClassNotFound" ||
+  e._tag === "HyperdriveConfigNotFound" ||
+  e._tag === "VectorizeIndexNotFound" ||
+  e._tag === "DispatchNamespaceNotFound" ||
+  e._tag === "MtlsCertificateNotFound";
+
+const bindingTargetNotFoundRetrySchedule = () =>
+  Schedule.fixed("2 seconds").pipe(Schedule.both(Schedule.recurs(10)));
+
+/**
  * Upsert a Worker script, routing to the dispatch-namespace endpoint when
- * `dispatchNamespace` is set. The metadata/files contract is identical.
+ * `dispatchNamespace` is set. The metadata/files contract is identical, and
+ * both endpoints run the same binding validation (see
+ * {@link isBindingTargetNotFound}), so both get the same bounded retry.
  *
  * @internal
  */
@@ -107,14 +145,21 @@ const putWorkerScript = (params: {
 }) =>
   Effect.gen(function* () {
     if (params.dispatchNamespace) {
-      return yield* wfp.putDispatchNamespaceScript({
-        accountId: params.accountId,
-        dispatchNamespace: params.dispatchNamespace,
-        scriptName: params.scriptName,
-        metadata:
-          params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
-        files: params.files,
-      });
+      return yield* wfp
+        .putDispatchNamespaceScript({
+          accountId: params.accountId,
+          dispatchNamespace: params.dispatchNamespace,
+          scriptName: params.scriptName,
+          metadata:
+            params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
+          files: params.files,
+        })
+        .pipe(
+          Effect.retry({
+            while: isBindingTargetNotFound,
+            schedule: bindingTargetNotFoundRetrySchedule(),
+          }),
+        );
     }
     return yield* workers
       .putScript({
@@ -125,14 +170,8 @@ const putWorkerScript = (params: {
       })
       .pipe(
         Effect.retry({
-          // A Secrets Store secret referenced by a binding can take a few
-          // seconds after creation before Cloudflare's deploy-time
-          // validation sees it; a genuinely missing secret keeps failing
-          // and surfaces after the (bounded) budget.
-          while: (e) => e._tag === "SecretsStoreBindingNotFound",
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
+          while: isBindingTargetNotFound,
+          schedule: bindingTargetNotFoundRetrySchedule(),
         }),
       );
   });
