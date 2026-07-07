@@ -3,10 +3,12 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
 
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
@@ -239,7 +241,29 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
 
   yield* Effect.gen(function* () {
     const stack = yield* stackEffect;
-    yield* Effect.gen(function* () {
+
+    // The HTTP layer is built in a scope WE close on a DETACHED fiber:
+    // its finalizer awaits Bun's graceful `server.stop()`, which waits on
+    // the browser's idle keep-alive connections and can pend forever.
+    // Closing it inline (via Effect.provide's own scope) blocks the whole
+    // CLI's teardown — the deploy would hang after "dashboard stopped".
+    // The detached close does its best; runMain's process.exit reaps any
+    // lingering server handle.
+    const serverScope = yield* Scope.make();
+    const serverContext = yield* Layer.buildWithScope(
+      // plan evaluation can hold a request open for a long time — give it
+      // headroom past Bun's 10s default idle timeout
+      httpServer(port, "127.0.0.1", {
+        idleTimeout: 240,
+        gracefulShutdownTimeout: "2 seconds",
+      }),
+      serverScope,
+    );
+    const closeServer = Effect.forkDetach(
+      Scope.close(serverScope, Exit.void),
+    ).pipe(Effect.asVoid);
+
+    const exit = yield* Effect.gen(function* () {
       const state = yield* yield* State.State;
 
       const address = yield* Server.serve({
@@ -273,31 +297,22 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
       }
       yield* Effect.never;
     }).pipe(
-      // Scope the server region SO ITS OWN scope (holding the SSE request
-      // fibers and the serve finalizer) closes before the HTTP layer below
-      // unwinds. Without this the layer's finalizer (Bun's graceful
-      // `server.stop()`, which waits for in-flight connections) deadlocks
-      // against SSE streams that only die when the outer scope closes —
-      // and the outer scope is blocked behind that very finalizer.
+      // Scope the server region SO ITS OWN scope (holding the SSE latch
+      // and the serve finalizer) closes before the server itself is torn
+      // down — live streams end cleanly first.
       Effect.scoped,
       Effect.provide(stack.services),
-      // plan evaluation can hold a request open for a long time — give it
-      // headroom past Bun's 10s default idle timeout
-      Effect.provide(
-        httpServer(port, "127.0.0.1", {
-          idleTimeout: 240,
-          gracefulShutdownTimeout: "2 seconds",
-        }),
-      ),
-      // Bun's graceful stop() waits for the browser's idle keep-alive
-      // connections; when the 2s cap above fires, the timeout INTERRUPTS
-      // the cached shutdown effect and the HTTP layer's own finalizer then
-      // re-raises that interrupt as the region's failure ("All fibers
-      // interrupted without error"). That teardown artifact is not an
-      // error — swallow interrupt-only causes, let real ones through.
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.failCause(cause),
-      ),
+      Effect.provideContext(serverContext),
+      Effect.exit,
+      // runs on interruption too (Ctrl+C): kick the detached close so the
+      // server never blocks the CLI's teardown
+      Effect.ensuring(closeServer),
     );
+    // A teardown interrupt (the graceful-stop cap interrupting the cached
+    // shutdown effect) is an artifact, not an error — re-raise only real
+    // causes.
+    if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+      return yield* Effect.failCause(exit.cause);
+    }
   }).pipe(Effect.provide(servicesFor(stage)), Effect.scoped);
 });
