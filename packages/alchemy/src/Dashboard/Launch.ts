@@ -43,6 +43,8 @@ export interface LaunchOptions {
   open: boolean;
   /** resolved once the server is up, with the dashboard URL */
   ready?: Deferred.Deferred<string>;
+  /** the CLI command this run-scoped dashboard serves (see Server options) */
+  command?: "deploy" | "destroy" | "plan";
 }
 
 /**
@@ -134,7 +136,8 @@ export const requestApprovalViaDashboard = Effect.fn(function* (
  * no coupling to the deploy itself.
  */
 export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
-  const { stackEffect, stage, envFile, profile, port, open, ready } = options;
+  const { stackEffect, stage, envFile, profile, port, open, ready, command } =
+    options;
 
   yield* requireDistDir();
 
@@ -272,6 +275,7 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
         stage,
         plan: planForStage,
         structure: structureForStage,
+        command,
       });
 
       const url = address.replace("0.0.0.0", "127.0.0.1");

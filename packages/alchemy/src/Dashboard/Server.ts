@@ -88,6 +88,15 @@ export interface DashboardServerOptions {
    * restarted server.
    */
   onClientConnected?: Effect.Effect<void>;
+  /**
+   * The CLI command this (run-scoped) dashboard serves. During a
+   * `destroy --ui` run the background plan worker's DEPLOY plan overlay
+   * ("+ create" on everything) is noise — the stage is being torn down —
+   * so it is suppressed and the canvas shows plain structure ghosts.
+   * Absent for the standalone `alchemy dashboard`, where previewing the
+   * deploy plan is the whole point.
+   */
+  command?: "deploy" | "destroy" | "plan";
 }
 
 /**
@@ -134,7 +143,8 @@ const FALLBACK_HTML = `<!doctype html>
  * continues for as long as the surrounding scope stays open.
  */
 export const serve = Effect.fn(function* (options: DashboardServerOptions) {
-  const { state, stack, stage, plan, structure, onClientConnected } = options;
+  const { state, stack, stage, plan, structure, onClientConnected, command } =
+    options;
   const notifyClientConnected = onClientConnected ?? Effect.void;
   const distDir = yield* resolveDistDir();
   const path = yield* Path.Path;
@@ -845,7 +855,11 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           );
           yield* broadcast(stg);
         }
-        if (plan === undefined) {
+        if (plan === undefined || command === "destroy") {
+          // a destroy-run dashboard never overlays the background DEPLOY
+          // plan — "+ create" on a stage being torn down reads as wrong;
+          // the destroy plan itself arrives via the approval request
+          planInFlight.delete(stg);
           continue;
         }
         const result = yield* plan(stg).pipe(
