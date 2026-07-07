@@ -116,3 +116,144 @@ export const toElkGraph = (
 
 export const positionsOf = (root: ElkNode): [string, number, number][] =>
   (root.children ?? []).map((child) => [child.id, child.x ?? 0, child.y ?? 0]);
+
+const COMPONENT_GAP = 64;
+
+/**
+ * Re-pack disconnected components toward the target aspect ratio.
+ *
+ * ELK's own component placement sizes its packing area from
+ * `sqrt(totalArea × aspectRatio)` — for the small graphs a stack
+ * typically has, that width fits at most one component per row and the
+ * result stacks into a column regardless of the aspect hint. This pass
+ * keeps ELK's per-component layouts verbatim and shelf-packs their
+ * bounding boxes left-to-right (tallest shelf first, wrapping at the
+ * aspect-derived width, never narrower than the widest component).
+ * Deterministic: components sort by height, then their smallest fqn.
+ */
+export const repackComponents = (
+  positions: [string, number, number][],
+  edges: readonly LayoutEdgeInput[],
+  aspectRatio: number,
+): [string, number, number][] => {
+  // union-find over fqns
+  const parent = new Map<string, string>();
+  const find = (a: string): string => {
+    let root = a;
+    while ((parent.get(root) ?? root) !== root) {
+      root = parent.get(root) ?? root;
+    }
+    parent.set(a, root);
+    return root;
+  };
+  const union = (a: string, b: string): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) {
+      parent.set(ra, rb);
+    }
+  };
+  for (const [fqn] of positions) {
+    parent.set(fqn, parent.get(fqn) ?? fqn);
+  }
+  for (const edge of edges) {
+    union(edge.source, edge.target);
+  }
+
+  interface Component {
+    key: string;
+    fqns: [string, number, number][];
+    minX: number;
+    minY: number;
+    width: number;
+    height: number;
+  }
+  const byRoot = new Map<string, [string, number, number][]>();
+  for (const entry of positions) {
+    const root = find(entry[0]);
+    const list = byRoot.get(root);
+    if (list === undefined) {
+      byRoot.set(root, [entry]);
+    } else {
+      list.push(entry);
+    }
+  }
+  if (byRoot.size <= 1) {
+    return positions;
+  }
+  const components: Component[] = [...byRoot.values()].map((fqns) => {
+    const xs = fqns.map(([, x]) => x);
+    const ys = fqns.map(([, , y]) => y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    return {
+      key: [...fqns].map(([fqn]) => fqn).sort()[0] ?? "",
+      fqns,
+      minX,
+      minY,
+      width: Math.max(...xs) + NODE_WIDTH - minX,
+      height: Math.max(...ys) + NODE_HEIGHT - minY,
+    };
+  });
+  components.sort((a, b) =>
+    a.height === b.height ? a.key.localeCompare(b.key) : b.height - a.height,
+  );
+
+  const pack = (
+    targetWidth: number,
+  ): { out: [string, number, number][]; width: number; height: number } => {
+    const out: [string, number, number][] = [];
+    let shelfX = 0;
+    let shelfY = 0;
+    let shelfHeight = 0;
+    let width = 0;
+    for (const component of components) {
+      if (shelfX > 0 && shelfX + component.width > targetWidth) {
+        shelfX = 0;
+        shelfY += shelfHeight + COMPONENT_GAP;
+        shelfHeight = 0;
+      }
+      for (const [fqn, x, y] of component.fqns) {
+        out.push([
+          fqn,
+          x - component.minX + shelfX,
+          y - component.minY + shelfY,
+        ]);
+      }
+      width = Math.max(width, shelfX + component.width);
+      shelfX += component.width + COMPONENT_GAP;
+      shelfHeight = Math.max(shelfHeight, component.height);
+    }
+    return { out, width, height: shelfY + shelfHeight };
+  };
+
+  // Try a spread of shelf widths and keep the packing whose aspect lands
+  // closest to the target — a single sqrt-area guess is routinely a hair
+  // too narrow, wrapping a small trailing component onto its own shelf.
+  const target = clampAspectRatio(aspectRatio);
+  const totalArea = components.reduce(
+    (sum, c) => sum + (c.width + COMPONENT_GAP) * (c.height + COMPONENT_GAP),
+    0,
+  );
+  const base = Math.max(
+    ...components.map((c) => c.width),
+    Math.sqrt(totalArea * target),
+  );
+  let best:
+    | { out: [string, number, number][]; score: number; area: number }
+    | undefined;
+  for (const factor of [1, 1.25, 1.5, 1.75, 2, 2.5]) {
+    const candidate = pack(base * factor);
+    const aspect = candidate.width / Math.max(1, candidate.height);
+    const score = Math.abs(Math.log(aspect / target));
+    const area = candidate.width * candidate.height;
+    if (
+      best === undefined ||
+      score < best.score - 1e-9 ||
+      (Math.abs(score - best.score) <= 1e-9 && area < best.area)
+    ) {
+      best = { out: candidate.out, score, area };
+    }
+  }
+  return best?.out ?? positions;
+};

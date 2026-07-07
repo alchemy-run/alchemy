@@ -141,7 +141,12 @@ export const ResourceNode = memo(function ResourceNode({
   const live = useDeploymentLive();
 
   // live overlay wins over the structural baseline
-  const status = decoration?.status ?? node?.status ?? "unknown";
+  const rawStatus = decoration?.status ?? node?.status ?? "unknown";
+  const status =
+    node?.kind === "action" &&
+    (rawStatus === "deleting" || rawStatus === "deleted")
+      ? (node?.status ?? "unknown")
+      : rawStatus;
   const ui = node !== undefined ? registry?.get(node.type) : undefined;
 
   // UIProvider hooks are pure functions of the ctx — memoized on the node's
@@ -176,7 +181,15 @@ export const ResourceNode = memo(function ResourceNode({
   const Card = ui?.Card;
   const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? NEUTRAL_COLOR;
   const plan = decoration?.planAction ?? node.planAction;
-  const result = decoration?.applyResult;
+  // A deleted task is a pure state drop: the destroy story deliberately
+  // excludes actions (they never run during teardown), so the ghost that
+  // returns after the run must not wear the destroy's verdict — and
+  // "deleting"/"deleted" are not real lifecycle phases for it either.
+  const isAction = node.kind === "action";
+  const result =
+    isAction && decoration?.applyResult === "deleted"
+      ? undefined
+      : decoration?.applyResult;
   const note = decoration?.note;
   const hidden = decoration?.hidden === true;
   const planColor = plan ? PLAN_COLORS[plan] : undefined;
@@ -201,13 +214,17 @@ export const ResourceNode = memo(function ResourceNode({
   // persisted baseline status like "deleting" left behind by a failed
   // destroy would otherwise masquerade as live forever and mask the
   // pending plan action ("delete") on the next attempt.
-  const runStatus =
+  const rawRunStatus =
     live &&
     decoration?.status !== undefined &&
     deployStartedAt !== undefined &&
     (decoration.at ?? 0) >= deployStartedAt
       ? decoration.status
       : undefined;
+  const runStatus =
+    isAction && (rawRunStatus === "deleting" || rawRunStatus === "deleted")
+      ? undefined
+      : rawRunStatus;
   const inFlight = runStatus !== undefined && statusInFlight(runStatus);
   // queued this run: waiting for its turn — spins in the plan's color
   const queued = runStatus === "pending";

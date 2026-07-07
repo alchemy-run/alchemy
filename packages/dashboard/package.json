@@ -12,6 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "bun test test/",
     "prepublishOnly": "vite build"
   },
   "devDependencies": {
