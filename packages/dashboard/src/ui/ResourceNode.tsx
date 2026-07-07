@@ -25,6 +25,7 @@ import {
   chipStyle,
   CLOUD_COLORS,
   cloudOf,
+  inFlightColor,
   NEUTRAL_COLOR,
   PLAN_COLORS,
   RESULT_COLORS,
@@ -189,7 +190,9 @@ export const ResourceNode = memo(function ResourceNode({
       ? { label: plan, color: planColor, spinner: false }
       : undefined;
   const tab = inFlight
-    ? { label: status, color: statusColor(status), spinner: true }
+    ? // action-consistent color: CREATING stays moss like the CREATE plan
+      // and CREATED result — the phase changes, the color doesn't
+      { label: status, color: inFlightColor(status, plan), spinner: true }
     : queued
       ? {
           label: "pending",
@@ -271,9 +274,13 @@ export const ResourceNode = memo(function ResourceNode({
         </span>
         <span
           className={`ml-auto h-2 w-2 shrink-0 rounded-full ${
-            inFlight ? "status-pulse" : ""
+            inFlight || queued ? "status-pulse" : ""
           }`}
-          style={bgOf(statusColor(status))}
+          style={bgOf(
+            statusInFlight(status)
+              ? inFlightColor(status, plan)
+              : statusColor(status),
+          )}
           title={status}
         />
       </div>
