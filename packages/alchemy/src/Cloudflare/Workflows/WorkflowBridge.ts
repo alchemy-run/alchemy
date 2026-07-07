@@ -170,8 +170,15 @@ const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
         timestamp instanceof Date ? timestamp.toISOString() : timestamp,
       ),
     ),
+  // The native `step.waitForEvent` resolves with the full event object
+  // (`{ payload, timestamp, type }`); the Effect wrapper returns just the
+  // typed payload.
   waitForEvent: <T>(name: string, options: any): Effect.Effect<T> =>
-    Effect.tryPromise(() => step.waitForEvent(name, options) as Promise<T>),
+    Effect.tryPromise(() =>
+      (step.waitForEvent(name, options) as Promise<{ payload: T }>).then(
+        (event) => event.payload,
+      ),
+    ),
 });
 
 const toWorkflowStepConfig = (
