@@ -5,13 +5,12 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
-  typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.KV.Namespace";
+  isResourceOfType(value, "Cloudflare.KV.Namespace");
 
 export type NamespaceProps = {
   /**

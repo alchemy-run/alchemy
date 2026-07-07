@@ -9,7 +9,7 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   generateLocalId,
@@ -20,8 +20,7 @@ import {
 import type { Providers } from "../Providers.ts";
 
 export const isQueue = (value: unknown): value is Queue =>
-  typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.Queues.Queue";
+  isResourceOfType(value, "Cloudflare.Queues.Queue");
 
 export type QueueProps = {
   /**

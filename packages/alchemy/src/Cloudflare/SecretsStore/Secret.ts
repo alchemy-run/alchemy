@@ -8,7 +8,7 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -57,8 +57,7 @@ export type Secret = Resource<
 >;
 
 export const isSecret = (value: unknown): value is Secret =>
-  typeof value === "object" &&
-  (value as any)?.Type === "Cloudflare.SecretsStore.Secret";
+  isResourceOfType(value, "Cloudflare.SecretsStore.Secret");
 
 export type SecretStatus = "pending" | "active" | "deleted";
 

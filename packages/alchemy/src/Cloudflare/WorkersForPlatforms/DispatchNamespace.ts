@@ -1,12 +1,11 @@
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -152,8 +151,7 @@ export const DispatchNamespace = Resource<DispatchNamespace>(TypeId);
  */
 export const isDispatchNamespace = (
   value: unknown,
-): value is DispatchNamespace =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+): value is DispatchNamespace => isResourceOfType(value, TypeId);
 
 export const DispatchNamespaceProvider = () =>
   Provider.succeed(DispatchNamespace, {

@@ -19,7 +19,11 @@ import {
   type PlatformProps,
   type PlatformServices,
 } from "../../Platform.ts";
-import { Resource, type ResourceClassLike } from "../../Resource.ts";
+import {
+  isResourceOfType,
+  Resource,
+  type ResourceClassLike,
+} from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self } from "../../Self.ts";
@@ -49,10 +53,7 @@ export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
 export const isWorker = <T>(value: T): value is T & Worker =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  value.Type === WorkerTypeId;
+  isResourceOfType(value, WorkerTypeId);
 
 export class WorkerEnvironment extends Context.Service<
   WorkerEnvironment,

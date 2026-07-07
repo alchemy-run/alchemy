@@ -1,10 +1,9 @@
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -150,7 +149,7 @@ export const App = Resource<App>(TypeId);
  * Returns true if the given value is a Flagship App resource.
  */
 export const isApp = (value: unknown): value is App =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+  isResourceOfType(value, TypeId);
 
 export const AppProvider = () =>
   Provider.succeed(App, {
