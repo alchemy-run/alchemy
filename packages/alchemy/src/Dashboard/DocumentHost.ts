@@ -6,7 +6,7 @@ import * as Queue from "effect/Queue";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { ApplyEvent } from "../Cli/Event.ts";
-import type { DeploymentMeta } from "../State/Deployment.ts";
+import type { DeploymentMeta, DeploymentRecord } from "../State/Deployment.ts";
 import type { DeploymentSessionPayload } from "../State/DeploymentSession.ts";
 import type { PersistedState, StateService } from "../State/State.ts";
 import {
@@ -246,6 +246,23 @@ export const make: (
       yield* record(applyStates(doc, states, keep));
     });
 
+  // An OPEN record whose heartbeat went stale is an abandoned run — the
+  // CLI was killed before its interrupted-end committed (or the write
+  // never became visible). Presenting it as live would stick the
+  // dashboard in "Deploying…" until a new record lands. Close it as
+  // abandoned FOR DISPLAY; the store's own reconciliation stays
+  // authoritative when it eventually surfaces. Heartbeat cadence is 10s,
+  // lease expiry ~60s — 90s is decisively dead.
+  const STALE_HEARTBEAT_MS = 90_000;
+  const reconcileStaleRecord = (
+    record_: DeploymentRecord,
+    now: number,
+  ): DeploymentRecord =>
+    record_.endedAt === undefined &&
+    now - record_.heartbeatAt > STALE_HEARTBEAT_MS
+      ? { ...record_, endedAt: record_.heartbeatAt, outcome: "abandoned" }
+      : record_;
+
   const newestRecord = Effect.gen(function* () {
     const deployments = state.deployments;
     if (deployments === undefined) {
@@ -254,7 +271,11 @@ export const make: (
     const records = yield* deployments
       .list({ stack, stage, limit: 1 })
       .pipe(Effect.orElseSucceed(() => []));
-    return records[0];
+    if (records[0] === undefined) {
+      return undefined;
+    }
+    const now = yield* Clock.currentTimeMillis;
+    return reconcileStaleRecord(records[0], now);
   });
 
   const refreshDeployment = () =>
