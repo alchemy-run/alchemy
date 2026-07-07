@@ -90,14 +90,14 @@ export const withDashboardReporter = <E, R>(
                   }).pipe(Effect.ignore),
                 ),
               ),
-            done: () =>
+            done: (outcome) =>
               Effect.gen(function* () {
                 yield* Queue.offer(queue, {
                   path: "/api/apply/done",
-                  body: { sessionId },
+                  body: { sessionId, outcome },
                 }).pipe(Effect.ignore);
                 yield* Queue.offer(queue, "flush").pipe(Effect.ignore);
-                yield* session.done();
+                yield* session.done(outcome);
                 yield* Deferred.await(flushed).pipe(
                   Effect.timeout(Duration.seconds(3)),
                   Effect.ignore,

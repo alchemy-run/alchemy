@@ -1,11 +1,13 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { Plan } from "../Plan.ts";
+import type { DeploymentEndOutcome } from "../State/Deployment.ts";
 import type { ApplyEvent } from "./Event.ts";
 
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
-  done: () => Effect.Effect<void>;
+  /** Called once when the apply settles; `outcome` says how it ended. */
+  done: (outcome?: DeploymentEndOutcome) => Effect.Effect<void>;
 }
 
 export interface ScopedPlanStatusSession extends PlanStatusSession {
