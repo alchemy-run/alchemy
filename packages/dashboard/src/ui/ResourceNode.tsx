@@ -201,10 +201,13 @@ export const ResourceNode = memo(function ResourceNode({
   const inFlight = runStatus !== undefined && statusInFlight(runStatus);
   // queued this run: waiting for its turn — spins in the plan's color
   const queued = runStatus === "pending";
-  // Phase treatment (color is ALWAYS the action's):
-  //   pending  → hollow tab (a promise; queued adds a spinner)
-  //   doing    → filled tab + spinner
-  //   complete → filled tab + ✓ (✗ for failed)
+  // Phase treatment (color is ALWAYS the action's). FILLED means SETTLED —
+  // everything unsettled stays hollow, so an in-flight tab can never be
+  // mistaken for a terminal one:
+  //   plan     → hollow, still (a quiet promise)
+  //   queued   → hollow + spinner (waiting in line)
+  //   doing    → hollow + pulsing dot (live activity)
+  //   complete → FILLED + ✓ (✗ for failed) — the only bold tab
   const planTab =
     showPlanChip && plan !== undefined && planColor !== undefined
       ? {
@@ -219,9 +222,9 @@ export const ResourceNode = memo(function ResourceNode({
     ? {
         label: status,
         color: inFlightColor(status, plan),
-        hollow: false,
-        spinner: true,
-        glyph: undefined,
+        hollow: true,
+        spinner: false,
+        glyph: "dot" as const,
       }
     : queued
       ? {
@@ -289,6 +292,9 @@ export const ResourceNode = memo(function ResourceNode({
           }
         >
           {tab.spinner && <Loader2 size={9} className="animate-spin" />}
+          {tab.glyph === "dot" && (
+            <span className="status-pulse h-1.5 w-1.5 rounded-full bg-current" />
+          )}
           {tab.glyph === "check" && <Check size={9} strokeWidth={3} />}
           {tab.glyph === "cross" && <X size={9} strokeWidth={3} />}
           {tab.label}
