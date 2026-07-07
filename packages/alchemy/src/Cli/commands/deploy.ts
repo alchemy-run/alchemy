@@ -127,19 +127,27 @@ export const execStack = Effect.fn(function* ({
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
 
-  // --ui: make sure the dashboard is up before any planning so the run
-  // streams into it from the first event (via the DashboardReporter tee).
-  // Reuse an already-running dashboard for this project; otherwise launch
-  // one in-process on the project's STABLE port (deterministic from
-  // cwd+stack) so a browser tab from the previous run reconnects to the
-  // same origin instead of a new tab opening every run. Fails fast (with
-  // install instructions) when the optional @alchemy.run/dashboard peer is
-  // missing — before any cloud interaction.
+  // --ui: fail fast (with install instructions) when the optional
+  // @alchemy.run/dashboard peer is missing — before any cloud interaction.
+  if (ui) {
+    yield* Dashboard.requireDistDir();
+  }
+
   let dashboardUrl: string | undefined;
   let launchedDashboard = false;
   let dashboardFiber: Fiber.Fiber<void, never> | undefined;
-  if (ui) {
-    yield* Dashboard.requireDistDir();
+
+  // Bring the dashboard up — called AFTER the plan is computed, not
+  // before: launching early opens a tab that renders the graph with
+  // nothing to do while Plan.make bundles and diffs (seconds), and the
+  // approval banner trailing in later reads as a glitch. Post-plan, the
+  // tab opens with the plan overlay and the approve prompt together. The
+  // DashboardReporter tee only needs the server up before APPLY starts,
+  // which is always after planning. Reuses an already-running dashboard
+  // for this project; otherwise launches in-process on the project's
+  // STABLE port (deterministic from cwd+stack) so the previous run's tab
+  // reconnects to the same origin.
+  const ensureDashboard = Effect.gen(function* () {
     // Opening is always safe: the SPA runs a same-origin BroadcastChannel
     // takeover, so the freshly opened tab supersedes (closes) any older
     // dashboard tab — the OS focuses the browser natively, no duplicate
@@ -150,49 +158,49 @@ export const execStack = Effect.fn(function* ({
     if (existing !== undefined) {
       dashboardUrl = existing.url;
       yield* Clank.openUrl(existing.url).pipe(Effect.catch(() => Effect.void));
-    } else {
-      let port = Discovery.stablePort(stackEffect.stackName);
-      const probe = yield* Discovery.probePort(port, stackEffect.stackName);
-      if (probe.kind === "ours") {
-        // a dashboard from a previous run is still serving (its
-        // advertisement was lost) — reuse it rather than failing to bind
-        dashboardUrl = probe.url;
-        yield* Clank.openUrl(probe.url).pipe(Effect.catch(() => Effect.void));
-      } else {
-        if (probe.kind === "foreign") {
-          // something else owns the stable port — fall back to a random one
-          port = 0;
-        }
-        const ready = yield* Deferred.make<string>();
-        dashboardFiber = yield* Effect.forkScoped(
-          Dashboard.launchDashboard({
-            stackEffect,
-            stage,
-            envFile,
-            profile: profile ?? "default",
-            port,
-            open: true,
-            ready,
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Console.error(`dashboard failed:\n${Cause.pretty(cause)}`),
-            ),
-          ),
-        );
-        dashboardUrl = yield* Deferred.await(ready).pipe(
-          Effect.timeout(Duration.seconds(30)),
-          Effect.orElseSucceed(() => undefined),
-        );
-        if (dashboardUrl === undefined) {
-          yield* Console.error(
-            "dashboard did not start in time; continuing without --ui",
-          );
-        } else {
-          launchedDashboard = true;
-        }
-      }
+      return;
     }
-  }
+    let port = Discovery.stablePort(stackEffect.stackName);
+    const probe = yield* Discovery.probePort(port, stackEffect.stackName);
+    if (probe.kind === "ours") {
+      // a dashboard from a previous run is still serving (its
+      // advertisement was lost) — reuse it rather than failing to bind
+      dashboardUrl = probe.url;
+      yield* Clank.openUrl(probe.url).pipe(Effect.catch(() => Effect.void));
+      return;
+    }
+    if (probe.kind === "foreign") {
+      // something else owns the stable port — fall back to a random one
+      port = 0;
+    }
+    const ready = yield* Deferred.make<string>();
+    dashboardFiber = yield* Effect.forkScoped(
+      Dashboard.launchDashboard({
+        stackEffect,
+        stage,
+        envFile,
+        profile: profile ?? "default",
+        port,
+        open: true,
+        ready,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Console.error(`dashboard failed:\n${Cause.pretty(cause)}`),
+        ),
+      ),
+    );
+    dashboardUrl = yield* Deferred.await(ready).pipe(
+      Effect.timeout(Duration.seconds(30)),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (dashboardUrl === undefined) {
+      yield* Console.error(
+        "dashboard did not start in time; continuing without --ui",
+      );
+    } else {
+      launchedDashboard = true;
+    }
+  });
 
   const services = Layer.mergeAll(
     Layer.effect(
@@ -248,6 +256,12 @@ export const execStack = Effect.fn(function* ({
           : stack,
         { force },
       );
+      // The plan is ready — NOW bring up the dashboard, so the tab opens
+      // with the plan overlay and the approval prompt in the same breath
+      // (see ensureDashboard above).
+      if (ui) {
+        yield* ensureDashboard;
+      }
       if (dryRun) {
         yield* cli.displayPlan(updatePlan);
       } else {
