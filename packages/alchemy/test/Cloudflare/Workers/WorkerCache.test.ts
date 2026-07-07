@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { expectUrlContains } from "../Utils/Http.ts";
+import CacheTestWorker from "./fixtures/cache/cache-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -100,6 +101,70 @@ test.provider(
         }),
       );
       expect(disabled.worker.workerName).toEqual(worker.workerName);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// Effect-native path: `yield* Cloudflare.cache()` in the init phase enables
+// Workers Cache via the binding contract (no `cache` prop) and returns the
+// runtime purge client backed by `ctx.cache`.
+test.provider(
+  "Cloudflare.cache() enables the cache and purges by tag",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* CacheTestWorker };
+        }),
+      );
+      expect(worker.url).toBeDefined();
+
+      yield* expectUrlContains(`${worker.url}/item`, "id:", {
+        label: "cache worker propagation",
+      });
+
+      // Poll the same URL until a repeat body proves the binding actually
+      // enabled the cache.
+      const url = `${worker.url}/item`;
+      let previous: string | undefined;
+      const hit = yield* fetchCached(url).pipe(
+        Effect.map((res) => {
+          const isHit =
+            res.status === 200 &&
+            previous !== undefined &&
+            res.body === previous;
+          previous = res.body;
+          return { ...res, isHit };
+        }),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res) => res.isHit,
+          times: 20,
+        }),
+      );
+      expect(hit.isHit).toBe(true);
+      const cachedBody = hit.body;
+
+      // Purge by Cache-Tag through the runtime client.
+      const purged = yield* fetchCached(`${worker.url}/purge`);
+      expect(purged.status).toBe(200);
+      expect((JSON.parse(purged.body) as { success: boolean }).success).toBe(
+        true,
+      );
+
+      // A fresh invocation id proves the tag purge evicted the entry.
+      const fresh = yield* fetchCached(url).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res) => res.status === 200 && res.body !== cachedBody,
+          times: 20,
+        }),
+      );
+      expect(fresh.body).not.toBe(cachedBody);
 
       yield* stack.destroy();
     }).pipe(logLevel),

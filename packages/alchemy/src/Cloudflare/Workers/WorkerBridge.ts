@@ -32,6 +32,7 @@ import {
   Worker,
   WorkerEnvironment,
   WorkerExecutionContext,
+  deferredExecutionContext,
   fromExecutionContext,
 } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
@@ -70,24 +71,24 @@ export const makeWorkerBridge = (
     return eff
       .pipe(
         Effect.flatMap(([eff, context]) =>
-          Effect.provide(
-            eff,
-            pipe(
-              Layer.succeedContext(context),
-              Layer.provideMerge(Layer.succeedContext(context)),
-              Layer.provideMerge(
+          eff.pipe(
+            // Per-event services take precedence over the captured init
+            // context: the init context carries the *deferred*
+            // WorkerExecutionContext (yieldable in the top-level closure),
+            // which must be shadowed by the real per-event one here.
+            Effect.provide(
+              Layer.mergeAll(
                 Layer.succeed(
                   WorkerExecutionContext,
                   fromExecutionContext(ctx),
                 ),
-              ),
-              Layer.provideMerge(
                 Layer.succeed(ExecutionContext, {
                   scope,
                   cache: {},
                 }),
               ),
             ),
+            Effect.provide(Layer.succeedContext(context)),
           ),
         ),
         Effect.provide(
@@ -250,6 +251,13 @@ export const getWorkerExport = <Export = any>({
             ),
           ),
           Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
+          // Init-phase ExecutionContext: yieldable from the Worker's
+          // top-level closure (and Layers); its RuntimeContext-colored
+          // methods defer to the real per-event context provided by
+          // `processEvent`.
+          Layer.provideMerge(
+            Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
+          ),
           Layer.provideMerge(
             Layer.succeed(
               CloudflareEnvironment,

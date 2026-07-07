@@ -2,6 +2,7 @@ export * from "./AccountSetting.ts";
 export * from "./Assets.ts";
 export * from "./Browser.ts";
 export * from "./BrowserBinding.ts";
+export * from "./Cache.ts";
 export * from "./ConfigProvider.ts";
 export * from "./CronEventSource.ts";
 export * from "./DurableObject.ts";

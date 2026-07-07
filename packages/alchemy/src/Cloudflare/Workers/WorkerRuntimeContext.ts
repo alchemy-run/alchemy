@@ -11,7 +11,9 @@ import { makeRequestHandler } from "./HttpServer.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
+  WorkerExecutionContext,
   WorkerTypeId,
+  deferredExecutionContext,
   type WorkerEvent,
 } from "./Worker.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
@@ -108,7 +110,13 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       Effect.sync(() => {
         exports[name] = value;
       }),
-    planServices: Layer.succeed(WorkerEnvironment, {}),
+    planServices: Layer.mergeAll(
+      Layer.succeed(WorkerEnvironment, {}),
+      // Lets the init closure `yield*` WorkerExecutionContext during plan;
+      // its RuntimeContext-colored methods can't run until a real handler
+      // provides the live per-event context.
+      Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
+    ),
     exports: Effect.gen(function* () {
       const handlers = yield* Effect.all(listeners, {
         concurrency: "unbounded",

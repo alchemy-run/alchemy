@@ -53,6 +53,9 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
   },
   Effect.gen(function* () {
     const journals = yield* Journal;
+    // Yielded from the init closure (deferred instance) — its methods
+    // resolve the live per-event context when invoked inside a handler.
+    const exec = yield* Cloudflare.WorkerExecutionContext;
 
     return {
       fetch: Effect.gen(function* () {
@@ -61,7 +64,6 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
         const journal = journals.getByName("default");
 
         if (url.pathname === "/bg") {
-          const exec = yield* Cloudflare.WorkerExecutionContext;
           yield* exec.waitUntil(
             Effect.sleep("100 millis").pipe(
               Effect.andThen(journal.record("from-worker-wait-until")),
