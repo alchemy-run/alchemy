@@ -10,7 +10,7 @@ import {
 } from "./store.ts";
 import { SERIF_HEADING } from "./theme.ts";
 import { ActivityFeed } from "./ui/ActivityFeed.tsx";
-import { ApprovalBanner } from "./ui/ApprovalBanner.tsx";
+import { DeploymentBanner } from "./ui/DeploymentBanner.tsx";
 import { Yantra } from "./ui/Brand.tsx";
 import { Canvas } from "./ui/Canvas.tsx";
 import { Inspector } from "./ui/Inspector.tsx";
@@ -39,7 +39,7 @@ export function App() {
     <div className="flex h-screen flex-col bg-[var(--alc-bg)]">
       <TopBar />
       <div className="relative flex min-h-0 flex-1">
-        <ApprovalBanner />
+        <DeploymentBanner />
         <ActivityFeed />
         <ViewHost />
         <Inspector />
