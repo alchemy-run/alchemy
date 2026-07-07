@@ -86,6 +86,13 @@ export const httpServer = (
      * Seconds, max 255. Node's server is unaffected.
      */
     idleTimeout?: number;
+    /**
+     * How long Bun's graceful `server.stop()` waits for in-flight
+     * connections before shutdown proceeds anyway (default 20s). Servers
+     * holding long-lived streams (SSE) should set this low so scope close
+     * doesn't stall on connected clients. Node's server is unaffected.
+     */
+    gracefulShutdownTimeout?: `${number} seconds`;
   },
 ): Layer.Layer<HttpServer, ServeError> =>
   platformLayer({
@@ -96,6 +103,9 @@ export const httpServer = (
         port,
         ...(options?.idleTimeout !== undefined
           ? { idleTimeout: options.idleTimeout }
+          : undefined),
+        ...(options?.gracefulShutdownTimeout !== undefined
+          ? { gracefulShutdownTimeout: options.gracefulShutdownTimeout }
           : undefined),
       });
     },
