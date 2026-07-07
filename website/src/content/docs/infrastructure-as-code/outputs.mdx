@@ -84,6 +84,27 @@ Output.asOutput(existingOutput);         // returns it unchanged
 
 Use this when writing helpers that should accept "anything output-y."
 
+## `as`
+
+Asserts a narrower type for an `Output` — most commonly to drop
+`undefined` from an attribute that is only ever absent under
+configuration you didn't choose:
+
+```typescript
+// worker.url is Output<string | undefined> — undefined only when `url: false`
+return { url: worker.url.as<string>() };
+```
+
+Stack outputs typed as `{ url: string }` need this: the attribute's
+declared type keeps the `undefined` arm even though your configuration
+guarantees a URL exists.
+
+:::caution
+`if (x === undefined)` does not narrow an `Output` — Outputs are lazy
+references, not values, so control flow never sees what's inside. Use
+`.as<T>()` to assert, or `Output.map` to transform the resolved value.
+:::
+
 ## `map`
 
 `Output.map` transforms an `Output<A>` into an `Output<B>` without
@@ -307,6 +328,7 @@ declared.
 | Reference an attribute that doesn't exist yet | `resource.attr`                            |
 | Wrap a constant as an Output                | `Output.literal(value)`                      |
 | Coerce a value / Effect / Output to Output  | `Output.asOutput(x)`                         |
+| Assert a narrower type (e.g. drop `undefined`) | `output.as<string>()`                     |
 | Transform an Output                         | `output.pipe(Output.map(fn))`                |
 | Transform with an Effect                    | `output.pipe(Output.mapEffect(fn))`          |
 | Combine several Outputs                     | `Output.all(a, b, c)`                        |

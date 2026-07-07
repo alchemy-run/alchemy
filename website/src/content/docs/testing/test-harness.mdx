@@ -163,6 +163,27 @@ afterAll.skipIf(true)(destroy(Stack));             // never (debugging)
 hook at all — there's no risk of an `Effect` being constructed
 and dropped.
 
+What `destroy(Stack)` actually does: it plans against an empty desired
+state **for the harness's stage** (`options.stage ?? "test"`, or the
+per-call override) and applies the deletions. If it reports
+`0 succeeded`, the usual cause is a stage mismatch — the harness is
+destroying a stage nothing was deployed to. Make sure the stage your
+tests deploy with is the same one `destroy` runs against (set it once
+in `Test.make({ stage })`).
+
+:::tip
+A common convention is gating teardown on an env var so local
+iteration keeps the deployment warm:
+
+```typescript
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+```
+
+`NO_DESTROY` has no built-in meaning to alchemy — it only does what
+your `skipIf` says. If teardown "silently didn't run", check whether
+the variable was set in the environment your test runner inherited.
+:::
+
 ### `afterEach(effect)`
 
 Runs after every test. Combine with `beforeEach` for

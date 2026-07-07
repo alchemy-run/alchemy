@@ -130,6 +130,62 @@ const res = await env.BACKEND.fetch(
 `fetch`, you can call its typed RPC methods directly; see
 [Schemaless RPC](/cloudflare/apis/schemaless-rpc).
 
+## Minimal app skeleton
+
+A working TanStack Start project needs these files beyond
+`vite.config.ts` — there is no hidden scaffold step:
+
+```
+src/
+  router.tsx          # createRouter({ routeTree })
+  routeTree.gen.ts    # GENERATED — created/updated by the vite plugin on dev/build
+  routes/
+    __root.tsx        # root layout: <Outlet />, document shell
+    index.tsx         # createFileRoute("/")(...)
+server.ts             # optional custom entry; default provided
+```
+
+`routeTree.gen.ts` does not exist until the first `vite build` / dev-server
+run generates it — don't hand-write it, and don't be alarmed when a fresh
+clone fails to typecheck before the first build.
+
+Server functions live anywhere under `src/` via `createServerFn`:
+
+```typescript
+// src/paste.server.ts
+import { createServerFn } from "@tanstack/react-start";
+import { env } from "cloudflare:workers";
+
+export const createPaste = createServerFn({ method: "POST" })
+  .validator((data: { content: string }) => data)
+  .handler(async ({ data }) => {
+    const id = crypto.randomUUID().slice(0, 10);
+    await env.DB.prepare("INSERT INTO pastes (id, content) VALUES (?, ?)")
+      .bind(id, data.content)
+      .run();
+    return { id };
+  });
+```
+
+## Verify a server function without a browser
+
+`createServerFn` endpoints are plain HTTP under the hood
+(`POST /_serverFn/<hash>` with a serialized body), but the wire format is
+an implementation detail — don't hand-craft it in tests or CI probes.
+Two supported ways to verify server behavior headlessly:
+
+1. **Test the data layer through the backend Worker** (the service-bound
+   Effect Worker) with the [test harness](/testing/testing-a-stack) —
+   this is where your logic should live anyway.
+2. **Expose an explicit HTTP route** (`src/routes/api.*.ts`) for anything
+   that needs machine verification; server routes are stable URLs with
+   JSON contracts, unlike serverFn hashes.
+
+A first request to a fresh deployment can transiently return Cloudflare
+error 1042 while the route propagates — retry for up to ~60s before
+concluding anything is broken (see
+[Retry the first request](/testing/testing-a-stack#retry-the-first-request)).
+
 ## Deploy and dev
 
 ```sh

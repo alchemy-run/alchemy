@@ -1,0 +1,22 @@
+{
+  "id": "pastebin-web",
+  "version": 1,
+  "family": "fullstack-paste",
+  "difficulty": "medium",
+  "mode": "user",
+  "budgets": {
+    "wallClockMs": 2700000,
+    "maxTurns": 150,
+    "budgetUsd": 12
+  },
+  "requiredOutputs": ["url"],
+  "mustPassChecks": ["create-paste", "share-link", "persistence"],
+  "docTags": [
+    "getting-started",
+    "cloudflare/worker",
+    "cloudflare/d1",
+    "cloudflare/durable-objects",
+    "cloudflare/tanstack",
+    "testing"
+  ]
+}

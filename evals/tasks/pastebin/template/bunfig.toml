@@ -1,0 +1,4 @@
+# The alchemy beta channel publishes faster than the machine-level
+# minimum-release-age supply-chain gate; exempt this workspace.
+[install]
+minimumReleaseAge = 0

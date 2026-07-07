@@ -1,0 +1,20 @@
+{
+  "id": "pastebin",
+  "version": 1,
+  "family": "paste-link-crud",
+  "difficulty": "easy",
+  "mode": "spec",
+  "budgets": {
+    "wallClockMs": 2100000,
+    "maxTurns": 100,
+    "budgetUsd": 8
+  },
+  "requiredOutputs": ["url"],
+  "mustPassChecks": ["create", "read-back", "not-found"],
+  "docTags": [
+    "getting-started",
+    "cloudflare/worker",
+    "cloudflare/d1",
+    "testing"
+  ]
+}

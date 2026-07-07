@@ -93,6 +93,30 @@ test(
 );
 ```
 
+POST a JSON body with `HttpBody.jsonUnsafe`:
+
+```typescript
+test(
+  "create via JSON API",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    const created = yield* HttpClient.post(`${url}/pastes`, {
+      body: HttpBody.jsonUnsafe({ content: "hello" }),
+    });
+    expect(created.status).toBe(201);
+    const { id } = (yield* created.json) as { id: string };
+
+    const read = yield* HttpClient.get(`${url}/pastes/${id}`);
+    expect(read.status).toBe(200);
+  }),
+);
+```
+
+The client does not fail on 4xx/5xx — assert on `response.status`
+directly (a `404` is a value, not an error, unless you opt into
+`HttpClient.filterStatusOk`).
+
 How the client is wired is covered in [Test harness](/testing/test-harness#httpclient-is-in-scope).
 
 ## Retry the first request
@@ -178,6 +202,16 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 ```
 
 See [State store](/state-store) for choosing a remote store.
+
+Vitest runs test files in parallel by default, so two files deploying
+the same stage can race the first converge. Either serialize files:
+
+```typescript
+// vitest.config.ts
+export default { test: { fileParallelism: false } };
+```
+
+or give each file its own stage if the suites are independent.
 
 ## CI
 

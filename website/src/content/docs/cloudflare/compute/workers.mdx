@@ -58,7 +58,9 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const worker = yield* Worker;
 
-    return { url: worker.url };
+    // worker.url is Output<string | undefined> (undefined only when
+    // `url: false`); assert the narrower type for the stack output
+    return { url: worker.url.as<string>() };
   }),
 );
 ```
@@ -68,7 +70,54 @@ bun alchemy deploy
 ```
 
 Alchemy bundles the file, uploads it, enables the `workers.dev`
-subdomain, and prints the URL as a stack output.
+subdomain, and prints the URL as a stack output. See
+[Outputs](/infrastructure-as-code/outputs#as) for how `.as<T>()`
+narrows lazy `Output` values.
+
+## Handle the request
+
+Inside `fetch`, read the incoming request with `HttpServerRequest` —
+method, path, headers, and body. A small JSON API:
+
+```typescript
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://x"); // request.url is a path
+
+        if (request.method === "POST" && url.pathname === "/items") {
+          const body = (yield* request.json) as { name?: string };
+          if (typeof body.name !== "string") {
+            return yield* HttpServerResponse.json(
+              { error: "invalid_name" },
+              { status: 400 },
+            );
+          }
+          return yield* HttpServerResponse.json({ ok: true }, { status: 201 });
+        }
+
+        return yield* HttpServerResponse.json(
+          { error: "not_found" },
+          { status: 404 },
+        );
+      }),
+    };
+  }),
+);
+```
+
+`request.headers` is a plain record (e.g. `request.headers["host"]`
+for building absolute URLs of the deployed Worker).
 
 ## Bindings
 
