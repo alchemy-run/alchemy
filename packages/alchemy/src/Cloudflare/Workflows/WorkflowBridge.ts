@@ -13,6 +13,7 @@ import {
   WorkflowStep,
   WorkflowStepContext,
   type WorkflowStepConfig,
+  type WorkflowStepEvent,
   type WorkflowTaskOptions,
 } from "./Workflow.ts";
 
@@ -164,20 +165,13 @@ const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
   sleep: (name: string, duration: string | number): Effect.Effect<void> =>
     Effect.tryPromise(() => step.sleep(name, duration)),
   sleepUntil: (name: string, timestamp: Date | number): Effect.Effect<void> =>
-    Effect.tryPromise(() =>
-      step.sleepUntil(
-        name,
-        timestamp instanceof Date ? timestamp.toISOString() : timestamp,
-      ),
-    ),
-  // The native `step.waitForEvent` resolves with the full event object
-  // (`{ payload, timestamp, type }`); the Effect wrapper returns just the
-  // typed payload.
-  waitForEvent: <T>(name: string, options: any): Effect.Effect<T> =>
-    Effect.tryPromise(() =>
-      (step.waitForEvent(name, options) as Promise<{ payload: T }>).then(
-        (event) => event.payload,
-      ),
+    Effect.tryPromise(() => step.sleepUntil(name, timestamp)),
+  waitForEvent: <T>(
+    name: string,
+    options: any,
+  ): Effect.Effect<WorkflowStepEvent<T>> =>
+    Effect.tryPromise(
+      () => step.waitForEvent(name, options) as Promise<WorkflowStepEvent<T>>,
     ),
 });
 

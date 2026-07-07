@@ -118,6 +118,16 @@ export interface WorkflowWaitForEventOptions {
   timeout?: string | number;
 }
 
+/**
+ * The event delivered to a `waitForEvent` step. Mirrors the native
+ * `WorkflowStepEvent` shape from `cloudflare:workers` 1:1.
+ */
+export interface WorkflowStepEvent<Payload = unknown> {
+  payload: Payload;
+  timestamp: Date;
+  type: string;
+}
+
 type ExcludeWorkflowStepContext<R> = R extends {
   readonly key: "Cloudflare.WorkflowStepContext";
 }
@@ -138,7 +148,7 @@ export class WorkflowStep extends Context.Service<
     waitForEvent<T>(
       name: string,
       options: WorkflowWaitForEventOptions,
-    ): Effect.Effect<T>;
+    ): Effect.Effect<WorkflowStepEvent<T>>;
   }
 >()("Cloudflare.Workflows.WorkflowStep") {}
 
@@ -211,12 +221,14 @@ export const sleepUntil = (
 
 /**
  * Pause the workflow until an external event is delivered with
- * `WorkflowInstance.sendEvent`.
+ * `WorkflowInstance.sendEvent`. Resolves with the full
+ * {@link WorkflowStepEvent} (`{ payload, timestamp, type }`), exactly like
+ * the native `step.waitForEvent`.
  */
 export const waitForEvent = <T = unknown>(
   name: string,
   options: WorkflowWaitForEventOptions,
-): Effect.Effect<T, never, WorkflowStep> =>
+): Effect.Effect<WorkflowStepEvent<T>, never, WorkflowStep> =>
   Effect.gen(function* () {
     const step = yield* WorkflowStep;
     return yield* step.waitForEvent<T>(name, options);
@@ -528,6 +540,8 @@ export class WorkflowScope extends Context.Service<
  *   "approval",
  *   { type: "approval", timeout: "1 day" },
  * );
+ * // Same shape as the native step.waitForEvent result:
+ * event.payload.approved;
  * ```
  *
  * @example Accessing env bindings inside a task

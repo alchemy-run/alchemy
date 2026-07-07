@@ -39,7 +39,7 @@ export default class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
         }>("external-event", { type: "test-event", timeout: "5 minutes" });
 
         return {
-          greeting: external.message,
+          greeting: external.payload.message,
           envBindingCount: Object.keys(env).length,
           workflowName: event.workflowName,
           stepAttempt: greeted.attempt,
