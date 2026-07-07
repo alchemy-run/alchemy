@@ -10,8 +10,10 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import crypto from "node:crypto";
 
 import * as Config from "effect/Config";
+import * as Option from "effect/Option";
 import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
@@ -37,7 +39,12 @@ import * as Access from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
-import { AuthToken, AuthTokenSecretName, TokenValue } from "./Token.ts";
+import {
+  AuthToken,
+  AuthTokenSecretName,
+  EncryptionKeySecretName,
+  TokenValue,
+} from "./Token.ts";
 
 const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
@@ -53,6 +60,12 @@ export const state = () =>
       const profileName = yield* ALCHEMY_PROFILE;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
+      // `deploy --yes` flows in here (via AlchemyContext.updateStateStore) to
+      // auto-accept an out-of-date state store upgrade instead of prompting.
+      // Optional so callers that don't provide AlchemyContext keep the prompt.
+      const autoUpdateStateStore =
+        Option.getOrUndefined(yield* Effect.serviceOption(AlchemyContext))
+          ?.updateStateStore ?? false;
       const context = yield* Effect.context<Effect.Services<typeof init>>();
 
       const init = Effect.gen(function* () {
@@ -79,9 +92,11 @@ export const state = () =>
               yield* checkStateStoreVersion(url);
 
             if (observed === undefined) {
-              const shouldDeploy = yield* Clank.confirm({
-                message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
-              });
+              const shouldDeploy =
+                autoUpdateStateStore ||
+                (yield* Clank.confirm({
+                  message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
+                }));
               if (shouldDeploy) {
                 return yield* bootstrap({
                   workerName: scriptName,
@@ -95,10 +110,32 @@ export const state = () =>
             const httpState = yield* ensureAccess({ url, authToken });
             if (matches) {
               return httpState;
+            }
+
+            // The store is out of date. Upgrade it in place.
+            const upgrade = Effect.gen(function* () {
+              yield* Clank.info(
+                `Cloudflare State Store '${scriptName}' is out of date ` +
+                  `(expected v${expected}, observed v${observed ?? "unknown"}); upgrading...`,
+              );
+              const stateStoreOptions = yield* deployStateStore({
+                stage: scriptName,
+                state: httpState,
+                force: false,
+              });
+              return yield* makeCloudflareStateStore(stateStoreOptions);
+            });
+
+            if (autoUpdateStateStore) {
+              // `--yes`: upgrade automatically (also unblocks CI).
+              return yield* upgrade;
             } else if (isCI) {
               return yield* Effect.die(
                 new AuthError({
-                  message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+                  message:
+                    `Cloudflare State store is out of date ` +
+                    `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
+                    `Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
                 }),
               );
             } else {
@@ -108,12 +145,7 @@ export const state = () =>
                   `(expected v${expected}, observed v${observed ?? "unknown"})`,
               });
               if (shouldDeploy) {
-                const stateStoreOptions = yield* deployStateStore({
-                  stage: scriptName,
-                  state: httpState,
-                  force: false,
-                });
-                return yield* makeCloudflareStateStore(stateStoreOptions);
+                return yield* upgrade;
               } else {
                 return yield* Effect.die(new Clank.PromptCancelled());
               }
@@ -154,12 +186,13 @@ export const state = () =>
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false),
           );
+        } else if (autoUpdateStateStore) {
+          // `--yes`: deploy the missing state store automatically (also in CI).
+          return yield* bootstrap();
         } else if (isCI) {
-          // TODO(sam): do we want to support bootstrapping the state store from CI?
-          // for now - just die here
           return yield* Effect.die(
             new AuthError({
-              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
             }),
           );
         } else {
@@ -297,6 +330,125 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     Effect.withSpan("state_store.bootstrap", {
       attributes: {
         "alchemy.state_store.op": "bootstrap",
+        "alchemy.state_store.script_name":
+          options.workerName ?? STATE_STORE_SCRIPT_NAME,
+      },
+    }),
+  );
+
+export interface TeardownOptions {
+  /** @default "alchemy-state-store" */
+  workerName?: string;
+  /** @default "default" */
+  profile?: string;
+  /**
+   * Delete the account Secrets Store too, but only once the state-store
+   * secrets have been removed and no other secrets remain in it. A store that
+   * still holds foreign secrets is left in place.
+   * @default true
+   */
+  deleteEmptySecretsStore?: boolean;
+}
+
+/**
+ * The inverse of {@link bootstrap}: tear down the Cloudflare-deployed state
+ * store. Deletes the state-store Worker and the secrets it created in the
+ * account Secrets Store (the bearer token + the encryption key), then deletes
+ * the Secrets Store itself if it is left empty, and drops the locally cached
+ * state-store credentials for the profile.
+ *
+ * Idempotent — missing resources are treated as already-gone, so it is safe to
+ * re-run. Intended for reclaiming a throwaway account after testing; on a
+ * shared account it only removes resources alchemy created.
+ */
+export const teardownStateStore = (options: TeardownOptions = {}) =>
+  Effect.gen(function* () {
+    const profileName = options.profile ?? (yield* ALCHEMY_PROFILE);
+    const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
+    const deleteEmptyStore = options.deleteEmptySecretsStore ?? true;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+
+    yield* annotateAccountHash();
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.script_name": scriptName,
+      "alchemy.state_store.profile": profileName,
+    });
+
+    // 1. Delete the state-store Worker.
+    yield* Clank.info(`Deleting state store worker '${scriptName}'...`);
+    yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
+      Effect.asVoid,
+      Effect.catchTag("WorkerNotFound", () =>
+        Clank.info(`  Worker '${scriptName}' not found (already gone).`),
+      ),
+    );
+
+    // 2. Delete the secrets the state store created, plus any now-empty store.
+    const ourSecretNames = new Set<string>([
+      AuthTokenSecretName,
+      EncryptionKeySecretName,
+    ]);
+    const stores = yield* SecretsStore.listStores({ accountId }).pipe(
+      Effect.map((r) => r.result),
+      Effect.catchTag("InvalidAccountId", () => Effect.succeed([])),
+    );
+    for (const store of stores) {
+      const secrets = yield* SecretsStore.listStoreSecrets({
+        accountId,
+        storeId: store.id,
+      }).pipe(
+        Effect.map((r) => r.result),
+        Effect.catchTag(["StoreNotFound", "InvalidAccountId"], () =>
+          Effect.succeed([]),
+        ),
+      );
+      const ours = secrets.filter((s) => ourSecretNames.has(s.name));
+      for (const secret of ours) {
+        yield* Clank.info(`Deleting secret '${secret.name}'...`);
+        yield* SecretsStore.deleteStoreSecret({
+          accountId,
+          storeId: store.id,
+          secretId: secret.id,
+        }).pipe(
+          Effect.asVoid,
+          Effect.catchTag(
+            ["SecretNotFound", "StoreNotFound", "NotFound", "InvalidAccountId"],
+            () => Effect.void,
+          ),
+        );
+      }
+      const remaining = secrets.length - ours.length;
+      if (deleteEmptyStore && remaining === 0) {
+        yield* Clank.info(`Deleting empty secrets store '${store.id}'...`);
+        yield* SecretsStore.deleteStore({
+          accountId,
+          storeId: store.id,
+          force: true,
+        }).pipe(
+          Effect.asVoid,
+          Effect.catchTag(
+            ["StoreNotFound", "NotFound", "InvalidAccountId"],
+            () => Effect.void,
+          ),
+        );
+      } else if (remaining > 0) {
+        yield* Clank.info(
+          `Secrets store '${store.id}' still has ${remaining} other ` +
+            `secret(s); leaving it in place.`,
+        );
+      }
+    }
+
+    // 3. Drop the locally cached state-store credentials for this profile.
+    const credStore = yield* CredentialsStore;
+    yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
+
+    yield* Clank.success(`Cloudflare State Store '${scriptName}' torn down.`);
+  }).pipe(
+    Effect.withSpan("state_store.teardown", {
+      attributes: {
+        "alchemy.state_store.op": "teardown",
         "alchemy.state_store.script_name":
           options.workerName ?? STATE_STORE_SCRIPT_NAME,
       },

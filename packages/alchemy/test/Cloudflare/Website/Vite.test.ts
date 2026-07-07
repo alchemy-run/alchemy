@@ -294,9 +294,7 @@ test.provider(
       // assert the marker that `main.ts` references via
       // `import.meta.env.VITE_TEST_MARKER` was actually inlined into the
       // served JS asset by `Cloudflare.Website.Vite`'s `env`-→-`define` plumbing.
-      const bundleUrl1 = yield* discoverBundleUrl(site1.url!);
-      yield* expectUrlContains(bundleUrl1, marker1, {
-        timeout: "60 seconds",
+      yield* expectBundleContains(site1.url!, marker1, {
         label: "VITE_TEST_MARKER v1 inlined into client bundle",
       });
 
@@ -311,9 +309,7 @@ test.provider(
       );
 
       expect(site2.hash?.input).toBeDefined();
-      const bundleUrl2 = yield* discoverBundleUrl(site2.url!);
-      yield* expectUrlContains(bundleUrl2, marker2, {
-        timeout: "60 seconds",
+      yield* expectBundleContains(site2.url!, marker2, {
         label: "VITE_TEST_MARKER v2 inlined into client bundle",
       });
 
@@ -689,16 +685,27 @@ const putTextJsonReady = <T>(url: string, body: string) =>
     );
   });
 
-const discoverBundleUrl = (siteUrl: string) =>
+// Assert that the site's *current* client bundle contains `marker`.
+//
+// The bundle filename is content-addressed, so an env-only redeploy changes
+// the bundle URL referenced by `index.html`. A PoP can keep serving the
+// previous deployment's `index.html` for a while after the version flip
+// (cache-busting query params don't help when the whole deployment is stale
+// at that edge) — so discovering the bundle URL *once* and then polling that
+// asset latches onto the old, immutable bundle and times out waiting for a
+// marker that will never appear there. Instead, re-discover the bundle URL
+// from `index.html` on every attempt so the assertion converges as soon as
+// the new deployment propagates.
+const expectBundleContains = (
+  siteUrl: string,
+  marker: string,
+  options: { label?: string } = {},
+) =>
   Effect.gen(function* () {
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-    return yield* Effect.gen(function* () {
-      // Cache-bust the index fetch. Without this, a freshly redeployed
-      // site can serve an edge-cached `index.html` that still points at
-      // the *previous* bundle hash; we'd then latch onto the stale
-      // bundle URL and never observe the new marker (the bundle filename
-      // is content-addressed, so the old asset keeps the old contents
-      // forever). The unique query string defeats the CDN cache key.
+    yield* Effect.gen(function* () {
+      // Cache-bust the index fetch — the unique query string defeats the
+      // CDN cache key for caches that respect it.
       const res = yield* client.get(`${siteUrl}/`, {
         urlParams: { __alchemy_cb: String(Date.now()) },
         headers: { "cache-control": "no-cache", pragma: "no-cache" },
@@ -716,12 +723,33 @@ const discoverBundleUrl = (siteUrl: string) =>
           ),
         );
       }
-      return `${siteUrl}${match[1]}`;
+      const bundleRes = yield* client.get(`${siteUrl}${match[1]}`, {
+        urlParams: { __alchemy_cb: String(Date.now()) },
+        headers: { "cache-control": "no-cache", pragma: "no-cache" },
+      });
+      const bundle = yield* bundleRes.text;
+      if (!bundle.includes(marker)) {
+        return yield* Effect.fail(
+          new Error(
+            `bundle ${match[1]} does not (yet) contain marker "${marker}"`,
+          ),
+        );
+      }
     }).pipe(
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 10,
+        // ~2 minutes total: capped exponential sampling through edge
+        // propagation of both the fresh index.html and the new asset.
+        schedule: Schedule.exponential("500 millis", 1.5).pipe(
+          Schedule.either(Schedule.spaced("5 seconds")),
+          Schedule.both(Schedule.recurs(30)),
+        ),
       }),
+      Effect.tapError((error) =>
+        Effect.logError(
+          `expectBundleContains(${options.label ?? marker}) failed`,
+          error,
+        ),
+      ),
     );
   });
 
