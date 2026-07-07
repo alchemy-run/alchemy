@@ -52,4 +52,4 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: |
             --model claude-fable-5
-            --allowedTools "Bash(aws:*)"
+            --allowedTools "Bash(aws:*),WebFetch,WebSearch"
