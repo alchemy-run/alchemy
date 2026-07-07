@@ -87,7 +87,11 @@ export const RESULT_COLORS: Record<string, string> = {
   updated: "var(--alc-warn)",
   replaced: "var(--alc-danger)",
   deleted: "var(--alc-danger)",
+  // an executed task reads as info (same hue as its "running" phase)
+  ran: "var(--alc-info)",
+  retained: "var(--alc-muted)",
   failed: "var(--alc-danger)",
+  // "skipped" is deliberately absent: a no-op earns no result tab
 };
 
 export const RESULT_LABELS: Record<string, string> = {
@@ -95,6 +99,8 @@ export const RESULT_LABELS: Record<string, string> = {
   updated: "✓ updated",
   replaced: "↻ replaced",
   deleted: "− deleted",
+  ran: "✓ ran",
+  retained: "◦ retained",
   failed: "✗ failed",
 };
 

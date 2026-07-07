@@ -41,6 +41,9 @@ export type ApplyResult =
   | "updated"
   | "replaced"
   | "deleted"
+  | "ran"
+  | "retained"
+  | "skipped"
   | "failed";
 
 export type PlanAction = "create" | "update" | "replace" | "delete";
@@ -73,12 +76,24 @@ export const IN_FLIGHT_STATUSES: ReadonlySet<string> = new Set([
   "running",
 ]);
 
-/** Terminal status → apply result (ported from v1's `Scene.ts`). */
+/**
+ * Terminal status → apply result (ported from v1's `Scene.ts`).
+ *
+ * COMPLETE over terminal statuses on purpose: decorations merge
+ * defined-fields-only and survive across deployments (journal hydration
+ * restores the last run's), so any terminal status WITHOUT a mapping
+ * would refresh `at` while leaving the previous run's applyResult in
+ * place — an action that just RAN would proudly wear the destroy's
+ * "deleted" verdict.
+ */
 export const TERMINAL_RESULTS: Readonly<Record<string, ApplyResult>> = {
   created: "created",
   updated: "updated",
   replaced: "replaced",
   deleted: "deleted",
+  ran: "ran",
+  retained: "retained",
+  skipped: "skipped",
   fail: "failed",
 };
 

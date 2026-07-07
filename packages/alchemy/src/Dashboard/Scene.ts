@@ -22,6 +22,9 @@ export type ApplyResult =
   | "updated"
   | "replaced"
   | "deleted"
+  | "ran"
+  | "retained"
+  | "skipped"
   | "failed";
 
 export interface SceneNode extends DashboardNode {
@@ -134,6 +137,9 @@ const TERMINAL: Record<string, ApplyResult> = {
   updated: "updated",
   replaced: "replaced",
   deleted: "deleted",
+  ran: "ran",
+  retained: "retained",
+  skipped: "skipped",
   fail: "failed",
 };
 
