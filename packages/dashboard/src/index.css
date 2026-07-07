@@ -142,15 +142,21 @@ summary {
 
 .node-beam {
   position: absolute;
-  inset: -1.5px;
+  inset: -2.5px;
   border-radius: var(--alc-radius-lg);
-  padding: 2px;
+  padding: 3px;
+  /* twin arcs 180° apart: some light is always in view, wherever the
+     orbit is; brightened toward white at each arc's head */
   background: conic-gradient(
     from var(--beam-angle),
     transparent 0%,
-    transparent 72%,
-    var(--beam-color) 88%,
-    transparent 100%
+    var(--beam-color) 12%,
+    color-mix(in srgb, var(--beam-color) 55%, white) 20%,
+    transparent 28%,
+    transparent 50%,
+    var(--beam-color) 62%,
+    color-mix(in srgb, var(--beam-color) 55%, white) 70%,
+    transparent 78%
   );
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
@@ -160,6 +166,7 @@ summary {
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
   mask-composite: exclude;
-  animation: beam-orbit 2.4s linear infinite;
+  filter: drop-shadow(0 0 5px var(--beam-color));
+  animation: beam-orbit 1.6s linear infinite;
   pointer-events: none;
 }
