@@ -265,11 +265,7 @@ export const ResourceNode = memo(function ResourceNode({
       />
       <div className="flex items-center gap-2">
         <ResourceIcon ui={ui} color={color} size={16} />
-        <span
-          className={`truncate text-[13px] font-semibold ${
-            deleted ? "text-[var(--alc-danger)]" : "text-[var(--alc-fg-1)]"
-          }`}
-        >
+        <span className="truncate text-[13px] font-semibold text-[var(--alc-fg-1)]">
           {node.logicalId}
         </span>
         <span

@@ -76,12 +76,17 @@ export const PLAN_LABELS: Record<string, string> = {
   delete: "− delete",
 };
 
-/** What the last apply DID (terminal results), vs PLAN_* (pending intent). */
+/**
+ * What the last apply DID (terminal results), vs PLAN_* (pending intent).
+ * Success always settles to moss regardless of the action — the in-flight
+ * phase carried the action's color; the RESULT's color answers only
+ * "did it work?".
+ */
 export const RESULT_COLORS: Record<string, string> = {
   created: "var(--alc-success)",
-  updated: "var(--alc-warn)",
-  replaced: "var(--alc-danger)",
-  deleted: "var(--alc-danger)",
+  updated: "var(--alc-success)",
+  replaced: "var(--alc-success)",
+  deleted: "var(--alc-success)",
   failed: "var(--alc-danger)",
 };
 
