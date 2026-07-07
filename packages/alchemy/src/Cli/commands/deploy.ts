@@ -139,7 +139,19 @@ export const execStack = Effect.fn(function* ({
     yield* Dashboard.requireDistDir();
     const openUnlessConnected = (url: string, clients: number) =>
       clients > 0
-        ? Console.log("  (existing dashboard tab is connected)")
+        ? // a tab is already attached — raise it instead of opening a
+          // duplicate (best-effort, forked so a macOS automation-permission
+          // prompt can never stall the deploy)
+          Console.log("  (existing dashboard tab is connected)").pipe(
+            Effect.andThen(
+              Effect.forkScoped(
+                Clank.focusUrl(url).pipe(
+                  Effect.catch(() => Effect.succeed(false)),
+                ),
+              ),
+            ),
+            Effect.asVoid,
+          )
         : Clank.openUrl(url).pipe(Effect.catch(() => Effect.void));
     const existing = yield* Discovery.discover().pipe(
       Effect.orElseSucceed(() => undefined),

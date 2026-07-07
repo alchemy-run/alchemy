@@ -293,6 +293,11 @@ export const launchDashboard = Effect.fn(function* (options: LaunchOptions) {
         );
         if (Result.isSuccess(reconnected)) {
           yield* Console.log("  (existing dashboard tab reconnected)");
+          // raise the reconnected tab (best-effort, forked so a macOS
+          // automation-permission prompt can never stall the run)
+          yield* Effect.forkScoped(
+            Clank.focusUrl(url).pipe(Effect.catch(() => Effect.succeed(false))),
+          );
         } else {
           yield* Clank.openUrl(url).pipe(Effect.catch(() => Effect.void));
         }
