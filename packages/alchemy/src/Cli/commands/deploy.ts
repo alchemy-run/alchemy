@@ -4,6 +4,7 @@ import * as Console from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -135,6 +136,7 @@ export const execStack = Effect.fn(function* ({
   // missing — before any cloud interaction.
   let dashboardUrl: string | undefined;
   let launchedDashboard = false;
+  let dashboardFiber: Fiber.Fiber<void, never> | undefined;
   if (ui) {
     yield* Dashboard.requireDistDir();
     // Opening is always safe: the SPA runs a same-origin BroadcastChannel
@@ -161,7 +163,7 @@ export const execStack = Effect.fn(function* ({
           port = 0;
         }
         const ready = yield* Deferred.make<string>();
-        yield* Effect.forkScoped(
+        dashboardFiber = yield* Effect.forkScoped(
           Dashboard.launchDashboard({
             stackEffect,
             stage,
@@ -331,9 +333,12 @@ export const execStack = Effect.fn(function* ({
 
     // `plan --ui` exists to LOOK at the plan — keep serving until Ctrl+C.
     // deploy/destroy exit when the run settles: give the SSE stream a beat
-    // to flush the final patch frames, then let the scope close, which
-    // stops the in-process dashboard and leaves the breadcrumb the next
-    // run's tab-reuse wait keys off.
+    // to flush the final patch frames, stop the dashboard fiber so its
+    // finalizers run (advertisement cleanup, SSE latch), then exit
+    // EXPLICITLY: runMain only force-exits on failure or signal, and the
+    // Bun server handle (whose graceful stop can wait forever on the
+    // browser's idle keep-alive connections) would otherwise keep the
+    // event loop alive indefinitely.
     if (ui && !dev && dashboardUrl !== undefined) {
       if (dryRun) {
         yield* Console.log(
@@ -345,6 +350,13 @@ export const execStack = Effect.fn(function* ({
         yield* Console.log(
           "\ndashboard stopped — the tab reconnects on the next --ui run",
         );
+        if (dashboardFiber !== undefined) {
+          yield* Fiber.interrupt(dashboardFiber).pipe(
+            Effect.timeout(Duration.seconds(3)),
+            Effect.ignore,
+          );
+        }
+        yield* Effect.sync(() => process.exit(0));
       }
     }
   }).pipe(Effect.provide(services));
