@@ -260,7 +260,7 @@ export const ConsumerProviderLive = () =>
             consumerId: output.consumerId,
           })
           .pipe(
-            Effect.catchTag("ConsumerNotFound", () =>
+            Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () =>
               Effect.succeed(undefined),
             ),
           );
@@ -467,7 +467,15 @@ export const ConsumerProviderLive = () =>
           queueId: output.queueId,
           consumerId: output.consumerId,
         })
-        .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
+        .pipe(
+          // QueueNotFound: the queue itself is already gone (deleted first
+          // by a partial destroy, or out-of-band) — the consumer cannot
+          // outlive its queue, so both count as already-deleted
+          Effect.catchTag(
+            ["ConsumerNotFound", "QueueNotFound"],
+            () => Effect.void,
+          ),
+        );
 
       // Block until Cloudflare's worker subsystem stops claiming
       // the script as a queue consumer. Without this the
@@ -482,7 +490,10 @@ export const ConsumerProviderLive = () =>
         })
         .pipe(
           Effect.flatMap(() => Effect.fail("still-attached" as const)),
-          Effect.catchTag("ConsumerNotFound", () => Effect.void),
+          Effect.catchTag(
+            ["ConsumerNotFound", "QueueNotFound"],
+            () => Effect.void,
+          ),
           Effect.retry({
             while: (e) => e === "still-attached",
             schedule: Schedule.spaced("1 second").pipe(
@@ -501,7 +512,7 @@ export const ConsumerProviderLive = () =>
             consumerId: output.consumerId,
           })
           .pipe(
-            Effect.catchTag("ConsumerNotFound", () =>
+            Effect.catchTag(["ConsumerNotFound", "QueueNotFound"], () =>
               Effect.succeed(undefined),
             ),
           );
