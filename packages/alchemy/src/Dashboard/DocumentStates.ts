@@ -44,3 +44,41 @@ export const applyStates = (
   finishStructure(doc, before, patches);
   return commit(doc, patches);
 };
+
+/**
+ * Merge ONE resource's freshly-persisted state into the document — called
+ * as each resource reaches a terminal status during a live run, so its
+ * outputs (attrs, links, bindings) appear the moment IT completes instead
+ * of when the whole run's final state refresh lands. Preserves the plan
+ * overlay, keeps the structural hash stable unless the node/edges are
+ * genuinely new, and clears the ghost flag (the resource now exists).
+ */
+export const upsertNodeFromState = (
+  doc: DeploymentDocument,
+  state: PersistedState,
+): Mutation => {
+  const patches: DocumentPatch[] = [];
+  const before = structureSignature(doc.structure);
+  const { nodes, edges } = toGraph([state]);
+  for (const fresh of nodes) {
+    const existing = doc.structure.nodes.get(fresh.fqn);
+    doc.structure.nodes.set(fresh.fqn, {
+      ...fresh,
+      // the plan overlay owns planAction; the run's decorations own status
+      // display — keep the overlay's view of intent
+      planAction: existing?.planAction,
+    } as DocumentNode);
+  }
+  for (const edge of edges) {
+    const key = edgeKeyOf(edge);
+    if (
+      !doc.structure.edges.has(key) &&
+      doc.structure.nodes.has(edge.source) &&
+      doc.structure.nodes.has(edge.target)
+    ) {
+      doc.structure.edges.set(key, { ...edge });
+    }
+  }
+  finishStructure(doc, before, patches);
+  return commit(doc, patches);
+};
