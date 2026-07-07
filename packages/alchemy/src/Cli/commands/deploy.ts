@@ -252,6 +252,11 @@ export const execStack = Effect.fn(function* ({
             }
           }
           if (approved === undefined) {
+            if (ui && dashboardUrl !== undefined) {
+              yield* Console.warn(
+                "dashboard approval unreachable — falling back to terminal approval",
+              );
+            }
             approved = yield* cli.approvePlan(updatePlan);
           }
           if (!approved) {

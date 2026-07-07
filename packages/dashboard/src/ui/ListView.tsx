@@ -6,6 +6,7 @@ import {
   isDimmed,
   setFilter,
   setSelectedFqn,
+  useDeploymentLive,
   useFilter,
   useFilterCounts,
   useIsSelected,
@@ -14,6 +15,7 @@ import {
   useProjection,
 } from "../store.ts";
 import {
+  badgeStyle,
   CHIP,
   chipStyle,
   CLOUD_COLORS,
@@ -114,6 +116,7 @@ export const ListView = memo(function ListView() {
 const Row = memo(function Row({ fqn }: { fqn: string }) {
   const { node, decoration } = useNode(fqn);
   const selected = useIsSelected(fqn);
+  const live = useDeploymentLive();
   const meta = useMeta();
   const registry = useRegistry();
 
@@ -133,6 +136,10 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
   }
   const applyResult = decoration?.applyResult;
   const planAction = node.planAction ?? decoration?.planAction;
+  // pending plan wins over the PREVIOUS deploy's result; during a live
+  // apply the fresh result takes over as each row completes
+  const showPlanChip =
+    planAction !== undefined && (!live || applyResult === undefined);
   const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? NEUTRAL_COLOR;
 
   return (
@@ -169,19 +176,20 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
             {decoration.note}
           </span>
         )}
-        {applyResult ? (
+        {showPlanChip && planAction ? (
+          <span
+            className={`${CHIP} border`}
+            style={badgeStyle(PLAN_COLORS[planAction] ?? NEUTRAL_COLOR)}
+            title={`pending: ${planAction}`}
+          >
+            {PLAN_LABELS[planAction] ?? planAction}
+          </span>
+        ) : applyResult ? (
           <span
             className={CHIP}
             style={chipStyle(RESULT_COLORS[applyResult] ?? NEUTRAL_COLOR)}
           >
             {RESULT_LABELS[applyResult] ?? applyResult}
-          </span>
-        ) : planAction ? (
-          <span
-            className={CHIP}
-            style={chipStyle(PLAN_COLORS[planAction] ?? NEUTRAL_COLOR)}
-          >
-            {PLAN_LABELS[planAction] ?? planAction}
           </span>
         ) : null}
         <span

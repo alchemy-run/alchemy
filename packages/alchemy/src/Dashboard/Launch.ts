@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
@@ -84,14 +85,21 @@ export const requestApprovalViaDashboard = Effect.fn(function* (
   plan: Parameters<typeof toPlanJson>[0],
 ) {
   const id = `approval-${process.pid}-${Date.now().toString(36)}`;
+  // Generous timeout + retries: the dashboard evaluates plans in-process
+  // (single-threaded Bun), so a bundling run can hold the event loop for
+  // seconds — a short abort here would silently drop to the terminal
+  // fallback, which auto-approves without a TTY.
   const post = Effect.tryPromise(() =>
     fetch(`${dashboardUrl}/api/approval/request`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, plan: toPlanJson(plan) }),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(15_000),
     }),
-  ).pipe(Effect.orElseSucceed(() => undefined));
+  ).pipe(
+    Effect.retry({ times: 2, schedule: Schedule.spaced("1 second") }),
+    Effect.orElseSucceed(() => undefined),
+  );
   if ((yield* post) === undefined) {
     return undefined;
   }
