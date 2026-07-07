@@ -126,10 +126,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
           );
         }
 
-        if (
-          request.method === "POST" &&
-          url.pathname === "/send-secondary"
-        ) {
+        if (request.method === "POST" && url.pathname === "/send-secondary") {
           const name = url.searchParams.get("name") ?? "default";
           const text = yield* request.text;
           yield* secondaryQueue.send({ name, text }).pipe(Effect.orDie);

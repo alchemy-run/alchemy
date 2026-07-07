@@ -168,6 +168,16 @@ const resetHttp = (url: string, key: string) =>
 
 // `reset` is idempotent, so it's safe to retry — this doubles as the
 // per-test readiness gate for WorkerA's RPC edge.
+//
+// Cold-start hazards on this path can also surface as DEFECTS, not failures:
+// while the deploy propagates, the Cloudflare runtime throws
+// "Worker not found." (service/DO binding not yet resolvable) or
+// "Handler does not export a fetch() function." (the pre-created stub
+// script, uploaded before the real bundle, is still live on the PoP).
+// The RPC server serializes those as defects and the client re-raises them
+// as defects, which `Effect.retry` will NOT retry. Since `reset` is
+// idempotent, demote defects to failures so the readiness retry rides
+// them out like any other cold-start blip.
 const resetA = (url: string, key: string) =>
   withRpcA(
     url,
@@ -175,7 +185,10 @@ const resetA = (url: string, key: string) =>
       const c = yield* RpcClient.make(CounterRpcs);
       yield* c.reset({ key });
     }),
-  ).pipe(Effect.retry(readinessRetry));
+  ).pipe(
+    Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.retry(readinessRetry),
+  );
 
 // Gate the deploy on all three workers' edges being resolvable (via the
 // idempotent reset path), then let propagation settle, so the non-retried
