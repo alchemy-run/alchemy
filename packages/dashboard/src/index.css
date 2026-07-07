@@ -122,3 +122,44 @@ summary {
 .status-pulse {
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
+
+/* ---------- border beam (actively-working nodes) ---------- */
+/* A bright arc of the action color orbiting the card's border while a
+   lifecycle operation is running — the "doing" phase's signature. The
+   overlay draws ONLY the ring: two stacked masks XOR the content box away,
+   leaving the padding (= border thickness) visible. */
+@property --beam-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes beam-orbit {
+  to {
+    --beam-angle: 360deg;
+  }
+}
+
+.node-beam {
+  position: absolute;
+  inset: -1.5px;
+  border-radius: var(--alc-radius-lg);
+  padding: 2px;
+  background: conic-gradient(
+    from var(--beam-angle),
+    transparent 0%,
+    transparent 72%,
+    var(--beam-color) 88%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: beam-orbit 2.4s linear infinite;
+  pointer-events: none;
+}
