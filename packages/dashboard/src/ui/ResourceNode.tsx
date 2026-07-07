@@ -37,6 +37,7 @@ import {
 import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
 import {
   useApproval,
+  useDeploymentLive,
   useDeploymentStartedAt,
   useIsSelected,
   useMeta,
@@ -110,6 +111,7 @@ export const ResourceNode = memo(function ResourceNode({
   const registry = useRegistry();
   const approval = useApproval();
   const deployStartedAt = useDeploymentStartedAt();
+  const live = useDeploymentLive();
 
   // live overlay wins over the structural baseline
   const status = decoration?.status ?? node?.status ?? "unknown";
@@ -166,18 +168,30 @@ export const ResourceNode = memo(function ResourceNode({
   // The bookmark tab is the node's single lifecycle indicator:
   //   running now (spinner) > result from the current run > pending plan.
   // Historical results (previous runs) stay as the muted in-card chip.
-  const inFlight = statusInFlight(status);
+  //
+  // "Running now" must be an in-flight status DECORATED BY THE CURRENT
+  // LIVE RUN — a persisted baseline status like "deleting" left behind by
+  // a failed destroy would otherwise masquerade as live forever and mask
+  // the pending plan action ("delete") on the next attempt.
+  const inFlight =
+    live &&
+    decoration?.status !== undefined &&
+    statusInFlight(decoration.status) &&
+    deployStartedAt !== undefined &&
+    (decoration.at ?? 0) >= deployStartedAt;
+  const planTab =
+    showPlanChip && plan !== undefined && planColor !== undefined
+      ? { label: plan, color: planColor, spinner: false }
+      : undefined;
   const tab = inFlight
     ? { label: status, color: statusColor(status), spinner: true }
-    : resultIsFresh && result !== undefined && resultColor !== undefined
-      ? {
-          label: result,
-          color: resultColor,
-          spinner: false,
-        }
-      : showPlanChip && plan !== undefined && planColor !== undefined
-        ? { label: plan, color: planColor, spinner: false }
-        : undefined;
+    : approval !== undefined && planTab !== undefined
+      ? // awaiting approval: what WILL happen outranks what the previous
+        // run did — this is the review screen
+        planTab
+      : resultIsFresh && result !== undefined && resultColor !== undefined
+        ? { label: result, color: resultColor, spinner: false }
+        : planTab;
   // terminated / declared-only resources render "dead": dashed ghost shell
   const deleted = result === "deleted" || status === "deleted";
   const ghost = node.ghost !== undefined || deleted;
