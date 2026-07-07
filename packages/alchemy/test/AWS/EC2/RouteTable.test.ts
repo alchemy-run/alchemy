@@ -43,6 +43,8 @@ test.provider(
   // VPC + RouteTable create, an account-wide DescribeRouteTables, then two
   // destroys (with VPC dependency-ordered teardown) can exceed the default
   // 120s under full-suite EC2 throttling load. All waits are bounded; give
-  // the end-to-end run headroom.
-  { timeout: 180_000 },
+  // the end-to-end run headroom. (Observed blowing 180s during a full-suite
+  // run where concurrent EC2 suites saturated the account's request budget
+  // and VPC quota; a timeout mid-destroy also leaks the VPC.)
+  { timeout: 300_000 },
 );

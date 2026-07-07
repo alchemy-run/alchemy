@@ -13,6 +13,7 @@ export type ApplyStatus =
   | "updated"
   | "deleting"
   | "deleted"
+  | "retained"
   | "replacing"
   | "replaced"
   // Action lifecycle (see {@link Action})

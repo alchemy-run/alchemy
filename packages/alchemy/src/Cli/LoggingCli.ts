@@ -35,6 +35,8 @@ const statusColor = (status: ApplyStatus): ((s: string) => string) => {
       return green;
     case "deleted":
       return dim;
+    case "retained":
+      return dim;
     case "fail":
       return red;
     case "attaching":
@@ -51,6 +53,7 @@ const isTerminal = (status: ApplyStatus): boolean =>
   status === "created" ||
   status === "updated" ||
   status === "deleted" ||
+  status === "retained" ||
   status === "replaced" ||
   status === "fail";
 
