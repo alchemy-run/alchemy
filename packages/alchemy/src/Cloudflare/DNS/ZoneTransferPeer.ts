@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ZoneTransferPeerTypeId = "Cloudflare.Dns.ZoneTransferPeer" as const;
-type ZoneTransferPeerTypeId = typeof ZoneTransferPeerTypeId;
+const TypeId = "Cloudflare.DNS.ZoneTransferPeer" as const;
+type TypeId = typeof TypeId;
 
 export interface ZoneTransferPeerProps {
   /**
@@ -74,7 +74,7 @@ export interface ZoneTransferPeerAttributes {
 }
 
 export type ZoneTransferPeer = Resource<
-  ZoneTransferPeerTypeId,
+  TypeId,
   ZoneTransferPeerProps,
   ZoneTransferPeerAttributes,
   never,
@@ -92,11 +92,13 @@ export type ZoneTransferPeer = Resource<
  * account. Cloudflare's create API only accepts a name; the provider
  * follows up with an update when `ip`, `port`, `tsigId`, or
  * `ixfrEnable` are declared, all of which remain mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Creating a Peer
  * @example Primary nameserver to transfer from
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  * });
@@ -104,11 +106,11 @@ export type ZoneTransferPeer = Resource<
  *
  * @example Peer with TSIG authentication
  * ```typescript
- * const tsig = yield* Cloudflare.ZoneTransferTsig("TransferKey", {
+ * const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
  *   secret: Redacted.make(process.env.TSIG_SECRET!),
  * });
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   tsigId: tsig.tsigId,
  *   ixfrEnable: true,
@@ -117,15 +119,13 @@ export type ZoneTransferPeer = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
  */
-export const ZoneTransferPeer = Resource<ZoneTransferPeer>(
-  ZoneTransferPeerTypeId,
-);
+export const ZoneTransferPeer = Resource<ZoneTransferPeer>(TypeId);
 
 /**
  * Returns true if the given value is a ZoneTransferPeer resource.
  */
 export const isZoneTransferPeer = (value: unknown): value is ZoneTransferPeer =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneTransferPeerTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneTransferPeerProvider = () =>
   Provider.succeed(ZoneTransferPeer, {

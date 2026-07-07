@@ -60,7 +60,7 @@ export interface KeyValueStore extends Resource<
  *
  * KeyValueStores can be associated with CloudFront Functions and are useful for
  * routing metadata or other small edge-time lookup tables.
- *
+ * @resource
  * @section Creating KeyValueStores
  * @example Basic Store
  * ```typescript

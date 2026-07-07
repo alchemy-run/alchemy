@@ -17,7 +17,6 @@ import { Counter, CounterLive } from "./object.ts";
 export class WorkerA extends Cloudflare.RpcWorker<WorkerA, Counter>()(
   "WorkerA",
   {
-    main: import.meta.filename,
     schema: CounterRpcs,
   },
 ) {}
@@ -25,6 +24,9 @@ export class WorkerA extends Cloudflare.RpcWorker<WorkerA, Counter>()(
 // Layer — yielding `Counter` resolves to WorkerA's local hosted
 // namespace (the `CounterLive` Layer below populates the tag).
 export default WorkerA.make(
+  {
+    main: import.meta.url,
+  },
   Effect.gen(function* () {
     const counter = yield* Counter;
 
@@ -66,7 +68,7 @@ export default WorkerA.make(
   }).pipe(
     Effect.provide(
       // WorkerA hosts `Counter`, so it must provide `CounterLive`.
-      CounterLive.pipe(Layer.provide(Cloudflare.D1ConnectionLive)),
+      CounterLive.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding)),
     ),
   ),
 );

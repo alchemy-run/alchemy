@@ -7,7 +7,7 @@ import DynamicLoaderEffectWorker from "./effect-worker.ts";
 export const AsyncWorker = Cloudflare.Worker("DynamicLoaderAsyncWorker", {
   main: pathe.resolve(import.meta.dirname, "async-worker.ts"),
   env: {
-    LOADER: Cloudflare.DynamicWorkerLoader(),
+    LOADER: Cloudflare.WorkerLoader(),
   },
 });
 

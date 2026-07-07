@@ -175,7 +175,7 @@ export interface Stream extends Resource<
  * including retention, encryption, monitoring, warm throughput, record size, tags,
  * and stream resource policy. A stream name is auto-generated from the app,
  * stage, and logical ID unless you provide one explicitly.
- *
+ * @resource
  * @section Creating Streams
  * @example On-Demand Stream
  * ```typescript
@@ -208,7 +208,7 @@ export interface Stream extends Resource<
  * @example Put a record from a handler
  * ```typescript
  * // init
- * const putRecord = yield* Kinesis.PutRecord.bind(stream);
+ * const putRecord = yield* AWS.Kinesis.PutRecord(stream);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -229,7 +229,9 @@ export interface Stream extends Resource<
  * @example Process stream records
  * ```typescript
  * // init
- * yield* Kinesis.records(stream).process(
+ * yield* Kinesis.consumeStreamRecords(
+ *   stream,
+ *   {},
  *   Effect.fn(function* (record) {
  *     const data = new TextDecoder().decode(record.data);
  *     yield* Effect.log(`Received: ${data}`);
@@ -363,9 +365,22 @@ const readStream = Effect.fn(function* ({
   }
 
   const summary = response.StreamDescriptionSummary;
-  const tagsResponse = yield* kinesis.listTagsForResource({
-    ResourceARN: summary.StreamARN,
-  });
+  // The stream can vanish between the describe above and these follow-up
+  // calls (e.g. another test tears its stream down while `list` hydrates) —
+  // a `ResourceNotFoundException` here just means it's gone, so report it as
+  // missing rather than failing the whole enumeration.
+  const tagsResponse = yield* kinesis
+    .listTagsForResource({
+      ResourceARN: summary.StreamARN,
+    })
+    .pipe(
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
+  if (!tagsResponse) {
+    return undefined;
+  }
   const policyResponse = yield* kinesis
     .getResourcePolicy({
       ResourceARN: summary.StreamARN,

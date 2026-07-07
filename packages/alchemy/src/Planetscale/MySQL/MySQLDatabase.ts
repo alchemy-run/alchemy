@@ -150,6 +150,7 @@ export type MySQLDatabase = Resource<
   Providers
 >;
 
+/** @resource */
 export const MySQLDatabase = Resource<MySQLDatabase>(
   "Planetscale.MySQLDatabase",
 );

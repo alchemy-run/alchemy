@@ -43,7 +43,7 @@ const web3Entitled = !!process.env.CLOUDFLARE_TEST_WEB3;
 // empty) array. This always runs and proves the enumeration shape.
 test.provider("list returns a well-typed array of web3 hostnames", (stack) =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Cloudflare.Web3Hostname);
+    const provider = yield* Provider.findProvider(Cloudflare.Web3.Hostname);
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
@@ -73,7 +73,7 @@ test.provider.skipIf(!web3Entitled)(
 
       const hostname = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Web3Hostname("ListHostname", {
+          return yield* Cloudflare.Web3.Hostname("ListHostname", {
             zoneId: zone.id,
             name,
             target: "ipfs_universal_path",
@@ -81,7 +81,7 @@ test.provider.skipIf(!web3Entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Web3Hostname);
+      const provider = yield* Provider.findProvider(Cloudflare.Web3.Hostname);
       const all = yield* provider.list();
 
       expect(all.some((h) => h.hostnameId === hostname.hostnameId)).toBe(true);

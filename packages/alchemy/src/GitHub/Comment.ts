@@ -73,7 +73,7 @@ export interface Comment extends Resource<
  * Authentication is resolved in order: explicit `token` prop,
  * `GITHUB_ACCESS_TOKEN` env var, `GITHUB_TOKEN` env var. The token needs
  * `repo` scope for private repositories or `public_repo` for public ones.
- *
+ * @resource
  * @section Creating Comments
  * @example Comment on an Issue
  * ```typescript

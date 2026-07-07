@@ -1,6 +1,7 @@
 import * as images from "@distilled.cloud/cloudflare/images";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -9,25 +10,20 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ImagesVariantTypeId = "Cloudflare.Images.Variant" as const;
-type ImagesVariantTypeId = typeof ImagesVariantTypeId;
+const TypeId = "Cloudflare.Images.Variant" as const;
+type TypeId = typeof TypeId;
 
 /**
  * How an image is resized to fit a variant's `width`x`height` box.
  */
-export type ImagesVariantFit =
-  | "scale-down"
-  | "contain"
-  | "cover"
-  | "crop"
-  | "pad";
+export type VariantFit = "scale-down" | "contain" | "cover" | "crop" | "pad";
 
 /**
  * What happens to the image's EXIF metadata when the variant is served.
  */
-export type ImagesVariantMetadata = "keep" | "copyright" | "none";
+export type VariantMetadata = "keep" | "copyright" | "none";
 
-export interface ImagesVariantProps {
+export interface VariantProps {
   /**
    * Account the variant is created in. Defaults to the ambient Cloudflare
    * account. Changing it triggers a replacement.
@@ -48,7 +44,7 @@ export interface ImagesVariantProps {
   /**
    * How the image is resized to fit the `width`x`height` box. Mutable.
    */
-  fit: ImagesVariantFit;
+  fit: VariantFit;
   /**
    * Maximum width in pixels (1-9999). Mutable.
    */
@@ -61,7 +57,7 @@ export interface ImagesVariantProps {
    * What EXIF metadata is preserved on the served image. Mutable.
    * @default "none"
    */
-  metadata?: ImagesVariantMetadata;
+  metadata?: VariantMetadata;
   /**
    * If `true`, this variant can serve an image without a signed URL even
    * when the image itself requires signed URLs. Mutable.
@@ -70,27 +66,27 @@ export interface ImagesVariantProps {
   neverRequireSignedURLs?: boolean;
 }
 
-export interface ImagesVariantAttributes {
+export interface VariantAttributes {
   /** The variant's name (its API path identifier and URL segment). */
   variantName: string;
   /** Account the variant belongs to. */
   accountId: string;
   /** How the image is resized. */
-  fit: ImagesVariantFit;
+  fit: VariantFit;
   /** Maximum width in pixels. */
   width: number;
   /** Maximum height in pixels. */
   height: number;
   /** EXIF metadata handling. */
-  metadata: ImagesVariantMetadata;
+  metadata: VariantMetadata;
   /** Whether the variant bypasses signed-URL requirements. */
   neverRequireSignedURLs: boolean;
 }
 
-export type ImagesVariant = Resource<
-  ImagesVariantTypeId,
-  ImagesVariantProps,
-  ImagesVariantAttributes,
+export type Variant = Resource<
+  TypeId,
+  VariantProps,
+  VariantAttributes,
   never,
   Providers
 >;
@@ -108,12 +104,14 @@ export type ImagesVariant = Resource<
  * Note: every Images-enabled account has a built-in `public` variant. Do not
  * manage `public` with this resource — Cloudflare silently ignores deletes
  * of the built-in variant, so destroy would not actually remove it.
- *
+ * @resource
+ * @product Images
+ * @category Media
  * @section Creating a Variant
  * @example Thumbnail variant
  * ```typescript
  * // Variant names are alphanumeric only (no hyphens/underscores).
- * const thumbnail = yield* Cloudflare.ImagesVariant("thumbnail", {
+ * const thumbnail = yield* Cloudflare.Images.Variant("thumbnail", {
  *   fit: "cover",
  *   width: 100,
  *   height: 100,
@@ -122,7 +120,7 @@ export type ImagesVariant = Resource<
  *
  * @example Hero variant with explicit name and metadata
  * ```typescript
- * const hero = yield* Cloudflare.ImagesVariant("HeroImage", {
+ * const hero = yield* Cloudflare.Images.Variant("HeroImage", {
  *   name: "hero",
  *   fit: "scale-down",
  *   width: 1920,
@@ -136,7 +134,7 @@ export type ImagesVariant = Resource<
  * ```typescript
  * // Serve this variant without a signature even when the image itself
  * // requires signed URLs (e.g. for public thumbnails of private images).
- * const preview = yield* Cloudflare.ImagesVariant("preview", {
+ * const preview = yield* Cloudflare.Images.Variant("preview", {
  *   fit: "contain",
  *   width: 320,
  *   height: 240,
@@ -146,16 +144,16 @@ export type ImagesVariant = Resource<
  *
  * @see https://developers.cloudflare.com/images/manage-images/create-variants/
  */
-export const ImagesVariant = Resource<ImagesVariant>(ImagesVariantTypeId);
+export const Variant = Resource<Variant>(TypeId);
 
 /**
- * Returns true if the given value is an ImagesVariant resource.
+ * Returns true if the given value is an Variant resource.
  */
-export const isImagesVariant = (value: unknown): value is ImagesVariant =>
-  Predicate.hasProperty(value, "Type") && value.Type === ImagesVariantTypeId;
+export const isVariant = (value: unknown): value is Variant =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const ImagesVariantProvider = () =>
-  Provider.succeed(ImagesVariant, {
+export const VariantProvider = () =>
+  Provider.succeed(Variant, {
     stables: ["variantName", "accountId"],
 
     list: Effect.fn(function* () {
@@ -194,9 +192,7 @@ export const ImagesVariantProvider = () =>
         { concurrency: 10 },
       );
 
-      return rows.filter(
-        (row): row is ImagesVariantAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is VariantAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -244,14 +240,14 @@ export const ImagesVariantProvider = () =>
       return output?.variantName ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const acct = (news.accountId as string | undefined) ?? accountId;
       const name = news.name ?? id;
 
-      // 1. Observe — cloud state is authoritative. `output` is only a hint;
-      //    a missing variant falls through to create.
+      // 1. Observe — cloud state is authoritative. The cached output is only
+      //    a hint; a missing variant falls through to create.
       let observed = yield* getVariant(acct, name);
 
       // 2. Ensure — create when missing. A concurrent create surfaces as
@@ -316,6 +312,22 @@ export const ImagesVariantProvider = () =>
           variantId: output.variantName,
         })
         .pipe(Effect.catchTag("VariantNotFound", () => Effect.void));
+
+      // Cloudflare's variant DELETE is eventually consistent: the GET
+      // endpoint keeps returning the variant for a short window after a
+      // successful delete. Confirm it is actually gone before reporting
+      // success, so the engine's replacement GC (which deletes the OLD
+      // generation as the new one is created) leaves a genuinely clean slate
+      // rather than an orphan that lingers past the caller's verification.
+      // Bounded — if it never clears we stop polling and proceed.
+      yield* getVariant(output.accountId, output.variantName).pipe(
+        Effect.repeat({
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.both(Schedule.recurs(12)),
+          ),
+          until: (observed) => observed === undefined,
+        }),
+      );
     }),
   });
 
@@ -355,7 +367,7 @@ const variantNamesFrom = (value: unknown): string[] => {
   return [];
 };
 
-const desiredOptions = (news: ImagesVariantProps) => ({
+const desiredOptions = (news: VariantProps) => ({
   fit: news.fit,
   width: news.width,
   height: news.height,
@@ -365,13 +377,13 @@ const desiredOptions = (news: ImagesVariantProps) => ({
 const toAttributes = (
   variant: ObservedVariant,
   accountId: string,
-): ImagesVariantAttributes => ({
+): VariantAttributes => ({
   variantName: variant.id,
   accountId,
   // Distilled widens generated string enums to open unions (`string & {}`).
-  fit: variant.options.fit as ImagesVariantFit,
+  fit: variant.options.fit as VariantFit,
   width: variant.options.width,
   height: variant.options.height,
-  metadata: variant.options.metadata as ImagesVariantMetadata,
+  metadata: variant.options.metadata as VariantMetadata,
   neverRequireSignedURLs: variant.neverRequireSignedURLs ?? false,
 });

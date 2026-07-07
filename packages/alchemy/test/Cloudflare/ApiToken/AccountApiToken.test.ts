@@ -27,7 +27,7 @@ describe.skip("AccountApiToken", () => {
 
       const token = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccountApiToken("DefaultToken", {
+          return yield* Cloudflare.ApiToken.AccountApiToken("DefaultToken", {
             policies: [
               {
                 effect: "allow",
@@ -67,7 +67,7 @@ describe.skip("AccountApiToken", () => {
 
       const token = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccountApiToken("UpdateToken", {
+          return yield* Cloudflare.ApiToken.AccountApiToken("UpdateToken", {
             name: "alchemy-test-acct-update-initial",
             policies: [
               {
@@ -87,7 +87,7 @@ describe.skip("AccountApiToken", () => {
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccountApiToken("UpdateToken", {
+          return yield* Cloudflare.ApiToken.AccountApiToken("UpdateToken", {
             name: "alchemy-test-acct-update-renamed",
             policies: [
               {
@@ -143,13 +143,13 @@ describe.skip("AccountApiToken", () => {
 
       const first = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccountApiToken("NoopToken", props);
+          return yield* Cloudflare.ApiToken.AccountApiToken("NoopToken", props);
         }),
       );
 
       const second = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccountApiToken("NoopToken", props);
+          return yield* Cloudflare.ApiToken.AccountApiToken("NoopToken", props);
         }),
       );
 
@@ -193,7 +193,7 @@ describe("AccountApiToken list", () => {
 
       const token = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AccountApiToken("ListToken", {
+          return yield* Cloudflare.ApiToken.AccountApiToken("ListToken", {
             name: "alchemy-test-acct-list",
             policies: [
               {
@@ -208,7 +208,9 @@ describe("AccountApiToken list", () => {
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.AccountApiToken);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ApiToken.AccountApiToken,
+      );
       const all = yield* provider.list();
 
       expect(all.some((t) => t.tokenId === token.tokenId)).toBe(true);

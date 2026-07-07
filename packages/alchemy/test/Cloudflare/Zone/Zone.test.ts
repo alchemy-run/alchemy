@@ -23,7 +23,7 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 const zoneNameFor = (accountId: string, label: string) =>
   process.env.TEST_ZONE_NAME ?? `alchemy-${label}-${accountId}.com`;
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "create zone retains by default — destroy() opts in to deletion",
   (stack) =>
     Effect.gen(function* () {
@@ -32,7 +32,7 @@ test.provider(
 
       const zone = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Zone("CreatedZone", {
+          return yield* Cloudflare.Zone.Zone("CreatedZone", {
             name: TEST_ZONE,
           }).pipe(destroy());
         }),
@@ -76,7 +76,7 @@ test.provider(
     }),
 );
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "create zone retains by default — survives stack.destroy()",
   (stack) =>
     Effect.gen(function* () {
@@ -85,7 +85,7 @@ test.provider(
 
       const zone = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Zone("RetainedZone", {
+          return yield* Cloudflare.Zone.Zone("RetainedZone", {
             name: TEST_ZONE,
           });
         }),
@@ -105,7 +105,7 @@ test.provider(
     }),
 );
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "adoption — existing zone errors without adopt, takes over with adopt(true)",
   (stack) =>
     Effect.gen(function* () {
@@ -140,7 +140,9 @@ test.provider(
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Zone("AdoptedZone", { name: TEST_ZONE });
+            return yield* Cloudflare.Zone.Zone("AdoptedZone", {
+              name: TEST_ZONE,
+            });
           }),
         )
         .pipe(
@@ -155,7 +157,7 @@ test.provider(
       const adopted = yield* stack
         .deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Zone("AdoptedZone", {
+            return yield* Cloudflare.Zone.Zone("AdoptedZone", {
               name: TEST_ZONE,
             }).pipe(destroy());
           }),
@@ -172,31 +174,33 @@ test.provider(
 // Standing test zone — always present in the testing account.
 const TEST_ZONE_NAME = "alchemy-test-2.us";
 
-test.provider("list enumerates every zone in the account", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider.skipIf(!!process.env.FAST)(
+  "list enumerates every zone in the account",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const testZone = yield* findZoneByName({
-      accountId,
-      name: TEST_ZONE_NAME,
-    });
-    expect(testZone).toBeDefined();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const testZone = yield* findZoneByName({
+        accountId,
+        name: TEST_ZONE_NAME,
+      });
+      expect(testZone).toBeDefined();
 
-    const provider = yield* Provider.findProvider(Cloudflare.Zone);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Zone.Zone);
+      const all = yield* provider.list();
 
-    // Exhaustive enumeration must include the standing test zone, returned in
-    // the full `read` Attributes shape.
-    const found = all.find((z) => z.zoneId === testZone!.id);
-    expect(found).toBeDefined();
-    expect(found!.name).toBe(TEST_ZONE_NAME);
-    expect(found!.accountId).toBe(accountId);
-    expect(typeof found!.createdOn).toBe("string");
-    expect(Array.isArray(found!.nameServers)).toBe(true);
+      // Exhaustive enumeration must include the standing test zone, returned in
+      // the full `read` Attributes shape.
+      const found = all.find((z) => z.zoneId === testZone!.id);
+      expect(found).toBeDefined();
+      expect(found!.name).toBe(TEST_ZONE_NAME);
+      expect(found!.accountId).toBe(accountId);
+      expect(typeof found!.createdOn).toBe("string");
+      expect(Array.isArray(found!.nameServers)).toBe(true);
 
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
 );
 
 const waitForZoneToBeDeleted = Effect.fn(function* (zoneId: string) {

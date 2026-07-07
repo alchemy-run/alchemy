@@ -29,7 +29,7 @@ export type Monitor = Resource<
  *   baseline by more than `tolerance` over `compareDays`.
  *
  * Changing `type` triggers a replacement; everything else updates in place.
- *
+ * @resource
  * @see https://axiom.co/docs/monitor-data/monitors
  *
  * @section Creating a Monitor

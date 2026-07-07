@@ -48,7 +48,7 @@ export interface OrganizationalUnit extends Resource<
 
 /**
  * An AWS Organizations organizational unit.
- *
+ * @resource
  * @section Creating OUs
  * @example Nested OU
  * ```typescript

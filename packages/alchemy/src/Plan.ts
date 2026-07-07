@@ -1,3 +1,5 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+/** @effect-diagnostics missingEffectError:off */
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -55,8 +57,8 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
-import { hashInput } from "./Util/hash.ts";
 import { findCycleMembers } from "./Util/scc.ts";
+import { hashInput } from "./Util/sha256.ts";
 
 export type PlanError = never;
 
@@ -332,10 +334,11 @@ export const make = <A>(
                     .pipe(providePlanScope(resource.FQN, oldState.instanceId))
                 : Effect.succeed(undefined);
 
-              const stables: string[] = [
-                ...(provider.stables ?? []),
-                ...(diff?.stables ?? []),
-              ];
+              // A present `diff.stables` is authoritative for this update and
+              // overrides `provider.stables`. We only fall back to the
+              // provider-level "always stable" list when the diff does not
+              // return one (e.g. no diff fn, or a diff that omits `stables`).
+              const stables: string[] = diff?.stables ?? provider.stables ?? [];
 
               const withStables = (output: any) =>
                 stables.length > 0
@@ -405,6 +408,18 @@ export const make = <A>(
           // resolving any nested outputs in the result.
           const resourceExpr = Output.of(input);
           const resolved = yield* resolveOutput(resourceExpr);
+          // An upstream being updated in place resolves to a `ResourceExpr`
+          // carrying only its *stable* attributes (see `withStables` in
+          // `resolveResource`). When the resource is referenced *whole*
+          // (rather than via a single prop like `upstream.id`), materialize
+          // those stable attributes into a plain object so the known, stable
+          // values flow into the consumer's `diff`. Otherwise the consumer
+          // sees the whole reference as an unresolved `Expr`, `isResolved`
+          // short-circuits, and a stable identifier that should have been
+          // available is missing — forcing consumers to hand-extract it.
+          if (Output.isResourceExpr(resolved) && resolved.stables) {
+            return yield* resolveInput(resolved.stables);
+          }
           return yield* resolveInput(resolved);
         } else if (typeof input === "object") {
           return Object.fromEntries(

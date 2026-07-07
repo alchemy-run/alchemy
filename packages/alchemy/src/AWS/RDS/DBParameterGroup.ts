@@ -43,6 +43,7 @@ export interface DBParameterGroup extends Resource<
 
 /**
  * An RDS DB parameter group, useful for Aurora cluster instances.
+ * @resource
  */
 export const DBParameterGroup = Resource<DBParameterGroup>(
   "AWS.RDS.DBParameterGroup",
@@ -103,7 +104,11 @@ export const DBParameterGroupProvider = () =>
                       g,
                     ): g is rds.DBParameterGroup & {
                       DBParameterGroupName: string;
-                    } => g.DBParameterGroupName != null,
+                    } =>
+                      g.DBParameterGroupName != null &&
+                      // AWS-managed `default.*` groups cannot be deleted
+                      // (InvalidDBParameterGroupStateFault) — don't enumerate.
+                      !g.DBParameterGroupName.startsWith("default."),
                   )
                   .map((g) => ({
                     dbParameterGroupName: g.DBParameterGroupName,

@@ -50,7 +50,7 @@ test.provider("create and delete a TURN key with default name", (stack) =>
     yield* stack.destroy();
 
     const turnKey = yield* stack.deploy(
-      Cloudflare.CallsTurnKey("DefaultTurnKey", {}),
+      Cloudflare.Calls.TurnKey("DefaultTurnKey", {}),
     );
 
     expect(turnKey.keyId).toBeTruthy();
@@ -75,7 +75,7 @@ test.provider("update name in place (same keyId, key preserved)", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.CallsTurnKey("UpdateTurnKey", {
+      Cloudflare.Calls.TurnKey("UpdateTurnKey", {
         name: "alchemy-calls-turn-update",
       }),
     );
@@ -85,7 +85,7 @@ test.provider("update name in place (same keyId, key preserved)", (stack) =>
     expect(initialKey).toBeTruthy();
 
     const updated = yield* stack.deploy(
-      Cloudflare.CallsTurnKey("UpdateTurnKey", {
+      Cloudflare.Calls.TurnKey("UpdateTurnKey", {
         name: "alchemy-calls-turn-update-v2",
       }),
     );
@@ -101,7 +101,7 @@ test.provider("update name in place (same keyId, key preserved)", (stack) =>
 
     // Redeploying identical props is a no-op (still the same key).
     const noop = yield* stack.deploy(
-      Cloudflare.CallsTurnKey("UpdateTurnKey", {
+      Cloudflare.Calls.TurnKey("UpdateTurnKey", {
         name: "alchemy-calls-turn-update-v2",
       }),
     );
@@ -121,7 +121,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     const turnKey = yield* stack.deploy(
-      Cloudflare.CallsTurnKey("HealTurnKey", {
+      Cloudflare.Calls.TurnKey("HealTurnKey", {
         name: "alchemy-calls-turn-heal",
       }),
     );
@@ -139,7 +139,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     );
 
     const healed = yield* stack.deploy(
-      Cloudflare.CallsTurnKey("HealTurnKey", {
+      Cloudflare.Calls.TurnKey("HealTurnKey", {
         name: "alchemy-calls-turn-heal-v2",
       }),
     );
@@ -164,12 +164,12 @@ test.provider("list enumerates the deployed TURN key", (stack) =>
     yield* stack.destroy();
 
     const deployed = yield* stack.deploy(
-      Cloudflare.CallsTurnKey("ListTurnKey", {
+      Cloudflare.Calls.TurnKey("ListTurnKey", {
         name: "alchemy-calls-turn-list",
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.CallsTurnKey);
+    const provider = yield* Provider.findProvider(Cloudflare.Calls.TurnKey);
     const all = yield* provider.list();
 
     expect(all.some((x) => x.keyId === deployed.keyId)).toBe(true);

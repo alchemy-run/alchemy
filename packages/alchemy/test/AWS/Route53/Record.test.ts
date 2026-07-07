@@ -14,7 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `CallerReference`, so re-running reuses the same zone rather than piling up
 // duplicates. (`example.com` is reserved by AWS, hence the bespoke name.)
 const zoneName = "alchemy-route53-list-test.com.";
-const callerReference = "alchemy-route53-record-list-test";
+const callerReference = "alchemy-route53-record-list-test-v2";
 const recordName = `list-record.${zoneName}`;
 const recordValue = '"alchemy-list-test"';
 
@@ -28,24 +28,51 @@ const findZoneIdByName = route53.listHostedZones.pages({}).pipe(
   Effect.map((zones) => zones.find((zone) => zone.Name === zoneName)?.Id),
 );
 
-const ensureZone = route53
-  .createHostedZone({ Name: zoneName, CallerReference: callerReference })
-  .pipe(
-    Effect.map((response) => normalizeId(response.HostedZone.Id)),
-    Effect.catchTag("HostedZoneAlreadyExists", () =>
-      findZoneIdByName.pipe(
-        Effect.flatMap((id) =>
-          id !== undefined
-            ? Effect.succeed(normalizeId(id))
-            : Effect.die(
-                new Error(
-                  "hosted zone not found after HostedZoneAlreadyExists",
+// The hosted zone is a *standing* fixture — created once and reused across
+// runs (we look it up by name first and only create on a genuine miss). We
+// deliberately do NOT delete the zone on teardown. A short retry absorbs the
+// brief list eventual-consistency right after a first-time create, when a
+// create can race ahead of the zone appearing in `listHostedZones`.
+const zoneNotYetListable =
+  "hosted zone not found after HostedZoneAlreadyExists";
+
+// List first, create only on a genuine miss. The previous create-first design
+// got permanently poisoned whenever the standing zone was deleted (e.g. by a
+// nuke): the stable `CallerReference` stays claimed during a long propagation
+// window, so `createHostedZone` keeps returning `HostedZoneAlreadyExists` while
+// `listHostedZones` still shows nothing. Looking the zone up first (and only
+// creating with a *fresh* CallerReference when it's truly absent) sidesteps
+// that trap — an absent/poisoned zone always re-creates cleanly, and a present
+// zone is reused without ever hitting the conflict path.
+const ensureZone = findZoneIdByName.pipe(
+  Effect.flatMap((existing) =>
+    existing !== undefined
+      ? Effect.succeed(normalizeId(existing))
+      : route53
+          .createHostedZone({
+            Name: zoneName,
+            CallerReference: `${callerReference}-${crypto.randomUUID()}`,
+          })
+          .pipe(
+            Effect.map((response) => normalizeId(response.HostedZone.Id)),
+            // A concurrent attempt won the race — fall back to the lookup.
+            Effect.catchTag("HostedZoneAlreadyExists", () =>
+              findZoneIdByName.pipe(
+                Effect.flatMap((id) =>
+                  id !== undefined
+                    ? Effect.succeed(normalizeId(id))
+                    : Effect.fail(new Error(zoneNotYetListable)),
                 ),
               ),
-        ),
-      ),
-    ),
-  );
+            ),
+          ),
+  ),
+  Effect.retry({
+    while: (e) => e instanceof Error && e.message === zoneNotYetListable,
+    schedule: Schedule.spaced("5 seconds"),
+    times: 24,
+  }),
+);
 
 // Create/delete the record set out of band. The Alchemy engine's own deploy
 // path is currently blocked by a distilled schema bug (see the file footer),
@@ -75,14 +102,6 @@ const changeRecord = (hostedZoneId: string, action: "UPSERT" | "DELETE") =>
       Effect.catchTag("NoSuchHostedZone", () => Effect.void),
     );
 
-const deleteZone = (hostedZoneId: string) =>
-  route53.deleteHostedZone({ Id: hostedZoneId }).pipe(
-    Effect.asVoid,
-    // Best-effort teardown: tolerate a vanished or still-non-empty zone.
-    Effect.catchTag("NoSuchHostedZone", () => Effect.void),
-    Effect.catchTag("HostedZoneNotEmpty", () => Effect.void),
-  );
-
 test.provider(
   "list enumerates the deployed record across hosted zones",
   (stack) =>
@@ -90,9 +109,7 @@ test.provider(
       yield* stack.destroy();
 
       const hostedZoneId = yield* ensureZone;
-      yield* changeRecord(hostedZoneId, "UPSERT").pipe(
-        Effect.tapError(() => deleteZone(hostedZoneId)),
-      );
+      yield* changeRecord(hostedZoneId, "UPSERT");
 
       const provider = yield* Provider.findProvider(Record);
 
@@ -121,7 +138,8 @@ test.provider(
       );
 
       yield* changeRecord(hostedZoneId, "DELETE");
-      yield* deleteZone(hostedZoneId);
+      // Leave the hosted zone standing — see `ensureZone` above. Deleting it
+      // would poison the stable `CallerReference` for the next run.
       yield* stack.destroy();
 
       expect(found).toBe(true);

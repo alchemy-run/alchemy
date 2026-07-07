@@ -17,7 +17,6 @@ import {
 } from "./Cli/Cli.ts";
 import type { ApplyStatus } from "./Cli/Event.ts";
 import { havePropsChanged } from "./Diff.ts";
-import { toFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -39,6 +38,7 @@ import {
   type PersistedState,
   type RanActionState,
   type ReplacedResourceState,
+  type ReplacementOldResourceState,
   type ReplacingResourceState,
   type ResourceState,
   type RunningActionState,
@@ -48,7 +48,7 @@ import {
   StateStoreError,
 } from "./State/index.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
-import { hashInput } from "./Util/hash.ts";
+import { hashInput } from "./Util/sha256.ts";
 
 export type ApplyEffect<
   P extends Plan,
@@ -220,7 +220,7 @@ export const apply = <P extends Plan>(
 // downstream resources can resolve stable identifiers without deadlocking.
 // The actual output lives in the mutable `tracker` map, not in the Deferred.
 
-const executePlan = Effect.fnUntraced(function* (
+const executePlan = Effect.fn(function* (
   plan: Plan,
   tracker: Record<string, ResourceTracker>,
   terminalStatuses: Map<
@@ -353,7 +353,9 @@ const executePlan = Effect.fnUntraced(function* (
     // Aggregate every collected lifecycle failure into a single parallel Cause
     // so the apply ends with one combined error containing every distinct
     // failure / defect that occurred across the concurrent fibers.
-    yield* Effect.failCause(failures.map((f) => f.cause).reduce(Cause.combine));
+    return yield* Effect.failCause(
+      failures.map((f) => f.cause).reduce(Cause.combine),
+    );
   }
 });
 
@@ -855,6 +857,58 @@ const executeNode = (
           replState = node.state;
         }
 
+        // ── delete-first replacements ──
+        //
+        // By default a replacement is create-first: the new generation is
+        // created here and the old generation(s) are reclaimed afterwards by
+        // `collectGarbage` (Phase 2). That ordering keeps the old resource
+        // alive if the create fails, but it is wrong for resources whose
+        // replacement cannot coexist with the original — a fixed physical
+        // name, a singleton, etc. Those providers return
+        // `{ action: "replace", deleteFirst: true }`.
+        //
+        // When `deleteFirst` is set we tear the previous generation(s) down
+        // BEFORE creating the new one, and commit the result as a terminal
+        // `created` state (rather than `replaced`) so Phase 2 has no old chain
+        // left to drain. `delete` is required to be idempotent, so a re-run
+        // after an interrupted apply simply re-converges.
+        const deleteOldGenerations = (
+          old: ReplacementOldResourceState,
+        ): Effect.Effect<void, any, any> =>
+          Effect.gen(function* () {
+            const retain = node.resource.RemovalPolicy === "retain";
+            if (old.attr !== undefined && !retain) {
+              yield* node.provider
+                .delete({
+                  id: logicalId,
+                  instanceId: old.instanceId,
+                  olds: old.props as never,
+                  output: old.attr,
+                  session: scopedSession,
+                  bindings: [],
+                })
+                .pipe(
+                  instrumentLifecycle(
+                    "delete",
+                    fqn,
+                    node.resource.Type,
+                    logicalId,
+                    old.instanceId,
+                  ),
+                );
+            }
+            if (old.status === "replacing" || old.status === "replaced") {
+              yield* deleteOldGenerations(old.old);
+            }
+          });
+
+        if (node.deleteFirst) {
+          yield* scopedSession.note(
+            "Deleting previous resource before creating its replacement (deleteFirst)...",
+          );
+          yield* deleteOldGenerations(replState.old);
+        }
+
         let attr: any = replState.attr;
 
         if (attr !== undefined) {
@@ -950,25 +1004,44 @@ const executeNode = (
             ),
           );
 
-        yield* commit<ReplacedResourceState>({
-          // Creation of the new generation succeeded; from here on the only remaining
-          // work is draining the old chain via garbage collection.
-          status: "replaced",
-          fqn,
-          logicalId,
-          instanceId,
-          resourceType: node.resource.Type,
-          props: news,
-          attr,
-          providerVersion: node.provider.version ?? 0,
-          bindings: excludeDeletedBindings(node.bindings),
-          downstream: node.downstream,
-          // Preserve the remaining backlog exactly as-is. GC is responsible for
-          // popping one generation at a time until the chain is exhausted.
-          old: replState.old,
-          deleteFirst: node.deleteFirst,
-          removalPolicy: node.resource.RemovalPolicy,
-        });
+        if (node.deleteFirst) {
+          // The old generation(s) were already torn down above, so there is
+          // nothing left for `collectGarbage` to drain — collapse straight to
+          // the terminal `created` state.
+          yield* commit<CreatedResourceState>({
+            status: "created",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        } else {
+          yield* commit<ReplacedResourceState>({
+            // Creation of the new generation succeeded; from here on the only remaining
+            // work is draining the old chain via garbage collection.
+            status: "replaced",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: excludeDeletedBindings(node.bindings),
+            downstream: node.downstream,
+            // Preserve the remaining backlog exactly as-is. GC is responsible for
+            // popping one generation at a time until the chain is exhausted.
+            old: replState.old,
+            deleteFirst: node.deleteFirst,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        }
 
         tracker[fqn] = {
           output: attr,
@@ -1200,7 +1273,7 @@ const executeActionNode = (
 // resource whose resolved inputs differ from what it was last applied with.
 // Repeat until no resource needs updating.
 
-const converge = Effect.fnUntraced(function* (
+const converge = Effect.fn(function* (
   plan: Plan,
   tracker: Record<string, ResourceTracker>,
   terminalStatuses: Map<
@@ -1393,7 +1466,7 @@ const converge = Effect.fnUntraced(function* (
 
 // ── Phase 2: delete orphans and old replaced resources ─────────────────────
 
-const collectGarbage = Effect.fnUntraced(function* (
+const collectGarbage = Effect.fn(function* (
   plan: Plan,
   session: PlanStatusSession,
 ) {
@@ -1428,7 +1501,7 @@ const collectGarbage = Effect.fnUntraced(function* (
     { concurrency: "unbounded" },
   );
 
-  const deleteGraph = Effect.fnUntraced(function* (
+  const deleteGraph = Effect.fn(function* (
     deletionGraph: Record<string, Delete | ReplacedResourceState | undefined>,
   ) {
     const deletions: {
@@ -1445,6 +1518,7 @@ const collectGarbage = Effect.fnUntraced(function* (
         ): node is Delete => "action" in node;
 
         const {
+          fqn,
           logicalId,
           namespace,
           resourceType,
@@ -1455,6 +1529,13 @@ const collectGarbage = Effect.fnUntraced(function* (
           provider,
         } = isDeleteNode(node)
           ? {
+              // Use the persisted FQN verbatim — never recompute it from
+              // `toFqn(namespace, logicalId)`. A logical ID may legitimately
+              // contain the FQN separator (`/`), in which case `parseFqn`
+              // truncated it and a recomputed key would miss the real state
+              // row (the row would then resurface as an orphan on every
+              // subsequent destroy, never getting deleted).
+              fqn: node.resource.FQN,
               logicalId: node.resource.LogicalId,
               namespace: node.resource.Namespace,
               resourceType: node.resource.Type,
@@ -1465,6 +1546,7 @@ const collectGarbage = Effect.fnUntraced(function* (
               provider: node.provider,
             }
           : {
+              fqn: node.fqn,
               logicalId: node.logicalId,
               namespace: node.namespace,
               resourceType: node.old.resourceType,
@@ -1475,7 +1557,6 @@ const collectGarbage = Effect.fnUntraced(function* (
               provider: yield* findProviderByType(node.old.resourceType),
             };
 
-        const fqn = toFqn(namespace, logicalId);
         const nextAncestors = new Set(ancestors).add(fqn);
 
         const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
@@ -1526,7 +1607,7 @@ const collectGarbage = Effect.fnUntraced(function* (
                   stage,
                   fqn,
                 });
-                yield* report("deleted");
+                yield* report("retained");
                 return;
               }
               yield* commit<DeletingResourceState>({
@@ -1663,7 +1744,9 @@ const collectGarbage = Effect.fnUntraced(function* (
       ...(first ? plan.deletions : {}),
       ...Object.fromEntries(
         remainingReplacedResources.map((replaced) => [
-          toFqn(replaced.namespace, replaced.logicalId),
+          // Key by the persisted FQN (not a recomputed one) so logical IDs
+          // containing the FQN separator round-trip correctly.
+          replaced.fqn,
           replaced,
         ]),
       ),

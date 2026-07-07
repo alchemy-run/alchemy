@@ -61,7 +61,7 @@ export interface VirtualMFADevice extends Resource<
  * `VirtualMFADevice` creates a software MFA device and can optionally activate
  * it for a user during creation when the initial authentication codes are
  * provided.
- *
+ * @resource
  * @section Managing MFA Devices
  * @example Create and Activate a Virtual MFA Device
  * ```typescript

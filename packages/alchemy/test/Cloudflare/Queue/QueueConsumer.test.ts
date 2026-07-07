@@ -10,6 +10,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -38,12 +39,12 @@ test.provider("create, update settings, replace script, delete", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         const workerA = yield* Cloudflare.Worker("WorkerA", {
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: workerA.workerName,
           settings: { batchSize: 5, maxRetries: 3 },
@@ -68,12 +69,12 @@ test.provider("create, update settings, replace script, delete", (stack) =>
     // must remain stable.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         const workerA = yield* Cloudflare.Worker("WorkerA", {
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: workerA.workerName,
           settings: { batchSize: 25, maxRetries: 7 },
@@ -101,7 +102,7 @@ test.provider("create, update settings, replace script, delete", (stack) =>
     // race the Worker.delete with Cloudflare's queue↔script sync.
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         yield* Cloudflare.Worker("WorkerA", {
           main,
           compatibility: { date: "2024-01-01" },
@@ -110,7 +111,7 @@ test.provider("create, update settings, replace script, delete", (stack) =>
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: workerB.workerName,
           settings: { batchSize: 25, maxRetries: 7 },
@@ -177,12 +178,12 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         const worker = yield* Cloudflare.Worker("Worker", {
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
           settings: { batchSize: 5 },
@@ -200,12 +201,12 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
 
     const recovered = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         const worker = yield* Cloudflare.Worker("Worker", {
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
           settings: { batchSize: 11 },
@@ -218,12 +219,22 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
     // The new consumer must be reachable on Cloudflare — the previous
     // implementation died with "already exists but could not be found"
     // because listConsumers was single-page and ConsumerAlreadyExists
-    // was caught by a generic `Effect.catch`.
-    const live = yield* queues.getConsumer({
-      accountId,
-      queueId: recovered.queue.queueId,
-      consumerId: recovered.consumer.consumerId,
-    });
+    // was caught by a generic `Effect.catch`. A freshly-created consumer
+    // can briefly 404 from this out-of-band read under load, so ride out
+    // the read-after-create lag before asserting.
+    const live = yield* queues
+      .getConsumer({
+        accountId,
+        queueId: recovered.queue.queueId,
+        consumerId: recovered.consumer.consumerId,
+      })
+      .pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ConsumerNotFound",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
+        }),
+      );
     expect("scriptName" in live ? live.scriptName : undefined).toEqual(
       recovered.worker.workerName,
     );
@@ -233,7 +244,7 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
 );
 
 /**
- * State-loss adoption. Wipe the local state for the QueueConsumer,
+ * State-loss adoption. Wipe the local state for the Consumer,
  * leaving the Cloudflare consumer in place. On redeploy the engine
  * calls `provider.read`, which now falls back to listConsumers when
  * `output.consumerId` is missing — so the consumer is adopted instead
@@ -247,12 +258,12 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         const worker = yield* Cloudflare.Worker("Worker", {
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
         });
@@ -260,7 +271,7 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
       }),
     );
 
-    // Wipe just the QueueConsumer entry — Queue and Worker stay so the
+    // Wipe just the Consumer entry — Queue and Worker stay so the
     // redeploy reuses the same queueId / scriptName.
     yield* Effect.gen(function* () {
       const state = yield* yield* State;
@@ -273,12 +284,12 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
 
     const adopted = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         const worker = yield* Cloudflare.Worker("Worker", {
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
         });
@@ -322,16 +333,16 @@ test.provider(
       yield* stack.destroy();
 
       // Phase 1: deploy worker A as the queue's consumer, then wipe just
-      // the QueueConsumer state so the next deploy thinks it's a
+      // the Consumer state so the next deploy thinks it's a
       // greenfield create.
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue("Q");
+          const queue = yield* Cloudflare.Queues.Queue("Q");
           const workerA = yield* Cloudflare.Worker("WorkerA", {
             main,
             compatibility: { date: "2024-01-01" },
           });
-          const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+          const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
             queueId: queue.queueId,
             scriptName: workerA.workerName,
           });
@@ -353,12 +364,12 @@ test.provider(
       const exit = yield* Effect.exit(
         stack.deploy(
           Effect.gen(function* () {
-            const queue = yield* Cloudflare.Queue("Q");
+            const queue = yield* Cloudflare.Queues.Queue("Q");
             const workerB = yield* Cloudflare.Worker("WorkerB", {
               main,
               compatibility: { date: "2024-01-01" },
             });
-            const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+            const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
               queueId: queue.queueId,
               scriptName: workerB.workerName,
             });
@@ -379,12 +390,12 @@ test.provider(
       // destroy can remove the cloud consumer.
       yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queue("Q");
+          const queue = yield* Cloudflare.Queues.Queue("Q");
           const workerA = yield* Cloudflare.Worker("WorkerA", {
             main,
             compatibility: { date: "2024-01-01" },
           });
-          yield* Cloudflare.QueueConsumer("Consumer", {
+          yield* Cloudflare.Queues.Consumer("Consumer", {
             queueId: queue.queueId,
             scriptName: workerA.workerName,
           });
@@ -422,7 +433,7 @@ test.provider("suppresses deletion of a dev-only consumer", (stack) =>
         value: {
           kind: "resource",
           status: "created",
-          resourceType: "Cloudflare.QueueConsumer",
+          resourceType: "Cloudflare.Queues.Consumer",
           namespace: undefined,
           fqn: "Consumer",
           logicalId: "Consumer",
@@ -481,12 +492,12 @@ test.provider("promotes a dev consumer to a live consumer on deploy", (stack) =>
     yield* stack.destroy();
 
     const buildStack = Effect.gen(function* () {
-      const queue = yield* Cloudflare.Queue("Q");
+      const queue = yield* Cloudflare.Queues.Queue("Q");
       const worker = yield* Cloudflare.Worker("Worker", {
         main,
         compatibility: { date: "2024-01-01" },
       });
-      const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+      const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
         queueId: queue.queueId,
         scriptName: worker.workerName,
         settings: { batchSize: 5 },
@@ -498,11 +509,12 @@ test.provider("promotes a dev consumer to a live consumer on deploy", (stack) =>
     expect(isLiveId(initial.consumer.consumerId)).toBe(true);
 
     // Rewrite the persisted consumerId back to a dev id, simulating a
-    // consumer that was minted in `alchemy dev`. The queueId stays live.
+    // consumer that was minted in `alchemy dev`.
+    const devQueueId = generateLocalId();
     const devConsumerId = generateLocalId();
     yield* Effect.gen(function* () {
       const state = yield* yield* State;
-      const current = (yield* state.get({
+      const currentConsumer = (yield* state.get({
         stack: stack.name,
         stage: "test",
         fqn: "Consumer",
@@ -512,8 +524,12 @@ test.provider("promotes a dev consumer to a live consumer on deploy", (stack) =>
         stage: "test",
         fqn: "Consumer",
         value: {
-          ...current,
-          attr: { ...current.attr, consumerId: devConsumerId },
+          ...currentConsumer,
+          attr: {
+            ...currentConsumer.attr,
+            queueId: devQueueId,
+            consumerId: devConsumerId,
+          },
         },
       });
     });
@@ -522,8 +538,10 @@ test.provider("promotes a dev consumer to a live consumer on deploy", (stack) =>
 
     // The dev id was promoted back to the real, live consumer id.
     expect(isLiveId(promoted.consumer.consumerId)).toBe(true);
+    expect(isLiveId(promoted.queue.queueId)).toBe(true);
     expect(promoted.consumer.consumerId).not.toEqual(devConsumerId);
     expect(promoted.consumer.consumerId).toEqual(initial.consumer.consumerId);
+    expect(promoted.queue.queueId).toEqual(initial.queue.queueId);
 
     const live = yield* queues.getConsumer({
       accountId,
@@ -551,12 +569,12 @@ test.provider("list enumerates the deployed consumer", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
+        const queue = yield* Cloudflare.Queues.Queue("Q");
         const worker = yield* Cloudflare.Worker("Worker", {
           main,
           compatibility: { date: "2024-01-01" },
         });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
           settings: { batchSize: 7 },
@@ -565,7 +583,7 @@ test.provider("list enumerates the deployed consumer", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.QueueConsumer);
+    const provider = yield* Provider.findProvider(Cloudflare.Queues.Consumer);
     const all = yield* provider.list();
 
     const found = all.find(

@@ -11,10 +11,10 @@ import { relations, Users } from "./schema.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
-    const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.postgres(conn.connectionString, {
       relations,
     });
@@ -88,5 +88,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.HyperdriveBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.Hyperdrive.ConnectBinding))),
 ) {}

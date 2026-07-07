@@ -75,7 +75,7 @@ export interface EventBusProps {
 
 /**
  * An Amazon EventBridge event bus for receiving and routing events.
- *
+ * @resource
  * @section Creating Event Buses
  * @example Custom Event Bus
  * ```typescript

@@ -30,6 +30,47 @@ export interface ResolvedRecordAliasTarget {
   evaluateTargetHealth?: boolean;
 }
 
+export interface RecordGeoLocation {
+  /**
+   * Two-letter continent code (e.g. `"NA"`, `"EU"`). Mutually exclusive with
+   * `countryCode`.
+   */
+  continentCode?: string;
+  /**
+   * Two-letter country code, or `"*"` for the default (catch-all) record.
+   */
+  countryCode?: string;
+  /**
+   * Subdivision code (e.g. a US state). Requires `countryCode`.
+   */
+  subdivisionCode?: string;
+}
+
+export interface RecordGeoProximityCoordinates {
+  /** Latitude as a string (e.g. `"49.22"`). */
+  latitude: string;
+  /** Longitude as a string (e.g. `"-122.41"`). */
+  longitude: string;
+}
+
+export interface RecordGeoProximityLocation {
+  /** AWS Region for the endpoint. Mutually exclusive with `coordinates`. */
+  awsRegion?: string;
+  /** Local Zone Group for the endpoint. */
+  localZoneGroup?: string;
+  /** Explicit latitude/longitude of the endpoint. */
+  coordinates?: RecordGeoProximityCoordinates;
+  /** Bias (-99 to 99) that expands or shrinks the geographic region. */
+  bias?: number;
+}
+
+export interface RecordCidrRoutingConfig {
+  /** ID of the CIDR collection. */
+  collectionId: string;
+  /** Name of the CIDR location within the collection. */
+  locationName: string;
+}
+
 export interface RecordProps {
   /**
    * Hosted zone that owns the record.
@@ -60,6 +101,40 @@ export interface RecordProps {
    * policies that require unique record identities.
    */
   setIdentifier?: string;
+  /**
+   * Weight (0-255) for weighted routing. Requires `setIdentifier`.
+   */
+  weight?: number;
+  /**
+   * AWS Region for latency-based routing. Requires `setIdentifier`.
+   */
+  region?: route53.ResourceRecordSetRegion;
+  /**
+   * Failover role for failover routing. Requires `setIdentifier`.
+   */
+  failover?: "PRIMARY" | "SECONDARY";
+  /**
+   * Geolocation routing rule. Requires `setIdentifier`.
+   */
+  geoLocation?: RecordGeoLocation;
+  /**
+   * Geoproximity routing rule. Requires `setIdentifier`.
+   */
+  geoProximityLocation?: RecordGeoProximityLocation;
+  /**
+   * Whether this record participates in multivalue answer routing. Requires
+   * `setIdentifier`.
+   */
+  multiValueAnswer?: boolean;
+  /**
+   * IP-based (CIDR) routing rule. Requires `setIdentifier`.
+   */
+  cidrRoutingConfig?: RecordCidrRoutingConfig;
+  /**
+   * Health check that gates whether Route 53 returns this record. Typically a
+   * `HealthCheck.id`.
+   */
+  healthCheckId?: string;
 }
 
 export interface Record extends Resource<
@@ -94,6 +169,38 @@ export interface Record extends Resource<
      * Optional routing set identifier.
      */
     setIdentifier: string | undefined;
+    /**
+     * Weight for weighted routing.
+     */
+    weight: number | undefined;
+    /**
+     * AWS Region for latency routing.
+     */
+    region: route53.ResourceRecordSetRegion | undefined;
+    /**
+     * Failover role for failover routing.
+     */
+    failover: "PRIMARY" | "SECONDARY" | undefined;
+    /**
+     * Geolocation routing rule.
+     */
+    geoLocation: RecordGeoLocation | undefined;
+    /**
+     * Geoproximity routing rule.
+     */
+    geoProximityLocation: RecordGeoProximityLocation | undefined;
+    /**
+     * Whether this record participates in multivalue answer routing.
+     */
+    multiValueAnswer: boolean | undefined;
+    /**
+     * IP-based (CIDR) routing rule.
+     */
+    cidrRoutingConfig: RecordCidrRoutingConfig | undefined;
+    /**
+     * Health check that gates this record.
+     */
+    healthCheckId: string | undefined;
   },
   never,
   Providers
@@ -105,7 +212,7 @@ export interface Record extends Resource<
  * `Record` manages a single Route 53 record set using `UPSERT` for create and
  * update operations, and waits for Route 53 change propagation before
  * returning.
- *
+ * @resource
  * @section Creating Records
  * @example A Record Alias To CloudFront
  * ```typescript
@@ -130,6 +237,78 @@ export interface Record extends Resource<
  *   records: ["\"value\""],
  * });
  * ```
+ *
+ * @section Routing Policies
+ * @example Weighted Routing
+ * ```typescript
+ * const blue = yield* Record("Blue", {
+ *   hostedZoneId: zone.id,
+ *   name: "api.example.com",
+ *   type: "A",
+ *   ttl: 60,
+ *   records: ["1.2.3.4"],
+ *   setIdentifier: "blue",
+ *   weight: 90,
+ * });
+ * const green = yield* Record("Green", {
+ *   hostedZoneId: zone.id,
+ *   name: "api.example.com",
+ *   type: "A",
+ *   ttl: 60,
+ *   records: ["5.6.7.8"],
+ *   setIdentifier: "green",
+ *   weight: 10,
+ * });
+ * ```
+ *
+ * @example Failover Routing With Health Check
+ * ```typescript
+ * const primary = yield* Record("Primary", {
+ *   hostedZoneId: zone.id,
+ *   name: "app.example.com",
+ *   type: "A",
+ *   ttl: 60,
+ *   records: ["1.2.3.4"],
+ *   setIdentifier: "primary",
+ *   failover: "PRIMARY",
+ *   healthCheckId: healthCheck.id,
+ * });
+ * const secondary = yield* Record("Secondary", {
+ *   hostedZoneId: zone.id,
+ *   name: "app.example.com",
+ *   type: "A",
+ *   ttl: 60,
+ *   records: ["5.6.7.8"],
+ *   setIdentifier: "secondary",
+ *   failover: "SECONDARY",
+ * });
+ * ```
+ *
+ * @example Latency Routing
+ * ```typescript
+ * const record = yield* Record("UsEast", {
+ *   hostedZoneId: zone.id,
+ *   name: "api.example.com",
+ *   type: "A",
+ *   ttl: 60,
+ *   records: ["1.2.3.4"],
+ *   setIdentifier: "us-east-1",
+ *   region: "us-east-1",
+ * });
+ * ```
+ *
+ * @example Geolocation Routing
+ * ```typescript
+ * const record = yield* Record("Default", {
+ *   hostedZoneId: zone.id,
+ *   name: "www.example.com",
+ *   type: "A",
+ *   ttl: 60,
+ *   records: ["1.2.3.4"],
+ *   setIdentifier: "default",
+ *   geoLocation: { countryCode: "*" },
+ * });
+ * ```
  */
 export const Record = Resource<Record>("AWS.Route53.Record");
 
@@ -150,10 +329,111 @@ const toAliasTarget = (
       }
     : undefined;
 
-const toRecordSet = (props: RecordProps): route53.ResourceRecordSet => ({
+const toGeoLocation = (
+  geo: RecordGeoLocation | undefined,
+): route53.GeoLocation | undefined =>
+  geo
+    ? {
+        ContinentCode: geo.continentCode,
+        CountryCode: geo.countryCode,
+        SubdivisionCode: geo.subdivisionCode,
+      }
+    : undefined;
+
+const fromGeoLocation = (
+  geo: route53.GeoLocation | undefined,
+): RecordGeoLocation | undefined =>
+  geo
+    ? {
+        continentCode: geo.ContinentCode,
+        countryCode: geo.CountryCode,
+        subdivisionCode: geo.SubdivisionCode,
+      }
+    : undefined;
+
+const toGeoProximity = (
+  geo: RecordGeoProximityLocation | undefined,
+): route53.GeoProximityLocation | undefined =>
+  geo
+    ? {
+        AWSRegion: geo.awsRegion,
+        LocalZoneGroup: geo.localZoneGroup,
+        Coordinates: geo.coordinates
+          ? {
+              Latitude: geo.coordinates.latitude,
+              Longitude: geo.coordinates.longitude,
+            }
+          : undefined,
+        Bias: geo.bias,
+      }
+    : undefined;
+
+const fromGeoProximity = (
+  geo: route53.GeoProximityLocation | undefined,
+): RecordGeoProximityLocation | undefined =>
+  geo
+    ? {
+        awsRegion: geo.AWSRegion,
+        localZoneGroup: geo.LocalZoneGroup,
+        coordinates: geo.Coordinates
+          ? {
+              latitude: geo.Coordinates.Latitude,
+              longitude: geo.Coordinates.Longitude,
+            }
+          : undefined,
+        bias: geo.Bias,
+      }
+    : undefined;
+
+const toCidrRouting = (
+  cidr: RecordCidrRoutingConfig | undefined,
+): route53.CidrRoutingConfig | undefined =>
+  cidr
+    ? { CollectionId: cidr.collectionId, LocationName: cidr.locationName }
+    : undefined;
+
+const fromCidrRouting = (
+  cidr: route53.CidrRoutingConfig | undefined,
+): RecordCidrRoutingConfig | undefined =>
+  cidr
+    ? { collectionId: cidr.CollectionId, locationName: cidr.LocationName }
+    : undefined;
+
+/**
+ * Build the full `ResourceRecordSet` wire shape from props. Used for both the
+ * UPSERT change batch and the DELETE change batch — DELETE requires an exact
+ * match of every policy field, so this must round-trip the entire surface.
+ */
+const toRecordSet = (
+  props: Pick<
+    RecordProps,
+    | "name"
+    | "type"
+    | "ttl"
+    | "records"
+    | "aliasTarget"
+    | "setIdentifier"
+    | "weight"
+    | "region"
+    | "failover"
+    | "geoLocation"
+    | "geoProximityLocation"
+    | "multiValueAnswer"
+    | "cidrRoutingConfig"
+    | "healthCheckId"
+  >,
+): route53.ResourceRecordSet => ({
   Name: normalizeName(props.name),
   Type: props.type,
   SetIdentifier: props.setIdentifier,
+  Weight: props.weight,
+  Region: props.region,
+  Failover: props.failover,
+  GeoLocation: toGeoLocation(props.geoLocation),
+  GeoProximityLocation: toGeoProximity(props.geoProximityLocation),
+  MultiValueAnswer: props.multiValueAnswer,
+  CidrRoutingConfig: toCidrRouting(props.cidrRoutingConfig),
+  HealthCheckId: props.healthCheckId,
   TTL: props.aliasTarget ? undefined : props.ttl,
   ResourceRecords: props.aliasTarget
     ? undefined
@@ -180,27 +460,32 @@ const toAttrs = (
   records: recordSet.ResourceRecords?.map((record) => record.Value),
   aliasTarget: toAliasTarget(recordSet.AliasTarget),
   setIdentifier: recordSet.SetIdentifier,
+  weight: recordSet.Weight,
+  region: recordSet.Region,
+  failover: recordSet.Failover as "PRIMARY" | "SECONDARY" | undefined,
+  geoLocation: fromGeoLocation(recordSet.GeoLocation),
+  geoProximityLocation: fromGeoProximity(recordSet.GeoProximityLocation),
+  multiValueAnswer: recordSet.MultiValueAnswer,
+  cidrRoutingConfig: fromCidrRouting(recordSet.CidrRoutingConfig),
+  healthCheckId: recordSet.HealthCheckId,
 });
 
 export const RecordProvider = () =>
   Provider.effect(
     Record,
     Effect.gen(function* () {
+      // Poll `getChange` until the change reaches INSYNC. `getChange` is
+      // eventually consistent and can briefly return `NoSuchChange` right after
+      // submit, so coalesce that to a non-INSYNC status and keep polling.
       const waitForChange = Effect.fn(function* (changeId: string) {
         return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((response) => response.ChangeInfo),
-          Effect.flatMap((changeInfo) =>
-            changeInfo.Status === "INSYNC"
-              ? Effect.succeed(changeInfo)
-              : Effect.die(new Error("Route53ChangePending")),
-          ),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error &&
-              error.message === "Route53ChangePending",
+          Effect.map((response) => response.ChangeInfo.Status),
+          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+          Effect.repeat({
             schedule: Schedule.fixed("2 seconds").pipe(
               Schedule.both(Schedule.recurs(60)),
             ),
+            until: (status) => status === "INSYNC",
           }),
         );
       });
@@ -222,7 +507,7 @@ export const RecordProvider = () =>
             ),
           );
 
-        return response?.ResourceRecordSets.find(
+        return (response?.ResourceRecordSets ?? []).find(
           (recordSet) =>
             recordSet.Name === normalizeName(props.name) &&
             recordSet.Type === props.type &&
@@ -258,7 +543,7 @@ export const RecordProvider = () =>
         };
         while (true) {
           const response = yield* route53.listResourceRecordSets(request);
-          all.push(...response.ResourceRecordSets);
+          all.push(...(response.ResourceRecordSets ?? []));
           if (!response.IsTruncated || response.NextRecordName === undefined) {
             break;
           }
@@ -360,25 +645,25 @@ export const RecordProvider = () =>
                 Changes: [
                   {
                     Action: "DELETE",
-                    ResourceRecordSet: {
-                      Name: output.name,
-                      Type: output.type,
-                      SetIdentifier: output.setIdentifier,
-                      TTL: output.aliasTarget ? undefined : output.ttl,
-                      ResourceRecords: output.records?.map((Value) => ({
-                        Value,
-                      })),
-                      AliasTarget: output.aliasTarget
-                        ? {
-                            HostedZoneId: normalizeHostedZoneId(
-                              output.aliasTarget.hostedZoneId as string,
-                            ),
-                            DNSName: output.aliasTarget.dnsName as string,
-                            EvaluateTargetHealth:
-                              output.aliasTarget.evaluateTargetHealth ?? false,
-                          }
-                        : undefined,
-                    },
+                    // Serialize the full record set — DELETE requires an exact
+                    // match including routing-policy fields, so reuse the same
+                    // builder as UPSERT against the stored attributes.
+                    ResourceRecordSet: toRecordSet({
+                      name: output.name,
+                      type: output.type,
+                      ttl: output.ttl,
+                      records: output.records,
+                      aliasTarget: output.aliasTarget,
+                      setIdentifier: output.setIdentifier,
+                      weight: output.weight,
+                      region: output.region,
+                      failover: output.failover,
+                      geoLocation: output.geoLocation,
+                      geoProximityLocation: output.geoProximityLocation,
+                      multiValueAnswer: output.multiValueAnswer,
+                      cidrRoutingConfig: output.cidrRoutingConfig,
+                      healthCheckId: output.healthCheckId,
+                    }),
                   },
                 ],
               },

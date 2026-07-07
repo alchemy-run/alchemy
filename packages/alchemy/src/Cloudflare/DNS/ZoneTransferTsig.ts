@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ZoneTransferTsigTypeId = "Cloudflare.Dns.ZoneTransferTsig" as const;
-type ZoneTransferTsigTypeId = typeof ZoneTransferTsigTypeId;
+const TypeId = "Cloudflare.DNS.ZoneTransferTsig" as const;
+type TypeId = typeof TypeId;
 
 export interface ZoneTransferTsigProps {
   /**
@@ -50,7 +50,7 @@ export interface ZoneTransferTsigAttributes {
 }
 
 export type ZoneTransferTsig = Resource<
-  ZoneTransferTsigTypeId,
+  TypeId,
   ZoneTransferTsigProps,
   ZoneTransferTsigAttributes,
   never,
@@ -67,11 +67,13 @@ export type ZoneTransferTsig = Resource<
  * Requires the Secondary DNS (zone transfer) entitlement on the
  * account. All fields are mutable in place; the secret is redacted and
  * never persisted in attributes.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Creating a TSIG
  * @example HMAC-SHA512 key
  * ```typescript
- * const tsig = yield* Cloudflare.ZoneTransferTsig("TransferKey", {
+ * const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
  *   secret: Redacted.make(process.env.TSIG_SECRET!),
  * });
@@ -80,7 +82,7 @@ export type ZoneTransferTsig = Resource<
  * @section Using with a Peer
  * @example Authenticate transfers from a primary nameserver
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  *   tsigId: tsig.tsigId,
@@ -89,15 +91,13 @@ export type ZoneTransferTsig = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
  */
-export const ZoneTransferTsig = Resource<ZoneTransferTsig>(
-  ZoneTransferTsigTypeId,
-);
+export const ZoneTransferTsig = Resource<ZoneTransferTsig>(TypeId);
 
 /**
  * Returns true if the given value is a ZoneTransferTsig resource.
  */
 export const isZoneTransferTsig = (value: unknown): value is ZoneTransferTsig =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneTransferTsigTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneTransferTsigProvider = () =>
   Provider.succeed(ZoneTransferTsig, {

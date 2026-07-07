@@ -44,9 +44,9 @@ const getSippy = (accountId: string, bucketName: string) =>
 
 const program = (opts: { sippy: boolean }) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("SippyBucket");
+    const bucket = yield* Cloudflare.R2.Bucket("SippyBucket");
     const sippy = opts.sippy
-      ? yield* Cloudflare.R2BucketSippy("Sippy", {
+      ? yield* Cloudflare.R2.BucketSippy("Sippy", {
           bucketName: bucket.bucketName,
           source: {
             provider: "aws",
@@ -150,7 +150,7 @@ test.provider(
 
       const { bucket } = yield* stack.deploy(program({ sippy: false }));
 
-      const provider = yield* Provider.findProvider(Cloudflare.R2BucketSippy);
+      const provider = yield* Provider.findProvider(Cloudflare.R2.BucketSippy);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -174,7 +174,7 @@ test.provider.skipIf(!sippyCreds)(
 
       const created = yield* stack.deploy(program({ sippy: true }));
 
-      const provider = yield* Provider.findProvider(Cloudflare.R2BucketSippy);
+      const provider = yield* Provider.findProvider(Cloudflare.R2.BucketSippy);
       const all = yield* provider.list();
 
       expect(

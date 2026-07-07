@@ -94,7 +94,7 @@ test.provider("list enumerates the account members", (_stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
 
-    const provider = yield* Provider.findProvider(Cloudflare.AccountMember);
+    const provider = yield* Provider.findProvider(Cloudflare.Account.Member);
     const all = yield* provider.list().pipe(Effect.retry(forbiddenRetry));
 
     expect(all.length).toBeGreaterThan(0);
@@ -120,7 +120,7 @@ test.provider("create member, update roles in place, delete", (stack) =>
     const [roleA, roleB] = yield* pickTwoRoles(accountId);
 
     const member = yield* stack.deploy(
-      Cloudflare.AccountMember("TestMember", {
+      Cloudflare.Account.Member("TestMember", {
         email: crudEmail,
         roles: [roleA.id],
       }),
@@ -139,7 +139,7 @@ test.provider("create member, update roles in place, delete", (stack) =>
 
     // Swap the role — same email, so the membership is updated in place.
     const updated = yield* stack.deploy(
-      Cloudflare.AccountMember("TestMember", {
+      Cloudflare.Account.Member("TestMember", {
         email: crudEmail,
         roles: [roleB.id],
       }),
@@ -152,7 +152,7 @@ test.provider("create member, update roles in place, delete", (stack) =>
 
     // Redeploying identical props is a no-op (same membership).
     const noop = yield* stack.deploy(
-      Cloudflare.AccountMember("TestMember", {
+      Cloudflare.Account.Member("TestMember", {
         email: crudEmail,
         roles: [roleB.id],
       }),
@@ -175,7 +175,7 @@ test.provider("replaces the member when the email changes", (stack) =>
     const [roleA] = yield* pickTwoRoles(accountId);
 
     const original = yield* stack.deploy(
-      Cloudflare.AccountMember("ReplaceMember", {
+      Cloudflare.Account.Member("ReplaceMember", {
         email: replaceEmail,
         roles: [roleA.id],
       }),
@@ -184,7 +184,7 @@ test.provider("replaces the member when the email changes", (stack) =>
     // Changing the email re-invites: a fresh membership id, and the old
     // invite is cancelled by the replacement's delete phase.
     const replaced = yield* stack.deploy(
-      Cloudflare.AccountMember("ReplaceMember", {
+      Cloudflare.Account.Member("ReplaceMember", {
         email: replacedEmail,
         roles: [roleA.id],
       }),
@@ -209,7 +209,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     const [roleA, roleB] = yield* pickTwoRoles(accountId);
 
     const member = yield* stack.deploy(
-      Cloudflare.AccountMember("HealMember", {
+      Cloudflare.Account.Member("HealMember", {
         email: healEmail,
         roles: [roleA.id],
       }),
@@ -223,7 +223,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
       .pipe(Effect.retry(forbiddenRetry));
 
     const healed = yield* stack.deploy(
-      Cloudflare.AccountMember("HealMember", {
+      Cloudflare.Account.Member("HealMember", {
         email: healEmail,
         roles: [roleB.id],
       }),

@@ -76,7 +76,7 @@ describe.sequential("AccountSettings", () => {
         yield* stack.destroy();
 
         const provider = yield* Provider.findProvider(
-          Cloudflare.AccountDnsSettings,
+          Cloudflare.DNS.AccountDnsSettings,
         );
         const all = yield* provider.list();
 
@@ -107,7 +107,7 @@ describe.sequential("AccountSettings", () => {
         yield* normalizeBaseline(accountId);
 
         const settings = yield* stack.deploy(
-          Cloudflare.AccountDnsSettings("AccountDns", {
+          Cloudflare.DNS.AccountDnsSettings("AccountDns", {
             zoneDefaults: { multiProvider: true },
           }),
         );
@@ -152,7 +152,7 @@ describe.sequential("AccountSettings", () => {
         yield* normalizeBaseline(accountId);
 
         const initial = yield* stack.deploy(
-          Cloudflare.AccountDnsSettings("AccountDns", {
+          Cloudflare.DNS.AccountDnsSettings("AccountDns", {
             zoneDefaults: { multiProvider: true },
           }),
         );
@@ -162,7 +162,7 @@ describe.sequential("AccountSettings", () => {
         // Same singleton patched in place — a second managed field joins;
         // the original snapshot survives the update.
         const updated = yield* stack.deploy(
-          Cloudflare.AccountDnsSettings("AccountDns", {
+          Cloudflare.DNS.AccountDnsSettings("AccountDns", {
             zoneDefaults: { multiProvider: true, secondaryOverrides: true },
           }),
         );
@@ -186,7 +186,7 @@ describe.sequential("AccountSettings", () => {
         // Drop `multiProvider` from props — the key stays managed (union
         // across all reconciles) so destroy still restores it.
         const dropped = yield* stack.deploy(
-          Cloudflare.AccountDnsSettings("AccountDns", {
+          Cloudflare.DNS.AccountDnsSettings("AccountDns", {
             zoneDefaults: { secondaryOverrides: true },
           }),
         );

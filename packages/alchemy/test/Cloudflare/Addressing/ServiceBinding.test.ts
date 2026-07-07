@@ -32,7 +32,7 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
 // each prefix's service bindings (`listPrefixServiceBindings`). Both endpoints
 // are available regardless of the BYOIP entitlement — on an account with no
 // onboarded prefixes the result is an empty, well-typed
-// `AddressingServiceBindingAttributes[]` (the exact shape `read` produces).
+// `ServiceBindingAttributes[]` (the exact shape `read` produces).
 test.provider(
   "list enumerates service bindings across prefixes (read-only)",
   (stack) =>
@@ -40,7 +40,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AddressingServiceBinding,
+        Cloudflare.Addressing.ServiceBinding,
       );
       const all = yield* retryForbidden(provider.list());
 

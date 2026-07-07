@@ -79,7 +79,7 @@ export interface CapacityProvider extends Resource<
  * Only EC2 Auto Scaling Group-backed capacity providers are currently
  * supported. The reserved AWS providers `FARGATE` and `FARGATE_SPOT` do not
  * need to be created and can be referenced by name on a `Cluster` directly.
- *
+ * @resource
  * @section Creating Capacity Providers
  * @example ASG-Backed Capacity Provider
  * ```typescript

@@ -1,3 +1,5 @@
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -144,15 +146,18 @@ export const withProviders = <A, E, R, ROut>(
   stackName: string,
 ): Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>> =>
   effect.pipe(
-    Effect.provide(options.providers as Layer.Layer<any, never, any>),
     Effect.provide(
-      Layer.succeed(Stack, {
-        name: stackName,
-        stage: options.stage ?? "test",
-        resources: {},
-        bindings: {},
-        actions: {},
-      }),
+      (options.providers as Layer.Layer<any, never, any>).pipe(
+        Layer.provideMerge(
+          Layer.succeed(Stack, {
+            name: stackName,
+            stage: options.stage ?? "test",
+            resources: {},
+            bindings: {},
+            actions: {},
+          }),
+        ),
+      ),
     ),
     Effect.provide(Layer.succeed(Stage, options.stage ?? "test")),
   ) as Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>>;

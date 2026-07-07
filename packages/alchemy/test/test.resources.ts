@@ -4,8 +4,8 @@ import * as Provider from "@/Provider.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
-import * as Context from "effect/Context";
 import { Data } from "effect";
+import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -47,13 +47,13 @@ const bucketProvider = () =>
   });
 
 // Queue
-export type QueueProps = {
+export type Props = {
   name?: string;
 };
 
 export interface Queue extends Resource<
   "Test.Queue",
-  QueueProps,
+  Props,
   {
     name: string;
     queueUrl: string;
@@ -607,6 +607,63 @@ export const kindStablesResourceProvider = () =>
     delete: Effect.fn(function* () {}),
   });
 
+// OverrideStablesResource — declares BOTH a provider-level `stables` list AND
+// a `diff` that returns its own `stables` list that DISAGREES with it. Used to
+// assert that a present `diff.stables` OVERRIDES `provider.stables` during plan
+// (rather than being merged with it):
+//   - `providerStable` is only in `provider.stables` (omitted by `diff.stables`)
+//   - `diffStable`     is only in `diff.stables`     (omitted by `provider.stables`)
+//   - `sharedStable`   is in both
+// Under override semantics, on a `string` change `providerStable` must be
+// treated as CHANGED (downstream re-plans) while `diffStable`/`sharedStable`
+// stay stable. Under the old merge, `providerStable` would wrongly stay stable.
+
+export type OverrideStablesResourceProps = {
+  string?: string;
+};
+
+export interface OverrideStablesResource extends Resource<
+  "Test.OverrideStablesResource",
+  OverrideStablesResourceProps,
+  {
+    string: string;
+    providerStable: string;
+    diffStable: string;
+    sharedStable: string;
+  }
+> {}
+
+export const OverrideStablesResource = Resource<OverrideStablesResource>(
+  "Test.OverrideStablesResource",
+);
+
+export const overrideStablesResourceProvider = () =>
+  Provider.succeed(OverrideStablesResource, {
+    list: () => Effect.succeed([]),
+    stables: ["providerStable", "sharedStable"],
+    diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+      if (!isResolved(news)) return undefined;
+      const n = news as OverrideStablesResourceProps;
+      const o = olds as OverrideStablesResourceProps;
+      if (n.string !== o.string) {
+        return {
+          action: "update",
+          stables: ["diffStable", "sharedStable"],
+        } as const;
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
+      return {
+        string: news.string ?? id,
+        providerStable: `provider-${id}`,
+        diffStable: `diff-${id}`,
+        sharedStable: `shared-${id}`,
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 export type PhasedTargetProps = {
   desired: string;
   replaceKey?: string;
@@ -788,6 +845,112 @@ export const durationResourceProvider = () =>
     delete: Effect.fn(function* () {}),
   });
 
+// DeleteFirstResource — exercises `{ action: "replace", deleteFirst: true }`.
+//
+// Models a resource whose replacement cannot coexist with the original (a
+// fixed physical name / singleton). When `replaceString` changes it asks the
+// engine to tear the old generation down BEFORE creating the new one.
+//
+// Two test affordances:
+//   - create/update/delete route through `TestResourceHooks` so a test can
+//     record the order the engine invokes them in.
+//   - if a `CollisionRegistry` is in context, create fails when an instance
+//     with the same physical `name` is still live. Under create-first ordering
+//     a same-name replacement would collide here (reproducing the real Docker
+//     "network already exists" / no-op `volume create` bug); under delete-first
+//     it succeeds.
+
+export class CollisionRegistry extends Context.Service<
+  CollisionRegistry,
+  { readonly live: Set<string> }
+>()("CollisionRegistry") {}
+
+export class CollisionError extends Data.TaggedError("CollisionError")<{
+  name: string;
+}> {}
+
+export type DeleteFirstResourceProps = {
+  string?: string;
+  replaceString?: string;
+  name?: string;
+};
+
+export interface DeleteFirstResource extends Resource<
+  "Test.DeleteFirstResource",
+  DeleteFirstResourceProps,
+  {
+    name: string;
+    string: string;
+    replaceString: DeleteFirstResourceProps["replaceString"];
+  }
+> {}
+
+export const DeleteFirstResource = Resource<DeleteFirstResource>(
+  "Test.DeleteFirstResource",
+);
+
+export const deleteFirstResourceProvider = () =>
+  Provider.succeed(DeleteFirstResource, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+      if (!isResolved(news)) return undefined;
+      const n = news as DeleteFirstResourceProps;
+      const o = olds as DeleteFirstResourceProps;
+      if (n.replaceString !== o.replaceString) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (n.string !== o.string) {
+        return { action: "update" } as const;
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, olds }) {
+      const name = news.name ?? id;
+      const hooks = Option.getOrUndefined(
+        yield* Effect.serviceOption(TestResourceHooks),
+      );
+      const registry = Option.getOrUndefined(
+        yield* Effect.serviceOption(CollisionRegistry),
+      );
+      // `olds === undefined` ⇒ create (greenfield OR replacement-create); the
+      // engine clears `olds` when minting the new replacement generation.
+      if (olds === undefined) {
+        if (registry?.live.has(name)) {
+          return yield* Effect.fail(new CollisionError({ name }));
+        }
+        registry?.live.add(name);
+        if (hooks?.create) {
+          yield* hooks.create(id, {
+            string: news.string,
+            replaceString: news.replaceString,
+          });
+        }
+      } else if (hooks?.update) {
+        yield* hooks.update(id, {
+          string: news.string,
+          replaceString: news.replaceString,
+        });
+      }
+      return {
+        name,
+        string: news.string ?? id,
+        replaceString: news.replaceString,
+      };
+    }),
+    delete: Effect.fn(function* ({ id, output }) {
+      const hooks = Option.getOrUndefined(
+        yield* Effect.serviceOption(TestResourceHooks),
+      );
+      const registry = Option.getOrUndefined(
+        yield* Effect.serviceOption(CollisionRegistry),
+      );
+      registry?.live.delete(output.name);
+      if (hooks?.delete) {
+        yield* hooks.delete(id);
+      }
+    }),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -800,9 +963,11 @@ export const TestLayers = () =>
     testResourceProvider(),
     staticStablesResourceProvider(),
     kindStablesResourceProvider(),
+    overrideStablesResourceProvider(),
     phasedTargetProvider(),
     noPrecreateBindingTargetProvider(),
     durationResourceProvider(),
+    deleteFirstResourceProvider(),
   );
 
 export const InMemoryTestLayers = () =>

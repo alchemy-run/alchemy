@@ -96,16 +96,19 @@ test.provider.skipIf(!outgoingEntitled)(
 
       const { outgoing, peer } = yield* stack.deploy(
         Effect.gen(function* () {
-          const peer = yield* Cloudflare.ZoneTransferPeer("OutgoingPeer", {
+          const peer = yield* Cloudflare.DNS.ZoneTransferPeer("OutgoingPeer", {
             name: "alchemy-dnszt-outgoing-peer",
             ip: "192.0.2.53",
             port: 53,
           });
-          const outgoing = yield* Cloudflare.ZoneTransferOutgoing("Outgoing", {
-            zoneId,
-            name: `${zoneName}.`,
-            peers: [peer.peerId],
-          });
+          const outgoing = yield* Cloudflare.DNS.ZoneTransferOutgoing(
+            "Outgoing",
+            {
+              zoneId,
+              name: `${zoneName}.`,
+              peers: [peer.peerId],
+            },
+          );
           return { outgoing, peer };
         }),
       );
@@ -118,17 +121,20 @@ test.provider.skipIf(!outgoingEntitled)(
       // dependency in the same deploy that changes its dependent).
       const disabled = yield* stack.deploy(
         Effect.gen(function* () {
-          const peer = yield* Cloudflare.ZoneTransferPeer("OutgoingPeer", {
+          const peer = yield* Cloudflare.DNS.ZoneTransferPeer("OutgoingPeer", {
             name: "alchemy-dnszt-outgoing-peer",
             ip: "192.0.2.53",
             port: 53,
           });
-          const outgoing = yield* Cloudflare.ZoneTransferOutgoing("Outgoing", {
-            zoneId,
-            name: `${zoneName}.`,
-            peers: [peer.peerId],
-            enabled: false,
-          });
+          const outgoing = yield* Cloudflare.DNS.ZoneTransferOutgoing(
+            "Outgoing",
+            {
+              zoneId,
+              name: `${zoneName}.`,
+              peers: [peer.peerId],
+              enabled: false,
+            },
+          );
           return outgoing;
         }),
       );
@@ -163,7 +169,7 @@ test.provider(
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.ZoneTransferOutgoing,
+        Cloudflare.DNS.ZoneTransferOutgoing,
       );
       const all = yield* provider.list();
 

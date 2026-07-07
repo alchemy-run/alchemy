@@ -102,6 +102,70 @@ export interface EIP extends Resource<
   never,
   Providers
 > {}
+/**
+ * An Elastic IP address — a static, public IPv4 address allocated to your AWS
+ * account that you can attach to instances, network interfaces, or NAT
+ * gateways.
+ *
+ * Allocating an `EIP` reserves the address; you then reference its
+ * `allocationId` from the resource that should use it (for example a public
+ * `NatGateway`). The address is released back to AWS when the resource is
+ * destroyed. The pool-related properties (`publicIpv4Pool`,
+ * `networkBorderGroup`, `customerOwnedIpv4Pool`) are immutable and replace the
+ * address when changed.
+ *
+ * @resource
+ * @section Allocating Elastic IPs
+ * By default an Elastic IP is allocated for use within a VPC (`domain: "vpc"`),
+ * which is the only domain available to modern accounts.
+ * @example VPC-Scoped Elastic IP
+ * ```typescript
+ * const eip = yield* AWS.EC2.EIP("MyEip", {
+ *   domain: "vpc",
+ *   tags: { Name: "app-eip" },
+ * });
+ * ```
+ * This reserves a standard, Amazon-owned public IPv4 address scoped to your VPC;
+ * `domain` defaults to `"vpc"`, so it can be omitted, and `tags` help you find
+ * the address in the console and on the bill.
+ *
+ * @section Bring-Your-Own-IP and Address Pools
+ * If you have onboarded an address range to AWS (BYOIP) or use Outposts, you can
+ * draw the address from a specific pool instead of Amazon's general pool.
+ * @example Allocate from a Public IPv4 (BYOIP) Pool
+ * ```typescript
+ * const eip = yield* AWS.EC2.EIP("ByoipEip", {
+ *   publicIpv4Pool: "ipv4pool-ec2-0abcdef1234567890",
+ *   networkBorderGroup: "us-east-1",
+ * });
+ * ```
+ * `publicIpv4Pool` selects an address from a pool you own rather than a random
+ * Amazon address, and `networkBorderGroup` restricts which zone group AWS
+ * advertises it from (useful for Local and Wavelength Zones).
+ *
+ * @example Allocate from a Customer-Owned Pool (Outposts)
+ * ```typescript
+ * const eip = yield* AWS.EC2.EIP("CoIpEip", {
+ *   customerOwnedIpv4Pool: "ipv4pool-coip-0abcdef1234567890",
+ * });
+ * ```
+ * `customerOwnedIpv4Pool` pulls a customer-owned IP (CoIP) from an
+ * Outposts-associated pool, for workloads that must use your own on-premises
+ * address space.
+ *
+ * @section Using an Elastic IP
+ * @example Attach to a NAT Gateway
+ * ```typescript
+ * const eip = yield* AWS.EC2.EIP("NatEip", {});
+ *
+ * const natGateway = yield* AWS.EC2.NatGateway("NatGateway", {
+ *   subnetId: publicSubnet.subnetId,
+ *   allocationId: eip.allocationId,
+ * });
+ * ```
+ * Downstream resources consume the reserved address through its `allocationId`;
+ * here the EIP becomes the fixed public IP of a NAT gateway.
+ */
 export const EIP = Resource<EIP>("AWS.EC2.EIP");
 
 export const EIPProvider = () =>

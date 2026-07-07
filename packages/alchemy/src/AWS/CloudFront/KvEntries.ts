@@ -45,7 +45,7 @@ export interface KvEntries extends Resource<
  * Entries are stored with a `{namespace}:{key}` prefix to allow multiple
  * logical groups within a single store. Updates use batched optimistic
  * concurrency with automatic ETag retry.
- *
+ * @resource
  * @section Managing Entries
  * @example Basic Entries
  * ```typescript

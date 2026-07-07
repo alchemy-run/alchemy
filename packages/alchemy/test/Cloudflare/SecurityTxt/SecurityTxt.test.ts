@@ -75,7 +75,7 @@ describe.sequential("SecurityTxt", () => {
 
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+            return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
               zoneId,
               contact,
               expires,
@@ -120,7 +120,7 @@ describe.sequential("SecurityTxt", () => {
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+          return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
             zoneId,
             contact,
             expires,
@@ -131,7 +131,7 @@ describe.sequential("SecurityTxt", () => {
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+          return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
             zoneId,
             contact,
             expires,
@@ -156,7 +156,7 @@ describe.sequential("SecurityTxt", () => {
       // Dropping the optional fields converges back to the minimal file.
       const reverted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+          return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
             zoneId,
             contact,
             expires,
@@ -184,7 +184,7 @@ describe.sequential("SecurityTxt", () => {
 
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+            return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
               zoneId,
               contact,
               expires,
@@ -194,7 +194,7 @@ describe.sequential("SecurityTxt", () => {
 
         const disabled = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+            return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
               zoneId,
               enabled: false,
               contact,
@@ -233,7 +233,7 @@ describe.sequential("SecurityTxt", () => {
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+          return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
             zoneId,
             contact,
             expires,
@@ -241,7 +241,9 @@ describe.sequential("SecurityTxt", () => {
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.SecurityTxt);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SecurityTxt.SecurityTxt,
+      );
       // Ride out token eventual-consistency 403s on the per-zone reads.
       const all = yield* provider.list().pipe(
         Effect.retry({

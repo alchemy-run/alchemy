@@ -18,7 +18,7 @@ const asyncCallerMain = pathe.resolve(
  * - `BindingAsyncCaller` — plain `{ fetch }` Cloudflare worker that calls
  *   `env.TARGET.greet(name)` over a service binding.
  * - `BindingEffectCaller` — Effect-native worker that uses
- *   `Cloudflare.bindWorker(BindingTargetWorker)` to call `greet` from
+ *   `Cloudflare.Workers.bindWorker(BindingTargetWorker)` to call `greet` from
  *   inside an Effect.
  */
 export default Alchemy.Stack(

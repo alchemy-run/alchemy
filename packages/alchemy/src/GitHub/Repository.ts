@@ -211,7 +211,7 @@ export interface Repository extends Resource<
  * Authentication is resolved via the `GitHubCredentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope (and `delete_repo` when deletion is opted in via `destroy()`).
- *
+ * @resource
  * @section Creating a Repository
  * @example Basic Repository
  * ```typescript
@@ -235,6 +235,20 @@ export interface Repository extends Resource<
  * });
  * ```
  *
+ * @example Initialize from Templates
+ * The `autoInit`, `gitignoreTemplate`, and `licenseTemplate` props seed the
+ * first commit. They are only honored at create time — changing them on a
+ * later deploy has no effect on an existing repository.
+ * ```typescript
+ * const repo = yield* GitHub.Repository("service", {
+ *   owner: "my-org",
+ *   name: "service",
+ *   autoInit: true,
+ *   gitignoreTemplate: "Node",
+ *   licenseTemplate: "mit",
+ * });
+ * ```
+ *
  * @section Topics and Merge Configuration
  * @example Repository with Topics and Merge Policy
  * ```typescript
@@ -246,6 +260,37 @@ export interface Repository extends Resource<
  *   allowRebaseMerge: false,
  *   allowSquashMerge: true,
  *   allowAutoMerge: true,
+ * });
+ * ```
+ *
+ * @section Renaming a Repository
+ * @example Rename in Place
+ * Keep the same logical ID and change `name` to rename the live repository
+ * instead of replacing it — the repository's history, issues, and pull
+ * requests are preserved. Only changing `owner` triggers a replacement.
+ * ```typescript
+ * // First deploy creates "api".
+ * const repo = yield* GitHub.Repository("api", {
+ *   owner: "my-org",
+ *   name: "api",
+ * });
+ *
+ * // A later deploy with the SAME logical ID ("api") renames it to "gateway".
+ * const repo = yield* GitHub.Repository("api", {
+ *   owner: "my-org",
+ *   name: "gateway",
+ * });
+ * ```
+ *
+ * @section Archiving a Repository
+ * @example Make a Repository Read-Only
+ * Archiving sets the repository to read-only. Set `archived` back to `false`
+ * on a later deploy to un-archive it.
+ * ```typescript
+ * yield* GitHub.Repository("legacy", {
+ *   owner: "my-org",
+ *   name: "legacy-service",
+ *   archived: true,
  * });
  * ```
  *
@@ -266,6 +311,24 @@ export interface Repository extends Resource<
  *   repository: repo.name!,
  *   name: "AWS_REGION",
  *   value: "us-east-1",
+ * });
+ * ```
+ *
+ * @example Store a Secret in the Repository
+ * ```typescript
+ * import * as Redacted from "effect/Redacted";
+ *
+ * const repo = yield* GitHub.Repository("api", {
+ *   owner: "my-org",
+ *   name: "api",
+ *   autoInit: true,
+ * });
+ *
+ * yield* GitHub.Secret("deploy-token", {
+ *   owner: "my-org",
+ *   repository: repo.name!,
+ *   name: "DEPLOY_TOKEN",
+ *   value: Redacted.make("my-secret-value"),
  * });
  * ```
  *

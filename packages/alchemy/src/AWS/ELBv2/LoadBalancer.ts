@@ -18,13 +18,55 @@ export type LoadBalancerArn =
   `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:loadbalancer/${string}`;
 
 export interface LoadBalancerProps {
+  /** The load balancer name. If omitted, a unique name is generated. Changing it replaces the load balancer. */
   name?: string;
+  /**
+   * Whether the load balancer is internet-facing or internal. Changing it
+   * replaces the load balancer.
+   * @default "internet-facing"
+   */
   scheme?: "internal" | "internet-facing";
-  type?: "application" | "network";
-  subnets: Input<SubnetId[]>;
+  /**
+   * The load balancer type. Changing it replaces the load balancer.
+   * @default "application"
+   */
+  type?: "application" | "network" | "gateway";
+  /**
+   * The subnets to attach. Mutually exclusive with {@link subnetMappings}.
+   * Updated in place via `setSubnets`.
+   */
+  subnets?: Input<SubnetId[]>;
+  /**
+   * Per-subnet mappings for static/EIP addresses (Network Load Balancers).
+   * Mutually exclusive with {@link subnets}. Updated in place via `setSubnets`.
+   */
+  subnetMappings?: {
+    subnetId: Input<SubnetId>;
+    /** The allocation ID of an Elastic IP (NLB). */
+    allocationId?: string;
+    /** A private IPv4 address from the subnet (internal NLB). */
+    privateIPv4Address?: string;
+    /** An IPv6 address from the subnet (dualstack NLB). */
+    iPv6Address?: string;
+    /** A source NAT IPv6 prefix. */
+    sourceNatIpv6Prefix?: string;
+  }[];
+  /** The security groups to attach. Updated in place via `setSecurityGroups`. */
   securityGroups?: Input<SecurityGroupId[]>;
+  /** The IP address type (`ipv4`, `dualstack`, ...). Updated in place via `setIpAddressType`. */
   ipAddressType?: string;
+  /** The ID of the customer-owned IPv4 pool (Outposts). Changing it replaces the load balancer. */
+  customerOwnedIpv4Pool?: string;
+  /** Whether to prefix-delegate IPv6 for source NAT (`on`/`off`). */
+  enablePrefixForIpv6SourceNat?: "on" | "off";
+  /**
+   * Whether to enforce security-group inbound rules on PrivateLink traffic
+   * (`on`/`off`). Carried by `setSecurityGroups`.
+   */
+  enforceSecurityGroupInboundRulesOnPrivateLinkTraffic?: "on" | "off";
+  /** Raw load-balancer attributes (idle timeout, deletion protection, access logs, ...). */
   attributes?: Record<string, string>;
+  /** Tags to apply to the load balancer. */
   tags?: Record<string, string>;
 }
 
@@ -47,6 +89,45 @@ export interface LoadBalancer extends Resource<
   Providers
 > {}
 
+/**
+ * An ELBv2 (Application / Network / Gateway) load balancer.
+ * @resource
+ * @section Creating a Load Balancer
+ * @example Internet-facing Application Load Balancer
+ * ```typescript
+ * const lb = yield* LoadBalancer("web", {
+ *   type: "application",
+ *   scheme: "internet-facing",
+ *   subnets: [subnet1.subnetId, subnet2.subnetId],
+ *   securityGroups: [sg.groupId],
+ * });
+ * ```
+ *
+ * @example Network Load Balancer with static EIPs
+ * ```typescript
+ * const nlb = yield* LoadBalancer("edge", {
+ *   type: "network",
+ *   scheme: "internet-facing",
+ *   subnetMappings: [
+ *     { subnetId: subnet1.subnetId, allocationId: eip1.allocationId },
+ *     { subnetId: subnet2.subnetId, allocationId: eip2.allocationId },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Attributes
+ * @example Idle timeout and deletion protection
+ * ```typescript
+ * const lb = yield* LoadBalancer("web", {
+ *   type: "application",
+ *   subnets: [subnet1.subnetId, subnet2.subnetId],
+ *   attributes: {
+ *     "idle_timeout.timeout_seconds": "120",
+ *     "deletion_protection.enabled": "true",
+ *   },
+ * });
+ * ```
+ */
 export const LoadBalancer = Resource<LoadBalancer>("AWS.ELBv2.LoadBalancer");
 
 export const LoadBalancerProvider = () =>
@@ -73,21 +154,20 @@ export const LoadBalancerProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+          // Only scheme, type and customerOwnedIpv4Pool are immutable.
+          // subnets, securityGroups and ipAddressType are mutated in place
+          // during reconcile (setSubnets / setSecurityGroups / setIpAddressType).
           if (
             !deepEqual(
               {
                 scheme: olds.scheme ?? "internet-facing",
                 type: olds.type ?? "application",
-                subnets: olds.subnets,
-                securityGroups: olds.securityGroups ?? [],
-                ipAddressType: olds.ipAddressType,
+                customerOwnedIpv4Pool: olds.customerOwnedIpv4Pool,
               },
               {
                 scheme: news.scheme ?? "internet-facing",
                 type: news.type ?? "application",
-                subnets: news.subnets,
-                securityGroups: news.securityGroups ?? [],
-                ipAddressType: news.ipAddressType,
+                customerOwnedIpv4Pool: news.customerOwnedIpv4Pool,
               },
             )
           ) {
@@ -218,17 +298,28 @@ export const LoadBalancerProvider = () =>
             );
           let loadBalancer = described?.LoadBalancers?.[0];
 
+          const subnetMappings = news.subnetMappings?.map((m) => ({
+            SubnetId: m.subnetId as string,
+            AllocationId: m.allocationId,
+            PrivateIPv4Address: m.privateIPv4Address,
+            IPv6Address: m.iPv6Address,
+            SourceNatIpv6Prefix: m.sourceNatIpv6Prefix,
+          }));
+
           // Ensure — create if missing. The replacement axes (scheme, type,
-          // subnets, securityGroups, ipAddressType) are handled by diff so
-          // we don't need to deal with mismatches here.
+          // customerOwnedIpv4Pool) are handled by diff so we don't need to
+          // deal with mismatches here.
           if (!loadBalancer?.LoadBalancerArn) {
             const created = yield* elbv2.createLoadBalancer({
               Name: name,
               Scheme: news.scheme ?? "internet-facing",
               Type: news.type ?? "application",
-              Subnets: news.subnets as string[],
+              Subnets: news.subnets as string[] | undefined,
+              SubnetMappings: subnetMappings,
               SecurityGroups: news.securityGroups as string[] | undefined,
               IpAddressType: news.ipAddressType,
+              CustomerOwnedIpv4Pool: news.customerOwnedIpv4Pool,
+              EnablePrefixForIpv6SourceNat: news.enablePrefixForIpv6SourceNat,
               Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                 Key,
                 Value,
@@ -244,6 +335,60 @@ export const LoadBalancerProvider = () =>
 
           const loadBalancerArn =
             loadBalancer.LoadBalancerArn as LoadBalancerArn;
+
+          // Sync subnets — diff observed against desired. Only applies to
+          // application/network LBs that manage subnets in place.
+          const observedSubnets =
+            loadBalancer.AvailabilityZones?.flatMap((z) =>
+              z.SubnetId ? [z.SubnetId] : [],
+            ) ?? [];
+          if (news.subnets) {
+            const desiredSubnets = news.subnets as string[];
+            if (
+              !deepEqual(
+                [...observedSubnets].sort(),
+                [...desiredSubnets].sort(),
+              )
+            ) {
+              yield* elbv2.setSubnets({
+                LoadBalancerArn: loadBalancerArn,
+                Subnets: desiredSubnets,
+              });
+            }
+          } else if (subnetMappings) {
+            yield* elbv2.setSubnets({
+              LoadBalancerArn: loadBalancerArn,
+              SubnetMappings: subnetMappings,
+            });
+          }
+
+          // Sync security groups — diff observed against desired.
+          if (news.securityGroups) {
+            const observedSgs = loadBalancer.SecurityGroups ?? [];
+            const desiredSgs = news.securityGroups as string[];
+            if (
+              !deepEqual([...observedSgs].sort(), [...desiredSgs].sort()) ||
+              news.enforceSecurityGroupInboundRulesOnPrivateLinkTraffic
+            ) {
+              yield* elbv2.setSecurityGroups({
+                LoadBalancerArn: loadBalancerArn,
+                SecurityGroups: desiredSgs,
+                EnforceSecurityGroupInboundRulesOnPrivateLinkTraffic:
+                  news.enforceSecurityGroupInboundRulesOnPrivateLinkTraffic,
+              });
+            }
+          }
+
+          // Sync IP address type — diff observed against desired.
+          if (
+            news.ipAddressType &&
+            news.ipAddressType !== loadBalancer.IpAddressType
+          ) {
+            yield* elbv2.setIpAddressType({
+              LoadBalancerArn: loadBalancerArn,
+              IpAddressType: news.ipAddressType,
+            });
+          }
 
           // Sync attributes — observed ↔ desired. We always apply when
           // desired attrs are non-empty; AWS rejects an empty list anyway,

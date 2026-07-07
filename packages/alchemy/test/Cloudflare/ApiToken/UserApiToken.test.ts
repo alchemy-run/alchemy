@@ -26,7 +26,7 @@ describe.skip("UserApiToken", () => {
 
       const token = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UserApiToken("DefaultUserToken", {
+          return yield* Cloudflare.ApiToken.UserApiToken("DefaultUserToken", {
             policies: [
               {
                 effect: "allow",
@@ -63,7 +63,7 @@ describe.skip("UserApiToken", () => {
 
       const token = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UserApiToken("UpdateUserToken", {
+          return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
             name: "alchemy-test-user-update-initial",
             policies: [
               {
@@ -83,7 +83,7 @@ describe.skip("UserApiToken", () => {
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UserApiToken("UpdateUserToken", {
+          return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
             name: "alchemy-test-user-update-renamed",
             policies: [
               {
@@ -149,7 +149,9 @@ describe("UserApiToken list", () => {
     "list enumerates user tokens",
     () =>
       Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(Cloudflare.UserApiToken);
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ApiToken.UserApiToken,
+        );
         const all = yield* provider.list();
 
         expect(Array.isArray(all)).toBe(true);
@@ -171,7 +173,9 @@ describe("UserApiToken list", () => {
 describe("UserApiToken list probe", () => {
   test.provider("list rejects with typed Unauthorized under scoped token", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(Cloudflare.UserApiToken);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ApiToken.UserApiToken,
+      );
       const result = yield* Effect.result(provider.list());
       if (Result.isSuccess(result)) {
         // An entitled credential can list — that's fine, nothing to assert.

@@ -7,8 +7,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const AccountDnsSettingsTypeId = "Cloudflare.Dns.AccountSettings" as const;
-type AccountDnsSettingsTypeId = typeof AccountDnsSettingsTypeId;
+const TypeId = "Cloudflare.DNS.AccountSettings" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Default nameserver assignment for new zones in the account.
@@ -178,7 +178,7 @@ export interface AccountDnsSettingsAttributes extends AccountDnsSettingsSnapshot
 }
 
 export type AccountDnsSettings = Resource<
-  AccountDnsSettingsTypeId,
+  TypeId,
   AccountDnsSettingsProps,
   AccountDnsSettingsAttributes,
   never,
@@ -202,11 +202,13 @@ export type AccountDnsSettings = Resource<
  * values require the custom nameserver TTL / custom SOA entitlements,
  * `foundationDns` is a paid add-on, and `internalDns` is Enterprise
  * Internal DNS only.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Account-wide overrides
  * @example Force every proxied record to DNS-only
  * ```typescript
- * yield* Cloudflare.AccountDnsSettings("DnsSettings", {
+ * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
  *   enforceDnsOnly: true,
  * });
  * ```
@@ -214,21 +216,19 @@ export type AccountDnsSettings = Resource<
  * @section Zone defaults
  * @example Flatten CNAMEs in every new zone
  * ```typescript
- * yield* Cloudflare.AccountDnsSettings("DnsSettings", {
+ * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
  *   zoneDefaults: { flattenAllCnames: true },
  * });
  * ```
  *
  * @example Default new zones to multi-provider DNS
  * ```typescript
- * yield* Cloudflare.AccountDnsSettings("DnsSettings", {
+ * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
  *   zoneDefaults: { multiProvider: true },
  * });
  * ```
  */
-export const AccountDnsSettings = Resource<AccountDnsSettings>(
-  AccountDnsSettingsTypeId,
-);
+export const AccountDnsSettings = Resource<AccountDnsSettings>(TypeId);
 
 /**
  * Returns true if the given value is an AccountDnsSettings resource.
@@ -236,8 +236,7 @@ export const AccountDnsSettings = Resource<AccountDnsSettings>(
 export const isAccountDnsSettings = (
   value: unknown,
 ): value is AccountDnsSettings =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === AccountDnsSettingsTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountDnsSettingsProvider = () =>
   Provider.succeed(AccountDnsSettings, {

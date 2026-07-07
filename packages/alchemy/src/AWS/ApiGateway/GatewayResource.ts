@@ -55,7 +55,7 @@ export interface ApiGatewayResource extends ResourceType<
  * points either at `api.rootResourceId` (for top-level paths) or at
  * another `Resource`'s `resourceId` (for nested paths). Attach methods
  * to a resource by passing its `resourceId` to `ApiGateway.Method`.
- *
+ * @resource
  * @section Path resources
  * @example Top-level path
  * ```typescript

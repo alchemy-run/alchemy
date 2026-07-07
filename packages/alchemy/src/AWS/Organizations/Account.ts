@@ -66,6 +66,7 @@ export interface Account extends Resource<
 
 /**
  * A member account created and managed by AWS Organizations.
+ * @resource
  */
 export const Account = Resource<Account>("AWS.Organizations.Account");
 

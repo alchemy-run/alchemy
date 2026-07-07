@@ -10,9 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const TcpFlowProtectionRuleTypeId =
-  "Cloudflare.DdosProtection.TcpFlowProtectionRule" as const;
-type TcpFlowProtectionRuleTypeId = typeof TcpFlowProtectionRuleTypeId;
+const TypeId = "Cloudflare.DdosProtection.TcpFlowProtectionRule" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Operating mode of a TCP Flow Protection rule: actively mitigate
@@ -84,7 +83,7 @@ export interface TcpFlowProtectionRuleAttributes {
 }
 
 export type TcpFlowProtectionRule = Resource<
-  TcpFlowProtectionRuleTypeId,
+  TypeId,
   TcpFlowProtectionRuleProps,
   TcpFlowProtectionRuleAttributes,
   never,
@@ -107,11 +106,13 @@ export type TcpFlowProtectionRule = Resource<
  * `read` scans for an existing rule with the same scope + name and reports
  * it as `Unowned`, so the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DDoS Protection
+ * @category Network
  * @section Creating a rule
  * @example Global TCP flow protection in monitoring mode
  * ```typescript
- * const rule = yield* Cloudflare.TcpFlowProtectionRule("GlobalFlow", {
+ * const rule = yield* Cloudflare.DdosProtection.TcpFlowProtectionRule("GlobalFlow", {
  *   scope: "global",
  *   mode: "monitoring",
  *   burstSensitivity: "medium",
@@ -121,7 +122,7 @@ export type TcpFlowProtectionRule = Resource<
  *
  * @example Region-scoped rule
  * ```typescript
- * yield* Cloudflare.TcpFlowProtectionRule("WeurFlow", {
+ * yield* Cloudflare.DdosProtection.TcpFlowProtectionRule("WeurFlow", {
  *   scope: "region",
  *   name: "WEUR",
  *   mode: "enabled",
@@ -132,9 +133,7 @@ export type TcpFlowProtectionRule = Resource<
  *
  * @see https://developers.cloudflare.com/ddos-protection/advanced-ddos-systems/overview/advanced-tcp-protection/
  */
-export const TcpFlowProtectionRule = Resource<TcpFlowProtectionRule>(
-  TcpFlowProtectionRuleTypeId,
-);
+export const TcpFlowProtectionRule = Resource<TcpFlowProtectionRule>(TypeId);
 
 /**
  * Returns true if the given value is a TcpFlowProtectionRule resource.
@@ -142,8 +141,7 @@ export const TcpFlowProtectionRule = Resource<TcpFlowProtectionRule>(
 export const isTcpFlowProtectionRule = (
   value: unknown,
 ): value is TcpFlowProtectionRule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === TcpFlowProtectionRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TcpFlowProtectionRuleProvider = () =>
   Provider.succeed(TcpFlowProtectionRule, {

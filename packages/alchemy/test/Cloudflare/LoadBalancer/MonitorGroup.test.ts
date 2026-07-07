@@ -101,7 +101,7 @@ test.provider.skipIf(monitorGroupsEnabled)(
 test.provider("list returns an array of monitor groups", () =>
   Effect.gen(function* () {
     const provider = yield* Provider.findProvider(
-      Cloudflare.LoadBalancerMonitorGroup,
+      Cloudflare.LoadBalancer.MonitorGroup,
     );
     const all = yield* provider.list();
     expect(Array.isArray(all)).toBe(true);
@@ -116,13 +116,13 @@ test.provider.skipIf(!monitorGroupsEnabled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const monitor = yield* Cloudflare.LoadBalancerMonitor("Monitor", {
+          const monitor = yield* Cloudflare.LoadBalancer.Monitor("Monitor", {
             description: NAME_MONITOR,
             type: "https",
             path: "/health",
             expectedCodes: "2xx",
           });
-          const group = yield* Cloudflare.LoadBalancerMonitorGroup("Group", {
+          const group = yield* Cloudflare.LoadBalancer.MonitorGroup("Group", {
             description: NAME_LIFECYCLE,
             members: [{ monitorId: monitor.monitorId }],
           });
@@ -131,7 +131,7 @@ test.provider.skipIf(!monitorGroupsEnabled)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancerMonitorGroup,
+        Cloudflare.LoadBalancer.MonitorGroup,
       );
       const all = yield* provider.list();
       expect(
@@ -153,13 +153,13 @@ test.provider.skipIf(!monitorGroupsEnabled)(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const monitor = yield* Cloudflare.LoadBalancerMonitor("Monitor", {
+          const monitor = yield* Cloudflare.LoadBalancer.Monitor("Monitor", {
             description: NAME_MONITOR,
             type: "https",
             path: "/health",
             expectedCodes: "2xx",
           });
-          const group = yield* Cloudflare.LoadBalancerMonitorGroup("Group", {
+          const group = yield* Cloudflare.LoadBalancer.MonitorGroup("Group", {
             description: NAME_LIFECYCLE,
             members: [{ monitorId: monitor.monitorId }],
           });
@@ -184,13 +184,13 @@ test.provider.skipIf(!monitorGroupsEnabled)(
       // monitor deployed across every step.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const monitor = yield* Cloudflare.LoadBalancerMonitor("Monitor", {
+          const monitor = yield* Cloudflare.LoadBalancer.Monitor("Monitor", {
             description: NAME_MONITOR,
             type: "https",
             path: "/health",
             expectedCodes: "2xx",
           });
-          const group = yield* Cloudflare.LoadBalancerMonitorGroup("Group", {
+          const group = yield* Cloudflare.LoadBalancer.MonitorGroup("Group", {
             description: NAME_LIFECYCLE,
             members: [{ monitorId: monitor.monitorId, monitoringOnly: true }],
           });

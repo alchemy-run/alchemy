@@ -13,9 +13,18 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
+import {
+  hashPackageInstallIdentity,
+  installResolvedPackages,
+  matchesPackageRoot,
+  normalizeInstallTargets,
+  resolvePackageInstallIdentity,
+  type PackageInstall,
+} from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
@@ -28,6 +37,7 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -60,10 +70,26 @@ export const isFunction = (value: any): value is Function => {
   );
 };
 
-export interface FunctionBuildOptions {
-  readonly input?: Partial<rolldown.InputOptions>;
+export interface FunctionBuildOptions extends Partial<rolldown.InputOptions> {
+  /**
+   * Native or Node-only packages to install into the Lambda artifact with npm,
+   * targeting Linux and the function's architecture.
+   *
+   * @example
+   * ```typescript
+   * build: { install: ["sharp"] }
+   * ```
+   *
+   * @example
+   * ```typescript
+   * build: { install: { sharp: "^0.33.5" } }
+   * ```
+   */
+  readonly install?: PackageInstall;
   readonly output?: Partial<rolldown.OutputOptions>;
 }
+
+export type FunctionArchitecture = "x86_64" | "arm64";
 
 export interface FunctionUrlConfig {
   /**
@@ -103,6 +129,13 @@ export interface FunctionProps extends PlatformProps {
   functionName?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
+  /**
+   * Instruction set architecture for the Lambda function.
+   *
+   * @default "x86_64"
+   */
+  architecture?: FunctionArchitecture;
+  memorySize?: number;
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -121,6 +154,11 @@ export interface FunctionProps extends PlatformProps {
    * @default 3 seconds (AWS Lambda default)
    */
   timeout?: Duration.Duration;
+  /**
+   * Maximum number of concurrent executions reserved for this function.
+   * Omit to remove the function-level reserved concurrency limit.
+   */
+  reservedConcurrentExecutions?: number;
 }
 
 /**
@@ -165,6 +203,7 @@ export interface Function extends Resource<
     code: {
       hash: string;
     };
+    reservedConcurrentExecutions?: number;
   },
   {
     env?: Record<string, any>;
@@ -203,6 +242,26 @@ const normalizeFunctionUrl = (
 };
 
 /**
+ * Evaluates a user-supplied Rolldown `external` option (string, RegExp, array,
+ * or predicate) for a single module id, preserving its original semantics.
+ */
+const matchesConfiguredExternal = (
+  external: rolldown.InputOptions["external"],
+  moduleId: string,
+  parentId: string | undefined,
+  isResolved: boolean,
+): boolean => {
+  if (external === undefined) return false;
+  if (typeof external === "function") {
+    return external(moduleId, parentId, isResolved) === true;
+  }
+  const matchers = Array.isArray(external) ? external : [external];
+  return matchers.some((matcher) =>
+    typeof matcher === "string" ? matcher === moduleId : matcher.test(moduleId),
+  );
+};
+
+/**
  * An AWS Lambda host resource that combines code bundling, IAM role
  * provisioning, and runtime binding collection.
  *
@@ -220,7 +279,7 @@ const normalizeFunctionUrl = (
  * for plain handler patterns, or the
  * {@link https://alchemy.run/guides/lambda | Effect Lambda Guide}
  * for the full Effect-based approach with bindings, event sources, and sinks.
- *
+ * @resource
  * @section Async Functions
  * Point `main` at a file that exports a standard Lambda handler. No
  * Effect runtime is included in the bundle. Useful when migrating
@@ -234,6 +293,25 @@ const normalizeFunctionUrl = (
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
  *   url: true,
+ * });
+ * ```
+ *
+ * @example Function using ARM64
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ArmFunction", {
+ *   main: "./src/handler.ts",
+ *   architecture: "arm64",
+ * });
+ * ```
+ *
+ * @example Function with a native package (Sharp)
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ImageProcessor", {
+ *   main: "./src/handler.ts",
+ *   architecture: "arm64",
+ *   build: {
+ *     install: ["sharp"],
+ *   },
  * });
  * ```
  *
@@ -257,10 +335,10 @@ const normalizeFunctionUrl = (
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
- *   { main: import.meta.filename, url: true },
+ *   { main: import.meta.url, url: true },
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const getItem = yield* DynamoDB.GetItem.bind(table);
+ *     const getItem = yield* AWS.DynamoDB.GetItem(table);
  *
  *     return {
  *       // runtime: use them
@@ -313,8 +391,8 @@ const normalizeFunctionUrl = (
  * @example Read and write S3 objects
  * ```typescript
  * // init
- * const getObject = yield* S3.GetObject.bind(bucket);
- * const putObject = yield* S3.PutObject.bind(bucket);
+ * const getObject = yield* S3.GetObject(bucket);
+ * const putObject = yield* S3.PutObject(bucket);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -333,8 +411,8 @@ const normalizeFunctionUrl = (
  * @example Get and put items
  * ```typescript
  * // init
- * const getItem = yield* DynamoDB.GetItem.bind(table);
- * const putItem = yield* DynamoDB.PutItem.bind(table);
+ * const getItem = yield* AWS.DynamoDB.GetItem(table);
+ * const putItem = yield* AWS.DynamoDB.PutItem(table);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -352,7 +430,7 @@ const normalizeFunctionUrl = (
  * @example Send a message
  * ```typescript
  * // init
- * const sendMessage = yield* SQS.SendMessage.bind(queue);
+ * const sendMessage = yield* SQS.SendMessage(queue);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -372,7 +450,7 @@ const normalizeFunctionUrl = (
  * @example Publish a notification
  * ```typescript
  * // init
- * const publish = yield* SNS.Publish.bind(topic);
+ * const publish = yield* AWS.SNS.Publish(topic);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -393,7 +471,7 @@ const normalizeFunctionUrl = (
  * @example Put a record
  * ```typescript
  * // init
- * const putRecord = yield* Kinesis.PutRecord.bind(stream);
+ * const putRecord = yield* AWS.Kinesis.PutRecord(stream);
  *
  * return {
  *   fetch: Effect.gen(function* () {
@@ -413,7 +491,7 @@ const normalizeFunctionUrl = (
  *
  * @example Process SQS messages
  * ```typescript
- * yield* SQS.messages(queue).process(
+ * yield* SQS.consumeQueueMessages(queue,
  *   Effect.fn(function* (message) {
  *     yield* Effect.log(`Received: ${message.body}`);
  *   }),
@@ -422,9 +500,9 @@ const normalizeFunctionUrl = (
  *
  * @example Process DynamoDB stream changes
  * ```typescript
- * yield* DynamoDB.streams(table, {
+ * yield* AWS.DynamoDB.consumeTableChanges(table, {
  *   StreamViewType: "NEW_AND_OLD_IMAGES",
- * }).process(
+ * },
  *   Effect.fn(function* (record) {
  *     yield* Effect.log(`Change: ${record.eventName}`);
  *   }),
@@ -433,9 +511,9 @@ const normalizeFunctionUrl = (
  *
  * @example Process S3 notifications
  * ```typescript
- * yield* S3.notifications(bucket, {
+ * yield* AWS.S3.consumeBucketEvents(bucket, {
  *   events: ["s3:ObjectCreated:*"],
- * }).subscribe((stream) =>
+ * }, (stream) =>
  *   stream.pipe(
  *     Stream.runForEach((event) =>
  *       Effect.log(`New object: ${event.key}`),
@@ -598,7 +676,7 @@ export const FunctionProvider = () =>
           };
         });
 
-      const attachBindings = Effect.fnUntraced(function* ({
+      const attachBindings = Effect.fn(function* ({
         roleName,
         policyName,
         // functionArn,
@@ -650,7 +728,7 @@ export const FunctionProvider = () =>
         return env;
       });
 
-      const createRoleIfNotExists = Effect.fnUntraced(function* ({
+      const createRoleIfNotExists = Effect.fn(function* ({
         id,
         roleName,
         vpc,
@@ -715,41 +793,67 @@ export const FunctionProvider = () =>
         return role;
       });
 
-      const bundleCode = Effect.fnUntraced(function* (
+      const bundleCode = Effect.fn(function* (
         id: string,
         props: FunctionProps,
       ) {
-        const sourcemap = props.build?.output?.sourcemap ?? true;
+        const {
+          output: buildOutput,
+          install,
+          ...inputOptions
+        } = props.build ?? {};
+        const sourcemap = buildOutput?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
 
-        const realMain = yield* fs.realPath(props.main);
+        const realMain = yield* TempRoot.resolveMainPath(props.main);
         const cwd = yield* TempRoot.findCwdForBundle(realMain);
 
         const rolldownSourcemap = sourcemap;
+        const architecture = props.architecture ?? "x86_64";
 
-        const buildBundle = Effect.fnUntraced(function* (
+        // Explicit install roots are excluded from the bundle and installed
+        // into the deployment artifact. build.external stays a pure Rolldown
+        // escape hatch and is not installed by Alchemy.
+        const requested = yield* normalizeInstallTargets(install);
+        const installRoots = new Set(Object.keys(requested));
+        const configuredExternal = inputOptions.external;
+        const externalOption = (
+          moduleId: string,
+          parentId: string | undefined,
+          isResolved: boolean,
+        ): boolean => {
+          if (moduleId.startsWith("@aws-sdk/")) return true;
+          for (const root of installRoots) {
+            if (matchesPackageRoot(moduleId, root)) return true;
+          }
+          return matchesConfiguredExternal(
+            configuredExternal,
+            moduleId,
+            parentId,
+            isResolved,
+          );
+        };
+
+        const buildBundle = Effect.fn(function* (
           entry: string,
           plugins?: rolldown.RolldownPluginOption,
         ) {
           return yield* Bundle.build(
             {
-              ...props.build?.input,
+              ...inputOptions,
               input: entry,
               cwd,
-              external: [
-                /^@aws-sdk\//,
-                ...((props.build?.input?.external as string[]) ?? []),
-              ],
+              external: externalOption,
               platform: "node",
-              plugins: [props.build?.input?.plugins, plugins],
+              plugins: [inputOptions.plugins, plugins],
             },
             {
-              ...props.build?.output,
+              ...buildOutput,
               format: "esm",
               sourcemap: rolldownSourcemap,
-              minify: props.build?.output?.minify ?? false,
+              minify: buildOutput?.minify ?? false,
               entryFileNames: "index.js",
-              codeSplitting: props.build?.output?.codeSplitting ?? false,
+              codeSplitting: buildOutput?.codeSplitting ?? false,
             },
           );
         });
@@ -852,15 +956,46 @@ export default await Effect.runPromise(handlerEffect)
             content: f.content,
           }));
 
-        const archive = yield* zipCode(
-          code,
-          extraFiles.length > 0 ? extraFiles : undefined,
-        );
-        return {
-          archive,
-          code,
-          hash: bundleOutput.hash,
-        };
+        // Resolve install versions without running npm so `diff` can compare a
+        // stable identity hash. The archive build performs the install.
+        const installIdentity = yield* resolvePackageInstallIdentity({
+          cwd,
+          requested,
+        });
+        const resolved = installIdentity.resolved;
+        const hasInstalledPackages = Object.keys(resolved).length > 0;
+
+        // Identity hash drives change detection in `diff`. With native packages,
+        // the installed bytes are not captured by the bundle hash, so fold the
+        // resolved versions, package-manager lockfile, and architecture in
+        // instead of installing.
+        const identityHash = hasInstalledPackages
+          ? yield* hashPackageInstallIdentity({
+              bundleHash: bundleOutput.hash,
+              identity: installIdentity,
+              architecture,
+            })
+          : bundleOutput.hash;
+
+        const buildArchive = Effect.gen(function* () {
+          const installedPackageFiles = hasInstalledPackages
+            ? yield* installResolvedPackages({ resolved, architecture })
+            : [];
+          const archiveFiles = [...extraFiles, ...installedPackageFiles];
+          const archive = yield* zipCode(
+            code,
+            archiveFiles.length > 0 ? archiveFiles : undefined,
+          );
+          // The S3 asset key is content-addressed, so the archive hash must be a
+          // true hash of the bytes when native packages are present.
+          const archiveHash =
+            installedPackageFiles.length > 0
+              ? yield* sha256(archive)
+              : bundleOutput.hash;
+          return { archive, archiveHash };
+        });
+
+        return { identityHash, buildArchive };
       });
 
       const withNodeSourceMaps = (
@@ -890,7 +1025,76 @@ export default await Effect.runPromise(handlerEffect)
         };
       };
 
-      const createOrUpdateFunction = Effect.fnUntraced(function* ({
+      const retryFunctionMutation = Effect.retry({
+        while: (e: any) =>
+          e._tag === "ResourceConflictException" ||
+          e._tag === "TooManyRequestsException",
+        schedule: Schedule.exponential(100).pipe(
+          Schedule.both(Schedule.recurs(30)),
+        ),
+      }) as <A, R, Err>(
+        self: Effect.Effect<A, Err, R>,
+      ) => Effect.Effect<A, Err, R>;
+
+      const getReservedConcurrentExecutions = Effect.fn(function* (
+        functionName: string,
+      ) {
+        return yield* Lambda.getFunctionConcurrency({
+          FunctionName: functionName,
+        }).pipe(
+          Effect.map((config) => config.ReservedConcurrentExecutions),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      });
+
+      const syncReservedConcurrentExecutions = Effect.fn(function* ({
+        functionName,
+        reservedConcurrentExecutions,
+      }: {
+        functionName: string;
+        reservedConcurrentExecutions: number | undefined;
+      }) {
+        const current = yield* getReservedConcurrentExecutions(functionName);
+        if (current === reservedConcurrentExecutions) {
+          return current;
+        }
+
+        if (reservedConcurrentExecutions === undefined) {
+          yield* Lambda.deleteFunctionConcurrency({
+            FunctionName: functionName,
+          }).pipe(
+            retryFunctionMutation,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          return undefined;
+        }
+
+        const updated = yield* Lambda.putFunctionConcurrency({
+          FunctionName: functionName,
+          ReservedConcurrentExecutions: reservedConcurrentExecutions,
+        }).pipe(retryFunctionMutation);
+        return (
+          updated.ReservedConcurrentExecutions ?? reservedConcurrentExecutions
+        );
+      });
+
+      const createOrUpdateFunction: (input: {
+        id: string;
+        news: FunctionProps;
+        roleArn: string;
+        archive: Uint8Array<ArrayBufferLike>;
+        hash: string;
+        env: Record<string, string> | undefined;
+        functionName: string;
+        preferUpdate?: boolean;
+        session: { note: (note: string) => Effect.Effect<void> };
+      }) => Effect.Effect<
+        void,
+        any,
+        Credentials | Region | HttpClient | Stack | Stage | AWSEnvironment
+      > = Effect.fn(function* ({
         id,
         news,
         roleArn,
@@ -958,6 +1162,8 @@ export default await Effect.runPromise(handlerEffect)
           Role: roleArn,
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
+          Architectures: [news.architecture ?? "x86_64"],
+          MemorySize: news.memorySize,
           Environment: runtimeEnv
             ? {
                 Variables: {
@@ -1050,7 +1256,7 @@ export default await Effect.runPromise(handlerEffect)
               yield* Effect.logDebug(`updated function configuration ${id}`);
             }),
           ),
-        );
+        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
         const create = Lambda.createFunction(createFunctionRequest).pipe(
           Effect.tapError((e) =>
@@ -1067,7 +1273,7 @@ export default await Effect.runPromise(handlerEffect)
           Effect.catchTags({
             ResourceConflictException: () => getAndUpdate,
           }),
-        );
+        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
         if (preferUpdate) {
           yield* getAndUpdate.pipe(
@@ -1083,7 +1289,7 @@ export default await Effect.runPromise(handlerEffect)
       const publicUrlAccessStatementId = "FunctionURLAllowPublicAccess";
       const publicUrlInvokeStatementId = "FunctionURLAllowPublicInvoke";
 
-      const removePublicFunctionUrlPermissions = Effect.fnUntraced(function* (
+      const removePublicFunctionUrlPermissions = Effect.fn(function* (
         functionName: string,
       ) {
         yield* Effect.all(
@@ -1118,9 +1324,10 @@ export default await Effect.runPromise(handlerEffect)
               yield* Lambda.addPermission(permission);
             }),
           ),
+          retryFunctionMutation,
         );
 
-      const upsertPublicFunctionUrlPermissions = Effect.fnUntraced(function* (
+      const upsertPublicFunctionUrlPermissions = Effect.fn(function* (
         functionName: string,
       ) {
         yield* Effect.all(
@@ -1144,7 +1351,7 @@ export default await Effect.runPromise(handlerEffect)
         );
       });
 
-      const createOrUpdateFunctionUrl = Effect.fnUntraced(function* ({
+      const createOrUpdateFunctionUrl = Effect.fn(function* ({
         functionName,
         url,
         oldUrl,
@@ -1179,6 +1386,7 @@ export default await Effect.runPromise(handlerEffect)
             Effect.catchTag("ResourceConflictException", () =>
               Lambda.updateFunctionUrlConfig(config),
             ),
+            retryFunctionMutation,
           );
 
           if (desired.authType === "NONE") {
@@ -1197,6 +1405,7 @@ export default await Effect.runPromise(handlerEffect)
             Lambda.deleteFunctionUrlConfig({
               FunctionName: functionName,
             }).pipe(
+              retryFunctionMutation,
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             ),
             removePublicFunctionUrlPermissions(functionName),
@@ -1206,18 +1415,18 @@ export default await Effect.runPromise(handlerEffect)
         return undefined;
       });
 
-      const summary = ({ code }: { code: Uint8Array<ArrayBufferLike> }) =>
+      const summary = ({ archive }: { archive: Uint8Array<ArrayBufferLike> }) =>
         `${
-          code.length >= 1024 * 1024
-            ? `${(code.length / (1024 * 1024)).toFixed(2)}MB`
-            : code.length >= 1024
-              ? `${(code.length / 1024).toFixed(2)}KB`
-              : `${code.length}B`
+          archive.length >= 1024 * 1024
+            ? `${(archive.length / (1024 * 1024)).toFixed(2)}MB`
+            : archive.length >= 1024
+              ? `${(archive.length / 1024).toFixed(2)}KB`
+              : `${archive.length}B`
         }`;
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fnUntraced(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
           // If output is undefined (resource in creating state), defer to default diff
           if (!output) {
@@ -1238,15 +1447,7 @@ export default await Effect.runPromise(handlerEffect)
           ) {
             return { action: "update" };
           }
-          if (
-            output.code.hash !==
-            (yield* bundleCode(id, {
-              main: news.main,
-              handler: news.handler,
-              build: news.build,
-              uploadSourceMap: news.uploadSourceMap,
-            })).hash
-          ) {
+          if (output.code.hash !== (yield* bundleCode(id, news)).identityHash) {
             // code changed
             return { action: "update" };
           }
@@ -1255,8 +1456,19 @@ export default await Effect.runPromise(handlerEffect)
           ) {
             return { action: "update" };
           }
+          if (
+            (olds.architecture ?? "x86_64") !== (news.architecture ?? "x86_64")
+          ) {
+            return { action: "update" };
+          }
+          if (
+            olds.reservedConcurrentExecutions !==
+            news.reservedConcurrentExecutions
+          ) {
+            return { action: "update" };
+          }
         }),
-        read: Effect.fnUntraced(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output }) {
           const functionName =
             output?.functionName ??
             (yield* createFunctionName(id, olds?.functionName));
@@ -1292,6 +1504,8 @@ export default await Effect.runPromise(handlerEffect)
               Effect.succeed(undefined),
             ),
           );
+          const reservedConcurrentExecutions =
+            yield* getReservedConcurrentExecutions(fn.FunctionName);
           // Reuse the persisted output where we have it (e.g. code hash) so
           // diff doesn't see drift it can't reconstruct from the API.
           const attrs = {
@@ -1301,6 +1515,7 @@ export default await Effect.runPromise(handlerEffect)
             functionUrl,
             roleArn: fn.Role,
             roleName: output?.roleName ?? fn.Role.split("/").pop()!,
+            reservedConcurrentExecutions,
           } as any;
           return (yield* hasAlchemyTags(id, tagsResult))
             ? attrs
@@ -1337,6 +1552,8 @@ export default await Effect.runPromise(handlerEffect)
                       Effect.succeed(undefined),
                     ),
                   );
+                  const reservedConcurrentExecutions =
+                    yield* getReservedConcurrentExecutions(fn.FunctionName);
                   return {
                     functionArn: fn.FunctionArn,
                     functionName: fn.FunctionName,
@@ -1344,6 +1561,9 @@ export default await Effect.runPromise(handlerEffect)
                     roleArn: fn.Role,
                     roleName: fn.Role.split("/").pop()!,
                     code: { hash: "" },
+                    ...(reservedConcurrentExecutions === undefined
+                      ? {}
+                      : { reservedConcurrentExecutions }),
                   } satisfies Function["Attributes"];
                 }),
               { concurrency: 10 },
@@ -1353,7 +1573,7 @@ export default await Effect.runPromise(handlerEffect)
             );
           }),
 
-        precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+        precreate: Effect.fn(function* ({ id, news, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
@@ -1399,7 +1619,7 @@ export default await Effect.runPromise(handlerEffect)
             roleArn,
           };
         }),
-        reconcile: Effect.fnUntraced(function* ({
+        reconcile: Effect.fn(function* ({
           id,
           news,
           olds,
@@ -1423,14 +1643,15 @@ export default await Effect.runPromise(handlerEffect)
             bindings,
           });
 
-          const { archive, code, hash } = yield* bundleCode(id, news);
+          const { identityHash, buildArchive } = yield* bundleCode(id, news);
+          const { archive, archiveHash } = yield* buildArchive;
 
           yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
             archive,
-            hash,
+            hash: archiveHash,
             env: {
               ...env,
               ...news.env,
@@ -1440,6 +1661,12 @@ export default await Effect.runPromise(handlerEffect)
             session,
           });
 
+          const reservedConcurrentExecutions =
+            yield* syncReservedConcurrentExecutions({
+              functionName,
+              reservedConcurrentExecutions: news.reservedConcurrentExecutions,
+            });
+
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
             url: news.url,
@@ -1447,7 +1674,7 @@ export default await Effect.runPromise(handlerEffect)
             currentFunctionUrl: output?.functionUrl,
           });
 
-          yield* session.note(summary({ code }));
+          yield* session.note(summary({ archive }));
 
           return {
             ...output,
@@ -1457,11 +1684,14 @@ export default await Effect.runPromise(handlerEffect)
             roleName,
             roleArn,
             code: {
-              hash,
+              hash: identityHash,
             },
+            reservedConcurrentExecutions,
           };
         }),
-        delete: Effect.fnUntraced(function* ({ output }) {
+        delete: Effect.fn(function* ({ output }) {
+          // The role may already be gone (e.g. deleted out-of-band or by a
+          // previous partial delete) — treat every step as idempotent.
           yield* iam
             .listRolePolicies({
               RoleName: output.roleName,
@@ -1470,13 +1700,21 @@ export default await Effect.runPromise(handlerEffect)
               Effect.flatMap((policies) =>
                 Effect.all(
                   (policies.PolicyNames ?? []).map((policyName) =>
-                    iam.deleteRolePolicy({
-                      RoleName: output.roleName,
-                      PolicyName: policyName,
-                    }),
+                    iam
+                      .deleteRolePolicy({
+                        RoleName: output.roleName,
+                        PolicyName: policyName,
+                      })
+                      .pipe(
+                        Effect.catchTag(
+                          "NoSuchEntityException",
+                          () => Effect.void,
+                        ),
+                      ),
                   ),
                 ),
               ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* iam
@@ -1501,6 +1739,7 @@ export default await Effect.runPromise(handlerEffect)
                   ),
                 ),
               ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
 
           yield* Lambda.deleteFunction({

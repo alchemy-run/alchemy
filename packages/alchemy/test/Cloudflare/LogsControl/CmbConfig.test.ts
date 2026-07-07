@@ -70,7 +70,7 @@ test.provider.skipIf(!entitled)(
 
       // Create — pin the CMB region.
       const created = yield* stack.deploy(
-        Cloudflare.LogsCmbConfig("Cmb", {
+        Cloudflare.LogsControl.CmbConfig("Cmb", {
           regions: "eu",
         }),
       );
@@ -82,7 +82,7 @@ test.provider.skipIf(!entitled)(
 
       // Update in place — POST is a full upsert.
       const updated = yield* stack.deploy(
-        Cloudflare.LogsCmbConfig("Cmb", {
+        Cloudflare.LogsControl.CmbConfig("Cmb", {
           regions: "eu",
           allowOutOfRegionAccess: true,
         }),
@@ -125,7 +125,9 @@ test.provider.skipIf(entitled)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.LogsCmbConfig);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LogsControl.CmbConfig,
+      );
       const all = yield* provider.list();
       expect(all).toEqual([]);
 
@@ -144,12 +146,14 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       yield* stack.deploy(
-        Cloudflare.LogsCmbConfig("Cmb", {
+        Cloudflare.LogsControl.CmbConfig("Cmb", {
           regions: "eu",
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.LogsCmbConfig);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LogsControl.CmbConfig,
+      );
       const all = yield* provider.list();
 
       expect(all.length).toEqual(1);

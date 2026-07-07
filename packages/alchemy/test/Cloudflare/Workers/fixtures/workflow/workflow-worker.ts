@@ -7,7 +7,7 @@ import TestWorkflow from "./test-workflow.ts";
 export default class WorkflowTestWorker extends Cloudflare.Worker<WorkflowTestWorker>()(
   "WorkflowTestWorker",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
   },
   Effect.gen(function* () {
     const workflow = yield* TestWorkflow;

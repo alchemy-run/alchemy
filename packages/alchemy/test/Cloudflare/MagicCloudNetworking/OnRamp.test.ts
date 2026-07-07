@@ -102,7 +102,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
       yield* stack.destroy();
 
       const onramp = yield* stack.deploy(
-        Cloudflare.OnRamp("Ramp", {
+        Cloudflare.MagicCloudNetworking.OnRamp("Ramp", {
           name: "alchemy-mcn-onramp",
           cloudType: "AWS",
           type: "OnrampTypeSingle",
@@ -127,7 +127,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
 
       // Update mutable props in place — same onRampId.
       const updated = yield* stack.deploy(
-        Cloudflare.OnRamp("Ramp", {
+        Cloudflare.MagicCloudNetworking.OnRamp("Ramp", {
           name: "alchemy-mcn-onramp-v2",
           cloudType: "AWS",
           type: "OnrampTypeSingle",
@@ -167,7 +167,9 @@ test.provider("list returns on-ramps or a typed [] when unentitled", (stack) =>
       Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.OnRamp);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.MagicCloudNetworking.OnRamp,
+    );
     const all = yield* provider.list();
 
     if (!canList) {
@@ -190,7 +192,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
       yield* stack.destroy();
 
       const onramp = yield* stack.deploy(
-        Cloudflare.OnRamp("ListRamp", {
+        Cloudflare.MagicCloudNetworking.OnRamp("ListRamp", {
           name: "alchemy-mcn-list-onramp",
           cloudType: "AWS",
           type: "OnrampTypeSingle",
@@ -202,7 +204,9 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.OnRamp);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicCloudNetworking.OnRamp,
+      );
       const all = yield* provider.list();
 
       expect(all.some((x) => x.onRampId === onramp.onRampId)).toBe(true);

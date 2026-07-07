@@ -99,6 +99,7 @@ export type PostgresDatabase = Resource<
   Providers
 >;
 
+/** @resource */
 export const PostgresDatabase = Resource<PostgresDatabase>(
   "Planetscale.PostgresDatabase",
 );

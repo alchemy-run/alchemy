@@ -68,7 +68,7 @@ test.provider.skipIf(!entitled)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const profile = yield* Cloudflare.DlpProfile("EmployeeIds", {
+          const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
             name: "alchemy-test-dlp-profile",
             description: "v1",
             allowedMatchCount: 0,
@@ -80,7 +80,7 @@ test.provider.skipIf(!entitled)(
               },
             ],
           });
-          const entry = yield* Cloudflare.DlpEntry("CardNumber", {
+          const entry = yield* Cloudflare.Dlp.Entry("CardNumber", {
             name: "alchemy-test-dlp-entry",
             pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
             profileId: profile.profileId,
@@ -97,7 +97,7 @@ test.provider.skipIf(!entitled)(
       // Description update converges in place — same profile id.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const profile = yield* Cloudflare.DlpProfile("EmployeeIds", {
+          const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
             name: "alchemy-test-dlp-profile",
             description: "v2",
             allowedMatchCount: 3,
@@ -109,7 +109,7 @@ test.provider.skipIf(!entitled)(
               },
             ],
           });
-          const entry = yield* Cloudflare.DlpEntry("CardNumber", {
+          const entry = yield* Cloudflare.Dlp.Entry("CardNumber", {
             name: "alchemy-test-dlp-entry",
             pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
             profileId: profile.profileId,

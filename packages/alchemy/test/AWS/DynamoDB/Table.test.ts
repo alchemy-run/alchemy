@@ -12,7 +12,7 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-describe.skipIf(!!process.env.NO_SLOW_TESTS)("AWS.DynamoDB.Table", () => {
+describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
   const longGlobalSecondaryIndexStabilization = Schedule.fixed(
     "10 seconds",
   ).pipe(Schedule.both(Schedule.recurs(180)));

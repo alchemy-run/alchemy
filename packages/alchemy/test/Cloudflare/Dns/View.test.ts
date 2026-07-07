@@ -82,7 +82,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.DnsView);
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.View);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
 
@@ -100,13 +100,13 @@ test.provider.skipIf(!internalDnsEntitled)(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.DnsView("ListView", {
+        Cloudflare.DNS.View("ListView", {
           name: "alchemy-dns-view-list",
           zones: [zoneId],
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.DnsView);
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.View);
       const all = yield* provider.list();
       expect(all.some((v) => v.viewId === deployed.viewId)).toBe(true);
 
@@ -125,7 +125,7 @@ test.provider.skipIf(!internalDnsEntitled)(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
-        Cloudflare.DnsView("TestView", {
+        Cloudflare.DNS.View("TestView", {
           name: "alchemy-dns-view-test",
           zones: [zoneId],
         }),
@@ -142,7 +142,7 @@ test.provider.skipIf(!internalDnsEntitled)(
 
       // Rename in place — same physical view.
       const renamed = yield* stack.deploy(
-        Cloudflare.DnsView("TestView", {
+        Cloudflare.DNS.View("TestView", {
           name: "alchemy-dns-view-test-renamed",
           zones: [zoneId],
         }),

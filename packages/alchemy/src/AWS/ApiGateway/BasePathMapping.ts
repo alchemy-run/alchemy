@@ -21,6 +21,7 @@ export interface BasePathMappingProps {
   stage?: string;
 }
 
+/** @resource */
 export interface BasePathMapping extends Resource<
   "AWS.ApiGateway.BasePathMapping",
   BasePathMappingProps,

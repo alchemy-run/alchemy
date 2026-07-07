@@ -81,10 +81,10 @@ describe.sequential("EmailCatchAll", () => {
 
         const catchAll = yield* stack.deploy(
           Effect.gen(function* () {
-            const routing = yield* Cloudflare.EmailRouting("Routing", {
+            const routing = yield* Cloudflare.Email.Routing("Routing", {
               zone: zoneName,
             });
-            return yield* Cloudflare.EmailCatchAll("CatchAll", {
+            return yield* Cloudflare.Email.CatchAll("CatchAll", {
               zone: { zoneId: routing.zoneId },
               name: "alchemy catch-all",
               actions: [{ type: "drop" }],
@@ -131,14 +131,14 @@ describe.sequential("EmailCatchAll", () => {
         const deployCatchAll = (props: {
           name: string;
           enabled?: boolean;
-          actions: Cloudflare.EmailAction[];
+          actions: Cloudflare.Email.Action[];
         }) =>
           stack.deploy(
             Effect.gen(function* () {
-              const routing = yield* Cloudflare.EmailRouting("Routing", {
+              const routing = yield* Cloudflare.Email.Routing("Routing", {
                 zone: zoneName,
               });
-              return yield* Cloudflare.EmailCatchAll("CatchAll", {
+              return yield* Cloudflare.Email.CatchAll("CatchAll", {
                 zone: { zoneId: routing.zoneId },
                 ...props,
               });
@@ -199,7 +199,9 @@ describe.sequential("EmailCatchAll", () => {
         // visible to `list()`; normalize to a known baseline.
         yield* setBaseline(zoneId);
 
-        const provider = yield* Provider.findProvider(Cloudflare.EmailCatchAll);
+        const provider = yield* Provider.findProvider(
+          Cloudflare.Email.CatchAll,
+        );
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

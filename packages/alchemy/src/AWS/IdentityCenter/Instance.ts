@@ -59,7 +59,7 @@ export interface Instance extends Resource<
  *
  * Use `mode: "existing"` to adopt a pre-enabled organization instance. Use
  * `mode: "account"` only for standalone or member-account account instances.
- *
+ * @resource
  * @section Discovering Existing Instances
  * @example Adopt An Existing Instance
  * ```typescript

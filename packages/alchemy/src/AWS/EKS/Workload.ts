@@ -81,7 +81,7 @@ export interface WorkloadResources {
  * `Workload` is the higher-level helper for the common "run pods and maybe
  * expose them on a Service" pattern without dropping down to each individual
  * Kubernetes primitive.
- *
+ * @resource
  * @example Deployment with a ClusterIP service
  * ```typescript
  * const app = yield* Workload("api", {

@@ -11,8 +11,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const IndicatorFeedTypeId = "Cloudflare.Intel.IndicatorFeed" as const;
-type IndicatorFeedTypeId = typeof IndicatorFeedTypeId;
+const TypeId = "Cloudflare.Intel.IndicatorFeed" as const;
+type TypeId = typeof TypeId;
 
 export interface IndicatorFeedProps {
   /**
@@ -84,7 +84,7 @@ export interface IndicatorFeedAttributes {
 }
 
 export type IndicatorFeed = Resource<
-  IndicatorFeedTypeId,
+  TypeId,
   IndicatorFeedProps,
   IndicatorFeedAttributes,
   never,
@@ -107,18 +107,20 @@ export type IndicatorFeed = Resource<
  * adopts an existing feed with the same name instead of creating a
  * duplicate.
  * :::
- *
+ * @resource
+ * @product Intel
+ * @category Observability & Analytics
  * @section Creating a Feed
  * @example Basic feed
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("threat-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
  * });
  * ```
  *
  * @example Public, downloadable feed
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("public-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("public-feed", {
  *   name: "acme-public-indicators",
  *   description: "Acme Corp public threat indicators",
  *   isPublic: true,
@@ -130,7 +132,7 @@ export type IndicatorFeed = Resource<
  * @section Publishing Indicators
  * @example Upload a STIX 2.x snapshot inline
  * ```typescript
- * const feed = yield* Cloudflare.IndicatorFeed("threat-feed", {
+ * const feed = yield* Cloudflare.Intel.IndicatorFeed("threat-feed", {
  *   description: "Indicators observed by our honeypots",
  *   snapshot: JSON.stringify({
  *     type: "bundle",
@@ -143,7 +145,7 @@ export type IndicatorFeed = Resource<
  * @section Sharing a Feed
  * @example Grant another account access
  * ```typescript
- * yield* Cloudflare.IndicatorFeedPermission("partner-access", {
+ * yield* Cloudflare.Intel.IndicatorFeedPermission("partner-access", {
  *   feedId: feed.feedId,
  *   accountTag: "023e105f4ecef8ad9ca31a8372d0c353",
  * });
@@ -151,13 +153,13 @@ export type IndicatorFeed = Resource<
  *
  * @see https://developers.cloudflare.com/security-center/indicator-feeds/
  */
-export const IndicatorFeed = Resource<IndicatorFeed>(IndicatorFeedTypeId);
+export const IndicatorFeed = Resource<IndicatorFeed>(TypeId);
 
 /**
  * Returns true if the given value is an IndicatorFeed resource.
  */
 export const isIndicatorFeed = (value: unknown): value is IndicatorFeed =>
-  Predicate.hasProperty(value, "Type") && value.Type === IndicatorFeedTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const IndicatorFeedProvider = () =>
   Provider.succeed(IndicatorFeed, {

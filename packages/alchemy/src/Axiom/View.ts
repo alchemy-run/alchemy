@@ -29,7 +29,7 @@ export type View = Resource<
  *
  * The path identifier is `name`. Renaming a view triggers a replacement
  * (the old one is deleted, a new one is created).
- *
+ * @resource
  * @see https://axiom.co/docs/query-data/datasets — APL query reference
  *
  * @section Creating a View

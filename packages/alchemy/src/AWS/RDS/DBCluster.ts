@@ -54,12 +54,126 @@ export interface DBClusterProps {
   enableHttpEndpoint?: boolean;
   /**
    * Engine mode, for example `provisioned` or `serverless`.
+   * Changing it forces replacement unless `AllowEngineModeChange` applies.
    */
   engineMode?: string;
   /**
    * Serverless v2 scaling configuration.
    */
   serverlessV2ScalingConfiguration?: rds.ServerlessV2ScalingConfiguration;
+  /**
+   * Serverless v1 scaling configuration. In-place modify.
+   */
+  scalingConfiguration?: rds.ScalingConfiguration;
+  /**
+   * Availability zones for cluster placement. Immutable — forces replacement.
+   */
+  availabilityZones?: string[];
+  /**
+   * Backup retention period in days. In-place modify.
+   */
+  backupRetentionPeriod?: number;
+  /**
+   * Daily backup window, e.g. `07:00-09:00`. In-place modify.
+   */
+  preferredBackupWindow?: string;
+  /**
+   * Weekly maintenance window, e.g. `Mon:00:00-Mon:03:00`. In-place modify.
+   */
+  preferredMaintenanceWindow?: string;
+  /**
+   * Backtrack window in seconds (Aurora MySQL only). In-place modify.
+   */
+  backtrackWindow?: number;
+  /**
+   * Option group name. In-place modify.
+   */
+  optionGroupName?: string;
+  /**
+   * Log types to export to CloudWatch Logs. Diffed against observed state and
+   * applied via the delta-shaped `CloudwatchLogsExportConfiguration` on modify.
+   */
+  enableCloudwatchLogsExports?: string[];
+  /**
+   * Auto minor version upgrade. In-place modify.
+   */
+  autoMinorVersionUpgrade?: boolean;
+  /**
+   * Allow a major engine-version upgrade during a modify. Modify-only flag.
+   */
+  allowMajorVersionUpgrade?: boolean;
+  /**
+   * Enhanced-monitoring granularity in seconds. In-place modify.
+   */
+  monitoringInterval?: number;
+  /**
+   * IAM role ARN for enhanced monitoring. In-place modify.
+   */
+  monitoringRoleArn?: string;
+  /**
+   * Enable Performance Insights. In-place modify.
+   */
+  enablePerformanceInsights?: boolean;
+  /**
+   * KMS key for Performance Insights. In-place modify.
+   */
+  performanceInsightsKMSKeyId?: string;
+  /**
+   * Performance Insights retention in days. In-place modify.
+   */
+  performanceInsightsRetentionPeriod?: number;
+  /**
+   * Network type: `IPV4` | `DUAL`. In-place modify.
+   */
+  networkType?: string;
+  /**
+   * CA certificate identifier. In-place modify.
+   */
+  caCertificateIdentifier?: string;
+  /**
+   * KMS key used to encrypt the managed master user secret. In-place modify.
+   */
+  masterUserSecretKmsKeyId?: string;
+  /**
+   * Rotate the managed master user password on the next reconcile.
+   */
+  rotateMasterUserPassword?: boolean;
+  /**
+   * Enable global write forwarding (secondary regions of a global cluster).
+   */
+  enableGlobalWriteForwarding?: boolean;
+  /**
+   * Enable local write forwarding (Aurora reader endpoints). In-place modify.
+   */
+  enableLocalWriteForwarding?: boolean;
+  /**
+   * Join this cluster to an Aurora global cluster. Immutable on create.
+   */
+  globalClusterIdentifier?: string;
+  /**
+   * Instance class for a provisioned multi-AZ cluster. In-place modify.
+   */
+  dbClusterInstanceClass?: string;
+  /**
+   * Allocated storage (GiB) for a provisioned multi-AZ cluster. In-place.
+   */
+  allocatedStorage?: number;
+  /**
+   * Storage type (provisioned multi-AZ cluster). In-place modify.
+   */
+  storageType?: string;
+  /**
+   * Provisioned IOPS (provisioned multi-AZ cluster). In-place modify.
+   */
+  iops?: number;
+  /**
+   * Whether a provisioned cluster is publicly reachable. In-place modify.
+   */
+  publiclyAccessible?: boolean;
+  /**
+   * Engine lifecycle support setting. Immutable — forces replacement.
+   */
+  engineLifecycleSupport?: string;
   /**
    * Whether to copy tags to snapshots.
    */
@@ -69,11 +183,11 @@ export interface DBClusterProps {
    */
   deletionProtection?: boolean;
   /**
-   * Whether the storage is encrypted.
+   * Whether the storage is encrypted. Immutable — forces replacement.
    */
   storageEncrypted?: boolean;
   /**
-   * Optional KMS key used for storage encryption.
+   * Optional KMS key used for storage encryption. Immutable — forces replace.
    */
   kmsKeyId?: string;
   /**
@@ -117,6 +231,34 @@ export interface DBCluster extends Resource<
     masterUserSecretArn: string | undefined;
     vpcSecurityGroupIds: string[];
     httpEndpointEnabled: boolean | undefined;
+    allocatedStorage: number | undefined;
+    backupRetentionPeriod: number | undefined;
+    preferredBackupWindow: string | undefined;
+    preferredMaintenanceWindow: string | undefined;
+    storageEncrypted: boolean | undefined;
+    kmsKeyId: string | undefined;
+    deletionProtection: boolean | undefined;
+    iamDatabaseAuthenticationEnabled: boolean | undefined;
+    engineMode: string | undefined;
+    dbClusterMembers: Array<{
+      dbInstanceIdentifier: string | undefined;
+      isClusterWriter: boolean | undefined;
+      promotionTier: number | undefined;
+    }>;
+    dbClusterResourceId: string | undefined;
+    hostedZoneId: string | undefined;
+    multiAZ: boolean | undefined;
+    enabledCloudwatchLogsExports: string[];
+    copyTagsToSnapshot: boolean | undefined;
+    clusterCreateTime: string | undefined;
+    serverlessV2PlatformVersion: string | undefined;
+    monitoringInterval: number | undefined;
+    performanceInsightsEnabled: boolean | undefined;
+    dbClusterInstanceClass: string | undefined;
+    storageType: string | undefined;
+    iops: number | undefined;
+    networkType: string | undefined;
+    customEndpoints: string[];
     tags: Record<string, string>;
   },
   never,
@@ -129,6 +271,40 @@ export interface DBCluster extends Resource<
  * `DBCluster` owns the writer and reader endpoints, cluster-wide networking,
  * and Data API enablement. It can bootstrap master credentials directly or by
  * reading a Secrets Manager secret that contains `username` and `password`.
+ *
+ * It exposes the full backup, maintenance, monitoring, performance-insights,
+ * encryption, scaling, and log-export surface of `createDBCluster` /
+ * `modifyDBCluster`. Mutable fields are reconciled in place against the
+ * observed cloud state; immutable fields (`engine`, `databaseName`,
+ * `dbSubnetGroupName`, `storageEncrypted`, `kmsKeyId`, `engineMode`,
+ * `globalClusterIdentifier`, `availabilityZones`, `engineLifecycleSupport`)
+ * force a replacement.
+ * @resource
+ * @section Serverless v2 Cluster
+ * @example Aurora Postgres serverless-v2
+ * ```typescript
+ * const cluster = yield* DBCluster("Cluster", {
+ *   engine: "aurora-postgresql",
+ *   engineMode: "provisioned",
+ *   serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 4 },
+ *   manageMasterUserPassword: true,
+ *   masterUsername: "alchemy",
+ *   backupRetentionPeriod: 7,
+ *   deletionProtection: false,
+ * });
+ * ```
+ *
+ * @section Logs & Monitoring
+ * @example Export logs and enable Performance Insights
+ * ```typescript
+ * const cluster = yield* DBCluster("Cluster", {
+ *   engine: "aurora-postgresql",
+ *   enableCloudwatchLogsExports: ["postgresql"],
+ *   enablePerformanceInsights: true,
+ *   monitoringInterval: 60,
+ *   monitoringRoleArn: monitoringRole.roleArn,
+ * });
+ * ```
  */
 export const DBCluster = Resource<DBCluster>("AWS.RDS.DBCluster");
 
@@ -196,8 +372,59 @@ const toAttrs = ({
     group.VpcSecurityGroupId ? [group.VpcSecurityGroupId] : [],
   ),
   httpEndpointEnabled: cluster.HttpEndpointEnabled,
+  allocatedStorage: cluster.AllocatedStorage,
+  backupRetentionPeriod: cluster.BackupRetentionPeriod,
+  preferredBackupWindow: cluster.PreferredBackupWindow,
+  preferredMaintenanceWindow: cluster.PreferredMaintenanceWindow,
+  storageEncrypted: cluster.StorageEncrypted,
+  kmsKeyId: cluster.KmsKeyId,
+  deletionProtection: cluster.DeletionProtection,
+  iamDatabaseAuthenticationEnabled: cluster.IAMDatabaseAuthenticationEnabled,
+  engineMode: cluster.EngineMode,
+  dbClusterMembers: (cluster.DBClusterMembers ?? []).map((member) => ({
+    dbInstanceIdentifier: member.DBInstanceIdentifier,
+    isClusterWriter: member.IsClusterWriter,
+    promotionTier: member.PromotionTier,
+  })),
+  dbClusterResourceId: cluster.DbClusterResourceId,
+  hostedZoneId: cluster.HostedZoneId,
+  multiAZ: cluster.MultiAZ,
+  enabledCloudwatchLogsExports: cluster.EnabledCloudwatchLogsExports ?? [],
+  copyTagsToSnapshot: cluster.CopyTagsToSnapshot,
+  clusterCreateTime: cluster.ClusterCreateTime?.toISOString(),
+  serverlessV2PlatformVersion: cluster.ServerlessV2PlatformVersion,
+  monitoringInterval: cluster.MonitoringInterval,
+  performanceInsightsEnabled: cluster.PerformanceInsightsEnabled,
+  dbClusterInstanceClass: cluster.DBClusterInstanceClass,
+  storageType: cluster.StorageType,
+  iops: cluster.Iops,
+  networkType: cluster.NetworkType,
+  customEndpoints: cluster.CustomEndpoints ?? [],
   tags,
 });
+
+/**
+ * Compute the CloudWatch Logs export delta. The modify API is delta-shaped
+ * (`EnableLogTypes`/`DisableLogTypes`), so it must NOT carry the full set.
+ * Returns `undefined` when there is no change.
+ */
+const logExportDelta = (
+  observed: string[] | undefined,
+  desired: string[] | undefined,
+): rds.CloudwatchLogsExportConfiguration | undefined => {
+  if (desired === undefined) return undefined;
+  const have = new Set(observed ?? []);
+  const want = new Set(desired);
+  const EnableLogTypes = [...want].filter((t) => !have.has(t));
+  const DisableLogTypes = [...have].filter((t) => !want.has(t));
+  if (EnableLogTypes.length === 0 && DisableLogTypes.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(EnableLogTypes.length > 0 ? { EnableLogTypes } : {}),
+    ...(DisableLogTypes.length > 0 ? { DisableLogTypes } : {}),
+  };
+};
 
 export const DBClusterProvider = () =>
   Provider.effect(
@@ -221,16 +448,33 @@ export const DBClusterProvider = () =>
         return response?.DBClusters?.[0];
       });
 
-      const waitForCluster = Effect.fn(function* (clusterId: string) {
-        const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-          Schedule.both(Schedule.recurs(30)),
+      // Bounded readiness wait. Gate on cluster `Status === "available"` so a
+      // follow-on `modifyDBCluster` doesn't hit `InvalidDBClusterStateFault`.
+      // Budgets ~10 min (60 * 10s) for slow provisioning. `requireAvailable:
+      // false` only waits for the ARN to appear.
+      const waitForCluster = Effect.fn(function* (
+        clusterId: string,
+        { requireAvailable = true }: { requireAvailable?: boolean } = {},
+      ) {
+        const readinessPolicy = Schedule.fixed("10 seconds").pipe(
+          Schedule.both(Schedule.recurs(60)),
         );
         return yield* readCluster(clusterId).pipe(
-          Effect.flatMap((cluster) =>
-            cluster?.DBClusterArn
-              ? Effect.succeed(cluster)
-              : Effect.fail(new Error(`DB cluster '${clusterId}' not ready`)),
-          ),
+          Effect.flatMap((cluster) => {
+            if (!cluster?.DBClusterArn) {
+              return Effect.fail(
+                new Error(`DB cluster '${clusterId}' not found`),
+              );
+            }
+            if (requireAvailable && cluster.Status !== "available") {
+              return Effect.fail(
+                new Error(
+                  `DB cluster '${clusterId}' not available (status: ${cluster.Status})`,
+                ),
+              );
+            }
+            return Effect.succeed(cluster);
+          }),
           Effect.retry({ schedule: readinessPolicy }),
         );
       });
@@ -265,7 +509,20 @@ export const DBClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if (olds?.engine !== news.engine) {
+          // Immutable props — any change forces a fresh cluster.
+          if (
+            olds !== undefined &&
+            (olds.engine !== news.engine ||
+              olds.databaseName !== news.databaseName ||
+              olds.dbSubnetGroupName !== news.dbSubnetGroupName ||
+              olds.storageEncrypted !== news.storageEncrypted ||
+              olds.kmsKeyId !== news.kmsKeyId ||
+              olds.engineMode !== news.engineMode ||
+              olds.globalClusterIdentifier !== news.globalClusterIdentifier ||
+              olds.engineLifecycleSupport !== news.engineLifecycleSupport ||
+              JSON.stringify(olds.availabilityZones ?? []) !==
+                JSON.stringify(news.availabilityZones ?? []))
+          ) {
             return { action: "replace" } as const;
           }
         }),
@@ -311,12 +568,39 @@ export const DBClusterProvider = () =>
                 DBClusterParameterGroupName: news.dbClusterParameterGroupName,
                 VpcSecurityGroupIds: news.vpcSecurityGroupIds,
                 Port: news.port,
+                AvailabilityZones: news.availabilityZones,
+                BackupRetentionPeriod: news.backupRetentionPeriod,
+                PreferredBackupWindow: news.preferredBackupWindow,
+                PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
+                BacktrackWindow: news.backtrackWindow,
+                OptionGroupName: news.optionGroupName,
+                EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
                 EnableIAMDatabaseAuthentication:
                   news.enableIAMDatabaseAuthentication,
                 EnableHttpEndpoint: news.enableHttpEndpoint,
                 EngineMode: news.engineMode,
+                ScalingConfiguration: news.scalingConfiguration,
                 ServerlessV2ScalingConfiguration:
                   news.serverlessV2ScalingConfiguration,
+                AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
+                MonitoringInterval: news.monitoringInterval,
+                MonitoringRoleArn: news.monitoringRoleArn,
+                EnablePerformanceInsights: news.enablePerformanceInsights,
+                PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
+                PerformanceInsightsRetentionPeriod:
+                  news.performanceInsightsRetentionPeriod,
+                NetworkType: news.networkType,
+                CACertificateIdentifier: news.caCertificateIdentifier,
+                MasterUserSecretKmsKeyId: news.masterUserSecretKmsKeyId,
+                EnableGlobalWriteForwarding: news.enableGlobalWriteForwarding,
+                EnableLocalWriteForwarding: news.enableLocalWriteForwarding,
+                GlobalClusterIdentifier: news.globalClusterIdentifier,
+                DBClusterInstanceClass: news.dbClusterInstanceClass,
+                AllocatedStorage: news.allocatedStorage,
+                StorageType: news.storageType,
+                Iops: news.iops,
+                PubliclyAccessible: news.publiclyAccessible,
+                EngineLifecycleSupport: news.engineLifecycleSupport,
                 CopyTagsToSnapshot: news.copyTagsToSnapshot,
                 DeletionProtection: news.deletionProtection,
                 StorageEncrypted: news.storageEncrypted,
@@ -337,26 +621,99 @@ export const DBClusterProvider = () =>
 
             observed = yield* waitForCluster(identifier);
           } else {
-            // Sync mutable cluster config — push the desired shape via
-            // `modifyDBCluster`. Many fields land in `PendingModifiedValues`
-            // and apply on next reboot; `ApplyImmediately` shortens that.
-            yield* rds.modifyDBCluster({
-              DBClusterIdentifier: identifier,
-              EngineVersion: news.engineVersion,
-              DBClusterParameterGroupName: news.dbClusterParameterGroupName,
-              VpcSecurityGroupIds: news.vpcSecurityGroupIds,
-              Port: news.port,
-              EnableIAMDatabaseAuthentication:
-                news.enableIAMDatabaseAuthentication,
-              EnableHttpEndpoint: news.enableHttpEndpoint,
-              ServerlessV2ScalingConfiguration:
-                news.serverlessV2ScalingConfiguration,
-              CopyTagsToSnapshot: news.copyTagsToSnapshot,
-              DeletionProtection: news.deletionProtection,
-              MasterUserPassword: credentials.MasterUserPassword,
-              ApplyImmediately: true,
-            });
+            // Wait for the cluster to settle before any modify so the call
+            // doesn't hit `InvalidDBClusterStateFault`.
             observed = yield* waitForCluster(identifier);
+
+            // syncCoreSettings — single `modifyDBCluster` carrying scalar
+            // in-place fields, only emitting a field when the desired value
+            // differs from the observed cloud state.
+            const core: rds.ModifyDBClusterMessage = {
+              DBClusterIdentifier: identifier,
+              ApplyImmediately: true,
+            };
+            let coreDirty = false;
+            const setIf = <K extends keyof rds.ModifyDBClusterMessage>(
+              key: K,
+              desired: rds.ModifyDBClusterMessage[K] | undefined,
+              observedValue: unknown,
+            ) => {
+              if (desired !== undefined && desired !== observedValue) {
+                core[key] = desired;
+                coreDirty = true;
+              }
+            };
+            setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
+            setIf("Port", news.port, observed.Port);
+            setIf("BackupRetentionPeriod", news.backupRetentionPeriod, observed.BackupRetentionPeriod); // prettier-ignore
+            setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
+            setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
+            setIf("BacktrackWindow", news.backtrackWindow, observed.BacktrackWindow); // prettier-ignore
+            setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
+            setIf("CopyTagsToSnapshot", news.copyTagsToSnapshot, observed.CopyTagsToSnapshot); // prettier-ignore
+            setIf("EnableIAMDatabaseAuthentication", news.enableIAMDatabaseAuthentication, observed.IAMDatabaseAuthenticationEnabled); // prettier-ignore
+            setIf("EnableHttpEndpoint", news.enableHttpEndpoint, observed.HttpEndpointEnabled); // prettier-ignore
+            setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
+            setIf("MonitoringInterval", news.monitoringInterval, observed.MonitoringInterval); // prettier-ignore
+            setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
+            setIf("EnablePerformanceInsights", news.enablePerformanceInsights, observed.PerformanceInsightsEnabled); // prettier-ignore
+            setIf("PerformanceInsightsKMSKeyId", news.performanceInsightsKMSKeyId, observed.PerformanceInsightsKMSKeyId); // prettier-ignore
+            setIf("PerformanceInsightsRetentionPeriod", news.performanceInsightsRetentionPeriod, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
+            setIf("NetworkType", news.networkType, observed.NetworkType);
+            setIf("DBClusterInstanceClass", news.dbClusterInstanceClass, observed.DBClusterInstanceClass); // prettier-ignore
+            setIf("AllocatedStorage", news.allocatedStorage, observed.AllocatedStorage); // prettier-ignore
+            setIf("StorageType", news.storageType, observed.StorageType);
+            setIf("Iops", news.iops, observed.Iops);
+            setIf("OptionGroupName", news.optionGroupName, undefined);
+            setIf("DBClusterParameterGroupName", news.dbClusterParameterGroupName, observed.DBClusterParameterGroup); // prettier-ignore
+            setIf("EnableGlobalWriteForwarding", news.enableGlobalWriteForwarding, undefined); // prettier-ignore
+            setIf("EnableLocalWriteForwarding", news.enableLocalWriteForwarding, undefined); // prettier-ignore
+            setIf("CACertificateIdentifier", news.caCertificateIdentifier, undefined); // prettier-ignore
+            if (news.scalingConfiguration !== undefined) {
+              core.ScalingConfiguration = news.scalingConfiguration;
+              coreDirty = true;
+            }
+            if (news.serverlessV2ScalingConfiguration !== undefined) {
+              core.ServerlessV2ScalingConfiguration =
+                news.serverlessV2ScalingConfiguration;
+              coreDirty = true;
+            }
+            if (news.vpcSecurityGroupIds !== undefined) {
+              core.VpcSecurityGroupIds = news.vpcSecurityGroupIds;
+              coreDirty = true;
+            }
+            if (news.allowMajorVersionUpgrade) {
+              core.AllowMajorVersionUpgrade = true;
+            }
+            // syncMasterPassword — rotation or explicit password update.
+            if (
+              news.manageMasterUserPassword &&
+              news.rotateMasterUserPassword
+            ) {
+              core.RotateMasterUserPassword = true;
+              coreDirty = true;
+            } else if (credentials.MasterUserPassword !== undefined) {
+              core.MasterUserPassword = credentials.MasterUserPassword;
+              coreDirty = true;
+            }
+            if (coreDirty) {
+              yield* rds.modifyDBCluster(core);
+              observed = yield* waitForCluster(identifier);
+            }
+
+            // syncCloudwatchLogsExports — delta-shaped; separate call.
+            const logDelta = logExportDelta(
+              observed.EnabledCloudwatchLogsExports,
+              news.enableCloudwatchLogsExports,
+            );
+            if (logDelta) {
+              yield* rds.modifyDBCluster({
+                DBClusterIdentifier: identifier,
+                CloudwatchLogsExportConfiguration: logDelta,
+                ApplyImmediately: true,
+              });
+              observed = yield* waitForCluster(identifier);
+            }
           }
 
           const dbClusterArn = observed.DBClusterArn ?? "";
@@ -389,6 +746,28 @@ export const DBClusterProvider = () =>
               SkipFinalSnapshot: true,
             })
             .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.void));
+          // Block until the cluster is fully gone. RDS deletion is async; if we
+          // return while it is still `deleting`, a dependent (e.g. a
+          // DBSubnetGroup or VPC) is torn down next and AWS rejects it with
+          // `InvalidDBSubnetGroupStateFault: ... still using it`.
+          yield* Effect.repeat(
+            rds
+              .describeDBClusters({
+                DBClusterIdentifier: output.dbClusterIdentifier,
+              })
+              .pipe(
+                Effect.as(true),
+                Effect.catchTag("DBClusterNotFoundFault", () =>
+                  Effect.succeed(false),
+                ),
+              ),
+            {
+              schedule: Schedule.fixed("15 seconds").pipe(
+                Schedule.both(Schedule.recurs(40)),
+              ),
+              until: (exists) => exists === false,
+            },
+          ).pipe(Effect.catch(() => Effect.void));
         }),
       };
     }),

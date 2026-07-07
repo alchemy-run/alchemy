@@ -10,9 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const LeakedCredentialDetectionTypeId =
-  "Cloudflare.LeakedCredentialCheck.Detection" as const;
-type LeakedCredentialDetectionTypeId = typeof LeakedCredentialDetectionTypeId;
+const TypeId = "Cloudflare.LeakedCredentialCheck.Detection" as const;
+type TypeId = typeof TypeId;
 
 export interface LeakedCredentialDetectionProps {
   /**
@@ -48,7 +47,7 @@ export interface LeakedCredentialDetectionAttributes {
 }
 
 export type LeakedCredentialDetection = Resource<
-  LeakedCredentialDetectionTypeId,
+  TypeId,
   LeakedCredentialDetectionProps,
   LeakedCredentialDetectionAttributes,
   never,
@@ -72,15 +71,17 @@ export type LeakedCredentialDetection = Resource<
  * state, `read` scans the zone for an existing detection with the same
  * expressions and reports it as `Unowned`, so the engine refuses to take
  * it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Leaked Credential Checks
+ * @category Application Security
  * @section Custom detection locations
  * @example Detect credentials in a JSON login body
  * ```typescript
- * const check = yield* Cloudflare.LeakedCredentialCheck("Lcc", {
+ * const check = yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
  *   zoneId: zone.zoneId,
  * });
  *
- * yield* Cloudflare.LeakedCredentialDetection("LoginBody", {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("LoginBody", {
  *   // Reference the check's zoneId so the toggle deploys first.
  *   zoneId: check.zoneId,
  *   username: 'lookup_json_string(http.request.body.raw, "user")',
@@ -90,7 +91,7 @@ export type LeakedCredentialDetection = Resource<
  *
  * @example Username-only detection
  * ```typescript
- * yield* Cloudflare.LeakedCredentialDetection("UsernameHeader",  {
+ * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("UsernameHeader",  {
  *   zoneId: check.zoneId,
  *   username: 'http.request.headers["x-username"][0]',
  * });
@@ -98,9 +99,8 @@ export type LeakedCredentialDetection = Resource<
  *
  * @see https://developers.cloudflare.com/waf/detections/leaked-credentials/#custom-detection-locations
  */
-export const LeakedCredentialDetection = Resource<LeakedCredentialDetection>(
-  LeakedCredentialDetectionTypeId,
-);
+export const LeakedCredentialDetection =
+  Resource<LeakedCredentialDetection>(TypeId);
 
 /**
  * Returns true if the given value is a LeakedCredentialDetection resource.
@@ -108,8 +108,7 @@ export const LeakedCredentialDetection = Resource<LeakedCredentialDetection>(
 export const isLeakedCredentialDetection = (
   value: unknown,
 ): value is LeakedCredentialDetection =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === LeakedCredentialDetectionTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LeakedCredentialDetectionProvider = () =>
   Provider.succeed(LeakedCredentialDetection, {

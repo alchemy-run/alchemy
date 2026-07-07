@@ -34,7 +34,7 @@ export interface RpcSpawnPayload extends Pick<
   serverEntryUrl: string;
 }
 
-export const make = Effect.fnUntraced(function* ({
+export const make = Effect.fn(function* ({
   profile,
   envFile,
 }: Pick<RpcServerEnvironment, "profile" | "envFile">) {
@@ -46,7 +46,7 @@ export const make = Effect.fnUntraced(function* ({
     capacity: Infinity,
   });
 
-  const spawn = Effect.fnUntraced(function* ({
+  const spawn = Effect.fn(function* ({
     serverEntryUrl,
     alchemyContext,
     stack,
@@ -115,7 +115,7 @@ export const make = Effect.fnUntraced(function* ({
     };
   });
 
-  const register = Effect.fnUntraced(function* (
+  const register = Effect.fn(function* (
     payload: RpcSpawnPayload,
     attempt = 0,
   ): Effect.fn.Return<string, PlatformError> {

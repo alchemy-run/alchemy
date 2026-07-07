@@ -3,6 +3,7 @@ export * from "./EIP.ts";
 export * from "./Image.ts";
 export * from "./Instance.ts";
 export * from "./InternetGateway.ts";
+export * from "./KeyPair.ts";
 export * from "./NatGateway.ts";
 export * from "./Network.ts";
 export * from "./NetworkAcl.ts";

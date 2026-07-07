@@ -82,7 +82,7 @@ export interface Function extends Resource<
  *
  * CloudFront Functions are lightweight JavaScript handlers that run at the
  * edge and can be attached to distribution cache behaviors.
- *
+ * @resource
  * @section Creating Functions
  * @example Viewer Request Function
  * ```typescript

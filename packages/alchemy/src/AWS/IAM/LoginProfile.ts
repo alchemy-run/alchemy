@@ -40,7 +40,7 @@ export interface LoginProfile extends Resource<
  *
  * `LoginProfile` manages AWS Management Console access for an IAM user. The
  * password is write-only, so AWS never returns it during later reads.
- *
+ * @resource
  * @section Managing Console Access
  * @example Create a Console Login Profile
  * ```typescript

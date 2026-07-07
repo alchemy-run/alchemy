@@ -58,7 +58,7 @@ const bootstrapCommand = Command.make(
       "alchemy.destroy": a.destroy,
     }),
   )(
-    Effect.fnUntraced(function* ({ envFile, profile, region, destroy }) {
+    Effect.fn(function* ({ envFile, profile, region, destroy }) {
       const logger = Logger.layer([fileLogger("bootstrap.txt")], {
         mergeWithExisting: true,
       });

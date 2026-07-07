@@ -99,7 +99,7 @@ export interface RestApi extends Resource<
  * stack is the `RestApi` value itself: child resources accept `restApi: api`
  * and register themselves back onto the API so that deployments and stages
  * wait for them without any user-authored dependency lists.
- *
+ * @resource
  * @section Getting started
  * A minimal API Gateway stack is four pieces: the `RestApi`, one or more
  * `Method`s, a `Deployment` that snapshots those methods, and a `Stage` that

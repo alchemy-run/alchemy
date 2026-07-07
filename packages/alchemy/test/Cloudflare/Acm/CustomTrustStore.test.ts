@@ -108,7 +108,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.CustomTrustStore,
+        Cloudflare.Acm.CustomTrustStore,
       );
       const all = yield* provider.list();
 
@@ -131,7 +131,7 @@ test.provider.skipIf(!entitledZoneId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomTrustStore("RootCa", {
+          return yield* Cloudflare.Acm.CustomTrustStore("RootCa", {
             zoneId,
             certificate,
           });
@@ -139,7 +139,7 @@ test.provider.skipIf(!entitledZoneId)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.CustomTrustStore,
+        Cloudflare.Acm.CustomTrustStore,
       );
       const all = yield* provider.list();
 
@@ -166,7 +166,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Create.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomTrustStore("RootCa", {
+          return yield* Cloudflare.Acm.CustomTrustStore("RootCa", {
             zoneId,
             certificate,
           });
@@ -184,7 +184,7 @@ test.provider.skipIf(!entitledZoneId)(
       // update API, so a new certificate id must be issued.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomTrustStore("RootCa", {
+          return yield* Cloudflare.Acm.CustomTrustStore("RootCa", {
             zoneId,
             certificate: certificate2,
           });

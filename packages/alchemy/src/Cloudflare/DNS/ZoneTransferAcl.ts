@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const ZoneTransferAclTypeId = "Cloudflare.Dns.ZoneTransferAcl" as const;
-type ZoneTransferAclTypeId = typeof ZoneTransferAclTypeId;
+const TypeId = "Cloudflare.DNS.ZoneTransferAcl" as const;
+type TypeId = typeof TypeId;
 
 export interface ZoneTransferAclProps {
   /**
@@ -48,7 +48,7 @@ export interface ZoneTransferAclAttributes {
 }
 
 export type ZoneTransferAcl = Resource<
-  ZoneTransferAclTypeId,
+  TypeId,
   ZoneTransferAclProps,
   ZoneTransferAclAttributes,
   never,
@@ -63,18 +63,20 @@ export type ZoneTransferAcl = Resource<
  *
  * Requires the Secondary DNS (zone transfer) entitlement on the
  * account. Both `name` and `ipRange` are mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Creating an ACL
  * @example Allow a primary nameserver range
  * ```typescript
- * const acl = yield* Cloudflare.ZoneTransferAcl("PrimaryNs", {
+ * const acl = yield* Cloudflare.DNS.ZoneTransferAcl("PrimaryNs", {
  *   ipRange: "192.0.2.48/28",
  * });
  * ```
  *
  * @example ACL with an explicit name
  * ```typescript
- * const acl = yield* Cloudflare.ZoneTransferAcl("PrimaryNs", {
+ * const acl = yield* Cloudflare.DNS.ZoneTransferAcl("PrimaryNs", {
  *   name: "primary-nameservers",
  *   ipRange: "2001:db8::/64",
  * });
@@ -82,13 +84,13 @@ export type ZoneTransferAcl = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
  */
-export const ZoneTransferAcl = Resource<ZoneTransferAcl>(ZoneTransferAclTypeId);
+export const ZoneTransferAcl = Resource<ZoneTransferAcl>(TypeId);
 
 /**
  * Returns true if the given value is a ZoneTransferAcl resource.
  */
 export const isZoneTransferAcl = (value: unknown): value is ZoneTransferAcl =>
-  Predicate.hasProperty(value, "Type") && value.Type === ZoneTransferAclTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneTransferAclProvider = () =>
   Provider.succeed(ZoneTransferAcl, {

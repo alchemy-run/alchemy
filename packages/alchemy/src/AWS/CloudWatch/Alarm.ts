@@ -52,7 +52,7 @@ export interface Alarm extends Resource<
 
 /**
  * A CloudWatch metric alarm.
- *
+ * @resource
  * @section Creating Alarms
  * @example Threshold Alarm
  * ```typescript

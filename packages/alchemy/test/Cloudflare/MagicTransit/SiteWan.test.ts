@@ -28,7 +28,9 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicSiteWan);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicSiteWan,
+      );
       const all = yield* provider.list();
 
       // Unentitled accounts surface MagicWanUnauthorized/Forbidden, which list()
@@ -54,14 +56,14 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const site = yield* stack.deploy(
-        Cloudflare.MagicSite("Site", {
+        Cloudflare.MagicTransit.MagicSite("Site", {
           name: "alchemy-wan-list-site",
           description: "alchemy magic site wan list test",
         }),
       );
 
       const wan = yield* stack.deploy(
-        Cloudflare.MagicSiteWan("Wan", {
+        Cloudflare.MagicTransit.MagicSiteWan("Wan", {
           siteId: site.siteId,
           physport: 1,
           name: "alchemy-wan-list",
@@ -77,7 +79,9 @@ test.provider.skipIf(!entitled)(
       });
       expect(live.result.some((w) => w.id === wan.wanId)).toBe(true);
 
-      const provider = yield* Provider.findProvider(Cloudflare.MagicSiteWan);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicTransit.MagicSiteWan,
+      );
       const all = yield* provider.list();
 
       expect(all.some((w) => w.wanId === wan.wanId)).toBe(true);

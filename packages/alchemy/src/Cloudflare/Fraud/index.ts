@@ -1,1 +1,1 @@
-export * from "./FraudDetectionSettings.ts";
+export * from "./DetectionSettings.ts";

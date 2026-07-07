@@ -56,7 +56,7 @@ export interface MetricStream extends Resource<
 
 /**
  * A CloudWatch metric stream.
- *
+ * @resource
  * @section Creating Metric Streams
  * @example Firehose Delivery Stream
  * ```typescript

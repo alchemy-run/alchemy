@@ -13,8 +13,8 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const LegacyPipelineTypeId = "Cloudflare.Pipelines.LegacyPipeline" as const;
-type LegacyPipelineTypeId = typeof LegacyPipelineTypeId;
+const TypeId = "Cloudflare.Pipelines.LegacyPipeline" as const;
+type TypeId = typeof TypeId;
 
 /**
  * HTTP ingest source — events are POSTed as JSON to the pipeline's
@@ -144,7 +144,7 @@ export interface LegacyPipelineAttributes {
 }
 
 export type LegacyPipeline = Resource<
-  LegacyPipelineTypeId,
+  TypeId,
   LegacyPipelineProps,
   LegacyPipelineAttributes,
   never,
@@ -158,7 +158,7 @@ export type LegacyPipeline = Resource<
  * :::caution
  * This is the **deprecated, legacy** Pipelines API. Cloudflare has
  * superseded it with the SQL-based product — prefer
- * {@link PipelineStream}, {@link PipelineSink}, and {@link Pipeline}
+ * {@link Stream}, {@link Sink}, and {@link Pipeline}
  * for new infrastructure. This resource exists only to manage
  * pre-existing legacy pipelines.
  * :::
@@ -166,16 +166,18 @@ export type LegacyPipeline = Resource<
  * A legacy pipeline accepts JSON events over HTTP (and/or a Worker
  * `pipelines` binding) and batches them into an R2 bucket using
  * S3-compatible credentials.
- *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  * @section Creating a Legacy Pipeline
  * @example HTTP ingest into R2
  * The S3-compatible credentials are derived from a Cloudflare API token:
  * the access key id is the token id and the secret is the SHA-256 hex
  * digest of the token value.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("events", {});
+ * const bucket = yield* Cloudflare.R2.Bucket("events", {});
  *
- * const pipeline = yield* Cloudflare.LegacyPipeline("ingest", {
+ * const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("ingest", {
  *   destination: {
  *     bucket: bucket.bucketName,
  *     credentials: {
@@ -189,7 +191,7 @@ export type LegacyPipeline = Resource<
  *
  * @example Tuned batching and CORS
  * ```typescript
- * const pipeline = yield* Cloudflare.LegacyPipeline("ingest", {
+ * const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("ingest", {
  *   source: [
  *     { type: "http", cors: { origins: ["https://example.com"] } },
  *   ],
@@ -205,13 +207,13 @@ export type LegacyPipeline = Resource<
  *
  * @see https://developers.cloudflare.com/pipelines/
  */
-export const LegacyPipeline = Resource<LegacyPipeline>(LegacyPipelineTypeId);
+export const LegacyPipeline = Resource<LegacyPipeline>(TypeId);
 
 /**
  * Returns true if the given value is a LegacyPipeline resource.
  */
 export const isLegacyPipeline = (value: unknown): value is LegacyPipeline =>
-  Predicate.hasProperty(value, "Type") && value.Type === LegacyPipelineTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LegacyPipelineProvider = () =>
   Provider.succeed(LegacyPipeline, {

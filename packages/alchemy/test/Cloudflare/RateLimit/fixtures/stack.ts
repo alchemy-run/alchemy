@@ -8,8 +8,7 @@ export const AsyncWorker = Cloudflare.Worker("RateLimitAsyncWorker", {
   main: path.resolve(import.meta.dirname, "async.ts"),
   url: true,
   env: {
-    THROTTLE: Cloudflare.RateLimit({
-      name: "THROTTLE",
+    THROTTLE: Cloudflare.RateLimit("THROTTLE", {
       namespaceId: 11_002,
       simple: { limit: 2, period: 10 },
     }),

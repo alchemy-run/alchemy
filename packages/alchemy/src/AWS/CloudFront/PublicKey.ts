@@ -71,7 +71,7 @@ export interface PublicKey extends Resource<
  *
  * The key body is immutable after creation — changing `encodedKey` triggers
  * a replacement (CloudFront returns no API to rotate a key in place).
- *
+ * @resource
  * @section Creating Public Keys
  * @example PEM-encoded RSA public key
  * ```typescript

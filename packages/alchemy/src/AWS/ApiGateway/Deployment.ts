@@ -66,7 +66,7 @@ export interface DeploymentType extends Resource<
 /**
  * A point-in-time snapshot of a REST API, ready to be served through a
  * `Stage`.
- *
+ * @resource
  * @section Creating a deployment
  * A Deployment captures whatever methods, integrations, resources, and
  * authorizers currently exist on the REST API and produces an immutable

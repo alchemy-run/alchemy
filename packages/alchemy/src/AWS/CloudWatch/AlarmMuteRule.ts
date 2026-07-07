@@ -44,7 +44,7 @@ export interface AlarmMuteRule extends Resource<
 
 /**
  * A CloudWatch alarm mute rule.
- *
+ * @resource
  * @section Creating Mute Rules
  * @example Scheduled Mute
  * ```typescript

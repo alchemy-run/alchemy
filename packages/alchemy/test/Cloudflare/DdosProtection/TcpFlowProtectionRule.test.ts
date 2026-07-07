@@ -36,12 +36,15 @@ test.provider.skipIf(!magicTransit)(
       // Create.
       const rule = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TcpFlowProtectionRule("Rule", {
-            scope: "global",
-            mode: "monitoring",
-            burstSensitivity: "medium",
-            rateSensitivity: "medium",
-          });
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule(
+            "Rule",
+            {
+              scope: "global",
+              mode: "monitoring",
+              burstSensitivity: "medium",
+              rateSensitivity: "medium",
+            },
+          );
         }),
       );
       expect(rule.scope).toEqual("global");
@@ -60,12 +63,15 @@ test.provider.skipIf(!magicTransit)(
       // In-place update — mode and sensitivities are patched, id is stable.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TcpFlowProtectionRule("Rule", {
-            scope: "global",
-            mode: "disabled",
-            burstSensitivity: "low",
-            rateSensitivity: "high",
-          });
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule(
+            "Rule",
+            {
+              scope: "global",
+              mode: "disabled",
+              burstSensitivity: "low",
+              rateSensitivity: "high",
+            },
+          );
         }),
       );
       expect(updated.ruleId).toEqual(rule.ruleId);
@@ -102,7 +108,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TcpFlowProtectionRule,
+        Cloudflare.DdosProtection.TcpFlowProtectionRule,
       );
       const all = yield* provider.list();
 
@@ -124,17 +130,20 @@ test.provider.skipIf(!magicTransit)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TcpFlowProtectionRule("ListRule", {
-            scope: "global",
-            mode: "monitoring",
-            burstSensitivity: "medium",
-            rateSensitivity: "medium",
-          });
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule(
+            "ListRule",
+            {
+              scope: "global",
+              mode: "monitoring",
+              burstSensitivity: "medium",
+              rateSensitivity: "medium",
+            },
+          );
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TcpFlowProtectionRule,
+        Cloudflare.DdosProtection.TcpFlowProtectionRule,
       );
       const all = yield* provider.list();
 

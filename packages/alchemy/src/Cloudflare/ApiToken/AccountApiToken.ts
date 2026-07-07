@@ -15,12 +15,12 @@ import {
   policyFingerprint,
   resolvePolicies,
   type ApiTokenBinding,
-  type ApiTokenProps,
+  type Props,
 } from "./Common.ts";
 
 export type AccountApiToken = Resource<
-  "Cloudflare.AccountApiToken",
-  ApiTokenProps,
+  "Cloudflare.ApiToken.AccountApiToken",
+  Props,
   {
     tokenId: string;
     name: string;
@@ -47,11 +47,13 @@ export type AccountApiToken = Resource<
  *
  * Creating account-owned tokens requires the caller to have the
  * `API Tokens > Write` account permission.
- *
+ * @resource
+ * @product API Tokens
+ * @category Account & Identity
  * @section Creating a Token
  * @example A token for managing Workers and KV from CI
  * ```typescript
- * const token = yield* Cloudflare.AccountApiToken("ci-token", {
+ * const token = yield* Cloudflare.ApiToken.AccountApiToken("ci-token", {
  *   name: "my-ci-token",
  *   accountId,
  *   policies: [
@@ -80,7 +82,7 @@ export type AccountApiToken = Resource<
  * supplied through its binding contract (see {@link ApiTokenBinding}). This is
  * how capabilities like {@link CreateTunnel} provision a least-privilege token.
  * ```typescript
- * const token = yield* Cloudflare.AccountApiToken("scoped-token");
+ * const token = yield* Cloudflare.ApiToken.AccountApiToken("scoped-token");
  *
  * yield* token.bind("MyCapability", {
  *   policies: [
@@ -113,7 +115,7 @@ export type AccountApiToken = Resource<
  * ```
  */
 export const AccountApiToken = Resource<AccountApiToken>(
-  "Cloudflare.AccountApiToken",
+  "Cloudflare.ApiToken.AccountApiToken",
 );
 
 type AccountApiTokenAttributes = AccountApiToken["Attributes"];
@@ -253,6 +255,10 @@ export const AccountApiTokenProvider = () =>
           // `TokenNotFound`. Either is fine; we just want the resource gone.
           Effect.catchTag("InvalidRoute", () => Effect.void),
           Effect.catchTag("TokenNotFound", () => Effect.void),
+          // Cloudflare-managed tokens (e.g. "Cloudflare Resource Tagging
+          // System") can never be deleted (code 1001). We don't own them, so
+          // treat the refusal as a no-op rather than a failure.
+          Effect.catchTag("TokenManagedByCloudflare", () => Effect.void),
         );
     }),
     list: Effect.fn(function* () {

@@ -9,9 +9,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const ZoneTransferIncomingTypeId =
-  "Cloudflare.Dns.ZoneTransferIncoming" as const;
-type ZoneTransferIncomingTypeId = typeof ZoneTransferIncomingTypeId;
+const TypeId = "Cloudflare.DNS.ZoneTransferIncoming" as const;
+type TypeId = typeof TypeId;
 
 export interface ZoneTransferIncomingProps {
   /**
@@ -64,7 +63,7 @@ export interface ZoneTransferIncomingAttributes {
 }
 
 export type ZoneTransferIncoming = Resource<
-  ZoneTransferIncomingTypeId,
+  TypeId,
   ZoneTransferIncomingProps,
   ZoneTransferIncomingAttributes,
   never,
@@ -81,15 +80,17 @@ export type ZoneTransferIncoming = Resource<
  * must be created with `type: "secondary"`. The configuration is a
  * per-zone singleton: `zoneId` is the identity (replacement on change),
  * everything else is mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Configuring incoming transfers
  * @example Transfer a secondary zone in from a primary
  * ```typescript
- * const peer = yield* Cloudflare.ZoneTransferPeer("Primary", {
+ * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   port: 53,
  * });
- * yield* Cloudflare.ZoneTransferIncoming("Incoming", {
+ * yield* Cloudflare.DNS.ZoneTransferIncoming("Incoming", {
  *   zoneId: zone.zoneId,
  *   name: "example.com.",
  *   peers: [peer.peerId],
@@ -99,9 +100,7 @@ export type ZoneTransferIncoming = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/setup/
  */
-export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(
-  ZoneTransferIncomingTypeId,
-);
+export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(TypeId);
 
 /**
  * Returns true if the given value is a ZoneTransferIncoming resource.
@@ -109,8 +108,7 @@ export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(
 export const isZoneTransferIncoming = (
   value: unknown,
 ): value is ZoneTransferIncoming =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === ZoneTransferIncomingTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneTransferIncomingProvider = () =>
   Provider.succeed(ZoneTransferIncoming, {
@@ -171,7 +169,7 @@ export const ZoneTransferIncomingProvider = () =>
       return output === undefined ? Unowned(attrs) : attrs;
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       // Inputs are resolved to concrete values by Plan.
       const zoneId = news.zoneId as string;
       const peers = news.peers as string[];

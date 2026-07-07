@@ -65,10 +65,10 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const tunnel = yield* Cloudflare.Tunnel("HrTunnel", {
+          const tunnel = yield* Cloudflare.Tunnel.Tunnel("HrTunnel", {
             adopt: true,
           });
-          const route = yield* Cloudflare.TunnelHostnameRoute("AppRoute", {
+          const route = yield* Cloudflare.Tunnel.HostnameRoute("AppRoute", {
             hostname: HOSTNAME,
             tunnelId: tunnel.tunnelId,
             comment: "v1",
@@ -93,10 +93,10 @@ test.provider(
       // Comment update converges in place — same route id.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const tunnel = yield* Cloudflare.Tunnel("HrTunnel", {
+          const tunnel = yield* Cloudflare.Tunnel.Tunnel("HrTunnel", {
             adopt: true,
           });
-          const route = yield* Cloudflare.TunnelHostnameRoute("AppRoute", {
+          const route = yield* Cloudflare.Tunnel.HostnameRoute("AppRoute", {
             hostname: HOSTNAME,
             tunnelId: tunnel.tunnelId,
             comment: "v2",
@@ -138,10 +138,10 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const tunnel = yield* Cloudflare.Tunnel("HrListTunnel", {
+          const tunnel = yield* Cloudflare.Tunnel.Tunnel("HrListTunnel", {
             adopt: true,
           });
-          const route = yield* Cloudflare.TunnelHostnameRoute("ListRoute", {
+          const route = yield* Cloudflare.Tunnel.HostnameRoute("ListRoute", {
             hostname: LIST_HOSTNAME,
             tunnelId: tunnel.tunnelId,
             comment: "list",
@@ -151,7 +151,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TunnelHostnameRoute,
+        Cloudflare.Tunnel.HostnameRoute,
       );
 
       // The account-wide list is eventually consistent right after a create —

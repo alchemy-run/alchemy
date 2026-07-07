@@ -75,7 +75,7 @@ export interface OriginRequestPolicy extends Resource<
  * addition to those used in the cache key) CloudFront includes when sending
  * a request to the origin. They are referenced by ID on a Distribution's
  * default behavior or per-path cache behaviors.
- *
+ * @resource
  * @section Creating Origin Request Policies
  * @example Forward all viewer headers and cookies
  * ```typescript

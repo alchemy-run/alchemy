@@ -30,7 +30,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.DlpProfile);
+      const provider = yield* Provider.findProvider(Cloudflare.Dlp.Profile);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -54,7 +54,7 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DlpProfile("ListResource", {
+          return yield* Cloudflare.Dlp.Profile("ListResource", {
             name: "alchemy-test-dlp-list",
             description: "list coverage",
             entries: [
@@ -68,7 +68,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.DlpProfile);
+      const provider = yield* Provider.findProvider(Cloudflare.Dlp.Profile);
       const all = yield* provider.list();
 
       expect(all.some((p) => p.profileId === deployed.profileId)).toBe(true);

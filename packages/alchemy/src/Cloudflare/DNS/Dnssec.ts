@@ -10,8 +10,8 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const DnssecTypeId = "Cloudflare.Dns.Dnssec" as const;
-type DnssecTypeId = typeof DnssecTypeId;
+const TypeId = "Cloudflare.DNS.Dnssec" as const;
+type TypeId = typeof TypeId;
 
 /**
  * Live DNSSEC status as Cloudflare reports it. `pending` /
@@ -134,7 +134,7 @@ export interface DnssecAttributes {
 }
 
 export type Dnssec = Resource<
-  DnssecTypeId,
+  TypeId,
   DnssecProps,
   DnssecAttributes,
   never,
@@ -161,11 +161,13 @@ export type Dnssec = Resource<
  * Safety: when there is no prior state and DNSSEC is already enabled
  * on the zone, `read` reports it as `Unowned` and the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Enabling DNSSEC
  * @example Sign the zone
  * ```typescript
- * const dnssec = yield* Cloudflare.Dnssec("ZoneDnssec", {
+ * const dnssec = yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  * });
  * // Paste `dnssec.ds` at your registrar to complete activation.
@@ -173,7 +175,7 @@ export type Dnssec = Resource<
  *
  * @example Multi-signer DNSSEC
  * ```typescript
- * yield* Cloudflare.Dnssec("ZoneDnssec", {
+ * yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  *   dnssecMultiSigner: true,
  * });
@@ -182,19 +184,19 @@ export type Dnssec = Resource<
  * @section Disabling DNSSEC
  * @example Keep DNSSEC explicitly off
  * ```typescript
- * yield* Cloudflare.Dnssec("ZoneDnssec", {
+ * yield* Cloudflare.DNS.Dnssec("ZoneDnssec", {
  *   zoneId: zone.zoneId,
  *   status: "disabled",
  * });
  * ```
  */
-export const Dnssec = Resource<Dnssec>(DnssecTypeId);
+export const Dnssec = Resource<Dnssec>(TypeId);
 
 /**
  * Returns true if the given value is a Dnssec resource.
  */
-export const isDnssec = (value: unknown): value is Dnssec =>
-  Predicate.hasProperty(value, "Type") && value.Type === DnssecTypeId;
+export const issec = (value: unknown): value is Dnssec =>
+  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DnssecProvider = () =>
   Provider.succeed(Dnssec, {

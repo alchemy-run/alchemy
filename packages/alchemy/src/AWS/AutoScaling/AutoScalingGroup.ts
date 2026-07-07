@@ -105,6 +105,7 @@ export interface AutoScalingGroup extends Resource<
  * An EC2 Auto Scaling Group that manages a fleet of instances from a launch
  * template and can register that fleet with one or more load balancer target
  * groups.
+ * @resource
  */
 export const AutoScalingGroup = Resource<AutoScalingGroup>(
   "AWS.AutoScaling.AutoScalingGroup",
