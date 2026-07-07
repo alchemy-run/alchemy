@@ -428,12 +428,20 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           Effect.gen(function* () {
             // rebuild the persisted baseline (retires plan ghosts), then
             // re-apply the structure pass; the fresh plan re-lands via the
-            // plan worker notification below
+            // plan worker notification below.
+            //
+            // Capture the edge set first: after a DESTROY the baseline is
+            // empty and the structure ghosts only know binding edges —
+            // restoring the captured dependency edges keeps the topology
+            // (and therefore the layout) identical, so the graph recolors
+            // to deleted ghosts IN PLACE instead of morphing.
+            const previousEdges = [...host.document.structure.edges.values()];
             yield* host.refreshStates();
             const lastStructure = lastStructures.get(stage);
             if (lastStructure !== undefined) {
               yield* host.applyStructure(lastStructure);
             }
+            yield* host.restoreEdges(previousEdges);
             yield* host.refreshOutputs();
             yield* host.deploymentDone();
           }),

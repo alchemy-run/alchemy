@@ -767,7 +767,7 @@ export const applyStructure = (
       fqn: res.fqn,
       logicalId: res.logicalId,
       path: res.fqn.split("/").slice(0, -1),
-      kind: "resource",
+      kind: res.kind ?? "resource",
       type: res.type,
       status: "pending",
       bindings: [],
@@ -806,6 +806,34 @@ export const applyStructure = (
  * `at` supplies the timestamp for payloads that don't carry their own `ts`
  * (journal envelopes stamp it — see {@link foldJournal}).
  */
+
+/**
+ * Re-add edges (typically captured before an `applyStates` rebuild) whose
+ * endpoints still exist. This is what keeps the topology IDENTICAL through
+ * a destroy: the states rebuild retires everything, the structure ghost
+ * pass re-adds the nodes (bindings only — it cannot know dependency
+ * edges), and this restores the dependency edges between surviving nodes
+ * so the structural hash — and therefore the layout — does not move.
+ */
+export const restoreEdges = (
+  doc: DeploymentDocument,
+  edges: readonly DocumentEdge[],
+): Mutation => {
+  const patches: DocumentPatch[] = [];
+  const before = structureSignature(doc.structure);
+  for (const edge of edges) {
+    const key = edgeKeyOf(edge);
+    if (
+      !doc.structure.edges.has(key) &&
+      doc.structure.nodes.has(edge.source) &&
+      doc.structure.nodes.has(edge.target)
+    ) {
+      doc.structure.edges.set(key, { ...edge });
+    }
+  }
+  finishStructure(doc, before, patches);
+  return commit(doc, patches);
+};
 export const applyEvent = (
   doc: DeploymentDocument,
   event: ApplyEvent | DeploymentSessionPayload,
