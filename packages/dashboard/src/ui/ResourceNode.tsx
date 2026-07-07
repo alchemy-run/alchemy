@@ -71,6 +71,16 @@ const tabStyleOf = (color: string): CSSProperties => {
   return style;
 };
 
+const beamCache = new Map<string, CSSProperties>();
+const beamStyleOf = (color: string): CSSProperties => {
+  let style = beamCache.get(color);
+  if (style === undefined) {
+    style = { "--beam-color": color } as CSSProperties;
+    beamCache.set(color, style);
+  }
+  return style;
+};
+
 // hollow variant: a PENDING phase is a promise, not yet real — outlined
 // tab with a soft wash of the action color
 const tabOutlineCache = new Map<string, CSSProperties>();
@@ -279,6 +289,11 @@ export const ResourceNode = memo(function ResourceNode({
         opacity: hidden ? 0.2 : undefined,
       }}
     >
+      {/* border beam: a light of the action color orbits the card while a
+          lifecycle operation is actively running */}
+      {inFlight && tab !== undefined && (
+        <span className="node-beam" style={beamStyleOf(tab.color)} />
+      )}
       {/* bookmark tab: the node's lifecycle at a glance, flush on the
           card's top edge like an index tab — "update" (pending) →
           "updating" + spinner (running) → "updated"/"failed" (this run) */}
