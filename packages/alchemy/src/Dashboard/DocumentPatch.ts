@@ -38,7 +38,9 @@ export const DocumentNodeSchema = S.Struct({
   attrs: S.optional(S.Record(S.String, S.Unknown)),
   bindings: S.Array(S.Struct({ sid: S.String, data: S.optional(S.Unknown) })),
   downstream: S.Array(S.String),
-  planAction: S.optional(S.Literals(["create", "update", "replace", "delete"])),
+  planAction: S.optional(
+    S.Literals(["create", "update", "replace", "delete", "run"]),
+  ),
   ghost: S.optional(S.Literals(["structure", "deleted"])),
 });
 
@@ -51,7 +53,9 @@ export const DocumentEdgeSchema = S.Struct({
 
 export const DecorationSchema = S.Struct({
   status: S.optional(S.String),
-  planAction: S.optional(S.Literals(["create", "update", "replace", "delete"])),
+  planAction: S.optional(
+    S.Literals(["create", "update", "replace", "delete", "run"]),
+  ),
   applyResult: S.optional(
     S.Literals([
       "created",
@@ -162,7 +166,9 @@ export const DecoratePatchSchema = S.Struct({
   ...revision,
   fqn: S.String,
   status: S.optional(S.String),
-  planAction: S.optional(S.Literals(["create", "update", "replace", "delete"])),
+  planAction: S.optional(
+    S.Literals(["create", "update", "replace", "delete", "run"]),
+  ),
   applyResult: S.optional(
     S.Literals([
       "created",
