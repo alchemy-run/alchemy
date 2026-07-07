@@ -155,7 +155,7 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
         selected ? "bg-[var(--alc-accent-12)]" : ""
       }`}
     >
-      <ResourceIcon ui={ui} color={color} size={14} />
+      <ResourceIcon ui={ui} color={color} size={14} kind={node.kind} />
       <span className="min-w-0">
         <span className="text-[var(--alc-fg-1)]">{node.logicalId}</span>
         {node.path.length > 0 && (

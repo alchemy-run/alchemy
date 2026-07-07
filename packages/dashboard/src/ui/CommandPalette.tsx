@@ -388,7 +388,7 @@ function PaletteRow({
       onMouseMove={onHover}
       onClick={onPick}
     >
-      <ResourceIcon ui={ui} color={color} size={14} />
+      <ResourceIcon ui={ui} color={color} size={14} kind={node?.kind} />
       <span className="font-medium text-[var(--alc-fg-1)]">
         {item.logicalId}
       </span>
