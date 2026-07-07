@@ -330,7 +330,7 @@ export const ResourceNode = memo(function ResourceNode({
         className={HANDLE_CLASS}
       />
       <div className="flex items-center gap-2">
-        <ResourceIcon ui={ui} color={color} size={16} />
+        <ResourceIcon ui={ui} color={color} size={16} kind={node.kind} />
         <span className="truncate text-[13px] font-semibold text-[var(--alc-fg-1)]">
           {node.logicalId}
         </span>

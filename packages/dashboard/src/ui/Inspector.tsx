@@ -82,7 +82,7 @@ function InspectorBody({
     <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-y-auto border-l border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)]">
       <div className="flex items-start gap-2.5 border-b border-[var(--alc-hairline)] p-4">
         <div className="mt-0.5">
-          <ResourceIcon ui={ui} color={color} size={18} />
+          <ResourceIcon ui={ui} color={color} size={18} kind={node.kind} />
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-medium text-[var(--alc-fg-1)]">
