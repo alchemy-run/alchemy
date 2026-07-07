@@ -32,6 +32,7 @@ import {
   Worker,
   WorkerEnvironment,
   WorkerExecutionContext,
+  fromExecutionContext,
 } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
@@ -74,7 +75,12 @@ export const makeWorkerBridge = (
             pipe(
               Layer.succeedContext(context),
               Layer.provideMerge(Layer.succeedContext(context)),
-              Layer.provideMerge(Layer.succeed(WorkerExecutionContext, ctx)),
+              Layer.provideMerge(
+                Layer.succeed(
+                  WorkerExecutionContext,
+                  fromExecutionContext(ctx),
+                ),
+              ),
               Layer.provideMerge(
                 Layer.succeed(ExecutionContext, {
                   scope,

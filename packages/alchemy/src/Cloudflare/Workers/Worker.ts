@@ -61,8 +61,43 @@ export class WorkerEnvironment extends Context.Service<
 
 export class WorkerExecutionContext extends Context.Service<
   WorkerExecutionContext,
-  cf.ExecutionContext
+  {
+    /**
+     * Run an Effect in the background without blocking the response, keeping
+     * the Worker alive until it settles. The Effect runs with the caller's
+     * full context (services, tracing), and the resulting promise is
+     * registered with workerd's `ctx.waitUntil`.
+     */
+    waitUntil<A, E, R>(
+      effect: Effect.Effect<A, E, R>,
+    ): Effect.Effect<void, never, R | RuntimeContext>;
+    /**
+     * Forward the request to the origin if the Worker throws an unhandled
+     * exception, instead of returning an error page.
+     */
+    passThroughOnException(): Effect.Effect<void, never, RuntimeContext>;
+    /**
+     * The raw workerd ExecutionContext, for interop with async APIs.
+     */
+    readonly raw: cf.ExecutionContext;
+  }
 >()("Cloudflare.Workers.WorkerExecutionContext") {}
+
+export const fromExecutionContext = (
+  ctx: cf.ExecutionContext,
+): WorkerExecutionContext["Service"] => ({
+  raw: ctx,
+  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      // Register the promise with workerd un-awaited — waitUntil extends the
+      // invocation's lifetime without blocking the response.
+      yield* Effect.sync(() =>
+        ctx.waitUntil(Effect.runPromise(effect.pipe(Effect.provide(context)))),
+      );
+    }),
+  passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
+});
 
 export type WorkerEvent = Exclude<
   {
