@@ -201,18 +201,18 @@ export const useCanvasLayout = (): CanvasLayout => {
 
   const cached = usePositions(hash);
 
-  // Resolve positions exactly once per never-seen hash.
+  // Resolve positions whenever the structural hash changes.
   //
-  // Position CONTINUITY comes first: if any node of the new hash already
-  // has a home this session (the per-node position memory — fed by ELK
-  // results, drags, and previous seeds), those coordinates are kept
-  // VERBATIM and only genuine newcomers get neighbor-seeded. ELK never
-  // re-runs for a structural change mid-session, so plan overlays, run
-  // convergence, and post-destroy rebuilds physically cannot morph the
-  // topology the user is watching. ELK runs only when nothing has a
-  // position yet (first layout of a stage).
+  // Position CONTINUITY is the only rule: if any node of the hash already
+  // has a home (the per-node position memory — fed by ELK results, drags,
+  // seeds, and restored session layouts), those coordinates are kept
+  // VERBATIM and only genuine newcomers get neighbor-seeded. The seed is
+  // recomputed even for a hash seen earlier this session, so returning to
+  // a previous shape honors drags made since. ELK runs only when nothing
+  // has a position yet (the first layout of a stage) — a structural
+  // change can never morph the topology the user is watching.
   useEffect(() => {
-    if (structure.fqns.length === 0 || getPositions(hash) !== undefined) {
+    if (structure.fqns.length === 0) {
       return;
     }
     const memory = getPositionMemory();
@@ -221,6 +221,9 @@ export const useCanvasLayout = (): CanvasLayout => {
         hash,
         seedPositions(structure.fqns, structure.visualEdges, memory),
       );
+      return;
+    }
+    if (getPositions(hash) !== undefined) {
       return;
     }
     requestLayout(hash, structure.fqns, structure.visualEdges)
