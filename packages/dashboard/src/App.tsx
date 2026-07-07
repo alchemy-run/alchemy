@@ -1,6 +1,8 @@
 import { memo, type CSSProperties } from "react";
 import {
+  useApproval,
   useConnection,
+  useDeployment,
   useFilterCounts,
   useHydrated,
   useMeta,
@@ -108,13 +110,28 @@ const ViewHost = memo(function ViewHost() {
   );
 });
 
-/** Shown over the (empty) canvas when the document has no structure yet. */
+/**
+ * Shown over the (empty) canvas when the document has no structure. Says
+ * WHAT KIND of empty this is:
+ * - a pending run/approval with nothing in it → "nothing to do"
+ * - a stage with deployment history but no resources → "stage is empty"
+ * - otherwise → still waiting for the structure/plan passes (pulse)
+ */
 const CanvasEmptyState = memo(function CanvasEmptyState() {
   const counts = useFilterCounts();
   const meta = useMeta();
+  const approval = useApproval();
+  const deployment = useDeployment();
   if (counts.total > 0) {
     return null;
   }
+  const settled = approval !== undefined || deployment !== undefined;
+  const message =
+    approval !== undefined
+      ? "Nothing to do — no resources are deployed to this stage"
+      : deployment !== undefined
+        ? "Stage is empty — no resources deployed"
+        : "Waiting for resources…";
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
       {/* faint alchemical watermark — decorative only */}
@@ -123,8 +140,10 @@ const CanvasEmptyState = memo(function CanvasEmptyState() {
         strokeWidth={0.5}
         className="absolute text-[var(--alc-fg-1)] opacity-[0.04]"
       />
-      <p className={`${SERIF_HEADING} animate-pulse text-[17px]`}>
-        Waiting for resources…
+      <p
+        className={`${SERIF_HEADING} ${settled ? "" : "animate-pulse"} text-[17px]`}
+      >
+        {message}
       </p>
       <p className="mt-2 font-mono text-[12px] text-[var(--alc-fg-3)]">
         {meta.stack}/{meta.stage}

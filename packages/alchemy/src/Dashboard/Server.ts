@@ -487,7 +487,22 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
           // again. On APPROVE the overlay stays until /api/apply/start
           // replaces it, so the review graph can't flash the background
           // deploy plan in the decide→start window.
-          yield* withHost(stage, (host) => host.clearApproval());
+          yield* withHost(stage, (host) =>
+            Effect.gen(function* () {
+              yield* host.clearApproval();
+              // gate-skipped overlays never re-apply on their own — restore
+              // the cached shape/plan now and queue a fresh computation
+              const lastStructure = lastStructures.get(stage);
+              if (lastStructure !== undefined) {
+                yield* host.applyStructure(lastStructure);
+              }
+              const lastPlan = lastPlans.get(stage);
+              if (lastPlan !== undefined) {
+                yield* host.applyPlan(lastPlan);
+              }
+            }),
+          );
+          yield* requestPlan(stage);
         }
         yield* broadcast(stage);
       }
