@@ -166,32 +166,44 @@ export const ResourceNode = memo(function ResourceNode({
   const showPlanChip =
     plan !== undefined && (approval !== undefined || !resultIsFresh);
   // The bookmark tab is the node's single lifecycle indicator:
-  //   running now (spinner) > result from the current run > pending plan.
+  //   this run's live status (spinner: pending → creating → …)
+  //   > pending plan > result from the current run.
   // Historical results (previous runs) stay as the muted in-card chip.
   //
-  // "Running now" must be an in-flight status DECORATED BY THE CURRENT
-  // LIVE RUN — a persisted baseline status like "deleting" left behind by
-  // a failed destroy would otherwise masquerade as live forever and mask
-  // the pending plan action ("delete") on the next attempt.
-  const inFlight =
+  // A "live status" must be DECORATED BY THE CURRENT LIVE RUN — a
+  // persisted baseline status like "deleting" left behind by a failed
+  // destroy would otherwise masquerade as live forever and mask the
+  // pending plan action ("delete") on the next attempt.
+  const runStatus =
     live &&
     decoration?.status !== undefined &&
-    statusInFlight(decoration.status) &&
     deployStartedAt !== undefined &&
-    (decoration.at ?? 0) >= deployStartedAt;
+    (decoration.at ?? 0) >= deployStartedAt
+      ? decoration.status
+      : undefined;
+  const inFlight = runStatus !== undefined && statusInFlight(runStatus);
+  // queued this run: waiting for its turn — spins in the plan's color
+  const queued = runStatus === "pending";
   const planTab =
     showPlanChip && plan !== undefined && planColor !== undefined
       ? { label: plan, color: planColor, spinner: false }
       : undefined;
   const tab = inFlight
     ? { label: status, color: statusColor(status), spinner: true }
-    : approval !== undefined && planTab !== undefined
-      ? // awaiting approval: what WILL happen outranks what the previous
-        // run did — this is the review screen
-        planTab
-      : resultIsFresh && result !== undefined && resultColor !== undefined
-        ? { label: result, color: resultColor, spinner: false }
-        : planTab;
+    : queued
+      ? {
+          label: "pending",
+          color: planColor ?? statusColor("pending"),
+          spinner: true,
+        }
+      : approval !== undefined
+        ? // the review screen shows ONLY what WILL happen: plan tabs on
+          // affected nodes, NOTHING on no-ops (a stale "created" would
+          // read as pending work)
+          planTab
+        : resultIsFresh && result !== undefined && resultColor !== undefined
+          ? { label: result, color: resultColor, spinner: false }
+          : planTab;
   // terminated / declared-only resources render "dead": dashed ghost shell
   const deleted = result === "deleted" || status === "deleted";
   const ghost = node.ghost !== undefined || deleted;

@@ -1924,6 +1924,13 @@ const collectGarbage = Effect.fn(function* (
 
         return yield* (deletions[fqn] ??= yield* Effect.cached(
           Effect.gen(function* () {
+            if (isDeleteNode(node)) {
+              // queued: deletions wait for their dependents in reverse
+              // dependency order — surface that as "pending" (like
+              // creates/updates do) so renderers can distinguish
+              // waiting-to-delete from actively deleting
+              yield* report("pending");
+            }
             yield* Effect.all(
               downstream.map((dep) =>
                 dep !== fqn && dep in deletionGraph && !ancestors.has(dep)
