@@ -1,4 +1,7 @@
-import { normalizeStateDomains } from "@/Cloudflare/Workers/WorkerProvider";
+import {
+  mergeDurableObjectClasses,
+  normalizeStateDomains,
+} from "@/Cloudflare/Workers/WorkerProvider";
 import { describe, expect, test } from "@effect/vitest";
 
 describe("WorkerProvider", () => {
@@ -57,6 +60,52 @@ describe("WorkerProvider", () => {
 
     test("returns an empty array for undefined state", () => {
       expect(normalizeStateDomains(undefined)).toEqual([]);
+    });
+  });
+
+  describe("mergeDurableObjectClasses", () => {
+    // A worker's precreate stub must declare every Durable Object class it
+    // hosts so each namespace is created there — not just classes defined as
+    // Effect-native exports, but also classes that only appear as an env
+    // binding (e.g. a bare `Cloudflare.DurableObject` fronting a Container
+    // image). Missing a binding-only class from the stub means its namespace
+    // never gets created there, so a resource caught in a worker<->container
+    // dependency cycle (which resolves `worker.durableObjectNamespaces`
+    // against the stub, not the final reconcile output) fails with
+    // "Worker did not expose Durable Object namespace <class>" on every
+    // fresh-stage deploy.
+    test("includes a class that only exists as a binding", () => {
+      const exportDerived = [{ logicalId: "Chat", className: "Chat" }];
+      const bindingDerived = [
+        { logicalId: "sandbox-do", className: "Sandbox" },
+      ];
+      expect(
+        mergeDurableObjectClasses(exportDerived, bindingDerived),
+      ).toEqual([
+        { logicalId: "Chat", className: "Chat" },
+        { logicalId: "sandbox-do", className: "Sandbox" },
+      ]);
+    });
+
+    test("dedupes by class name, letting the binding-derived entry win", () => {
+      const exportDerived = [{ logicalId: "Chat", className: "Chat" }];
+      const bindingDerived = [
+        { logicalId: "chat-do-binding", className: "Chat" },
+      ];
+      expect(
+        mergeDurableObjectClasses(exportDerived, bindingDerived),
+      ).toEqual([{ logicalId: "chat-do-binding", className: "Chat" }]);
+    });
+
+    test("returns export-derived classes unchanged when there are no bindings", () => {
+      const exportDerived = [{ logicalId: "Chat", className: "Chat" }];
+      expect(mergeDurableObjectClasses(exportDerived, [])).toEqual(
+        exportDerived,
+      );
+    });
+
+    test("returns an empty array when there are no classes at all", () => {
+      expect(mergeDurableObjectClasses([], [])).toEqual([]);
     });
   });
 });
