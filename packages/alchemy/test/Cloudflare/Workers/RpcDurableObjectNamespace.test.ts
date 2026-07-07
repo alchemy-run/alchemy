@@ -160,12 +160,25 @@ test(
     const delta = k("delta");
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
+    // The stream route commits a 200 before the DO stream produces data, so
+    // a transient `Worker not found.` during binding propagation dies AFTER
+    // the headers are sent and surfaces as a truncated/empty 200 body —
+    // invisible to status-based retries. `CountUpTo` is a pure stream, so
+    // retry on content until all four lines arrive.
+    const lines = yield* client
       .get(`${url}/counter/${delta}/stream?upto=4`)
-      .pipe(retryHttp);
-    expect(res.status).toBe(200);
-    const body = yield* res.text;
-    const lines = body.split("\n").filter((l) => l.length > 0);
+      .pipe(
+        Effect.flatMap((res) => res.text),
+        Effect.flatMap((body) => {
+          const lines = body.split("\n").filter((l) => l.length > 0);
+          return lines.length === 4
+            ? Effect.succeed(lines)
+            : Effect.fail(
+                new Error(`truncated stream body: ${JSON.stringify(lines)}`),
+              );
+        }),
+        retryHttp,
+      );
     expect(lines).toEqual(["1", "2", "3", "4"]);
   }).pipe(logLevel),
   { timeout: 30_000 },
