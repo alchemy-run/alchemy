@@ -12,6 +12,7 @@ import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
@@ -776,6 +777,92 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
       }).pipe(logLevel),
+  );
+
+  // #745 regression: metadata-only edits (compatibility flags, observability,
+  // placement, limits, logpush, env literals, ...) never touch the
+  // bundle/vite/asset-content hashes, so the update decision used to plan
+  // them as a noop and silently skip the deploy. `hash.metadata` makes them
+  // visible to the diff. Deploy a worker, re-deploy with a
+  // compatibility-flag-only and then an observability-only change, and
+  // assert each change actually lands in the live script settings. Identical
+  // props must keep planning as a noop — that guards the hash's stability
+  // across runs (Redacted env values hash by value, not by reference, so the
+  // freshly-constructed secret in each plan must not force a phantom update).
+  test.provider(
+    "metadata-only changes (compatibility flags, observability) deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const program = (opts: { flags: string[]; observability: boolean }) =>
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("MetadataOnlyWorker", {
+              main,
+              compatibility: { date: "2024-01-01", flags: opts.flags },
+              observability: { enabled: opts.observability },
+              env: { WORKER_SECRET: Redacted.make("metadata-hash-stability") },
+            });
+          });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const v1 = yield* stack.deploy(
+          program({ flags: [], observability: false }),
+        );
+
+        // Identical props → noop.
+        const stablePlan = yield* stack.plan(
+          program({ flags: [], observability: false }),
+        );
+        expect(actionOf(stablePlan, "MetadataOnlyWorker")).toBe("noop");
+
+        // A compatibility-flag-only change must plan as an update ...
+        const flagPlan = yield* stack.plan(
+          program({ flags: ["nodejs_als"], observability: false }),
+        );
+        expect(actionOf(flagPlan, "MetadataOnlyWorker")).toBe("update");
+
+        // ... and the deploy must apply it to the live script settings.
+        const v2 = yield* stack.deploy(
+          program({ flags: ["nodejs_als"], observability: false }),
+        );
+        expect(v2.workerName).toEqual(v1.workerName);
+        const flagSettings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: v2.workerName,
+        });
+        expect(flagSettings.compatibilityFlags).toContain("nodejs_als");
+
+        // Same for an observability-only change. The bundle hash must not
+        // move — proof the update decision came from the metadata hash alone,
+        // not from an incidental rebuild.
+        const v3 = yield* stack.deploy(
+          program({ flags: ["nodejs_als"], observability: true }),
+        );
+        expect(v3.hash?.bundle).toEqual(v2.hash?.bundle);
+        const observabilitySettings =
+          yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: v3.workerName,
+          });
+        expect(observabilitySettings.observability?.enabled).toBe(true);
+
+        // The applied props are now the stored state → back to noop.
+        const settledPlan = yield* stack.plan(
+          program({ flags: ["nodejs_als"], observability: true }),
+        );
+        expect(actionOf(settledPlan, "MetadataOnlyWorker")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
   );
 
   // `domains` should reflect the workers.dev URL when the subdomain is

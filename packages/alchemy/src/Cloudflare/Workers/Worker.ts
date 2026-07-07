@@ -427,6 +427,12 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
       assets: string | undefined;
       bundle: string | undefined;
       input: string | undefined;
+      // Hash of the deploy-time metadata surface (compatibility, env,
+      // bindings, asset config, limits, observability, ...) so metadata-only
+      // edits trigger an update (#745). Optional: state written before this
+      // field existed has no `metadata`, which reads as a one-time update on
+      // the first diff after upgrading (the apply backfills it).
+      metadata?: string | undefined;
     };
   },
   {
