@@ -56,8 +56,11 @@ SKILL.md is a separate locally-injected condition (C3) layered on either docs UR
 - `runner/` — plain bun TS orchestration: adapters, workspace provisioning,
   verify pyramid, journaling. Task templates/oracles/tests are Effect-native.
 - `tasks/<id>/` — `task.json`, `PROMPT.md` (`{{STAGE}}`/`{{DOCS}}` rendered at
-  provision), `template/` (agent starting point), `verify/checks.ts` (hidden,
-  never copied into workspaces), `answer/` (oracle overlay).
+  provision), `template/` (agent starting point — deliberately mirrors the
+  real getting-started flow: deps installed, tsconfig, NOTHING else; no stub
+  Stack, no seed tests, so the docs must teach everything we grade),
+  `verify/` (hidden `checks.ts` or `intent.md`, never copied into
+  workspaces), `answer/` (oracle overlay).
 - `results/` — gitignored `runs.jsonl` + `journal.jsonl`.
 
 ## Isolation

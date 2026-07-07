@@ -130,8 +130,8 @@ export function trialEnv(workspace: Workspace): Record<string, string> {
     CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN!,
     CLOUDFLARE_ACCOUNT_ID: accountId,
     STAGE: workspace.stage,
-    // Keep the deployment alive for grading; the canonical afterAll pattern
-    // in smoke.test.ts is skipIf(NO_DESTROY).
+    // Keep the deployment alive for grading; prompts require agents to gate
+    // test teardown on this (the documented afterAll.skipIf convention).
     NO_DESTROY: "1",
     CI: "1",
   };

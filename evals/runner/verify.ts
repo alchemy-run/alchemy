@@ -166,12 +166,12 @@ export async function verify(options: {
     }
   }
 
-  // L5a — agent-authored tests (exist beyond smoke, use the harness, pass)
+  // L5a — agent-authored tests. The template ships NO tests (mirrors the real
+  // getting-started flow), so everything under test/ is the agent's own work;
+  // the harness pattern must have come from the docs — that's the measurement.
   const testDir = join(cwd, "test");
   const testFiles = existsSync(testDir)
-    ? readdirSync(testDir).filter(
-        (f) => f.endsWith(".test.ts") && f !== "smoke.test.ts",
-      )
+    ? readdirSync(testDir).filter((f) => f.endsWith(".test.ts"))
     : [];
   const usesHarness = testFiles.some((f) => {
     const source = readFileSync(join(testDir, f), "utf8");
