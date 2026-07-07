@@ -23,7 +23,7 @@ const scope = self as unknown as {
 scope.onmessage = (event) => {
   const request = event.data;
   void elk
-    .layout(toElkGraph(request.fqns, request.edges))
+    .layout(toElkGraph(request.fqns, request.edges, request.aspectRatio))
     .then((root) => {
       scope.postMessage({
         id: request.id,

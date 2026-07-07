@@ -64,7 +64,7 @@ const nodeTypes = { resource: ResourceNode };
 const FIT_VIEW = {
   padding: { top: "96px", bottom: "12%", left: "12%", right: "12%" },
   maxZoom: 1.25,
-};
+} as const;
 const PRO_OPTIONS = { hideAttribution: true };
 const ORIGIN: XY = { x: 0, y: 0 };
 
