@@ -386,20 +386,20 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       // timelines reset lazily per resource as its first in-flight status
       // arrives in THIS session
       timelineResets = new Set();
-      yield* withHost(stage, (host) =>
-        Effect.gen(function* () {
-          yield* host.clearApproval();
-          yield* host.applyPlan(body.plan);
-          // a plan whose only work is deletions is a destroy
-          const command =
-            body.plan.available &&
-            Object.keys(body.plan.resources).length === 0 &&
-            Object.keys(body.plan.deletions).length > 0
-              ? "destroy"
-              : "deploy";
-          yield* host.deploymentStarted(command);
-        }),
-      );
+      // hostFor (not withHost): with --ui --yes the apply starts before the
+      // browser tab connects — the host must exist NOW so live events fold
+      // into the document the first tab's snapshot is built from
+      const applyHost = yield* hostFor(stage);
+      yield* applyHost.clearApproval();
+      yield* applyHost.applyPlan(body.plan);
+      // a plan whose only work is deletions is a destroy
+      const applyCommand =
+        body.plan.available &&
+        Object.keys(body.plan.resources).length === 0 &&
+        Object.keys(body.plan.deletions).length > 0
+          ? "destroy"
+          : "deploy";
+      yield* applyHost.deploymentStarted(applyCommand);
       yield* broadcast(stage);
       return yield* HttpServerResponse.json({ ok: true });
     }
@@ -455,12 +455,14 @@ export const serve = Effect.fn(function* (options: DashboardServerOptions) {
       // session's result overlay so the canvas shows what WILL happen,
       // not what last happened
       session = undefined;
-      yield* withHost(stage, (host) =>
-        Effect.gen(function* () {
-          yield* host.applyPlan(body.plan);
-          yield* host.setApproval({ plan: body.plan });
-        }),
-      );
+      // hostFor (not withHost): on the fresh-launch path (`deploy --ui`
+      // spawning its own dashboard) the approval arrives BEFORE any browser
+      // tab has connected — the host must be created now so the approval is
+      // already in the snapshot the first tab receives, otherwise the
+      // approve button never renders and the deploy waits forever
+      const approvalHost = yield* hostFor(stage);
+      yield* approvalHost.applyPlan(body.plan);
+      yield* approvalHost.setApproval({ plan: body.plan });
       yield* broadcast(stage);
       return yield* HttpServerResponse.json({ ok: true });
     }
