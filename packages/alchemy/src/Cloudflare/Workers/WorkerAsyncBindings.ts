@@ -284,3 +284,21 @@ const toBinding = (
 export const getCronBindings = (
   bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
 ) => Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
+
+/**
+ * Merge the Workers Cache settings contributed by `yield* Cloudflare.cache()`
+ * bindings. Commutative: the cache is enabled (and cross-version) if any
+ * contributor asked for it.
+ */
+export const getCacheBinding = (
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+) => {
+  const configs = bindings.flatMap((b) => (b.data.cache ? [b.data.cache] : []));
+  if (configs.length === 0) {
+    return undefined;
+  }
+  return {
+    enabled: configs.some((c) => c.enabled),
+    crossVersionCache: configs.some((c) => c.crossVersionCache) || undefined,
+  };
+};

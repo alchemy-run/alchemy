@@ -3,6 +3,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -19,7 +20,11 @@ import {
   type PlatformProps,
   type PlatformServices,
 } from "../../Platform.ts";
-import { Resource, type ResourceClassLike } from "../../Resource.ts";
+import {
+  isResourceOfType,
+  Resource,
+  type ResourceClassLike,
+} from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self } from "../../Self.ts";
@@ -49,20 +54,140 @@ export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
 export const isWorker = <T>(value: T): value is T & Worker =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  value.Type === WorkerTypeId;
+  isResourceOfType(value, WorkerTypeId);
 
 export class WorkerEnvironment extends Context.Service<
   WorkerEnvironment,
   Record<string, any>
 >()("Cloudflare.Workers.WorkerEnvironment") {}
 
+export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
+/**
+ * Effect-native view of the Workers Cache runtime API on the execution
+ * context (`ctx.cache`). Only available when the Worker has Workers Cache
+ * enabled (the `cache` prop or `yield* Cloudflare.cache()`).
+ */
+export interface WorkerExecutionContextCache {
+  /**
+   * Purge cached responses by `Cache-Tag`, path prefix, or everything.
+   */
+  purge(
+    options: cf.CachePurgeOptions,
+  ): Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>;
+}
+
 export class WorkerExecutionContext extends Context.Service<
   WorkerExecutionContext,
-  cf.ExecutionContext
+  {
+    /**
+     * Run an Effect in the background without blocking the response, keeping
+     * the Worker alive until it settles. The Effect runs with the caller's
+     * full context (services, tracing), and the resulting promise is
+     * registered with workerd's `ctx.waitUntil`.
+     */
+    waitUntil<A, E, R>(
+      effect: Effect.Effect<A, E, R>,
+    ): Effect.Effect<void, never, R | RuntimeContext>;
+    /**
+     * Forward the request to the origin if the Worker throws an unhandled
+     * exception, instead of returning an error page.
+     */
+    passThroughOnException(): Effect.Effect<void, never, RuntimeContext>;
+    /**
+     * The Workers Cache runtime API (`ctx.cache`).
+     */
+    readonly cache: WorkerExecutionContextCache;
+    /**
+     * The raw workerd ExecutionContext, for interop with async APIs.
+     */
+    readonly raw: cf.ExecutionContext;
+  }
 >()("Cloudflare.Workers.WorkerExecutionContext") {}
+
+export const fromExecutionContext = (
+  ctx: cf.ExecutionContext,
+): WorkerExecutionContext["Service"] => ({
+  raw: ctx,
+  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      // Register the promise with workerd un-awaited — waitUntil extends the
+      // invocation's lifetime without blocking the response.
+      yield* Effect.sync(() =>
+        ctx.waitUntil(Effect.runPromise(effect.pipe(Effect.provide(context)))),
+      );
+    }),
+  passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
+  cache: {
+    purge: (options) =>
+      ctx.cache
+        ? Effect.tryPromise({
+            try: () => ctx.cache!.purge(options),
+            catch: (cause) =>
+              new CachePurgeError({
+                message:
+                  cause instanceof Error
+                    ? cause.message
+                    : "Unknown cache purge error",
+                cause,
+              }),
+          })
+        : Effect.fail(
+            new CachePurgeError({
+              message:
+                "ctx.cache is not available — enable Workers Cache on this " +
+                "Worker (the `cache` prop or `yield* Cloudflare.cache()`) " +
+                "and note it is not supported in local dev.",
+            }),
+          ),
+  },
+});
+
+/**
+ * A {@link WorkerExecutionContext} whose methods resolve the live per-event
+ * context from the calling fiber at call time. Provided during the Worker's
+ * init phase (plan and runtime module init) so the service can be yielded
+ * and closed over in the top-level closure; every method is colored with
+ * `RuntimeContext`, so it can only be *run* inside a handler, where the
+ * bridge provides the real per-event context that these methods defer to.
+ */
+export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
+  get raw(): cf.ExecutionContext {
+    throw new Error(
+      "WorkerExecutionContext.raw is only available inside a request handler",
+    );
+  },
+  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    liveExecutionContext.pipe(
+      Effect.flatMap((live) => live.waitUntil(effect)),
+    ) as Effect.Effect<void, never, R | RuntimeContext>,
+  passThroughOnException: () =>
+    liveExecutionContext.pipe(
+      Effect.flatMap((live) => live.passThroughOnException()),
+    ) as Effect.Effect<void, never, RuntimeContext>,
+  cache: {
+    purge: (options) =>
+      liveExecutionContext.pipe(
+        Effect.flatMap((live) => live.cache.purge(options)),
+      ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
+  },
+};
+
+const liveExecutionContext = WorkerExecutionContext.pipe(
+  Effect.flatMap((live) =>
+    live === deferredExecutionContext
+      ? Effect.die(
+          new Error(
+            "WorkerExecutionContext can only be used inside a request handler",
+          ),
+        )
+      : Effect.succeed(live),
+  ),
+);
 
 export type WorkerEvent = Exclude<
   {
@@ -100,6 +225,11 @@ export interface WorkerObservability extends Exclude<
 
 export interface WorkerLimits extends Exclude<
   workers.PutScriptRequest["metadata"]["limits"],
+  undefined
+> {}
+
+export interface WorkerCache extends Exclude<
+  workers.PutScriptRequest["metadata"]["cache"],
   undefined
 > {}
 
@@ -226,6 +356,26 @@ export interface WorkerProps<
    * `traces: { enabled: true, ... }`.
    */
   observability?: WorkerObservability;
+  /**
+   * Workers Cache settings. When `enabled` is `true`, Cloudflare checks a
+   * regionally tiered cache in front of the Worker on every HTTP request —
+   * cache hits are served from the edge without invoking the Worker at all.
+   * The Worker controls what gets cached via standard response headers
+   * (`Cache-Control`, `Cache-Tag`, `Vary`), including
+   * `stale-while-revalidate`.
+   *
+   * Set `crossVersionCache: true` to share cached responses across Worker
+   * versions (by default the cache is scoped to a single version, so every
+   * deploy starts cold).
+   *
+   * If omitted, Workers Cache is disabled — unless the Worker's init phase
+   * enables it via `yield* Cloudflare.cache()`, which is the preferred way
+   * for Effect-native Workers (and also returns the runtime purge client).
+   * When both are set, this prop takes precedence.
+   *
+   * @see https://blog.cloudflare.com/workers-cache/
+   */
+  cache?: WorkerCache;
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
@@ -437,6 +587,12 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   },
   {
     bindings?: WorkerBinding[];
+    /**
+     * Workers Cache settings contributed by `yield* Cloudflare.cache()`.
+     * Merged into the upload metadata's `cache_options`; an explicit
+     * `WorkerProps.cache` takes precedence.
+     */
+    cache?: WorkerCache;
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
@@ -678,6 +834,101 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     },
  *   },
  * }
+ * ```
+ *
+ * @section Workers Cache
+ * Workers Cache puts a regionally tiered cache in front of the Worker —
+ * cache hits are served from the edge without invoking the Worker (and
+ * without billing CPU time). In an Effect-native Worker, enable it by
+ * yielding `Cloudflare.cache()` in the init phase, which also returns the
+ * runtime purge client; async Workers use the `cache` prop instead. Control
+ * what gets cached from your handlers via standard response headers:
+ * `Cache-Control` (including `stale-while-revalidate`), `Cache-Tag` for
+ * tag-based purging, and `Vary` for content negotiation.
+ *
+ * The cache is scoped to a single Worker version by default, so every
+ * deploy starts cold. Set `crossVersionCache: true` to share cached
+ * responses across versions.
+ *
+ * @example Enabling and purging the cache in an Effect Worker
+ * ```typescript
+ * Effect.gen(function* () {
+ *   // init: enable Workers Cache on this Worker
+ *   const { purge } = yield* Cloudflare.cache({ crossVersionCache: true });
+ *
+ *   return {
+ *     fetch: Effect.gen(function* () {
+ *       const request = yield* HttpServerRequest;
+ *       if (request.url.startsWith("/invalidate")) {
+ *         yield* purge({ tags: ["products"] });
+ *         return HttpServerResponse.text("purged");
+ *       }
+ *       return HttpServerResponse.text("hello", {
+ *         headers: {
+ *           "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+ *           "Cache-Tag": "products,product:123",
+ *         },
+ *       });
+ *     }),
+ *   };
+ * })
+ * ```
+ *
+ * @example Enabling Workers Cache on an async Worker
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   cache: {
+ *     enabled: true,
+ *     crossVersionCache: true,
+ *   },
+ * }
+ * ```
+ *
+ * @section Background Work & Scopes
+ * Each incoming event (fetch, RPC call, scheduled run) gets its own Effect
+ * `Scope`. When the handler finishes, the bridge closes that scope and
+ * registers the close promise with workerd's `ctx.waitUntil` — so
+ * finalizers added with `Effect.addFinalizer` inside a handler run *after*
+ * the response is sent, without blocking it, and the Worker stays alive
+ * until they settle. Streaming responses transfer the scope to the stream,
+ * so those finalizers run when the stream completes instead.
+ *
+ * For ad-hoc background work, `WorkerExecutionContext.waitUntil(effect)`
+ * forks an Effect with the caller's full context and keeps the invocation
+ * alive until it settles. The context can be yielded once in the init
+ * closure and used from any handler; its methods are `RuntimeContext`-
+ * colored, so they can only run inside a handler.
+ *
+ * The init closure itself is evaluated per event (its Layer is rebuilt for
+ * each event's runtime), so treat it as stateless setup: bind resources and
+ * build handlers there, but attach cleanup to handler scopes — a finalizer
+ * added in the init closure runs at the end of every event, not once per
+ * Worker.
+ *
+ * @example Post-response cleanup with a scope finalizer
+ * ```typescript
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runs after this response is sent, kept alive by waitUntil
+ *     yield* Effect.addFinalizer(() => flushMetrics().pipe(Effect.ignore));
+ *     return HttpServerResponse.text("ok");
+ *   }),
+ * };
+ * ```
+ *
+ * @example Background work with waitUntil
+ * ```typescript
+ * // init
+ * const exec = yield* Cloudflare.WorkerExecutionContext;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // respond now; the audit write completes in the background
+ *     yield* exec.waitUntil(writeAuditLog(event));
+ *     return HttpServerResponse.text("accepted", { status: 202 });
+ *   }),
+ * };
  * ```
  *
  * @section R2 Bucket

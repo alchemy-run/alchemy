@@ -133,6 +133,28 @@ export const isResource = (value: any): value is ResourceLike => {
   return typeof value === "object" && value !== null && "Type" in value;
 };
 
+/**
+ * Does `value` reference an instance of the resource type `type` —
+ * either a locally-declared resource or a `Resource.ref(...)` to one?
+ *
+ * Two constraints that ad-hoc guards get wrong for refs, which resolve
+ * to Output-expression proxies:
+ *
+ * - Read `.Type` via property access (never `in`): the proxy answers
+ *   property reads with statically-known values but deliberately does
+ *   not report key existence (so {@link isResource} keeps routing refs
+ *   through Output resolution instead of the upstream-node lookup).
+ * - Accept `typeof value === "function"`: the proxy's target is
+ *   callable (it needs an `apply` trap), so refs are not `"object"`.
+ *
+ * Either mistake silently rejects refs — in a Worker `env` that
+ * degrades the binding to a plain JSON var.
+ */
+export const isResourceOfType = (value: unknown, type: string): boolean =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  (value as { Type?: unknown }).Type === type;
+
 export type Resource<
   Type extends string = any,
   Props extends object | undefined = any,
@@ -312,7 +334,7 @@ export function Resource<R extends ResourceLike>(
       id: string,
       options?: { stage?: string; stack?: string },
     ): Effect.Effect<R> =>
-      Effect.succeed(Output.of(makeRef<R>(id, options)) as unknown as R),
+      Effect.succeed(Output.of(makeRef<R>(id, options, type)) as unknown as R),
 
     Type: type,
     Provider: ProviderTag,

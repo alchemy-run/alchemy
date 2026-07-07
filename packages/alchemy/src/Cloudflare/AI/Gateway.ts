@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -302,10 +302,7 @@ const nullIfZero = (value: number | null | undefined): number | null =>
   value == null || value === 0 ? null : value;
 
 export const isAiGateway = (value: unknown): value is Gateway =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  (value as Gateway).Type === "Cloudflare.AI.Gateway";
+  isResourceOfType(value, "Cloudflare.AI.Gateway");
 
 /**
  * A Cloudflare.AI. Gateway for observability, caching, rate limiting, and

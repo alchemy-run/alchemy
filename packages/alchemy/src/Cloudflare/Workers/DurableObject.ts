@@ -518,6 +518,41 @@ export class DurableObjectScope extends Context.Service<
  * const value = yield* state.storage.get("counter");
  * ```
  *
+ * @section Background Work & Scopes
+ * Every RPC call and fetch into a Durable Object gets its own Effect
+ * `Scope`. When the method finishes, the bridge closes that scope and
+ * registers the close promise with workerd's `state.waitUntil` — so
+ * finalizers added with `Effect.addFinalizer` inside a method run *after*
+ * the result is returned to the caller, without blocking it, and the
+ * object stays alive until they settle.
+ *
+ * For ad-hoc background work, `state.waitUntil(effect)` forks an Effect
+ * with the caller's full context and keeps the object alive until it
+ * settles.
+ *
+ * Attach cleanup to method scopes, not the constructor (init) closure —
+ * the constructor runs once per in-memory instance under
+ * `blockConcurrencyWhile`, and its scope is not tied to any call.
+ *
+ * @example Responding before finishing the work
+ * ```typescript
+ * return {
+ *   record: Effect.fn(function* (entry: string) {
+ *     // runs after `record` returns; the DO stays alive until it settles
+ *     yield* Effect.addFinalizer(() =>
+ *       state.storage.put(`audit:${entry}`, Date.now()).pipe(Effect.ignore),
+ *     );
+ *     return "accepted" as const;
+ *   }),
+ *
+ *   refresh: Effect.fn(function* () {
+ *     // same idea, explicit form
+ *     yield* state.waitUntil(recomputeExpensiveView());
+ *     return "scheduled" as const;
+ *   }),
+ * };
+ * ```
+ *
  * @section WebSocket Hibernation
  * Durable Objects support WebSocket hibernation — the runtime can
  * evict the object from memory while keeping connections open. Use

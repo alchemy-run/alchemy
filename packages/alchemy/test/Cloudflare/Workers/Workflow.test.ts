@@ -29,9 +29,49 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 interface WorkflowStatus {
   status: string;
-  output?: { greeting: string; envBindingCount: number };
+  output?: {
+    greeting: string;
+    envBindingCount: number;
+    workflowName: string;
+    stepAttempt: number;
+    instanceId: string;
+  };
   error?: { message?: string } | null;
+  rollback?: {
+    outcome: "complete" | "failed";
+    error: { message?: string } | null;
+  } | null;
 }
+
+const isTerminal = (status: WorkflowStatus) =>
+  status.status === "complete" ||
+  status.status === "errored" ||
+  status.status === "terminated";
+
+const waitForStatus = (
+  client: HttpClient.HttpClient,
+  url: string,
+  id: string,
+  until: (status: WorkflowStatus) => boolean = isTerminal,
+  times = 30,
+) =>
+  client.get(`${url}/workflow/status/${id}`).pipe(
+    // The status endpoint transiently returns a 500 (HTML error page, not
+    // JSON) while the freshly-deployed worker's Workflow binding is still
+    // propagating. Only decode JSON on a 200; treat any other status as a
+    // non-terminal "pending" so the poll keeps swinging instead of dying
+    // on a JSON decode error.
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? res.json.pipe(Effect.map((json) => json as unknown as WorkflowStatus))
+        : Effect.succeed({ status: "pending" } as WorkflowStatus),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until,
+      times,
+    }),
+  );
 
 // Start a fresh workflow instance and poll until it reaches a terminal state.
 // A transient `errored` during edge/binding propagation fails this effect so
@@ -62,27 +102,7 @@ const runWorkflowToCompletion = (url: string) =>
     const { instanceId } = (yield* startRes.json) as { instanceId: string };
     expect(instanceId).toBeTypeOf("string");
 
-    const lastStatus = yield* client
-      .get(`${url}/workflow/status/${instanceId}`)
-      .pipe(
-        // The status endpoint transiently returns a 500 (HTML error page, not
-        // JSON) while the freshly-deployed worker's Workflow binding is still
-        // propagating. Only decode JSON on a 200; treat any other status as a
-        // non-terminal "pending" so the poll keeps swinging instead of dying
-        // on a JSON decode error.
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json.pipe(
-                Effect.map((json) => json as unknown as WorkflowStatus),
-              )
-            : Effect.succeed({ status: "pending" } as WorkflowStatus),
-        ),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (s) => s.status === "complete" || s.status === "errored",
-          times: 12,
-        }),
-      );
+    const lastStatus = yield* waitForStatus(client, url, instanceId);
 
     // Surface a non-complete terminal state as a failure so the outer retry
     // can take another swing (a fresh worker occasionally errors a step while
@@ -111,13 +131,76 @@ test(
     expect(lastStatus.status).toBe("complete");
     expect(lastStatus.error).toBeFalsy();
     expect(lastStatus.output?.greeting).toBe("Hello, world!");
+    expect(lastStatus.output?.workflowName).toBe("TestWorkflow");
+    expect(lastStatus.output?.stepAttempt).toBe(1);
+    expect(lastStatus.rollback).toBeNull();
     // The body yields `WorkerEnvironment` — if the regression from PR #71 ever
     // returns, the body dies on the first yield and `output` is undefined.
     expect(lastStatus.output?.envBindingCount).toBeGreaterThan(0);
   }).pipe(logLevel),
-  // Budget covers the full retry envelope: up to 3 attempts, each with a
-  // capped start-retry (~30s worst case) + status polling (12 × 2s).
-  { timeout: 120_000 },
+  { timeout: 180_000 },
+);
+
+test(
+  "workflow can wait for and receive external events",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    const startRes = yield* client.post(`${url}/workflow/wait/world`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 15,
+      }),
+    );
+    const { instanceId } = (yield* startRes.json) as { instanceId: string };
+
+    // Cloudflare reports an instance parked in `waitForEvent` as `running`
+    // (`waiting` is reserved for sleeps), so the wait step itself is not
+    // observable through the coarse instance status. Wait for the instance
+    // to start, then deliver the event.
+    const runningStatus = yield* waitForStatus(
+      client,
+      url,
+      instanceId,
+      (status) => status.status === "running" || isTerminal(status),
+    );
+    expect(runningStatus.status).toBe("running");
+
+    // An event sent in the gap before the `waitForEvent` step registers can
+    // be missed, so re-send until the workflow acknowledges it by reaching a
+    // terminal status.
+    const lastStatus = yield* Effect.gen(function* () {
+      const sendRes = yield* client.post(
+        `${url}/workflow/send/${instanceId}/external-ok`,
+      );
+      if (sendRes.status !== 200) {
+        return yield* Effect.fail(
+          new Error(`sendEvent failed: ${sendRes.status}`),
+        );
+      }
+      const status = yield* waitForStatus(
+        client,
+        url,
+        instanceId,
+        isTerminal,
+        5,
+      );
+      return isTerminal(status)
+        ? status
+        : yield* Effect.fail(new Error(`workflow still ${status.status}`));
+    }).pipe(Effect.retry({ times: 3 }));
+    expect(lastStatus.status).toBe("complete");
+    expect(lastStatus.error).toBeFalsy();
+    expect(lastStatus.output?.greeting).toBe("external-ok");
+    expect(lastStatus.output?.instanceId).toBe(instanceId);
+  }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 // Canonical `list()` test (account collection): deploy the worker+workflow

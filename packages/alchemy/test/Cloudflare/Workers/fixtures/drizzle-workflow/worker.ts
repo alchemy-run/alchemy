@@ -25,7 +25,9 @@ export default class DrizzleWorkflowWorker extends Cloudflare.Worker<DrizzleWork
 
         if (request.url.startsWith("/workflow/start/")) {
           const id = Number(request.url.split("/workflow/start/")[1] ?? "1");
-          const instance = yield* workflow.create({ id, name: `widget-${id}` });
+          const instance = yield* workflow.create({
+            params: { id, name: `widget-${id}` },
+          });
           return yield* HttpServerResponse.json({ instanceId: instance.id });
         }
 

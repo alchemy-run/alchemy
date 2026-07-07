@@ -61,3 +61,28 @@ test(
   }),
   { timeout: 180_000 },
 );
+
+// `globalOutbound: null` must reach the runtime as `null` — coercing it to
+// `undefined` (the old `?.raw` behavior) silently restores default outbound
+// access for workers meant to be sandboxed (#746). The fixture's dynamic
+// worker attempts an outbound fetch and reports whether the runtime allowed
+// it.
+test(
+  "dynamic worker loaded with globalOutbound: null cannot reach the network",
+  Effect.gen(function* () {
+    const { effectWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${effectWorkerUrl}/outbound/sandboxed`);
+    expect(body).toMatchObject({ outbound: "blocked" });
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "dynamic worker loaded without globalOutbound has default network access",
+  Effect.gen(function* () {
+    const { effectWorkerUrl } = yield* stack;
+    const body = yield* readJson(`${effectWorkerUrl}/outbound/open`);
+    expect(body).toMatchObject({ outbound: "allowed", status: 200 });
+  }),
+  { timeout: 180_000 },
+);
