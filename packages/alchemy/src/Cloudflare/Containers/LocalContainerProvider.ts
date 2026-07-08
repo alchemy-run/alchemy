@@ -150,7 +150,7 @@ export const LocalContainerProvider = () =>
           durableObjects: undefined,
           createdAt: new Date().toISOString(),
           version: 1,
-          dev: { context, dockerfile },
+          dev: { context, dockerfile, env: news.env },
           hash: { image: hash },
         } satisfies ContainerApplication["Attributes"];
       });
