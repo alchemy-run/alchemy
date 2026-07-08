@@ -37,7 +37,14 @@ export type ProviderKeyProps = Omit<
 };
 
 export type ProviderKey = {
+  /**
+   * The Secrets Store secret holding the provider API key, named
+   * `{gatewayId}_{providerSlug}_{alias}` and scoped to `ai_gateway`.
+   */
   readonly secret: Secret;
+  /**
+   * The gateway's BYOK provider config referencing {@link secret}.
+   */
   readonly gatewayProvider: GatewayProvider;
 };
 
@@ -50,6 +57,19 @@ export type ProviderKey = {
  * contract with the {@link GatewayProvider} declaration so app stacks do not
  * have to wire the secret and provider config manually.
  *
+ * The children are namespaced under the given id: a {@link Secret} (child
+ * `Secret`) holding the key, and a {@link GatewayProvider} (child `Provider`)
+ * referencing it. It returns `{ secret, gatewayProvider }` so either
+ * underlying resource stays addressable.
+ *
+ * Rotating `value` updates the secret in place. Changing `alias` (or
+ * `providerSlug`) renames the secret — a replacement — and cascades: the
+ * provider config is replaced and re-pointed at the new secret.
+ *
+ * @resource
+ * @product AI Gateway
+ * @category AI
+ * @section Bringing your own key
  * @example Bring your own OpenAI key
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("Store");
@@ -64,6 +84,26 @@ export type ProviderKey = {
  *   gatewayId: gateway.gatewayId,
  *   providerSlug: "openai",
  *   value: yield* Config.redacted("OPENAI_API_KEY"),
+ * });
+ * ```
+ *
+ * @example Multiple keys for one provider
+ * Distinguish keys for the same provider with an `alias` — each alias gets
+ * its own secret and provider config.
+ * ```typescript
+ * const production = yield* Cloudflare.AI.ProviderKey("OpenAiKey", {
+ *   store,
+ *   gatewayId: gateway.gatewayId,
+ *   providerSlug: "openai",
+ *   value: yield* Config.redacted("OPENAI_API_KEY"),
+ * });
+ *
+ * const evals = yield* Cloudflare.AI.ProviderKey("OpenAiEvalsKey", {
+ *   store,
+ *   gatewayId: gateway.gatewayId,
+ *   providerSlug: "openai",
+ *   alias: "evals",
+ *   value: yield* Config.redacted("OPENAI_EVALS_API_KEY"),
  * });
  * ```
  *
