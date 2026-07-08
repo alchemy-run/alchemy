@@ -2259,7 +2259,7 @@ function bumpMigrationTagVersion(
  * binding-derived entry wins on a collision so the `alchemy:do:` tag keys off
  * the same logical id (the binding sid) that `reconcile` writes.
  */
-export function mergeDurableObjectClasses(
+function mergeDurableObjectClasses(
   exportDerived: ReadonlyArray<{ logicalId: string; className: string }>,
   bindingDerived: ReadonlyArray<{ logicalId: string; className: string }>,
 ) {
