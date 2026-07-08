@@ -152,7 +152,9 @@ distilled service. Only the owner of `turnstile` writes to
 Every test follows one shape: deploy, verify out-of-band by
 querying the API directly through distilled, mutate, verify
 again, destroy, and prove the destroy by watching the resource
-disappear. Nothing counts because the deploy said so.
+disappear. A test never trusts the deploy's own report of
+success. It confirms every step against what the API actually
+returns.
 
 Two choices kept the loop fast. distilled is a git submodule
 inside alchemy's bun workspace, so an agent patches the SDK
