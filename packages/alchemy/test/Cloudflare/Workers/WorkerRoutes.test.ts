@@ -120,7 +120,7 @@ const T1_ADDED = `${zoneName}/${routeSuffix}/t1/other/*`;
 const T1_MATCH_URL = `https://${zoneName}/${routeSuffix}/t1/api/ping`;
 const T1_MISS_URL = `https://${zoneName}/${routeSuffix}/t1/unknown`;
 
-test.provider.skipIf(!zoneName || !!process.env.FAST)(
+test.provider.skipIf(!zoneName)(
   "creates, keeps, updates, and removes worker zone routes",
   (stack) =>
     Effect.gen(function* () {
