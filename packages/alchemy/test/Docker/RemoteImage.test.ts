@@ -28,6 +28,7 @@ test.provider("diff pulls again unless alwaysPull is disabled", () =>
 
     const pinned = yield* provider.diff!({
       id: "nginx",
+      fqn: "nginx",
       instanceId: "instance",
       olds: { name: "nginx", tag: "alpine", alwaysPull: false },
       news: { name: "nginx", tag: "alpine", alwaysPull: false },
@@ -39,6 +40,7 @@ test.provider("diff pulls again unless alwaysPull is disabled", () =>
 
     const refreshed = yield* provider.diff!({
       id: "nginx",
+      fqn: "nginx",
       instanceId: "instance",
       olds: { name: "nginx", tag: "alpine", alwaysPull: false },
       news: { name: "nginx", tag: "alpine" },

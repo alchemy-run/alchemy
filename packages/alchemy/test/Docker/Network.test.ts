@@ -19,6 +19,7 @@ test.provider("diff replaces a network when labels change", () =>
     const networkProvider = yield* Provider.findProvider(Docker.Network);
     const networkDiff = yield* networkProvider.diff!({
       id: "app",
+      fqn: "app",
       instanceId: "instance",
       olds: { name: "app", labels: { usage: "old" } },
       news: { name: "app", labels: { usage: "new" } },

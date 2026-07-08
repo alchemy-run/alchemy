@@ -16,6 +16,7 @@ const callDiff = (olds: DBClusterProps, news: DBClusterProps) =>
     const provider = yield* Provider.findProvider(DBCluster);
     return yield* provider.diff!({
       id: "TestCluster",
+      fqn: "TestCluster",
       instanceId: "test-cluster",
       olds,
       news,

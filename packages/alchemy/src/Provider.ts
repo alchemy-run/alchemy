@@ -156,6 +156,11 @@ export interface ProviderService<
    */
   tail?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     props: Props<Res>;
     output: Res["Attributes"];
@@ -166,6 +171,11 @@ export interface ProviderService<
    */
   logs?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     props: Props<Res>;
     output: Res["Attributes"];
@@ -178,6 +188,11 @@ export interface ProviderService<
   // branch?() {}
   read?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     olds: Props<Res>;
     // what is the ARN?
@@ -189,6 +204,11 @@ export interface ProviderService<
   stables?: Extract<keyof Res["Attributes"], string>[];
   diff?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     olds: Props<Res>;
     // Note: we do not resolve (Res["Props"]) here because diff runs during plan
@@ -201,6 +221,11 @@ export interface ProviderService<
   // dev?:() => Effect.Effect<void, any, DevReq>;
   precreate?(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     news: Props<Res>;
     instanceId: string;
     session: ScopedPlanStatusSession;
@@ -230,6 +255,11 @@ export interface ProviderService<
    */
   reconcile(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     news: Props<Res>;
     olds: Props<Res> | undefined;
@@ -239,6 +269,11 @@ export interface ProviderService<
   }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
   delete(input: {
     id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
     instanceId: string;
     olds: Props<Res>;
     output: Res["Attributes"];

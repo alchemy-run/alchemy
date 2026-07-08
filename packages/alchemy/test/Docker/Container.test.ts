@@ -23,6 +23,7 @@ test.provider("diff replaces a container when its image changes", () =>
     const containerProvider = yield* Provider.findProvider(Docker.Container);
     const containerDiff = yield* containerProvider.diff!({
       id: "web",
+      fqn: "web",
       instanceId: "instance",
       olds: { name: "web", image: "nginx:alpine" },
       news: { name: "web", image: "nginx:1.27-alpine" },

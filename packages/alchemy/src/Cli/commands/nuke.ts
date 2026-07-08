@@ -521,6 +521,9 @@ const nukeCommand = Command.make(
                 item.provider
                   .delete({
                     id: displayName(item.attr),
+                    // Enumerated straight from the cloud, so there is no
+                    // Alchemy namespace — an un-namespaced fqn is just the id.
+                    fqn: displayName(item.attr),
                     instanceId: "",
                     olds: item.attr as never,
                     output: item.attr as never,
