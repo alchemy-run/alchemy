@@ -223,7 +223,9 @@ const initialState = (): DashboardState => ({
   connection: { status: "connecting", stage: undefined, revision: 0 },
   history: initialHistory(),
   // feedExpanded starts false: the ActivityFeed opens as a one-line pill
-  ui: { view: "canvas", filter: "", paletteOpen: false, feedExpanded: false },
+  // list is the default view: it reads instantly (no layout pass) and
+  // scales to any stack size; the graph is one click away
+  ui: { view: "list", filter: "", paletteOpen: false, feedExpanded: false },
   layout: {
     positionsByHash: new Map(),
     positionMemory: new Map(),
