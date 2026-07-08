@@ -266,64 +266,35 @@ disappear. Nothing counts because the deploy said so.
 
 ## What the agents didn't do
 
-The honest version of "AI wrote 200 resources" includes what
-was already standing when it did.
-
-The doctrine came first, by hand. The reconciler shape
-(observe → ensure → sync → return), the typed-error rule, the
-test conventions with destroy-bookends and out-of-band
-verification — all of it was established on hand-built
-resources and written down before any fleet ran. In the days
-just before #601, [Andy
-Jefferson](https://github.com/microagi-andy) contributed
-DnsRecord and five Zero Trust resources built exactly to that
-doctrine
+The doctrine came first, by hand: the reconciler shape, the
+typed-error rule, the test conventions. Days before #601,
+[Andy Jefferson](https://github.com/microagi-andy) built
+DnsRecord and five Zero Trust resources to that doctrine
 ([#570](https://github.com/alchemy-run/alchemy-effect/pull/570))
-— about 5,100 lines over two and a half days of careful work.
-The factory didn't replace that kind of engineering; it
-scaled it. Every agent prompt pointed at the doctrine and at
-exemplar resources, and the difference between "AI slop" and
-what shipped is precisely that scaffolding: agents were never
-asked to invent judgment, only to apply written-down judgment
-several hundred times under a type system that refuses lies.
+— 5,100 lines over two and a half days. The factory scaled
+that work rather than replacing it: agents applied
+written-down judgment a few hundred times under a type system
+that refuses lies.
 
-A coordinator (human plus one orchestrating session) stayed in
-the loop throughout: the authoritative type-checks,
-cross-cutting fixes like the `mergeAll` restructure, and the
-call on what was out of scope — deprecated APIs superseded by
-Rulesets, billing objects, closed betas — all stayed
-centralized.
-
-And the map has known edges. When beta.56 shipped, twenty of
-distilled's 114 services had no patches at all, and over a
-thousand operations still carried only default transport
-errors — mostly paths no resource exercises yet. Products
-gated behind plans we don't have (Magic Transit, Total TLS)
-are implemented and tested up to the gate, but their live
-lifecycles aren't exercised on our account. The corpus is a
-record of every road actually driven, not a claim that every
-road is paved.
+Coverage has known edges: 20 of 114 services have no patches
+yet, and plan-gated products (Magic Transit, Total TLS) are
+tested only up to the gate.
 
 ## Where this lands
 
-The 230 resources are the visible output, and they shipped in
-[2.0.0-beta.56](/blog/2026-06-17-beta-56). But the durable
-output is the SDK. Resources are rewritten as engines evolve —
-the patch corpus survives all of it, because it encodes facts
-about Cloudflare, not facts about Alchemy: this operation
-returns 10404 for a missing widget, that one misuses 400,
-these fields come back null. 1,099 operations' worth of those
-facts now regenerate into typed unions on every build, for
-every consumer.
+The resources shipped in [2.0.0-beta.56](/blog/2026-06-17-beta-56).
+The durable output is the SDK: patches encode facts about
+Cloudflare, not Alchemy — this operation returns 10404 for a
+missing widget, that one misuses 400 — so they outlive every
+rewrite of the resources that found them. 1,099 patched
+operations now regenerate into typed unions on every build,
+for every consumer.
 
-That's also why this template travels. The factory needs three
-things: a generated SDK with a patch layer, a live account to
-test against, and a doctrine that forbids handling unknown
-errors locally. Nothing about that is Cloudflare-specific —
-AWS, Neon, PlanetScale, and Stripe sit in distilled behind
-the same generator-plus-patches architecture. The Cloudflare
-run was the proof; the same flywheel is how every provider
-gets built from here.
+The factory needs a generated SDK with a patch layer, a live
+account, and the rule against handling unknown errors locally.
+AWS, Neon, PlanetScale, and Stripe already sit in distilled
+behind the same architecture. Cloudflare was the proof; every
+provider gets built this way from here.
 
 - [2.0.0-beta.56 — the release these resources shipped in](/blog/2026-06-17-beta-56)
 - [PR #601 — the generation wave](https://github.com/alchemy-run/alchemy-effect/pull/601)
