@@ -103,6 +103,14 @@ export interface ProviderService<
    */
   version?: number;
   /**
+   * Legacy type names this provider also answers to. Copied from the
+   * resource class's `aliases` option by {@link succeed}/{@link effect} so
+   * state persisted under a pre-rename type (e.g. `"Cloudflare.Queue"`
+   * before the `"Cloudflare.Queues.Queue"` rename) still resolves to this
+   * provider via {@link tryFindProviderByType}.
+   */
+  aliases?: readonly string[];
+  /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
    * report an endless "deleted but still there" loop. `read`/import are
@@ -275,8 +283,14 @@ export const effect = <
     LifecycleServices
   >
 > =>
-  // @ts-expect-error
-  Layer.effect(Provider(cls.Type), eff) as any;
+  Layer.effect(
+    // @ts-expect-error
+    Provider(cls.Type),
+    Effect.map(eff, (service) => ({
+      aliases: "Aliases" in cls ? cls.Aliases : undefined,
+      ...service,
+    })),
+  ) as any;
 
 export const succeed = <
   R extends ResourceLike,
@@ -310,7 +324,10 @@ export const succeed = <
   >
 > =>
   // @ts-expect-error
-  Layer.succeed(Provider(cls.Type), service);
+  Layer.succeed(Provider(cls.Type), {
+    aliases: "Aliases" in cls ? cls.Aliases : undefined,
+    ...service,
+  });
 
 export interface ProviderCollectionLike {
   kind: "ProviderCollection";
@@ -398,6 +415,20 @@ const isProviderCollectionService = (
   );
 };
 
+/**
+ * Structural check for a {@link ProviderService} living in the Effect
+ * context. Providers are keyed by their canonical resource type; when
+ * searching for a legacy alias, the tag key won't match, so lookup has to
+ * recognize provider services by shape.
+ */
+const isProviderService = (value: unknown): value is ProviderService =>
+  typeof value === "object" &&
+  value !== null &&
+  "reconcile" in value &&
+  typeof (value as ProviderService).reconcile === "function" &&
+  "delete" in value &&
+  typeof (value as ProviderService).delete === "function";
+
 export const findProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
@@ -446,6 +477,25 @@ export const tryFindProviderByType: {
       if (provider) {
         return Option.some(provider);
       }
+    }
+  }
+
+  // State persisted before a type rename carries the legacy name, so no
+  // provider is keyed under it. Fall back to a provider that declares the
+  // name in its `aliases` — scanning both bare Provider layers and the
+  // members of every ProviderCollection.
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      for (const provider of Object.values(value.providers)) {
+        if (provider.aliases?.includes(resourceType)) {
+          return Option.some(provider);
+        }
+      }
+    } else if (
+      isProviderService(value) &&
+      value.aliases?.includes(resourceType)
+    ) {
+      return Option.some(value);
     }
   }
   return Option.none();

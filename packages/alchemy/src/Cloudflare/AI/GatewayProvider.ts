@@ -175,7 +175,9 @@ export type GatewayProvider = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/
  */
-export const GatewayProvider = Resource<GatewayProvider>(TypeId);
+export const GatewayProvider = Resource<GatewayProvider>(TypeId, {
+  aliases: ["Cloudflare.AiGateway.ProviderConfig"],
+});
 
 /**
  * Returns true if the given value is a GatewayProvider resource.

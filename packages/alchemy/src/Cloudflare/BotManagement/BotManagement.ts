@@ -222,7 +222,9 @@ export type BotManagement = Resource<
  *
  * @see https://developers.cloudflare.com/bots/
  */
-export const BotManagement = Resource<BotManagement>(TypeId);
+export const BotManagement = Resource<BotManagement>(TypeId, {
+  aliases: ["Cloudflare.BotManagement"],
+});
 
 /**
  * Returns true if the given value is a BotManagement resource.

@@ -119,7 +119,9 @@ export type ZoneTransferPeer = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
  */
-export const ZoneTransferPeer = Resource<ZoneTransferPeer>(TypeId);
+export const ZoneTransferPeer = Resource<ZoneTransferPeer>(TypeId, {
+  aliases: ["Cloudflare.Dns.ZoneTransferPeer"],
+});
 
 /**
  * Returns true if the given value is a ZoneTransferPeer resource.

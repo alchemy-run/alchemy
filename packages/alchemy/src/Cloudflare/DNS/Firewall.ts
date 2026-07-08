@@ -238,7 +238,9 @@ export type Firewall = Resource<
  *
  * @see https://developers.cloudflare.com/dns/dns-firewall/
  */
-export const Firewall = Resource<Firewall>(TypeId);
+export const Firewall = Resource<Firewall>(TypeId, {
+  aliases: ["Cloudflare.DnsFirewall"],
+});
 
 /**
  * Returns true if the given value is a DnsFirewall resource.

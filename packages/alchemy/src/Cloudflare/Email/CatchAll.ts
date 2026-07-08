@@ -124,7 +124,9 @@ export type CatchAll = Resource<
  * });
  * ```
  */
-export const CatchAll = Resource<CatchAll>(CatchAllTypeId);
+export const CatchAll = Resource<CatchAll>(CatchAllTypeId, {
+  aliases: ["Cloudflare.EmailCatchAll"],
+});
 
 /**
  * Returns true if the given value is an CatchAll resource.

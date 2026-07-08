@@ -84,7 +84,9 @@ export type ZoneTransferAcl = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
  */
-export const ZoneTransferAcl = Resource<ZoneTransferAcl>(TypeId);
+export const ZoneTransferAcl = Resource<ZoneTransferAcl>(TypeId, {
+  aliases: ["Cloudflare.Dns.ZoneTransferAcl"],
+});
 
 /**
  * Returns true if the given value is a ZoneTransferAcl resource.

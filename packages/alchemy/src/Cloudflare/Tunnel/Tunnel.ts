@@ -150,7 +150,9 @@ export type Tunnel = Resource<
  * };
  * ```
  */
-export const Tunnel = Resource<Tunnel>("Cloudflare.Tunnel.Tunnel");
+export const Tunnel = Resource<Tunnel>("Cloudflare.Tunnel.Tunnel", {
+  aliases: ["Cloudflare.Tunnel"],
+});
 
 export const TunnelProvider = () =>
   Provider.succeed(Tunnel, {

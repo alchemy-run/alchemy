@@ -100,7 +100,9 @@ export type ZoneTransferIncoming = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/setup/
  */
-export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(TypeId);
+export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(TypeId, {
+  aliases: ["Cloudflare.Dns.ZoneTransferIncoming"],
+});
 
 /**
  * Returns true if the given value is a ZoneTransferIncoming resource.

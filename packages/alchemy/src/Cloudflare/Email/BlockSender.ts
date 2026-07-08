@@ -104,6 +104,7 @@ export type BlockSender = Resource<
  */
 export const BlockSender = Resource<BlockSender>(
   EmailSecurityBlockSenderTypeId,
+  { aliases: ["Cloudflare.EmailSecurity.BlockSender"] },
 );
 
 /**

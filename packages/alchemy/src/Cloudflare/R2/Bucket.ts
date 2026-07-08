@@ -299,7 +299,9 @@ export type Bucket = Resource<
  * });
  * ```
  */
-export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket");
+export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
+  aliases: ["Cloudflare.R2Bucket"],
+});
 
 export declare namespace Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";

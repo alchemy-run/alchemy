@@ -170,7 +170,9 @@ export type PageRule = Resource<TypeId, Props, Attributes, never, Providers>;
  *
  * @see https://developers.cloudflare.com/rules/page-rules/
  */
-export const PageRule = Resource<PageRule>(TypeId);
+export const PageRule = Resource<PageRule>(TypeId, {
+  aliases: ["Cloudflare.PageRule"],
+});
 
 /**
  * Returns true if the given value is a PageRule resource.

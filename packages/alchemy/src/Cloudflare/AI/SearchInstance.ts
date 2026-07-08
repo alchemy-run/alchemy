@@ -556,7 +556,9 @@ export type SearchInstance = Resource<
  *
  * @see https://developers.cloudflare.com/ai-search/
  */
-export const SearchInstance = Resource<SearchInstance>(TypeId);
+export const SearchInstance = Resource<SearchInstance>(TypeId, {
+  aliases: ["Cloudflare.AiSearch.Instance"],
+});
 
 /**
  * Returns true if the given value is a SearchInstance resource.

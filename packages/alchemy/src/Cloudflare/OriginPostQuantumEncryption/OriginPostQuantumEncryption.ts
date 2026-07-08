@@ -113,7 +113,9 @@ export type OriginPostQuantumEncryption = Resource<
  * @see https://developers.cloudflare.com/ssl/origin-configuration/pqc-to-origin/
  */
 export const OriginPostQuantumEncryption =
-  Resource<OriginPostQuantumEncryption>(TypeId);
+  Resource<OriginPostQuantumEncryption>(TypeId, {
+    aliases: ["Cloudflare.OriginPostQuantumEncryption"],
+  });
 
 /**
  * Returns true if the given value is an OriginPostQuantumEncryption resource.

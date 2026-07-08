@@ -129,7 +129,9 @@ export type GoogleTagGateway = Resource<
  *
  * @see https://developers.cloudflare.com/google-tag-gateway/
  */
-export const GoogleTagGateway = Resource<GoogleTagGateway>(TypeId);
+export const GoogleTagGateway = Resource<GoogleTagGateway>(TypeId, {
+  aliases: ["Cloudflare.GoogleTagGateway"],
+});
 
 /**
  * Returns true if the given value is a GoogleTagGateway resource.

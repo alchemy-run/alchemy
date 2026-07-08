@@ -162,7 +162,9 @@ export type ClientCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  */
-export const ClientCertificate = Resource<ClientCertificate>(TypeId);
+export const ClientCertificate = Resource<ClientCertificate>(TypeId, {
+  aliases: ["Cloudflare.ClientCertificate"],
+});
 
 /**
  * Returns true if the given value is a ClientCertificate resource.

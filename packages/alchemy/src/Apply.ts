@@ -465,7 +465,13 @@ const executeNode = (
     // ── noop ──
 
     if (node.action === "noop") {
-      // No work to do — the persisted attr is already stable.
+      // No work to do — the persisted attr is already stable. If the row was
+      // persisted under a legacy type name (the type was since renamed and
+      // carries the old name as an alias), migrate it to the canonical type
+      // so the state stops depending on the alias.
+      if (node.state.resourceType !== node.resource.Type) {
+        yield* commit({ ...node.state, resourceType: node.resource.Type });
+      }
       yield* signalReadyStable;
       yield* storeAndSignal({
         output: node.state.attr,

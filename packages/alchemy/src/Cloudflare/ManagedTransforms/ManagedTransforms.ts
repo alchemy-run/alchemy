@@ -172,7 +172,9 @@ export type ManagedTransforms = Resource<
  *
  * @see https://developers.cloudflare.com/rules/transform/managed-transforms/
  */
-export const ManagedTransforms = Resource<ManagedTransforms>(TypeId);
+export const ManagedTransforms = Resource<ManagedTransforms>(TypeId, {
+  aliases: ["Cloudflare.ManagedTransforms"],
+});
 
 /**
  * Returns true if the given value is a ManagedTransforms resource.

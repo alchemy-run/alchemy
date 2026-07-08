@@ -293,7 +293,9 @@ export type Healthcheck = Resource<TypeId, Props, Attributes, never, Providers>;
  *
  * @see https://developers.cloudflare.com/health-checks/
  */
-export const Healthcheck = Resource<Healthcheck>(TypeId);
+export const Healthcheck = Resource<Healthcheck>(TypeId, {
+  aliases: ["Cloudflare.Healthcheck"],
+});
 
 /**
  * Returns true if the given value is a Healthcheck resource.
