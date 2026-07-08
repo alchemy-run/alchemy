@@ -164,37 +164,14 @@ distilled. And vitest resolves distilled from its TypeScript
 source, so a regenerated service is visible to the very next
 test run. The loop's cycle time is the test's runtime.
 
-## What the agents didn't do
+## What's next
 
-The doctrine came first, written by hand: the reconciler
-shape, the typed-error rule, the test conventions. Days before
-#601, [Andy Jefferson](https://github.com/microagi-andy) built
-DnsRecord and five Zero Trust resources to that doctrine
-([#570](https://github.com/alchemy-run/alchemy-effect/pull/570)),
-about 5,100 lines over two and a half days. The factory scaled
-that work rather than replacing it. Agents applied
-written-down judgment a few hundred times under a type system
-that refuses lies.
-
-Coverage has known edges: 20 of 114 services have no patches
-yet, and plan-gated products (Magic Transit, Total TLS) are
-tested only up to the gate.
-
-## Where this lands
-
-The resources shipped in [2.0.0-beta.56](/blog/2026-06-17-beta-56).
-The durable output is the SDK. The patches encode facts about
-Cloudflare rather than Alchemy, like which operation returns
-10404 for a missing widget and which one misuses 400, so they
-outlive every rewrite of the resources that found them. 1,099
-patched operations now regenerate into typed unions on every
-build, for every consumer.
-
-The factory needs a generated SDK with a patch layer, a live
-account, and the rule against handling unknown errors locally.
-AWS, Neon, PlanetScale, and Stripe already sit in distilled
-behind the same architecture. Cloudflare was the proof. Every
-provider gets built this way from here.
+We're scaling this loop to every cloud provider, with two
+goals: 100% IaC coverage in Alchemy, and refined SDKs whose
+types align with each API's real behavior rather than just its
+spec. AWS is next, then Railway, GCP, and Azure. The
+Cloudflare run was the proof, and it shipped in
+[2.0.0-beta.56](/blog/2026-06-17-beta-56).
 
 - [2.0.0-beta.56 — the release these resources shipped in](/blog/2026-06-17-beta-56)
 - [PR #601 — the generation wave](https://github.com/alchemy-run/alchemy-effect/pull/601)
