@@ -147,12 +147,10 @@ correction, until the whole resource is green against the
 live API. The resource is the product; the truthful SDK falls
 out as a byproduct.
 
-And the byproduct compounds: that patch doesn't belong to the
-Turnstile resource, or to Alchemy. It belongs to the SDK.
-Every future consumer of distilled's Turnstile module — ours
-or anyone's — gets `WidgetNotFound` as a typed, catchable
-error forever. The test didn't just verify a resource. It
-compiled a piece of Cloudflare's actual behavior into the type
+The patch lives in the SDK, not in Alchemy. Anyone who uses
+distilled's Turnstile module from now on gets `WidgetNotFound`
+as a typed, catchable error. The test found a fact about
+Cloudflare's API, and the patch made it part of the type
 system.
 
 ## What 1,087 patches look like
