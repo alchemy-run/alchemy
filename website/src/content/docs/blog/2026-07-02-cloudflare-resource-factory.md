@@ -11,14 +11,21 @@ framework built from the ground up in TypeScript and Effect.
 Everything is typed code, from a resource's inputs and outputs
 down to the SDK calls and errors inside its lifecycle logic.
 
-This loop grew Alchemy's Cloudflare provider from **22
-resources to 230** between June 11 and June 17. Fleets of AI
-agents write the resources and their live tests, then run them
-against a real Cloudflare account. Every API behavior the
-SDK's types don't capture becomes a patch to the SDK, which
-regenerates and the tests rerun. One run produced 288 test
-files with roughly 700 tests and **720 SDK patches**. Most of
-it landed in a single PR
+Built from the ground up also means starting from zero
+coverage. Alchemy can't reuse the providers of existing IaC
+ecosystems like Terraform or Pulumi, and we're a team of
+three, so hand-writing lifecycle code for thousands of cloud
+resources isn't an option. We generate it with AI, using the
+loop in the diagram above.
+
+Fleets of AI agents write the resources and their live tests,
+then run them against a real Cloudflare account. Every API
+behavior the SDK's types don't capture becomes a patch to the
+SDK, which regenerates and the tests rerun. One run of this
+loop grew Alchemy's Cloudflare provider from **22 resources to
+230** between June 11 and June 17, producing 288 test files
+with roughly 700 tests and **720 SDK patches**. Most of it
+landed in a single PR
 ([#601](https://github.com/alchemy-run/alchemy-effect/pull/601))
 that added 101,178 lines across 542 files and was open for 22
 hours. The PR description, in its entirety:
