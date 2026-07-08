@@ -41,7 +41,10 @@ export const NeonDatabase = Effect.gen(function* () {
  */
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDatabase;
-  return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
     origin: branch.origin,
+    caching: {
+      disabled: true,
+    },
   });
 });

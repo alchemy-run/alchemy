@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import * as Rpc from "effect/unstable/rpc/Rpc";
+import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 /**
  * Shared domain + RPC contract.
@@ -23,7 +24,7 @@ export class Todo extends Schema.Class<Todo>("Todo")({
 /** Raised when a mutation targets a todo id that no longer exists. */
 export class TodoNotFound extends Schema.TaggedErrorClass<TodoNotFound>()(
   "TodoNotFound",
-  { id: Schema.Number },
+  { message: Schema.String, id: Schema.Number },
 ) {}
 
 export class TodoRpcs extends RpcGroup.make(

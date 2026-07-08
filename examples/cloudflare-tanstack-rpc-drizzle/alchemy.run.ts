@@ -13,7 +13,7 @@ import { Hyperdrive, NeonDatabase } from "./src/backend/database.ts";
  * `BACKEND` service binding; the `/rpc` server route proxies the browser's
  * `AtomRpc` traffic to it.
  */
-export class Website extends Cloudflare.Vite<Website>()("Website", {
+export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
   compatibility: {
     flags: ["nodejs_compat", "enable_request_signal"],
   },
@@ -21,7 +21,7 @@ export class Website extends Cloudflare.Vite<Website>()("Website", {
     BACKEND: Backend,
   },
   assets: {
-    runWorkerFirst: ["/rpc", "/rpc/"],
+    runWorkerFirst: true,
   },
 }) {}
 

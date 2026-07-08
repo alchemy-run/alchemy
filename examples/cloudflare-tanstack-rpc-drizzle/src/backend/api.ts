@@ -15,14 +15,14 @@ import { relations, Todos } from "./schema.ts";
  * the browser never reaches it directly; the TanStack `/rpc` route proxies to
  * it (see `src/routes/rpc.ts`).
  */
-export default class Backend extends Cloudflare.RpcWorker<Backend>()(
+export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   "Backend",
   {
     main: import.meta.filename,
     schema: TodoRpcs,
   },
   Effect.gen(function* () {
-    const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.postgres(conn.connectionString, { relations });
 
     // DB failures are unexpected here, so we `orDie` them into defects. That
@@ -56,10 +56,12 @@ export default class Backend extends Cloudflare.RpcWorker<Backend>()(
           .where(eq(Todos.id, id))
           .returning()
           .pipe(
-            Effect.flatMap(([row]) =>
-              row ? Effect.succeed(new Todo(row)) : new TodoNotFound({ id }),
-            ),
             Effect.orDie,
+            Effect.flatMap(([row]) =>
+              row
+                ? Effect.succeed(new Todo(row))
+                : new TodoNotFound({ message: `Todo ${id} not found`, id }),
+            ),
           ),
 
       deleteTodo: ({ id }) =>
@@ -68,15 +70,17 @@ export default class Backend extends Cloudflare.RpcWorker<Backend>()(
           .where(eq(Todos.id, id))
           .returning()
           .pipe(
-            Effect.flatMap(([row]) =>
-              row ? Effect.succeed(row.id) : new TodoNotFound({ id }),
-            ),
             Effect.orDie,
+            Effect.flatMap(([row]) =>
+              row
+                ? Effect.succeed(row.id)
+                : new TodoNotFound({ message: `Todo ${id} not found`, id }),
+            ),
           ),
     });
 
     return RpcServer.toHttpEffect(TodoRpcs).pipe(
       Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
     );
-  }).pipe(Effect.provide(Cloudflare.HyperdriveBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}

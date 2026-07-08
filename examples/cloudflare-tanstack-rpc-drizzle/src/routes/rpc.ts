@@ -12,14 +12,16 @@ import type { WebsiteEnv } from "../../alchemy.run.ts";
 export const Route = createFileRoute("/rpc")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
+      ANY: async ({ request }) => {
         return await (env as WebsiteEnv).BACKEND.fetch("https://backend/rpc", {
           method: request.method,
-          headers: {
-            "content-type":
-              request.headers.get("content-type") ?? "application/json",
-          },
-          body: await request.text(),
+          headers: request.body
+            ? {
+                "content-type":
+                  request.headers.get("content-type") ?? "application/json",
+              }
+            : undefined,
+          body: request.body ? await request.text() : undefined,
           signal: request.signal,
           redirect: "manual",
         });
