@@ -25,6 +25,8 @@ import { readAssets, uploadAssets } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { ensureTestLogger, testLoggerBindings } from "./TestLogging/Ensure.ts";
+import { TestLoggingPolicy } from "./TestLogging/Policy.ts";
 import { Worker, type WorkerProps } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerSettingsBinding } from "./WorkerBinding.ts";
@@ -307,7 +309,34 @@ interface WorkerMetadataHashInput {
   readonly bindings: readonly ResourceBinding<Worker["Binding"]>[];
   readonly accountId: string;
   readonly stack: { readonly name: string; readonly stage: string };
+  /**
+   * Whether test logging is active for this deploy — it injects extra
+   * bindings (logger DO namespace + identity env vars), so toggling it must
+   * register as a metadata change and trigger a redeploy.
+   */
+  readonly testLogging: boolean;
 }
+
+/**
+ * Whether the test-logging pipeline applies to this Worker: the deploy must
+ * opt in (the test harness provides {@link TestLoggingPolicy}), and the
+ * Worker must be one we can actually instrument — a bundled, routable,
+ * account-level script. Dispatch-namespace user workers, raw `script`
+ * uploads, prebuilt (`bundle: false`) workers, and vite builds are skipped
+ * entirely (no bindings, no logger dependency).
+ */
+const isTestLoggingEnabled = (props: WorkerProps) =>
+  Effect.gen(function* () {
+    const enabled = yield* TestLoggingPolicy;
+    return (
+      enabled &&
+      props.namespace == null &&
+      props.main !== undefined &&
+      props.bundle !== false &&
+      props.script === undefined &&
+      !props.vite
+    );
+  });
 
 // The asset router config the resource declares (htmlHandling,
 // notFoundHandling, ...), minus the local `directory` path (machine-specific,
@@ -337,11 +366,15 @@ const resolveWorkerMetadataHash = ({
   bindings,
   accountId,
   stack,
+  testLogging,
 }: WorkerMetadataHashInput): Effect.Effect<string> =>
   resolveMetadataHashValue({
     accountId,
     stack: { name: stack.name, stage: stack.stage },
-    compatibility: getCompatibility(props),
+    compatibility: getCompatibility(props, testLogging),
+    // Only hashed when on so the hash surface is unchanged for the normal
+    // (CLI) deploy path.
+    testLogging: testLogging || undefined,
     env: props.env,
     bindings: bindings.map((binding) => ({
       sid: binding.sid,
@@ -773,27 +806,34 @@ export const LiveWorkerProvider = () =>
       });
 
       const prepareBundle = (id: string, props: WorkerProps) =>
-        (props.bundle === false
-          ? readPrebuiltWorkerBundle({
+        Effect.gen(function* () {
+          if (props.bundle === false) {
+            return yield* readPrebuiltWorkerBundle({
               main: props.main!,
               rules: props.rules,
-            })
-          : bundler.build({
-              id,
-              main: props.main!,
-              compatibility: getCompatibility(props),
-              entry: props.isExternal
-                ? {
-                    kind: "external",
-                  }
-                : {
-                    kind: "effect",
-                    exports: props.exports ?? {},
-                  },
-              stack: { name: stack.name, stage: stack.stage },
-              extraOptions: props.build,
-            })
-        ).pipe(Artifacts.cached("build"));
+            });
+          }
+          // With test logging on, external workers get the wrapper entry
+          // (console patch + request-ID ALS) and the `nodejs_als` flag.
+          // Effect workers need neither — their bundled WorkerBridge does
+          // the same at runtime, keyed off the injected binding.
+          const testLogging = yield* isTestLoggingEnabled(props);
+          return yield* bundler.build({
+            id,
+            main: props.main!,
+            compatibility: getCompatibility(props, testLogging),
+            entry: props.isExternal
+              ? {
+                  kind: testLogging ? "external-wrapped" : "external",
+                }
+              : {
+                  kind: "effect",
+                  exports: props.exports ?? {},
+                },
+            stack: { name: stack.name, stage: stack.stage },
+            extraOptions: props.build,
+          });
+        }).pipe(Artifacts.cached("build"));
 
       const hashScript = (script: string) =>
         Effect.sync(() =>
@@ -963,6 +1003,7 @@ export const LiveWorkerProvider = () =>
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
+        const testLogging = yield* isTestLoggingEnabled(news);
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
@@ -990,6 +1031,7 @@ export const LiveWorkerProvider = () =>
           bindings,
           accountId,
           stack: { name: stack.name, stage: stack.stage },
+          testLogging,
         });
         const hash = {
           ...preparedHash,
@@ -1071,6 +1113,27 @@ export const LiveWorkerProvider = () =>
             text: accountId,
           },
         );
+        if (testLogging) {
+          // Ensure the account-level logger singleton exists before we
+          // upload a script whose bindings reference it (Cloudflare
+          // validates cross-script DO bindings at PUT time). Degrade
+          // gracefully — log plumbing must never fail a deploy.
+          const loggerTarget = yield* ensureTestLogger({
+            accountId,
+            doName: `${stack.name}/${stack.stage}`,
+          }).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning(
+                `Cloudflare test logging: failed to provision the alchemy-test-logger worker: ${String(error)}`,
+              ).pipe(Effect.as(undefined)),
+            ),
+          );
+          if (loggerTarget) {
+            metadataBindings.push(
+              ...testLoggerBindings(name, loggerTarget.doName),
+            );
+          }
+        }
         // Add environment variables as metadata bindings
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
@@ -1274,7 +1337,7 @@ export const LiveWorkerProvider = () =>
           }),
         );
 
-        const compatibility = getCompatibility(news);
+        const compatibility = getCompatibility(news, testLogging);
         const metadata: workers.PutScriptRequest["metadata"] = {
           assets: metadataAssets,
           bindings: metadataBindings,
@@ -1469,6 +1532,7 @@ export const LiveWorkerProvider = () =>
             bindings,
             accountId,
             stack: { name: stack.name, stage: stack.stage },
+            testLogging: yield* isTestLoggingEnabled(props),
           });
           if (metadataHash !== output.hash?.metadata) {
             return true;
@@ -1587,6 +1651,18 @@ export const LiveWorkerProvider = () =>
         diff: Effect.fn(function* ({ id, news, olds, output, newBindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           if (!isResolved(news)) return undefined;
+          if (yield* isTestLoggingEnabled(news)) {
+            // Converge the account-level logger singleton and record the
+            // connection target in the in-process registry even when this
+            // plan is a no-op (e.g. a NO_DESTROY re-run) — otherwise the
+            // test harness would have nothing to subscribe to. Idempotent
+            // and memoized per account; degrade gracefully because log
+            // plumbing must never fail a plan.
+            yield* ensureTestLogger({
+              accountId,
+              doName: `${stack.name}/${stack.stage}`,
+            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          }
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
           }

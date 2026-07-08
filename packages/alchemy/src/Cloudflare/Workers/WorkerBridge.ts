@@ -27,6 +27,7 @@ import {
   encodeRpcError,
   toRpcStream,
 } from "./Rpc.ts";
+import { installTestLogging, runWithRequestId } from "./TestLogging/runtime.ts";
 import {
   ExportedHandlerMethods,
   Worker,
@@ -113,25 +114,36 @@ export const makeWorkerBridge = (
     ) {
       super(ctx, env);
 
+      // Test-logging console patch — a no-op unless the stack was deployed
+      // with test logging enabled (binding present in `env`).
+      installTestLogging(env);
+
       for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) =>
-          exported
-            .pipe(
-              Effect.map((_default) => _default[methodName]),
-              Effect.map(
-                (f) =>
-                  f(input, this.env, this.ctx) as [
-                    Effect.Effect<any>,
-                    Context.Context<never>,
-                  ],
-              ),
-              (eff) => processEvent(eff, this.ctx),
-            )
-            .then((exit) =>
-              exit._tag === "Success"
-                ? Promise.resolve(exit.value)
-                : Promise.reject(Cause.squash(exit.cause)),
-            );
+        (this as any)[methodName] = async (input: any) => {
+          const dispatch = () =>
+            exported
+              .pipe(
+                Effect.map((_default) => _default[methodName]),
+                Effect.map(
+                  (f) =>
+                    f(input, this.env, this.ctx) as [
+                      Effect.Effect<any>,
+                      Context.Context<never>,
+                    ],
+                ),
+                (eff) => processEvent(eff, this.ctx),
+              )
+              .then((exit) =>
+                exit._tag === "Success"
+                  ? Promise.resolve(exit.value)
+                  : Promise.reject(Cause.squash(exit.cause)),
+              );
+          // Correlate fetch-driven logs to the originating test via the
+          // `alchemy-request-id` header (no-op without test logging).
+          return methodName === "fetch"
+            ? runWithRequestId(input, dispatch)
+            : dispatch();
+        };
       }
 
       return new Proxy(this, {

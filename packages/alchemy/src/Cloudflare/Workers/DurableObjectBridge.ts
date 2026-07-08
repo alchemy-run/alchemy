@@ -18,6 +18,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
+import { installTestLogging, runWithRequestId } from "./TestLogging/runtime.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
@@ -51,6 +52,10 @@ export const makeDurableObjectBridge =
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
         this.#state = state;
+
+        // Test-logging console patch — a no-op unless the stack was
+        // deployed with test logging enabled (binding present in `env`).
+        installTestLogging(env);
 
         const { globalContext, exported } =
           getWorkerExport<DurableObjectExport>({
@@ -154,14 +159,18 @@ export const makeDurableObjectBridge =
       }
 
       async fetch(request: Request): Promise<any> {
-        return this.#execute((instance) =>
-          instance.fetch
-            ? makeRequestEffect(request as any, instance.fetch)
-            : Effect.succeed(
-                HttpServerResponse.text("Not implemented", {
-                  status: 404,
-                }),
-              ),
+        // Correlate fetch-driven logs to the originating test via the
+        // `alchemy-request-id` header (no-op without test logging).
+        return runWithRequestId(request, () =>
+          this.#execute((instance) =>
+            instance.fetch
+              ? makeRequestEffect(request as any, instance.fetch)
+              : Effect.succeed(
+                  HttpServerResponse.text("Not implemented", {
+                    status: 404,
+                  }),
+                ),
+          ),
         );
       }
 

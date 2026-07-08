@@ -106,8 +106,15 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     Core.toEffect(eff, options, sharedScope);
   const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope);
 
+  // Row-ids already printed by any test/flush in this file — dedupes across
+  // websocket reconnects, the per-test flush, and the trailing afterAll
+  // flush of the unattributed "default" bucket.
+  const seenLogRows = new Set<string>();
+  const wrapTest = <A>(eff: TestEffect<A>) =>
+    wrap(Core.withTestLogs(eff, options, seenLogRows));
+
   const test = ((name, eff, opts) => {
-    it.live(name, () => wrap(eff), timeoutOf(opts));
+    it.live(name, () => wrapTest(eff), timeoutOf(opts));
   }) as TestFn;
 
   test.skip = (name, _eff, opts) => {
@@ -117,11 +124,11 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     if (condition) {
       it.skip(name, () => {}, timeoutOf(opts));
     } else {
-      it.live(name, () => wrap(eff), timeoutOf(opts));
+      it.live(name, () => wrapTest(eff), timeoutOf(opts));
     }
   };
   test.only = (name, eff, opts) => {
-    it.only(name, () => wrap(eff) as Effect.Effect<any>, timeoutOf(opts));
+    it.only(name, () => wrapTest(eff) as Effect.Effect<any>, timeoutOf(opts));
   };
   test.todo = (name, _eff, _opts) => {
     it.todo(name);
@@ -214,6 +221,16 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // user-registered `afterAll` (including `destroy(Stack)`); vitest runs
   // afterAll hooks in registration order.
   queueMicrotask(() => {
+    // Surface any remaining buffered worker logs — most importantly the
+    // unattributed "default" bucket. Runs with a fresh scope (the shared
+    // one may already be closed by `destroy`); the logger worker survives
+    // stack destroys, so this works even after cleanup.
+    if (Core.testLogsEnabled(options)) {
+      vitestAfterAll(
+        () => Core.run(Core.flushAllTestLogs(seenLogRows), options),
+        DEFAULT_TIMEOUT,
+      );
+    }
     vitestAfterAll(() => Effect.runPromise(closeScope), DEFAULT_TIMEOUT);
   });
 

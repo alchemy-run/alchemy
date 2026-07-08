@@ -127,18 +127,25 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   const sharedScope = Scope.makeUnsafe("sequential");
   const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope);
 
+  // Row-ids already printed by any test/flush in this file — dedupes across
+  // websocket reconnects, the per-test flush, and the trailing afterAll
+  // flush of the unattributed "default" bucket.
+  const seenLogRows = new Set<string>();
+  const runTest = <A>(eff: TestEffect<A>) =>
+    runEff(Core.withTestLogs(eff, options, seenLogRows));
+
   const test = ((name, eff, opts) => {
-    bun.test(name, () => runEff(eff), opts);
+    bun.test(name, () => runTest(eff), opts);
   }) as TestFn;
 
   test.skip = (name, eff, opts) => {
-    bun.test.skip(name, () => runEff(eff), opts);
+    bun.test.skip(name, () => runTest(eff), opts);
   };
   test.skipIf = (condition) => (name, eff, opts) => {
-    bun.test.skipIf(condition)(name, () => runEff(eff), opts);
+    bun.test.skipIf(condition)(name, () => runTest(eff), opts);
   };
   test.only = (name, eff, opts) => {
-    bun.test.only(name, () => runEff(eff), opts);
+    bun.test.only(name, () => runTest(eff), opts);
   };
   test.todo = (name, eff, opts) => {
     bun.test.todo(name, () => runEff(eff), opts);
@@ -210,6 +217,16 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // user-registered `afterAll` (including `destroy(Stack)`); bun runs
   // afterAll hooks in registration order.
   queueMicrotask(() => {
+    // Surface any remaining buffered worker logs — most importantly the
+    // unattributed "default" bucket. Runs with a fresh scope (the shared
+    // one may already be closed by `destroy`); the logger worker survives
+    // stack destroys, so this works even after cleanup.
+    if (Core.testLogsEnabled(options)) {
+      bun.afterAll(
+        () => Core.run(Core.flushAllTestLogs(seenLogRows), options),
+        DEFAULT_HOOK_TIMEOUT,
+      );
+    }
     bun.afterAll(() => Effect.runPromise(closeScope), DEFAULT_HOOK_TIMEOUT);
   });
 

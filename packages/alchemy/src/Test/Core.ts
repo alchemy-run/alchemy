@@ -2,10 +2,13 @@
 
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
@@ -15,6 +18,13 @@ import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
+import {
+  flushTestLogs,
+  streamTestLogs,
+} from "../Cloudflare/Workers/TestLogging/Client.ts";
+import { TEST_LOG_HEADER } from "../Cloudflare/Workers/TestLogging/constants.ts";
+import { TestLoggingPolicy } from "../Cloudflare/Workers/TestLogging/Policy.ts";
+import { getTestLoggerTargets } from "../Cloudflare/Workers/TestLogging/Registry.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
@@ -57,7 +67,22 @@ export interface MakeOptions<ROut = any> {
    * `ALCHEMY_DEV` environment variable (`"1"` / `"true"` enable it).
    */
   dev?: boolean;
+  /**
+   * Stream Cloudflare Worker `console` logs into the tests that caused
+   * them. Deploys made through this harness provision the account-level
+   * `alchemy-test-logger` singleton and instrument each Worker; every test
+   * gets a unique `alchemy-request-id` header on its `HttpClient` and logs
+   * matching that ID are printed live inside the test. Unattributed logs
+   * (queue/scheduled handlers, RPC-invoked DOs) are flushed in an
+   * `afterAll`. Defaults to `true`; only affects test deploys — CLI deploys
+   * never enable it.
+   */
+  logs?: boolean;
 }
+
+/** Whether worker-log streaming is active for this test file. */
+export const testLogsEnabled = (options: MakeOptions): boolean =>
+  options.logs ?? true;
 
 /** Resolve the effective `dev` flag from explicit options or `ALCHEMY_DEV`. */
 export const resolveDev = (options: { dev?: boolean }): boolean => {
@@ -113,6 +138,10 @@ export const toEffect = <A>(
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
+    // Opt worker deploys into the test-logging pipeline (read by the
+    // Cloudflare Worker provider during diff/reconcile). The Reference
+    // defaults to `false`, so CLI deploys are unaffected.
+    Effect.provideService(TestLoggingPolicy, testLogsEnabled(options)),
     Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
@@ -134,6 +163,74 @@ export const run = <A>(
   options: MakeOptions,
   scope?: Scope.Scope,
 ): Promise<A> => Effect.runPromise(toEffect(effect, options, scope));
+
+/**
+ * Per-test worker-log streaming wrapper (see {@link MakeOptions.logs}).
+ *
+ * Generates a unique request ID, rewrites the test's `HttpClient` so every
+ * request carries it as the `alchemy-request-id` header, and — for each
+ * logger target the deploy registered — forks a websocket subscriber that
+ * prints matching worker logs live while the test body runs. When the body
+ * finishes (success, failure, or interruption) it flushes once more to
+ * catch trailing `waitUntil` deliveries, then tears the subscribers down.
+ *
+ * A no-op when logging is disabled or the stack deployed no Cloudflare
+ * Workers (empty registry).
+ */
+export const withTestLogs = <A>(
+  effect: TestEffect<A>,
+  options: MakeOptions,
+  seen: Set<string>,
+): TestEffect<A> => {
+  if (!testLogsEnabled(options)) return effect;
+  return Effect.gen(function* () {
+    const targets = getTestLoggerTargets();
+    if (targets.length === 0) {
+      return yield* effect as Effect.Effect<A, any, any>;
+    }
+    const requestId = yield* Effect.sync(() => crypto.randomUUID());
+    const subscribers = yield* Effect.forEach(targets, (target) =>
+      Effect.forkChild(streamTestLogs(target, requestId, seen)),
+    );
+    return yield* (effect as Effect.Effect<A, any, any>).pipe(
+      Effect.updateService(HttpClient.HttpClient, (client) =>
+        client.pipe(
+          HttpClient.mapRequest(
+            HttpClientRequest.setHeader(TEST_LOG_HEADER, requestId),
+          ),
+        ),
+      ),
+      Effect.ensuring(
+        Effect.gen(function* () {
+          // Give trailing `waitUntil` log deliveries a beat to land in the
+          // DO before the final flush.
+          yield* Effect.sleep("250 millis");
+          yield* Effect.forEach(
+            targets,
+            (target) => flushTestLogs(target, requestId, seen),
+            { concurrency: "unbounded" },
+          );
+          yield* Fiber.interruptAll(subscribers);
+        }),
+      ),
+    );
+  }) as TestEffect<A>;
+};
+
+/**
+ * Flush and print every remaining buffered log row — most importantly the
+ * `default` bucket of unattributed logs (queue/scheduled handlers,
+ * RPC-invoked DOs, requests made outside the test's `HttpClient`).
+ * Registered as a trailing `afterAll` by the harness adapters.
+ */
+export const flushAllTestLogs = (seen: Set<string>) =>
+  Effect.suspend(() =>
+    Effect.forEach(
+      getTestLoggerTargets(),
+      (target) => flushTestLogs(target, undefined, seen),
+      { concurrency: "unbounded" },
+    ),
+  ).pipe(Effect.asVoid);
 
 /**
  * Wrap an effect so it runs with `options.providers` + a placeholder Stack +

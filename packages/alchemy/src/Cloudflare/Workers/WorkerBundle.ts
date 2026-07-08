@@ -32,6 +32,14 @@ export interface WorkerBundleOptions {
         kind: "external";
       }
     | {
+        /**
+         * External worker wrapped for test logging: the user's module is
+         * re-exported through a generated entry that patches `console` and
+         * threads the `alchemy-request-id` header into `AsyncLocalStorage`.
+         */
+        kind: "external-wrapped";
+      }
+    | {
         kind: "effect";
         exports: Record<string, DurableObjectExport | WorkflowExport>;
       };
@@ -75,7 +83,9 @@ export const WorkerBundle = Effect.gen(function* () {
                 makeEffectVirtualEntry(options.entry.exports, options.stack),
               ),
             ]
-          : undefined,
+          : options.entry.kind === "external-wrapped"
+            ? [virtualEntryPlugin(makeExternalWrappedEntry)]
+            : undefined,
       ],
       checks: {
         // Suppress unresolved import warnings for unrelated AWS packages
@@ -194,6 +204,25 @@ ${[
 ].join("\n")}
 `;
 };
+
+/**
+ * Test-logging wrapper entry for external (non-Effect) workers: re-exports
+ * the user's module untouched, installs the console patch, and wraps the
+ * default export's `fetch` so logs are correlated to the originating test's
+ * `alchemy-request-id` header. Effect-native workers don't need this — their
+ * `WorkerBridge` (already bundled) does the same at runtime.
+ */
+export const makeExternalWrappedEntry = (importPath: string) => `
+import { env, waitUntil } from "cloudflare:workers";
+import { installTestLogging, wrapExternalWorker } from "alchemy/Cloudflare/Workers/TestLogging";
+
+import * as __alchemyUserModule from ${JSON.stringify(importPath)};
+export * from ${JSON.stringify(importPath)};
+
+installTestLogging(env, waitUntil);
+
+export default wrapExternalWorker(__alchemyUserModule.default);
+`;
 
 /**
  * A rule selecting additional module files to upload alongside the entry
