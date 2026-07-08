@@ -27,28 +27,31 @@ export const GitHubEnv: Config.Config<GitHubEnv | undefined> = Config.boolean(
   "GITHUB_ACTIONS",
 ).pipe(
   Config.withDefault(false),
-  Config.flatMap((enabled) =>
-    enabled
-      ? Config.all({
-          sha: Config.string("GITHUB_SHA"),
-          owner: Config.string("GITHUB_REPOSITORY_OWNER"),
-          repository: Config.string("GITHUB_REPOSITORY").pipe(
-            Config.mapOrFail(
-              flow(
-                String.split("/"),
-                Array.get(1),
-                Effect.fromOption,
-                Effect.catchTags({
-                  NoSuchElementError: Effect.die,
-                }),
+  // Config has no flatMap in Effect 4; a Config is itself an Effect, so the
+  // enabled branch returns the inner config for mapOrFail to evaluate.
+  Config.mapOrFail(
+    (enabled): Effect.Effect<GitHubEnv | undefined, Config.ConfigError> =>
+      enabled
+        ? Config.all({
+            sha: Config.string("GITHUB_SHA"),
+            owner: Config.string("GITHUB_REPOSITORY_OWNER"),
+            repository: Config.string("GITHUB_REPOSITORY").pipe(
+              Config.mapOrFail(
+                flow(
+                  String.split("/"),
+                  Array.get(1),
+                  Effect.fromOption,
+                  Effect.catchTags({
+                    NoSuchElementError: Effect.die,
+                  }),
+                ),
               ),
             ),
-          ),
-          pr: Config.number("PULL_REQUEST").pipe(
-            Config.option,
-            Config.map(Option.getOrUndefined),
-          ),
-        })
-      : Config.succeed(undefined),
+            pr: Config.number("PULL_REQUEST").pipe(
+              Config.option,
+              Config.map(Option.getOrUndefined),
+            ),
+          })
+        : Effect.succeed(undefined),
   ),
 );
