@@ -6,6 +6,11 @@ excerpt: AI agents write resources and live tests, run them against the real API
 
 ![The generation loop — write resources and live tests, run them against the real API, every unmatched error becomes an SDK patch and regeneration, retest until green, then ship the IaC and the truthful SDK together](/blog/resource-factory/loop.svg)
 
+[Alchemy](https://alchemy.run) is a new Infrastructure-as-Code
+framework built from the ground up in TypeScript and Effect.
+Everything is typed code, from a resource's inputs and outputs
+down to the SDK calls and errors inside its lifecycle logic.
+
 This loop grew Alchemy's Cloudflare provider from **22
 resources to 230** between June 11 and June 17. Fleets of AI
 agents write the resources and their live tests, then run them
