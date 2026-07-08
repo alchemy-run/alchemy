@@ -1,0 +1,45 @@
+<svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="14">
+  <!-- The generation loop: write IaC + tests -> run against the real API
+       -> unmatched error -> patch the SDK, regenerate -> retest -> ship. -->
+  <defs>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9ca3af"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/>
+    </marker>
+  </defs>
+
+  <!-- boxes -->
+  <g fill="none" stroke="#9ca3af" stroke-width="1.5">
+    <rect x="20" y="30" width="200" height="56" rx="8"/>
+    <rect x="300" y="30" width="200" height="56" rx="8"/>
+    <rect x="580" y="30" width="160" height="56" rx="8"/>
+    <rect x="300" y="170" width="200" height="56" rx="8" stroke="#f6821f"/>
+  </g>
+  <g fill="#9ca3af" text-anchor="middle">
+    <text x="120" y="53">write resources</text>
+    <text x="120" y="72">+ live tests</text>
+    <text x="400" y="53">run against</text>
+    <text x="400" y="72">the real API</text>
+    <text x="660" y="53">ship IaC</text>
+    <text x="660" y="72">+ truthful SDK</text>
+    <text x="400" y="193" fill="#f6821f">patch the SDK,</text>
+    <text x="400" y="212" fill="#f6821f">regenerate</text>
+  </g>
+
+  <!-- forward arrows -->
+  <g stroke="#9ca3af" stroke-width="1.5" fill="none">
+    <line x1="220" y1="45" x2="296" y2="45" marker-end="url(#arrow-gray)"/>
+    <line x1="500" y1="58" x2="576" y2="58" marker-end="url(#arrow-gray)"/>
+  </g>
+  <text x="538" y="46" fill="#9ca3af" font-size="12.5" text-anchor="middle">all green</text>
+
+  <!-- feedback loop -->
+  <g stroke="#f6821f" stroke-width="1.5" fill="none">
+    <line x1="420" y1="86" x2="420" y2="166" marker-end="url(#arrow-orange)"/>
+    <path d="M300,198 H262 V70 H296" marker-end="url(#arrow-orange)"/>
+  </g>
+  <text x="430" y="130" fill="#f6821f" font-size="12.5">unmatched error</text>
+  <text x="252" y="130" fill="#f6821f" font-size="12.5" text-anchor="end">retest</text>
+</svg>

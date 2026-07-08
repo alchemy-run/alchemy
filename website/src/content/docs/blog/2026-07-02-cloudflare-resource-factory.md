@@ -1,26 +1,32 @@
 ---
-title: Generating 200+ Cloudflare Resources with AI
+title: Looping the Generation of IaC and SDKs
 date: 2026-07-02
-excerpt: Fleets of AI agents grew Alchemy's Cloudflare provider from 22 resources to 230, live-tested against the real Cloudflare API — and every API surprise the tests hit became a typed patch to our generated SDK, 720 of them in one run.
+excerpt: A loop for generating infrastructure-as-code — AI agents write resources and live tests, run them against the real API, and every unmatched error becomes a typed patch to our generated SDK. One run grew Alchemy's Cloudflare provider from 22 resources to 230 and patched 720 SDK operations, most of it in 22 hours.
 ---
 
-Between June 11 and June 17, Alchemy's Cloudflare provider grew
-from **22 resources to 230**. Test suites went from 55 files to
-288 — roughly 700 test cases, run against a real Cloudflare
-account, not mocks. Most of it landed in a single PR
+![The generation loop — write resources and live tests, run them against the real API, every unmatched error becomes an SDK patch and regeneration, retest until green, then ship the IaC and the truthful SDK together](/blog/resource-factory/loop.svg)
+
+This loop grew Alchemy's Cloudflare provider from **22
+resources to 230** between June 11 and June 17: fleets of AI
+agents write the resources and their live tests, run them
+against a real Cloudflare account — not mocks — and every API
+behavior the SDK's types don't capture becomes a patch to the
+SDK, which regenerates and the tests rerun. One run produced
+288 test files (~700 tests), **720 SDK patches**, and most of
+it landed in a single PR
 ([#601](https://github.com/alchemy-run/alchemy-effect/pull/601)):
-+101,178 lines across 542 files, open for 22 hours, written by
-fleets of AI agents. The PR description, in its entirety:
++101,178 lines across 542 files, open for 22 hours. The PR
+description, in its entirety:
 
 > Using Fable to generate all missing cloudflare resources
 
 Volume is not the hard part. Generated infrastructure code
 compiles, reads well, and lies: real APIs return undocumented
 error codes, misuse HTTP statuses, and null out fields their
-schemas declare required. So the interesting number isn't 230
-resources. It's **720 patches to our SDK's type system, each
-one a place where a live test caught the API doing something
-its spec doesn't admit to.**
+schemas declare required. That's why the interesting number
+isn't the 230 resources — it's the 720 patches, each one a
+place where a live test caught the API doing something its
+spec doesn't admit to.
 
 ![Cumulative patched operations in the distilled Cloudflare SDK, June 11-19 — a step line that jumps from 369 to 1,075 in the first 24 hours as PR #601 lands, then climbs slowly to 1,093 through the beta.56 and beta.57 releases](/blog/resource-factory/patches.svg)
 
