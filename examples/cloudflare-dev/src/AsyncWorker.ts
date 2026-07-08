@@ -18,7 +18,7 @@ export default {
         const instance = (await WebAssembly.instantiate(wasm)) as AddInstance;
         return Response.json({ result: instance.exports.add(3, 4) });
       case "/queue/send": {
-        const body = await request.json<QueueMessage["body"]>();
+        const body = await request.json<Message["body"]>();
         const queue = await env.QUEUE.send(body);
         return Response.json({ queue });
       }
@@ -41,7 +41,7 @@ export default {
     for (const message of batch.messages) {
       await storage.put({
         id: message.id,
-        body: message.body as QueueMessage["body"],
+        body: message.body as Message["body"],
       });
     }
   },
@@ -61,7 +61,7 @@ export class Counter extends DurableObject {
   }
 }
 
-export interface QueueMessage {
+export interface Message {
   id: string;
   body: {
     text: string;
@@ -70,12 +70,12 @@ export interface QueueMessage {
 }
 
 export class QueueMessages extends DurableObject {
-  async put(message: QueueMessage) {
+  async put(message: Message) {
     this.ctx.storage.kv.put(message.id, message);
   }
 
-  async list(): Promise<QueueMessage[]> {
-    const messages = new Map(this.ctx.storage.kv.list<QueueMessage>());
+  async list(): Promise<Message[]> {
+    const messages = new Map(this.ctx.storage.kv.list<Message>());
     return Array.from(messages.values());
   }
 }

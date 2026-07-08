@@ -206,7 +206,9 @@ export type DeviceDefaultProfile = Resource<
  * Manages the **singleton** Cloudflare WARP **default device profile** for
  * an account. The default profile applies to every WARP device not
  * matched by a custom profile.
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @remarks
  * There is exactly one default profile per account; it cannot be created
  * or deleted. Reconciling this resource patches the existing profile in
@@ -220,7 +222,7 @@ export type DeviceDefaultProfile = Resource<
  * @section Configuring split tunneling
  * @example Exclude-mode (default): tunnel everything except listed routes
  * ```typescript
- * yield* Cloudflare.DeviceDefaultProfile("Default", {
+ * yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
  *   mode: "exclude",
  *   splitTunnelExclude: [
  *     { address: "10.0.0.0/8", description: "RFC1918" },
@@ -232,7 +234,7 @@ export type DeviceDefaultProfile = Resource<
  *
  * @example Include-mode: only listed routes go through WARP
  * ```typescript
- * yield* Cloudflare.DeviceDefaultProfile("Default", {
+ * yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
  *   mode: "include",
  *   splitTunnelInclude: [
  *     { address: "10.42.0.0/16", description: "Prod VPC" },
@@ -243,7 +245,7 @@ export type DeviceDefaultProfile = Resource<
  * @section Configuring fallback domains
  * @example Resolve a private suffix via an on-prem DNS server
  * ```typescript
- * yield* Cloudflare.DeviceDefaultProfile("Default", {
+ * yield* Cloudflare.Devices.DeviceDefaultProfile("Default", {
  *   fallbackDomains: [
  *     {
  *       suffix: "corp.example.com",

@@ -71,11 +71,14 @@ describe.sequential("UrlNormalization", () => {
 
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UrlNormalization("UrlNormalization", {
-              zoneId,
-              scope: "both",
-              type: "rfc3986",
-            });
+            return yield* Cloudflare.UrlNormalization.UrlNormalization(
+              "UrlNormalization",
+              {
+                zoneId,
+                scope: "both",
+                type: "rfc3986",
+              },
+            );
           }),
         );
 
@@ -107,11 +110,14 @@ describe.sequential("UrlNormalization", () => {
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UrlNormalization("UrlNormalization", {
-            zoneId,
-            scope: "both",
-            type: "rfc3986",
-          });
+          return yield* Cloudflare.UrlNormalization.UrlNormalization(
+            "UrlNormalization",
+            {
+              zoneId,
+              scope: "both",
+              type: "rfc3986",
+            },
+          );
         }),
       );
 
@@ -121,11 +127,14 @@ describe.sequential("UrlNormalization", () => {
       // Same singleton updated in place via a full-replace PUT.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.UrlNormalization("UrlNormalization", {
-            zoneId,
-            scope: "incoming",
-            type: "cloudflare",
-          });
+          return yield* Cloudflare.UrlNormalization.UrlNormalization(
+            "UrlNormalization",
+            {
+              zoneId,
+              scope: "incoming",
+              type: "cloudflare",
+            },
+          );
         }),
       );
 
@@ -164,9 +173,12 @@ describe.sequential("UrlNormalization", () => {
 
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UrlNormalization("UrlNormalization", {
-              zoneId,
-            });
+            return yield* Cloudflare.UrlNormalization.UrlNormalization(
+              "UrlNormalization",
+              {
+                zoneId,
+              },
+            );
           }),
         );
 
@@ -195,7 +207,7 @@ describe.sequential("UrlNormalization", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.UrlNormalization,
+        Cloudflare.UrlNormalization.UrlNormalization,
       );
       const all = yield* provider.list();
 

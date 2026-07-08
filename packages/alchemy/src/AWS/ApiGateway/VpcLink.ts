@@ -27,6 +27,7 @@ export interface VpcLinkProps {
   tags?: Record<string, string>;
 }
 
+/** @resource */
 export interface VpcLink extends Resource<
   "AWS.ApiGateway.VpcLink",
   VpcLinkProps,

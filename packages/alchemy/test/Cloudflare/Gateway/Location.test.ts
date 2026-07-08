@@ -46,7 +46,7 @@ test.provider("create, verify, and destroy a location", (stack) =>
     yield* stack.destroy();
 
     const location = yield* stack.deploy(
-      Cloudflare.GatewayLocation("BasicLocation", {
+      Cloudflare.Gateway.Location("BasicLocation", {
         name: "alchemy-zt-location-basic",
         ecsSupport: false,
       }),
@@ -75,7 +75,7 @@ test.provider("update name and ecsSupport in place (same id)", (stack) =>
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(
-      Cloudflare.GatewayLocation("UpdateLocation", {
+      Cloudflare.Gateway.Location("UpdateLocation", {
         name: "alchemy-zt-location-update",
         ecsSupport: false,
       }),
@@ -83,7 +83,7 @@ test.provider("update name and ecsSupport in place (same id)", (stack) =>
     expect(initial.ecsSupport).toBe(false);
 
     const updated = yield* stack.deploy(
-      Cloudflare.GatewayLocation("UpdateLocation", {
+      Cloudflare.Gateway.Location("UpdateLocation", {
         name: "alchemy-zt-location-update-v2",
         ecsSupport: true,
       }),
@@ -102,7 +102,7 @@ test.provider("update name and ecsSupport in place (same id)", (stack) =>
 
     // Redeploying identical props is a no-op (still the same location).
     const noop = yield* stack.deploy(
-      Cloudflare.GatewayLocation("UpdateLocation", {
+      Cloudflare.Gateway.Location("UpdateLocation", {
         name: "alchemy-zt-location-update-v2",
         ecsSupport: true,
       }),
@@ -121,7 +121,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     const location = yield* stack.deploy(
-      Cloudflare.GatewayLocation("HealLocation", {
+      Cloudflare.Gateway.Location("HealLocation", {
         name: "alchemy-zt-location-heal",
         ecsSupport: false,
       }),
@@ -140,7 +140,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     // Change a prop to force reconcile — it must observe the location as
     // missing and recreate it instead of failing on a 404.
     const healed = yield* stack.deploy(
-      Cloudflare.GatewayLocation("HealLocation", {
+      Cloudflare.Gateway.Location("HealLocation", {
         name: "alchemy-zt-location-heal",
         ecsSupport: true,
       }),
@@ -165,13 +165,13 @@ test.provider("list enumerates deployed gateway locations", (stack) =>
     yield* stack.destroy();
 
     const location = yield* stack.deploy(
-      Cloudflare.GatewayLocation("ListLocation", {
+      Cloudflare.Gateway.Location("ListLocation", {
         name: "alchemy-zt-location-list",
         ecsSupport: false,
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.GatewayLocation);
+    const provider = yield* Provider.findProvider(Cloudflare.Gateway.Location);
     const all = yield* provider.list();
 
     // The deployed location appears with the exact `read` Attributes shape.

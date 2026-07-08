@@ -80,7 +80,7 @@ export type Dataset = Resource<
  * inject them into a Worker / Lambda's env vars for OpenTelemetry shipping.
  * The bearer token is **not** stored in resource state — supply
  * `Authorization: Bearer <AXIOM_TOKEN>` separately at runtime.
- *
+ * @resource
  * @see https://axiom.co/docs/reference/datasets
  * @see https://axiom.co/docs/send-data/opentelemetry — OTLP endpoint reference
  *

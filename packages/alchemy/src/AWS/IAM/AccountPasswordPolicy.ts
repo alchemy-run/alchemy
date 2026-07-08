@@ -20,7 +20,7 @@ export interface AccountPasswordPolicy extends Resource<
  *
  * `AccountPasswordPolicy` manages the account-wide password requirements that
  * apply to IAM users with console passwords.
- *
+ * @resource
  * @section Managing Password Rules
  * @example Require Strong Passwords
  * ```typescript

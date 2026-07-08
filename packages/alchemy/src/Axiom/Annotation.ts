@@ -26,7 +26,7 @@ export type Annotation = Resource<
  * Although typically created at deploy/release time (out-of-band of
  * regular IaC), modelling them as resources makes per-environment
  * annotation history reproducible.
- *
+ * @resource
  * @see https://axiom.co/docs/query-data/annotate-charts
  *
  * @section Creating an Annotation

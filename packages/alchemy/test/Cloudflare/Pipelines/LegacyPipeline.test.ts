@@ -93,8 +93,8 @@ const legacy = (
   opts: LegacyOpts = {},
 ) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("LegacyBucket", {});
-    const pipeline = yield* Cloudflare.LegacyPipeline("Legacy", {
+    const bucket = yield* Cloudflare.R2.Bucket("LegacyBucket", {});
+    const pipeline = yield* Cloudflare.Pipelines.LegacyPipeline("Legacy", {
       name: opts.name,
       source: [
         {
@@ -223,7 +223,9 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_LEGACY_PIPELINE_LIST)(
       // Account collection: list() exhaustively paginates every legacy
       // pipeline in the account and hydrates each into the read
       // Attributes shape.
-      const provider = yield* Provider.findProvider(Cloudflare.LegacyPipeline);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Pipelines.LegacyPipeline,
+      );
       const all = yield* provider.list();
 
       const match = all.find(

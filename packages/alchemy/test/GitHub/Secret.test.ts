@@ -1,8 +1,10 @@
 import * as GitHub from "@/GitHub";
+import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -15,8 +17,59 @@ const logLevel = Effect.provideService(
 );
 
 // Deploying a secret needs an owner + repository the token can write to.
-const owner = process.env.GITHUB_TEST_OWNER ?? "";
-const repository = process.env.GITHUB_TEST_REPOSITORY ?? "";
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run";
+const repository = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
+
+// GitHub never returns a secret's value, only its metadata — so `getRepoSecret`
+// succeeding (vs. 404) is how we assert presence/absence out-of-band.
+const secretExists = (name: string) =>
+  Effect.gen(function* () {
+    const octokit = yield* Octokit;
+    return yield* Effect.tryPromise(async () => {
+      try {
+        await octokit.rest.actions.getRepoSecret({
+          owner,
+          repo: repository,
+          secret_name: name,
+        });
+        return true;
+      } catch (error: any) {
+        if (error.status === 404) return false;
+        throw error;
+      }
+    });
+  });
+
+test.provider(
+  "Secrets resolves Config values before wrapping them as Redacted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const [secret] = yield* stack.deploy(
+        GitHub.Secrets({
+          owner,
+          repository,
+          secrets: {
+            ALCHEMY_CONFIG_SECRET: Config.succeed("hunter2"),
+          },
+        }),
+      );
+
+      // A Config value resolves to "hunter2", gets wrapped as Redacted, and is
+      // encrypted + uploaded successfully — proven by a fresh `updatedAt`.
+      expect(secret.updatedAt).toEqual(expect.any(String));
+
+      // The secret really lives in GitHub now.
+      expect(yield* secretExists("ALCHEMY_CONFIG_SECRET")).toBe(true);
+
+      yield* stack.destroy();
+
+      // ...and is gone after destroy.
+      expect(yield* secretExists("ALCHEMY_CONFIG_SECRET")).toBe(false);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
 
 // `list()` for GitHub.Secret is non-listable (pattern (e) in
 // processes/list-support.md): secrets are keyed by their parent
@@ -30,20 +83,21 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // When a writable repo is available, prove `list()` still returns `[]`
-      // even with a real secret deployed (it is not enumerable without scope).
-      if (owner && repository) {
-        yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* GitHub.Secret("ListSecret", {
-              owner,
-              repository,
-              name: "ALCHEMY_LIST_TEST",
-              value: Redacted.make("list-test-value"),
-            }).pipe(destroy());
-          }),
-        );
-      }
+      // Prove `list()` still returns `[]` even with a real secret deployed
+      // (it is not enumerable without scope).
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GitHub.Secret("ListSecret", {
+            owner,
+            repository,
+            name: "ALCHEMY_LIST_TEST",
+            value: Redacted.make("list-test-value"),
+          }).pipe(destroy());
+        }),
+      );
+
+      // The secret is really in GitHub even though `list()` can't see it.
+      expect(yield* secretExists("ALCHEMY_LIST_TEST")).toBe(true);
 
       const provider = yield* Provider.findProvider(GitHub.Secret);
       const all = yield* provider.list();
@@ -51,6 +105,9 @@ test.provider(
       expect(all).toEqual([]);
 
       yield* stack.destroy();
+
+      // ...and is gone after destroy.
+      expect(yield* secretExists("ALCHEMY_LIST_TEST")).toBe(false);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

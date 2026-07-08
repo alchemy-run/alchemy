@@ -55,7 +55,7 @@ export interface InstanceProfile extends Resource<
  *
  * `InstanceProfile` bridges IAM roles into EC2 so compute instances can assume
  * the attached role through the instance metadata service.
- *
+ * @resource
  * @section Attaching Roles to EC2
  * @example Create an Instance Profile
  * ```typescript

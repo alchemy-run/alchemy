@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { expect } from "@effect/vitest";
@@ -81,10 +82,10 @@ describe.sequential("EmailCatchAll", () => {
 
         const catchAll = yield* stack.deploy(
           Effect.gen(function* () {
-            const routing = yield* Cloudflare.EmailRouting("Routing", {
+            const routing = yield* Cloudflare.Email.Routing("Routing", {
               zone: zoneName,
             });
-            return yield* Cloudflare.EmailCatchAll("CatchAll", {
+            return yield* Cloudflare.Email.CatchAll("CatchAll", {
               zone: { zoneId: routing.zoneId },
               name: "alchemy catch-all",
               actions: [{ type: "drop" }],
@@ -131,14 +132,14 @@ describe.sequential("EmailCatchAll", () => {
         const deployCatchAll = (props: {
           name: string;
           enabled?: boolean;
-          actions: Cloudflare.EmailAction[];
+          actions: Cloudflare.Email.Action[];
         }) =>
           stack.deploy(
             Effect.gen(function* () {
-              const routing = yield* Cloudflare.EmailRouting("Routing", {
+              const routing = yield* Cloudflare.Email.Routing("Routing", {
                 zone: zoneName,
               });
-              return yield* Cloudflare.EmailCatchAll("CatchAll", {
+              return yield* Cloudflare.Email.CatchAll("CatchAll", {
                 zone: { zoneId: routing.zoneId },
                 ...props,
               });
@@ -182,6 +183,99 @@ describe.sequential("EmailCatchAll", () => {
       }).pipe(logLevel),
   );
 
+  test.provider(
+    "recovers a half-created catch-all whose creating-state lost Output-valued props (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        yield* setBaseline(zoneId);
+        // Safety net: normalize the zone singleton back to the Cloudflare
+        // default even if the test dies mid-way.
+        yield* Effect.addFinalizer(() =>
+          setBaseline(zoneId).pipe(Effect.ignore),
+        );
+
+        const deployCatchAll = () =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const routing = yield* Cloudflare.Email.Routing("Routing", {
+                zone: zoneName,
+              });
+              return yield* Cloudflare.Email.CatchAll("CatchAll", {
+                // Output-valued zone reference — the #736 shape.
+                zone: { zoneId: routing.zoneId },
+                name: "alchemy recovery test",
+                actions: [{ type: "drop" }],
+              });
+            }),
+          );
+
+        const created = yield* deployCatchAll();
+        expect(created.zoneId).toEqual(zoneId);
+        expect(created.ruleId).not.toEqual("");
+
+        // Rewrite the persisted row into the wedged shape an interrupted
+        // deploy leaves behind: `creating`, no attributes, and the
+        // Output-valued `zone` prop lost in the round-trip.
+        const state = yield* yield* State;
+        const stage = "test"; // scratch stacks default to the "test" stage
+        const fqns = yield* state.list({ stack: stack.name, stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state
+            .get({ stack: stack.name, stage, fqn })
+            .pipe(Effect.map((row) => ({ fqn, row }))),
+        );
+        const wedged = rows.find(
+          (r): r is { fqn: string; row: ResourceState } =>
+            isResourceState(r.row) &&
+            r.row.resourceType === "Cloudflare.Email.CatchAll",
+        );
+        if (!wedged) {
+          return yield* Effect.die(
+            new Error(
+              "no Cloudflare.Email.CatchAll state row found after deploy",
+            ),
+          );
+        }
+        yield* state.set({
+          stack: stack.name,
+          stage,
+          fqn: wedged.fqn,
+          value: {
+            ...wedged.row,
+            status: "creating",
+            attr: undefined,
+            props: { ...wedged.row.props, zone: undefined },
+          },
+        });
+
+        // Before the fix `read` crashed resolving `olds.zone === undefined`
+        // (TypeError reading `name` of undefined inside `resolve`). After
+        // the fix it reports "not found" and reconcile converges on the
+        // same zone singleton — same rule, no duplicate.
+        const recovered = yield* deployCatchAll();
+        expect(recovered.zoneId).toEqual(zoneId);
+        expect(recovered.ruleId).toEqual(created.ruleId);
+        expect(recovered.name).toEqual("alchemy recovery test");
+        expect(recovered.enabled).toEqual(true);
+        expect(recovered.actions).toEqual([{ type: "drop" }]);
+
+        // Out-of-band verification against the live API.
+        const live = yield* getCatchAll(zoneId);
+        expect(live.enabled).toEqual(true);
+        expect(live.name).toEqual("alchemy recovery test");
+
+        yield* stack.destroy();
+        // The recovery re-adopted the singleton with the managed state as
+        // its restore baseline, so destroy restores that state — normalize
+        // the zone back to the Cloudflare default for subsequent tests.
+        yield* setBaseline(zoneId);
+      }).pipe(logLevel),
+    { timeout: 240_000 },
+  );
+
   // Canonical `list()` test (zone-scoped singleton): there is no account-wide
   // API for this per-zone catch-all rule, so `list()` enumerates every zone
   // via `listAllZones` and reads the singleton in each (skipping zones without
@@ -199,7 +293,9 @@ describe.sequential("EmailCatchAll", () => {
         // visible to `list()`; normalize to a known baseline.
         yield* setBaseline(zoneId);
 
-        const provider = yield* Provider.findProvider(Cloudflare.EmailCatchAll);
+        const provider = yield* Provider.findProvider(
+          Cloudflare.Email.CatchAll,
+        );
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

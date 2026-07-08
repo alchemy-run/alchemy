@@ -65,8 +65,17 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
     }),
   );
 
+// Toggling Universal SSL off DELETES the standing zone's universal edge
+// certificate; Cloudflare re-issues it minutes later on re-enable — and
+// sometimes not at all (`enabled: true` with zero certificate packs), which
+// breaks every TLS-dependent test on the shared zone (worker routes, R2
+// domains, Hyperdrive origins) until someone re-orders the cert by toggling
+// the setting off→on. The toggle lifecycle is therefore opt-in; the
+// read-only `list` test below always runs.
+const destructive = !!process.env.CLOUDFLARE_TEST_UNIVERSAL_SSL;
+
 describe.sequential("UniversalSsl", () => {
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "disables Universal SSL and restores the original value on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -78,7 +87,7 @@ describe.sequential("UniversalSsl", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: false,
             });
@@ -102,7 +111,7 @@ describe.sequential("UniversalSsl", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "updates enabled in place and keeps the captured initial value",
     (stack) =>
       Effect.gen(function* () {
@@ -113,7 +122,7 @@ describe.sequential("UniversalSsl", () => {
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: false,
             });
@@ -125,7 +134,7 @@ describe.sequential("UniversalSsl", () => {
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: true,
             });
@@ -148,7 +157,7 @@ describe.sequential("UniversalSsl", () => {
     { timeout: 180_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "destroy restores a disabled baseline when managing from a disabled zone",
     (stack) =>
       Effect.gen(function* () {
@@ -161,7 +170,7 @@ describe.sequential("UniversalSsl", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+            return yield* Cloudflare.Ssl.UniversalSsl("UniversalSsl", {
               zoneId,
               enabled: true,
             });
@@ -193,7 +202,9 @@ describe.sequential("UniversalSsl", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(Cloudflare.UniversalSsl);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Ssl.UniversalSsl,
+      );
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

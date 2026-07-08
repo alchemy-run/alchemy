@@ -1,4 +1,5 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import { ProfileLive } from "@/Auth/Profile.ts";
 import * as AWS from "@/AWS";
@@ -20,6 +21,7 @@ it.live(
       Effect.provide(
         Layer.mergeAll(
           Layer.succeed(AuthProviders, {}),
+          Layer.sync(ArtifactStore, createArtifactStore),
           Layer.succeed(Stage, "test"),
           Layer.succeed(Stack, {
             name: "test",

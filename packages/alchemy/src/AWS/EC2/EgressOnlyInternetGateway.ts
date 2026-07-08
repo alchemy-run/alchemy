@@ -66,6 +66,64 @@ export interface EgressOnlyInternetGateway extends Resource<
   never,
   Providers
 > {}
+/**
+ * An egress-only internet gateway is the IPv6 counterpart to a NAT gateway: it
+ * lets instances in a VPC initiate outbound IPv6 traffic to the internet while
+ * preventing the internet from initiating inbound connections to them. Use it
+ * to give private, IPv6-addressed resources outbound-only internet access.
+ *
+ * Unlike a NAT gateway it is free, has no bandwidth charges, and does not
+ * require an Elastic IP — but it works for IPv6 only. It always belongs to a
+ * VPC (`vpcId` is required); the gateway must be paired with an IPv6
+ * {@link Route} to actually carry traffic.
+ *
+ * @resource
+ * @section Creating an Egress-Only Internet Gateway
+ * The gateway is created and attached to `vpcId` in a single step. Because the
+ * attachment is intrinsic, changing `vpcId` replaces the gateway rather than
+ * moving it.
+ *
+ * @example Basic Egress-Only Internet Gateway
+ * ```typescript
+ * const egressOnlyIgw = yield* AWS.EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
+ *   vpcId: myVpc.vpcId,
+ * });
+ * ```
+ * Creates the gateway in the VPC. The resulting
+ * `egressOnlyInternetGatewayId` (prefixed `eigw-`) is referenced from a
+ * route's `egressOnlyInternetGatewayId` target.
+ *
+ * @example Egress-Only Internet Gateway with Tags
+ * ```typescript
+ * const egressOnlyIgw = yield* AWS.EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
+ *   vpcId: myVpc.vpcId,
+ *   tags: { Name: "production-eigw" },
+ * });
+ * ```
+ * The `tags` map is merged with the alchemy auto-tags and can be updated in
+ * place without replacing the gateway.
+ *
+ * @section Routing IPv6 Egress Traffic
+ * A gateway alone does nothing until a private route table sends IPv6 traffic
+ * to it. Pair it with a `::/0` {@link Route} so private, IPv6-addressed
+ * instances can reach the internet outbound-only.
+ *
+ * @example IPv6 Default Route to the Egress-Only Gateway
+ * ```typescript
+ * const egressOnlyIgw = yield* AWS.EC2.EgressOnlyInternetGateway("EgressOnlyIgw", {
+ *   vpcId: myVpc.vpcId,
+ * });
+ *
+ * const ipv6EgressRoute = yield* AWS.EC2.Route("Ipv6EgressRoute", {
+ *   routeTableId: privateRouteTable.routeTableId,
+ *   destinationIpv6CidrBlock: "::/0",
+ *   egressOnlyInternetGatewayId: egressOnlyIgw.egressOnlyInternetGatewayId,
+ * });
+ * ```
+ * Instances in subnets associated with `privateRouteTable` can now make
+ * outbound IPv6 connections (updates, API calls) while remaining unreachable
+ * from the public internet.
+ */
 export const EgressOnlyInternetGateway = Resource<EgressOnlyInternetGateway>(
   "AWS.EC2.EgressOnlyInternetGateway",
 );

@@ -34,7 +34,7 @@ describe.sequential("Organization", () => {
 
         const org = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.AccessOrganization("Org", {
+            return yield* Cloudflare.Access.Organization("Org", {
               authDomain: AUTH_DOMAIN!,
               name: AUTH_DOMAIN!,
             });
@@ -75,7 +75,7 @@ describe.sequential("Organization", () => {
         // Step 1 — set to true.
         const enabled = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.AccessOrganization("Org", {
+            return yield* Cloudflare.Access.Organization("Org", {
               authDomain: AUTH_DOMAIN!,
               name: originalName,
               allowAuthenticateViaWarp: true,
@@ -91,7 +91,7 @@ describe.sequential("Organization", () => {
         // Step 2 — flip to false.
         const disabled = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.AccessOrganization("Org", {
+            return yield* Cloudflare.Access.Organization("Org", {
               authDomain: AUTH_DOMAIN!,
               name: originalName,
               allowAuthenticateViaWarp: false,
@@ -108,7 +108,7 @@ describe.sequential("Organization", () => {
         // isn't left mutated by the test.
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.AccessOrganization("Org", {
+            return yield* Cloudflare.Access.Organization("Org", {
               authDomain: AUTH_DOMAIN!,
               name: originalName,
               allowAuthenticateViaWarp: originalWarp,
@@ -130,7 +130,7 @@ describe.sequential("Organization", () => {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.AccessOrganization,
+        Cloudflare.Access.Organization,
       );
       const all = yield* provider.list();
 

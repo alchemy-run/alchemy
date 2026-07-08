@@ -49,7 +49,7 @@ test.provider(
       yield* stack.destroy();
 
       const endpoint = yield* stack.deploy(
-        Cloudflare.GatewayProxyEndpoint("IdentityProxy", {
+        Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
           name: "alchemy-zt-proxy-identity",
           kind: "identity",
         }),
@@ -67,7 +67,7 @@ test.provider(
 
       // Rename in place — same id, same subdomain.
       const updated = yield* stack.deploy(
-        Cloudflare.GatewayProxyEndpoint("IdentityProxy", {
+        Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
           name: "alchemy-zt-proxy-identity-v2",
           kind: "identity",
         }),
@@ -153,14 +153,14 @@ test.provider("list enumerates the deployed proxy endpoint", (stack) =>
     // identity-kind endpoints work on all Zero Trust plans, so this deploy is
     // not entitlement-gated (unlike ip-kind, which needs Enterprise).
     const endpoint = yield* stack.deploy(
-      Cloudflare.GatewayProxyEndpoint("ListProxy", {
+      Cloudflare.Gateway.ProxyEndpoint("ListProxy", {
         name: "alchemy-zt-proxy-list",
         kind: "identity",
       }),
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.GatewayProxyEndpoint,
+      Cloudflare.Gateway.ProxyEndpoint,
     );
     const all = yield* provider.list();
 

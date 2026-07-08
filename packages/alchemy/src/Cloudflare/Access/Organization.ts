@@ -6,7 +6,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type AccessOrganizationProps = {
+export type OrganizationProps = {
   /**
    * The unique subdomain assigned to your Zero Trust organization, e.g.
    * `acme.cloudflareaccess.com`. Per-account this is functionally immutable —
@@ -74,16 +74,16 @@ export type AccessOrganizationProps = {
    *
    * @see https://developers.cloudflare.com/cloudflare-one/identity/users/login-page/
    */
-  loginDesign?: AccessOrganization.LoginDesign;
+  loginDesign?: Organization.LoginDesign;
   /**
    * Pointers to custom HTML pages shown when Access blocks a request.
    *
    * @see https://developers.cloudflare.com/cloudflare-one/policies/access/custom-pages/
    */
-  customPages?: AccessOrganization.CustomPages;
+  customPages?: Organization.CustomPages;
 };
 
-export declare namespace AccessOrganization {
+export declare namespace Organization {
   /**
    * Branding for the Access login screen.
    */
@@ -118,9 +118,9 @@ export declare namespace AccessOrganization {
   }
 }
 
-export type AccessOrganization = Resource<
-  "Cloudflare.AccessOrganization",
-  AccessOrganizationProps,
+export type Organization = Resource<
+  "Cloudflare.Access.Organization",
+  OrganizationProps,
   {
     /** Cloudflare account that owns the Zero Trust organization. */
     accountId: string;
@@ -143,9 +143,9 @@ export type AccessOrganization = Resource<
     /** WARP authentication session duration observed on Cloudflare. */
     warpAuthSessionDuration: string | undefined;
     /** Login-page branding observed on Cloudflare. */
-    loginDesign: AccessOrganization.LoginDesign | undefined;
+    loginDesign: Organization.LoginDesign | undefined;
     /** Custom-pages pointers observed on Cloudflare. */
-    customPages: AccessOrganization.CustomPages | undefined;
+    customPages: Organization.CustomPages | undefined;
   },
   never,
   Providers
@@ -156,7 +156,9 @@ export type AccessOrganization = Resource<
  * domain, login branding, session lifetimes, WARP authentication toggle, etc.
  *
  * Wraps `PUT /accounts/{account_id}/access/organizations`.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @remarks
  * **This resource is a singleton.** Every Cloudflare account owns exactly one
  * Access Organization; you cannot create a second one and you cannot delete
@@ -171,7 +173,7 @@ export type AccessOrganization = Resource<
  * @section Configuring the organization
  * @example Adopt and brand the organization
  * ```typescript
- * const org = yield* Cloudflare.AccessOrganization("Org", {
+ * const org = yield* Cloudflare.Access.Organization("Org", {
  *   authDomain: "acme.cloudflareaccess.com",
  *   name: "Acme",
  *   sessionDuration: "24h",
@@ -184,12 +186,13 @@ export type AccessOrganization = Resource<
  * });
  * ```
  */
-export const AccessOrganization = Resource<AccessOrganization>(
-  "Cloudflare.AccessOrganization",
+export const Organization = Resource<Organization>(
+  "Cloudflare.Access.Organization",
+  { aliases: ["Cloudflare.AccessOrganization"] },
 );
 
-export const AccessOrganizationProvider = () =>
-  Provider.succeed(AccessOrganization, {
+export const OrganizationProvider = () =>
+  Provider.succeed(Organization, {
     nuke: { singleton: true },
     stables: ["accountId", "authDomain"],
     reconcile: Effect.fn(function* ({ news }) {
@@ -302,7 +305,7 @@ export const AccessOrganizationProvider = () =>
     }),
     delete: Effect.fn(function* () {
       yield* Effect.logWarning(
-        "AccessOrganization.delete is a no-op — the Cloudflare Access Organization is a singleton tied to the account and cannot be deleted without deleting the Cloudflare account itself.",
+        "Organization.delete is a no-op — the Cloudflare Access Organization is a singleton tied to the account and cannot be deleted without deleting the Cloudflare account itself.",
       );
     }),
     read: Effect.fn(function* ({ olds }) {
@@ -401,7 +404,7 @@ const toAttrs = (
 });
 
 const buildLoginDesign = (
-  design: AccessOrganization.LoginDesign | undefined,
+  design: Organization.LoginDesign | undefined,
 ):
   | {
       backgroundColor?: string;
@@ -439,7 +442,7 @@ const observedLoginDesign = (
       }
     | null
     | undefined,
-): AccessOrganization.LoginDesign | undefined => {
+): Organization.LoginDesign | undefined => {
   if (!design) return undefined;
   return {
     backgroundColor: design.backgroundColor ?? undefined,
@@ -455,7 +458,7 @@ const observedCustomPages = (
     | { forbidden?: string | null; identityDenied?: string | null }
     | null
     | undefined,
-): AccessOrganization.CustomPages | undefined => {
+): Organization.CustomPages | undefined => {
   if (!pages) return undefined;
   return {
     forbidden: pages.forbidden ?? undefined,

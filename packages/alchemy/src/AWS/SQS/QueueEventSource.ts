@@ -19,16 +19,37 @@ export interface MessagesProps extends QueueEventSourceProps {
   maxNumberOfMessages?: number;
 }
 
-export const messages = <Q extends Queue>(
+type MessagesHandler<Req> = (
+  stream: Stream.Stream<SQSRecord>,
+) => Effect.Effect<void, never, Req>;
+
+/**
+ * Subscribe an Effect handler to messages produced by an SQS {@link Queue}.
+ *
+ * @param queue The SQS queue to consume messages from.
+ * @param props Optional event-source configuration.
+ * @param process The handler invoked with a stream of SQS records (last argument).
+ */
+export function consumeQueueMessages<Q extends Queue, Req = never>(
   queue: Q,
-  props: MessagesProps = {},
-) => ({
-  subscribe: <Req = never>(
-    process: (
-      stream: Stream.Stream<SQSRecord>,
-    ) => Effect.Effect<void, never, Req>,
-  ) => QueueEventSource.use((source) => source(queue, props, process)),
-});
+  process: MessagesHandler<Req>,
+): Effect.Effect<void, never, QueueEventSource>;
+export function consumeQueueMessages<Q extends Queue, Req = never>(
+  queue: Q,
+  props: MessagesProps,
+  process: MessagesHandler<Req>,
+): Effect.Effect<void, never, QueueEventSource>;
+export function consumeQueueMessages<Q extends Queue, Req = never>(
+  queue: Q,
+  propsOrProcess: MessagesProps | MessagesHandler<Req>,
+  maybeProcess?: MessagesHandler<Req>,
+): Effect.Effect<void, never, QueueEventSource> {
+  const [props, process] =
+    typeof propsOrProcess === "function"
+      ? [{} as MessagesProps, propsOrProcess]
+      : [propsOrProcess, maybeProcess!];
+  return QueueEventSource.use((source) => source(queue, props, process));
+}
 
 export class QueueEventSource extends Context.Service<
   QueueEventSource,

@@ -60,11 +60,13 @@ const expectGone = (accountId: string, bucketName: string, queueId: string) =>
 // One program deploying the bucket, the queue, and the notification joining
 // them. The notification's props reference both resources' outputs, so the
 // engine orders notification-last on deploy (and first on destroy).
-const program = (opts: { rules: Cloudflare.R2BucketEventNotificationRule[] }) =>
+const program = (opts: {
+  rules: Cloudflare.R2.BucketEventNotificationRule[];
+}) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("EventBucket");
-    const queue = yield* Cloudflare.Queue("EventQueueA");
-    const notification = yield* Cloudflare.R2BucketEventNotification(
+    const bucket = yield* Cloudflare.R2.Bucket("EventBucket");
+    const queue = yield* Cloudflare.Queues.Queue("EventQueueA");
+    const notification = yield* Cloudflare.R2.BucketEventNotification(
       "Notification",
       {
         bucketName: bucket.bucketName,
@@ -79,15 +81,15 @@ const program = (opts: { rules: Cloudflare.R2BucketEventNotificationRule[] }) =>
 // the notification's target queue flips, so the replacement is isolated to
 // the notification itself.
 const replacementProgram = (opts: {
-  rules: Cloudflare.R2BucketEventNotificationRule[];
+  rules: Cloudflare.R2.BucketEventNotificationRule[];
   target: "A" | "B";
 }) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("EventBucket");
-    const queueA = yield* Cloudflare.Queue("EventQueueA");
-    const queueB = yield* Cloudflare.Queue("EventQueueB");
+    const bucket = yield* Cloudflare.R2.Bucket("EventBucket");
+    const queueA = yield* Cloudflare.Queues.Queue("EventQueueA");
+    const queueB = yield* Cloudflare.Queues.Queue("EventQueueB");
     const target = opts.target === "B" ? queueB : queueA;
-    const notification = yield* Cloudflare.R2BucketEventNotification(
+    const notification = yield* Cloudflare.R2.BucketEventNotification(
       "Notification",
       {
         bucketName: bucket.bucketName,
@@ -299,7 +301,7 @@ test.provider(
       // event-notification queues — the deployed (bucket, queue) pair must
       // appear, hydrated into the exact `read` Attributes shape.
       const provider = yield* Provider.findProvider(
-        Cloudflare.R2BucketEventNotification,
+        Cloudflare.R2.BucketEventNotification,
       );
       const all = yield* provider.list();
 

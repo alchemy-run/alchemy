@@ -25,10 +25,7 @@ import type { Providers } from "./Providers.ts";
 
 const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
 
-export type BranchSource =
-  | Project
-  | { projectId: string }
-  | { project: Project };
+export type BranchSource = Project | { projectId: string };
 
 export type ParentBranchSource =
   | Branch
@@ -138,6 +135,11 @@ export type Branch = Resource<
      * when fronting Neon with another pooler like Hyperdrive.
      */
     origin: PostgresOrigin;
+    /**
+     * Parsed pooled connection components. Useful as a Hyperdrive `dev`
+     * origin when local workers bypass Hyperdrive and connect directly.
+     */
+    pooledOrigin: PostgresOrigin;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
     migrationsHashes: Record<string, string>;
@@ -152,7 +154,7 @@ export type Branch = Resource<
  *
  * Branches are first-class, copy-on-write copies of a parent branch — they
  * share storage with the parent until the new branch starts diverging.
- *
+ * @resource
  * @section Branching from a project's default branch
  * @example Basic branch
  * ```typescript
@@ -196,6 +198,28 @@ export const BranchProvider = () =>
   Provider.succeed(Branch, {
     stables: ["branchId", "projectId"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
+      // Normally we short-circuit on `isResolved(news)` at the beginning.
+      // However, this wouldn't detect an upstream project change, causing an update when what we really want is a replace.
+      // So, we check the project first before short-circuiting. `projectId` is a stable attribute of `Project`, so the
+      // planning engine resolves `news.project` to a plain object carrying that stable id (even when the project is being
+      // updated in place). An unchanged project therefore resolves to the same string; a changed/replaced project resolves
+      // to either a different string or an unresolved output, so `oldProjectId !== newProjectId` evaluates correctly.
+      // An Output-valued `project` doesn't survive a `creating`-state
+      // round-trip (it deserializes as `undefined`) — when the old project is
+      // unknown, fall through to the create/update recovery path rather than
+      // force a replacement.
+      const oldProjectId =
+        output?.projectId ??
+        (olds.project !== undefined
+          ? maybeResolveProjectId(olds.project as BranchSource)
+          : undefined);
+      const newProjectId =
+        "project" in news
+          ? maybeResolveProjectId(news.project as BranchSource)
+          : undefined;
+      if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
+        return { action: "replace" } as const;
+      }
       if (!isResolved(news)) return undefined;
       if (
         news.parentLsn !== undefined &&
@@ -258,12 +282,20 @@ export const BranchProvider = () =>
             protected: branch.protected,
             default: branch.default,
             expiresAt: branch.expires_at,
+            pooledOrigin:
+              output.pooledOrigin ??
+              parsePostgresOrigin(output.pooledConnectionUri),
           })),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       }
       if (!olds?.project) return undefined;
-      const projectId = resolveProjectId(olds.project as BranchSource);
+      const projectId = maybeResolveProjectId(olds.project as BranchSource);
+      if (projectId === undefined) {
+        // The project reference survived as an object but its Output-valued
+        // `projectId` did not — there is nothing to look the branch up in.
+        return undefined;
+      }
       const name = yield* createBranchName(id, olds.name);
       const matches = yield* findBranchByName(projectId, name);
       const match = matches[0];
@@ -299,6 +331,7 @@ export const BranchProvider = () =>
         connectionUri: conn.uri,
         pooledConnectionUri: conn.pooled,
         origin: parsePostgresOrigin(conn.uri),
+        pooledOrigin: parsePostgresOrigin(conn.pooled),
         migrationsDir: olds?.migrationsDir,
         migrationsTable: olds?.migrationsTable,
         migrationsHashes: {},
@@ -337,6 +370,9 @@ export const BranchProvider = () =>
               connectionUri: output.connectionUri,
               pooledConnectionUri: output.pooledConnectionUri,
               origin: output.origin,
+              pooledOrigin:
+                output.pooledOrigin ??
+                parsePostgresOrigin(output.pooledConnectionUri),
             })),
           )
         : yield* Effect.gen(function* () {
@@ -391,6 +427,7 @@ export const BranchProvider = () =>
               connectionUri: conn.uri,
               pooledConnectionUri: conn.pooled,
               origin: parsePostgresOrigin(conn.uri),
+              pooledOrigin: parsePostgresOrigin(conn.pooled),
             };
           });
 
@@ -461,9 +498,7 @@ const listAllProjects = Effect.gen(function* () {
   const projects: ListProjectsOutput["projects"][number][] = [];
   let cursor: string | undefined;
   while (true) {
-    const page = yield* listProjects({
-      ...(cursor !== undefined ? { cursor } : {}),
-    });
+    const page = yield* listProjects(cursor !== undefined ? { cursor } : {});
     projects.push(...page.projects);
     const nextCursor = page.pagination?.cursor;
     // Neon returns a `pagination.cursor` on every response (the `created_at`
@@ -532,6 +567,7 @@ const hydrateBranch = (
       connectionUri: conn.uri,
       pooledConnectionUri: conn.pooled,
       origin: parsePostgresOrigin(conn.uri),
+      pooledOrigin: parsePostgresOrigin(conn.pooled),
       migrationsDir: undefined,
       migrationsTable: undefined,
       migrationsHashes: {},
@@ -567,15 +603,18 @@ const findBranchByName = (projectId: string, name: string) =>
     return matches;
   });
 
-const resolveProjectId = (source: BranchSource): string => {
-  if ("projectId" in source && source.projectId) {
+const maybeResolveProjectId = (source: BranchSource): string | undefined => {
+  if (source && "projectId" in source && source.projectId) {
     return source.projectId as unknown as string;
   }
-  if ("project" in source && source.project) {
-    return source.project.projectId as unknown as string;
-  }
+  return undefined;
+};
+
+const resolveProjectId = (source: BranchSource): string => {
+  const projectId = maybeResolveProjectId(source);
+  if (projectId) return projectId;
   throw new Error(
-    "Invalid Neon project source: must be a Project, { projectId }, or { project }",
+    "Invalid Neon project source: must be a Project or { projectId }",
   );
 };
 

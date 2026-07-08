@@ -142,7 +142,7 @@ export const AssetsLive = Layer.effect(
           ),
         );
       },
-      hasAsset: Effect.fnUntraced(function* (hash: string) {
+      hasAsset: Effect.fn(function* (hash: string) {
         const key = getLambdaAssetKey(hash);
 
         return yield* s3

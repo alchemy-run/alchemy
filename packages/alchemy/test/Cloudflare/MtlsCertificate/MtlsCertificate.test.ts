@@ -34,7 +34,7 @@ describe.sequential("MtlsCertificate", () => {
       yield* stack.destroy();
 
       const cert = yield* stack.deploy(
-        Cloudflare.MtlsCertificate("CaCert", {
+        Cloudflare.MtlsCertificate.MtlsCertificate("CaCert", {
           ca: true,
           certificates: CA_CERT_1,
         }),
@@ -68,7 +68,7 @@ describe.sequential("MtlsCertificate", () => {
         yield* stack.destroy();
 
         const cert = yield* stack.deploy(
-          Cloudflare.MtlsCertificate("LeafCert", {
+          Cloudflare.MtlsCertificate.MtlsCertificate("LeafCert", {
             ca: false,
             certificates: LEAF_CERT,
             privateKey: Redacted.make(LEAF_KEY),
@@ -98,14 +98,14 @@ describe.sequential("MtlsCertificate", () => {
       yield* stack.destroy();
 
       const original = yield* stack.deploy(
-        Cloudflare.MtlsCertificate("ReplaceCert", {
+        Cloudflare.MtlsCertificate.MtlsCertificate("ReplaceCert", {
           ca: true,
           certificates: CA_CERT_1,
         }),
       );
 
       const replaced = yield* stack.deploy(
-        Cloudflare.MtlsCertificate("ReplaceCert", {
+        Cloudflare.MtlsCertificate.MtlsCertificate("ReplaceCert", {
           ca: true,
           certificates: CA_CERT_2,
         }),
@@ -139,13 +139,15 @@ describe.sequential("MtlsCertificate", () => {
       yield* stack.destroy();
 
       const cert = yield* stack.deploy(
-        Cloudflare.MtlsCertificate("ListCert", {
+        Cloudflare.MtlsCertificate.MtlsCertificate("ListCert", {
           ca: true,
           certificates: CA_CERT_1,
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.MtlsCertificate);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MtlsCertificate.MtlsCertificate,
+      );
 
       // A freshly-deployed certificate is eventually consistent in the
       // account-wide list(); poll until it appears before asserting.

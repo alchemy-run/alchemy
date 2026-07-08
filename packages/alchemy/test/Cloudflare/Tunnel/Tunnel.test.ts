@@ -100,11 +100,11 @@ describe("Tunnel.list", () => {
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Tunnel("ListTunnel");
+          return yield* Cloudflare.Tunnel.Tunnel("ListTunnel");
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.Tunnel);
+      const provider = yield* Provider.findProvider(Cloudflare.Tunnel.Tunnel);
       const all = yield* provider.list();
 
       expect(all.some((t) => t.tunnelId === deployed.tunnelId)).toBe(true);

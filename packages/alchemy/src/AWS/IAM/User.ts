@@ -69,7 +69,7 @@ export interface User extends Resource<
  *
  * `User` manages a long-lived IAM identity together with its attached managed
  * policies, inline policies, permissions boundary, and tags.
- *
+ * @resource
  * @section Creating IAM Users
  * @example User with Managed Policies
  * ```typescript

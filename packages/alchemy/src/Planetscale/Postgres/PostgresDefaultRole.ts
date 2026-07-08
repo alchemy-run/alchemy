@@ -97,6 +97,7 @@ export type PostgresDefaultRole = Resource<
   Providers
 >;
 
+/** @resource */
 export const PostgresDefaultRole = Resource<PostgresDefaultRole>(
   "Planetscale.PostgresDefaultRole",
 );

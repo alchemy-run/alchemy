@@ -42,7 +42,7 @@ export interface SSHPublicKey extends Resource<
  *
  * `SSHPublicKey` uploads and manages a user's public key for services such as
  * AWS CodeCommit that authenticate through IAM-backed SSH credentials.
- *
+ * @resource
  * @section Managing SSH Keys
  * @example Upload an SSH Public Key
  * ```typescript

@@ -86,7 +86,9 @@ test.provider("list enumerates account custom nameservers", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.CustomNameserver);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.CustomNameserver.CustomNameserver,
+    );
     const all = yield* provider.list();
 
     // Always a well-typed array; `[]` on unentitled accounts.
@@ -108,11 +110,11 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const ns = yield* stack.deploy(
-        Cloudflare.CustomNameserver("NsList", { nsName }),
+        Cloudflare.CustomNameserver.CustomNameserver("NsList", { nsName }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.CustomNameserver,
+        Cloudflare.CustomNameserver.CustomNameserver,
       );
       const all = yield* provider.list();
       expect(all.some((x) => x.nsName === ns.nsName)).toBe(true);
@@ -133,7 +135,7 @@ test.provider.skipIf(!entitled)(
 
       // Create on the default set.
       const ns = yield* stack.deploy(
-        Cloudflare.CustomNameserver("Ns", { nsName }),
+        Cloudflare.CustomNameserver.CustomNameserver("Ns", { nsName }),
       );
       expect(ns.nsName).toEqual(nsName);
       expect(ns.accountId).toEqual(accountId);
@@ -147,14 +149,17 @@ test.provider.skipIf(!entitled)(
       // Redeploying identical props is a no-op (reconcile observes the
       // existing nameserver and converges without an API write).
       const noop = yield* stack.deploy(
-        Cloudflare.CustomNameserver("Ns", { nsName }),
+        Cloudflare.CustomNameserver.CustomNameserver("Ns", { nsName }),
       );
       expect(noop.nsName).toEqual(nsName);
       expect(noop.zoneTag).toEqual(ns.zoneTag);
 
       // nsSet is immutable — changing it must replace the nameserver.
       const replaced = yield* stack.deploy(
-        Cloudflare.CustomNameserver("Ns", { nsName, nsSet: 2 }),
+        Cloudflare.CustomNameserver.CustomNameserver("Ns", {
+          nsName,
+          nsSet: 2,
+        }),
       );
       expect(replaced.nsName).toEqual(nsName);
       expect(replaced.nsSet).toEqual(2);

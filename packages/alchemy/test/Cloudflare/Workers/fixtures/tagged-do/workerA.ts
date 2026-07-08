@@ -8,13 +8,13 @@ import { Counter, CounterLive } from "./object.ts";
 // Tag
 export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
   "WorkerA",
-  {
-    main: import.meta.filename,
-  },
 ) {}
 
 // Layer
 export default WorkerA.make(
+  {
+    main: import.meta.url,
+  },
   Effect.gen(function* () {
     const counter = yield* Counter;
 
@@ -56,7 +56,7 @@ export default WorkerA.make(
   }).pipe(
     Effect.provide(
       // WorkerA needs to provide it
-      CounterLive.pipe(Layer.provide(Cloudflare.D1ConnectionLive)),
+      CounterLive.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding)),
     ),
   ),
 );

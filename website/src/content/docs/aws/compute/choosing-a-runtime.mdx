@@ -1,0 +1,101 @@
+---
+title: Choosing a runtime
+description: Lambda vs ECS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
+---
+
+Every Alchemy app on AWS needs somewhere for its code to run.
+Alchemy ships three runtimes, all driven by the same pattern —
+bundle an Effect program, deploy it as a resource, bind building
+blocks to it:
+
+- **Lambda** — serverless functions. **Use this by default.**
+- **ECS** — long-running containers on Fargate.
+- **EC2** — virtual machines you fully control.
+
+## At a glance
+
+|                  | Lambda                                     | ECS                                        | EC2                                      |
+| ---------------- | ------------------------------------------ | ------------------------------------------ | ---------------------------------------- |
+| Execution model  | Per-request, event-driven                  | Always-on containers                       | Always-on machine                        |
+| Cost shape       | Pay per invocation; scales to zero         | Pay per running task                       | Pay per running instance                 |
+| Startup          | Cold starts (ms–s), then warm              | Task launch (tens of seconds), then steady | Instance boot (minutes), then steady     |
+| Packaging        | Bundled zip (Rolldown)                     | Docker image, built + pushed for you       | Bundled program on an AMI you choose     |
+| Networking       | None required (Function URL)               | VPC required (awsvpc), optional ALB        | VPC required, you own every primitive    |
+| Alchemy coverage | Fully documented                           | Cluster/Service/Task resources             | Instance + full VPC primitives           |
+
+## Lambda — the default
+
+Serverless, event-driven, and the runtime this documentation is
+written around. You get the [`Function`](/providers/aws/lambda/function)
+resource with a public Function URL, typed bindings that mint
+least-privilege IAM policies from your call sites, and
+`Stream`-shaped event sources for SQS, Kinesis, DynamoDB
+Streams, S3 notifications, SNS, and EventBridge. Cold starts and
+the 15-minute execution cap are the trade; per-request pricing
+and zero idle cost are the payoff.
+
+Choose Lambda unless you have a specific reason not to.
+
+→ [Lambda](/aws/compute/lambda)
+
+## ECS — long-running containers
+
+When your workload doesn't fit a request/response window — a
+WebSocket server, a worker that holds connections open, anything
+that should be always-on — run it as a container. Alchemy models
+ECS with three resources:
+
+- [`Cluster`](/providers/aws/ecs/cluster) — an ECS cluster for
+  running tasks and services.
+- [`Task`](/providers/aws/ecs/task) — bundles an inline Effect
+  program, builds and pushes a Docker image to a generated ECR
+  repository, provisions task + execution IAM roles and a
+  CloudWatch log group, and registers a Fargate task definition.
+  Tasks can serve HTTP directly and accept the same
+  binding contract (env + IAM policy statements) as Lambda.
+- [`Service`](/providers/aws/ecs/service) — keeps a task
+  definition running with awsvpc networking; set `public: true`
+  and Alchemy provisions a public ALB + listener + target group
+  for you.
+
+You pay for running tasks whether or not they're serving
+traffic, and you bring a VPC (subnets + security groups) — the
+[`Network`](/providers/aws/ec2/network) helper builds one in a
+single call.
+
+→ [ECS](/aws/compute/ecs)
+
+## EC2 — when you need the machine
+
+Full-control VMs for workloads that need an OS, a GPU, custom
+daemons, or just predictable dedicated capacity. The
+[`Instance`](/providers/aws/ec2/instance) resource can act as a
+low-level compute primitive or run a bundled long-lived Effect
+program directly on the machine (including serving HTTP), and
+Alchemy ships the complete networking toolkit around it:
+[`Vpc`](/providers/aws/ec2/vpc),
+[`Subnet`](/providers/aws/ec2/subnet),
+[`SecurityGroup`](/providers/aws/ec2/securitygroup), NAT and
+internet gateways, route tables, EIPs, and VPC endpoints (see
+[VPC & networking](/aws/networking)).
+
+You own patching, scaling, and availability.
+
+→ [EC2](/aws/compute/ec2)
+
+## Rule of thumb
+
+1. Start with **Lambda**. Per-request cost, no servers, and the
+   whole documented binding/event-source surface.
+2. Move a workload to **ECS** when it's long-running, needs more
+   than 15 minutes, or is already a container.
+3. Reach for **EC2** when you need the machine itself — kernel
+   access, GPUs, custom networking, or software that expects a
+   host.
+
+## Where next
+
+- [Lambda](/aws/compute/lambda) — deploy a function with a public URL.
+- [AWS overview](/aws) — resources and recipes.
+- [Providers reference](/providers) — generated docs for every
+  ECS and EC2 resource.

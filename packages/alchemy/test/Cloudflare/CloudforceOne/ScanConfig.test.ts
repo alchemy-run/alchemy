@@ -95,7 +95,7 @@ test.provider.skipIf(!entitled)(
 
       // Create — one-off scan of a single documentation address.
       const created = yield* stack.deploy(
-        Cloudflare.CloudforceOneScanConfig("TestScanConfig", {
+        Cloudflare.CloudforceOne.ScanConfig("TestScanConfig", {
           ips: ["1.1.1.1/32"],
           frequency: 0,
         }),
@@ -111,7 +111,7 @@ test.provider.skipIf(!entitled)(
 
       // In-place update — change the port list; the config id is stable.
       const updated = yield* stack.deploy(
-        Cloudflare.CloudforceOneScanConfig("TestScanConfig", {
+        Cloudflare.CloudforceOne.ScanConfig("TestScanConfig", {
           ips: ["1.1.1.1/32"],
           frequency: 0,
           ports: ["1-80", "443"],
@@ -122,7 +122,7 @@ test.provider.skipIf(!entitled)(
 
       // No-op redeploy — same props, same config id.
       const noop = yield* stack.deploy(
-        Cloudflare.CloudforceOneScanConfig("TestScanConfig", {
+        Cloudflare.CloudforceOne.ScanConfig("TestScanConfig", {
           ips: ["1.1.1.1/32"],
           frequency: 0,
           ports: ["1-80", "443"],
@@ -147,7 +147,7 @@ test.provider("list returns an array of scan configs", (stack) =>
     yield* stack.destroy();
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.CloudforceOneScanConfig,
+      Cloudflare.CloudforceOne.ScanConfig,
     );
     const all = yield* provider.list();
     expect(Array.isArray(all)).toBe(true);
@@ -166,14 +166,14 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.CloudforceOneScanConfig("ListScanConfig", {
+        Cloudflare.CloudforceOne.ScanConfig("ListScanConfig", {
           ips: ["1.1.1.1/32"],
           frequency: 0,
         }),
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.CloudforceOneScanConfig,
+        Cloudflare.CloudforceOne.ScanConfig,
       );
       const all = yield* provider.list();
       expect(all.some((c) => c.configId === deployed.configId)).toBe(true);

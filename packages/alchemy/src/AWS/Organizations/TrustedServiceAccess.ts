@@ -26,6 +26,7 @@ export interface TrustedServiceAccess extends Resource<
 
 /**
  * Enables trusted access for an AWS service principal.
+ * @resource
  */
 export const TrustedServiceAccess = Resource<TrustedServiceAccess>(
   "AWS.Organizations.TrustedServiceAccess",
@@ -44,9 +45,15 @@ export const TrustedServiceAccessProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          return yield* readTrustedServiceAccess(
-            output?.servicePrincipal ?? olds!.servicePrincipal,
-          );
+          const servicePrincipal =
+            output?.servicePrincipal ?? olds?.servicePrincipal;
+          if (servicePrincipal === undefined) {
+            // Output-valued props don't survive a `creating`-state round-trip
+            // (they deserialize as `undefined`) — report "not found" so the
+            // engine re-drives the create.
+            return undefined;
+          }
+          return yield* readTrustedServiceAccess(servicePrincipal);
         }),
         list: () =>
           Effect.gen(function* () {

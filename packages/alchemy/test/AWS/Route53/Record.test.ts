@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import { Record } from "@/AWS/Route53";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "@effect/vitest";
@@ -14,7 +15,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `CallerReference`, so re-running reuses the same zone rather than piling up
 // duplicates. (`example.com` is reserved by AWS, hence the bespoke name.)
 const zoneName = "alchemy-route53-list-test.com.";
-const callerReference = "alchemy-route53-record-list-test";
+const callerReference = "alchemy-route53-record-list-test-v2";
 const recordName = `list-record.${zoneName}`;
 const recordValue = '"alchemy-list-test"';
 
@@ -28,24 +29,51 @@ const findZoneIdByName = route53.listHostedZones.pages({}).pipe(
   Effect.map((zones) => zones.find((zone) => zone.Name === zoneName)?.Id),
 );
 
-const ensureZone = route53
-  .createHostedZone({ Name: zoneName, CallerReference: callerReference })
-  .pipe(
-    Effect.map((response) => normalizeId(response.HostedZone.Id)),
-    Effect.catchTag("HostedZoneAlreadyExists", () =>
-      findZoneIdByName.pipe(
-        Effect.flatMap((id) =>
-          id !== undefined
-            ? Effect.succeed(normalizeId(id))
-            : Effect.die(
-                new Error(
-                  "hosted zone not found after HostedZoneAlreadyExists",
+// The hosted zone is a *standing* fixture — created once and reused across
+// runs (we look it up by name first and only create on a genuine miss). We
+// deliberately do NOT delete the zone on teardown. A short retry absorbs the
+// brief list eventual-consistency right after a first-time create, when a
+// create can race ahead of the zone appearing in `listHostedZones`.
+const zoneNotYetListable =
+  "hosted zone not found after HostedZoneAlreadyExists";
+
+// List first, create only on a genuine miss. The previous create-first design
+// got permanently poisoned whenever the standing zone was deleted (e.g. by a
+// nuke): the stable `CallerReference` stays claimed during a long propagation
+// window, so `createHostedZone` keeps returning `HostedZoneAlreadyExists` while
+// `listHostedZones` still shows nothing. Looking the zone up first (and only
+// creating with a *fresh* CallerReference when it's truly absent) sidesteps
+// that trap — an absent/poisoned zone always re-creates cleanly, and a present
+// zone is reused without ever hitting the conflict path.
+const ensureZone = findZoneIdByName.pipe(
+  Effect.flatMap((existing) =>
+    existing !== undefined
+      ? Effect.succeed(normalizeId(existing))
+      : route53
+          .createHostedZone({
+            Name: zoneName,
+            CallerReference: `${callerReference}-${crypto.randomUUID()}`,
+          })
+          .pipe(
+            Effect.map((response) => normalizeId(response.HostedZone.Id)),
+            // A concurrent attempt won the race — fall back to the lookup.
+            Effect.catchTag("HostedZoneAlreadyExists", () =>
+              findZoneIdByName.pipe(
+                Effect.flatMap((id) =>
+                  id !== undefined
+                    ? Effect.succeed(normalizeId(id))
+                    : Effect.fail(new Error(zoneNotYetListable)),
                 ),
               ),
-        ),
-      ),
-    ),
-  );
+            ),
+          ),
+  ),
+  Effect.retry({
+    while: (e) => e instanceof Error && e.message === zoneNotYetListable,
+    schedule: Schedule.spaced("5 seconds"),
+    times: 24,
+  }),
+);
 
 // Create/delete the record set out of band. The Alchemy engine's own deploy
 // path is currently blocked by a distilled schema bug (see the file footer),
@@ -75,14 +103,6 @@ const changeRecord = (hostedZoneId: string, action: "UPSERT" | "DELETE") =>
       Effect.catchTag("NoSuchHostedZone", () => Effect.void),
     );
 
-const deleteZone = (hostedZoneId: string) =>
-  route53.deleteHostedZone({ Id: hostedZoneId }).pipe(
-    Effect.asVoid,
-    // Best-effort teardown: tolerate a vanished or still-non-empty zone.
-    Effect.catchTag("NoSuchHostedZone", () => Effect.void),
-    Effect.catchTag("HostedZoneNotEmpty", () => Effect.void),
-  );
-
 test.provider(
   "list enumerates the deployed record across hosted zones",
   (stack) =>
@@ -90,9 +110,7 @@ test.provider(
       yield* stack.destroy();
 
       const hostedZoneId = yield* ensureZone;
-      yield* changeRecord(hostedZoneId, "UPSERT").pipe(
-        Effect.tapError(() => deleteZone(hostedZoneId)),
-      );
+      yield* changeRecord(hostedZoneId, "UPSERT");
 
       const provider = yield* Provider.findProvider(Record);
 
@@ -121,7 +139,8 @@ test.provider(
       );
 
       yield* changeRecord(hostedZoneId, "DELETE");
-      yield* deleteZone(hostedZoneId);
+      // Leave the hosted zone standing — see `ensureZone` above. Deleting it
+      // would poison the stable `CallerReference` for the next run.
       yield* stack.destroy();
 
       expect(found).toBe(true);
@@ -129,17 +148,137 @@ test.provider(
   { timeout: 240_000 },
 );
 
-// NOTE — distilled patch needed (do not apply here; reported to coordinator):
-//   service: route-53
-//   structures.ListResourceRecordSetsResponse.members.ResourceRecordSets.optional: true
+// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
 //
-// Route53 omits the `<ResourceRecordSets>` element entirely when a
-// `ListResourceRecordSets` page is empty (e.g. when `StartRecordName` points
-// past the last record — exactly what the provider's `read`/`findRecord`
-// adoption probe does for a brand-new record). distilled currently marks the
-// member required, so the response fails to parse with:
-//   SchemaError: Missing key at ["ResourceRecordSets"]
-// This blocks deploying any record through the Alchemy engine (the greenfield
-// adoption probe in Plan.ts), so this test seeds the record out of band. Once
-// the member is optional, `findRecord` should also coalesce
-// `response.ResourceRecordSets ?? []`.
+// An interrupted first deploy persists the record as `status: "creating"`
+// with no attributes — and the Output-valued props (`hostedZoneId` flows from
+// the zone resource, `name` is typically derived from it) do not survive the
+// state round-trip: they deserialize as `undefined`. Plan's recovery branch
+// then calls `provider.read` with those junk props, which crashed in
+// `normalizeHostedZoneId(undefined)` (`undefined is not an object (evaluating
+// 'hostedZoneId.replace')`) and wedged the stack. When `read` reports "not
+// found", the same junk `olds` flow into `diff`, whose unguarded
+// `normalizeHostedZoneId(olds.hostedZoneId)` / `normalizeName(olds.name)`
+// were the next crash sites — so one wedged redeploy exercises all the guards.
+//
+// Deploy into the standing zone (see `ensureZone`), wedge the persisted row
+// into exactly that shape, and assert the next deploy recovers: `read`
+// returns undefined, `diff` falls through to the create recovery path, and
+// reconcile's UPSERT converges on the half-created record.
+const recoveryRecordName = `pr770-recovery.${zoneName}`;
+const recoveryRecordValue = '"pr770-recovery"';
+
+const deleteRecoveryRecord = (hostedZoneId: string) =>
+  route53
+    .changeResourceRecordSets({
+      HostedZoneId: hostedZoneId,
+      ChangeBatch: {
+        Comment: "pr770 recovery test cleanup",
+        Changes: [
+          {
+            Action: "DELETE",
+            ResourceRecordSet: {
+              Name: recoveryRecordName,
+              Type: "TXT",
+              TTL: 60,
+              ResourceRecords: [{ Value: recoveryRecordValue }],
+            },
+          },
+        ],
+      },
+    })
+    .pipe(Effect.ignore);
+
+test.provider(
+  "recovers a half-created record whose creating-state lost Output-valued props (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const hostedZoneId = yield* ensureZone;
+
+      // Safety net: if the recovery redeploy defects (the pre-fix crash), the
+      // half-created record would otherwise leak into the standing zone; on
+      // the happy path the DELETE finds nothing (InvalidChangeBatch, ignored).
+      yield* Effect.addFinalizer(() => deleteRecoveryRecord(hostedZoneId));
+
+      const deployRecord = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Record("RecoveryRecord", {
+              hostedZoneId,
+              name: recoveryRecordName,
+              type: "TXT",
+              ttl: 60,
+              records: [recoveryRecordValue],
+            });
+          }),
+        );
+
+      const created = yield* deployRecord();
+      expect(created.name).toBe(recoveryRecordName);
+
+      // Rewrite the record's persisted row into the wedged shape: `creating`,
+      // no attributes, and the Output-valued identity props lost in the
+      // state round-trip.
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) && r.row.resourceType === "AWS.Route53.Record",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error("no AWS.Route53.Record state row found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: {
+            ...wedged.row.props,
+            hostedZoneId: undefined,
+            name: undefined,
+          },
+        },
+      });
+
+      // Before the fix this crashed in plan with
+      // `TypeError: undefined is not an object (evaluating 'hostedZoneId.replace')`.
+      const recovered = yield* deployRecord();
+      expect(normalizeId(recovered.hostedZoneId)).toBe(
+        normalizeId(hostedZoneId),
+      );
+      expect(recovered.name).toBe(recoveryRecordName);
+      expect(recovered.type).toBe("TXT");
+
+      // Verify out of band the record actually exists.
+      const observed = yield* route53.listResourceRecordSets({
+        HostedZoneId: hostedZoneId,
+        StartRecordName: recoveryRecordName,
+        StartRecordType: "TXT",
+        MaxItems: 1,
+      });
+      expect(
+        (observed.ResourceRecordSets ?? []).some(
+          (set) => set.Name === recoveryRecordName && set.Type === "TXT",
+        ),
+      ).toBe(true);
+
+      // The standing zone is left in place (see `ensureZone` — deleting it
+      // poisons the CallerReference); destroy() removes the record.
+      yield* stack.destroy();
+    }),
+  { timeout: 240_000 },
+);

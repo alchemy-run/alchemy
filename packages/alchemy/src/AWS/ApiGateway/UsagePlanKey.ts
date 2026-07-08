@@ -16,6 +16,7 @@ export interface UsagePlanKeyProps {
   keyType?: string;
 }
 
+/** @resource */
 export interface UsagePlanKey extends Resource<
   "AWS.ApiGateway.UsagePlanKey",
   UsagePlanKeyProps,

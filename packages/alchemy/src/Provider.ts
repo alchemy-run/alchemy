@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
-import type { Policy } from "./Binding.ts";
 import type { ScopedPlanStatusSession } from "./Cli/Cli.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
@@ -13,6 +12,7 @@ import type { Platform } from "./Platform.ts";
 import type {
   ResourceBinding,
   ResourceClass,
+  ResourceClassLike,
   ResourceLike,
 } from "./Resource.ts";
 
@@ -102,6 +102,14 @@ export interface ProviderService<
    * @default 0
    */
   version?: number;
+  /**
+   * Legacy type names this provider also answers to. Copied from the
+   * resource class's `aliases` option by {@link succeed}/{@link effect} so
+   * state persisted under a pre-rename type (e.g. `"Cloudflare.Queue"`
+   * before the `"Cloudflare.Queues.Queue"` rename) still resolves to this
+   * provider via {@link tryFindProviderByType}.
+   */
+  aliases?: readonly string[];
   /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
@@ -251,7 +259,7 @@ export const effect = <
   LogsReq = never,
   ListReq = never,
 >(
-  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   eff: Effect.Effect<
     ProviderService<
       R,
@@ -275,8 +283,14 @@ export const effect = <
     LifecycleServices
   >
 > =>
-  // @ts-expect-error
-  Layer.effect(Provider(cls.Type), eff);
+  Layer.effect(
+    // @ts-expect-error
+    Provider(cls.Type),
+    Effect.map(eff, (service) => ({
+      aliases: "Aliases" in cls ? cls.Aliases : undefined,
+      ...service,
+    })),
+  ) as any;
 
 export const succeed = <
   R extends ResourceLike,
@@ -310,7 +324,10 @@ export const succeed = <
   >
 > =>
   // @ts-expect-error
-  Layer.succeed(Provider(cls.Type), service);
+  Layer.succeed(Provider(cls.Type), {
+    aliases: "Aliases" in cls ? cls.Aliases : undefined,
+    ...service,
+  });
 
 export interface ProviderCollectionLike {
   kind: "ProviderCollection";
@@ -351,10 +368,7 @@ export interface ProviderCollectionService {
 }
 
 export const collection = <
-  R extends
-    | ResourceClass<any>
-    | Platform<any, any, any, any, any>
-    | Policy<any, any, any>,
+  R extends ResourceClassLike<any> | Platform<any, any, any, any, any>,
 >(
   resources: R[],
 ): Effect.Effect<
@@ -362,9 +376,7 @@ export const collection = <
   never,
   R extends ResourceClass<infer R> | Platform<infer R, any, any, any, any>
     ? Provider<R>
-    : R extends Policy<infer Self, infer _I, infer _S>
-      ? Self
-      : never
+    : never
 > =>
   Effect.gen(function* () {
     const context = yield* Effect.context();
@@ -377,8 +389,8 @@ export const collection = <
                 Effect.map((provider) => [resource.Type, provider] as const),
               )
             : Effect.succeed([
-                resource.key,
-                context.mapUnsafe.get(resource.key),
+                (resource as { key: string }).key,
+                context.mapUnsafe.get((resource as { key: string }).key),
               ] as const),
         ),
         { concurrency: "unbounded" },
@@ -403,14 +415,25 @@ const isProviderCollectionService = (
   );
 };
 
+/**
+ * Structural check for a {@link ProviderService} living in the Effect
+ * context. Providers are keyed by their canonical resource type; when
+ * searching for a legacy alias, the tag key won't match, so lookup has to
+ * recognize provider services by shape.
+ */
+const isProviderService = (value: unknown): value is ProviderService =>
+  typeof value === "object" &&
+  value !== null &&
+  "reconcile" in value &&
+  typeof (value as ProviderService).reconcile === "function" &&
+  "delete" in value &&
+  typeof (value as ProviderService).delete === "function";
+
 export const findProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
   ): Effect.Effect<ProviderService<R>>;
-  <P extends Policy<any, any, any>>(
-    policyType: P["key"],
-  ): Effect.Effect<Effect.Success<P>>;
-} = (type: string) =>
+} = ((type: string) =>
   tryFindProviderByType(type).pipe(
     Effect.flatMap(
       Option.match({
@@ -418,21 +441,18 @@ export const findProviderByType: {
         onSome: (provider) => Effect.succeed(provider),
       }),
     ),
-  );
+  )) as any;
 
 /**
- * Typed provider lookup by resource class (or {@link Platform} / {@link Policy})
- * value. Infers `R` from the class so `provider.list()` / `provider.read(...)`
- * return the resource's `Attributes` shape — prefer this over
- * {@link findProviderByType}, which only takes the type string.
+ * Typed provider lookup by resource class (or {@link Platform}) value. Infers
+ * `R` from the class so `provider.list()` / `provider.read(...)` return the
+ * resource's `Attributes` shape — prefer this over {@link findProviderByType},
+ * which only takes the type string.
  */
 export const findProvider: {
   <R extends ResourceLike>(
-    resource: ResourceClass<R> | Platform<R, any, any, any, any>,
+    resource: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   ): Effect.Effect<ProviderService<R>>;
-  <P extends Policy<any, any, any>>(
-    policy: P,
-  ): Effect.Effect<Effect.Success<P>>;
 } = (resource: { Type?: string; key?: string }) =>
   findProviderByType((resource.Type ?? resource.key) as string) as any;
 
@@ -440,12 +460,7 @@ export const tryFindProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
   ): Effect.Effect<Option.Option<ProviderService<R>>>;
-  <P extends Policy<any, any, any>>(
-    policyType: P["key"],
-  ): Effect.Effect<Option.Option<Effect.Success<P>>>;
-} = Effect.fnUntraced(function* <R extends ResourceLike>(
-  resourceType: R["Type"],
-) {
+} = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
   const Tag = Provider<R>(resourceType) as unknown as Context.Service<
     Provider<R>,
     any
@@ -462,6 +477,25 @@ export const tryFindProviderByType: {
       if (provider) {
         return Option.some(provider);
       }
+    }
+  }
+
+  // State persisted before a type rename carries the legacy name, so no
+  // provider is keyed under it. Fall back to a provider that declares the
+  // name in its `aliases` — scanning both bare Provider layers and the
+  // members of every ProviderCollection.
+  for (const value of context.mapUnsafe.values()) {
+    if (isProviderCollectionService(value)) {
+      for (const provider of Object.values(value.providers)) {
+        if (provider.aliases?.includes(resourceType)) {
+          return Option.some(provider);
+        }
+      }
+    } else if (
+      isProviderService(value) &&
+      value.aliases?.includes(resourceType)
+    ) {
+      return Option.some(value);
     }
   }
   return Option.none();

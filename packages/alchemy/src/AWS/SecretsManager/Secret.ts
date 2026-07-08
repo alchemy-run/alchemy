@@ -75,7 +75,7 @@ export interface Secret extends Resource<
  * `Secret` owns the lifecycle of the secret metadata and current value. It can
  * store a caller-provided value or generate a password-backed JSON payload for
  * downstream resources such as Aurora clusters and RDS proxies.
- *
+ * @resource
  * @section Creating Secrets
  * @example Static Secret String
  * ```typescript

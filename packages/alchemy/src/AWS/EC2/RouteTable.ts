@@ -171,6 +171,77 @@ export interface RouteTable extends Resource<
   never,
   Providers
 > {}
+/**
+ * A VPC route table holds a set of routes that determine where network
+ * traffic from associated subnets (or gateways) is directed. Create one
+ * route table per routing domain — typically a "public" table whose default
+ * route points at an {@link InternetGateway}, and one or more "private" tables
+ * whose default route points at a NAT gateway.
+ *
+ * A route table is little more than a container: it owns a `vpcId` and tags,
+ * while the actual routing behaviour is supplied by separate {@link Route}
+ * resources and applied to subnets by {@link RouteTableAssociation} resources.
+ *
+ * @resource
+ * @section Creating a Route Table
+ * The only required input is the `vpcId` the table belongs to. Changing
+ * `vpcId` later replaces the route table, since a table cannot move between
+ * VPCs.
+ *
+ * @example Basic Route Table
+ * ```typescript
+ * const routeTable = yield* AWS.EC2.RouteTable("PublicRouteTable", {
+ *   vpcId: myVpc.vpcId,
+ * });
+ * ```
+ * Creates an empty route table in the given VPC. It starts with only the
+ * implicit `local` route (managed by AWS) until you add your own
+ * {@link Route} resources.
+ *
+ * @example Route Table with Tags
+ * ```typescript
+ * const routeTable = yield* AWS.EC2.RouteTable("PrivateRouteTable", {
+ *   vpcId: myVpc.vpcId,
+ *   tags: { Name: "private-rt", Tier: "private" },
+ * });
+ * ```
+ * The `tags` map is merged with the alchemy auto-tags (`alchemy::stack`,
+ * `alchemy::stage`, `alchemy::id`) and can be updated in place without
+ * replacing the table. Use the `Name` tag to label the table in the AWS
+ * console.
+ *
+ * @section Building a Public Routing Domain
+ * A route table only directs traffic once you attach routes to it and
+ * associate it with subnets. The pattern below wires a public subnet to the
+ * internet: an {@link InternetGateway}, a default {@link Route} pointing at it,
+ * and a {@link RouteTableAssociation} binding the subnet to the table.
+ *
+ * @example Route Table, Internet Route, and Subnet Association
+ * ```typescript
+ * const internetGateway = yield* AWS.EC2.InternetGateway("InternetGateway", {
+ *   vpcId: myVpc.vpcId,
+ * });
+ *
+ * const publicRouteTable = yield* AWS.EC2.RouteTable("PublicRouteTable", {
+ *   vpcId: myVpc.vpcId,
+ * });
+ *
+ * const internetRoute = yield* AWS.EC2.Route("InternetRoute", {
+ *   routeTableId: publicRouteTable.routeTableId,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   gatewayId: internetGateway.internetGatewayId,
+ * });
+ *
+ * const association = yield* AWS.EC2.RouteTableAssociation("PublicSubnetAssociation", {
+ *   routeTableId: publicRouteTable.routeTableId,
+ *   subnetId: publicSubnet.subnetId,
+ * });
+ * ```
+ * Any subnet associated with this table now reaches the public internet via
+ * the `0.0.0.0/0` route. Multiple subnets can share the same route table by
+ * declaring additional associations — a common way to give every public
+ * subnet in a VPC identical routing.
+ */
 export const RouteTable = Resource<RouteTable>("AWS.EC2.RouteTable");
 
 export const RouteTableProvider = () =>

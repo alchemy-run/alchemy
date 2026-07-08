@@ -61,6 +61,7 @@ export interface Policy extends Resource<
 
 /**
  * An AWS Organizations policy such as an SCP or tag policy.
+ * @resource
  */
 export const Policy = Resource<Policy>("AWS.Organizations.Policy");
 

@@ -22,7 +22,7 @@ test.provider("create and delete index with explicit dimensions", (stack) =>
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("DefaultIndex", {
+      Cloudflare.Vectorize.Index("DefaultIndex", {
         dimensions: 768,
         metric: "cosine",
       }),
@@ -52,7 +52,7 @@ test.provider("create index from a preset", (stack) =>
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("PresetIndex", {
+      Cloudflare.Vectorize.Index("PresetIndex", {
         preset: "@cf/baai/bge-base-en-v1.5",
         description: "preset index",
       }),
@@ -79,7 +79,7 @@ test.provider("replaces index when dimensions change", (stack) =>
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ReplaceIndex", {
+      Cloudflare.Vectorize.Index("ReplaceIndex", {
         dimensions: 32,
         metric: "cosine",
       }),
@@ -88,7 +88,7 @@ test.provider("replaces index when dimensions change", (stack) =>
     expect(index.metric).toEqual("cosine");
 
     const replaced = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ReplaceIndex", {
+      Cloudflare.Vectorize.Index("ReplaceIndex", {
         dimensions: 64,
         metric: "euclidean",
       }),
@@ -114,13 +114,13 @@ test.provider("list enumerates the deployed index", (stack) =>
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ListIndex", {
+      Cloudflare.Vectorize.Index("ListIndex", {
         dimensions: 768,
         metric: "cosine",
       }),
     );
 
-    const provider = yield* Provider.findProvider(Cloudflare.VectorizeIndex);
+    const provider = yield* Provider.findProvider(Cloudflare.Vectorize.Index);
     const all = yield* provider.list();
 
     expect(all.some((x) => x.indexName === index.indexName)).toBe(true);

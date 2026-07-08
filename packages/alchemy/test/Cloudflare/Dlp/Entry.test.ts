@@ -30,7 +30,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(Cloudflare.DlpEntry);
+      const provider = yield* Provider.findProvider(Cloudflare.Dlp.Entry);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -57,7 +57,7 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const profile = yield* Cloudflare.DlpProfile("EmployeeIds", {
+          const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
             name: "alchemy-test-dlp-entry-list-profile",
             allowedMatchCount: 0,
             entries: [
@@ -68,7 +68,7 @@ test.provider.skipIf(!entitled)(
               },
             ],
           });
-          const entry = yield* Cloudflare.DlpEntry("CardNumber", {
+          const entry = yield* Cloudflare.Dlp.Entry("CardNumber", {
             name: "alchemy-test-dlp-entry-list",
             pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
             profileId: profile.profileId,
@@ -77,7 +77,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.DlpEntry);
+      const provider = yield* Provider.findProvider(Cloudflare.Dlp.Entry);
       const all = yield* provider.list();
 
       expect(all.some((e) => e.entryId === deployed.entry.entryId)).toBe(true);

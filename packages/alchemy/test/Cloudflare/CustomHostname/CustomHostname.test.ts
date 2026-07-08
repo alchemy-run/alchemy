@@ -117,7 +117,7 @@ testSaas(
 
       const hostname = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname("Default", {
+          return yield* Cloudflare.CustomHostname.CustomHostname("Default", {
             zoneId,
             hostname: HOST_DEFAULT,
           }).pipe(adopt(true));
@@ -155,7 +155,7 @@ testSaas(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname("Update", {
+          return yield* Cloudflare.CustomHostname.CustomHostname("Update", {
             zoneId,
             hostname: HOST_UPDATE,
             ssl: { method: "txt", type: "dv" },
@@ -167,7 +167,7 @@ testSaas(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname("Update", {
+          return yield* Cloudflare.CustomHostname.CustomHostname("Update", {
             zoneId,
             hostname: HOST_UPDATE,
             ssl: { method: "http", type: "dv" },
@@ -185,7 +185,7 @@ testSaas(
       // trigger reissuance).
       const again = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname("Update", {
+          return yield* Cloudflare.CustomHostname.CustomHostname("Update", {
             zoneId,
             hostname: HOST_UPDATE,
             ssl: { method: "http", type: "dv" },
@@ -207,7 +207,9 @@ test.provider("list returns a well-typed array of custom hostnames", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Cloudflare.CustomHostname);
+    const provider = yield* Provider.findProvider(
+      Cloudflare.CustomHostname.CustomHostname,
+    );
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
@@ -236,14 +238,19 @@ testSaas(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname("ListResource", {
-            zoneId,
-            hostname: HOST_DEFAULT,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.CustomHostname.CustomHostname(
+            "ListResource",
+            {
+              zoneId,
+              hostname: HOST_DEFAULT,
+            },
+          ).pipe(adopt(true));
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.CustomHostname.CustomHostname,
+      );
       const all = yield* provider.list();
 
       expect(
@@ -266,7 +273,7 @@ testSaas(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname("Replace", {
+          return yield* Cloudflare.CustomHostname.CustomHostname("Replace", {
             zoneId,
             hostname: HOST_REPLACE_A,
           }).pipe(adopt(true));
@@ -277,7 +284,7 @@ testSaas(
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname("Replace", {
+          return yield* Cloudflare.CustomHostname.CustomHostname("Replace", {
             zoneId,
             hostname: HOST_REPLACE_B,
           }).pipe(adopt(true));

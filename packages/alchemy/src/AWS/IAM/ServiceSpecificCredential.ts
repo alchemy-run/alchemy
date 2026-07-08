@@ -54,7 +54,7 @@ export interface ServiceSpecificCredential extends Resource<
  * CodeCommit HTTPS passwords for an IAM user. AWS only returns the secret
  * fields during creation, so subsequent reads preserve the originally stored
  * redacted values.
- *
+ * @resource
  * @section Managing Service Credentials
  * @example Create a CodeCommit Credential
  * ```typescript

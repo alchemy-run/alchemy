@@ -57,9 +57,9 @@ const etl = (creds: {
   secretAccessKey: Redacted.Redacted<string>;
 }) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket("SinkBucket", {});
-    const stream = yield* Cloudflare.PipelineStream("Stream", {});
-    const sink = yield* Cloudflare.PipelineSink("Sink", {
+    const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
+    const stream = yield* Cloudflare.Pipelines.Stream("Stream", {});
+    const sink = yield* Cloudflare.Pipelines.Sink("Sink", {
       type: "r2",
       config: {
         bucket: bucket.bucketName,
@@ -67,7 +67,7 @@ const etl = (creds: {
         rollingPolicy: { intervalSeconds: 10 },
       },
     });
-    const pipeline = yield* Cloudflare.Pipeline("Etl", {
+    const pipeline = yield* Cloudflare.Pipelines.Pipeline("Etl", {
       sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
     });
     return { bucket, stream, sink, pipeline };
@@ -82,7 +82,9 @@ test.provider(
       const creds = yield* r2Credentials;
       const deployed = yield* retryAuthBlip(stack.deploy(etl(creds)));
 
-      const provider = yield* Provider.findProvider(Cloudflare.Pipeline);
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Pipelines.Pipeline,
+      );
       const all = yield* provider.list();
 
       // Each element is the full `read` Attributes shape, usable by delete.

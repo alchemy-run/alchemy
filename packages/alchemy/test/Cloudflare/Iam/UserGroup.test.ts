@@ -70,11 +70,11 @@ const program = (opts: {
   accountScopeKey: string;
 }) =>
   Effect.gen(function* () {
-    const rg = yield* Cloudflare.IamResourceGroup("Rg", {
+    const rg = yield* Cloudflare.Iam.ResourceGroup("Rg", {
       name: RG_NAME,
       scope: { key: opts.accountScopeKey, objects: [{ key: "*" }] },
     });
-    const group = yield* Cloudflare.IamUserGroup("Group", {
+    const group = yield* Cloudflare.Iam.UserGroup("Group", {
       name: opts.name,
       policies: [
         {
@@ -185,13 +185,13 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.IamUserGroup("ListGroup", {
+          return yield* Cloudflare.Iam.UserGroup("ListGroup", {
             name: UG_LIST_NAME,
           });
         }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.IamUserGroup);
+      const provider = yield* Provider.findProvider(Cloudflare.Iam.UserGroup);
       const all = yield* provider.list();
 
       // Exhaustively-paginated account collection contains the deployed

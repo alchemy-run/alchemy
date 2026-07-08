@@ -62,7 +62,7 @@ export interface KeyGroup extends Resource<
  * `TrustedKeyGroups` on a Distribution's cache behavior. CloudFront uses
  * the keys in the group to verify the signatures on signed URLs and
  * signed cookies for that behavior.
- *
+ * @resource
  * @section Creating Key Groups
  * @example Group two public keys for signed URL verification
  * ```typescript

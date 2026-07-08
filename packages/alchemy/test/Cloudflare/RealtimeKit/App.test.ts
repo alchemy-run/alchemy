@@ -106,7 +106,7 @@ test.provider(
       // Create — or adopt the app left over from a previous run (apps can
       // never be deleted, so adoption-by-name is the designed behavior).
       const app = yield* stack.deploy(
-        Cloudflare.RealtimeKitApp("App", { name: APP_NAME }),
+        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
       );
 
       expect(app.appId).toBeTruthy();
@@ -124,7 +124,7 @@ test.provider(
 
       // Re-deploy is a no-op update — same app, same id.
       const again = yield* stack.deploy(
-        Cloudflare.RealtimeKitApp("App", { name: APP_NAME }),
+        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
       );
       expect(again.appId).toEqual(app.appId);
 
@@ -142,7 +142,7 @@ test.provider(
       // adoption-by-name existed).
       const expectedAdoptee = oldestNamed(yield* listApps(accountId));
       const adopted = yield* stack.deploy(
-        Cloudflare.RealtimeKitApp("App", { name: APP_NAME }),
+        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
       );
       expect(adopted.appId).toEqual(expectedAdoptee?.id);
 
@@ -172,10 +172,10 @@ test.provider(
       // (apps can never be deleted, so adoption-by-name is the designed
       // behavior).
       const deployed = yield* stack.deploy(
-        Cloudflare.RealtimeKitApp("App", { name: APP_NAME }),
+        Cloudflare.RealtimeKit.App("App", { name: APP_NAME }),
       );
 
-      const provider = yield* Provider.findProvider(Cloudflare.RealtimeKitApp);
+      const provider = yield* Provider.findProvider(Cloudflare.RealtimeKit.App);
       const all = yield* provider.list();
 
       expect(all.some((a) => a.appId === deployed.appId)).toBe(true);

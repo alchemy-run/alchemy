@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import { expect } from "@effect/vitest";
@@ -10,12 +11,16 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import {
+  CERT_2,
   CERT_3,
   CERT_4,
   CERT_8,
+  CERT_9,
+  KEY_2,
   KEY_3,
   KEY_4,
   KEY_8,
+  KEY_9,
 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -52,6 +57,25 @@ const getCertificate = (zoneId: string, certificateId: string) =>
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,
       times: 8,
+    }),
+  );
+
+// Re-uploading a PEM that collides with a not-yet-cleared tombstone (a prior
+// run's `pending_deletion` cert for the same PEM) resurrects it under the same
+// id, and the certificate can briefly read back as `pending_deletion` before
+// transitioning to a live status. Poll until it settles, bounded.
+const waitForLive = (zoneId: string, certificateId: string) =>
+  getCertificate(zoneId, certificateId).pipe(
+    Effect.flatMap((cert) =>
+      cert.status !== "pending_deletion" && cert.status !== "deleted"
+        ? Effect.succeed(cert)
+        : Effect.fail({ _tag: "CertificateNotLive" } as const),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "CertificateNotLive",
+      schedule: Schedule.spaced("3 seconds").pipe(
+        Schedule.both(Schedule.recurs(15)),
+      ),
     }),
   );
 
@@ -118,23 +142,27 @@ test.provider(
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
+      // Dedicated PEM (CERT_9): the sibling "replaces" test churns CERT_3
+      // concurrently under the global concurrent config, and its
+      // `pending_deletion` tombstone for CERT_3 would otherwise collide here
+      // (a re-upload resurrects the half-deleted cert, which never goes live).
       yield* stack.destroy();
-      yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
+      yield* purgeCertificates(zoneId, [CERT_9]);
 
       const cert = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("AopHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("AopHostCert", {
           zoneId,
-          certificate: CERT_3,
-          privateKey: Redacted.make(KEY_3),
+          certificate: CERT_9,
+          privateKey: Redacted.make(KEY_9),
         }),
       );
 
       expect(cert.certificateId).toBeDefined();
       expect(cert.zoneId).toEqual(zoneId);
       expect(cert.status).toBeDefined();
-      expect(cert.issuer).toContain("Alchemy AOP Test Cert 3");
+      expect(cert.issuer).toContain("Alchemy AOP Test Cert 9");
 
-      const actual = yield* getCertificate(zoneId, cert.certificateId);
+      const actual = yield* waitForLive(zoneId, cert.certificateId);
       expect(actual.id).toEqual(cert.certificateId);
       expect(actual.status).not.toEqual("deleted");
       expect(actual.status).not.toEqual("pending_deletion");
@@ -156,7 +184,7 @@ test.provider(
       yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
 
       const original = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("ReplaceHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("ReplaceHostCert", {
           zoneId,
           certificate: CERT_3,
           privateKey: Redacted.make(KEY_3),
@@ -164,7 +192,7 @@ test.provider(
       );
 
       const replaced = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("ReplaceHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("ReplaceHostCert", {
           zoneId,
           certificate: CERT_4,
           privateKey: Redacted.make(KEY_4),
@@ -189,6 +217,79 @@ test.provider(
 );
 
 test.provider(
+  "recovers a creating-state row whose Output-valued certificate was lost (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      // Dedicated PEM (CERT_2): the other hostname-certificate tests own
+      // CERT_3/4/8/9; CERT_2 is otherwise only used by the *zone-level*
+      // Certificate suite, which is a separate Cloudflare collection.
+      yield* stack.destroy();
+      yield* purgeCertificates(zoneId, [CERT_2]);
+
+      const deployCert = () =>
+        stack.deploy(
+          Cloudflare.OriginTlsClientAuth.HostnameCertificate("WedgedHostCert", {
+            zoneId,
+            certificate: CERT_2,
+            privateKey: Redacted.make(KEY_2),
+          }),
+        );
+
+      const created = yield* deployCert();
+      expect(created.certificateId).toBeDefined();
+
+      // Rewrite the persisted row into the wedged shape an interrupted deploy
+      // leaves behind when `certificate` was Output-valued: `creating`, no
+      // attributes, and the certificate lost in the round-trip (#736).
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) &&
+          r.row.resourceType ===
+            "Cloudflare.OriginTlsClientAuth.HostnameCertificate",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error("no HostnameCertificate state row found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: { ...wedged.row.props, certificate: undefined },
+        },
+      });
+
+      // `read` cannot content-match without `olds.certificate`, so planning
+      // falls through to `diff` with the junk olds. Before the fix this
+      // crashed with `TypeError: undefined is not an object (evaluating
+      // 'pem.trim')` in normalizePem; after it, diff falls through and
+      // reconcile re-adopts the live certificate by PEM content.
+      const recovered = yield* deployCert();
+      expect(recovered.certificateId).toEqual(created.certificateId);
+
+      yield* stack.destroy();
+
+      yield* waitForGone(zoneId, recovered.certificateId);
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
   "list enumerates the deployed hostname certificate",
   (stack) =>
     Effect.gen(function* () {
@@ -198,7 +299,7 @@ test.provider(
       yield* purgeCertificates(zoneId, [CERT_8]);
 
       const cert = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate("ListHostCert", {
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate("ListHostCert", {
           zoneId,
           // Dedicated PEM (see fixtures/certs.ts): keeps this certificate out
           // of the upload/delete churn the sibling tests put CERT_3 through,
@@ -209,7 +310,7 @@ test.provider(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.OriginTlsClientAuthHostnameCertificate,
+        Cloudflare.OriginTlsClientAuth.HostnameCertificate,
       );
       // A freshly uploaded certificate can lag the zone list endpoint by
       // tens of seconds — especially when the same PEM was recently deleted

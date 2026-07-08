@@ -65,7 +65,7 @@ export interface Cluster extends Resource<
 
 /**
  * An Amazon ECS cluster for running tasks and services.
- *
+ * @resource
  * @section Creating Clusters
  * @example Default Cluster
  * ```typescript

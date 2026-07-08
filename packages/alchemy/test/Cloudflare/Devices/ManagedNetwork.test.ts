@@ -60,7 +60,7 @@ test.provider(
       yield* stack.destroy();
 
       const network = yield* stack.deploy(
-        Cloudflare.DeviceManagedNetwork("Office", {
+        Cloudflare.Devices.DeviceManagedNetwork("Office", {
           name: "alchemy-test-managed-network",
           config: { tlsSockaddr: "192.0.2.1:443", sha256: SHA_A },
         }),
@@ -80,7 +80,7 @@ test.provider(
 
       // Update config in place — same networkId.
       const updated = yield* stack.deploy(
-        Cloudflare.DeviceManagedNetwork("Office", {
+        Cloudflare.Devices.DeviceManagedNetwork("Office", {
           name: "alchemy-test-managed-network",
           config: { tlsSockaddr: "192.0.2.2:443", sha256: SHA_B },
         }),
@@ -94,7 +94,7 @@ test.provider(
 
       // Redeploying identical props is a no-op (same network).
       const noop = yield* stack.deploy(
-        Cloudflare.DeviceManagedNetwork("Office", {
+        Cloudflare.Devices.DeviceManagedNetwork("Office", {
           name: "alchemy-test-managed-network",
           config: { tlsSockaddr: "192.0.2.2:443", sha256: SHA_B },
         }),
@@ -111,14 +111,14 @@ test.provider("list enumerates the deployed managed network", (stack) =>
     yield* stack.destroy();
 
     const deployed = yield* stack.deploy(
-      Cloudflare.DeviceManagedNetwork("ListResource", {
+      Cloudflare.Devices.DeviceManagedNetwork("ListResource", {
         name: "alchemy-test-managed-network-list",
         config: { tlsSockaddr: "192.0.2.3:443", sha256: SHA_A },
       }),
     );
 
     const provider = yield* Provider.findProvider(
-      Cloudflare.DeviceManagedNetwork,
+      Cloudflare.Devices.DeviceManagedNetwork,
     );
     const all = yield* provider.list();
 

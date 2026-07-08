@@ -12,7 +12,7 @@ export const AsyncWorker = Cloudflare.Worker("BrowserAsyncWorker", {
     flags: ["nodejs_compat"],
   },
   env: {
-    BROWSER: Cloudflare.Browser({ name: "BROWSER" }),
+    BROWSER: Cloudflare.Browser("BROWSER"),
   },
 });
 

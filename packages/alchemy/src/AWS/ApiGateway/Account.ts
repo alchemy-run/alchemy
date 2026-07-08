@@ -13,6 +13,7 @@ export interface AccountProps {
   cloudwatchRoleArn?: string;
 }
 
+/** @resource */
 export interface Account extends Resource<
   "AWS.ApiGateway.Account",
   AccountProps,

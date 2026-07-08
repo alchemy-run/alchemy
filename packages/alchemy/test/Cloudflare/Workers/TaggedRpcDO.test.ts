@@ -4,15 +4,14 @@ import { poll } from "@/Util/poll.ts";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import { CounterRpcs } from "./fixtures/tagged-rpc-do/group.ts";
 import Stack from "./fixtures/tagged-rpc-do/stack.ts";
@@ -50,7 +49,7 @@ const requestUntilReady = (
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
-      Effect.fnUntraced(function* (res) {
+      Effect.fn(function* (res) {
         return res.status >= 200 && res.status < 300
           ? res
           : yield* Effect.fail(
@@ -82,7 +81,7 @@ const postIncrementOnce = (
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
-      Effect.fnUntraced(function* (res) {
+      Effect.fn(function* (res) {
         if (res.status >= 200 && res.status < 300) {
           return res;
         }
@@ -101,6 +100,25 @@ const postIncrementOnce = (
     }),
   );
 
+// The RPC edge has the same cold-start hazard as the raw HTTP edge: a request
+// landing on a PoP that hasn't resolved the script yet gets Cloudflare's
+// placeholder HTML, which is not valid ndjson, so the client surfaces an
+// `RpcClientError` whose `reason` is an `RpcClientDefect` ("Error decoding HTTP
+// response"). A decode defect proves the response never came from the Worker
+// handler — so the RPC never executed and no write committed. That makes it
+// the one RPC failure safe to retry even for a non-idempotent increment (the
+// RPC analogue of `postIncrementOnce`/`EdgeNotReady`). Any other failure
+// (transport error, a typed handler error) is ambiguous and is NOT retried.
+const isEdgeNotReadyRpc = (e: unknown): boolean =>
+  e instanceof RpcClientError && e.reason._tag === "RpcClientDefect";
+
+const rpcUntilReady = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.retry(effect, {
+    while: isEdgeNotReadyRpc,
+    schedule: readinessRetry.schedule,
+    times: readinessRetry.times,
+  });
+
 // Each test addresses its own DO instance via a unique counter key so the
 // tests are safe to run in parallel. WorkerB / WorkerC fixtures read
 // the `x-counter-key` header; WorkerA's RPC takes `key` directly in
@@ -108,16 +126,11 @@ const postIncrementOnce = (
 const withCounterKey = (key: string) =>
   HttpClient.mapRequest(HttpClientRequest.setHeader("x-counter-key", key));
 
-// Build a typed `RpcClient<CounterRpcs>` against WorkerA's URL.
-// Every call rides through the same JSON edge as the worker.dev URL,
-// so we share the readiness retry below at the test layer.
-const rpcClientLayer = (url: string) =>
-  RpcClient.layerProtocolHttp({ url }).pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
-    ),
-  );
+// WorkerA's typed RPC transport is `Test.rpcClientLayer` (see Test/Http.ts).
+// Its transport-level retry fires only on non-ndjson responses — edge pages
+// that prove the handler never ran (see `isEdgeNotReadyRpc` above) — so it
+// is safe for the non-idempotent increment bodies below.
+const rpcClientLayer = Test.rpcClientLayer;
 
 // Drive a typed `RpcClient<CounterRpcs>` body against WorkerA's URL.
 // Each call gets its own scope (so the client is freed promptly).
@@ -148,6 +161,16 @@ const resetHttp = (url: string, key: string) =>
 
 // `reset` is idempotent, so it's safe to retry — this doubles as the
 // per-test readiness gate for WorkerA's RPC edge.
+//
+// Cold-start hazards on this path can also surface as DEFECTS, not failures:
+// while the deploy propagates, the Cloudflare runtime throws
+// "Worker not found." (service/DO binding not yet resolvable) or
+// "Handler does not export a fetch() function." (the pre-created stub
+// script, uploaded before the real bundle, is still live on the PoP).
+// The RPC server serializes those as defects and the client re-raises them
+// as defects, which `Effect.retry` will NOT retry. Since `reset` is
+// idempotent, demote defects to failures so the readiness retry rides
+// them out like any other cold-start blip.
 const resetA = (url: string, key: string) =>
   withRpcA(
     url,
@@ -155,7 +178,10 @@ const resetA = (url: string, key: string) =>
       const c = yield* RpcClient.make(CounterRpcs);
       yield* c.reset({ key });
     }),
-  ).pipe(Effect.retry(readinessRetry));
+  ).pipe(
+    Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.retry(readinessRetry),
+  );
 
 // Gate the deploy on all three workers' edges being resolvable (via the
 // idempotent reset path), then let propagation settle, so the non-retried
@@ -181,8 +207,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 test(
   "RpcWorker WorkerA exposes the same RPC surface as the underlying DO",
   Effect.gen(function* () {
-    const { urlA, urlB, urlC } = yield* stack;
-    console.log("URLS:", { urlA, urlB, urlC });
+    const { urlA } = yield* stack;
     const key = "rpc-worker-a";
 
     yield* resetA(urlA, key);
@@ -191,10 +216,9 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        const first = yield* c.incrementD1({ key });
-        console.log("withRpcA", first);
-        const second = yield* c.incrementD1({ key });
-        const get = yield* c.getD1({ key });
+        const first = yield* rpcUntilReady(c.incrementD1({ key }));
+        const second = yield* rpcUntilReady(c.incrementD1({ key }));
+        const get = yield* rpcUntilReady(c.getD1({ key }));
         expect(first.value).toBe(1);
         expect(second.value).toBe(2);
         expect(get.value).toBe(2);
@@ -217,9 +241,9 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        const inc1 = yield* c.incrementD1({ key });
+        const inc1 = yield* rpcUntilReady(c.incrementD1({ key }));
         expect(inc1.value).toBe(1);
-        const inc2 = yield* c.incrementD1({ key });
+        const inc2 = yield* rpcUntilReady(c.incrementD1({ key }));
         expect(inc2.value).toBe(2);
       }),
     );
@@ -256,9 +280,9 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        const inc1 = yield* c.incrementDO({ key });
+        const inc1 = yield* rpcUntilReady(c.incrementDO({ key }));
         expect(inc1.value).toBe(1);
-        const inc2 = yield* c.incrementDO({ key });
+        const inc2 = yield* rpcUntilReady(c.incrementDO({ key }));
         expect(inc2.value).toBe(2);
       }),
     );
@@ -293,31 +317,37 @@ test(
     yield* postIncrementOnce(httpClient.post(`${urlB}/d1/increment`));
     yield* postIncrementOnce(httpClient.post(`${urlB}/do/increment`));
 
-    yield* withRpcA(
-      urlA,
-      Effect.gen(function* () {
-        const c = yield* RpcClient.make(CounterRpcs);
-        // The writes above (WorkerB → WorkerA's cross-script DO) are
-        // eventually consistent when read back through WorkerA's RPC:
-        // D1 in particular can lag a beat before the second increment
-        // is visible from the reading replica. getD1/getDO are
-        // idempotent, so poll the read pair until both counters settle
-        // rather than reading once and flaking on "expected 1 to be 2".
-        const { d1, dox } = yield* poll({
-          description: "WorkerB writes visible from WorkerA (d1=2, do=1)",
-          effect: Effect.all({
-            d1: c.getD1({ key }),
-            dox: c.getDO({ key }),
-          }),
-          predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
-          schedule: Schedule.spaced("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(30)),
-          ),
-        });
-        expect(d1.value).toBe(2);
-        expect(dox.value).toBe(1);
-      }),
-    );
+    // The writes above (WorkerB → WorkerA's cross-script DO) are
+    // eventually consistent when read back through WorkerA's RPC:
+    // D1 in particular can lag a beat before the second increment
+    // is visible from the reading replica. getD1/getDO are
+    // idempotent, so poll the read pair until both counters settle
+    // rather than reading once and flaking on "expected 1 to be 2".
+    //
+    // Build a FRESH RPC client per poll iteration (withRpcA provides the
+    // protocol layer + scope) rather than sharing one client across every
+    // retry: the ndjson HTTP transport can't reconstruct a request whose
+    // body was already consumed on a previous swing ("Cannot reconstruct a
+    // Request with a used body"), so each iteration gets its own transport.
+    const { d1, dox } = yield* poll({
+      description: "WorkerB writes visible from WorkerA (d1=2, do=1)",
+      effect: withRpcA(
+        urlA,
+        Effect.gen(function* () {
+          const c = yield* RpcClient.make(CounterRpcs);
+          return yield* Effect.all({
+            d1: rpcUntilReady(c.getD1({ key })),
+            dox: rpcUntilReady(c.getDO({ key })),
+          });
+        }),
+      ),
+      predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
+      schedule: Schedule.spaced("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(30)),
+      ),
+    });
+    expect(d1.value).toBe(2);
+    expect(dox.value).toBe(1);
   }).pipe(logLevel),
   { timeout: testTimeout },
 );
@@ -338,7 +368,7 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        yield* c.incrementDO({ key });
+        yield* rpcUntilReady(c.incrementDO({ key }));
       }),
     );
 
@@ -351,7 +381,7 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        const fromA = yield* c.getDO({ key });
+        const fromA = yield* rpcUntilReady(c.getDO({ key }));
         expect(fromA.value).toBe(2);
       }),
     );
@@ -377,7 +407,7 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        const aAfter = yield* c.getDO({ key });
+        const aAfter = yield* rpcUntilReady(c.getDO({ key }));
         expect(aAfter.value).toBe(2);
       }),
     );

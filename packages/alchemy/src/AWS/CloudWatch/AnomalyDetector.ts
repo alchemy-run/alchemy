@@ -35,7 +35,7 @@ export interface AnomalyDetector extends Resource<
 
 /**
  * A CloudWatch anomaly detector.
- *
+ * @resource
  * @section Creating Detectors
  * @example Single Metric Detector
  * ```typescript

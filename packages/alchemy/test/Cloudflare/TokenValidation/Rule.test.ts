@@ -48,7 +48,7 @@ test.provider(
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TokenValidationRule,
+        Cloudflare.TokenValidation.Rule,
       );
       const all = yield* provider.list();
 
@@ -77,13 +77,16 @@ test.provider.skipIf(!entitledZoneId)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const config = yield* Cloudflare.TokenConfiguration("JwtConfig", {
-            zoneId,
-            description: "list-test",
-            tokenSources: ['http.request.headers["authorization"][0]'],
-            keys: [JWKS_KEY_1],
-          });
-          return yield* Cloudflare.TokenValidationRule("JwtRule", {
+          const config = yield* Cloudflare.TokenValidation.TokenConfiguration(
+            "JwtConfig",
+            {
+              zoneId,
+              description: "list-test",
+              tokenSources: ['http.request.headers["authorization"][0]'],
+              keys: [JWKS_KEY_1],
+            },
+          );
+          return yield* Cloudflare.TokenValidation.Rule("JwtRule", {
             zoneId,
             action: "log",
             expression: Output.interpolate`is_jwt_valid("${config.configId}")`,
@@ -93,7 +96,7 @@ test.provider.skipIf(!entitledZoneId)(
       );
 
       const provider = yield* Provider.findProvider(
-        Cloudflare.TokenValidationRule,
+        Cloudflare.TokenValidation.Rule,
       );
       const all = yield* provider.list();
 

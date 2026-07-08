@@ -19,7 +19,7 @@ export type Notifier = Resource<
  * Opsgenie, Discord, Microsoft Teams, generic webhook, or a fully custom
  * webhook with templated body/headers) that {@link Monitor monitors} target
  * via `notifierIds`. Exactly one channel under `properties` should be set.
- *
+ * @resource
  * @see https://axiom.co/docs/monitor-data/notifiers
  *
  * @section Creating a Notifier

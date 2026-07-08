@@ -62,7 +62,7 @@ export type Dashboard = Resource<
  * - The chart payload is strict: only `id`, `name`, `type`, `query`. Extra
  *   keys (e.g. `dataset`, `description`) trigger
  *   `Unrecognized keys: "<name>"`.
- *
+ * @resource
  * @see https://axiom.co/docs/query-data/dashboards
  *
  * @section Creating a Dashboard

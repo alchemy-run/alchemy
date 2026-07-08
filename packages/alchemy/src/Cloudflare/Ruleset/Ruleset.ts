@@ -7,31 +7,29 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { Zone, ZoneAttributes } from "../Zone/index.ts";
+import type { Attributes, Zone } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-export type RulesetPhase = rulesets.CreateRulesetForZoneRequest["phase"];
-export type RulesetRule = NonNullable<
-  rulesets.PutPhasForZoneRequest["rules"]
->[number];
-export type RulesetOutputRule = Omit<
+export type Phase = rulesets.CreateRulesetForZoneRequest["phase"];
+export type Rule = NonNullable<rulesets.PutPhasForZoneRequest["rules"]>[number];
+export type OutputRule = Omit<
   NonNullable<rulesets.GetPhasResponse["rules"]>[number],
   "lastUpdated" | "version"
 >;
 
 export type RulesetProps = {
   /**
-   * Zone to apply the ruleset to. Pass a `Cloudflare.Zone`.
+   * Zone to apply the ruleset to. Pass a `Cloudflare.Zone.Zone`.
    */
   zone: Zone;
   /**
    * Ruleset phase entrypoint to own.
    */
-  phase: RulesetPhase;
+  phase: Phase;
   /**
    * Rules to apply to the phase entrypoint.
    */
-  rules: RulesetRule[];
+  rules: Rule[];
   /**
    * Human-readable name for the ruleset.
    * @default ${app}-${stage}-${id}
@@ -43,15 +41,10 @@ export type RulesetProps = {
   description?: string;
 };
 
-export type RulesetKind =
-  | "managed"
-  | "custom"
-  | "root"
-  | "zone"
-  | (string & {});
+export type Kind = "managed" | "custom" | "root" | "zone" | (string & {});
 
 export type Ruleset = Resource<
-  "Cloudflare.Ruleset",
+  "Cloudflare.Ruleset.Ruleset",
   RulesetProps,
   {
     /** The unique ID of the ruleset (Cloudflare `id`). */
@@ -62,15 +55,15 @@ export type Ruleset = Resource<
      */
     zoneId: string;
     /** The kind of the ruleset. */
-    kind: RulesetKind;
+    kind: Kind;
     /** The human-readable name of the ruleset. */
     name: string;
     /** The phase of the ruleset. */
-    phase: RulesetPhase;
+    phase: Phase;
     /** An informative description of the ruleset. */
     description: string | undefined;
     /** The list of rules in the ruleset. */
-    rules: RulesetOutputRule[];
+    rules: OutputRule[];
     /** The timestamp of when the ruleset was last modified. */
     lastUpdated: string;
     /** The version of the ruleset. */
@@ -85,12 +78,14 @@ export type Ruleset = Resource<
  *
  * This resource owns the entire ruleset for a phase entrypoint. Rules managed
  * elsewhere in the same phase can be overwritten on deploy.
- *
+ * @resource
+ * @product Rulesets
+ * @category Rules & Configuration
  * @section WAF Rules
  * @example Block probes in the custom firewall phase
  * ```typescript
- * const zone = yield* Cloudflare.Zone("MyZone", { name: "example.com" });
- * const waf = yield* Cloudflare.Ruleset("WafRules", {
+ * const zone = yield* Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
+ * const waf = yield* Cloudflare.Ruleset.Ruleset("WafRules", {
  *   zone,
  *   phase: "http_request_firewall_custom",
  *   rules: [
@@ -103,7 +98,9 @@ export type Ruleset = Resource<
  * });
  * ```
  */
-export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset")({});
+export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset.Ruleset", {
+  aliases: ["Cloudflare.Ruleset"],
+})({});
 
 export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {
@@ -260,8 +257,11 @@ export const toRulesetAttributes = (
 // type statically exposes it as an `Output`. During `diff` (plan time) the
 // zone can still be unresolved — e.g. when it's being created in the same
 // deploy — in which case `zoneId` is not yet a string. Callers must treat a
-// non-string result as "not resolved yet".
-const zoneIdOf = (zone: Zone): string | undefined => {
-  const zoneId = (zone as unknown as Partial<ZoneAttributes>).zoneId;
+// non-string result as "not resolved yet". May also receive `undefined`:
+// an Output-valued `zone` doesn't survive a `creating`-state round-trip
+// (it deserializes as `undefined`), and recovery paths hand those props
+// back as `olds`.
+const zoneIdOf = (zone: Zone | undefined): string | undefined => {
+  const zoneId = (zone as unknown as Partial<Attributes> | undefined)?.zoneId;
   return typeof zoneId === "string" ? zoneId : undefined;
 };

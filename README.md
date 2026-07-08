@@ -25,9 +25,9 @@ const Bucket = Cloudflare.R2Bucket("bucket");
 
 export default Cloudflare.Worker(
   "api",
-  { main: import.meta.filename },
+  { main: import.meta.url },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -44,7 +44,7 @@ One `bind()` wires the binding, env var, and typed connection — at deploy time
 ---
 
 - **One program, one language.** Resources, Lambdas/Workers, IAM, and SDKs live in the same Effect program — no YAML, no second runtime.
-- **Bindings, not glue code.** `S3.GetObject.bind(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
+- **Bindings, not glue code.** `S3.GetObject(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
 - **Errors in the type system.** Every cloud API failure is a tagged Effect error you handle — or don't — on purpose.
 - **AWS + Cloudflare today.** S3, SQS, DynamoDB, Kinesis, Lambda, EC2 / Workers, R2, D1, Durable Objects, Containers.
 - **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.
@@ -52,6 +52,21 @@ One `bind()` wires the binding, env var, and typed connection — at deploy time
 ```sh
 bun add alchemy@next effect@next
 ```
+
+## GitHub Action
+
+Use the root action to deploy `prod` from `main`, deploy PR previews as
+`staging-{number}`, and destroy PR previews when the PR closes:
+
+```yaml
+- uses: alchemy-run/alchemy-effect@v1
+  env:
+    CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+The workflow must install the `alchemy` CLI before this action runs.
 
 ## Bootstrap with an AI coding agent
 

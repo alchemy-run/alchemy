@@ -78,7 +78,7 @@ export interface ApiGatewayStage extends Resource<
  * ```
  * https://<restApiId>.execute-api.<region>.amazonaws.com/<stageName>/
  * ```
- *
+ * @resource
  * @section Stages
  * @example A dev stage pointing at the latest deployment
  * ```typescript

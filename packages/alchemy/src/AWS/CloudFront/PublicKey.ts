@@ -71,7 +71,7 @@ export interface PublicKey extends Resource<
  *
  * The key body is immutable after creation — changing `encodedKey` triggers
  * a replacement (CloudFront returns no API to rotate a key in place).
- *
+ * @resource
  * @section Creating Public Keys
  * @example PEM-encoded RSA public key
  * ```typescript
@@ -171,7 +171,11 @@ export const PublicKeyProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          // Compare only when the old key is known — an Output-valued
+          // `encodedKey` doesn't survive a `creating`-state round-trip (it
+          // deserializes as `undefined`).
           if (
+            olds.encodedKey !== undefined &&
             isResolved(olds.encodedKey) &&
             extractValue(olds.encodedKey) !== extractValue(news.encodedKey)
           ) {

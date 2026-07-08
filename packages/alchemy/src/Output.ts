@@ -23,7 +23,15 @@ export const of = <R extends ResourceLike>(
   : RefExpr<R["Attributes"]> => {
   if (isRef(resource)) {
     const metadata = getRefMetadata(resource);
-    return new RefExpr(metadata.stack, metadata.stage, metadata.id) as any;
+    return new RefExpr(
+      metadata.stack,
+      metadata.stage,
+      metadata.id,
+      // Surface the target's resource type as a statically-known
+      // property so duck-typing classifiers (Worker env bindings)
+      // identify the ref exactly like a locally-declared resource.
+      metadata.type !== undefined ? { Type: metadata.type } : undefined,
+    ) as any;
   }
   return new ResourceExpr(resource) as any;
 };
@@ -377,6 +385,12 @@ export class RefExpr<A> extends BaseExpr<A, never> {
     public readonly stack: string | undefined,
     public readonly stage: string | undefined,
     public readonly resourceId: string,
+    /**
+     * Statically-known properties of the ref's target (currently its
+     * resource `Type`), served as literals by the proxy instead of
+     * `PropExpr`s — mirrors {@link ResourceExpr}'s `stables`.
+     */
+    readonly stables?: Record<string, any>,
   ) {
     super();
     return proxy(this);
@@ -502,7 +516,9 @@ function proxy(self: any): any {
           ? self
           : prop === inspect
             ? target[inspect]
-            : isResourceExpr(self) && self.stables && prop in self.stables
+            : (isResourceExpr(self) || isRefExpr(self)) &&
+                self.stables &&
+                prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
               : prop in self
                 ? typeof self[prop as keyof typeof self] === "function" &&

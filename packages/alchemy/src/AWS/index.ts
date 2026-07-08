@@ -21,6 +21,7 @@ export * as ELBv2 from "./ELBv2/index.ts";
 export * as EventBridge from "./EventBridge/index.ts";
 export * as IAM from "./IAM/index.ts";
 export * as IdentityCenter from "./IdentityCenter/index.ts";
+export * as KMS from "./KMS/index.ts";
 export * as Kinesis from "./Kinesis/index.ts";
 export * as Lambda from "./Lambda/index.ts";
 export * as Logs from "./Logs/index.ts";

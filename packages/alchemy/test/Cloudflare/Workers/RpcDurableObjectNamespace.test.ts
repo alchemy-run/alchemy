@@ -2,14 +2,11 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import Stack from "./fixtures/rpc-do-namespace-do-rpc/stack.ts";
 import { WorkerRpcs as RpcWorkerWorkerRpcs } from "./fixtures/rpc-worker-rpc-http/group.ts";
 import RpcWorkerStack from "./fixtures/rpc-worker-rpc-http/stack.ts";
@@ -17,6 +14,11 @@ import RpcWorkerStack from "./fixtures/rpc-worker-rpc-http/stack.ts";
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
+
+// `Test.rpcClientLayer` guards the transport against edge-generated HTML
+// bodies (workers.dev placeholder, error pages) that the RPC protocol would
+// otherwise surface as an opaque `RpcClientDefect`; see Test/Http.ts.
+const rpcClientLayer = Test.rpcClientLayer;
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -48,14 +50,6 @@ const resetCounter = (url: string, id: string) =>
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     yield* client.post(`${url}/counter/${id}/reset`).pipe(retryHttp);
   });
-
-const rpcClientLayer = (url: string) =>
-  RpcClient.layerProtocolHttp({ url }).pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
-    ),
-  );
 
 const readinessRetries = 15;
 
@@ -100,7 +94,7 @@ const rpcWorkerStack = beforeAll(
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RpcWorkerStack));
 
 test(
-  "RpcDurableObjectNamespace: Increment / Get round-trip via Worker",
+  "RpcDurableObject: Increment / Get round-trip via Worker",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const alpha = k("alpha");
@@ -126,7 +120,7 @@ test(
 );
 
 test(
-  "RpcDurableObjectNamespace: separate getByName(id) instances are isolated",
+  "RpcDurableObject: separate getByName(id) instances are isolated",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const betaId = k("beta");
@@ -154,25 +148,38 @@ test(
 );
 
 test(
-  "RpcDurableObjectNamespace: streaming RPC via getByName(id).CountUpTo",
+  "RpcDurableObject: streaming RPC via getByName(id).CountUpTo",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const delta = k("delta");
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
+    // The stream route commits a 200 before the DO stream produces data, so
+    // a transient `Worker not found.` during binding propagation dies AFTER
+    // the headers are sent and surfaces as a truncated/empty 200 body —
+    // invisible to status-based retries. `CountUpTo` is a pure stream, so
+    // retry on content until all four lines arrive.
+    const lines = yield* client
       .get(`${url}/counter/${delta}/stream?upto=4`)
-      .pipe(retryHttp);
-    expect(res.status).toBe(200);
-    const body = yield* res.text;
-    const lines = body.split("\n").filter((l) => l.length > 0);
+      .pipe(
+        Effect.flatMap((res) => res.text),
+        Effect.flatMap((body) => {
+          const lines = body.split("\n").filter((l) => l.length > 0);
+          return lines.length === 4
+            ? Effect.succeed(lines)
+            : Effect.fail(
+                new Error(`truncated stream body: ${JSON.stringify(lines)}`),
+              );
+        }),
+        retryHttp,
+      );
     expect(lines).toEqual(["1", "2", "3", "4"]);
   }).pipe(logLevel),
   { timeout: 30_000 },
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: Worker proxies *DO RPCs through the typed namespace",
+  "RpcWorker + RpcDurableObject: Worker proxies *DO RPCs through the typed namespace",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 
@@ -189,7 +196,7 @@ test(
 );
 
 test(
-  "RpcDurableObjectNamespace: 100 concurrent Increment calls do not hang",
+  "RpcDurableObject: 100 concurrent Increment calls do not hang",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const concurrent = k("concurrent");
@@ -207,9 +214,17 @@ test(
         client.post(`${url}/counter/${concurrent}/increment`).pipe(
           Effect.flatMap((res) => res.json),
           Effect.timeout("10 seconds"),
+          // Under full-suite load the account churns through worker
+          // deploys/deletes and workers.dev routing intermittently 404s an
+          // existing worker for several seconds; `times: 3` (~3.5s) is not
+          // enough to ride out a blip when 100 requests each get 4 chances.
+          // Retry only HTTP failures (a 404/5xx never reached the DO, so the
+          // increment can't double-count); a timeout is ambiguous and stays
+          // un-retried so the final-count assertion holds.
           Effect.retry({
+            while: (e) => e._tag === "HttpClientError",
             schedule: readinessSchedule,
-            times: 3,
+            times: 10,
           }),
         ),
       { concurrency: 32 },
@@ -226,7 +241,7 @@ test(
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: 100 concurrent unary RPCs do not hang",
+  "RpcWorker + RpcDurableObject: 100 concurrent unary RPCs do not hang",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 
@@ -239,10 +254,12 @@ test(
         (i) =>
           c.Ping({ message: `m-${i}` }).pipe(
             Effect.timeout("10 seconds"),
-            Effect.retry({
-              schedule: readinessSchedule,
-              times: 3,
-            }),
+            // A cold PoP mid-propagation returns Cloudflare's HTML error
+            // page, which is not valid ndjson and surfaces as a retryable
+            // `RpcClientError` (`RpcClientDefect: Error decoding HTTP
+            // response`); `times: 3` (~6s) is not enough to ride out a
+            // multi-second blip across 100 requests. Ping is idempotent.
+            retryReadyN(8),
           ),
         { concurrency: 32 },
       );
@@ -253,11 +270,11 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: 100 concurrent *DO unary RPCs do not hang",
+  "RpcWorker + RpcDurableObject: 100 concurrent *DO unary RPCs do not hang",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 
@@ -284,7 +301,7 @@ test(
 );
 
 test(
-  "RpcWorker + RpcDurableObjectNamespace: 100 concurrent streaming *DO RPCs do not hang",
+  "RpcWorker + RpcDurableObject: 100 concurrent streaming *DO RPCs do not hang",
   Effect.gen(function* () {
     const { url } = yield* rpcWorkerStack;
 
