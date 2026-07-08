@@ -111,6 +111,74 @@ test.provider("explicit alias threads through the naming contract", (stack) =>
 );
 
 test.provider(
+  "value rotation updates in place; alias change cascades a replacement",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (opts: { value: string; alias?: string }) =>
+        Effect.gen(function* () {
+          const store = yield* Cloudflare.SecretsStore.Store("PkRotateStore");
+          const gateway = yield* Cloudflare.AI.Gateway("PkRotateGateway", {
+            id: GATEWAY_ID + "-rotate",
+            storeId: store.storeId,
+          });
+          return yield* Cloudflare.AI.ProviderKey("PkRotateKey", {
+            store,
+            gatewayId: gateway.gatewayId,
+            providerSlug: PROVIDER_SLUG,
+            alias: opts.alias,
+            value: Redacted.make(opts.value),
+          });
+        });
+
+      const initial = yield* stack.deploy(
+        program({ value: "alchemy-test-key-v1" }),
+      );
+
+      // Rotating the key value is an in-place update: the secret keeps its
+      // id, so the provider config it feeds is untouched.
+      const rotated = yield* stack.deploy(
+        program({ value: "alchemy-test-key-v2" }),
+      );
+      expect(rotated.secret.secretId).toEqual(initial.secret.secretId);
+      expect(rotated.gatewayProvider.providerConfigId).toEqual(
+        initial.gatewayProvider.providerConfigId,
+      );
+
+      // Changing the alias renames the secret — a replacement (new id) —
+      // and must cascade: the provider config is replaced (delete-first)
+      // and re-pointed at the new secret.
+      const renamed = yield* stack.deploy(
+        program({ value: "alchemy-test-key-v2", alias: "rotated" }),
+      );
+      expect(renamed.secret.secretName).toEqual(
+        `${GATEWAY_ID}-rotate_${PROVIDER_SLUG}_rotated`,
+      );
+      expect(renamed.secret.secretId).not.toEqual(initial.secret.secretId);
+      expect(renamed.gatewayProvider.providerConfigId).not.toEqual(
+        initial.gatewayProvider.providerConfigId,
+      );
+      expect(renamed.gatewayProvider.alias).toEqual("rotated");
+      expect(renamed.gatewayProvider.secretId).toEqual(renamed.secret.secretId);
+
+      // The replaced secret is reclaimed — no orphan left in the store.
+      const oldSecret = yield* secretsStore
+        .getStoreSecret({
+          accountId: initial.secret.accountId,
+          storeId: initial.secret.storeId,
+          secretId: initial.secret.secretId,
+        })
+        .pipe(
+          Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)),
+        );
+      expect(oldSecret).toBeUndefined();
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+test.provider(
   "destroying the provider key removes the secret from the surviving store",
   (stack) =>
     Effect.gen(function* () {

@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
+import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { Secret, type StoreSecretProps } from "../SecretsStore/Secret.ts";
 import {
@@ -33,11 +34,6 @@ export type ProviderKeyProps = Omit<
    * Optional free-form description on the Secrets Store secret.
    */
   comment?: string;
-  /**
-   * Logical ID for the backing Secrets Store secret. Defaults to
-   * `${id}-secret`; set explicitly when migrating existing resources.
-   */
-  secretResourceId?: string;
 };
 
 export type ProviderKey = {
@@ -76,7 +72,7 @@ export type ProviderKey = {
 export const ProviderKey = (id: string, props: ProviderKeyProps) =>
   Effect.gen(function* () {
     const alias = props.alias ?? "default";
-    const secret = yield* Secret(props.secretResourceId ?? `${id}-secret`, {
+    const secret = yield* Secret("Secret", {
       store: props.store,
       name: Output.interpolate`${props.gatewayId}_${props.providerSlug}_${alias}`,
       value: props.value,
@@ -84,7 +80,7 @@ export const ProviderKey = (id: string, props: ProviderKeyProps) =>
       comment: props.comment,
     });
 
-    const gatewayProvider = yield* GatewayProvider(id, {
+    const gatewayProvider = yield* GatewayProvider("Provider", {
       gatewayId: props.gatewayId,
       providerSlug: props.providerSlug,
       alias,
@@ -98,4 +94,4 @@ export const ProviderKey = (id: string, props: ProviderKeyProps) =>
       secret,
       gatewayProvider,
     } satisfies ProviderKey;
-  });
+  }).pipe(Namespace.push(id));
