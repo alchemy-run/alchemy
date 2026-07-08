@@ -20,13 +20,16 @@ description, in its entirety:
 
 > Using Fable to generate all missing cloudflare resources
 
-Volume is not the hard part. Generated infrastructure code
-compiles, reads well, and lies: real APIs return undocumented
-error codes, misuse HTTP statuses, and null out fields their
-schemas declare required. That's why the interesting number
-isn't the 230 resources — it's the 720 patches, each one a
-place where a live test caught the API doing something its
-spec doesn't admit to.
+Volume is not the hard part. Deterministic codegen has been
+producing SDKs and IaC providers from API specs for years, and
+AI makes it even cheaper. The problem is that code generated
+from a spec is only as truthful as the spec, and real APIs
+drift from their specs: undocumented error codes, misused HTTP
+statuses, fields that come back null where the schema says
+they can't. That's why the interesting number isn't the 230
+resources — it's the 720 patches, each one a place where a
+live test caught the API doing something its spec doesn't
+admit to.
 
 ![Cumulative patched operations in the distilled Cloudflare SDK, June 11-19 — a step line that jumps from 369 to 1,075 in the first 24 hours as PR #601 lands, then climbs slowly to 1,093 through the beta.56 and beta.57 releases](/blog/resource-factory/patches.svg)
 
