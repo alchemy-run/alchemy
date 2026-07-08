@@ -277,15 +277,18 @@ is settled *inline* before the handler returns — so
 and request finalizers should be fast (closing a pool is
 milliseconds).
 
-That inline settle is a platform constraint, not a choice: a
-buffered invocation's response is not released to the caller until
-the entire Invoke phase completes, so any scheme that defers cleanup
-past the handler (we measured an extension-held post-response
-window) still shows up as response latency — and environments whose
-invoke phase is held open this way get recycled. Response streaming
-(`url: { invokeMode: "RESPONSE_STREAM" }`) is the genuine escape
-hatch for latency-sensitive trailing work: bytes flush to the caller
-as they're written.
+There is deliberately no `waitUntil` on Lambda — no mechanism
+delivers it reliably. A buffered invocation's response is not
+released to the caller until the entire Invoke phase completes, so
+deferring cleanup past the handler (we measured an extension-held
+post-response window) still shows up as response latency, and
+environments whose invoke phase is held open this way get recycled.
+Dangling promises resume on a later thaw at best: TCP connections
+rarely survive the freeze, and a crash or timeout reset drops the
+work entirely — silent data loss for anything that mattered. So the
+contract is blocking and honest: request finalizers run before the
+response, keep them cheap, and anything that must not be lost gets
+written durably (a queue, a table) inside the handler itself.
 
 Init-level finalizers run at **sandbox shutdown**. A Lambda sandbox
 with no registered extensions is killed with no signal at all, so

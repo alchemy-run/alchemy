@@ -306,11 +306,22 @@ settles:
 
 ```typescript
 fetch: Effect.gen(function* () {
-  // runs after the response is sent, without blocking it
-  yield* Effect.addFinalizer(() => flushMetrics().pipe(Effect.ignore));
+  // workerd: runs after the response via ctx.waitUntil, without
+  // blocking it. Lambda: runs before the response — keep it cheap.
+  yield* Effect.addFinalizer(() => releaseThings().pipe(Effect.ignore));
   return HttpServerResponse.text("ok");
 }),
 ```
+
+*When* request finalizers run differs by runtime. workerd closes the
+scope into `ctx.waitUntil`, so they run after the response without
+blocking it. Lambda settles the scope **inline, before the response
+leaves** — a buffered invocation's response isn't released until the
+Invoke phase completes, and no deferral scheme (extension windows,
+dangling promises across freezes) is reliable, so the contract is
+blocking and honest: keep Lambda request finalizers cheap, and write
+anything that must not be lost durably inside the handler instead of
+flushing it from a finalizer.
 
 Resources that should live for the whole event but be shared across
 calls within it — a database pool, for example — are memoized on the
