@@ -295,6 +295,20 @@ const matchesConfiguredExternal = (
  * for plain handler patterns, or the
  * [Lambda guide](/aws/compute/lambda)
  * for the full Effect-based approach with bindings, event sources, and sinks.
+ *
+ * :::caution[Request finalizers block the response — there is no `waitUntil` on Lambda]
+ * `Effect.addFinalizer` in a handler runs **before the response is
+ * returned**: a buffered invocation's response is not released until the
+ * Invoke phase completes, and no deferral scheme is reliable (dangling
+ * promises are dropped on crash/timeout resets and their sockets rarely
+ * survive the freeze — silent data loss). Keep request finalizers cheap
+ * (closing a pool is milliseconds), and write anything that must not be
+ * lost durably — a queue, a table — inside the handler itself. Init-level
+ * finalizers instead run in the 500 ms `SIGTERM` window at sandbox
+ * shutdown, which the generated entry obtains by registering an internal
+ * extension. See
+ * [Sandbox scope vs invocation scope](/aws/compute/lambda#sandbox-scope-vs-invocation-scope).
+ * :::
  * @resource
  * @section Async Functions
  * Point `main` at a file that exports a standard Lambda handler. No
