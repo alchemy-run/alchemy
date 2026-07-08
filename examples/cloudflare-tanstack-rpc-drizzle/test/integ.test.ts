@@ -30,8 +30,13 @@ describe.each([true, false])(
     const stack = beforeAll(
       deploy(Stack).pipe(
         Effect.tap((stack) =>
-          // Fresh workers.dev URLs take a few seconds to start answering.
-          HttpClient.get(new URL("/rpc/", stack.websiteUrl)).pipe(
+          // Fresh workers.dev URLs take a few seconds to start answering, so
+          // fetch with retries until it's ready before we exercise it in tests.
+          // Note that the response here will be the RPC server complaining that the
+          // request is invalid since we're not actually making an RPC call here.
+          // `filterStatusOk` works because Effect RPC still returns 200, but we may
+          // need to update this if/when Effect RPC changes its behavior.
+          HttpClient.get(new URL("/rpc", stack.websiteUrl)).pipe(
             Effect.flatMap(HttpClientResponse.filterStatusOk),
             Effect.retry({
               schedule: Schedule.spaced("500 millis").pipe(

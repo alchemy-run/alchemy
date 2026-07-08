@@ -6,7 +6,7 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
  * Shared domain + RPC contract.
  *
  * This module is the single source of truth imported by BOTH ends:
- *   - the backend `Cloudflare.RpcWorker` ({@link ./backend.ts}) serves it, and
+ *   - the backend `Cloudflare.Workers.RpcWorker` ({@link ./api.ts}) serves it, and
  *   - the browser `AtomRpc` client ({@link ./rpc-client.ts}) consumes it.
  *
  * One `Schema` codec round-trips every value over the wire, so the React UI is

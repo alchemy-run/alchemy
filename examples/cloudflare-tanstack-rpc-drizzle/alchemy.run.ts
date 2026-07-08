@@ -9,7 +9,7 @@ import { Hyperdrive, NeonDatabase } from "./src/backend/database.ts";
 
 /**
  * The TanStack Start frontend. Deployed as a Cloudflare Worker + static assets
- * by `Cloudflare.Vite`. The `Backend` RPC worker is injected as a private
+ * by `Cloudflare.Website.Vite`. The `Backend` RPC worker is injected as a private
  * `BACKEND` service binding; the `/rpc` server route proxies the browser's
  * `AtomRpc` traffic to it.
  */

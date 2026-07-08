@@ -9,7 +9,7 @@ import { Todo, TodoNotFound, TodoRpcs } from "./rpc.ts";
 import { relations, Todos } from "./schema.ts";
 
 /**
- * The RPC backend. A {@link Cloudflare.RpcWorker} that serves {@link TodoRpcs}
+ * The RPC backend. A {@link Cloudflare.Workers.RpcWorker} that serves {@link TodoRpcs}
  * over HTTP (JSON), backed by Drizzle talking to Neon Postgres through a
  * Hyperdrive pool. It is bound to the frontend as a private service binding —
  * the browser never reaches it directly; the TanStack `/rpc` route proxies to
