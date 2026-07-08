@@ -413,7 +413,7 @@ export interface WorkerProps<
    *   `Config.number`, …) — resolved at deploy time and bound as
    *   `secret_text` on Cloudflare regardless of the `Config`
    *   constructor used. See
-   *   {@link https://v2.alchemy.run/concepts/secrets | Concepts › Secrets and Variables}.
+   *   [Secrets & env](/cloudflare/security/secrets-env).
    * - Literal values — routed by shape: `Redacted<string>` →
    *   `secret_text`, `string` → `plain_text`, anything else → `json`.
    *
@@ -625,7 +625,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * There are three ways to define a Worker, from simplest to most
- * flexible. See the {@link https://alchemy.run/concepts/platform | Platform concept}
+ * flexible. See the [Functions & Servers](/infrastructure-as-effects/functions-and-servers)
  * page for the full explanation.
  *
  * - **Async** — plain `async fetch` handler, no Effect runtime in the bundle.
@@ -646,7 +646,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * `Cloudflare.InferEnv` to extract a fully typed `env` object from
  * them.
  *
- * See the {@link https://alchemy.run/guides/async-worker | Async Workers Guide}
+ * See the [Workers guide](/cloudflare/compute/workers)
  * for a comprehensive walkthrough of all binding types (R2, D1,
  * Durable Objects, Assets, and more).
  *

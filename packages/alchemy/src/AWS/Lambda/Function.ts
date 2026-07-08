@@ -287,9 +287,9 @@ const matchesConfiguredExternal = (
  * - **Async** — plain handler export, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation with typed bindings and event sources.
  *
- * See the {@link https://alchemy.run/guides/async-lambda | Async Lambda Guide}
+ * See [Effect handlers vs async handlers](/infrastructure-as-effects/functions-and-servers#effect-handlers-vs-async-handlers)
  * for plain handler patterns, or the
- * {@link https://alchemy.run/guides/lambda | Effect Lambda Guide}
+ * [Lambda guide](/aws/compute/lambda)
  * for the full Effect-based approach with bindings, event sources, and sinks.
  * @resource
  * @section Async Functions
