@@ -207,9 +207,6 @@ export const NeonAuth = AuthProviderLayer<
             Console.log(`  source: ${sourceStr}`),
           ]);
         }),
-        Effect.catch((e) =>
-          Console.error(`  Failed to retrieve credentials: ${e}`),
-        ),
       );
 
     return {
