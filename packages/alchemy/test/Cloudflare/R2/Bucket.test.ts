@@ -499,6 +499,76 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
   }).pipe(logLevel),
 );
 
+test.provider("cors is applied to the new bucket on replacement", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const oldName = "alchemy-test-r2-cors-replace-a";
+    const newName = "alchemy-test-r2-cors-replace-b";
+    const cors = [
+      {
+        id: "range-reads",
+        allowed: {
+          methods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
+          origins: ["https://map.example.com"],
+          headers: ["range"],
+        },
+        exposeHeaders: ["etag"],
+        maxAgeSeconds: 3600,
+      },
+    ];
+
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("ReplaceCorsBucket", {
+          name: oldName,
+          cors,
+        });
+      }),
+    );
+    expect(initial.bucketName).toEqual(oldName);
+
+    const initialCors = yield* r2.getBucketCors({
+      accountId,
+      bucketName: oldName,
+    });
+    expect(initialCors.rules).toHaveLength(1);
+
+    // Changing the name replaces the bucket: the new bucket is created
+    // (greenfield reconcile must apply the CORS config from scratch) and
+    // the old bucket is deleted afterwards.
+    const replaced = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("ReplaceCorsBucket", {
+          name: newName,
+          cors,
+        });
+      }),
+    );
+    expect(replaced.bucketName).toEqual(newName);
+    expect(replaced.cors).toHaveLength(1);
+    expect(replaced.cors[0]?.id).toEqual("range-reads");
+
+    const replacedCors = yield* r2.getBucketCors({
+      accountId,
+      bucketName: newName,
+    });
+    expect(replacedCors.rules).toHaveLength(1);
+    expect(replacedCors.rules?.[0]?.id).toEqual("range-reads");
+    expect(replacedCors.rules?.[0]?.allowed.origins).toEqual([
+      "https://map.example.com",
+    ]);
+
+    // The replaced bucket is cleaned up.
+    yield* waitForBucketToBeDeleted(oldName, accountId);
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(newName, accountId);
+  }).pipe(logLevel),
+);
+
 // R2 bucket creates are eventually consistent — a read immediately after
 // deploy can briefly return NoSuchBucket until the bucket propagates.
 const getBucketWhenReady = Effect.fn(function* (
