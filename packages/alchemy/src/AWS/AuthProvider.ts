@@ -393,9 +393,6 @@ export const AwsAuth = AuthProviderLayer<
             );
           }),
         ),
-        Effect.catch((e) =>
-          Console.error(`  Failed to retrieve credentials: ${e}`),
-        ),
       );
 
     const logout = (profileName: string, config: AwsAuthConfig) =>

@@ -1,4 +1,3 @@
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,22 +7,16 @@ import { MinimumLogLevel } from "effect/References";
 import { Command, Flag } from "effect/unstable/cli";
 import picomatch from "picomatch";
 
-import { AuthProviders } from "../../Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../Auth/Profile.ts";
 import type { ProviderService } from "../../Provider.ts";
-import { Stack } from "../../Stack.ts";
-import { Stage } from "../../Stage.ts";
 import * as Clank from "../../Util/Clank.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { fileLogger } from "../../Util/FileLogger.ts";
 import type { ScopedPlanStatusSession } from "../Cli.ts";
 import { isNonInteractive } from "../selectCli.ts";
 import * as NukeUI from "../tui/components/Nuke.tsx";
 
 import {
+  buildStackProviders,
   dryRun,
   envFile,
-  importStack,
   instrumentCommand,
   profile,
   script,
@@ -311,42 +304,18 @@ const nukeCommand = Command.make(
       // log stream isn't clobbered by the progress renderer.
       const debug = !!process.env.DEBUG;
       const interactive = !isNonInteractive() && !debug;
-      const stackEffect = yield* importStack(main);
-      const authProviders: AuthProviders["Service"] = {};
 
-      // Build the state + providers layer (same wiring as `alchemy login`) so
-      // that the resulting context holds every resource provider plus the
-      // cloud-environment services their `list`/`delete` need at call time.
-      const context = yield* Layer.build(
-        (stackEffect.providers ?? Layer.empty).pipe(
-          Layer.provideMerge(stackEffect.state ?? Layer.empty),
-          Layer.provideMerge(
-            Layer.mergeAll(
-              Layer.succeed(AuthProviders, authProviders),
-              ConfigProvider.layer(
-                withProfileOverride(
-                  yield* loadConfigProvider(envFile),
-                  profile,
-                ),
-              ),
-              debug
-                ? Logger.layer([Logger.defaultLogger])
-                : Logger.layer([fileLogger("out")], {
-                    mergeWithExisting: true,
-                  }),
-              Layer.succeed(MinimumLogLevel, debug ? "Debug" : "Info"),
-              Layer.succeed(Stage, "placeholder"),
-              Layer.succeed(Stack, {
-                actions: {},
-                bindings: {},
-                name: stackEffect.stackName,
-                resources: {},
-                stage: "placeholder",
-              }),
-            ),
-          ),
-        ),
-      );
+      // Build the user's providers() (+ state) layer so the resulting context
+      // holds every resource provider plus the cloud-environment services
+      // their `list`/`delete` need at call time. DEBUG=1 routes provider logs
+      // to the console at Debug level instead of the .alchemy/log/out file.
+      const { context } = yield* buildStackProviders({
+        main,
+        envFile,
+        profile,
+        logger: debug ? Logger.layer([Logger.defaultLogger]) : undefined,
+        extra: Layer.succeed(MinimumLogLevel, debug ? "Debug" : "Info"),
+      });
 
       const discovered = discoverProviders(context as Context.Context<never>);
 
