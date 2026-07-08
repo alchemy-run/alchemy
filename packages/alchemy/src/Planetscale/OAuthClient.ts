@@ -78,10 +78,10 @@ const tokenRequest = (
   Effect.gen(function* () {
     // PlanetScale's docs show the token endpoint with all parameters in
     // the query string (https://planetscale.com/docs/api/reference/oauth).
-    // Their .well-known discovery doc claims only client_secret_basic /
-    // client_secret_post are supported, but we've verified both forms of
-    // auth produce equivalent (and equivalently broken) tokens, so we
-    // follow the public docs literally.
+    // Their .well-known discovery doc advertises client_secret_basic /
+    // client_secret_post instead, but both behave identically to the
+    // query-string form in practice, so we follow the public docs
+    // literally.
     const url = new URL(OAUTH_ENDPOINTS.token);
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
@@ -134,16 +134,11 @@ const tokenRequest = (
   });
 
 /**
- * Generate a PlanetScale authorization URL for the given scopes.
+ * Generate a PlanetScale authorization URL.
  *
- * Scope names MUST use the tier prefix (`user:`, `organization:`,
- * `database:`, `branch:`) — bare names like `read_user` are rejected with
- * "The requested scope is invalid, unknown, or malformed." Use the values
- * from {@link ALL_SCOPES}, which carry the prefix.
- *
- * Pass an empty array to fall back to PlanetScale's implicit default set
- * (`read_databases`, `read_user`, `read_organization` — the only place
- * unprefixed names work).
+ * No `scope` parameter is sent: PlanetScale scopes are configured on the
+ * OAuth application itself, not requested per-authorization, so the
+ * consent screen shows whatever the app is registered with.
  */
 export function authorize(): Authorization {
   const state = generateState();
