@@ -228,7 +228,9 @@ one was found by a test provisioning real infrastructure and
 hitting the discrepancy, and every one is now permanent: the
 generator refuses to run if a patch no longer matches an
 operation, so a spec update can't silently drop what the tests
-learned.
+learned. The corpus even shrinks a few times in the chart
+(1,083 → 1,080) — review consolidating duplicate patches as
+the loop settled.
 
 ## The factory
 
@@ -261,48 +263,6 @@ Every test follows one shape: deploy, verify **out-of-band**
 by querying the API directly through distilled, mutate, verify
 again, destroy, and prove the destroy by watching the resource
 disappear. Nothing counts because the deploy said so.
-
-## What broke at scale
-
-Some of the run's most useful output was the damage. Fleet
-work finds structural limits that no single-resource
-development ever would.
-
-The one that cost the most time: registering ~280 provider
-layers in a single flat `Layer.mergeAll(...)` call doesn't
-fail — it silently succeeds with the wrong type. The comment
-that now lives in `Providers.ts`:
-
-```typescript
-// Split into nested groups: a single flat mergeAll with ~200
-// arguments exceeds tsgo's variadic inference ceiling and
-// silently drops the tail layers from the inferred union.
-```
-
-The symptom was a baffling cascade of
-`Provider<X> is not assignable` errors across every test file,
-pointing nowhere near the cause. Nested groups of ~90 fixed it.
-
-The new fleet's own tests also caught the engine misbehaving.
-With 233 new suites deploying and re-deploying, two
-stable-attribute bugs that had always been latent became
-constant noise: a Worker's `url` and its
-`durableObjectNamespaces` were regenerated on every deploy
-even when unchanged, phantom-updating everything downstream
-([#616](https://github.com/alchemy-run/alchemy-effect/pull/616),
-[#617](https://github.com/alchemy-run/alchemy-effect/pull/617)).
-And a CLI that starts in 8.2 seconds is fine for a person but
-brutal for a fleet running hundreds of plans — lazy-loading
-the TUI and deferring distilled's schema construction got it
-to 1.8s
-([#618](https://github.com/alchemy-run/alchemy-effect/pull/618)).
-
-Even the patch chart carries scars if you look closely: the
-corpus *shrinks* a few times during the hardening tail
-(1,083 → 1,080) where
-review consolidated duplicate patches — and one agent left its
-scratch probe, `.ai-workspace/web3-probe.ts`, sitting in the
-merged PR. Shipped fast, cleaned up after.
 
 ## What the agents didn't do
 
