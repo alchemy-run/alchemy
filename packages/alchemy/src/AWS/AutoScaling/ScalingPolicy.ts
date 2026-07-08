@@ -71,14 +71,6 @@ export const ScalingPolicy = Resource<ScalingPolicy>(
   "AWS.AutoScaling.ScalingPolicy",
 );
 
-const isAutoScalingGroupResource = (
-  value: unknown,
-): value is AutoScalingGroupResource =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  (value as { Type?: string }).Type === "AWS.AutoScaling.AutoScalingGroup";
-
 export const ScalingPolicyProvider = () =>
   Provider.effect(
     ScalingPolicy,
@@ -88,15 +80,24 @@ export const ScalingPolicyProvider = () =>
           ? Effect.succeed(props.policyName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
 
-      // May receive `undefined`: an Output-valued `autoScalingGroup` doesn't
-      // survive a `creating`-state round-trip (it deserializes as
-      // `undefined`), and recovery paths hand those props back as `olds`.
+      // Derive the group name from either spelling of `autoScalingGroup`. A
+      // whole AutoScalingGroup resource resolves to its bare Attributes
+      // before reaching the provider — the resource `Type` marker does not
+      // survive resolution — so narrow on the attributes shape, never on
+      // `Type`. May also receive `undefined`: an Output-valued
+      // `autoScalingGroup` doesn't survive a `creating`-state round-trip
+      // (it deserializes as `undefined`), and recovery paths hand those
+      // props back as `olds`.
       const toAutoScalingGroupName = (
         input: ScalingPolicyProps["autoScalingGroup"] | undefined,
-      ) =>
-        isAutoScalingGroupResource(input)
-          ? (input.autoScalingGroupName as unknown as string)
-          : (input as unknown as string | undefined);
+      ): string | undefined =>
+        typeof input === "string"
+          ? input
+          : typeof (input as { autoScalingGroupName?: unknown } | undefined)
+                ?.autoScalingGroupName === "string"
+            ? (input as unknown as { autoScalingGroupName: string })
+                .autoScalingGroupName
+            : undefined;
 
       // `describePolicies` searches account-wide when no AutoScalingGroupName
       // is given; policy names are unique physical names, so a name-only
