@@ -51,7 +51,54 @@ const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 /** Filename used for stored credentials under the profile directory. */
 const CREDENTIALS_FILE = "cloudflare-state-store";
 
-export const state = () =>
+export interface StateOptions {
+  /**
+   * Pin the Cloudflare account this stack's state store must live in.
+   *
+   * The account is otherwise decided implicitly by the auth profile —
+   * a `login` against the wrong account (easy for users who belong to
+   * several) resolves an **empty** state store, so the engine
+   * cold-probes live cloud resources and fails with confusing
+   * `OwnedBySomeoneElse` errors (or, with `--adopt`, silently forks
+   * state into the wrong account). When set, the layer asserts the
+   * profile-resolved accountId matches before reading, bootstrapping,
+   * or upgrading anything, and fails with re-login instructions
+   * instead.
+   */
+  accountId?: string;
+}
+
+/**
+ * Fail loudly when the auth profile resolves a different Cloudflare
+ * account than the one the stack pins via {@link StateOptions.accountId}.
+ * No-op when no pin is configured.
+ */
+const assertAccountId = (
+  expected: string | undefined,
+  profileName: string,
+): Effect.Effect<
+  void,
+  never,
+  CloudflareEnvironment.CloudflareEnvironment
+> =>
+  Effect.gen(function* () {
+    if (expected === undefined) return;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
+    if (accountId !== expected) {
+      return yield* Effect.die(
+        new AuthError({
+          message:
+            `Cloudflare account mismatch: profile '${profileName}' resolves ` +
+            `account ${accountId}, but this stack pins its state store to ` +
+            `account ${expected}. Re-run 'alchemy login --profile ${profileName}' ` +
+            `and select the expected account.`,
+        }),
+      );
+    }
+  });
+
+export const state = (options: StateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -69,6 +116,11 @@ export const state = () =>
       const context = yield* Effect.context<Effect.Services<typeof init>>();
 
       const init = Effect.gen(function* () {
+        // Guard the account BEFORE any state is read or bootstrapped —
+        // an account mismatch must not be able to reach the "State
+        // Store not available. Do you want to deploy it?" prompt.
+        yield* assertAccountId(options.accountId, profileName);
+
         if (yield* hasLocalStack(localStage)) {
           // if there's still a local stack, then we need to finish the bootstrap
           // TODO(sam): what if the local stack was
@@ -230,6 +282,11 @@ export interface BootstrapOptions {
   force?: boolean;
   /** @default "default" */
   profile?: string;
+  /**
+   * Require the profile to resolve this Cloudflare account before
+   * deploying anything. See {@link StateOptions.accountId}.
+   */
+  accountId?: string;
 }
 
 export const bootstrap = (options: BootstrapOptions = {}) =>
@@ -239,6 +296,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
     const force = options.force ?? false;
     const localStage = `${profileName}_${scriptName}`;
+    yield* assertAccountId(options.accountId, profileName);
     yield* Effect.annotateCurrentSpan({
       "alchemy.state_store.script_name": scriptName,
       "alchemy.state_store.profile": profileName,
