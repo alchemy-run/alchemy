@@ -257,8 +257,11 @@ export const toRulesetAttributes = (
 // type statically exposes it as an `Output`. During `diff` (plan time) the
 // zone can still be unresolved — e.g. when it's being created in the same
 // deploy — in which case `zoneId` is not yet a string. Callers must treat a
-// non-string result as "not resolved yet".
-const zoneIdOf = (zone: Zone): string | undefined => {
-  const zoneId = (zone as unknown as Partial<Attributes>).zoneId;
+// non-string result as "not resolved yet". May also receive `undefined`:
+// an Output-valued `zone` doesn't survive a `creating`-state round-trip
+// (it deserializes as `undefined`), and recovery paths hand those props
+// back as `olds`.
+const zoneIdOf = (zone: Zone | undefined): string | undefined => {
+  const zoneId = (zone as unknown as Partial<Attributes> | undefined)?.zoneId;
   return typeof zoneId === "string" ? zoneId : undefined;
 };

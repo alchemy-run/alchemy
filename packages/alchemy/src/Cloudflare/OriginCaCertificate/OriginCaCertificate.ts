@@ -240,7 +240,10 @@ export const OriginCaCertificateProvider = () =>
       // adopt policy. Ambiguity (several live certs with the same
       // hostnames) means no identity at all — report missing and recreate
       // (certificates are free and revocation is harmless).
-      if (!olds?.hostnames?.length) return undefined;
+      // Output-valued hostname elements don't survive a `creating`-state
+      // round-trip (they deserialize as null/undefined) — without a concrete
+      // hostname there is no identity to search by.
+      if (typeof olds?.hostnames?.[0] !== "string") return undefined;
       const matches = yield* findByHostnames(olds.hostnames);
       if (matches.length !== 1) return undefined;
       const observed = yield* getCertificate(matches[0].id!);

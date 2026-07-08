@@ -204,13 +204,20 @@ export const BranchProvider = () =>
       // planning engine resolves `news.project` to a plain object carrying that stable id (even when the project is being
       // updated in place). An unchanged project therefore resolves to the same string; a changed/replaced project resolves
       // to either a different string or an unresolved output, so `oldProjectId !== newProjectId` evaluates correctly.
+      // An Output-valued `project` doesn't survive a `creating`-state
+      // round-trip (it deserializes as `undefined`) — when the old project is
+      // unknown, fall through to the create/update recovery path rather than
+      // force a replacement.
       const oldProjectId =
-        output?.projectId ?? resolveProjectId(olds.project as BranchSource);
+        output?.projectId ??
+        (olds.project !== undefined
+          ? maybeResolveProjectId(olds.project as BranchSource)
+          : undefined);
       const newProjectId =
         "project" in news
           ? maybeResolveProjectId(news.project as BranchSource)
           : undefined;
-      if (oldProjectId !== newProjectId) {
+      if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;
@@ -283,7 +290,12 @@ export const BranchProvider = () =>
         );
       }
       if (!olds?.project) return undefined;
-      const projectId = resolveProjectId(olds.project as BranchSource);
+      const projectId = maybeResolveProjectId(olds.project as BranchSource);
+      if (projectId === undefined) {
+        // The project reference survived as an object but its Output-valued
+        // `projectId` did not — there is nothing to look the branch up in.
+        return undefined;
+      }
       const name = yield* createBranchName(id, olds.name);
       const matches = yield* findBranchByName(projectId, name);
       const match = matches[0];

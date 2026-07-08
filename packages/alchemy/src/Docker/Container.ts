@@ -243,9 +243,14 @@ export const ContainerProvider = () =>
               ),
             );
           if (!info) return undefined;
+          // `olds.image` may be `undefined` when a `creating` row was
+          // persisted before upstream Outputs resolved — fall back to the
+          // live container's actual image.
           const attrs = toContainerAttributes(
             info,
-            normalizeImageRef(olds.image),
+            olds.image !== undefined
+              ? normalizeImageRef(olds.image)
+              : info.Config.Image,
           );
           if (output) return attrs;
           // Without prior state, only adopt a container that carries our
@@ -258,6 +263,10 @@ export const ContainerProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
           if (!isResolved(news)) return undefined;
+          // An Output-valued `image` doesn't survive a `creating`-state
+          // round-trip (it deserializes as `undefined`) — without comparable
+          // prior create args, let the engine apply its default update logic.
+          if (olds.image === undefined) return undefined;
           const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
           const newArgs = yield* makeCreateArgs(id, news, instanceId);
           if (!Equal.equals(oldArgs, newArgs)) {

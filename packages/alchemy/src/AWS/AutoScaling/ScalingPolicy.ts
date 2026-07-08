@@ -88,18 +88,24 @@ export const ScalingPolicyProvider = () =>
           ? Effect.succeed(props.policyName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
 
+      // May receive `undefined`: an Output-valued `autoScalingGroup` doesn't
+      // survive a `creating`-state round-trip (it deserializes as
+      // `undefined`), and recovery paths hand those props back as `olds`.
       const toAutoScalingGroupName = (
-        input: ScalingPolicyProps["autoScalingGroup"],
+        input: ScalingPolicyProps["autoScalingGroup"] | undefined,
       ) =>
         isAutoScalingGroupResource(input)
           ? (input.autoScalingGroupName as unknown as string)
-          : (input as unknown as string);
+          : (input as unknown as string | undefined);
 
+      // `describePolicies` searches account-wide when no AutoScalingGroupName
+      // is given; policy names are unique physical names, so a name-only
+      // lookup still identifies our policy during state recovery.
       const describePolicy = ({
         autoScalingGroupName,
         policyName,
       }: {
-        autoScalingGroupName: string;
+        autoScalingGroupName: string | undefined;
         policyName: string;
       }) =>
         autoscaling
@@ -147,10 +153,17 @@ export const ScalingPolicyProvider = () =>
           const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
+          // ASG change → replace, but only when both sides are known — a
+          // half-created state row may have lost an Output-valued
+          // `autoScalingGroup`, and an unknown old ASG must fall through to
+          // the create/update recovery path rather than force a replacement.
+          const oldGroupName = toAutoScalingGroupName(olds.autoScalingGroup);
+          const newGroupName = toAutoScalingGroupName(news.autoScalingGroup);
           if (
             oldName !== newName ||
-            toAutoScalingGroupName(olds.autoScalingGroup) !==
-              toAutoScalingGroupName(news.autoScalingGroup)
+            (oldGroupName !== undefined &&
+              newGroupName !== undefined &&
+              oldGroupName !== newGroupName)
           ) {
             return { action: "replace" } as const;
           }
@@ -165,7 +178,7 @@ export const ScalingPolicyProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const autoScalingGroupName =
             output?.autoScalingGroupName ??
-            toAutoScalingGroupName(olds!.autoScalingGroup);
+            toAutoScalingGroupName(olds?.autoScalingGroup);
           const policyName =
             output?.policyName ?? (yield* toName(id, olds ?? {}));
           const policy = yield* describePolicy({
