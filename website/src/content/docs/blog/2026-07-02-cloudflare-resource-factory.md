@@ -233,65 +233,36 @@ learned.
 ## The factory
 
 The agents ran as a fleet — around twelve concurrent, each one
-owning exactly one distilled service. Ownership is what keeps
-a fleet coherent: only the owner of `turnstile` may write to
-`patches/turnstile/` and regenerate `services/turnstile.ts`,
-so two agents never race the generator. An agent implements
-its service's resources, writes their live tests, runs them
+owning one distilled service. Only the owner of `turnstile`
+may write to `patches/turnstile/` and regenerate its module,
+so agents never race the generator. Each agent implements its
+service's resources, writes their live tests, runs them
 against the real account, patches its service when a test
 surfaces a lie, and repeats until green.
 
-A few mechanical choices mattered more than any prompt:
+Two mechanical choices kept that loop fast. distilled is
+embedded in the alchemy repo as a git submodule and included
+in its bun workspaces, so the SDK and its consumer install
+together and an agent patches both in one working tree — a
+wave's output lands as two PRs, one to alchemy-effect and one
+to distilled. And vitest resolves distilled from its
+TypeScript source (the `bun` export condition), so a
+regenerated service is visible to the very next test run. No
+compile step; the flywheel's cycle time is the test's runtime.
 
-**One workspace across two repos.** distilled is embedded in
-the alchemy repo as a git submodule and included in its bun
-workspaces, so the SDK and its consumer install together —
-one `bun install`, one consistent dependency graph, and
-`@distilled.cloud/cloudflare` resolves to the submodule
-sitting right there in the checkout. An agent patches the SDK
-and the resource that consumes it in the same working tree,
-and a wave's output lands as two PRs: one to alchemy-effect,
-one to distilled.
+Time was budgeted as strictly as correctness. Every test
+invocation ran under a hard timeout, every retry was bounded,
+and a suite still red after three fix attempts — where the
+blocker is platform behavior, not our code — got skip-gated
+with the exact typed error recorded instead of burning an
+hour.
 
-**Regeneration is instantly visible.** Our vitest config adds
-the `bun` export condition, so tests resolve distilled from
-its TypeScript source rather than built output:
-
-```typescript
-// packages/alchemy/vitest.config.ts
-externalConditions: ["bun", "node", "module-sync"],
-```
-
-No compile step after regenerating a service — the moment the
-generator writes `services/turnstile.ts`, the next test run
-sees the new types. The flywheel's cycle time is the test's
-runtime.
-
-**Never wait on a hang.** Every test invocation ran under a
-hard `timeout` kill, every retry was bounded, and polling for
-anything slower than ~90 seconds was forbidden. Hitting the
-wall *is* the failure: read the partial output, find the
-unbounded retry or infinite pagination, fix the cause. An
-agent transcript silent for five minutes got killed and
-re-dispatched, and because every task prompt was worded
-assess-first — "partial work may exist, finish it, don't
-rewrite" — a killed agent's successor picked up where it died.
-
-**A budget for stubbornness.** Three iterations. A suite still
-red after three fix attempts, where the blocker is platform
-behavior rather than our code, gets implemented fully,
-skip-gated with the exact typed error recorded, and reported
-honestly — not burned an hour on.
-
-That last rule produced one of our favorite patterns.
-Cloudflare gates entire products behind plans and
-entitlements — Magic Transit, Total TLS, custom hostnames. The
-factory couldn't lifecycle-test those on our account, but it
-could pin the *gate itself* into the type system. Each gated
-product got its rejection patched as a typed error
-(`MagicTransitNotOnboarded`, code 1012;
-`AdvancedCertificateManagerRequired`, code 1450) and a probe
-test that always runs:
+That last rule matters for Cloudflare, which gates entire
+products behind plans — Magic Transit, Total TLS, custom
+hostnames. The factory couldn't lifecycle-test those on our
+account, but it pinned the gate itself into the type system:
+the rejection patched as a typed error, plus a probe test that
+always runs:
 
 ```typescript
 // test/Cloudflare/MagicTransit/StaticRoute.test.ts
@@ -300,8 +271,6 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       // ... resolve accountId; no-op early if this account is entitled ...
-
-      // The typed tag — not UnknownCloudflareError, not a status check.
       const error = yield* magicTransit
         .listRoutes({ accountId })
         .pipe(Effect.flip);
@@ -312,19 +281,14 @@ test.provider(
 test.provider.skipIf(!entitled)("list enumerates the deployed static route", ...);
 ```
 
-The probe proves the patch and the gating are correct forever,
-at near-zero cost; an entitled account flips one environment
-variable and the full lifecycle suite runs unchanged. 136 of
-the 288 test files carry gates like this.
+An entitled account flips one environment variable and the
+full lifecycle suite runs unchanged. 136 of the 288 test files
+carry gates like this.
 
-The tests themselves follow one shape: deploy real
-infrastructure, verify it **out-of-band** by querying the API
-directly through distilled (227 of the test files import it
-for exactly this), mutate, verify again, destroy, and prove
-the destroy by watching the resource disappear — with a typed
-`catchTag` on the not-found tag standing in for "gone".
-Nothing counts because the deploy said so; everything is
-checked against what Cloudflare actually reports.
+Every test follows one shape: deploy, verify **out-of-band**
+by querying the API directly through distilled, mutate, verify
+again, destroy, and prove the destroy by watching the resource
+disappear. Nothing counts because the deploy said so.
 
 ## What broke at scale
 
