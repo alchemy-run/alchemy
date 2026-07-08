@@ -283,7 +283,10 @@ test(
     const url = effectWorker!;
     const response = yield* HttpClient.get(new URL("/sandbox", url));
     expect(response.status).toBe(200);
-    const body = (yield* response.text) as string;
-    expect(body).toBe("Hello from Sandbox container!");
+    const body = yield* response.text;
+    // The container echoes its `GREETING` env var, proving env vars flow
+    // through to the container (via the application config on a live deploy,
+    // and via `ctx.container.start({ env })` in local dev).
+    expect(body).toBe("Hello from Sandbox container! GREETING=hello-from-env");
   }),
 );
