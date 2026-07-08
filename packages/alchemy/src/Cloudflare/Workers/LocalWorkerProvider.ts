@@ -62,7 +62,6 @@ import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { sha256 } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { containerEnvBindingName } from "../Containers/ContainerBundle.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -312,21 +311,6 @@ export const LocalWorkerProvider = () =>
                 );
               }
               containers[container.className] = container.dev;
-              // workerd's DO container config carries only an image name, so
-              // there is no config channel for the container's env vars. Stash
-              // them as a JSON worker binding; the DO-side container handle
-              // (`ContainerPlatform.bind`) reads it back and merges it into
-              // `ctx.container.start({ env })`.
-              if (container.env && container.env.length > 0) {
-                workerBindings.push(
-                  Json.local(
-                    containerEnvBindingName(container.className),
-                    Object.fromEntries(
-                      container.env.map((entry) => [entry.name, entry.value]),
-                    ),
-                  ),
-                );
-              }
             }
           }
         }

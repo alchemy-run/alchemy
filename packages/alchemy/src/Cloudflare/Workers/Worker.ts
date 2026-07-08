@@ -25,10 +25,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
-import type {
-  ContainerApplication,
-  DevContainerImage,
-} from "../Containers/ContainerApplication.ts";
+import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
@@ -434,18 +431,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   },
   {
     bindings?: WorkerBinding[];
-    containers?: {
-      className: string;
-      dev: DevContainerImage | undefined;
-      /**
-       * Container environment variables to inject at start time in local dev.
-       * On a real deploy Cloudflare applies these via the application's
-       * `environmentVariables`; locally `workerd` has no config channel for
-       * them, so the local worker provider surfaces them to the DO runtime
-       * which merges them into `ctx.container.start({ env })`.
-       */
-      env?: ContainerApplication.EnvironmentVariable[];
-    }[];
+    containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
   },

@@ -12,9 +12,6 @@ export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
   Stack.useSync((stack) => ({
     main: import.meta.url,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
-    env: {
-      GREETING: "hello-from-env",
-    },
     observability: {
       logs: {
         enabled: true,
@@ -23,10 +20,8 @@ export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
   })),
   Effect.gen(function* () {
     return SandboxContainer.of({
-      fetch: Effect.sync(() =>
-        HttpServerResponse.text(
-          `Hello from Sandbox container! GREETING=${process.env.GREETING}`,
-        ),
+      fetch: Effect.succeed(
+        HttpServerResponse.text("Hello from Sandbox container!"),
       ),
     });
   }),

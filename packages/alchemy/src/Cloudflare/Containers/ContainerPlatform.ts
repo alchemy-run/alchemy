@@ -11,14 +11,13 @@ import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
+import { Worker } from "../Workers/Worker.ts";
 import { ContainerTypeId } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
-import { containerEnvBindingName } from "./ContainerBundle.ts";
 
 export const ContainerPlatform: Platform<
   ContainerApplication,
@@ -174,41 +173,13 @@ export const ContainerPlatform: Platform<
       const className = namespace.name;
 
       yield* worker.bind`${container.LogicalId}`({
-        containers: [
-          {
-            className,
-            dev: container.dev,
-            // Carry the resolved container env to the worker so local dev can
-            // inject it at start time (workerd has no config env channel). On a
-            // live deploy Cloudflare applies these via the application config
-            // and the local binding is absent, so the start-time merge no-ops.
-            env: Output.map(
-              container.configuration,
-              (configuration) => configuration.environmentVariables,
-            ),
-          },
-        ],
+        containers: [{ className, dev: container.dev }],
       });
 
       // TODO(sam): register this in the Container Execution Context
       // const _httpEffect = yield* init;
       return Effect.gen(function* () {
         const state = yield* DurableObjectState;
-        // In local dev the container env travels as a JSON worker binding
-        // (see `LocalWorkerProvider`); read it back and merge it into every
-        // `start`. Optional so live workers (no such binding) are unaffected.
-        const workerEnv = yield* Effect.serviceOption(WorkerEnvironment).pipe(
-          Effect.map(Option.getOrUndefined),
-        );
-        const containerEnv = (workerEnv?.[containerEnvBindingName(className)] ??
-          undefined) as Record<string, string> | undefined;
-        const startWithEnv = (options?: ContainerStartupOptions) => {
-          if (!containerEnv && !options?.env) return options;
-          return {
-            ...options,
-            env: { ...containerEnv, ...options?.env },
-          } as ContainerStartupOptions;
-        };
         return {
           id: container.LogicalId,
           running: Effect.sync(() => state.container!.running ?? false),
@@ -241,7 +212,7 @@ export const ContainerPlatform: Platform<
               () => state.container?.monitor() ?? Promise.resolve(),
             ),
           start: (options?: ContainerStartupOptions) =>
-            Effect.sync(() => state.container!.start(startWithEnv(options))),
+            Effect.sync(() => state.container!.start(options)),
         } as unknown;
       });
     }),

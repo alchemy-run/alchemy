@@ -76,17 +76,6 @@ export const foldEnvIntoEnvironmentVariables = (
 };
 
 /**
- * Name of the worker binding that carries a container's start-time environment
- * variables to the local (`workerd`) runtime. workerd's Durable-Object
- * container config has no env channel, so the local worker provider stashes the
- * env under this binding and `ContainerPlatform.bind`'s runtime handle reads it
- * back and merges it into `ctx.container.start({ env })`. Shared so both sides
- * agree on the key (sanitized to a valid binding identifier).
- */
-export const containerEnvBindingName = (className: string) =>
-  `ALCHEMY_CONTAINER_ENV_${className.replaceAll(/[^a-zA-Z0-9_]/g, "_")}`;
-
-/**
  * Derive the physical name for a container application. Shared between the
  * live and local providers so they agree on the deterministic name.
  */

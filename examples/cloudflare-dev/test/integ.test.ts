@@ -305,10 +305,7 @@ test(
     const response = yield* HttpClient.get(new URL("/sandbox", url));
     expect(response.status).toBe(200);
     const body = (yield* response.text) as string;
-    // The container echoes its `GREETING` env var, proving env vars flow
-    // through to the container (via the application config on a live deploy,
-    // and via `ctx.container.start({ env })` in local dev).
-    expect(body).toBe("Hello from Sandbox container! GREETING=hello-from-env");
+    expect(body).toBe("Hello from Sandbox container!");
   }),
   { timeout: 180_000 },
 );
