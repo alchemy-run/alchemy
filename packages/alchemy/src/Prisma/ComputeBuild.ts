@@ -2,11 +2,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import type { PlatformError } from "effect/PlatformError";
 import type { Scope } from "effect/Scope";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { nodeFileTrace } from "@vercel/nft";
-import { runBuildCommand } from "../Build/Command.ts";
 import { normalizeEntrypoint } from "./ComputeArchive.ts";
 
 export type ComputeAutoBuildFramework =
@@ -78,6 +79,65 @@ type BuildServices =
   | FileSystem.FileSystem
   | Path.Path
   | Scope;
+
+export interface RunBuildCommandOptions {
+  command: string;
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+/**
+ * Run a shell build command, dying on non-zero exit. Local stand-in for the
+ * removed `Build/Command.ts` helper, matching `Command.CommandExecutorLive`
+ * spawn semantics (`shell: true`, env extended over `process.env`).
+ */
+export const runBuildCommand = Effect.fn(function* ({
+  command,
+  cwd,
+  env,
+}: RunBuildCommandOptions) {
+  const spawner = yield* ChildProcessSpawner;
+  const path = yield* Path.Path;
+  const result = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(command, [], {
+          cwd: path.resolve(cwd ?? "."),
+          shell: true,
+          env: env ?? {},
+          extendEnv: true,
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          detached: false,
+        }),
+      );
+      return yield* Effect.all(
+        {
+          exitCode: handle.exitCode,
+          stdout: Stream.mkString(Stream.decodeText(handle.stdout)),
+          stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
+        },
+        { concurrency: "unbounded" },
+      );
+    }),
+  );
+
+  if (result.exitCode !== 0) {
+    return yield* Effect.fail(
+      new Error(
+        `Build command failed with exit code ${result.exitCode}${result.stderr ? `\n${result.stderr}` : ""}`,
+      ),
+    );
+  }
+
+  yield* Effect.logDebug("Build output", result.stdout);
+  if (result.stderr) {
+    yield* Effect.logDebug("Build stderr", result.stderr);
+  }
+
+  return result;
+});
 
 const NEXT_CONFIG_FILENAMES = [
   "next.config.js",

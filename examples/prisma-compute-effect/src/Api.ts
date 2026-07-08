@@ -35,7 +35,7 @@ export default class Api extends Prisma.Compute<Api>()(
     };
   }),
   Effect.gen(function* () {
-    const db = yield* Prisma.Connection.bind(Connection);
+    const db = yield* Prisma.ConnectionBinding(Connection);
 
     return {
       fetch: Effect.gen(function* () {

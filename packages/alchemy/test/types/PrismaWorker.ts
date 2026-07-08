@@ -6,23 +6,24 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 declare const connection: Prisma.Connection;
 
-interface ApiShape {
+type ApiShape = {
   databaseUrl(): Effect.Effect<string | undefined, never, RuntimeContext>;
-}
+};
 
 export class PrismaWorkerApi extends Cloudflare.Worker<
   PrismaWorkerApi,
   ApiShape
->()("PrismaWorkerApi", {
-  main: import.meta.filename,
-  compatibility: {
-    flags: ["nodejs_compat"],
-  },
-}) {}
+>()("PrismaWorkerApi") {}
 
 export const PrismaWorkerApiLive = PrismaWorkerApi.make(
+  {
+    main: import.meta.filename,
+    compatibility: {
+      flags: ["nodejs_compat"],
+    },
+  },
   Effect.gen(function* () {
-    const db = yield* Prisma.Connection.bind(connection);
+    const db = yield* Prisma.ConnectionBinding(connection);
 
     return PrismaWorkerApi.of({
       databaseUrl: () => db.databaseUrl,

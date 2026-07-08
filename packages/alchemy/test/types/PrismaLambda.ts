@@ -6,21 +6,22 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 declare const connection: Prisma.Connection;
 
-interface ApiShape {
+type ApiShape = {
   databaseUrl(): Effect.Effect<string | undefined, never, RuntimeContext>;
-}
+};
 
 export class PrismaLambdaApi extends AWS.Lambda.Function<
   PrismaLambdaApi,
   ApiShape
->()("PrismaLambdaApi", {
-  main: import.meta.filename,
-  url: true,
-}) {}
+>()("PrismaLambdaApi") {}
 
 export const PrismaLambdaApiLive = PrismaLambdaApi.make(
+  {
+    main: import.meta.filename,
+    url: true,
+  },
   Effect.gen(function* () {
-    const db = yield* Prisma.Connection.bind(connection);
+    const db = yield* Prisma.ConnectionBinding(connection);
 
     return PrismaLambdaApi.of({
       databaseUrl: () => db.databaseUrl,

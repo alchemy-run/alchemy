@@ -100,7 +100,7 @@ test.provider(
               },
             },
             Effect.gen(function* () {
-              const db = yield* Prisma.Connection.bind(connection);
+              const db = yield* Prisma.ConnectionBinding(connection);
 
               return {
                 fetch: Effect.gen(function* () {

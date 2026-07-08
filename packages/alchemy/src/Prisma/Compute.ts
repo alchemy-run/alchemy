@@ -14,7 +14,6 @@ import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../Bundle/TempRoot.ts";
-import { runBuildCommand } from "../Build/Command.ts";
 import { isResolved } from "../Diff.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import type { InputProps } from "../Input.ts";
@@ -34,6 +33,7 @@ import {
   type PrismaManagementClient,
 } from "./Client.ts";
 import {
+  runBuildCommand,
   runComputeAutoBuild,
   type ComputeAutoBuildFramework,
 } from "./ComputeBuild.ts";
@@ -464,7 +464,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *     main: import.meta.filename,
  *   },
  *   Effect.gen(function* () {
- *     const db = yield* Prisma.Connection.bind(connection);
+ *     const db = yield* Prisma.ConnectionBinding(connection);
  *
  *     return {
  *       fetch: Effect.gen(function* () {

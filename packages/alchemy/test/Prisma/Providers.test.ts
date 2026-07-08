@@ -62,9 +62,6 @@ describe("Prisma providers", () => {
         resourceTypes.map((type) => Provider.findProviderByType(type as any)),
         { concurrency: "unbounded" },
       );
-      const bindingPolicy = yield* Provider.findProviderByType(
-        Prisma.ConnectionBindingPolicy.key,
-      );
 
       expect(providers).toHaveLength(resourceTypes.length);
       for (const provider of providers) {
@@ -76,7 +73,6 @@ describe("Prisma providers", () => {
           expectedStables.get(resourceTypes[i]),
         );
       }
-      expect(typeof bindingPolicy).toBe("function");
     }).pipe(providePrismaDev),
   );
 
@@ -92,27 +88,27 @@ describe("Prisma providers", () => {
         Prisma.EnvironmentVariable.Type as any,
       );
 
-      const project = yield* projectProvider.reconcile(
+      const project = (yield* projectProvider.reconcile(
         reconcileInput("Project", {
           name: "local-project",
           createDatabase: false,
         }),
-      );
-      const service = yield* serviceProvider.reconcile(
+      )) as Prisma.Project["Attributes"];
+      const service = (yield* serviceProvider.reconcile(
         reconcileInput("ComputeService", {
           project,
           displayName: "api",
           regionId: "us-east-1",
         }),
-      );
-      const env = yield* envProvider.reconcile(
+      )) as Prisma.ComputeService["Attributes"];
+      const env = (yield* envProvider.reconcile(
         reconcileInput("Environment", {
           project,
           class: "production",
           key: "TOKEN",
           value: Redacted.make("secret"),
         }),
-      );
+      )) as Prisma.EnvironmentVariable["Attributes"];
 
       expect(project.projectId).toBe("dev:project:Project");
       expect(service.projectId).toBe(project.projectId);

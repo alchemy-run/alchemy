@@ -8,6 +8,10 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { PrismaEnvironment } from "./PrismaEnvironment.ts";
 import type {
+  App,
+  AppCreateInput,
+  AppDeploymentTarget,
+  AppUpdateInput,
   Backup,
   BackupListResponse,
   Branch,
@@ -34,6 +38,10 @@ import type {
   DatabaseCreateInput,
   DatabaseUpdateInput,
   DatabaseUsage,
+  Deployment,
+  DeploymentCreateInput,
+  DeploymentCreateResult,
+  DeploymentListItem,
   EnvironmentVariable,
   EnvironmentVariableCreateInput,
   EnvironmentVariableUpdateInput,
@@ -47,18 +55,22 @@ import type {
   ProjectDatabaseCreateInput,
   ProjectTransferInput,
   ProjectUpdateInput,
+  PromoteAppResult,
   PromoteComputeServiceResult,
+  RollbackAppResult,
   RollbackComputeServiceResult,
   Region,
   RestoreDatabaseInput,
   ScmInstallIntent,
   ScmInstallIntentCreateInput,
   ScmInstallation,
+  ScmInstallationConnectInput,
   ScmRepository,
   ServiceComputeVersionCreateInput,
   SourceRepository,
   SourceRepositoryCreateInput,
   StartComputeVersionResult,
+  StartDeploymentResult,
   Workspace,
 } from "./Types.ts";
 
@@ -354,6 +366,69 @@ export interface PrismaManagementClient {
     id: string,
     query?: ComputeVersionLogsQuery,
   ): Effect.Effect<string>;
+  listApps(
+    query?: AppListQuery,
+  ): Effect.Effect<App[], PrismaApiError | PrismaApiDecodeError>;
+  getApp(id: string): Effect.Effect<App, PrismaApiError | PrismaApiDecodeError>;
+  createApp(
+    input: AppCreateInput,
+  ): Effect.Effect<App, PrismaApiError | PrismaApiDecodeError>;
+  updateApp(
+    id: string,
+    input: AppUpdateInput,
+  ): Effect.Effect<App, PrismaApiError | PrismaApiDecodeError>;
+  deleteApp(
+    id: string,
+  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  promoteApp(
+    id: string,
+    target: AppDeploymentTarget,
+  ): Effect.Effect<PromoteAppResult, PrismaApiError | PrismaApiDecodeError>;
+  rollbackApp(
+    id: string,
+    target: AppDeploymentTarget,
+  ): Effect.Effect<RollbackAppResult, PrismaApiError | PrismaApiDecodeError>;
+  listAppDomains(
+    appId: string,
+  ): Effect.Effect<CustomDomain[], PrismaApiError | PrismaApiDecodeError>;
+  createAppDomain(
+    appId: string,
+    input: CustomDomainCreateInput,
+  ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
+  listAppDeployments(
+    appId: string,
+    query?: PaginationQuery,
+  ): Effect.Effect<DeploymentListItem[], PrismaApiError | PrismaApiDecodeError>;
+  createAppDeployment(
+    appId: string,
+    input: DeploymentCreateInput,
+  ): Effect.Effect<
+    DeploymentCreateResult,
+    PrismaApiError | PrismaApiDecodeError
+  >;
+  getDeployment(
+    id: string,
+  ): Effect.Effect<Deployment, PrismaApiError | PrismaApiDecodeError>;
+  deleteDeployment(
+    id: string,
+  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  startDeployment(
+    id: string,
+  ): Effect.Effect<
+    StartDeploymentResult,
+    PrismaApiError | PrismaApiDecodeError
+  >;
+  stopDeployment(
+    id: string,
+  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  getDeploymentLogsUrl(
+    id: string,
+    query?: ComputeVersionLogsQuery,
+  ): Effect.Effect<string>;
+  getBuildLogsUrl(
+    buildId: string,
+    query?: ComputeVersionLogsQuery,
+  ): Effect.Effect<string>;
   listEnvironmentVariables(
     query?: EnvironmentVariableListQuery,
   ): Effect.Effect<
@@ -392,12 +467,21 @@ export interface PrismaManagementClient {
   ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   listScmInstallations(query: {
     workspaceId: string;
+    /**
+     * Filter by connection state. Omit for connected rows plus (on full user
+     * sessions) connectable installations of the caller's other workspaces.
+     */
+    connected?: boolean;
     cursor?: string | null;
     limit?: number;
   }): Effect.Effect<ScmInstallation[], PrismaApiError | PrismaApiDecodeError>;
   createScmInstallIntent(
     input: ScmInstallIntentCreateInput,
   ): Effect.Effect<ScmInstallIntent, PrismaApiError | PrismaApiDecodeError>;
+  connectScmInstallation(
+    installationId: string,
+    input: ScmInstallationConnectInput,
+  ): Effect.Effect<ScmInstallation, PrismaApiError | PrismaApiDecodeError>;
   listScmInstallationRepositories(
     installationId: string,
     query?: PaginationQuery,
@@ -457,6 +541,12 @@ export interface ComputeServiceListQuery extends PaginationQuery {
 
 export interface ComputeVersionListQuery extends PaginationQuery {
   computeServiceId?: string;
+}
+
+export interface AppListQuery extends PaginationQuery {
+  projectId?: string;
+  branchId?: PrismaBranchIdFilter;
+  branchGitName?: string;
 }
 
 export type { ComputeVersionLogsQuery, ComputeVersionLogsRequest };
@@ -922,6 +1012,46 @@ function makePrismaClient(): Effect.Effect<
           logsQuery(query),
         ),
 
+      listApps: (query) => paginate<App>("/v1/apps", query),
+      getApp: (id) => data<App>("GET", `/v1/apps/${id}`),
+      createApp: (input) => data<App>("POST", "/v1/apps", { body: input }),
+      updateApp: (id, input) =>
+        data<App>("PATCH", `/v1/apps/${id}`, { body: input }),
+      deleteApp: (id) => request<void>("DELETE", `/v1/apps/${id}`),
+      promoteApp: (id, target) =>
+        data<PromoteAppResult>("POST", `/v1/apps/${id}/promote`, {
+          body: target,
+        }),
+      rollbackApp: (id, target) =>
+        data<RollbackAppResult>("POST", `/v1/apps/${id}/rollback`, {
+          body: target,
+        }),
+      listAppDomains: (appId) =>
+        paginate<ApiCustomDomain>(`/v1/apps/${appId}/domains`).pipe(
+          Effect.map((domains) => domains.map(normalizeCustomDomain)),
+        ),
+      createAppDomain: (appId, input) =>
+        data<ApiCustomDomain>("POST", `/v1/apps/${appId}/domains`, {
+          body: input,
+        }).pipe(Effect.map(normalizeCustomDomain)),
+      listAppDeployments: (appId, query) =>
+        paginate<DeploymentListItem>(`/v1/apps/${appId}/deployments`, query),
+      createAppDeployment: (appId, input) =>
+        data<DeploymentCreateResult>("POST", `/v1/apps/${appId}/deployments`, {
+          body: input,
+        }),
+      getDeployment: (id) => data<Deployment>("GET", `/v1/deployments/${id}`),
+      deleteDeployment: (id) =>
+        request<void>("DELETE", `/v1/deployments/${id}`),
+      startDeployment: (id) =>
+        data<StartDeploymentResult>("POST", `/v1/deployments/${id}/start`),
+      stopDeployment: (id) =>
+        request<void>("POST", `/v1/deployments/${id}/stop`),
+      getDeploymentLogsUrl: (id, query) =>
+        buildWebSocketUrl(`/v1/deployments/${id}/logs`, logsQuery(query)),
+      getBuildLogsUrl: (buildId, query) =>
+        buildWebSocketUrl(`/v1/builds/${buildId}/logs`, logsQuery(query)),
+
       listEnvironmentVariables: (query) =>
         paginate<EnvironmentVariable>("/v1/environment-variables", query),
       getEnvironmentVariable: (id) =>
@@ -963,6 +1093,12 @@ function makePrismaClient(): Effect.Effect<
           {
             body: input,
           },
+        ),
+      connectScmInstallation: (installationId, input) =>
+        data<ScmInstallation>(
+          "POST",
+          `/v1/scm-installations/${installationId}/connect`,
+          { body: input },
         ),
       listScmInstallationRepositories: (installationId, query) =>
         paginate<ScmRepository>(

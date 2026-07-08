@@ -398,6 +398,98 @@ export interface RollbackComputeServiceResult {
   reassignedDomains: number;
 }
 
+/**
+ * The `/v1/apps` surface is the current public naming for Compute services.
+ * An App wraps the same underlying service; deployments are the app-facing
+ * name for compute versions.
+ */
+export interface App {
+  id: string;
+  type: "app";
+  url: string;
+  name: string;
+  region: { id: string; name: string };
+  projectId: string;
+  branchId: string | null;
+  latestDeploymentId: string | null;
+  appEndpointDomain: string;
+  createdAt: string;
+}
+
+export interface AppCreateInput {
+  projectId: string;
+  displayName: string;
+  regionId?: PrismaRegionId;
+  branchId?: string | null;
+  branchGitName?: string | null;
+}
+
+export interface AppUpdateInput {
+  displayName?: string;
+  branchId?: string | null;
+  branchGitName?: string | null;
+}
+
+/**
+ * Promote/rollback target for an App. Pass the new `deploymentId`; the
+ * legacy `versionId` is still accepted but deprecated — when both are
+ * present `deploymentId` wins.
+ */
+export interface AppDeploymentTarget {
+  deploymentId?: string;
+  /**
+   * @deprecated Use `deploymentId` instead.
+   */
+  versionId?: string;
+}
+
+export interface PromoteAppResult {
+  appEndpointDomain: string;
+  reassignedDomains: number;
+}
+
+export interface RollbackAppResult {
+  appEndpointDomain: string;
+  reassignedDomains: number;
+}
+
+export interface DeploymentListItem {
+  id: string;
+  type: "deployment";
+  url: string;
+  foundryVersionId: string;
+  createdAt: string;
+}
+
+export interface Deployment {
+  id: string;
+  type: "deployment";
+  url: string;
+  foundryVersionId: string;
+  status: string;
+  previewDomain: string | null;
+  envVars?: Record<string, string>;
+  portMapping?: { http?: number };
+  createdAt: string;
+}
+
+export interface DeploymentCreateInput {
+  portMapping?: { http?: number | null };
+  skipCodeUpload?: boolean;
+}
+
+export interface DeploymentCreateResult {
+  id: string;
+  type: "deployment";
+  url: string;
+  foundryVersionId: string;
+  uploadUrl: string | null;
+}
+
+export interface StartDeploymentResult {
+  previewDomain: string;
+}
+
 export type CustomDomainStatus =
   | "pending_dns"
   | "verifying"
@@ -495,8 +587,23 @@ export interface ScmInstallation {
   accountLogin: string;
   accountType: "user" | "organization";
   suspended: boolean;
+  /**
+   * Whether the installation is connected to the workspace in the list query.
+   * Connectable installations of the caller's other workspaces are returned
+   * with `connected: false` (full user sessions only).
+   */
+  connected: boolean;
+  /**
+   * When the installation was connected to the workspace, `null` for
+   * connectable-but-not-connected rows.
+   */
+  connectedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ScmInstallationConnectInput {
+  workspaceId: string;
 }
 
 export interface ScmInstallIntentCreateInput {

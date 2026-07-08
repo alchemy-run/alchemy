@@ -1,7 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
 import { isResolved } from "../Diff.ts";
@@ -186,10 +184,24 @@ export interface ConnectionBindingEnvKeys {
   password: string;
 }
 
-export class ConnectionBinding extends Binding.Service<
+/**
+ * Bind a {@link Connection} to a Prisma Compute app, AWS Lambda Function, or
+ * Cloudflare Worker and obtain the typed runtime client.
+ *
+ * `ConnectionBinding` is a single identifier that is simultaneously the
+ * binding's Context tag, its type, and the callable —
+ * `yield* Prisma.ConnectionBinding(connection)`.
+ *
+ * @binding
+ */
+export interface ConnectionBinding extends Binding.Service<
   ConnectionBinding,
+  "Prisma.Connection",
   (connection: Connection) => Effect.Effect<ConnectionBindingClient>
->()("Prisma.Connection") {}
+> {}
+
+export const ConnectionBinding =
+  Binding.Service<ConnectionBinding>("Prisma.Connection");
 
 export type ConnectionUrlKind = "legacy" | "direct" | "pooled" | "accelerate";
 export type ConnectionUrlPreference =
@@ -342,7 +354,7 @@ export type ConnectionEnv<
  *   "api",
  *   { project, serviceName: "api", main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const db = yield* Prisma.Connection.bind(connection);
+ *     const db = yield* Prisma.ConnectionBinding(connection);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const databaseUrl = yield* db.databaseUrl;
@@ -359,7 +371,7 @@ export type ConnectionEnv<
  *   "api",
  *   { main: import.meta.filename, url: true },
  *   Effect.gen(function* () {
- *     const db = yield* Prisma.Connection.bind(connection);
+ *     const db = yield* Prisma.ConnectionBinding(connection);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const databaseUrl = yield* db.databaseUrl;
@@ -376,7 +388,7 @@ export type ConnectionEnv<
  *   "api",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const db = yield* Prisma.Connection.bind(connection);
+ *     const db = yield* Prisma.ConnectionBinding(connection);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const databaseUrl = yield* db.databaseUrl;
@@ -387,9 +399,7 @@ export type ConnectionEnv<
  * );
  * ```
  */
-export const Connection = Resource<Connection>("Prisma.Connection")({
-  bind: ConnectionBinding.bind,
-});
+export const Connection = Resource<Connection>("Prisma.Connection");
 
 const envName = (value: string) =>
   value.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
@@ -670,8 +680,24 @@ export const ConnectionBindingLive = Layer.effect(
   ConnectionBinding,
   Effect.gen(function* () {
     return Effect.fn(function* (connection: Connection) {
-      const policy = yield* resolveConnectionBindingPolicy;
-      yield* policy(connection);
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (supportsConnectionEnvBinding(host)) {
+          yield* host.bind`${connection}`({
+            env: connectionBindingEnv(connection),
+          });
+        } else if (supportsConnectionWorkerBinding(host)) {
+          yield* host.bind`${connection}`({
+            bindings: connectionWorkerBindings(connection),
+          });
+        } else {
+          return yield* Effect.die(
+            new Error(
+              `Prisma.ConnectionBinding supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host.Type}'`,
+            ),
+          );
+        }
+      }
       const keys = connectionBindingEnvKeys(connection);
       const env = encodedConnectionBindingEnv(connection);
       const connectionString = runtimeOutput(
@@ -716,63 +742,6 @@ export const ConnectionBindingLive = Layer.effect(
     });
   }),
 );
-
-export class ConnectionBindingPolicy extends Binding.Policy<
-  ConnectionBindingPolicy,
-  (connection: Connection) => Effect.Effect<void>
->()("Prisma.Connection") {}
-
-type ConnectionBindingPolicyFn = (
-  connection: Connection,
-) => Effect.Effect<void>;
-
-const ConnectionBindingPolicyService =
-  Context.Service<ConnectionBindingPolicyFn>(ConnectionBindingPolicy.key);
-
-const resolveConnectionBindingPolicy: Effect.Effect<ConnectionBindingPolicyFn> =
-  Effect.gen(function* () {
-    const directPolicy = yield* Effect.serviceOption(
-      ConnectionBindingPolicyService,
-    );
-    const policy = Option.isSome(directPolicy)
-      ? directPolicy
-      : yield* Provider.tryFindProviderByType<typeof ConnectionBindingPolicy>(
-          ConnectionBindingPolicy.key,
-        );
-
-    if (Option.isSome(policy)) {
-      return policy.value;
-    }
-
-    // Do not ask for the host Self here. Prisma.Compute runtime entrypoints
-    // construct binding layers while their own Self layer is still being built.
-    return () => Effect.void;
-  });
-
-export const ConnectionBindingPolicyLive =
-  ConnectionBindingPolicy.layer.succeed(
-    Effect.fnUntraced(function* (host: ResourceLike, connection: Connection) {
-      if (supportsConnectionEnvBinding(host)) {
-        yield* host.bind`${connection}`({
-          env: connectionBindingEnv(connection),
-        });
-        return;
-      }
-
-      if (supportsConnectionWorkerBinding(host)) {
-        yield* host.bind`${connection}`({
-          bindings: connectionWorkerBindings(connection),
-        });
-        return;
-      }
-
-      return yield* Effect.die(
-        new Error(
-          `Prisma.Connection.bind supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host.Type}'`,
-        ),
-      );
-    }),
-  );
 
 const findConnection = (
   client: PrismaManagementClient,

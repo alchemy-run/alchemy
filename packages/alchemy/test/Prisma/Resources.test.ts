@@ -10,8 +10,8 @@ import {
   ComputeVersionProvider,
 } from "@/Prisma/ComputeVersion";
 import {
+  ConnectionBinding,
   ConnectionBindingLive,
-  ConnectionBindingPolicyLive,
   Connection as PrismaConnection,
   ConnectionProvider,
   connectionBindingEnvKeys,
@@ -537,7 +537,7 @@ describe("Prisma resource providers", () => {
       } as PrismaConnection;
 
       return Effect.gen(function* () {
-        const db = yield* PrismaConnection.bind(connection);
+        const db = yield* ConnectionBinding(connection);
         const keys = connectionBindingEnvKeys(connection);
         const encodedEnv = yield* Output.evaluate(
           capturedBindingEnv ?? {},
@@ -575,7 +575,6 @@ describe("Prisma resource providers", () => {
         );
       }).pipe(
         Effect.provide(ConnectionBindingLive),
-        Effect.provide(ConnectionBindingPolicyLive),
         Effect.provide(Layer.succeed(RuntimeContext, runtime)),
         Effect.provide(Layer.succeed(Self, host)),
         Effect.provide(
@@ -589,7 +588,7 @@ describe("Prisma resource providers", () => {
   );
 
   it.effect(
-    "ConnectionBindingLive does not require the deploy-time policy at runtime",
+    "ConnectionBindingLive does not require the deploy-time host at runtime",
     () => {
       const stored: Record<string, Output.Output> = {};
       const runtime = {
@@ -625,8 +624,12 @@ describe("Prisma resource providers", () => {
         password: Output.asOutput(Redacted.make("password")),
       } as PrismaConnection;
 
+      // The deploy-time host dispatch is guarded by `__ALCHEMY_RUNTIME__`,
+      // which bundles fold to `true` — simulate that so no Self is needed.
+      const wasRuntime = globalThis.__ALCHEMY_RUNTIME__;
+      globalThis.__ALCHEMY_RUNTIME__ = true;
       return Effect.gen(function* () {
-        const db = yield* PrismaConnection.bind(connection);
+        const db = yield* ConnectionBinding(connection);
 
         expect(yield* db.connectionId).toBe("connection-1");
         expect(yield* db.databaseUrl).toBe("postgres://runtime");
@@ -638,6 +641,11 @@ describe("Prisma resource providers", () => {
             ConfigProvider.ConfigProvider,
             ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
           ),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            globalThis.__ALCHEMY_RUNTIME__ = wasRuntime;
+          }),
         ),
       );
     },
@@ -681,7 +689,7 @@ describe("Prisma resource providers", () => {
             main: "app.ts",
           },
           Effect.gen(function* () {
-            yield* PrismaConnection.bind(connection);
+            yield* ConnectionBinding(connection);
           }).pipe(Effect.provide(ConnectionBindingLive)),
         );
 
@@ -709,12 +717,12 @@ describe("Prisma resource providers", () => {
         ).toBe("prisma+postgres://api");
         expect(redactedValue(env[keys.password] ?? undefined)).toBe("password");
       }).pipe(
-        Effect.provide(ConnectionBindingPolicyLive),
         Effect.provide(inMemoryState()),
         Effect.provide(
           Layer.succeed(PrismaProviderCollection, {
             kind: "ProviderCollection" as const,
             get: () => undefined,
+            providers: {},
           }),
         ),
         Effect.provideService(Stack, stack),
@@ -776,7 +784,7 @@ describe("Prisma resource providers", () => {
     } as PrismaConnection;
 
     return Effect.gen(function* () {
-      const db = yield* PrismaConnection.bind(connection);
+      const db = yield* ConnectionBinding(connection);
       const keys = connectionBindingEnvKeys(connection);
       const env = yield* Output.evaluate(
         capturedBindingEnv ?? {},
@@ -809,7 +817,6 @@ describe("Prisma resource providers", () => {
       expect(yield* db.databaseUrl).toBe("postgres://api");
     }).pipe(
       Effect.provide(ConnectionBindingLive),
-      Effect.provide(ConnectionBindingPolicyLive),
       Effect.provide(inMemoryState()),
       Effect.provide(Layer.succeed(RuntimeContext, runtime)),
       Effect.provide(Layer.succeed(Self, host)),
@@ -872,7 +879,7 @@ describe("Prisma resource providers", () => {
     } as PrismaConnection;
 
     return Effect.gen(function* () {
-      const db = yield* PrismaConnection.bind(connection);
+      const db = yield* ConnectionBinding(connection);
       const keys = connectionBindingEnvKeys(connection);
       const bindings = (yield* Output.evaluate(
         capturedBindings ?? [],
@@ -912,7 +919,6 @@ describe("Prisma resource providers", () => {
       expect(yield* db.password).toBe("password");
     }).pipe(
       Effect.provide(ConnectionBindingLive),
-      Effect.provide(ConnectionBindingPolicyLive),
       Effect.provide(inMemoryState()),
       Effect.provide(Layer.succeed(RuntimeContext, runtime)),
       Effect.provide(Layer.succeed(Self, host)),

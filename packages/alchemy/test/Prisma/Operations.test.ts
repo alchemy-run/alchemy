@@ -76,6 +76,23 @@ const expectedOperationHelpers = [
   "stopComputeServiceVersion",
   "getComputeVersionLogsRequest",
   "getComputeVersionLogsUrl",
+  "listApps",
+  "getApp",
+  "createApp",
+  "updateApp",
+  "deleteApp",
+  "promoteApp",
+  "rollbackApp",
+  "listAppDomains",
+  "createAppDomain",
+  "listAppDeployments",
+  "createAppDeployment",
+  "getDeployment",
+  "deleteDeployment",
+  "startDeployment",
+  "stopDeployment",
+  "getDeploymentLogsUrl",
+  "getBuildLogsUrl",
   "listEnvironmentVariables",
   "getEnvironmentVariable",
   "createEnvironmentVariable",
@@ -88,6 +105,7 @@ const expectedOperationHelpers = [
   "revokeWorkspaceIntegration",
   "listScmInstallations",
   "createScmInstallIntent",
+  "connectScmInstallation",
   "listScmInstallationRepositories",
   "listSourceRepositories",
   "getSourceRepository",
@@ -214,6 +232,24 @@ describe("Prisma operation helpers", () => {
         fromStart: true,
       });
 
+      yield* Prisma.listApps({ projectId: "project-1" });
+      yield* Prisma.getApp("app-1");
+      yield* Prisma.createApp({ projectId: "project-1", displayName: "web" });
+      yield* Prisma.updateApp("app-1", { displayName: "renamed" });
+      yield* Prisma.deleteApp("app-1");
+      yield* Prisma.promoteApp("app-1", { deploymentId: "deployment-1" });
+      yield* Prisma.rollbackApp("app-1", { deploymentId: "deployment-1" });
+      yield* Prisma.listAppDomains("app-1");
+      yield* Prisma.createAppDomain("app-1", { hostname: "web.example.com" });
+      yield* Prisma.listAppDeployments("app-1", { limit: 1 });
+      yield* Prisma.createAppDeployment("app-1", { skipCodeUpload: true });
+      yield* Prisma.getDeployment("deployment-1");
+      yield* Prisma.deleteDeployment("deployment-1");
+      yield* Prisma.startDeployment("deployment-1");
+      yield* Prisma.stopDeployment("deployment-1");
+      yield* Prisma.getDeploymentLogsUrl("deployment-1", { tail: 10 });
+      yield* Prisma.getBuildLogsUrl("build-1");
+
       yield* Prisma.listEnvironmentVariables({ projectId: "project-1" });
       yield* Prisma.getEnvironmentVariable("env-1");
       yield* Prisma.createEnvironmentVariable({
@@ -234,6 +270,9 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.listScmInstallations({ workspaceId: "workspace-1" });
       yield* Prisma.createScmInstallIntent({
         provider: "github",
+        workspaceId: "workspace-1",
+      });
+      yield* Prisma.connectScmInstallation("scminstall-1", {
         workspaceId: "workspace-1",
       });
       yield* Prisma.listScmInstallationRepositories("scminstall-1", {

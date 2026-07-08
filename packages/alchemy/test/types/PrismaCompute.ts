@@ -14,22 +14,23 @@ type Expect<T extends true> = T;
 type EffectRequirement<T> =
   T extends Effect.Effect<unknown, unknown, infer R> ? R : never;
 
-interface ApiShape {
+type ApiShape = {
   connectionId(): Effect.Effect<string, never, RuntimeContext>;
-}
+};
 
 export class PrismaComputeApi extends Prisma.Compute<
   PrismaComputeApi,
   ApiShape
->()("PrismaComputeApi", {
-  project: "project-1",
-  serviceName: "api",
-  main: import.meta.filename,
-}) {}
+>()("PrismaComputeApi") {}
 
 export const PrismaComputeApiLive = PrismaComputeApi.make(
+  {
+    project: "project-1",
+    serviceName: "api",
+    main: import.meta.filename,
+  },
   Effect.gen(function* () {
-    const db = yield* Prisma.Connection.bind(connection);
+    const db = yield* Prisma.ConnectionBinding(connection);
     type _DatabaseUrlIsRuntimeOnly = Expect<
       Equal<EffectRequirement<typeof db.databaseUrl>, RuntimeContext>
     >;

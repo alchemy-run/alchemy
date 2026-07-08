@@ -114,6 +114,24 @@ const lifecycleResources = [
 ] as const;
 
 const operationOnlyRoutes = [
+  "GET /v1/apps",
+  "POST /v1/apps",
+  "GET /v1/apps/{appId}",
+  "PATCH /v1/apps/{appId}",
+  "DELETE /v1/apps/{appId}",
+  "POST /v1/apps/{appId}/promote",
+  "POST /v1/apps/{appId}/rollback",
+  "GET /v1/apps/{appId}/domains",
+  "POST /v1/apps/{appId}/domains",
+  "GET /v1/apps/{appId}/deployments",
+  "POST /v1/apps/{appId}/deployments",
+  "GET /v1/deployments/{deploymentId}",
+  "DELETE /v1/deployments/{deploymentId}",
+  "POST /v1/deployments/{deploymentId}/start",
+  "POST /v1/deployments/{deploymentId}/stop",
+  "GET /v1/deployments/{deploymentId}/logs",
+  "GET /v1/builds/{buildId}/logs",
+  "POST /v1/scm-installations/{installationId}/connect",
   "POST /v1/projects/{id}/transfer",
   "GET /v1/databases/{databaseId}/backups",
   "POST /v1/databases/{targetDatabaseId}/restore",
@@ -147,6 +165,19 @@ const expectedManagementApiRoutes = [
   ...lifecycleResources.flatMap((resource) => resource.routes),
   ...operationOnlyRoutes,
 ].sort();
+
+/**
+ * Routes that exist in the control-plane route sources but have not shipped
+ * to the production OpenAPI document yet (the SDK's `api.d.ts` is generated
+ * from `https://api.prisma.io/v1/doc`). Remove entries as they go live.
+ */
+const unreleasedManagementApiRoutes = new Set<string>([
+  "POST /v1/scm-installations/{installationId}/connect",
+]);
+
+const releasedManagementApiRoutes = expectedManagementApiRoutes.filter(
+  (route) => !unreleasedManagementApiRoutes.has(route),
+);
 
 const expectedProjectComputeSdkRoutes = [
   "DELETE /v1/compute-services/{computeServiceId}",
@@ -275,9 +306,9 @@ describe("Prisma Management API coverage", () => {
       if (!(yield* fs.exists(referenceApiPath))) return;
 
       const source = yield* fs.readFileString(referenceApiPath);
-      expect(expectedManagementApiRoutes).toHaveLength(78);
+      expect(expectedManagementApiRoutes).toHaveLength(96);
       expect(managementApiRoutesFromOpenApiTypes(source)).toEqual(
-        expectedManagementApiRoutes,
+        releasedManagementApiRoutes,
       );
     }).pipe(Effect.provide(NodeServices.layer)),
   );

@@ -17,12 +17,7 @@ import { Branch, BranchProvider } from "./Branch.ts";
 import { Compute, ComputeDevProvider, ComputeProvider } from "./Compute.ts";
 import { ComputeService, ComputeServiceProvider } from "./ComputeService.ts";
 import { ComputeVersion, ComputeVersionProvider } from "./ComputeVersion.ts";
-import {
-  Connection,
-  ConnectionBindingPolicy,
-  ConnectionBindingPolicyLive,
-  ConnectionProvider,
-} from "./Connection.ts";
+import { Connection, ConnectionProvider } from "./Connection.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
 import {
@@ -117,7 +112,6 @@ export const providers = () =>
       ComputeService,
       ComputeVersion,
       CustomDomain,
-      ConnectionBindingPolicy,
       EnvironmentVariable,
       SourceRepository,
     ]),
@@ -140,7 +134,6 @@ const devProviderLayer = () =>
     computeServiceDevProvider(),
     computeVersionDevProvider(),
     customDomainDevProvider(),
-    ConnectionBindingPolicyLive,
     environmentVariableDevProvider(),
     sourceRepositoryDevProvider(),
   );
@@ -396,7 +389,6 @@ const liveProviderLayer = () =>
     ComputeServiceProvider(),
     ComputeVersionProvider(),
     CustomDomainProvider(),
-    ConnectionBindingPolicyLive,
     EnvironmentVariableProvider(),
     SourceRepositoryProvider(),
   ).pipe(Layer.provideMerge(managementApiLayer()), Layer.orDie);

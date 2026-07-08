@@ -1,9 +1,13 @@
 import * as Effect from "effect/Effect";
 import { PrismaClient, type PrismaManagementClient } from "./Client.ts";
 import type {
+  AppCreateInput,
+  AppDeploymentTarget,
+  AppUpdateInput,
   BranchCreateInput,
   BranchUpdateInput,
   ComputeVersionLogsQuery,
+  DeploymentCreateInput,
   DatabaseConnectionCreateInput,
   ComputeServiceCreateInput,
   ComputeServiceUpdateInput,
@@ -22,6 +26,7 @@ import type {
   ProjectUpdateInput,
   RestoreDatabaseInput,
   ScmInstallIntentCreateInput,
+  ScmInstallationConnectInput,
   ServiceComputeVersionCreateInput,
   SourceRepositoryCreateInput,
 } from "./Types.ts";
@@ -228,6 +233,55 @@ export const getComputeVersionLogsUrl = (
   query?: ComputeVersionLogsQuery,
 ) => withClient((client) => client.getComputeVersionLogsUrl(id, query));
 
+export const listApps = (query?: {
+  cursor?: string | null;
+  limit?: number;
+  projectId?: string;
+  branchId?: PrismaBranchIdFilter;
+  branchGitName?: string;
+}) => withClient((client) => client.listApps(query));
+export const getApp = (id: string) => withClient((client) => client.getApp(id));
+export const createApp = (input: AppCreateInput) =>
+  withClient((client) => client.createApp(input));
+export const updateApp = (id: string, input: AppUpdateInput) =>
+  withClient((client) => client.updateApp(id, input));
+export const deleteApp = (id: string) =>
+  withClient((client) => client.deleteApp(id));
+export const promoteApp = (id: string, target: AppDeploymentTarget) =>
+  withClient((client) => client.promoteApp(id, target));
+export const rollbackApp = (id: string, target: AppDeploymentTarget) =>
+  withClient((client) => client.rollbackApp(id, target));
+export const listAppDomains = (appId: string) =>
+  withClient((client) => client.listAppDomains(appId));
+export const createAppDomain = (
+  appId: string,
+  input: CustomDomainCreateInput,
+) => withClient((client) => client.createAppDomain(appId, input));
+export const listAppDeployments = (
+  appId: string,
+  query?: { cursor?: string | null; limit?: number },
+) => withClient((client) => client.listAppDeployments(appId, query));
+export const createAppDeployment = (
+  appId: string,
+  input: DeploymentCreateInput,
+) => withClient((client) => client.createAppDeployment(appId, input));
+export const getDeployment = (id: string) =>
+  withClient((client) => client.getDeployment(id));
+export const deleteDeployment = (id: string) =>
+  withClient((client) => client.deleteDeployment(id));
+export const startDeployment = (id: string) =>
+  withClient((client) => client.startDeployment(id));
+export const stopDeployment = (id: string) =>
+  withClient((client) => client.stopDeployment(id));
+export const getDeploymentLogsUrl = (
+  id: string,
+  query?: ComputeVersionLogsQuery,
+) => withClient((client) => client.getDeploymentLogsUrl(id, query));
+export const getBuildLogsUrl = (
+  buildId: string,
+  query?: ComputeVersionLogsQuery,
+) => withClient((client) => client.getBuildLogsUrl(buildId, query));
+
 export const listEnvironmentVariables = (query?: {
   cursor?: string | null;
   limit?: number;
@@ -272,11 +326,17 @@ export const revokeWorkspaceIntegration = (
 
 export const listScmInstallations = (query: {
   workspaceId: string;
+  connected?: boolean;
   cursor?: string | null;
   limit?: number;
 }) => withClient((client) => client.listScmInstallations(query));
 export const createScmInstallIntent = (input: ScmInstallIntentCreateInput) =>
   withClient((client) => client.createScmInstallIntent(input));
+export const connectScmInstallation = (
+  installationId: string,
+  input: ScmInstallationConnectInput,
+) =>
+  withClient((client) => client.connectScmInstallation(installationId, input));
 export const listScmInstallationRepositories = (
   installationId: string,
   query?: { cursor?: string | null; limit?: number },

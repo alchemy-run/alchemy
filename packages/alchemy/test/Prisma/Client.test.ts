@@ -47,6 +47,24 @@ const json = (value: unknown, init?: ResponseInit) =>
 const empty = () => new Response(null, { status: 204 });
 
 const expectedManagementApiRoutes = [
+  "GET /v1/apps",
+  "POST /v1/apps",
+  "GET /v1/apps/{appId}",
+  "PATCH /v1/apps/{appId}",
+  "DELETE /v1/apps/{appId}",
+  "POST /v1/apps/{appId}/promote",
+  "POST /v1/apps/{appId}/rollback",
+  "GET /v1/apps/{appId}/domains",
+  "POST /v1/apps/{appId}/domains",
+  "GET /v1/apps/{appId}/deployments",
+  "POST /v1/apps/{appId}/deployments",
+  "GET /v1/deployments/{deploymentId}",
+  "DELETE /v1/deployments/{deploymentId}",
+  "POST /v1/deployments/{deploymentId}/start",
+  "POST /v1/deployments/{deploymentId}/stop",
+  "GET /v1/deployments/{deploymentId}/logs",
+  "GET /v1/builds/{buildId}/logs",
+  "POST /v1/scm-installations/{installationId}/connect",
   "DELETE /v1/branches/{branchId}",
   "DELETE /v1/compute-services/{computeServiceId}",
   "DELETE /v1/compute-services/versions/{versionId}",
@@ -128,6 +146,34 @@ const expectedManagementApiRoutes = [
 ].sort();
 
 const concreteRouteTemplates = new Map([
+  ["GET /v1/apps", "GET /v1/apps"],
+  ["POST /v1/apps", "POST /v1/apps"],
+  ["GET /v1/apps/app-1", "GET /v1/apps/{appId}"],
+  ["PATCH /v1/apps/app-1", "PATCH /v1/apps/{appId}"],
+  ["DELETE /v1/apps/app-1", "DELETE /v1/apps/{appId}"],
+  ["POST /v1/apps/app-1/promote", "POST /v1/apps/{appId}/promote"],
+  ["POST /v1/apps/app-1/rollback", "POST /v1/apps/{appId}/rollback"],
+  ["GET /v1/apps/app-1/domains", "GET /v1/apps/{appId}/domains"],
+  ["POST /v1/apps/app-1/domains", "POST /v1/apps/{appId}/domains"],
+  ["GET /v1/apps/app-1/deployments", "GET /v1/apps/{appId}/deployments"],
+  ["POST /v1/apps/app-1/deployments", "POST /v1/apps/{appId}/deployments"],
+  ["GET /v1/deployments/deployment-1", "GET /v1/deployments/{deploymentId}"],
+  [
+    "DELETE /v1/deployments/deployment-1",
+    "DELETE /v1/deployments/{deploymentId}",
+  ],
+  [
+    "POST /v1/deployments/deployment-1/start",
+    "POST /v1/deployments/{deploymentId}/start",
+  ],
+  [
+    "POST /v1/deployments/deployment-1/stop",
+    "POST /v1/deployments/{deploymentId}/stop",
+  ],
+  [
+    "POST /v1/scm-installations/scminstall-1/connect",
+    "POST /v1/scm-installations/{installationId}/connect",
+  ],
   ["DELETE /v1/branches/branch-1", "DELETE /v1/branches/{branchId}"],
   [
     "DELETE /v1/compute-services/service-1",
@@ -315,6 +361,8 @@ const routeInventoryFrom = (captured: Captured[]) => {
     routes.add(route);
   }
   routes.add("GET /v1/compute-services/versions/{versionId}/logs");
+  routes.add("GET /v1/deployments/{deploymentId}/logs");
+  routes.add("GET /v1/builds/{buildId}/logs");
   return [...routes].sort();
 };
 
@@ -1297,6 +1345,47 @@ describe("PrismaClient", () => {
           });
           yield* client.deleteSourceRepository("repo-1");
 
+          yield* client.listApps({
+            projectId: "project-1",
+            branchGitName: "main",
+          });
+          yield* client.getApp("app-1");
+          yield* client.createApp({
+            projectId: "project-1",
+            displayName: "web",
+          });
+          yield* client.updateApp("app-1", { displayName: "web-2" });
+          yield* client.deleteApp("app-1");
+          yield* client.promoteApp("app-1", { deploymentId: "deployment-1" });
+          yield* client.rollbackApp("app-1", { deploymentId: "deployment-1" });
+          yield* client.listAppDomains("app-1");
+          yield* client.createAppDomain("app-1", {
+            hostname: "web.example.com",
+          });
+          yield* client.listAppDeployments("app-1", { limit: 1 });
+          yield* client.createAppDeployment("app-1", {
+            skipCodeUpload: true,
+          });
+          yield* client.getDeployment("deployment-1");
+          yield* client.deleteDeployment("deployment-1");
+          yield* client.startDeployment("deployment-1");
+          yield* client.stopDeployment("deployment-1");
+          yield* client.connectScmInstallation("scminstall-1", {
+            workspaceId: "workspace-1",
+          });
+
+          const deploymentLogsUrl = yield* client.getDeploymentLogsUrl(
+            "deployment-1",
+            { tail: 10 },
+          );
+          expect(deploymentLogsUrl).toBe(
+            "wss://api.prisma.test/v1/deployments/deployment-1/logs?tail=10",
+          );
+          const buildLogsUrl = yield* client.getBuildLogsUrl("build-1");
+          expect(buildLogsUrl).toBe(
+            "wss://api.prisma.test/v1/builds/build-1/logs",
+          );
+
           expect(
             captured.map((request) => [
               request.method,
@@ -1386,11 +1475,27 @@ describe("PrismaClient", () => {
             ["GET", "/v1/source-repositories/repo-1"],
             ["POST", "/v1/source-repositories"],
             ["DELETE", "/v1/source-repositories/repo-1"],
+            ["GET", "/v1/apps?projectId=project-1&branchGitName=main"],
+            ["GET", "/v1/apps/app-1"],
+            ["POST", "/v1/apps"],
+            ["PATCH", "/v1/apps/app-1"],
+            ["DELETE", "/v1/apps/app-1"],
+            ["POST", "/v1/apps/app-1/promote"],
+            ["POST", "/v1/apps/app-1/rollback"],
+            ["GET", "/v1/apps/app-1/domains"],
+            ["POST", "/v1/apps/app-1/domains"],
+            ["GET", "/v1/apps/app-1/deployments?limit=1"],
+            ["POST", "/v1/apps/app-1/deployments"],
+            ["GET", "/v1/deployments/deployment-1"],
+            ["DELETE", "/v1/deployments/deployment-1"],
+            ["POST", "/v1/deployments/deployment-1/start"],
+            ["POST", "/v1/deployments/deployment-1/stop"],
+            ["POST", "/v1/scm-installations/scminstall-1/connect"],
           ]);
           expect(routeInventoryFrom(captured)).toEqual(
             expectedManagementApiRoutes,
           );
-          expect(expectedManagementApiRoutes).toHaveLength(78);
+          expect(expectedManagementApiRoutes).toHaveLength(96);
           expect(captured[11]?.bodyJson).toEqual({
             recipientAccessToken: "recipient-token",
           });
@@ -1544,8 +1649,16 @@ describe("PrismaClient", () => {
         if (!(yield* fs.exists(referenceApiPath))) return;
 
         const source = yield* fs.readFileString(referenceApiPath);
+        // The SDK's api.d.ts is generated from the production OpenAPI doc
+        // (`https://api.prisma.io/v1/doc`), so routes that exist in the
+        // control-plane sources but have not shipped yet are absent from it.
+        const unreleasedRoutes = new Set([
+          "POST /v1/scm-installations/{installationId}/connect",
+        ]);
         expect(managementApiRoutesFromOpenApiTypes(source)).toEqual(
-          expectedManagementApiRoutes,
+          expectedManagementApiRoutes.filter(
+            (route) => !unreleasedRoutes.has(route),
+          ),
         );
       }).pipe(Effect.provide(NodeServices.layer)),
   );
