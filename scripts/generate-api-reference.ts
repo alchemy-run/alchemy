@@ -319,6 +319,192 @@ function findTaggedPrimary(sourceFile: SourceFile): Primary | undefined {
   return undefined;
 }
 
+const LINK_TAG_RE = /\{@link\s+([^}]+)\}/g;
+
+/** Split a `{@link ...}` tag's inner text into target + optional label. */
+function parseLinkTag(inner: string): { target: string; label?: string } {
+  const trimmed = inner.trim();
+  const pipe = trimmed.indexOf("|");
+  if (pipe !== -1) {
+    return {
+      target: trimmed.slice(0, pipe).trim(),
+      label: trimmed.slice(pipe + 1).trim() || undefined,
+    };
+  }
+  const space = trimmed.search(/\s/);
+  if (space !== -1) {
+    return {
+      target: trimmed.slice(0, space).trim(),
+      label: trimmed.slice(space + 1).trim() || undefined,
+    };
+  }
+  return { target: trimmed };
+}
+
+/**
+ * Reduce a typedoc-style `import("./Secrets.ts").Secrets` target to the bare
+ * symbol name — resolution (same-directory first) and display both want the
+ * name, not the module expression.
+ */
+function normalizeLinkTarget(target: string): string {
+  const match = target.match(/^import\((["'])[^"']+\1\)\.(.+)$/);
+  return match ? match[2] : target;
+}
+
+/** Resolves a `{@link}` symbol target to a generated page URL, if any. */
+type LinkResolver = (target: string) => string | undefined;
+
+/**
+ * Build a per-page resolver factory. A symbol resolves to another generated
+ * page preferring (in order): a same-directory page named after it, a
+ * same-directory page whose source file exports it (an access-level service
+ * like `ReadNamespace` documented on its `ReadWriteNamespace` page), a unique
+ * name match within the same provider, a unique exporter within the same
+ * provider, then a unique global name match. Member suffixes
+ * (`Cluster#capacityProviders`), provider-qualified names (`Cloudflare.Worker`)
+ * and `FooProps` interfaces resolve to the base resource's page.
+ */
+function makeLinkResolverFactory(
+  pages: PageEntry[],
+): (fromDir: string) => LinkResolver {
+  const byName = new Map<string, PageEntry[]>();
+  const byExport = new Map<string, PageEntry[]>();
+  for (const p of pages) {
+    if (!byName.has(p.resource)) byName.set(p.resource, []);
+    byName.get(p.resource)!.push(p);
+    for (const name of p.exports) {
+      if (!byExport.has(name)) byExport.set(name, []);
+      byExport.get(name)!.push(p);
+    }
+  }
+  const providers = new Set(pages.map((p) => p.provider));
+
+  return (fromDir: string) => {
+    const fromProvider = fromDir.split("/")[0] ?? "";
+
+    const lookup = (
+      name: string,
+      provider?: string,
+    ): PageEntry | undefined => {
+      const scope = (list: PageEntry[] | undefined) =>
+        (list ?? []).filter((c) => !provider || c.provider === provider);
+      const named = scope(byName.get(name));
+      const exporting = scope(byExport.get(name));
+
+      const sameDirNamed = named.filter((c) => c.dir === fromDir);
+      if (sameDirNamed.length === 1) return sameDirNamed[0];
+      const sameDirExporting = exporting.filter((c) => c.dir === fromDir);
+      if (sameDirExporting.length === 1) return sameDirExporting[0];
+      const providerNamed = named.filter((c) => c.provider === fromProvider);
+      if (providerNamed.length === 1) return providerNamed[0];
+      const providerExporting = exporting.filter(
+        (c) => c.provider === fromProvider,
+      );
+      if (providerExporting.length === 1) return providerExporting[0];
+      if (named.length === 1) return named[0];
+      return undefined;
+    };
+
+    return (target: string) => {
+      // Strip a `#member` suffix — the link lands on the owning resource page.
+      const base = target.split("#")[0];
+
+      const attempts: { name: string; provider?: string }[] = [{ name: base }];
+      if (base.includes(".")) {
+        const segments = base.split(".");
+        const first = segments[0];
+        const last = segments[segments.length - 1];
+        if (providers.has(first)) {
+          // Provider-qualified: `Cloudflare.Worker`, `Cloudflare.KV.Namespace`.
+          attempts.push({ name: last, provider: first });
+        } else {
+          // Member access on a symbol: `KeyPairProps.publicKeyMaterial`.
+          attempts.push({ name: first });
+          if (first.endsWith("Props")) {
+            attempts.push({ name: first.slice(0, -"Props".length) });
+          }
+        }
+      } else if (base.endsWith("Props")) {
+        attempts.push({ name: base.slice(0, -"Props".length) });
+      }
+
+      for (const attempt of attempts) {
+        const found = lookup(attempt.name, attempt.provider);
+        if (found) return found.link;
+      }
+      return undefined;
+    };
+  };
+}
+
+const isUrl = (target: string) => /^https?:\/\//.test(target);
+
+/**
+ * Replace `{@link ...}` tags with markdown links, skipping fenced code
+ * blocks. Symbols that don't resolve to a generated page render as inline
+ * code (or their label) instead of leaking the raw tag.
+ */
+/** Symbol targets that didn't resolve to a page, for the end-of-run summary. */
+const unresolvedLinkTargets = new Map<string, number>();
+
+function linkifyMarkdown(markdown: string, resolve: LinkResolver): string {
+  const replaceTags = (chunk: string) =>
+    chunk.replace(LINK_TAG_RE, (_, inner: string) => {
+      // A tag wrapped across source lines carries the line break in its
+      // label — collapse it so the markdown link stays intact.
+      const parsed = parseLinkTag(inner.replace(/\s+/g, " "));
+      const label = parsed.label;
+      if (isUrl(parsed.target)) {
+        return `[${label ?? parsed.target}](${parsed.target})`;
+      }
+      const target = normalizeLinkTarget(parsed.target);
+      const url = resolve(target);
+      if (!url) {
+        unresolvedLinkTargets.set(
+          target,
+          (unresolvedLinkTargets.get(target) ?? 0) + 1,
+        );
+      }
+      const text = label ?? `\`${target}\``;
+      return url ? `[${text}](${url})` : text;
+    });
+
+  // Apply across contiguous non-fence chunks (a `{@link}` may span lines);
+  // leave fenced code blocks untouched.
+  const out: string[] = [];
+  let chunk: string[] = [];
+  let insideFence = false;
+  const flushChunk = () => {
+    if (chunk.length > 0) {
+      out.push(replaceTags(chunk.join("\n")));
+      chunk = [];
+    }
+  };
+  for (const line of markdown.split("\n")) {
+    if (line.trim().startsWith("```")) {
+      if (!insideFence) flushChunk();
+      insideFence = !insideFence;
+      out.push(line);
+      continue;
+    }
+    if (insideFence) {
+      out.push(line);
+    } else {
+      chunk.push(line);
+    }
+  }
+  flushChunk();
+  return out.join("\n");
+}
+
+/** Reduce `{@link ...}` tags to plain text for frontmatter descriptions. */
+function stripLinkTags(text: string): string {
+  return text.replace(LINK_TAG_RE, (_, inner: string) => {
+    const { target, label } = parseLinkTag(inner.replace(/\s+/g, " "));
+    return (label ?? normalizeLinkTarget(target)).replace(/`/g, "");
+  });
+}
+
 function yamlString(value: string): string {
   if (/[\n:"{}[\],&*?|>!%@`#]/.test(value) || value.trim() !== value) {
     return JSON.stringify(value);
@@ -356,10 +542,11 @@ function renderPageBody(doc: PageDoc): string {
   return parts.join("\n\n");
 }
 
-function renderPage(doc: PageDoc): string {
+function renderPage(doc: PageDoc, resolve: LinkResolver): string {
   const sourcePath = `src/${normalizeSlashes(doc.relativePath)}`;
   const description =
-    firstParagraph(doc.summary) || `API reference for ${doc.title}`;
+    stripLinkTags(firstParagraph(doc.summary)) ||
+    `API reference for ${doc.title}`;
   const frontmatter = [
     "---",
     `title: ${yamlString(doc.title)}`,
@@ -368,7 +555,7 @@ function renderPage(doc: PageDoc): string {
   ].join("\n");
 
   const sourceBlock = `> **Source:** \`${sourcePath}\``;
-  const body = renderPageBody(doc).trim();
+  const body = linkifyMarkdown(renderPageBody(doc).trim(), resolve);
 
   if (body) {
     return `${frontmatter}\n\n${sourceBlock}\n\n${body}\n`;
@@ -403,6 +590,10 @@ interface PageEntry {
   category: string;
   product: string;
   link: string;
+  /** Source directory relative to srcRoot (slash-normalized), e.g. `Cloudflare/KV`. */
+  dir: string;
+  /** All names the page's source file exports — `{@link}` targets documented on this page. */
+  exports: string[];
 }
 
 const byLabel = (a: { label: string }, b: { label: string }) =>
@@ -553,6 +744,7 @@ async function main() {
 
   const seen = new Map<string, string>();
   const pageEntries: PageEntry[] = [];
+  const pending: { outputRelative: string; doc: PageDoc }[] = [];
   let written = 0;
   let skipped = 0;
 
@@ -596,11 +788,14 @@ async function main() {
       summary: primary.doc.summary,
       sections: primary.doc.sections,
     };
+    pending.push({ outputRelative, doc });
 
-    const outputPath = path.join(config.outRoot, outputRelative);
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, renderPage(doc), "utf8");
-    written++;
+    let exportNames: string[] = [];
+    try {
+      exportNames = [...sourceFile.getExportedDeclarations().keys()];
+    } catch {
+      // Unresolvable re-exports — page-name resolution still applies.
+    }
 
     const segments = normalizeSlashes(outputRelative).split("/");
     pageEntries.push({
@@ -612,7 +807,22 @@ async function main() {
       link: `/providers/${normalizeSlashes(outputRelative)
         .replace(/\.md$/, "")
         .toLowerCase()}`,
+      dir: normalizeSlashes(relDir),
+      exports: exportNames,
     });
+  }
+
+  // Second pass: render with `{@link}` resolution — the full page set must be
+  // known before symbol targets can resolve to their pages.
+  const resolverFor = makeLinkResolverFactory(pageEntries);
+  for (const page of pending) {
+    const resolve = resolverFor(
+      normalizeSlashes(path.dirname(page.outputRelative)),
+    );
+    const outputPath = path.join(config.outRoot, page.outputRelative);
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, renderPage(page.doc, resolve), "utf8");
+    written++;
   }
 
   const sidebar = buildProvidersSidebar(pageEntries);
@@ -660,6 +870,15 @@ async function main() {
       path.relative(path.join(import.meta.dir, ".."), config.outRoot),
     )}.`,
   );
+  if (unresolvedLinkTargets.size > 0) {
+    const list = [...unresolvedLinkTargets.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([target, n]) => (n > 1 ? `${target} ×${n}` : target))
+      .join(", ");
+    console.log(
+      `{@link} targets without a page (rendered as inline code): ${list}`,
+    );
+  }
   console.log(
     `Wrote provider sidebar to ${normalizeSlashes(
       path.relative(path.join(import.meta.dir, ".."), sidebarPath),
