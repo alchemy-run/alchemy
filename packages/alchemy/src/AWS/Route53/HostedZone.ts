@@ -114,17 +114,22 @@ export const HostedZoneProvider = () =>
       // Poll `getChange` until the change reaches INSYNC. `getChange` is
       // eventually consistent and can briefly return `NoSuchChange` right after
       // submit, so coalesce that to a non-INSYNC status and keep polling.
+      // `ChangeInfo.Id` comes back as "/change/C..." but `getChange` only
+      // accepts the bare id — the prefixed form returns `NoSuchChange`
+      // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((r) => r.ChangeInfo.Status),
-          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-          Effect.repeat({
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-            until: (status) => status === "INSYNC",
-          }),
-        );
+        return yield* route53
+          .getChange({ Id: changeId.replace(/^\/change\//, "") })
+          .pipe(
+            Effect.map((r) => r.ChangeInfo.Status),
+            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+            Effect.repeat({
+              schedule: Schedule.fixed("2 seconds").pipe(
+                Schedule.both(Schedule.recurs(60)),
+              ),
+              until: (status) => status === "INSYNC",
+            }),
+          );
       });
 
       const findByName = Effect.fn(function* (name: string) {
