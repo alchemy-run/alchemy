@@ -163,6 +163,13 @@ export interface Decoration {
   hidden?: boolean;
   /** ts of the event that last touched this decoration */
   at: number;
+  /**
+   * ts of the event that last set `applyResult`. Distinct from `at`
+   * deliberately: `at` refreshes on EVERY decorate (status ticks), so a
+   * previous run's verdict riding along on fresh in-flight decorations
+   * would look current — renderers gate result freshness on THIS.
+   */
+  resultAt?: number;
 }
 
 /** One entry in a resource's deployment timeline. */
@@ -558,12 +565,17 @@ const decorate = (
   doc: DeploymentDocument,
   patches: DocumentPatch[],
   fqn: string,
-  fields: Omit<Partial<Decoration>, "at">,
+  fields: Omit<Partial<Decoration>, "at" | "resultAt">,
   at: number,
 ): void => {
   const defined = definedOnly(fields);
   const existing = doc.decorations.get(fqn);
-  doc.decorations.set(fqn, { ...existing, ...defined, at });
+  doc.decorations.set(fqn, {
+    ...existing,
+    ...defined,
+    at,
+    ...("applyResult" in defined ? { resultAt: at } : {}),
+  });
   patches.push({ kind: "decorate", revision: 0, fqn, ...defined, at });
 };
 

@@ -202,7 +202,7 @@ export const ResourceNode = memo(function ResourceNode({
   const resultIsFresh =
     result !== undefined &&
     deployStartedAt !== undefined &&
-    (decoration?.at ?? 0) >= deployStartedAt;
+    (decoration?.resultAt ?? 0) >= deployStartedAt;
   const showPlanChip =
     plan !== undefined && (approval !== undefined || !resultIsFresh);
   // The bookmark tab is the node's single lifecycle indicator:

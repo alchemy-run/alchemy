@@ -152,7 +152,7 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
   const resultIsFresh =
     applyResult !== undefined &&
     deployStartedAt !== undefined &&
-    (decoration?.at ?? 0) >= deployStartedAt;
+    (decoration?.resultAt ?? 0) >= deployStartedAt;
   const showPlanChip =
     planAction !== undefined && (approval !== undefined || !resultIsFresh);
   const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? NEUTRAL_COLOR;
@@ -199,7 +199,7 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
           >
             {PLAN_LABELS[planAction] ?? planAction}
           </span>
-        ) : applyResult ? (
+        ) : applyResult && resultIsFresh ? (
           <span
             className={CHIP}
             style={chipStyle(RESULT_COLORS[applyResult] ?? NEUTRAL_COLOR)}
