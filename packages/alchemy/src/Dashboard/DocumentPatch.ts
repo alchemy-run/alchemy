@@ -316,7 +316,11 @@ export const applyPatch = (
       const next = { ...existing, at: patch.at };
       if (patch.status !== undefined) next.status = patch.status;
       if (patch.planAction !== undefined) next.planAction = patch.planAction;
-      if (patch.applyResult !== undefined) next.applyResult = patch.applyResult;
+      if (patch.applyResult !== undefined) {
+        next.applyResult = patch.applyResult;
+        // mirrors the fold's decorate(): the verdict's own timestamp
+        next.resultAt = patch.at;
+      }
       if (patch.note !== undefined) next.note = patch.note;
       if (patch.hidden !== undefined) next.hidden = patch.hidden;
       doc.decorations.set(patch.fqn, next);

@@ -66,9 +66,19 @@ export const summaryOf = (doc: DeploymentDocument): SummaryView => {
       byPlanAction[node.planAction] = (byPlanAction[node.planAction] ?? 0) + 1;
     }
   }
+  // Only the CURRENT run's verdicts count — a previous run's applyResult
+  // survives in the decoration (defined-fields merge) and must not inflate
+  // this run's progress or failures. `resultAt` stamps when the verdict
+  // itself landed (`at` refreshes on every status tick).
+  const startedAt = doc.deployment?.startedAt;
+  const resultIsCurrent = (decoration: {
+    resultAt?: number;
+    at: number;
+  }): boolean =>
+    startedAt === undefined || (decoration.resultAt ?? 0) >= startedAt;
   const byApplyResult: Record<string, number> = {};
   for (const decoration of doc.decorations.values()) {
-    if (decoration.applyResult !== undefined) {
+    if (decoration.applyResult !== undefined && resultIsCurrent(decoration)) {
       byApplyResult[decoration.applyResult] =
         (byApplyResult[decoration.applyResult] ?? 0) + 1;
     }
@@ -76,7 +86,10 @@ export const summaryOf = (doc: DeploymentDocument): SummaryView => {
 
   const failedFqns = new Set<string>();
   for (const [fqn, decoration] of doc.decorations) {
-    if (decoration.applyResult === "failed" || decoration.status === "fail") {
+    if (
+      (decoration.applyResult === "failed" && resultIsCurrent(decoration)) ||
+      decoration.status === "fail"
+    ) {
       failedFqns.add(fqn);
     }
   }
