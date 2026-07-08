@@ -7,16 +7,16 @@ excerpt: A loop for generating infrastructure-as-code — AI agents write resour
 ![The generation loop — write resources and live tests, run them against the real API, every unmatched error becomes an SDK patch and regeneration, retest until green, then ship the IaC and the truthful SDK together](/blog/resource-factory/loop.svg)
 
 This loop grew Alchemy's Cloudflare provider from **22
-resources to 230** between June 11 and June 17: fleets of AI
-agents write the resources and their live tests, run them
-against a real Cloudflare account — not mocks — and every API
-behavior the SDK's types don't capture becomes a patch to the
-SDK, which regenerates and the tests rerun. One run produced
-288 test files (~700 tests), **720 SDK patches**, and most of
+resources to 230** between June 11 and June 17. Fleets of AI
+agents write the resources and their live tests, then run them
+against a real Cloudflare account. Every API behavior the
+SDK's types don't capture becomes a patch to the SDK, which
+regenerates and the tests rerun. One run produced 288 test
+files with roughly 700 tests and **720 SDK patches**. Most of
 it landed in a single PR
-([#601](https://github.com/alchemy-run/alchemy-effect/pull/601)):
-+101,178 lines across 542 files, open for 22 hours. The PR
-description, in its entirety:
+([#601](https://github.com/alchemy-run/alchemy-effect/pull/601))
+that added 101,178 lines across 542 files and was open for 22
+hours. The PR description, in its entirety:
 
 > Using Fable to generate all missing cloudflare resources
 
