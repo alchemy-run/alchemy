@@ -2,6 +2,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Vitest";
+import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
@@ -65,6 +66,36 @@ const listByPattern = (zoneId: string, pattern: string) =>
 const findRoute = (zoneId: string, pattern: string) =>
   listByPattern(zoneId, pattern).pipe(Effect.map((rs) => rs[0]));
 
+// Workers only run on proxied hostnames, so the zone apex needs a proxied
+// placeholder record for route-matched requests to reach Cloudflare's edge
+// at all. The record is standing test-zone infrastructure (like the zone
+// itself): ensure it exists out-of-band, never tear it down.
+const ensureApexPlaceholder = (zoneId: string) =>
+  Effect.gen(function* () {
+    const existing = yield* dns.listRecords.items({ zoneId }).pipe(
+      Stream.filter(
+        (r) => r.name === zoneName && (r.type === "A" || r.type === "AAAA"),
+      ),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)[0]),
+      Effect.retry({
+        while: (e) => e._tag === "Forbidden",
+        schedule: forbiddenRetrySchedule,
+        times: 8,
+      }),
+    );
+    if (existing) return;
+    yield* dns.createRecord({
+      zoneId,
+      name: zoneName,
+      type: "AAAA",
+      content: "100::",
+      proxied: true,
+      ttl: 1,
+      comment: "standing placeholder so Workers routes serve on the zone apex",
+    });
+  });
+
 // Delete every route matching the pattern — purge leftovers from
 // interrupted runs so tests start from a clean slate (Cloudflare enforces
 // one route per pattern per zone).
@@ -98,6 +129,7 @@ test.provider.skipIf(!zoneName)(
 
       yield* stack.destroy();
       yield* purgeRoutes(zoneId, T1_V1, T1_V2, T1_ADDED);
+      yield* ensureApexPlaceholder(zoneId);
 
       let workerName: string | undefined;
 
@@ -298,7 +330,7 @@ test.provider.skipIf(!zoneName)(
       yield* purgeRoutes(zoneId, T3_PATTERN);
 
       yield* Effect.gen(function* () {
-        yield* stack.deploy(
+        const owner = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("RouteOwnerWorker", {
               main,
@@ -336,7 +368,7 @@ test.provider.skipIf(!zoneName)(
 
         // The pattern still routes to its original owner.
         const live = yield* findRoute(zoneId, T3_PATTERN);
-        expect(live?.script).toContain("RouteOwnerWorker");
+        expect(live?.script).toEqual(owner.workerName);
       }).pipe(
         Effect.ensuring(stack.destroy().pipe(Effect.ignore)),
       );
