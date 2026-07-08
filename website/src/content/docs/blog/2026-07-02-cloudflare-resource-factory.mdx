@@ -1,10 +1,12 @@
 ---
 title: Looping the Generation of IaC and SDKs
-date: 2026-07-02
+date: 2026-07-02T16:00:00Z
 excerpt: AI agents write resources and live tests, run them against the real API, and every unmatched error becomes a typed patch to our generated SDK. One run of this loop grew Alchemy's Cloudflare provider from 22 resources to 230 and patched 720 SDK operations, most of it in 22 hours.
 ---
 
-![The generation loop — write resources and live tests, run them against the real API, every unmatched error becomes an SDK patch and regeneration, retest until green, then ship the IaC and the truthful SDK together](/blog/resource-factory/loop.svg)
+import LoopDiagram from "../../../components/LoopDiagram.astro";
+
+<LoopDiagram />
 
 [Alchemy](https://alchemy.run) is a new Infrastructure-as-Code
 framework built from the ground up in TypeScript and Effect.
