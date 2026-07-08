@@ -5,13 +5,17 @@ import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type * as rolldown from "rolldown";
@@ -27,7 +31,7 @@ import {
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import type { HttpEffect } from "../../Http.ts";
+import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
@@ -641,11 +645,36 @@ export const Function: Platform<
               for (const handler of handlers) {
                 const eff = handler(event);
                 if (Effect.isEffect(eff)) {
-                  return await eff.pipe(
-                    Effect.provideService(HandlerContext, context),
+                  // Each invocation gets a fresh request scope, matching the
+                  // Worker / Durable Object / Workflow bridges. Lambda
+                  // freezes the sandbox after the handler returns (there is
+                  // no `waitUntil`), so the scope is settled inline before
+                  // returning; a failing finalizer is logged and ignored so
+                  // it can't mask the invocation's outcome.
+                  const scope = Scope.makeUnsafe();
+                  const exit = await eff.pipe(
+                    Effect.provide(
+                      Layer.mergeAll(
+                        Layer.succeed(HandlerContext, context),
+                        Layer.succeed(Scope.Scope, scope),
+                      ),
+                    ),
                     Effect.tap(Effect.logDebug),
-                    Effect.runPromise,
+                    Effect.runPromiseExit,
                   );
+                  if (!isScopeEjected(scope)) {
+                    await Scope.close(scope, exit).pipe(
+                      Effect.ignoreCause({
+                        log: "Warn",
+                        message: "Lambda invocation scope close failed",
+                      }),
+                      Effect.runPromise,
+                    );
+                  }
+                  if (Exit.isSuccess(exit)) {
+                    return exit.value;
+                  }
+                  throw Cause.squash(exit.cause);
                 }
               }
               throw new Error("No event handler found");

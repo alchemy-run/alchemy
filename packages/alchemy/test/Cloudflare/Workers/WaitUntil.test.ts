@@ -132,13 +132,15 @@ test(
     expect(entries).toContain("from-do-finalizer");
 
     // Init-phase semantics (documented on the Worker resource): the init
-    // closure is re-evaluated per event — its Layer is rebuilt for each
-    // event's runtime — and the layer's build scope closes when the event
-    // ends, so a finalizer added in the init closure fires once per event.
-    // This pins that observable behavior: after the requests above, the
-    // per-isolate counters show multiple init runs with finalizers tracking
-    // them (finalized ≥ init - 1 on a single isolate; sampled loosely to
-    // tolerate isolate churn).
+    // closure runs exactly once per isolate — the bridge builds the layer
+    // stack on the first event and every later event reuses the built
+    // context. The build scope is never closed (workerd has no isolate
+    // teardown), so a finalizer added in the init closure NEVER fires;
+    // request-coupled cleanup belongs in handlers, where `addFinalizer`
+    // attaches to the per-event scope (asserted above). Each observation
+    // may come from a different isolate, but every isolate must report
+    // exactly one init run and zero init-finalizer runs no matter how many
+    // events it has served.
     const observations: { init: number; finalized: number }[] = [];
     yield* Effect.gen(function* () {
       const init = Number(yield* getText(client, `${url}/init-runs`));
@@ -152,7 +154,7 @@ test(
         times: 5,
       }),
     );
-    expect(observations.some((o) => o.init >= 2 && o.finalized >= 1)).toBe(
+    expect(observations.every((o) => o.init === 1 && o.finalized === 0)).toBe(
       true,
     );
   }).pipe(logLevel),

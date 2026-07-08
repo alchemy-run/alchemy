@@ -555,6 +555,13 @@ Why this matters: consumers can build cloud-agnostic services on top of bindings
 
 After implementing, re-export the contract and implementation layers from the service's `index.ts` (but keep the shared `{Cap}Binding.ts`/`{Cap}Http.ts` scaffolding un-exported).
 
+### Isolate scope vs request scope (runtime bridges)
+
+**Layer construction is isolate-scoped; the effects built services expose are request-scoped.**
+
+- **At layer build / Worker init (isolate scope)** a layer MAY resolve services and env/config, register listeners and `bind` declarations, and assemble `Effect.fn` clients — pure computation only. It MUST NOT perform I/O (fetch, sockets, binding calls, timers), retain I/O-backed promises, or use `Layer.scoped` / `Effect.acquireRelease` / init-level `Effect.addFinalizer` for request-coupled resources. The runtime bridges (Worker event, Durable Object call, Workflow run, Lambda invoke) build the layer stack **once per isolate** on the first event; the build scope is never closed (serverless runtimes have no teardown hook), so finalizers registered at init **never run**.
+- **At request scope**, anything needing I/O or cleanup is an effect requiring `Scope.Scope`, acquired lazily per call. Every bridge provides a fresh `Scope` per event; `Effect.addFinalizer` in a handler attaches to it and runs after the response (registered with `ctx.waitUntil` on workerd; settled inline on Lambda). Per-request memoization keys on the scope object (`yield* Effect.scope`) — see [Drizzle/Postgres.ts](./packages/alchemy/src/Drizzle/Postgres.ts) for the canonical WeakMap pattern. One pool/socket per event is the law on workerd (sockets are IoContext-pinned); Hyperdrive is the cross-request pooler.
+
 :::tip
 If you need to know what AWS region or account ID the resource is being created/updated in, you can use this inside any of the lifecycle operations.
 
