@@ -16,18 +16,18 @@ import * as Effect from "effect/Effect";
 export const NeonDatabase = Effect.gen(function* () {
   const { stage } = yield* Alchemy.Stack;
 
-  const schema = yield* Drizzle.Schema("app-schema", {
+  const schema = yield* Drizzle.Schema("Schema", {
     schema: "./src/backend/schema.ts",
     out: "./migrations",
   });
 
   const project = stage.startsWith("pr-")
-    ? yield* Neon.Project.ref("app-db", { stage: `staging-${stage}` })
-    : yield* Neon.Project("app-db", {
+    ? yield* Neon.Project.ref("Database", { stage: `staging-${stage}` })
+    : yield* Neon.Project("Database", {
         region: "aws-us-east-1",
       });
 
-  const branch = yield* Neon.Branch("app-branch", {
+  const branch = yield* Neon.Branch("Branch", {
     project,
     migrationsDir: schema.out,
   });
@@ -41,8 +41,17 @@ export const NeonDatabase = Effect.gen(function* () {
  */
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDatabase;
-  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+
+  return yield* Cloudflare.Hyperdrive.Connection("Hyperdrive", {
     origin: branch.origin,
+
+    // By default, Hyperdrive caches responses for 60 seconds.
+    // In this case, we wanted database writes to be reflected immediately,
+    // so we disabled caching while retaining Hyperdrive for connection pooling.
+    // You should configure this based on your requirements.
+    // Another common approach is to use two Hyperdrive connections: one with caching enabled
+    // for use cases that can accept eventual consistency in exchange for performance, and one
+    // without for when you need immediate consistency.
     caching: {
       disabled: true,
     },
