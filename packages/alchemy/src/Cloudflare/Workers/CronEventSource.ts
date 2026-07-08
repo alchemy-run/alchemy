@@ -22,7 +22,10 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *   - `controller.cron` — the cron expression that fired.
  *   - `controller.noRetry()` — opts the invocation out of Cloudflare's
  *     retry-on-failure. Only meaningful when the scheduled invocation can
- *     actually fail — see the retry note below.
+ *     actually fail — see the failure & retry section below.
+ *
+ *   Each member has its own section below with an Effect example first and
+ *   an async example second.
  *
  * Requires `CronEventSourceLive` provided on the Worker's Effect.
  *
@@ -38,15 +41,15 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *
  * Async (non-Effect) Workers don't use `cron` — they attach schedules with
  * the Worker's `crons` prop and export their own `scheduled` handler from
- * the entry module (see the Async Worker section below). Pass `crons: []`
- * to remove all Cron Triggers from a Worker.
+ * the entry module (each section below includes the async variant). Pass
+ * `crons: []` to remove all Cron Triggers from a Worker.
  *
  * @binding
  * @product Workers
  * @category Workers & Compute
  *
- * @section Effect-native Worker (recommended)
- * @example Run an Effect on a schedule
+ * @section Declare a schedule
+ * @example Effect-native Worker (recommended)
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
@@ -56,8 +59,8 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *   "Worker",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     yield* Cloudflare.Workers.cron("0 12 * * *", (controller) =>
- *       Effect.log(`scheduled at ${controller.scheduledTime}`),
+ *     yield* Cloudflare.Workers.cron("0 12 * * *", () =>
+ *       Effect.log("cron fired"),
  *     );
  *
  *     return {
@@ -67,15 +70,24 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * );
  * ```
  *
- * @example Multiple schedules
+ * @example Async Worker — `crons` prop + exported `scheduled` handler
  * ```typescript
- * // Each handler only runs for fires of its own expression — the listener
- * // checks controller.cron, so a midnight fire never runs the hourly handler.
- * yield* Cloudflare.Workers.cron("0 * * * *", () => syncFeeds);
- * yield* Cloudflare.Workers.cron("0 0 * * *", () => purgeExpired);
+ * // alchemy.run.ts — attach the cron expressions at deploy time
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   crons: ["0 12 * * *"],
+ * });
+ *
+ * // src/worker.ts — the entry module handles the fires itself
+ * export default {
+ *   async scheduled(controller: ScheduledController) {
+ *     console.log("cron fired");
+ *   },
+ * };
  * ```
  *
- * @example Record each fire on a Durable Object
+ * @section `controller.scheduledTime` — the fire time
+ * @example Effect: record each fire on a Durable Object
  * ```typescript
  * export default class Worker extends Cloudflare.Worker<Worker>()(
  *   "Worker",
@@ -97,24 +109,31 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * ) {}
  * ```
  *
- * @section Async Worker
- * @example Attach schedules with the `crons` prop and export `scheduled`
+ * @example Async: use the fire time as an idempotency key
  * ```typescript
- * // alchemy.run.ts — attach the cron expressions at deploy time
- * export const Worker = Cloudflare.Worker("Worker", {
- *   main: "./src/worker.ts",
- *   crons: ["0 12 * * *"],
- * });
- *
- * // src/worker.ts — the entry module handles the fires itself
+ * // scheduledTime is the time the fire was *scheduled* for (not when it
+ * // ran), so it is stable across retries of the same fire — a natural
+ * // idempotency key for at-most-once side effects.
  * export default {
- *   async scheduled(controller: ScheduledController) {
- *     console.log(`scheduled at ${controller.scheduledTime}`);
+ *   async scheduled(controller: ScheduledController, env: WorkerEnv) {
+ *     const key = `run:${controller.scheduledTime}`;
+ *     if (await env.RUNS.get(key)) return;
+ *     await syncFeeds();
+ *     await env.RUNS.put(key, "done");
  *   },
  * };
  * ```
  *
- * @example Dispatch multiple schedules on `controller.cron`
+ * @section `controller.cron` — dispatch multiple schedules
+ * @example Effect: one handler per expression
+ * ```typescript
+ * // Each handler only runs for fires of its own expression — the listener
+ * // checks controller.cron, so a midnight fire never runs the hourly handler.
+ * yield* Cloudflare.Workers.cron("0 * * * *", () => syncFeeds);
+ * yield* Cloudflare.Workers.cron("0 0 * * *", () => purgeExpired);
+ * ```
+ *
+ * @example Async: switch on `controller.cron`
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
@@ -136,7 +155,30 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * };
  * ```
  *
- * @example Suppress retry for permanent failures with `controller.noRetry()`
+ * @section `controller.noRetry()` — failure & retry control
+ * @example Effect: bound retries with `Effect.retry`
+ * ```typescript
+ * import * as Schedule from "effect/Schedule";
+ *
+ * // The event source reports the invocation as successful even when the
+ * // handler fails, so Cloudflare's platform retry rarely engages for Effect
+ * // handlers — Effect.retry is the primary retry control. Calling
+ * // controller.noRetry() once retries are exhausted defensively covers
+ * // anything that can still mark the invocation failed (e.g. a failing
+ * // waitUntil task).
+ * yield* Cloudflare.Workers.cron("0 * * * *", (controller) =>
+ *   syncFeeds.pipe(
+ *     Effect.retry({ schedule: Schedule.exponential("1 second"), times: 3 }),
+ *     Effect.tapError((error) =>
+ *       Effect.logError("syncFeeds failed permanently", error).pipe(
+ *         Effect.andThen(Effect.sync(() => controller.noRetry())),
+ *       ),
+ *     ),
+ *   ),
+ * );
+ * ```
+ *
+ * @example Async: suppress retry for permanent failures
  * ```typescript
  * // src/worker.ts — a thrown error marks the invocation failed and
  * // Cloudflare may retry it; noRetry() opts this fire out of that.
