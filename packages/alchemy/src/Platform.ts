@@ -44,27 +44,41 @@ export interface PlatformProps {
 }
 
 /**
- * Provide `layer` by building it against the AMBIENT scope rather than
- * `Effect.provide`'s transient region scope. `Effect.provide(layer)` is
- * implemented with `scopedWith`, so the layer's resources would be torn down
- * (and init-level finalizers fired) the moment the wrapped effect resolves —
- * i.e. immediately after the platform's init completes. Building against the
- * ambient scope ties the layer's lifetime to the caller instead: the runtime
- * bridges evaluate the entrypoint under the isolate-lifetime build scope
- * (never closed — serverless runtimes have no teardown hook), while
- * plan/deploy evaluates under the deploy scope (closed at the end of the
- * run, releasing deploy-time resources as before).
+ * Provide the platform class's layer (`cls.make(props, impl)`) with a
+ * lifetime that matches the phase.
+ *
+ * **At runtime** (`__ALCHEMY_RUNTIME__`, folded to `true` in every bundled
+ * artifact) the layer builds against the AMBIENT scope. `Effect.provide` is
+ * implemented with `scopedWith`, so its transient region scope would tear
+ * the layer down — firing init-level finalizers and releasing
+ * `Layer.scoped` services — the moment init completes. The runtime bridges
+ * evaluate the entrypoint under the isolate-lifetime build scope (never
+ * closed; serverless runtimes have no teardown hook), so building against
+ * it keeps isolate services alive for the isolate.
+ *
+ * **At plan/deploy** it stays `Effect.provide`: the transient region evicts
+ * the layer's memo entry when each `yield*` of the class completes, so
+ * every deploy in a session re-evaluates the resource and re-registers its
+ * Output sources. Building on the session scope would keep the memo alive
+ * across deploys and a second `stack.deploy` would skip source
+ * registration (`MissingSourceError`).
  */
-const provideOnAmbientScope =
+const provideClassLayer =
   <ROut, E2, RIn>(layer: Layer.Layer<ROut, E2, RIn>) =>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | E2, RIn | Scope | Exclude<R, ROut>> =>
-    Effect.flatMap(Effect.scope, (scope) =>
-      Effect.flatMap(Layer.buildWithScope(layer, scope), (context) =>
-        Effect.provideContext(self, context),
-      ),
-    ) as Effect.Effect<A, E | E2, RIn | Scope | Exclude<R, ROut>>;
+    (globalThis.__ALCHEMY_RUNTIME__
+      ? Effect.flatMap(Effect.scope, (scope) =>
+          Effect.flatMap(Layer.buildWithScope(layer, scope), (context) =>
+            Effect.provideContext(self, context),
+          ),
+        )
+      : Effect.provide(self, layer)) as Effect.Effect<
+      A,
+      E | E2,
+      RIn | Scope | Exclude<R, ROut>
+    >;
 
 export type Main<InitServices = never> = void | {
   fetch?:
@@ -349,7 +363,7 @@ export const Platform = <
         );
       return Object.assign(
         function (props: Props, impl: Impl) {
-          return cls.Self.pipe(provideOnAmbientScope(cls.make(props, impl)));
+          return cls.Self.pipe(provideClassLayer(cls.make(props, impl)));
         },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
@@ -371,7 +385,7 @@ export const Platform = <
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id);
       return cls.Self.pipe(
-        provideOnAmbientScope(cls.make(props, impl)),
+        provideClassLayer(cls.make(props, impl)),
         effectClass,
       );
     }

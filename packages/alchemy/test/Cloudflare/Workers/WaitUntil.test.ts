@@ -64,9 +64,13 @@ test(
     // The entries only appear if waitUntil kept the invocations alive until
     // the delayed writes completed.
     const entries = yield* Effect.gen(function* () {
-      const body = JSON.parse(yield* getText(client, `${url}/entries`)) as {
-        entries?: string[];
-      };
+      const text = yield* getText(client, `${url}/entries`);
+      // The workers.dev placeholder serves HTML with a 200 during subdomain
+      // propagation; a bare JSON.parse throw would be a *defect* that the
+      // `Effect.catch` below can't see, so parse as a typed failure.
+      const body = yield* Effect.try(
+        () => JSON.parse(text) as { entries?: string[] },
+      );
       return body.entries ?? [];
     }).pipe(
       Effect.catch(() => Effect.succeed([] as string[])),
@@ -113,9 +117,13 @@ test(
     });
 
     const entries = yield* Effect.gen(function* () {
-      const body = JSON.parse(yield* getText(client, `${url}/entries`)) as {
-        entries?: string[];
-      };
+      const text = yield* getText(client, `${url}/entries`);
+      // The workers.dev placeholder serves HTML with a 200 during subdomain
+      // propagation; a bare JSON.parse throw would be a *defect* that the
+      // `Effect.catch` below can't see, so parse as a typed failure.
+      const body = yield* Effect.try(
+        () => JSON.parse(text) as { entries?: string[] },
+      );
       return body.entries ?? [];
     }).pipe(
       Effect.catch(() => Effect.succeed([] as string[])),
