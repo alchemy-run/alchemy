@@ -60,11 +60,6 @@ import {
   type EventInvokeConfig,
 } from "./EventInvokeConfig.ts";
 import { makeFunctionHttpHandler } from "./HttpServer.ts";
-import {
-  enqueuePostResponse,
-  isLambdaExtensionActive,
-  settleLambdaInvocation,
-} from "./RuntimeExtension.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
 export type FunctionTypeId = typeof FunctionTypeId;
@@ -647,54 +642,45 @@ export const Function: Platform<
           }),
           (handlers) =>
             async (event: any, context: lambda.Context): Promise<any> => {
-              try {
-                for (const handler of handlers) {
-                  const eff = handler(event);
-                  if (Effect.isEffect(eff)) {
-                    // Each invocation gets a fresh request scope, matching
-                    // the Worker / Durable Object / Workflow bridges.
-                    const scope = Scope.makeUnsafe();
-                    const exit = await eff.pipe(
-                      Effect.provide(
-                        Layer.mergeAll(
-                          Layer.succeed(HandlerContext, context),
-                          Layer.succeed(Scope.Scope, scope),
-                        ),
+              for (const handler of handlers) {
+                const eff = handler(event);
+                if (Effect.isEffect(eff)) {
+                  // Each invocation gets a fresh request scope, matching the
+                  // Worker / Durable Object / Workflow bridges. The scope is
+                  // settled inline before returning: a buffered Lambda
+                  // response is not released to the caller until the Invoke
+                  // phase completes, so deferring cleanup (e.g. via an
+                  // INVOKE-subscribed extension window) shows up as response
+                  // latency anyway — keep request finalizers fast. A failing
+                  // finalizer is logged and ignored so it can't mask the
+                  // invocation's outcome.
+                  const scope = Scope.makeUnsafe();
+                  const exit = await eff.pipe(
+                    Effect.provide(
+                      Layer.mergeAll(
+                        Layer.succeed(HandlerContext, context),
+                        Layer.succeed(Scope.Scope, scope),
                       ),
-                      Effect.tap(Effect.logDebug),
-                      Effect.runPromiseExit,
+                    ),
+                    Effect.tap(Effect.logDebug),
+                    Effect.runPromiseExit,
+                  );
+                  if (!isScopeEjected(scope)) {
+                    await Scope.close(scope, exit).pipe(
+                      Effect.ignoreCause({
+                        log: "Warn",
+                        message: "Lambda invocation scope close failed",
+                      }),
+                      Effect.runPromise,
                     );
-                    if (!isScopeEjected(scope)) {
-                      const close = Scope.close(scope, exit).pipe(
-                        Effect.ignoreCause({
-                          log: "Warn",
-                          message: "Lambda invocation scope close failed",
-                        }),
-                        Effect.runPromise,
-                      );
-                      if (isLambdaExtensionActive()) {
-                        // The internal extension holds the Invoke phase open
-                        // until queued work settles — but Lambda has already
-                        // returned the response to the client, so finalizers
-                        // run *after* the response without blocking it (the
-                        // Lambda equivalent of workerd's `ctx.waitUntil`).
-                        enqueuePostResponse(close);
-                      } else {
-                        // No extension (local dev, registration refused):
-                        // the sandbox freezes at return, settle inline.
-                        await close;
-                      }
-                    }
-                    if (Exit.isSuccess(exit)) {
-                      return exit.value;
-                    }
-                    throw Cause.squash(exit.cause);
                   }
+                  if (Exit.isSuccess(exit)) {
+                    return exit.value;
+                  }
+                  throw Cause.squash(exit.cause);
                 }
-                throw new Error("No event handler found");
-              } finally {
-                settleLambdaInvocation();
               }
+              throw new Error("No event handler found");
             },
         ),
       })),
@@ -958,9 +944,8 @@ import { MinimumLogLevel } from "effect/References";
 import entrypoint from ${JSON.stringify(importPath)};
 
 // Register the internal extension: it buys the Shutdown phase (SIGTERM +
-// 500 ms — without any registered extension the sandbox is killed with no
-// signal at all) and a post-response window per invocation that the handler
-// dispatch uses to close the request scope off the response path.
+// 500 ms) — without any registered extension the sandbox is killed with no
+// signal at all, and init-level finalizers would never run.
 await registerLambdaExtension();
 
 // Instance scope: the sandbox-lifetime layer build lives under it, and it is

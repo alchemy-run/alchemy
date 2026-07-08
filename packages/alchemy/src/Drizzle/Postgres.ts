@@ -79,24 +79,21 @@ export const postgres = <
         }
         let memo = cache.get(symbol);
         if (memo === undefined) {
-          // Construct the cached effect and insert it SYNCHRONOUSLY — no
-          // yield between the miss and the set — so a concurrent first
-          // query joins this memo instead of racing past the check and
-          // building a second pool. `Effect.cached`'s construction is
-          // synchronous (it only allocates the memo cell; the underlying
-          // build runs on first evaluation), so `runSync` cannot block.
-          memo = Effect.runSync(
-            Effect.cached(
-              Effect.gen(function* () {
-                const pgCtx = yield* Layer.buildWithScope(
-                  PgClient.layer({ url: yield* connectionString }),
-                  scope,
-                );
-                return yield* PgDrizzle.makeWithDefaults(config).pipe(
-                  Effect.provideContext(pgCtx),
-                );
-              }),
-            ),
+          // `Effect.cached` only allocates the memo cell — the build runs
+          // on first evaluation — so this yield is synchronous and the
+          // fiber cannot be interleaved between the miss check and the
+          // set: a concurrent first query joins this memo (evaluating the
+          // same cached effect) instead of building a second pool.
+          memo = yield* Effect.cached(
+            Effect.gen(function* () {
+              const pgCtx = yield* Layer.buildWithScope(
+                PgClient.layer({ url: yield* connectionString }),
+                scope,
+              );
+              return yield* PgDrizzle.makeWithDefaults(config).pipe(
+                Effect.provideContext(pgCtx),
+              );
+            }),
           );
           cache.set(symbol, memo);
         }
