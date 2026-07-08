@@ -99,6 +99,42 @@ export type BucketLifecycleRule = {
   }[];
 };
 
+export type BucketCorsRule = {
+  /**
+   * Identifier for this rule.
+   */
+  id?: string;
+  /**
+   * Allowed origins, methods and headers for this CORS rule.
+   */
+  allowed: {
+    /**
+     * HTTP methods browsers are allowed to use in cross-origin requests.
+     */
+    methods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
+    /**
+     * Origins allowed to make cross-origin requests, e.g.
+     * `"https://example.com"`. Use `"*"` to allow any origin.
+     */
+    origins: string[];
+    /**
+     * Request headers browsers are allowed to send, e.g. `"range"` for
+     * range reads. If omitted, only simple headers are allowed.
+     */
+    headers?: string[];
+  };
+  /**
+   * Response headers the browser is allowed to expose to the requesting
+   * JavaScript, e.g. `"etag"` or `"content-range"`.
+   */
+  exposeHeaders?: string[];
+  /**
+   * How long (in seconds) browsers may cache CORS preflight responses.
+   * Browsers may cap this at 2 hours or less, even if 86400 is specified.
+   */
+  maxAgeSeconds?: number;
+};
+
 export type BucketProps = {
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
@@ -130,6 +166,13 @@ export type BucketProps = {
    * supported transitions.
    */
   lifecycleRules?: BucketLifecycleRule[];
+  /**
+   * CORS rules applied to the bucket, controlling which cross-origin
+   * browser requests are allowed against the bucket's public or S3 API
+   * endpoints. Pass an empty array (or omit) to remove the CORS
+   * configuration.
+   */
+  cors?: BucketCorsRule[];
 };
 
 export type Bucket = Resource<
@@ -143,6 +186,7 @@ export type Bucket = Resource<
     accountId: string;
     domains: Bucket.CustomDomain[];
     lifecycleRules: Bucket.LifecycleRule[];
+    cors: Bucket.CorsRule[];
   },
   never,
   Cloudflare.Providers
@@ -298,6 +342,63 @@ export type Bucket = Resource<
  *   ],
  * });
  * ```
+ *
+ * @section CORS
+ *
+ * Configure CORS rules so browsers can make cross-origin requests against
+ * the bucket's public (custom domain / r2.dev) or S3 API endpoints. Pass an
+ * empty array (or omit) to remove the CORS configuration. See the
+ * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/cors/)
+ * for details.
+ *
+ * @example Allow cross-origin reads from any origin
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   cors: [
+ *     {
+ *       allowed: {
+ *         methods: ["GET", "HEAD"],
+ *         origins: ["*"],
+ *       },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Browser range reads (e.g. PMTiles map tiles)
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   domains: [{ name: "tiles.example.com" }],
+ *   cors: [
+ *     {
+ *       id: "range-reads",
+ *       allowed: {
+ *         methods: ["GET", "HEAD"],
+ *         origins: ["https://map.example.com"],
+ *         headers: ["range", "if-match"],
+ *       },
+ *       exposeHeaders: ["etag", "content-range"],
+ *       maxAgeSeconds: 3600,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Allow uploads from a web app
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
+ *   cors: [
+ *     {
+ *       allowed: {
+ *         methods: ["GET", "PUT", "POST"],
+ *         origins: ["https://app.example.com"],
+ *         headers: ["content-type"],
+ *       },
+ *       exposeHeaders: ["etag"],
+ *     },
+ *   ],
+ * });
+ * ```
  */
 export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
   aliases: ["Cloudflare.R2Bucket"],
@@ -323,6 +424,16 @@ export declare namespace Bucket {
           storageClass: "InfrequentAccess";
         }[]
       | undefined;
+  };
+  export type CorsRule = {
+    id: string | undefined;
+    allowed: {
+      methods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
+      origins: string[];
+      headers: string[] | undefined;
+    };
+    exposeHeaders: string[] | undefined;
+    maxAgeSeconds: number | undefined;
   };
   export type CustomDomain = {
     domain: string;
@@ -659,6 +770,71 @@ export const BucketProvider = () =>
           return desiredRules;
         });
 
+      const reconcileCorsRules = (
+        bucketName: string,
+        jurisdiction: Bucket.Jurisdiction,
+        desired: BucketCorsRule[],
+      ) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const observed = yield* r2
+            .getBucketCors({
+              accountId,
+              bucketName,
+              jurisdiction,
+            })
+            .pipe(
+              Effect.map((response) => (response.rules ?? []).map(toCorsRule)),
+              // A bucket with no CORS configuration is a typed error, not an
+              // empty rule list — normalize it to [] for the diff below.
+              Effect.catchTag("NoCorsConfiguration", () =>
+                Effect.succeed([] as Bucket.CorsRule[]),
+              ),
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          const desiredRules = desired.map(normalizeCorsRule);
+
+          if (deepEqual(observed, desiredRules)) {
+            return desiredRules;
+          }
+
+          if (desiredRules.length === 0) {
+            yield* r2
+              .deleteBucketCors({
+                accountId,
+                bucketName,
+                jurisdiction,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              );
+            return desiredRules;
+          }
+
+          yield* r2
+            .putBucketCors({
+              accountId,
+              bucketName,
+              jurisdiction,
+              rules: desired,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          return desiredRules;
+        });
+
       return {
         stables: ["bucketName", "accountId"],
         list: () =>
@@ -717,6 +893,21 @@ export const BucketProvider = () =>
                         Effect.succeed([] as Bucket.LifecycleRule[]),
                       ),
                     );
+                  const cors = yield* r2
+                    .getBucketCors({
+                      accountId,
+                      bucketName: bucket.name,
+                      jurisdiction: bucket.jurisdiction,
+                    })
+                    .pipe(
+                      Effect.map((observed) =>
+                        (observed.rules ?? []).map(toCorsRule),
+                      ),
+                      Effect.catchTag(
+                        ["NoSuchBucket", "NoCorsConfiguration"],
+                        () => Effect.succeed([] as Bucket.CorsRule[]),
+                      ),
+                    );
                   return {
                     bucketName: bucket.name,
                     storageClass: bucket.storageClass,
@@ -725,6 +916,7 @@ export const BucketProvider = () =>
                     accountId,
                     domains,
                     lifecycleRules,
+                    cors,
                   };
                 }).pipe(
                   // The custom-domain endpoint intermittently 500s ("Failed to
@@ -772,6 +964,9 @@ export const BucketProvider = () =>
             return { action: "update" } as const;
           }
           if (!deepEqual(olds.lifecycleRules, news.lifecycleRules)) {
+            return { action: "update" } as const;
+          }
+          if (!deepEqual(olds.cors, news.cors)) {
             return { action: "update" } as const;
           }
         }),
@@ -875,10 +1070,17 @@ export const BucketProvider = () =>
             news.lifecycleRules ?? [],
           );
 
+          const cors = yield* reconcileCorsRules(
+            attrs.bucketName,
+            attrs.jurisdiction,
+            news.cors ?? [],
+          );
+
           return {
             ...attrs,
             domains,
             lifecycleRules,
+            cors,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -933,6 +1135,7 @@ export const BucketProvider = () =>
                 accountId: acct,
                 domains: output?.domains ?? [],
                 lifecycleRules: output?.lifecycleRules ?? [],
+                cors: output?.cors ?? [],
               })),
               Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
             );
@@ -1021,6 +1224,31 @@ const normalizeLifecycleRule = (
     ? { condition: rule.deleteObjectsTransition.condition }
     : undefined,
   storageClassTransitions: rule.storageClassTransitions,
+});
+
+type CorsRuleResponse = NonNullable<r2.GetBucketCorsResponse["rules"]>[number];
+
+const toCorsRule = (rule: CorsRuleResponse): Bucket.CorsRule => ({
+  id: rule.id ?? undefined,
+  allowed: {
+    // Distilled widened generated string enums to open unions.
+    methods: rule.allowed.methods as Bucket.CorsRule["allowed"]["methods"],
+    origins: rule.allowed.origins,
+    headers: rule.allowed.headers ?? undefined,
+  },
+  exposeHeaders: rule.exposeHeaders ?? undefined,
+  maxAgeSeconds: rule.maxAgeSeconds ?? undefined,
+});
+
+const normalizeCorsRule = (rule: BucketCorsRule): Bucket.CorsRule => ({
+  id: rule.id,
+  allowed: {
+    methods: rule.allowed.methods,
+    origins: rule.allowed.origins,
+    headers: rule.allowed.headers,
+  },
+  exposeHeaders: rule.exposeHeaders,
+  maxAgeSeconds: rule.maxAgeSeconds,
 });
 
 const toLifecyclePutPayload = (

@@ -294,6 +294,113 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
   }).pipe(logLevel),
 );
 
+test.provider("cors rules are added, updated, and removed", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    // Create with one rule.
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("CorsBucket", {
+          cors: [
+            {
+              id: "range-reads",
+              allowed: {
+                methods: ["GET", "HEAD"],
+                origins: ["https://map.example.com"],
+                headers: ["range"],
+              },
+              exposeHeaders: ["etag", "content-range"],
+              maxAgeSeconds: 3600,
+            },
+          ],
+        });
+      }),
+    );
+
+    expect(initial.cors).toHaveLength(1);
+
+    const initialCors = yield* r2.getBucketCors({
+      accountId,
+      bucketName: initial.bucketName,
+    });
+    expect(initialCors.rules).toHaveLength(1);
+    expect(initialCors.rules?.[0]?.id).toEqual("range-reads");
+    expect(initialCors.rules?.[0]?.allowed.methods).toEqual(["GET", "HEAD"]);
+    expect(initialCors.rules?.[0]?.allowed.origins).toEqual([
+      "https://map.example.com",
+    ]);
+    expect(initialCors.rules?.[0]?.exposeHeaders).toEqual([
+      "etag",
+      "content-range",
+    ]);
+    expect(initialCors.rules?.[0]?.maxAgeSeconds).toEqual(3600);
+
+    // Update: widen origins and add a second rule.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("CorsBucket", {
+          cors: [
+            {
+              id: "range-reads",
+              allowed: {
+                methods: ["GET", "HEAD"],
+                origins: ["*"],
+                headers: ["range"],
+              },
+              exposeHeaders: ["etag", "content-range"],
+              maxAgeSeconds: 3600,
+            },
+            {
+              id: "uploads",
+              allowed: {
+                methods: ["PUT", "POST"],
+                origins: ["https://app.example.com"],
+                headers: ["content-type"],
+              },
+            },
+          ],
+        });
+      }),
+    );
+
+    const updatedCors = yield* r2.getBucketCors({
+      accountId,
+      bucketName: initial.bucketName,
+    });
+    expect(updatedCors.rules).toHaveLength(2);
+    expect(updatedCors.rules?.[0]?.allowed.origins).toEqual(["*"]);
+    expect(updatedCors.rules?.[1]?.id).toEqual("uploads");
+    expect(updatedCors.rules?.[1]?.allowed.methods).toEqual(["PUT", "POST"]);
+
+    // Clear all rules — the CORS configuration is deleted entirely, so the
+    // GET endpoint reports the typed NoCorsConfiguration error.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("CorsBucket", {
+          cors: [],
+        });
+      }),
+    );
+
+    const cleared = yield* r2
+      .getBucketCors({
+        accountId,
+        bucketName: initial.bucketName,
+      })
+      .pipe(
+        Effect.map((response) => response.rules ?? []),
+        Effect.catchTag("NoCorsConfiguration", () => Effect.succeed([])),
+      );
+    expect(cleared).toEqual([]);
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
+  }).pipe(logLevel),
+);
+
 // R2 bucket creates are eventually consistent — a read immediately after
 // deploy can briefly return NoSuchBucket until the bucket propagates.
 const getBucketWhenReady = Effect.fn(function* (
