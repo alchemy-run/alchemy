@@ -4,6 +4,7 @@ import { Vpc } from "@/AWS/EC2/Vpc.ts";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
@@ -444,6 +445,125 @@ test.provider(
       yield* elbv2
         .deleteTargetGroup({ TargetGroupArn: targetGroupArn })
         .pipe(Effect.catch(() => Effect.void));
+
+      yield* stack.destroy();
+      yield* ecs
+        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
+        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+    }),
+  { timeout: 240_000 },
+);
+
+// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+//
+// An interrupted first deploy persists the service as `status: "creating"`
+// with no attributes — and the Output-valued props (`cluster` passed as a
+// resource object, `task`, `vpcId`, `subnets`) do not survive the state
+// round-trip: they deserialize as `undefined`. Plan's recovery branch then
+// calls `provider.read` with those junk props, which crashed in
+// `clusterArnOf(undefined)` and wedged the stack (plan/deploy/destroy all
+// build a plan, so there was no CLI escape hatch).
+//
+// Simulate exactly that state row after a real deploy and assert the next
+// deploy recovers: `read` reports "not found", the engine re-drives the
+// create, and reconcile converges on the half-created service by name —
+// SAME serviceArn, no replacement.
+test.provider(
+  "recovers a half-created service whose creating-state lost Output-valued props (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const registered = yield* ecs.registerTaskDefinition({
+        family: "alchemy-test-ecs-service-wedged",
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "256",
+        memory: "512",
+        containerDefinitions: [
+          {
+            name: "app",
+            image: "public.ecr.aws/nginx/nginx:stable",
+            essential: true,
+            portMappings: [{ containerPort: 80, protocol: "tcp" }],
+          },
+        ],
+      });
+      const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
+      // Safety net: deregister the out-of-band task definition on scope close.
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
+          .pipe(Effect.ignore),
+      );
+
+      const deployService = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("WedgedVpc", { cidrBlock: "10.74.0.0/16" });
+            const subnet = yield* Subnet("WedgedSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.74.1.0/24",
+            });
+            const cluster = yield* Cluster("WedgedCluster", {
+              clusterName: "alchemy-test-ecs-service-wedged",
+            });
+            return yield* Service("WedgedService", {
+              // Whole resource object, NOT a string ARN — the #736 shape.
+              cluster,
+              task: { taskDefinitionArn, containerName: "app", port: 80 },
+              desiredCount: 0,
+              vpcId: vpc.vpcId,
+              subnets: [subnet.subnetId],
+            });
+          }),
+        );
+
+      const created = yield* deployService();
+
+      // Rewrite the service's persisted row into the wedged shape an
+      // interrupted deploy leaves behind: `creating`, no attributes, and
+      // every Output-valued prop lost in the round-trip.
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) && r.row.resourceType === "AWS.ECS.Service",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error("no AWS.ECS.Service state row found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: {
+            ...wedged.row.props,
+            cluster: undefined,
+            task: undefined,
+            vpcId: undefined,
+            subnets: undefined,
+          },
+        },
+      });
+
+      // Before the fix this crashed in plan with
+      // `TypeError: undefined is not an object (evaluating 'cluster.clusterArn')`.
+      const recovered = yield* deployService();
+      expect(recovered.serviceArn).toEqual(created.serviceArn);
+      expect(recovered.clusterArn).toEqual(created.clusterArn);
 
       yield* stack.destroy();
       yield* ecs
