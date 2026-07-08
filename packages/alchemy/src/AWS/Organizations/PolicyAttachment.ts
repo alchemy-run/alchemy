@@ -55,10 +55,16 @@ export const PolicyAttachmentProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          return yield* readAttachment({
-            policyId: output?.policyId ?? olds!.policyId,
-            targetId: output?.targetId ?? olds!.targetId,
-          });
+          const policyId = output?.policyId ?? olds?.policyId;
+          const targetId = output?.targetId ?? olds?.targetId;
+          if (policyId === undefined || targetId === undefined) {
+            // A `creating` row persisted before upstream Outputs resolved
+            // can't round-trip Output-valued ids — they deserialize as
+            // `undefined`. Report "not found" so the engine re-drives the
+            // create (reconcile observes before attaching).
+            return undefined;
+          }
+          return yield* readAttachment({ policyId, targetId });
         }),
         // Enumerate every (policy, target) attachment. There is no direct
         // "list attachments" API, so we fan out: for each policy type, list the

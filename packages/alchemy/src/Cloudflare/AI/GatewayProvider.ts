@@ -145,10 +145,11 @@ export type GatewayProvider = Resource<
  * });
  *
  * // The secret name must be `{gatewayId}_{providerSlug}_{alias}`.
+ * // Prefer `Cloudflare.AI.ProviderKey` to wire this secret automatically.
  * const secret = yield* Cloudflare.SecretsStore.Secret("OpenAiKey", {
  *   store,
  *   name: "my-gateway_openai_default",
- *   value: Redacted.make(process.env.OPENAI_API_KEY!),
+ *   value: yield* Config.redacted("OPENAI_API_KEY"),
  *   scopes: ["ai_gateway"],
  * });
  *
@@ -175,7 +176,9 @@ export type GatewayProvider = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/
  */
-export const GatewayProvider = Resource<GatewayProvider>(TypeId);
+export const GatewayProvider = Resource<GatewayProvider>(TypeId, {
+  aliases: ["Cloudflare.AiGateway.ProviderConfig"],
+});
 
 /**
  * Returns true if the given value is a GatewayProvider resource.

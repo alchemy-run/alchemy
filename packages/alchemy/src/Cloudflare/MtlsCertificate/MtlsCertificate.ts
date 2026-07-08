@@ -167,7 +167,9 @@ export type MtlsCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  */
-export const MtlsCertificate = Resource<MtlsCertificate>(TypeId);
+export const MtlsCertificate = Resource<MtlsCertificate>(TypeId, {
+  aliases: ["Cloudflare.MtlsCertificate"],
+});
 
 /**
  * Returns true if the given value is a MtlsCertificate resource.

@@ -477,17 +477,22 @@ export const RecordProvider = () =>
       // Poll `getChange` until the change reaches INSYNC. `getChange` is
       // eventually consistent and can briefly return `NoSuchChange` right after
       // submit, so coalesce that to a non-INSYNC status and keep polling.
+      // `ChangeInfo.Id` comes back as "/change/C..." but `getChange` only
+      // accepts the bare id — the prefixed form returns `NoSuchChange`
+      // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((response) => response.ChangeInfo.Status),
-          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-          Effect.repeat({
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
-            until: (status) => status === "INSYNC",
-          }),
-        );
+        return yield* route53
+          .getChange({ Id: changeId.replace(/^\/change\//, "") })
+          .pipe(
+            Effect.map((response) => response.ChangeInfo.Status),
+            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+            Effect.repeat({
+              schedule: Schedule.fixed("2 seconds").pipe(
+                Schedule.both(Schedule.recurs(60)),
+              ),
+              until: (status) => status === "INSYNC",
+            }),
+          );
       });
 
       const findRecord = Effect.fn(function* (
@@ -590,10 +595,16 @@ export const RecordProvider = () =>
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
+          // Identity change → replace, but only when the old value is known —
+          // a half-created state row can't round-trip Output-valued props
+          // (they deserialize as `undefined`), and an unknown old identity
+          // must fall through to the create/update recovery path.
           if (
-            normalizeHostedZoneId(olds.hostedZoneId) !==
-              normalizeHostedZoneId(news.hostedZoneId) ||
-            normalizeName(olds.name) !== normalizeName(news.name) ||
+            (olds.hostedZoneId !== undefined &&
+              normalizeHostedZoneId(olds.hostedZoneId) !==
+                normalizeHostedZoneId(news.hostedZoneId)) ||
+            (olds.name !== undefined &&
+              normalizeName(olds.name) !== normalizeName(news.name)) ||
             olds.type !== news.type ||
             olds.setIdentifier !== news.setIdentifier
           ) {
@@ -601,20 +612,31 @@ export const RecordProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const recordSet = yield* findRecord(
-            output?.hostedZoneId ?? olds!.hostedZoneId,
-            {
-              name: output?.name ?? olds!.name,
-              type: output?.type ?? olds!.type,
-              setIdentifier: output?.setIdentifier ?? olds!.setIdentifier,
-            },
-          );
+          const hostedZoneId = output?.hostedZoneId ?? olds?.hostedZoneId;
+          const name = output?.name ?? olds?.name;
+          const type = output?.type ?? olds?.type;
+          if (
+            hostedZoneId === undefined ||
+            name === undefined ||
+            type === undefined
+          ) {
+            // Output-valued props don't survive a `creating`-state round-trip
+            // — without the record's identity we can't look it up. Report
+            // "not found" so the engine re-drives the create (the UPSERT in
+            // reconcile converges on any half-created record).
+            return undefined;
+          }
+          const recordSet = yield* findRecord(hostedZoneId, {
+            name,
+            type,
+            setIdentifier: output?.setIdentifier ?? olds?.setIdentifier,
+          });
 
           if (!recordSet) {
             return undefined;
           }
 
-          return toAttrs(recordSet, output?.hostedZoneId ?? olds!.hostedZoneId);
+          return toAttrs(recordSet, hostedZoneId);
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
           // Route 53 `changeResourceRecordSets` with `UPSERT` is naturally

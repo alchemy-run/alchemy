@@ -1,6 +1,5 @@
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
@@ -8,7 +7,7 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
@@ -160,8 +159,7 @@ export type Connection = Resource<
 export const Connection = Resource<Connection>("Cloudflare.Hyperdrive");
 
 export const isHyperdriveConnection = (value: unknown): value is Connection =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Hyperdrive";
+  isResourceOfType(value, "Cloudflare.Hyperdrive");
 
 export const ConnectionProvider = () =>
   Provider.succeed(Connection, {

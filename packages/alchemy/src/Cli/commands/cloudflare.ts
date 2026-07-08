@@ -20,7 +20,10 @@ import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment.t
 import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
 import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
-import { bootstrap as bootstrapCloudflare } from "../../Cloudflare/StateStore/State.ts";
+import {
+  bootstrap as bootstrapCloudflare,
+  teardownStateStore,
+} from "../../Cloudflare/StateStore/State.ts";
 import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
@@ -114,6 +117,33 @@ const bootstrapCommand = Command.make(
       }).pipe(Effect.provide(services));
     }),
   ),
+);
+
+const teardownCommand = Command.make(
+  "teardown",
+  {
+    envFile,
+    profile,
+    workerName: cloudflareWorkerName,
+  },
+  instrumentCommand(
+    "cloudflare.teardown",
+    (a: { profile: string; workerName: string | undefined }) => ({
+      "alchemy.profile": a.profile,
+      "alchemy.worker_name": a.workerName ?? "",
+    }),
+  )(
+    Effect.fn(function* ({ envFile, profile, workerName }) {
+      const services = yield* cloudflareLayers(envFile, profile);
+      yield* teardownStateStore({
+        workerName,
+        profile,
+      }).pipe(Effect.provide(services));
+    }),
+  ),
+).pipe(
+  Command.withHidden,
+  Command.withDescription("Tear down the cloudflare state store"),
 );
 
 /**
@@ -606,5 +636,10 @@ const stateCommand = Command.make("state", {}).pipe(
 );
 
 export const cloudflareCommand = Command.make("cloudflare", {}).pipe(
-  Command.withSubcommands([bootstrapCommand, createTokenCommand, stateCommand]),
+  Command.withSubcommands([
+    bootstrapCommand,
+    teardownCommand,
+    createTokenCommand,
+    stateCommand,
+  ]),
 );

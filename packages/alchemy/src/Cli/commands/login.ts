@@ -1,21 +1,13 @@
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "../../Auth/AuthProvider.ts";
-import { AlchemyProfile, withProfileOverride } from "../../Auth/Profile.ts";
-import { Stage } from "../../Stage.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { fileLogger } from "../../Util/FileLogger.ts";
+import { AlchemyProfile } from "../../Auth/Profile.ts";
 
-import { Stack } from "../../Stack.ts";
 import {
+  buildStackProviders,
   envFile,
-  importStack,
   instrumentCommand,
   printProfile,
   profile,
@@ -46,36 +38,13 @@ export const loginCommand = Command.make(
     }),
   )(
     Effect.fn(function* ({ main, envFile, profile, configure }) {
-      const stackEffect = yield* importStack(main);
-
-      const authProviders: AuthProviders["Service"] = {};
-
-      // build the state + providers layer to capture the Auth Providers
-      yield* Layer.build(
-        (stackEffect.providers ?? Layer.empty).pipe(
-          Layer.provideMerge(stackEffect.state ?? Layer.empty),
-          Layer.provideMerge(
-            Layer.mergeAll(
-              Layer.succeed(AuthProviders, authProviders),
-              ConfigProvider.layer(
-                withProfileOverride(
-                  yield* loadConfigProvider(envFile),
-                  profile,
-                ),
-              ),
-              Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-              Layer.succeed(Stage, "placeholder"),
-              Layer.succeed(Stack, {
-                actions: {},
-                bindings: {},
-                name: stackEffect.stackName,
-                resources: {},
-                stage: "placeholder",
-              }),
-            ),
-          ),
-        ),
-      );
+      // Build the user's providers() (+ state) layer to capture the auth
+      // providers their stack wires up.
+      const { authProviders } = yield* buildStackProviders({
+        main,
+        envFile,
+        profile,
+      });
 
       const profiles = yield* AlchemyProfile;
 

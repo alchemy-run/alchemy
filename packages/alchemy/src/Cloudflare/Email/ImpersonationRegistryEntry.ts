@@ -107,6 +107,7 @@ export type ImpersonationRegistryEntry = Resource<
  */
 export const ImpersonationRegistryEntry = Resource<ImpersonationRegistryEntry>(
   EmailSecurityImpersonationRegistryEntryTypeId,
+  { aliases: ["Cloudflare.EmailSecurity.ImpersonationRegistryEntry"] },
 );
 
 /**

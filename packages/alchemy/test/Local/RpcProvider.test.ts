@@ -43,6 +43,7 @@ describe("Local.RpcProvider.effect", () => {
         const [capture, result] = yield* useProvider((provider) =>
           provider.reconcile({
             id: "r",
+            fqn: "r",
             instanceId: "inst-from-arg",
             news: {},
             olds: undefined,
@@ -73,6 +74,7 @@ describe("Local.RpcProvider.effect", () => {
           provider
             .reconcile({
               id: "r",
+              fqn: "r",
               instanceId: "inst-from-arg",
               news: {},
               olds: undefined,
@@ -97,6 +99,7 @@ describe("Local.RpcProvider.effect", () => {
       const [capture, items] = yield* useProvider((provider) =>
         provider.tail!({
           id: "r",
+          fqn: "r",
           instanceId: "inst-from-arg",
           props: {},
           output: { ok: true, artifact: "artifact" },
@@ -115,6 +118,7 @@ describe("Local.RpcProvider.effect", () => {
         provider
           .reconcile({
             id: "r",
+            fqn: "r",
             news: {},
             olds: undefined,
             output: undefined,
@@ -136,6 +140,7 @@ describe("Local.RpcProvider.effect", () => {
       const [capture, result] = yield* useProvider((provider) =>
         provider.diff!({
           id: "r",
+          fqn: "r",
           news: {},
           olds: undefined,
           output: undefined,
@@ -147,6 +152,7 @@ describe("Local.RpcProvider.effect", () => {
             Effect.all({
               sameInstanceId: provider.reconcile({
                 id: "r",
+                fqn: "r",
                 instanceId: "inst-from-arg",
                 news: {},
                 olds: undefined,
@@ -156,6 +162,7 @@ describe("Local.RpcProvider.effect", () => {
               }),
               differentInstanceId: provider.reconcile({
                 id: "r",
+                fqn: "r",
                 instanceId: "inst-from-arg-2",
                 news: {},
                 olds: undefined,

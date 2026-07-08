@@ -139,7 +139,9 @@ export type SearchToken = Resource<
  *
  * @see https://developers.cloudflare.com/ai-search/
  */
-export const SearchToken = Resource<SearchToken>(TypeId);
+export const SearchToken = Resource<SearchToken>(TypeId, {
+  aliases: ["Cloudflare.AiSearch.Token"],
+});
 
 /**
  * Returns true if the given value is a SearchToken resource.

@@ -157,7 +157,9 @@ export type DetectionSettings = Resource<
  *
  * @see https://developers.cloudflare.com/bots/additional-configurations/fraud-detection/
  */
-export const DetectionSettings = Resource<DetectionSettings>(TypeId);
+export const DetectionSettings = Resource<DetectionSettings>(TypeId, {
+  aliases: ["Cloudflare.FraudDetectionSettings"],
+});
 
 /**
  * Returns true if the given value is a DetectionSettings resource.

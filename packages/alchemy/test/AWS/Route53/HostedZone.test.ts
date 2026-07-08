@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { HostedZone } from "@/AWS/Route53";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "@effect/vitest";
@@ -140,6 +141,98 @@ test.provider(
       yield* assertZoneGone(zone.id);
     }),
   { timeout: 180_000 },
+);
+
+// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+//
+// An interrupted first deploy persists the zone as `status: "creating"` with
+// no attributes — and an Output-valued `name` does not survive the state
+// round-trip: it deserializes as `undefined`. Plan's recovery branch then
+// calls `provider.read` with those junk props, which crashed in
+// `normalizeName(undefined)` (`undefined is not an object (evaluating
+// 'name.endsWith')`) and wedged the stack. When `read` reports "not found",
+// the same junk `olds` flow into `diff`, whose unguarded
+// `normalizeName(olds.name)` was the second crash site — so this one wedged
+// redeploy exercises both guards.
+//
+// Simulate exactly that state row after a real deploy and assert the next
+// deploy recovers: `read` returns undefined, `diff` falls through to the
+// create recovery path, and reconcile converges on the half-created zone via
+// its stable CallerReference (HostedZoneAlreadyExists → findByName) — SAME
+// zone id, no duplicate created.
+const recoveryZoneName = "pr770-recovery-hz.alchemy.";
+
+test.provider(
+  "recovers a half-created hosted zone whose creating-state lost Output-valued props (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployZone = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* HostedZone("RecoveryZone", {
+              name: recoveryZoneName,
+              comment: "pr770 recovery",
+            });
+          }),
+        );
+
+      const created = yield* deployZone();
+      expect(created.id).toBeDefined();
+
+      // Safety net: if the recovery redeploy defects (the pre-fix crash), the
+      // zone would otherwise leak — a fresh zone only holds its SOA/NS records
+      // so it deletes cleanly; on the happy path it's already gone (ignored).
+      yield* Effect.addFinalizer(() =>
+        route53
+          .deleteHostedZone({ Id: normalizeId(created.id) })
+          .pipe(Effect.ignore),
+      );
+
+      // Rewrite the zone's persisted row into the wedged shape an interrupted
+      // deploy leaves behind: `creating`, no attributes, and the Output-valued
+      // `name` lost in the state round-trip.
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) &&
+          r.row.resourceType === "AWS.Route53.HostedZone",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error("no AWS.Route53.HostedZone state row found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: { ...wedged.row.props, name: undefined },
+        },
+      });
+
+      // Before the fix this crashed in plan with
+      // `TypeError: undefined is not an object (evaluating 'name.endsWith')`.
+      const recovered = yield* deployZone();
+      expect(recovered.id).toEqual(created.id);
+      expect(recovered.name).toBe(recoveryZoneName);
+
+      yield* stack.destroy();
+      yield* assertZoneGone(created.id);
+    }),
+  { timeout: 240_000 },
 );
 
 test.provider(

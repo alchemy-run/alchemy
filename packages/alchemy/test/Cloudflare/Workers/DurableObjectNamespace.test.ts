@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
@@ -359,6 +360,103 @@ export default { async fetch() { return new Response("v4"); } };
       yield* scratch.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
+);
+
+// Reproduces #763: a Worker's precreate stub must declare Durable Object
+// classes that exist only as env *bindings* — an async worker has no
+// Effect-native exports, so before the fix the stub declared no DO classes at
+// all. A resource caught in a dependency cycle with the worker resolves
+// `worker.durableObjectNamespaces` against that stub (not the final reconcile
+// output), so a binding-only class had no namespace id there and the deploy
+// failed with "Worker did not expose Durable Object namespace <class>" on
+// every fresh stage's FIRST deploy (reruns found the script already existing
+// and passed — which is why this must run on a scratch stack, not a shared
+// beforeAll deploy).
+//
+// The cycle here mirrors the worker<->container shape from the issue (a bare
+// `Cloudflare.DurableObject` fronting a Container, where the container binds
+// the DO's namespace id and the worker binds the container) without needing a
+// Docker build: the consumer worker binds the host's `Counter` namespace id,
+// and the host binds the consumer's name back.
+test.provider(
+  "precreate stub exposes binding-only durable object namespaces to cycle peers",
+  (scratch) =>
+    Effect.gen(function* () {
+      const deployed = yield* scratch.deploy(
+        Effect.gen(function* () {
+          // `Counter` lives only in the inline script + env binding — it is
+          // never an Effect-native export.
+          const host = yield* Cloudflare.Worker("host-worker", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter"),
+            },
+          });
+
+          const consumer = yield* Cloudflare.Worker("consumer-worker", {
+            script: `export default {
+  async fetch(request, env) {
+    return Response.json({ namespaceId: env.COUNTER_NS });
+  },
+};
+`,
+          });
+
+          // consumer -> host: resolve the DO namespace id, exactly how a
+          // Container application binds `durableObjects.namespaceId`. The
+          // throw fires when the precreate stub omits the class — failing the
+          // deploy the same way the container cycle in #763 did.
+          yield* consumer.bind("counter-namespace", {
+            bindings: [
+              {
+                type: "plain_text",
+                name: "COUNTER_NS",
+                text: host.durableObjectNamespaces.pipe(
+                  Output.map((namespaces) => {
+                    const id = namespaces.Counter;
+                    if (!id) {
+                      throw new Error(
+                        "Worker did not expose Durable Object namespace Counter.",
+                      );
+                    }
+                    return id;
+                  }),
+                ),
+              },
+            ],
+          });
+
+          // host -> consumer: closes the cycle so both workers are SCC
+          // members and rendezvous on each other's precreate stubs.
+          yield* host.bind("consumer-name", {
+            bindings: [
+              {
+                type: "plain_text",
+                name: "CONSUMER_NAME",
+                text: consumer.workerName,
+              },
+            ],
+          });
+
+          return { host, consumer };
+        }),
+      );
+
+      // The namespace id created for the precreate stub must survive into the
+      // final reconcile output...
+      const finalNamespaceId = deployed.host.durableObjectNamespaces.Counter;
+      expect(finalNamespaceId).toBeDefined();
+
+      // ...and be the same id the consumer resolved from the stub and
+      // deployed into its live environment.
+      const body = yield* fetchJsonReady<{ namespaceId: string }>(
+        deployed.consumer.url!,
+      );
+      expect(body.namespaceId).toBe(finalNamespaceId);
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 // Adopt a Durable Object class that already exists on a worker created

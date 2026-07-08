@@ -1015,7 +1015,7 @@ export const TableProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          for (const [name, type] of Object.entries(olds.attributes)) {
+          for (const [name, type] of Object.entries(olds.attributes ?? {})) {
             if (news.attributes[name] !== type) {
               return { action: "replace" } as const;
             }

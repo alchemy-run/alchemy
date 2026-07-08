@@ -175,8 +175,12 @@ export const HostnameCertificateProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
+      // Compare the certificate only when the old value is known — an
+      // Output-valued `certificate` doesn't survive a `creating`-state
+      // round-trip (it deserializes as `undefined`).
       if (
-        normalizePem(olds.certificate) !== normalizePem(news.certificate) ||
+        (olds.certificate !== undefined &&
+          normalizePem(olds.certificate) !== normalizePem(news.certificate)) ||
         unwrap(olds.privateKey) !== unwrap(news.privateKey)
       ) {
         // There is no update API for hostname client certificates — every

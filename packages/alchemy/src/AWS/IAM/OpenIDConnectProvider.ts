@@ -147,7 +147,15 @@ export const OpenIDConnectProviderProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           const providerArn =
             output?.openIDConnectProviderArn ??
-            (yield* oidcArnFromUrl(olds.url));
+            (olds?.url !== undefined
+              ? yield* oidcArnFromUrl(olds.url)
+              : undefined);
+          if (providerArn === undefined) {
+            // An Output-valued `url` doesn't survive a `creating`-state
+            // round-trip (it deserializes as `undefined`) — report "not
+            // found" so the engine re-drives the create.
+            return undefined;
+          }
           const provider = yield* readProvider(providerArn);
           if (!provider?.Url) {
             return undefined;

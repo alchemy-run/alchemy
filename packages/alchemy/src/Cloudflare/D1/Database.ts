@@ -6,7 +6,7 @@ import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -17,7 +17,7 @@ import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
 
 export const isDatabase = (value: unknown): value is Database =>
-  typeof value === "object" && (value as any)?.Type === "Cloudflare.D1Database";
+  isResourceOfType(value, "Cloudflare.D1Database");
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
 export type PrimaryLocationHint =

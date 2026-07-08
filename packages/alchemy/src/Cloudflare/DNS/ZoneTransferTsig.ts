@@ -91,7 +91,9 @@ export type ZoneTransferTsig = Resource<
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
  */
-export const ZoneTransferTsig = Resource<ZoneTransferTsig>(TypeId);
+export const ZoneTransferTsig = Resource<ZoneTransferTsig>(TypeId, {
+  aliases: ["Cloudflare.Dns.ZoneTransferTsig"],
+});
 
 /**
  * Returns true if the given value is a ZoneTransferTsig resource.

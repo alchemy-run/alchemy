@@ -35,6 +35,7 @@ export * as Serverless from "./Serverless/index.ts";
 export { Stack } from "./Stack.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";
+export * as Sync from "./Sync.ts";
 
 // Re-export internal types so they can be portably named in
 // downstream `.d.ts` emissions (fixes TS2883 in user files).

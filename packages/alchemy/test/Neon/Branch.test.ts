@@ -1,10 +1,12 @@
 import * as Neon from "@/Neon";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
-import { getProjectBranch } from "@distilled.cloud/neon";
+import { deleteProjectBranch, getProjectBranch } from "@distilled.cloud/neon";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Neon.providers() });
 
@@ -201,4 +203,172 @@ test.provider("replaces branch when project is replaced", (stack) =>
 
     yield* stack.destroy();
   }).pipe(logLevel),
+);
+
+// #736 regression tests: a `creating`-state row persisted before upstream
+// Outputs resolve cannot round-trip Output-valued props — they deserialize as
+// `undefined`. The engine's recovery paths hand those junk props back to the
+// provider as `olds` (Plan.ts calls `read` and then `diff` with
+// `olds: oldState.props` for a creating row with no attributes). The provider
+// must fall through to the create path instead of crashing in
+// `resolveProjectId`.
+//
+// Shared shape (Variant B): deploy a project + branch, rewrite the branch's
+// persisted row into the wedged creating-state shape, delete the branch
+// out-of-band so recovery must recreate it, redeploy, and assert convergence.
+
+/** Rewrite the deployed branch's state row into a wedged `creating` row. */
+const wedgeBranchRow = (stack: { name: string }, project: unknown) =>
+  Effect.gen(function* () {
+    const state = yield* yield* State;
+    const stage = "test"; // scratch stacks default to the "test" stage
+    const fqns = yield* state.list({ stack: stack.name, stage });
+    const rows = yield* Effect.forEach(fqns, (fqn) =>
+      state
+        .get({ stack: stack.name, stage, fqn })
+        .pipe(Effect.map((row) => ({ fqn, row }))),
+    );
+    const wedged = rows.find(
+      (r): r is { fqn: string; row: ResourceState } =>
+        isResourceState(r.row) && r.row.resourceType === "Neon.Branch",
+    );
+    if (!wedged) {
+      return yield* Effect.die(
+        new Error("no Neon.Branch state row found after deploy"),
+      );
+    }
+    yield* state.set({
+      stack: stack.name,
+      stage,
+      fqn: wedged.fqn,
+      value: {
+        ...wedged.row,
+        status: "creating",
+        attr: undefined,
+        props: {
+          ...wedged.row.props,
+          project,
+        },
+      },
+    });
+  });
+
+/** Delete the branch out-of-band and wait (bounded) until it is gone. */
+const deleteBranchOutOfBand = (projectId: string, branchId: string) =>
+  Effect.gen(function* () {
+    yield* deleteProjectBranch({
+      project_id: projectId,
+      branch_id: branchId,
+    }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+    const gone = yield* getProjectBranch({
+      project_id: projectId,
+      branch_id: branchId,
+    }).pipe(
+      Effect.as("found" as const),
+      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s === "gone",
+        times: 10,
+      }),
+    );
+    expect(gone).toEqual("gone");
+  });
+
+// `read` guard: the project reference survived the creating-state round-trip
+// as an object, but its Output-valued `projectId` did not. Pre-fix, `read`
+// crashed with `Error: Invalid Neon project source: must be a Project or
+// { projectId }` (thrown by `resolveProjectId`); post-fix it returns
+// `undefined` and recovery recreates the branch.
+test.provider(
+  "recovers a creating-state branch whose project lost its Output-valued projectId (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployBranch = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Neon.Project("WedgedReadProject");
+            const branch = yield* Neon.Branch("WedgedReadBranch", { project });
+            return { project, branch };
+          }),
+        );
+
+      const initial = yield* deployBranch();
+
+      // The #736 shape for the `read` guard: the object survived but the
+      // Output-valued `projectId` inside it deserialized as `undefined`.
+      yield* wedgeBranchRow(stack, { projectId: undefined });
+
+      // Delete the branch out-of-band so recovery must recreate it (a
+      // recovery `read` returning attributes would skip the create path).
+      yield* deleteBranchOutOfBand(
+        initial.project.projectId,
+        initial.branch.branchId,
+      );
+
+      const recovered = yield* deployBranch();
+      expect(recovered.branch.branchId).toBeDefined();
+      expect(recovered.branch.branchId).not.toEqual(initial.branch.branchId);
+      expect(recovered.branch.projectId).toEqual(recovered.project.projectId);
+      expect(recovered.branch.branchName).toEqual(initial.branch.branchName);
+
+      const fetched = yield* getProjectBranch({
+        project_id: recovered.project.projectId,
+        branch_id: recovered.branch.branchId,
+      });
+      expect(fetched.branch.id).toEqual(recovered.branch.branchId);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// `diff` guard: the whole `project` prop deserialized as `undefined`. `read`
+// falls through on `!olds?.project` (both pre- and post-fix), so the engine
+// then calls `diff` with the junk olds. Pre-fix, `diff` crashed in
+// `resolveProjectId(undefined)`; post-fix the unknown old project id falls
+// through to the create/update recovery path (no forced replacement).
+test.provider(
+  "recovers a creating-state branch whose project prop was lost entirely (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployBranch = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Neon.Project("WedgedDiffProject");
+            const branch = yield* Neon.Branch("WedgedDiffBranch", { project });
+            return { project, branch };
+          }),
+        );
+
+      const initial = yield* deployBranch();
+
+      // The #736 shape for the `diff` guard: the entire Output-valued
+      // `project` prop deserialized as `undefined`.
+      yield* wedgeBranchRow(stack, undefined);
+
+      yield* deleteBranchOutOfBand(
+        initial.project.projectId,
+        initial.branch.branchId,
+      );
+
+      const recovered = yield* deployBranch();
+      expect(recovered.branch.branchId).toBeDefined();
+      expect(recovered.branch.branchId).not.toEqual(initial.branch.branchId);
+      expect(recovered.branch.projectId).toEqual(recovered.project.projectId);
+      expect(recovered.branch.branchName).toEqual(initial.branch.branchName);
+
+      const fetched = yield* getProjectBranch({
+        project_id: recovered.project.projectId,
+        branch_id: recovered.branch.branchId,
+      });
+      expect(fetched.branch.id).toEqual(recovered.branch.branchId);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
 );

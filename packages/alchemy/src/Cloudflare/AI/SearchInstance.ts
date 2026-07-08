@@ -1,13 +1,12 @@
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -557,13 +556,15 @@ export type SearchInstance = Resource<
  *
  * @see https://developers.cloudflare.com/ai-search/
  */
-export const SearchInstance = Resource<SearchInstance>(TypeId);
+export const SearchInstance = Resource<SearchInstance>(TypeId, {
+  aliases: ["Cloudflare.AiSearch.Instance"],
+});
 
 /**
  * Returns true if the given value is a SearchInstance resource.
  */
 export const isSearchInstance = (value: unknown): value is SearchInstance =>
-  Predicate.hasProperty(value, "Type") && value.Type === TypeId;
+  isResourceOfType(value, TypeId);
 
 export const SearchInstanceProvider = () =>
   Provider.succeed(SearchInstance, {

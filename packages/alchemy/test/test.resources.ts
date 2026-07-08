@@ -1,3 +1,4 @@
+import { Unowned } from "@/AdoptPolicy";
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
 import * as Provider from "@/Provider.ts";
@@ -951,10 +952,182 @@ export const deleteFirstResourceProvider = () =>
     }),
   });
 
+// ── DriftResource — exercises `alchemy sync` (read + reconcile drift repair).
+//
+// Models a cloud with an inspectable, mutable backing store (`TestCloud`):
+// `reconcile` upserts the resource into the cloud map, `read` observes it,
+// `delete` removes it. Tests mutate the map out-of-band to simulate drift
+// (or delete entries to simulate out-of-band deletion) and assert that
+// `sync` converges the cloud back to the last-deployed desired state.
+//
+// The map stores deep copies — the in-memory state store keeps references,
+// so aliasing the persisted `attr` would make out-of-band mutations
+// invisible to drift detection.
+
+export interface TestCloudService {
+  /** Live cloud state keyed by logical id. Mutate/delete to simulate drift. */
+  readonly resources: Map<string, Record<string, any>>;
+  /** Ids whose `read` result is branded {@link Unowned} (foreign tags). */
+  readonly unowned: Set<string>;
+  /** Lifecycle invocations, in order. Clear between phases to scope asserts. */
+  readonly calls: { op: "read" | "reconcile" | "delete"; id: string }[];
+}
+
+export class TestCloud extends Context.Service<TestCloud, TestCloudService>()(
+  "TestCloud",
+) {}
+
+export const makeTestCloud = (): TestCloudService => ({
+  resources: new Map(),
+  unowned: new Set(),
+  calls: [],
+});
+
+export type DriftResourceProps = {
+  value?: string;
+  tags?: Record<string, string>;
+};
+
+export interface DriftResource extends Resource<
+  "Test.DriftResource",
+  DriftResourceProps,
+  {
+    id: string;
+    value: string;
+    tags: Record<string, string>;
+    env: Record<string, string>;
+  },
+  {
+    env?: Record<string, string>;
+  }
+> {}
+
+export const DriftResource = Resource<DriftResource>("Test.DriftResource");
+
+export const driftResourceProvider = () =>
+  Provider.effect(
+    DriftResource,
+    Effect.gen(function* () {
+      const cloudOf = Effect.serviceOption(TestCloud).pipe(
+        Effect.map(Option.getOrUndefined),
+      );
+      const copy = (attrs: Record<string, any>) =>
+        JSON.parse(JSON.stringify(attrs)) as DriftResource["Attributes"];
+      return {
+        list: () => Effect.succeed([]),
+        read: Effect.fn(function* ({ id, output }) {
+          const cloud = yield* cloudOf;
+          // Without a TestCloud in context the resource behaves like
+          // TestResource: read reflects the persisted output back.
+          if (!cloud) return output;
+          cloud.calls.push({ op: "read", id });
+          const live = cloud.resources.get(id);
+          if (live === undefined) return undefined;
+          const attrs = copy(live);
+          return cloud.unowned.has(id) ? Unowned(attrs) : attrs;
+        }),
+        reconcile: Effect.fn(function* ({ id, news = {}, olds, bindings }) {
+          const cloud = yield* cloudOf;
+          cloud?.calls.push({ op: "reconcile", id });
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(TestResourceHooks),
+          );
+          if (olds === undefined) {
+            if (hooks?.create) {
+              yield* hooks.create(id, { string: news.value });
+            }
+          } else if (hooks?.update) {
+            yield* hooks.update(id, { string: news.value });
+          }
+          const attrs = {
+            id,
+            value: news.value ?? id,
+            tags: news.tags ?? {},
+            env: Object.assign(
+              {},
+              ...bindings.map(
+                (binding: any) => binding.env ?? binding.data?.env ?? {},
+              ),
+            ),
+          };
+          cloud?.resources.set(id, copy(attrs));
+          return attrs;
+        }),
+        delete: Effect.fn(function* ({ id }) {
+          const cloud = yield* cloudOf;
+          cloud?.calls.push({ op: "delete", id });
+          cloud?.resources.delete(id);
+        }),
+      };
+    }),
+  );
+
+// AliasedWidget — a resource whose type was "renamed" from `Test.Widget` to
+// `Test.Widgets.Widget`. The legacy name is carried as an alias so state
+// persisted under the old type still resolves to this provider. Its provider
+// is intentionally NOT part of `TestLayers` — alias tests provide it as a
+// bare layer or wrapped in a `ProviderCollection` to exercise both lookup
+// paths in isolation.
+export interface AliasedWidget extends Resource<
+  "Test.Widgets.Widget",
+  { name?: string },
+  {
+    name: string;
+  }
+> {}
+
+export const AliasedWidget = Resource<AliasedWidget>("Test.Widgets.Widget", {
+  aliases: ["Test.Widget"],
+});
+
+/** Logical IDs whose provider `delete` ran — proves deletion went through the provider. */
+export const aliasedWidgetDeletes: string[] = [];
+
+export const aliasedWidgetProvider = () =>
+  Provider.succeed(AliasedWidget, {
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      return { name: news?.name ?? id };
+    }),
+    delete: Effect.fn(function* ({ id }) {
+      aliasedWidgetDeletes.push(id);
+    }),
+  });
+
+// FqnProbe — echoes the identity the engine threads into each handler input
+// (`id` and `fqn`) back out as attributes. Lets a test assert that the engine
+// passes the resource's real fully-qualified name — namespace path + logical
+// id — which differs from the bare logical `id` for namespaced resources.
+
+export interface FqnProbe extends Resource<
+  "Test.FqnProbe",
+  {},
+  {
+    id: string;
+    fqn: string;
+  }
+> {}
+
+export const FqnProbe = Resource<FqnProbe>("Test.FqnProbe");
+
+export const fqnProbeProvider = () =>
+  Provider.succeed(FqnProbe, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news }) {
+      if (!isResolved(news)) return undefined;
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, fqn }) {
+      return { id, fqn };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
     bucketProvider(),
+    fqnProbeProvider(),
     queueProvider(),
     functionProvider(),
     bindingTargetProvider(),
@@ -968,6 +1141,7 @@ export const TestLayers = () =>
     noPrecreateBindingTargetProvider(),
     durationResourceProvider(),
     deleteFirstResourceProvider(),
+    driftResourceProvider(),
   );
 
 export const InMemoryTestLayers = () =>

@@ -83,7 +83,9 @@ export type View = Resource<
  *
  * @see https://developers.cloudflare.com/dns/internal-dns/
  */
-export const View = Resource<View>(DnsViewTypeId);
+export const View = Resource<View>(DnsViewTypeId, {
+  aliases: ["Cloudflare.Dns.View"],
+});
 
 /**
  * Returns true if the given value is a View resource.

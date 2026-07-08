@@ -165,7 +165,9 @@ export type Dataset = Resource<
  *
  * @see https://developers.cloudflare.com/ai-gateway/evaluations/set-up-evaluations/
  */
-export const Dataset = Resource<Dataset>(TypeId);
+export const Dataset = Resource<Dataset>(TypeId, {
+  aliases: ["Cloudflare.AiGateway.Dataset"],
+});
 
 /**
  * Returns true if the given value is a Dataset resource.

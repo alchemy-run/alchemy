@@ -32,6 +32,8 @@ import {
   Worker,
   WorkerEnvironment,
   WorkerExecutionContext,
+  deferredExecutionContext,
+  fromExecutionContext,
 } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
@@ -69,24 +71,31 @@ export const makeWorkerBridge = (
     return eff
       .pipe(
         Effect.flatMap(([eff, context]) =>
-          Effect.provide(
-            eff,
-            pipe(
-              Layer.succeedContext(context),
-              Layer.provideMerge(Layer.succeedContext(context)),
-              Layer.provideMerge(Layer.succeed(WorkerExecutionContext, ctx)),
-              Layer.provideMerge(
+          eff.pipe(
+            // Per-event services take precedence over the captured init
+            // context: the init context carries the *deferred*
+            // WorkerExecutionContext (yieldable in the top-level closure)
+            // and the isolate-lifetime instance Scope, both of which must
+            // be shadowed by the real per-event ones here so that
+            // `Effect.addFinalizer` in a handler attaches to the request
+            // scope (closed into `ctx.waitUntil` below).
+            Effect.provide(
+              Layer.mergeAll(
+                Layer.succeed(
+                  WorkerExecutionContext,
+                  fromExecutionContext(ctx),
+                ),
                 Layer.succeed(ExecutionContext, {
                   scope,
                   cache: {},
                 }),
+                Layer.succeed(Scope.Scope, scope),
               ),
             ),
+            Effect.provide(Layer.succeedContext(context)),
           ),
         ),
-        Effect.provide(
-          Layer.provideMerge(globalContext, Layer.succeed(Scope.Scope, scope)),
-        ),
+        Effect.provide(globalContext),
         Effect.runPromiseExit,
       )
       .finally(() =>
@@ -220,6 +229,16 @@ export const getWorkerExport = <Export = any>({
     Logger.layer([Logger.consolePretty()]),
   );
 
+  // Fallback Scope for init-phase code paths where the Layer machinery
+  // doesn't provide a build scope of its own. Never closed (workerd has no
+  // isolate-teardown hook). Note the entrypoint layer is rebuilt per event
+  // (each event runs in a fresh runtime with its own memo map), and a layer
+  // build provides its own scope to the init effect — so init-level
+  // finalizers actually attach to that build scope and fire at the end of
+  // each event, not here. Handlers get the request scope from
+  // `processEvent`, which closes into `ctx.waitUntil` after the response.
+  const instanceScope = Scope.makeUnsafe();
+
   const globalContext = Layer.unwrap(
     cloudflare_workers.pipe(
       Effect.map(({ env }) =>
@@ -244,6 +263,13 @@ export const getWorkerExport = <Export = any>({
             ),
           ),
           Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
+          // Init-phase ExecutionContext: yieldable from the Worker's
+          // top-level closure (and Layers); its RuntimeContext-colored
+          // methods defer to the real per-event context provided by
+          // `processEvent`.
+          Layer.provideMerge(
+            Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
+          ),
           Layer.provideMerge(
             Layer.succeed(
               CloudflareEnvironment,
@@ -260,6 +286,7 @@ export const getWorkerExport = <Export = any>({
               (env as any).DEBUG ? "Debug" : "Info",
             ),
           ),
+          Layer.provideMerge(Layer.succeed(Scope.Scope, instanceScope)),
         ),
       ),
     ),

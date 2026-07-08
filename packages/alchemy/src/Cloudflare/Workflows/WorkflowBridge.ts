@@ -11,6 +11,10 @@ import {
   type WorkflowExport,
   type WorkflowImpl,
   WorkflowStep,
+  WorkflowStepContext,
+  type WorkflowStepConfig,
+  type WorkflowStepEvent,
+  type WorkflowTaskOptions,
 } from "./Workflow.ts";
 
 /**
@@ -105,29 +109,75 @@ export const makeWorkflowBridge =
       }
     };
 
-const wrapWorkflowEvent = (
-  event: any,
-): { payload: unknown; timestamp: Date; instanceId: string } => ({
+const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
   payload: event.payload,
   timestamp:
     event.timestamp instanceof Date
       ? event.timestamp
       : new Date(event.timestamp),
   instanceId: event.instanceId ?? "",
+  workflowName: event.workflowName ?? "",
+  schedule: event.schedule,
 });
 
 const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
-  do: <T>(name: string, effect: Effect.Effect<T>): Effect.Effect<T> =>
-    Effect.tryPromise(
-      () => step.do(name, () => Effect.runPromise(effect)) as Promise<T>,
-    ),
+  do: <T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T> => {
+    const { name } = options;
+    // The surrounding body context is already provided in `task`; the bridge
+    // supplies `WorkflowStepContext` and runs the step to completion, so the
+    // effect is fully satisfied (R = never) at this boundary.
+    const effect = options.effect as Effect.Effect<
+      T,
+      never,
+      WorkflowStepContext
+    >;
+    const config = toWorkflowStepConfig(options);
+    const rollbackEffect = options.rollback;
+    const callback = (context: any) =>
+      Effect.runPromise(
+        effect.pipe(
+          Effect.provideService(WorkflowStepContext, {
+            step: context.step,
+            attempt: context.attempt,
+            config: context.config,
+          }),
+        ),
+      );
+    const rollback = rollbackEffect
+      ? {
+          rollback: (context: any) =>
+            Effect.runPromise(
+              rollbackEffect({
+                error: context.error,
+                output: context.output,
+              }) as Effect.Effect<void>,
+            ),
+          rollbackConfig: options.rollbackConfig,
+        }
+      : undefined;
+    return Effect.tryPromise(() => {
+      if (config && rollback) return step.do(name, config, callback, rollback);
+      if (config) return step.do(name, config, callback);
+      if (rollback) return step.do(name, callback, rollback);
+      return step.do(name, callback);
+    });
+  },
   sleep: (name: string, duration: string | number): Effect.Effect<void> =>
     Effect.tryPromise(() => step.sleep(name, duration)),
   sleepUntil: (name: string, timestamp: Date | number): Effect.Effect<void> =>
-    Effect.tryPromise(() =>
-      step.sleepUntil(
-        name,
-        timestamp instanceof Date ? timestamp.toISOString() : timestamp,
-      ),
+    Effect.tryPromise(() => step.sleepUntil(name, timestamp)),
+  waitForEvent: <T>(
+    name: string,
+    options: any,
+  ): Effect.Effect<WorkflowStepEvent<T>> =>
+    Effect.tryPromise(
+      () => step.waitForEvent(name, options) as Promise<WorkflowStepEvent<T>>,
     ),
 });
+
+const toWorkflowStepConfig = (
+  options: WorkflowTaskOptions<any, any, any>,
+): WorkflowStepConfig | undefined => {
+  if (!options.retries && !options.timeout) return undefined;
+  return { retries: options.retries, timeout: options.timeout };
+};

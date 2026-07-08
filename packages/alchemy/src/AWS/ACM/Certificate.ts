@@ -356,16 +356,27 @@ export const CertificateProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
+          // `olds.domainName` may be `undefined` when a `creating` row was
+          // persisted before upstream Outputs resolved — without a domain
+          // there is nothing to search for, so report "not found" and let
+          // the engine re-drive the create (reconcile finds any managed
+          // certificate by tags before requesting a new one).
           const certificate = output?.certificateArn
             ? yield* describeCertificate(output.certificateArn)
-            : yield* findManagedCertificate(id, olds!);
+            : olds?.domainName !== undefined
+              ? yield* findManagedCertificate(id, olds)
+              : undefined;
 
           if (!certificate?.CertificateArn) {
             return undefined;
           }
 
           const tags = yield* listCertificateTags(certificate.CertificateArn);
-          return toAttrs(olds!, certificate, tags);
+          return toAttrs(
+            olds ?? { domainName: certificate.DomainName! },
+            certificate,
+            tags,
+          );
         }),
         reconcile: Effect.fn(function* ({
           id,

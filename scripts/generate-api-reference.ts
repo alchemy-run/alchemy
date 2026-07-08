@@ -319,6 +319,192 @@ function findTaggedPrimary(sourceFile: SourceFile): Primary | undefined {
   return undefined;
 }
 
+const LINK_TAG_RE = /\{@link\s+([^}]+)\}/g;
+
+/** Split a `{@link ...}` tag's inner text into target + optional label. */
+function parseLinkTag(inner: string): { target: string; label?: string } {
+  const trimmed = inner.trim();
+  const pipe = trimmed.indexOf("|");
+  if (pipe !== -1) {
+    return {
+      target: trimmed.slice(0, pipe).trim(),
+      label: trimmed.slice(pipe + 1).trim() || undefined,
+    };
+  }
+  const space = trimmed.search(/\s/);
+  if (space !== -1) {
+    return {
+      target: trimmed.slice(0, space).trim(),
+      label: trimmed.slice(space + 1).trim() || undefined,
+    };
+  }
+  return { target: trimmed };
+}
+
+/**
+ * Reduce a typedoc-style `import("./Secrets.ts").Secrets` target to the bare
+ * symbol name — resolution (same-directory first) and display both want the
+ * name, not the module expression.
+ */
+function normalizeLinkTarget(target: string): string {
+  const match = target.match(/^import\((["'])[^"']+\1\)\.(.+)$/);
+  return match ? match[2] : target;
+}
+
+/** Resolves a `{@link}` symbol target to a generated page URL, if any. */
+type LinkResolver = (target: string) => string | undefined;
+
+/**
+ * Build a per-page resolver factory. A symbol resolves to another generated
+ * page preferring (in order): a same-directory page named after it, a
+ * same-directory page whose source file exports it (an access-level service
+ * like `ReadNamespace` documented on its `ReadWriteNamespace` page), a unique
+ * name match within the same provider, a unique exporter within the same
+ * provider, then a unique global name match. Member suffixes
+ * (`Cluster#capacityProviders`), provider-qualified names (`Cloudflare.Worker`)
+ * and `FooProps` interfaces resolve to the base resource's page.
+ */
+function makeLinkResolverFactory(
+  pages: PageEntry[],
+): (fromDir: string) => LinkResolver {
+  const byName = new Map<string, PageEntry[]>();
+  const byExport = new Map<string, PageEntry[]>();
+  for (const p of pages) {
+    if (!byName.has(p.resource)) byName.set(p.resource, []);
+    byName.get(p.resource)!.push(p);
+    for (const name of p.exports) {
+      if (!byExport.has(name)) byExport.set(name, []);
+      byExport.get(name)!.push(p);
+    }
+  }
+  const providers = new Set(pages.map((p) => p.provider));
+
+  return (fromDir: string) => {
+    const fromProvider = fromDir.split("/")[0] ?? "";
+
+    const lookup = (
+      name: string,
+      provider?: string,
+    ): PageEntry | undefined => {
+      const scope = (list: PageEntry[] | undefined) =>
+        (list ?? []).filter((c) => !provider || c.provider === provider);
+      const named = scope(byName.get(name));
+      const exporting = scope(byExport.get(name));
+
+      const sameDirNamed = named.filter((c) => c.dir === fromDir);
+      if (sameDirNamed.length === 1) return sameDirNamed[0];
+      const sameDirExporting = exporting.filter((c) => c.dir === fromDir);
+      if (sameDirExporting.length === 1) return sameDirExporting[0];
+      const providerNamed = named.filter((c) => c.provider === fromProvider);
+      if (providerNamed.length === 1) return providerNamed[0];
+      const providerExporting = exporting.filter(
+        (c) => c.provider === fromProvider,
+      );
+      if (providerExporting.length === 1) return providerExporting[0];
+      if (named.length === 1) return named[0];
+      return undefined;
+    };
+
+    return (target: string) => {
+      // Strip a `#member` suffix — the link lands on the owning resource page.
+      const base = target.split("#")[0];
+
+      const attempts: { name: string; provider?: string }[] = [{ name: base }];
+      if (base.includes(".")) {
+        const segments = base.split(".");
+        const first = segments[0];
+        const last = segments[segments.length - 1];
+        if (providers.has(first)) {
+          // Provider-qualified: `Cloudflare.Worker`, `Cloudflare.KV.Namespace`.
+          attempts.push({ name: last, provider: first });
+        } else {
+          // Member access on a symbol: `KeyPairProps.publicKeyMaterial`.
+          attempts.push({ name: first });
+          if (first.endsWith("Props")) {
+            attempts.push({ name: first.slice(0, -"Props".length) });
+          }
+        }
+      } else if (base.endsWith("Props")) {
+        attempts.push({ name: base.slice(0, -"Props".length) });
+      }
+
+      for (const attempt of attempts) {
+        const found = lookup(attempt.name, attempt.provider);
+        if (found) return found.link;
+      }
+      return undefined;
+    };
+  };
+}
+
+const isUrl = (target: string) => /^https?:\/\//.test(target);
+
+/**
+ * Replace `{@link ...}` tags with markdown links, skipping fenced code
+ * blocks. Symbols that don't resolve to a generated page render as inline
+ * code (or their label) instead of leaking the raw tag.
+ */
+/** Symbol targets that didn't resolve to a page, for the end-of-run summary. */
+const unresolvedLinkTargets = new Map<string, number>();
+
+function linkifyMarkdown(markdown: string, resolve: LinkResolver): string {
+  const replaceTags = (chunk: string) =>
+    chunk.replace(LINK_TAG_RE, (_, inner: string) => {
+      // A tag wrapped across source lines carries the line break in its
+      // label — collapse it so the markdown link stays intact.
+      const parsed = parseLinkTag(inner.replace(/\s+/g, " "));
+      const label = parsed.label;
+      if (isUrl(parsed.target)) {
+        return `[${label ?? parsed.target}](${parsed.target})`;
+      }
+      const target = normalizeLinkTarget(parsed.target);
+      const url = resolve(target);
+      if (!url) {
+        unresolvedLinkTargets.set(
+          target,
+          (unresolvedLinkTargets.get(target) ?? 0) + 1,
+        );
+      }
+      const text = label ?? `\`${target}\``;
+      return url ? `[${text}](${url})` : text;
+    });
+
+  // Apply across contiguous non-fence chunks (a `{@link}` may span lines);
+  // leave fenced code blocks untouched.
+  const out: string[] = [];
+  let chunk: string[] = [];
+  let insideFence = false;
+  const flushChunk = () => {
+    if (chunk.length > 0) {
+      out.push(replaceTags(chunk.join("\n")));
+      chunk = [];
+    }
+  };
+  for (const line of markdown.split("\n")) {
+    if (line.trim().startsWith("```")) {
+      if (!insideFence) flushChunk();
+      insideFence = !insideFence;
+      out.push(line);
+      continue;
+    }
+    if (insideFence) {
+      out.push(line);
+    } else {
+      chunk.push(line);
+    }
+  }
+  flushChunk();
+  return out.join("\n");
+}
+
+/** Reduce `{@link ...}` tags to plain text for frontmatter descriptions. */
+function stripLinkTags(text: string): string {
+  return text.replace(LINK_TAG_RE, (_, inner: string) => {
+    const { target, label } = parseLinkTag(inner.replace(/\s+/g, " "));
+    return (label ?? normalizeLinkTarget(target)).replace(/`/g, "");
+  });
+}
+
 function yamlString(value: string): string {
   if (/[\n:"{}[\],&*?|>!%@`#]/.test(value) || value.trim() !== value) {
     return JSON.stringify(value);
@@ -356,10 +542,11 @@ function renderPageBody(doc: PageDoc): string {
   return parts.join("\n\n");
 }
 
-function renderPage(doc: PageDoc): string {
+function renderPage(doc: PageDoc, resolve: LinkResolver): string {
   const sourcePath = `src/${normalizeSlashes(doc.relativePath)}`;
   const description =
-    firstParagraph(doc.summary) || `API reference for ${doc.title}`;
+    stripLinkTags(firstParagraph(doc.summary)) ||
+    `API reference for ${doc.title}`;
   const frontmatter = [
     "---",
     `title: ${yamlString(doc.title)}`,
@@ -368,7 +555,7 @@ function renderPage(doc: PageDoc): string {
   ].join("\n");
 
   const sourceBlock = `> **Source:** \`${sourcePath}\``;
-  const body = renderPageBody(doc).trim();
+  const body = linkifyMarkdown(renderPageBody(doc).trim(), resolve);
 
   if (body) {
     return `${frontmatter}\n\n${sourceBlock}\n\n${body}\n`;
@@ -378,6 +565,12 @@ function renderPage(doc: PageDoc): string {
 
 /** Providers shown first in the sidebar; the rest follow alphabetically. */
 const PROVIDER_ORDER = ["AWS", "Cloudflare"];
+
+/**
+ * Uncategorized providers with at most this many pages render as a flat
+ * resource list instead of per-service folders (see buildProvidersSidebar).
+ */
+const FLAT_PROVIDER_MAX_PAGES = 16;
 
 interface SidebarLeaf {
   label: string;
@@ -397,6 +590,10 @@ interface PageEntry {
   category: string;
   product: string;
   link: string;
+  /** Source directory relative to srcRoot (slash-normalized), e.g. `Cloudflare/KV`. */
+  dir: string;
+  /** All names the page's source file exports — `{@link}` targets documented on this page. */
+  exports: string[];
 }
 
 const byLabel = (a: { label: string }, b: { label: string }) =>
@@ -411,26 +608,28 @@ function orderedKeys(keys: string[], order: string[]): string[] {
 
 /**
  * Build sidebar items for one set of pages sharing a provider+category:
- * every service (product) is its own collapsible folder containing its
- * resource pages, mirroring how Cloudflare's API reference gives each
- * product its own section — even single-page products like D1 or
- * Organization — so the grouping is uniform.
+ * every product is its own collapsible folder containing its resource
+ * pages, mirroring how Cloudflare's API reference gives each product its
+ * own section — even single-page products like D1 or Organization — so
+ * the grouping is uniform.
+ *
+ * Grouping is by resolved product LABEL (`@product`, falling back to the
+ * service dir name), not by directory: two directories declaring the same
+ * product merge into one group instead of rendering duplicate siblings.
  */
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
-  const byService = new Map<string, PageEntry[]>();
+  const byLabelKey = new Map<string, PageEntry[]>();
   for (const p of pages) {
-    const key = p.service || p.resource;
-    if (!byService.has(key)) byService.set(key, []);
-    byService.get(key)!.push(p);
+    const key = p.product || p.service || p.resource;
+    if (!byLabelKey.has(key)) byLabelKey.set(key, []);
+    byLabelKey.get(key)!.push(p);
   }
   const items: SidebarItem[] = [];
-  for (const [service, servicePages] of byService) {
-    // Prefer the human product name from `@product`; fall back to the dir name.
-    const label = servicePages.find((p) => p.product)?.product || service;
+  for (const [label, productPages] of byLabelKey) {
     items.push({
       label,
       collapsed: true,
-      items: servicePages
+      items: productPages
         .map((p) => ({ label: p.resource, link: p.link }))
         .sort(byLabel),
     });
@@ -448,12 +647,25 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
   const providers: SidebarGroup[] = [];
   for (const provider of orderedKeys([...byProvider.keys()], PROVIDER_ORDER)) {
     const pages = byProvider.get(provider)!;
+
+    // `@category` is per-file; a documented file that omits it must not fall
+    // out of its service's category and render a duplicate service group at
+    // the provider root. Inherit the category any sibling page of the same
+    // service dir declares.
+    const categoryByService = new Map<string, string>();
+    for (const p of pages) {
+      if (p.service && p.category && !categoryByService.has(p.service)) {
+        categoryByService.set(p.service, p.category);
+      }
+    }
+
     const categorized = new Map<string, PageEntry[]>();
     const uncategorized: PageEntry[] = [];
     for (const p of pages) {
-      if (p.category) {
-        if (!categorized.has(p.category)) categorized.set(p.category, []);
-        categorized.get(p.category)!.push(p);
+      const category = p.category || categoryByService.get(p.service) || "";
+      if (category) {
+        if (!categorized.has(category)) categorized.set(category, []);
+        categorized.get(category)!.push(p);
       } else {
         uncategorized.push(p);
       }
@@ -469,13 +681,53 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
         items: buildServiceItems(categorized.get(cat)!),
       });
     }
-    // Pages without a category fall back to service grouping directly under
-    // the provider (this is how AWS renders until it gets categorized).
-    items.push(...buildServiceItems(uncategorized));
+    if (categorized.size === 0 && pages.length <= FLAT_PROVIDER_MAX_PAGES) {
+      // Small uncategorized providers (Neon, Planetscale, Axiom, GitHub, …)
+      // render as a flat resource list — per-service folders around one or
+      // two pages ("Branch > Branch") are redundant nesting, and prefixed
+      // resource names (MySQLBranch/PostgresBranch) already carry the
+      // grouping information.
+      items.push(
+        ...uncategorized
+          .map((p) => ({ label: p.resource, link: p.link }))
+          .sort(byLabel),
+      );
+    } else {
+      // Pages without a category fall back to service grouping directly under
+      // the provider (this is how AWS renders until it gets categorized).
+      items.push(...buildServiceItems(uncategorized));
+    }
 
     providers.push({ label: provider, collapsed: true, items });
   }
+
+  assertNoDuplicateSiblings(providers, []);
   return providers;
+}
+
+/**
+ * Duplicate sibling labels are always a tagging bug (e.g. two products
+ * resolving to the same name in one category) and render as confusing
+ * twin sections — fail the generation instead of shipping them.
+ */
+function assertNoDuplicateSiblings(items: SidebarItem[], path: string[]) {
+  const seen = new Map<string, number>();
+  for (const item of items) {
+    seen.set(item.label, (seen.get(item.label) ?? 0) + 1);
+  }
+  const dups = [...seen.entries()].filter(([, n]) => n > 1);
+  if (dups.length > 0) {
+    throw new Error(
+      `Duplicate sidebar sibling label(s) under "${path.join(" > ") || "(root)"}": ${dups
+        .map(([label, n]) => `"${label}" ×${n}`)
+        .join(", ")} — fix the @product/@category tags on the offending files.`,
+    );
+  }
+  for (const item of items) {
+    if ("items" in item) {
+      assertNoDuplicateSiblings(item.items, [...path, item.label]);
+    }
+  }
 }
 
 async function main() {
@@ -492,6 +744,7 @@ async function main() {
 
   const seen = new Map<string, string>();
   const pageEntries: PageEntry[] = [];
+  const pending: { outputRelative: string; doc: PageDoc }[] = [];
   let written = 0;
   let skipped = 0;
 
@@ -535,11 +788,14 @@ async function main() {
       summary: primary.doc.summary,
       sections: primary.doc.sections,
     };
+    pending.push({ outputRelative, doc });
 
-    const outputPath = path.join(config.outRoot, outputRelative);
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, renderPage(doc), "utf8");
-    written++;
+    let exportNames: string[] = [];
+    try {
+      exportNames = [...sourceFile.getExportedDeclarations().keys()];
+    } catch {
+      // Unresolvable re-exports — page-name resolution still applies.
+    }
 
     const segments = normalizeSlashes(outputRelative).split("/");
     pageEntries.push({
@@ -551,10 +807,53 @@ async function main() {
       link: `/providers/${normalizeSlashes(outputRelative)
         .replace(/\.md$/, "")
         .toLowerCase()}`,
+      dir: normalizeSlashes(relDir),
+      exports: exportNames,
     });
   }
 
+  // Second pass: render with `{@link}` resolution — the full page set must be
+  // known before symbol targets can resolve to their pages.
+  const resolverFor = makeLinkResolverFactory(pageEntries);
+  for (const page of pending) {
+    const resolve = resolverFor(
+      normalizeSlashes(path.dirname(page.outputRelative)),
+    );
+    const outputPath = path.join(config.outRoot, page.outputRelative);
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, renderPage(page.doc, resolve), "utf8");
+    written++;
+  }
+
   const sidebar = buildProvidersSidebar(pageEntries);
+
+  // Landing page for the Reference tab (/providers): a provider directory.
+  // Each provider's reference belongs to its docs hub — the directory just
+  // routes there (or into the tree, for providers without a hub). The
+  // ProviderDirectory component reads the generated sidebar for counts.
+  // Regenerated with the rest of the tree on every run.
+  const referenceIndex = [
+    "---",
+    "title: API Reference",
+    "description: Every provider alchemy can manage — pick a provider to open its docs hub and resource reference.",
+    "---",
+    "",
+    'import ProviderDirectory from "../../../components/ProviderDirectory.astro";',
+    "",
+    "Every resource alchemy can manage, documented from the source JSDoc and",
+    "organized by provider. A provider's reference lives in its docs hub —",
+    "pick one below, or search with `⌘K`.",
+    "",
+    "<ProviderDirectory />",
+    "",
+  ].join("\n");
+  await fs.rm(path.join(config.outRoot, "index.md"), { force: true });
+  await fs.writeFile(
+    path.join(config.outRoot, "index.mdx"),
+    referenceIndex,
+    "utf8",
+  );
+
   const sidebarPath = path.join(
     websiteRoot,
     "src/generated/providers-sidebar.json",
@@ -571,6 +870,15 @@ async function main() {
       path.relative(path.join(import.meta.dir, ".."), config.outRoot),
     )}.`,
   );
+  if (unresolvedLinkTargets.size > 0) {
+    const list = [...unresolvedLinkTargets.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([target, n]) => (n > 1 ? `${target} ×${n}` : target))
+      .join(", ");
+    console.log(
+      `{@link} targets without a page (rendered as inline code): ${list}`,
+    );
+  }
   console.log(
     `Wrote provider sidebar to ${normalizeSlashes(
       path.relative(path.join(import.meta.dir, ".."), sidebarPath),
