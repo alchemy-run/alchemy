@@ -1,4 +1,6 @@
 import { Unowned } from "@/AdoptPolicy";
+import type { ApplyEvent } from "@/Cli/Event";
+import * as Namespace from "@/Namespace.ts";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Sync from "@/Sync";
@@ -584,6 +586,189 @@ describe("bindings", () => {
         expect((yield* getState("A"))?.attr?.env).toEqual({
           FEATURE_FLAG: "on",
         });
+      }).pipe(withCloud(cloud));
+    },
+  );
+});
+
+describe("plan", () => {
+  test.provider(
+    "projects detection results onto plan node actions",
+    (stack) => {
+      const cloud = makeTestCloud();
+      return Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* DriftResource("Clean", { value: "clean" });
+            yield* DriftResource("Drifted", { value: "drifted" });
+            yield* DriftResource("Missing", { value: "missing" });
+          }),
+        );
+
+        cloud.resources.get("Drifted")!.value = "hijacked";
+        cloud.resources.delete("Missing");
+
+        cloud.calls.length = 0;
+        const stk = yield* Stack;
+        const { result, plan } = yield* Sync.plan({
+          name: stk.name,
+          stage: stk.stage,
+        });
+
+        // drifted -> update, missing -> create, unchanged -> noop
+        expect(plan.resources.Clean?.action).toEqual("noop");
+        expect(plan.resources.Drifted?.action).toEqual("update");
+        expect(plan.resources.Missing?.action).toEqual("create");
+        // detection result rides along
+        expect(result.resources).toMatchObject({
+          Clean: { action: "unchanged" },
+          Drifted: { action: "drifted" },
+          Missing: { action: "missing" },
+        });
+        // the synthetic resource carries what the renderers need
+        expect(plan.resources.Drifted?.resource).toMatchObject({
+          FQN: "Drifted",
+          LogicalId: "Drifted",
+          Type: "Test.DriftResource",
+        });
+        // resource-only view: no deletions/actions in a sync plan
+        expect(plan.deletions).toEqual({});
+        expect(plan.actions).toEqual({});
+        expect(plan.actionDeletions).toEqual({});
+        // planning is detection-only: nothing was repaired
+        expect(cloud.resources.get("Drifted")).toMatchObject({
+          value: "hijacked",
+        });
+        expect(reconcileCalls(cloud)).toEqual([]);
+      }).pipe(withCloud(cloud));
+    },
+  );
+
+  test.provider(
+    "skipped resources render as noop nodes carrying persisted state",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(Bucket("MyBucket", { name: "test-bucket" }));
+
+        const stk = yield* Stack;
+        const { result, plan } = yield* Sync.plan({
+          name: stk.name,
+          stage: stk.stage,
+        });
+
+        expect(result.resources.MyBucket?.action).toEqual("skipped");
+        expect(plan.resources.MyBucket).toMatchObject({
+          action: "noop",
+          state: { status: "created" },
+          resource: { LogicalId: "MyBucket", Type: "Test.Bucket" },
+        });
+      }),
+  );
+
+  test.provider(
+    "namespaced resources keep their namespace, FQN and bindings",
+    (stack) => {
+      const cloud = makeTestCloud();
+      return Effect.gen(function* () {
+        const Site = (id: string) =>
+          Effect.gen(function* () {
+            const a = yield* DriftResource("A", { value: "a" });
+            yield* a.bind("Env", { env: { KEY: "on" } });
+            return a;
+          }).pipe(Namespace.push(id));
+
+        yield* stack.deploy(Site("Site"));
+
+        cloud.resources.get("A")!.value = "hijacked";
+
+        const stk = yield* Stack;
+        const { plan } = yield* Sync.plan({
+          name: stk.name,
+          stage: stk.stage,
+        });
+
+        const node = plan.resources["Site/A"];
+        expect(node?.action).toEqual("update");
+        expect(node?.resource).toMatchObject({
+          FQN: "Site/A",
+          LogicalId: "A",
+        });
+        expect(node?.resource.Namespace).toBeDefined();
+        // persisted bindings surface as noop rows (topology, not changes)
+        expect(node?.bindings).toMatchObject([{ sid: "Env", action: "noop" }]);
+      }).pipe(withCloud(cloud));
+    },
+  );
+});
+
+describe("session events", () => {
+  test.provider(
+    "repair reports progress through the provided session",
+    (stack) => {
+      const cloud = makeTestCloud();
+      const events: ApplyEvent[] = [];
+      const session = {
+        emit: (event: ApplyEvent) =>
+          Effect.sync(() => {
+            events.push(event);
+          }),
+        done: () => Effect.void,
+      };
+      return Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* DriftResource("Drifted", { value: "drifted" });
+            yield* DriftResource("Missing", { value: "missing" });
+            yield* Bucket("MyBucket", { name: "test-bucket" });
+          }),
+        );
+
+        cloud.resources.get("Drifted")!.value = "hijacked";
+        cloud.resources.delete("Missing");
+
+        yield* runSync({ session });
+
+        // drift repair reports the update lifecycle
+        expect(events).toContainEqual({
+          kind: "status-change",
+          id: "Drifted",
+          type: "Test.DriftResource",
+          status: "updating",
+        });
+        expect(events).toContainEqual({
+          kind: "status-change",
+          id: "Drifted",
+          type: "Test.DriftResource",
+          status: "updated",
+        });
+        // recreation reports the create lifecycle
+        expect(events).toContainEqual({
+          kind: "status-change",
+          id: "Missing",
+          type: "Test.DriftResource",
+          status: "creating",
+        });
+        expect(events).toContainEqual({
+          kind: "status-change",
+          id: "Missing",
+          type: "Test.DriftResource",
+          status: "created",
+        });
+        // skipped resources settle with a terminal status and a reason note
+        expect(events).toContainEqual({
+          kind: "status-change",
+          id: "MyBucket",
+          type: "Test.Bucket",
+          status: "skipped",
+        });
+        expect(
+          events.some(
+            (e) =>
+              e.kind === "annotate" &&
+              e.id === "MyBucket" &&
+              e.message.includes("read"),
+          ),
+        ).toBe(true);
       }).pipe(withCloud(cloud));
     },
   );

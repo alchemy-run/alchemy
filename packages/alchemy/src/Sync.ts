@@ -13,7 +13,9 @@ import {
 import type { PlanStatusSession, ScopedPlanStatusSession } from "./Cli/Cli.ts";
 import { deepEqual } from "./Diff.ts";
 import { InstanceId } from "./InstanceId.ts";
-import { findProviderByType } from "./Provider.ts";
+import type { Apply, Plan } from "./Plan.ts";
+import { findProviderByType, Provider } from "./Provider.ts";
+import type { ResourceLike } from "./Resource.ts";
 import {
   isActionState,
   State,
@@ -146,27 +148,6 @@ export const sync = (
         ...partial,
       });
 
-      if (old.status !== "created" && old.status !== "updated") {
-        // Anything mid-flight (or with a pending replacement chain) belongs
-        // to `deploy`'s recovery machinery — replacement generations and
-        // dependency ordering are not sync's to drive.
-        return result({
-          action: "skipped",
-          reason:
-            old.status === "replaced" || old.status === "replacing"
-              ? `resource has a pending replacement (status '${old.status}'); run deploy to finish it`
-              : `resource status '${old.status}' is not stable; run deploy to recover`,
-        });
-      }
-
-      const provider = yield* findProviderByType(resourceType);
-      if (!provider.read) {
-        return result({
-          action: "skipped",
-          reason: `provider '${resourceType}' does not implement read`,
-        });
-      }
-
       const scopedSession = {
         ...session,
         note: (note: string) =>
@@ -174,7 +155,7 @@ export const sync = (
       } satisfies ScopedPlanStatusSession;
 
       const report = (
-        status: "updating" | "updated" | "creating" | "created",
+        status: "updating" | "updated" | "creating" | "created" | "skipped",
       ) =>
         session.emit({
           kind: "status-change",
@@ -182,6 +163,34 @@ export const sync = (
           type: resourceType,
           status,
         });
+
+      // Surface the skip reason through the session (the TUI renders it as a
+      // note under the row; the logging CLI prints it) and settle the row
+      // with a terminal `skipped` status so it never shows as in-progress.
+      const skip = (reason: string) =>
+        Effect.gen(function* () {
+          yield* scopedSession.note(reason);
+          yield* report("skipped");
+          return result({ action: "skipped", reason });
+        });
+
+      if (old.status !== "created" && old.status !== "updated") {
+        // Anything mid-flight (or with a pending replacement chain) belongs
+        // to `deploy`'s recovery machinery — replacement generations and
+        // dependency ordering are not sync's to drive.
+        return yield* skip(
+          old.status === "replaced" || old.status === "replacing"
+            ? `resource has a pending replacement (status '${old.status}'); run deploy to finish it`
+            : `resource status '${old.status}' is not stable; run deploy to recover`,
+        );
+      }
+
+      const provider = yield* findProviderByType(resourceType);
+      if (!provider.read) {
+        return yield* skip(
+          `provider '${resourceType}' does not implement read`,
+        );
+      }
 
       const commit = (value: Omit<ResourceState, "namespace">) =>
         state.set({
@@ -390,76 +399,96 @@ const instrumentLifecycle =
       }),
     ) as Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>>;
 
+export interface SyncPlan {
+  /** Per-resource detection outcome (a dry-run {@link SyncResult}). */
+  result: SyncResult;
+  /**
+   * The detection outcome projected onto the engine's {@link Plan} shape so
+   * the CLI renders a sync exactly like a deploy plan (ink TUI when
+   * interactive, plain logging otherwise): `drifted` → `update`, `missing` →
+   * `create`, `unchanged`/`skipped` → `noop`.
+   */
+  plan: Plan;
+}
+
 /**
- * Print a sync result in a human-readable format.
+ * Run the drift-detection pass (a dry-run {@link sync}) and project the
+ * outcome onto a {@link Plan} for display/approval. The plan is a read-only
+ * view — repair happens by calling {@link sync} (without `dryRun`), which
+ * re-observes the cloud rather than trusting the detection snapshot.
  */
-export const printSync = (result: SyncResult): string => {
-  const symbol = (action: SyncAction) => {
-    switch (action) {
-      case "unchanged":
-        return "=";
-      case "drifted":
-        return "!";
-      case "missing":
-        return "?";
-      case "repaired":
-        return "~";
-      case "recreated":
-        return "+";
-      case "skipped":
-        return "·";
+export const plan = (stack: {
+  name: string;
+  stage: string;
+}): Effect.Effect<SyncPlan, any, State> =>
+  Effect.gen(function* () {
+    const result = yield* sync(stack, { dryRun: true });
+    const state = yield* yield* State;
+
+    const resources: Plan["resources"] = {};
+    for (const [fqn, r] of Object.entries(result.resources)) {
+      const persisted = yield* state.get({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn,
+      });
+      if (!persisted || isActionState(persisted)) continue;
+      const provider = yield* findProviderByType(persisted.resourceType);
+      const action =
+        r.action === "drifted"
+          ? ("update" as const)
+          : r.action === "missing"
+            ? ("create" as const)
+            : ("noop" as const);
+      resources[fqn] = {
+        action,
+        props: persisted.props,
+        state: persisted,
+        provider,
+        // Synthetic ResourceLike reconstructed from persisted state, the
+        // same way Plan.make builds its deletion nodes.
+        resource: {
+          Namespace: persisted.namespace,
+          FQN: fqn,
+          LogicalId: persisted.logicalId,
+          Type: persisted.resourceType,
+          Attributes: persisted.attr,
+          Props: persisted.props,
+          Binding: undefined!,
+          Provider: Provider(persisted.resourceType),
+          RemovalPolicy: persisted.removalPolicy,
+          Adopt: undefined,
+          RuntimeContext: undefined!,
+          Providers: undefined,
+        } as ResourceLike,
+        // Sync repairs from the persisted bindings verbatim — surface them
+        // as noop rows so the renderer shows the binding topology without
+        // implying binding changes.
+        bindings: (persisted.bindings ?? []).map((binding) => ({
+          sid: binding.sid,
+          action: "noop" as const,
+          data: binding.data,
+        })),
+        downstream: persisted.downstream ?? [],
+      } as Apply;
     }
-  };
 
-  const lines: string[] = [];
-  lines.push(
-    "┌─ Sync ─────────────────────────────────────────────────────────┐",
+    return {
+      result,
+      plan: {
+        resources,
+        actions: {},
+        deletions: {},
+        actionDeletions: {},
+        output: undefined,
+        cycleMembers: new Set<string>(),
+      },
+    } satisfies SyncPlan;
+  }).pipe(
+    Effect.withSpan("sync.plan", {
+      attributes: {
+        "alchemy.stack": stack.name,
+        "alchemy.stage": stack.stage,
+      },
+    }),
   );
-  lines.push(
-    "│ Legend: = unchanged, ! drifted, ? missing, ~ repaired,         │",
-  );
-  lines.push(
-    "│         + recreated, · skipped                                 │",
-  );
-  lines.push(
-    "├────────────────────────────────────────────────────────────────┤",
-  );
-  const ids = Object.keys(result.resources).sort();
-  for (const id of ids) {
-    const r = result.resources[id];
-    const reason = r.reason ? ` — ${r.reason}` : "";
-    lines.push(
-      `│ [${symbol(r.action)}] ${id} (${r.resourceType}) ${r.action}${reason}`,
-    );
-  }
-  if (ids.length === 0) {
-    lines.push("│ (no resources)");
-  }
-  lines.push(
-    "└────────────────────────────────────────────────────────────────┘",
-  );
-
-  const counts = Object.values(result.resources).reduce(
-    (acc, r) => {
-      acc[r.action] = (acc[r.action] ?? 0) + 1;
-      return acc;
-    },
-    {} as Record<SyncAction, number>,
-  );
-  const summary = (
-    [
-      "unchanged",
-      "drifted",
-      "missing",
-      "repaired",
-      "recreated",
-      "skipped",
-    ] as const
-  )
-    .filter((a) => counts[a])
-    .map((a) => `${counts[a]} ${a}`)
-    .join(", ");
-  lines.push(summary === "" ? "Nothing to sync." : summary);
-
-  return lines.join("\n");
-};
