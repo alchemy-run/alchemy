@@ -142,9 +142,7 @@ instead of 404 for a missing snippet, so the matcher reads the
 message. Queues consumers support `http_pull` but the spec's
 enum doesn't include it. Account settings come back null where
 the schema says they can't. None of this is discoverable by
-reading documentation, and all of it is permanent. The
-generator refuses to run if a patch no longer matches an
-operation.
+reading documentation.
 
 ## The factory
 
