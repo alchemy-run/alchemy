@@ -838,9 +838,9 @@ export const LiveWorkerProvider = () =>
                 // a route right after `putScript` can race Cloudflare's
                 // script registry, which rejects with code 10019 ("Cannot
                 // configure a route for a Worker which does not exist") —
-                // typed as `WorkerNotFound` via the createRoute patch.
+                // typed as `RouteScriptNotFound` via the createRoute patch.
                 Effect.retry({
-                  while: (error) => error._tag === "WorkerNotFound",
+                  while: (error) => error._tag === "RouteScriptNotFound",
                   schedule: Schedule.exponential(200).pipe(
                     Schedule.both(Schedule.recurs(15)),
                   ),
