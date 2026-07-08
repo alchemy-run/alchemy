@@ -307,11 +307,9 @@ test.provider("cors rules are added, updated, and removed", (stack) =>
           cors: [
             {
               id: "range-reads",
-              allowed: {
-                methods: ["GET", "HEAD"],
-                origins: ["https://map.example.com"],
-                headers: ["range"],
-              },
+              allowedMethods: ["GET", "HEAD"],
+              allowedOrigins: ["https://map.example.com"],
+              allowedHeaders: ["range"],
               exposeHeaders: ["etag", "content-range"],
               maxAgeSeconds: 3600,
             },
@@ -345,21 +343,17 @@ test.provider("cors rules are added, updated, and removed", (stack) =>
           cors: [
             {
               id: "range-reads",
-              allowed: {
-                methods: ["GET", "HEAD"],
-                origins: ["*"],
-                headers: ["range"],
-              },
+              allowedMethods: ["GET", "HEAD"],
+              allowedOrigins: ["*"],
+              allowedHeaders: ["range"],
               exposeHeaders: ["etag", "content-range"],
               maxAgeSeconds: 3600,
             },
             {
               id: "uploads",
-              allowed: {
-                methods: ["PUT", "POST"],
-                origins: ["https://app.example.com"],
-                headers: ["content-type"],
-              },
+              allowedMethods: ["PUT", "POST"],
+              allowedOrigins: ["https://app.example.com"],
+              allowedHeaders: ["content-type"],
             },
           ],
         });
@@ -410,11 +404,9 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
     const bucketName = "alchemy-test-r2-cors-drift";
     const rangeReads = {
       id: "range-reads",
-      allowed: {
-        methods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
-        origins: ["https://map.example.com"],
-        headers: ["range"],
-      },
+      allowedMethods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
+      allowedOrigins: ["https://map.example.com"],
+      allowedHeaders: ["range"],
       exposeHeaders: ["etag"],
       maxAgeSeconds: 3600,
     };
@@ -510,11 +502,9 @@ test.provider("cors is applied to the new bucket on replacement", (stack) =>
     const cors = [
       {
         id: "range-reads",
-        allowed: {
-          methods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
-          origins: ["https://map.example.com"],
-          headers: ["range"],
-        },
+        allowedMethods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
+        allowedOrigins: ["https://map.example.com"],
+        allowedHeaders: ["range"],
         exposeHeaders: ["etag"],
         maxAgeSeconds: 3600,
       },

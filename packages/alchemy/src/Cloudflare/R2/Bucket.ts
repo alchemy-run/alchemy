@@ -101,28 +101,25 @@ export type BucketLifecycleRule = {
 
 export type BucketCorsRule = {
   /**
-   * Identifier for this rule.
+   * Optional label for this rule, shown in the Cloudflare dashboard. Not
+   * used to correlate rules across updates — the CORS configuration is
+   * always replaced as a whole.
    */
   id?: string;
   /**
-   * Allowed origins, methods and headers for this CORS rule.
+   * HTTP methods browsers are allowed to use in cross-origin requests.
    */
-  allowed: {
-    /**
-     * HTTP methods browsers are allowed to use in cross-origin requests.
-     */
-    methods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
-    /**
-     * Origins allowed to make cross-origin requests, e.g.
-     * `"https://example.com"`. Use `"*"` to allow any origin.
-     */
-    origins: string[];
-    /**
-     * Request headers browsers are allowed to send, e.g. `"range"` for
-     * range reads. If omitted, only simple headers are allowed.
-     */
-    headers?: string[];
-  };
+  allowedMethods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
+  /**
+   * Origins allowed to make cross-origin requests, e.g.
+   * `"https://example.com"`. Use `"*"` to allow any origin.
+   */
+  allowedOrigins: string[];
+  /**
+   * Request headers browsers are allowed to send, e.g. `"range"` for
+   * range reads. If omitted, only simple headers are allowed.
+   */
+  allowedHeaders?: string[];
   /**
    * Response headers the browser is allowed to expose to the requesting
    * JavaScript, e.g. `"etag"` or `"content-range"`.
@@ -356,10 +353,8 @@ export type Bucket = Resource<
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   cors: [
  *     {
- *       allowed: {
- *         methods: ["GET", "HEAD"],
- *         origins: ["*"],
- *       },
+ *       allowedMethods: ["GET", "HEAD"],
+ *       allowedOrigins: ["*"],
  *     },
  *   ],
  * });
@@ -371,12 +366,9 @@ export type Bucket = Resource<
  *   domains: [{ name: "tiles.example.com" }],
  *   cors: [
  *     {
- *       id: "range-reads",
- *       allowed: {
- *         methods: ["GET", "HEAD"],
- *         origins: ["https://map.example.com"],
- *         headers: ["range", "if-match"],
- *       },
+ *       allowedMethods: ["GET", "HEAD"],
+ *       allowedOrigins: ["https://map.example.com"],
+ *       allowedHeaders: ["range", "if-match"],
  *       exposeHeaders: ["etag", "content-range"],
  *       maxAgeSeconds: 3600,
  *     },
@@ -389,11 +381,9 @@ export type Bucket = Resource<
  * const bucket = yield* Cloudflare.R2.Bucket("MyBucket", {
  *   cors: [
  *     {
- *       allowed: {
- *         methods: ["GET", "PUT", "POST"],
- *         origins: ["https://app.example.com"],
- *         headers: ["content-type"],
- *       },
+ *       allowedMethods: ["GET", "PUT", "POST"],
+ *       allowedOrigins: ["https://app.example.com"],
+ *       allowedHeaders: ["content-type"],
  *       exposeHeaders: ["etag"],
  *     },
  *   ],
@@ -427,11 +417,9 @@ export declare namespace Bucket {
   };
   export type CorsRule = {
     id: string | undefined;
-    allowed: {
-      methods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
-      origins: string[];
-      headers: string[] | undefined;
-    };
+    allowedMethods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
+    allowedOrigins: string[];
+    allowedHeaders: string[] | undefined;
     exposeHeaders: string[] | undefined;
     maxAgeSeconds: number | undefined;
   };
@@ -823,7 +811,7 @@ export const BucketProvider = () =>
               accountId,
               bucketName,
               jurisdiction,
-              rules: desired,
+              rules: desired.map(toCorsPutPayload),
             })
             .pipe(
               Effect.retry({
@@ -1230,22 +1218,31 @@ type CorsRuleResponse = NonNullable<r2.GetBucketCorsResponse["rules"]>[number];
 
 const toCorsRule = (rule: CorsRuleResponse): Bucket.CorsRule => ({
   id: rule.id ?? undefined,
-  allowed: {
-    // Distilled widened generated string enums to open unions.
-    methods: rule.allowed.methods as Bucket.CorsRule["allowed"]["methods"],
-    origins: rule.allowed.origins,
-    headers: rule.allowed.headers ?? undefined,
-  },
+  // Distilled widened generated string enums to open unions.
+  allowedMethods: rule.allowed.methods as Bucket.CorsRule["allowedMethods"],
+  allowedOrigins: rule.allowed.origins,
+  allowedHeaders: rule.allowed.headers ?? undefined,
   exposeHeaders: rule.exposeHeaders ?? undefined,
   maxAgeSeconds: rule.maxAgeSeconds ?? undefined,
 });
 
 const normalizeCorsRule = (rule: BucketCorsRule): Bucket.CorsRule => ({
   id: rule.id,
+  allowedMethods: rule.allowedMethods,
+  allowedOrigins: rule.allowedOrigins,
+  allowedHeaders: rule.allowedHeaders,
+  exposeHeaders: rule.exposeHeaders,
+  maxAgeSeconds: rule.maxAgeSeconds,
+});
+
+const toCorsPutPayload = (
+  rule: BucketCorsRule,
+): NonNullable<r2.PutBucketCorsRequest["rules"]>[number] => ({
+  id: rule.id,
   allowed: {
-    methods: rule.allowed.methods,
-    origins: rule.allowed.origins,
-    headers: rule.allowed.headers,
+    methods: rule.allowedMethods,
+    origins: rule.allowedOrigins,
+    headers: rule.allowedHeaders,
   },
   exposeHeaders: rule.exposeHeaders,
   maxAgeSeconds: rule.maxAgeSeconds,
