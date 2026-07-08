@@ -425,6 +425,13 @@ export interface WorkerProps<
   /**
    * Cron expressions that trigger the Worker's scheduled handler.
    *
+   * This is how async (non-Effect) Workers configure Cron Triggers — the
+   * entry module exports its own `scheduled` handler and this prop attaches
+   * the schedules at deploy time. Effect-native Workers usually skip this
+   * prop and call `Cloudflare.Workers.cron(expression, handler)` in the Init
+   * phase instead, which attaches the expression and registers the runtime
+   * listener in one step.
+   *
    * Pass an empty array to remove all Cron Triggers.
    */
   crons?: string[];

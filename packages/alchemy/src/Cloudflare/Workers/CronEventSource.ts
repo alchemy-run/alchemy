@@ -10,19 +10,121 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
 /**
  * Subscribe to Cloudflare Cron Triggers with an Effect handler.
  *
- * This wires both pieces of a scheduled Worker:
+ * A single call wires both pieces of a scheduled Worker:
  *
- * - **Runtime**: registers a `scheduled` listener on the Worker.
- * - **Deploy-time**: attaches the cron expression to the host Worker.
+ * - **Deploy-time**: attaches the cron expression to the host Worker's
+ *   Cron Triggers.
+ * - **Runtime**: registers a `scheduled` listener that runs your Effect on
+ *   each fire. The handler receives Cloudflare's `ScheduledController` —
+ *   `controller.scheduledTime` is the fire time and `controller.cron` is
+ *   the expression that fired.
+ *
+ * Requires `CronEventSourceLive` provided on the Worker's Effect.
+ * A failing handler won't crash the Worker — the event source catches the
+ * failure and moves on; log or report errors inside the handler if you
+ * need visibility into failed runs.
+ *
+ * Async (non-Effect) Workers don't use `cron` — they attach schedules with
+ * the Worker's `crons` prop and export their own `scheduled` handler from
+ * the entry module (see the Async Worker section below). Pass `crons: []`
+ * to remove all Cron Triggers from a Worker.
+ *
  * @binding
  * @product Workers
  * @category Workers & Compute
- * @example
+ *
+ * @section Effect-native Worker (recommended)
+ * @example Run an Effect on a schedule
  * ```typescript
- * yield* Cloudflare.Workers.cron("0 12 * * *", (controller) =>
- *   Effect.log(`scheduled at ${controller.scheduledTime}`),
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     yield* Cloudflare.Workers.cron("0 12 * * *", (controller) =>
+ *       Effect.log(`scheduled at ${controller.scheduledTime}`),
+ *     );
+ *
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.Workers.CronEventSourceLive)),
  * );
  * ```
+ *
+ * @example Multiple schedules
+ * ```typescript
+ * // Each handler only runs for fires of its own expression — the listener
+ * // checks controller.cron, so a midnight fire never runs the hourly handler.
+ * yield* Cloudflare.Workers.cron("0 * * * *", () => syncFeeds);
+ * yield* Cloudflare.Workers.cron("0 0 * * *", () => purgeExpired);
+ * ```
+ *
+ * @example Record each fire on a Durable Object
+ * ```typescript
+ * export default class Worker extends Cloudflare.Worker<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const counters = yield* CronCounter;
+ *
+ *     yield* Cloudflare.Workers.cron("0 * * * *", (controller) =>
+ *       counters.getByName("default").record(controller.scheduledTime),
+ *     );
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { times } = yield* counters.getByName("default").snapshot();
+ *         return yield* HttpServerResponse.json({ times });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.Workers.CronEventSourceLive)),
+ * ) {}
+ * ```
+ *
+ * @section Async Worker
+ * @example Attach schedules with the `crons` prop and export `scheduled`
+ * ```typescript
+ * // alchemy.run.ts — attach the cron expressions at deploy time
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   crons: ["0 12 * * *"],
+ * });
+ *
+ * // src/worker.ts — the entry module handles the fires itself
+ * export default {
+ *   async scheduled(controller: ScheduledController) {
+ *     console.log(`scheduled at ${controller.scheduledTime}`);
+ *   },
+ * };
+ * ```
+ *
+ * @example Dispatch multiple schedules on `controller.cron`
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   crons: ["0 * * * *", "0 0 * * *"],
+ * });
+ *
+ * // src/worker.ts — one scheduled handler receives every fire
+ * export default {
+ *   async scheduled(controller: ScheduledController) {
+ *     switch (controller.cron) {
+ *       case "0 * * * *":
+ *         await syncFeeds();
+ *         break;
+ *       case "0 0 * * *":
+ *         await purgeExpired();
+ *         break;
+ *     }
+ *   },
+ * };
+ * ```
+ *
+ * @see https://developers.cloudflare.com/workers/configuration/cron-triggers/
  */
 export const cron = <Req = never>(
   expression: string,
