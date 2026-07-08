@@ -100,13 +100,13 @@ turnstile`) and the union names what the API actually does:
 export type GetWidgetError = DefaultErrors | WidgetNotFound | Forbidden;
 ```
 
-The `catchTag` compiles, the test goes green, and the loop
-continues — reconcile, read, diff, delete, list — until the
-resource is green against the live API. The resource is the
-product; the truthful SDK is the byproduct. The patch lives in
-the SDK, not Alchemy: anyone who uses distilled's Turnstile
-module from now on gets `WidgetNotFound` as a typed, catchable
-error.
+The `catchTag` compiles and the test goes green. The loop
+continues through reconcile, read, diff, delete, and list
+until the whole resource passes against the live API. The
+resource is the product and the truthful SDK is the byproduct.
+The patch lives in the SDK, not Alchemy, so anyone who uses
+distilled's Turnstile module from now on gets `WidgetNotFound`
+as a typed, catchable error.
 
 ## What 1,087 patches look like
 
@@ -124,12 +124,12 @@ of the SDK, spanning 94 of 114 services:
 | matchers needing `message.includes` | 377 |
 | matchers needing a regex | 0 |
 
-Most tags are the vocabulary lifecycle code needs —
-`Forbidden`, `WorkerNotFound`, `NoSuchBucket`. The rest
-catalog how APIs drift from their docs: Snippets returns
-400 — not 404 — for a missing snippet (matched on the
-message), Queues consumers support `http_pull` but the spec's
-enum doesn't include it, account settings come back null where
+Most tags are the vocabulary lifecycle code needs, like
+`Forbidden`, `WorkerNotFound`, and `NoSuchBucket`. The rest
+catalog how APIs drift from their docs. Snippets returns 400
+instead of 404 for a missing snippet, so the matcher reads the
+message. Queues consumers support `http_pull` but the spec's
+enum doesn't include it. Account settings come back null where
 the schema says they can't. None of this is discoverable by
 reading documentation, and all of it is permanent: the
 generator refuses to run if a patch no longer matches an
