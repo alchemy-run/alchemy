@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as googleTagGateway from "@distilled.cloud/cloudflare/google-tag-gateway";
 import { expect } from "@effect/vitest";
@@ -191,6 +192,96 @@ describe.sequential("GoogleTagGateway", () => {
           const stillRestored = yield* getConfig(zoneId);
           expect(stillRestored).toEqual(baseline);
         }).pipe(Effect.ensuring(setBaseline(zoneId).pipe(Effect.ignore)));
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "recovers a creating-state row whose Output-valued zone prop was lost (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        yield* setBaseline(zoneId);
+
+        yield* Effect.gen(function* () {
+          const deployGateway = () =>
+            stack.deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
+                  "GtgWedged",
+                  {
+                    zone: { zoneId, name: zoneName },
+                    enabled: true,
+                    endpoint: "/wedged",
+                    measurementId: "G-WEDGED0001",
+                    hideOriginalIp: true,
+                    setUpTag: false,
+                  },
+                );
+              }),
+            );
+
+          const created = yield* deployGateway();
+          expect(created.zoneId).toEqual(zoneId);
+
+          // Rewrite the persisted row into the wedged shape an interrupted
+          // deploy leaves behind: `creating`, no attributes, and the
+          // Output-valued `zone` prop lost in the state round-trip (#736).
+          const state = yield* yield* State;
+          const stage = "test"; // scratch stacks default to the "test" stage
+          const fqns = yield* state.list({ stack: stack.name, stage });
+          const rows = yield* Effect.forEach(fqns, (fqn) =>
+            state
+              .get({ stack: stack.name, stage, fqn })
+              .pipe(Effect.map((row) => ({ fqn, row }))),
+          );
+          const wedged = rows.find(
+            (r): r is { fqn: string; row: ResourceState } =>
+              isResourceState(r.row) &&
+              r.row.resourceType ===
+                "Cloudflare.GoogleTagGateway.GoogleTagGateway",
+          );
+          if (!wedged) {
+            return yield* Effect.die(
+              new Error("no GoogleTagGateway state row found after deploy"),
+            );
+          }
+          yield* state.set({
+            stack: stack.name,
+            stage,
+            fqn: wedged.fqn,
+            value: {
+              ...wedged.row,
+              status: "creating",
+              attr: undefined,
+              props: { ...wedged.row.props, zone: undefined },
+            },
+          });
+
+          // Before the fix this crashed in `read` with
+          // `TypeError: undefined is not an object (evaluating 'zone.name')`
+          // (resolve(olds.zone) with a lost `zone`). After the fix, read
+          // reports "not found" and reconcile converges on the same zone
+          // singleton — no drift, same identity.
+          const recovered = yield* deployGateway();
+          expect(recovered.zoneId).toEqual(created.zoneId);
+          expect(recovered.enabled).toEqual(true);
+          expect(recovered.endpoint).toEqual("/wedged");
+          expect(recovered.measurementId).toEqual("G-WEDGED0001");
+          expect(recovered.hideOriginalIp).toEqual(true);
+
+          // The live singleton still matches — converged, not duplicated.
+          const live = yield* getConfig(zoneId);
+          expect(live?.endpoint).toEqual("/wedged");
+          expect(live?.measurementId).toEqual("G-WEDGED0001");
+
+          yield* stack.destroy();
+        }).pipe(
+          // Leave the zone in the disabled baseline even if the test fails.
+          Effect.ensuring(setBaseline(zoneId).pipe(Effect.ignore)),
+        );
       }).pipe(logLevel),
     { timeout: 120_000 },
   );

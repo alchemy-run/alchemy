@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import { PublicKey } from "@/AWS/CloudFront";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "@effect/vitest";
@@ -43,8 +44,9 @@ describe("AWS.CloudFront.PublicKey", () => {
         });
         expect(initial.PublicKey?.Id).toEqual(created.publicKeyId);
         expect(initial.PublicKey?.PublicKeyConfig?.Comment).toEqual("initial");
-        expect(initial.PublicKey?.PublicKeyConfig?.EncodedKey).toEqual(
-          TEST_PUBLIC_KEY,
+        // CloudFront normalizes the stored key (trailing newline stripped).
+        expect(initial.PublicKey?.PublicKeyConfig?.EncodedKey?.trim()).toEqual(
+          TEST_PUBLIC_KEY.trim(),
         );
 
         const updated = yield* stack.deploy(
@@ -96,6 +98,97 @@ describe("AWS.CloudFront.PublicKey", () => {
         yield* assertPublicKeyDeleted(deployed.publicKeyId);
       }),
     { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!runLive)(
+    "recovers a wedged creating-state row that lost its Output-valued encodedKey (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployKey = () =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return yield* PublicKey("WedgedKey", {
+                encodedKey: TEST_PUBLIC_KEY,
+                comment: "wedged recovery test",
+              });
+            }),
+          );
+
+        const created = yield* deployKey();
+
+        // Rewrite the persisted row into the wedged shape an interrupted
+        // deploy leaves behind: `creating`, no attributes, and the
+        // Output-valued `encodedKey` lost in the round-trip (#736).
+        const state = yield* yield* State;
+        const stage = "test"; // scratch stacks default to the "test" stage
+        const fqns = yield* state.list({ stack: stack.name, stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state
+            .get({ stack: stack.name, stage, fqn })
+            .pipe(Effect.map((row) => ({ fqn, row }))),
+        );
+        const wedged = rows.find(
+          (r): r is { fqn: string; row: ResourceState } =>
+            isResourceState(r.row) &&
+            r.row.resourceType === "AWS.CloudFront.PublicKey",
+        );
+        if (!wedged) {
+          return yield* Effect.die(
+            new Error(
+              "no AWS.CloudFront.PublicKey state row found after deploy",
+            ),
+          );
+        }
+        yield* state.set({
+          stack: stack.name,
+          stage,
+          fqn: wedged.fqn,
+          value: {
+            ...wedged.row,
+            status: "creating",
+            attr: undefined,
+            props: {
+              ...wedged.row.props,
+              encodedKey: undefined,
+            },
+          },
+        });
+
+        // Delete the public key out-of-band so the recovery `read` misses
+        // and the engine falls through to `diff` with the junk olds.
+        const current = yield* cloudfront.getPublicKey({
+          Id: created.publicKeyId,
+        });
+        yield* cloudfront
+          .deletePublicKey({
+            Id: created.publicKeyId,
+            IfMatch: current.ETag,
+          })
+          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.void));
+        yield* assertPublicKeyDeleted(created.publicKeyId);
+
+        // Before the fix this crashed in `diff`: `extractValue(undefined)`
+        // called `Redacted.value(undefined)` on the lost `olds.encodedKey`.
+        // After the fix, diff skips the comparison and the engine recreates
+        // the key cleanly.
+        const recovered = yield* deployKey();
+        expect(recovered.publicKeyId).not.toEqual(created.publicKeyId);
+
+        const after = yield* cloudfront.getPublicKey({
+          Id: recovered.publicKeyId,
+        });
+        expect(after.PublicKey?.Id).toEqual(recovered.publicKeyId);
+        // CloudFront normalizes the stored key (trailing newline stripped).
+        expect(after.PublicKey?.PublicKeyConfig?.EncodedKey?.trim()).toEqual(
+          TEST_PUBLIC_KEY.trim(),
+        );
+
+        yield* stack.destroy();
+        yield* assertPublicKeyDeleted(recovered.publicKeyId);
+      }),
+    { timeout: 240_000 },
   );
 });
 

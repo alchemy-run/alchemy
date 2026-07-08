@@ -2,12 +2,20 @@ import * as AWS from "@/AWS";
 import { Certificate, waitForRoute53Change } from "@/AWS/ACM/Certificate.ts";
 import { HostedZone } from "@/AWS/Route53";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
+import * as acm from "@distilled.cloud/aws/acm";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+
+// ACM certificates for CloudFront are provider-pinned to us-east-1; every
+// out-of-band ACM call in this file must target the same region.
+const withUsEast1 = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed("us-east-1")));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -101,3 +109,124 @@ test.provider.skipIf(!!process.env.FAST)(
 );
 
 class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
+
+// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+//
+// A `creating` state row persisted before upstream Outputs resolve cannot
+// round-trip Output-valued props (`domainName` from a HostedZone Output,
+// `hostedZoneId`) — they deserialize as `undefined`. In the worst case the
+// row's props are junk and the engine's deletion-planning branch (which every
+// `destroy` and every deploy that drops the resource runs) calls
+// `provider.read` with those junk `olds`. Before the fix, `read` dereferenced
+// `olds!` unconditionally (`findManagedCertificate` reads
+// `props.keyAlgorithm` / `props.domainName`), so planning crashed with a
+// TypeError and wedged the stack — plan/deploy/destroy all build a plan, so
+// there was no CLI escape hatch.
+//
+// Simulate exactly that row after a real deploy and assert the guarded `read`
+// reports "not found" instead of crashing: destroy succeeds (skipping the
+// physical delete, since no attr could be recovered), and a follow-up deploy
+// of the same program converges on the SAME leaked certificate (found by
+// domain + SAN + alchemy ownership tags) — no duplicate is requested.
+test.provider.skipIf(!!process.env.FAST)(
+  "recovers a wedged creating-state certificate whose props were lost (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const domainName = "alchemy-acm-recovery-736.example.com";
+      const deployCertificate = () =>
+        stack.deploy(
+          Certificate("RecoveryCertificate", {
+            domainName,
+            // List the primary domain explicitly: ACM's DescribeCertificate
+            // reports it in SubjectAlternativeNames, and recovery-by-search
+            // (`findManagedCertificate`) compares that list against the
+            // props' SAN list — aligning them is what lets the redeploy
+            // below converge on the leaked certificate.
+            subjectAlternativeNames: [domainName],
+          }),
+        );
+
+      const created = yield* deployCertificate();
+      expect(created.certificateArn).toBeDefined();
+
+      // Safety net: reclaim the certificate on scope close even if the body
+      // fails mid-way (e.g. during the pre-fix crash verification).
+      yield* Effect.addFinalizer(() =>
+        withUsEast1(
+          acm.deleteCertificate({ CertificateArn: created.certificateArn }),
+        ).pipe(Effect.ignore),
+      );
+
+      // `ListCertificates` is eventually consistent; the recovery redeploy
+      // below finds the certificate through it, so wait (bounded) until the
+      // fresh ARN is visible before wedging the state.
+      yield* Effect.gen(function* () {
+        const listed = yield* withUsEast1(acm.listCertificates({}));
+        if (
+          !listed.CertificateSummaryList?.some(
+            (summary) => summary.CertificateArn === created.certificateArn,
+          )
+        ) {
+          return yield* Effect.fail(new CertificateNotListed());
+        }
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "CertificateNotListed",
+          schedule: Schedule.fixed("3 seconds").pipe(
+            Schedule.both(Schedule.recurs(18)),
+          ),
+        }),
+      );
+
+      // Rewrite the certificate's persisted row into the wedged shape an
+      // interrupted deploy leaves behind: `creating`, no attributes, and the
+      // props lost in the Output round-trip.
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) &&
+          r.row.resourceType === "AWS.ACM.Certificate",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error("no AWS.ACM.Certificate state row found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: undefined as never,
+        },
+      });
+
+      // Deletion planning reads the wedged row with `olds: undefined`.
+      // Before the fix this crashed with
+      // `TypeError: undefined is not an object (evaluating 'props.keyAlgorithm')`;
+      // after it, `read` reports "not found", the physical delete is skipped
+      // (no attr could be recovered) and the row is reaped.
+      yield* stack.destroy();
+
+      // The certificate itself leaked (the wedged row had no recoverable
+      // attr) — redeploying the same program must converge on it via
+      // domain + SAN + ownership tags instead of requesting a duplicate.
+      const recovered = yield* deployCertificate();
+      expect(recovered.certificateArn).toEqual(created.certificateArn);
+
+      yield* stack.destroy();
+    }),
+  { timeout: 240_000 },
+);
