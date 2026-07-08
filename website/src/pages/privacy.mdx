@@ -46,7 +46,7 @@ Per-operation span attributes:
 
 ### From the Cloudflare State Store
 
-When you deploy the [Cloudflare State Store](/guides/custom-state-store) it runs as a Worker on **your** Cloudflare account. The worker emits OTLP traces/metrics/logs to the same `otel.alchemy.run` relay.
+When you deploy the [Cloudflare State Store](/state-store/custom-state-store) it runs as a Worker on **your** Cloudflare account. The worker emits OTLP traces/metrics/logs to the same `otel.alchemy.run` relay.
 
 Resource attributes (set on every signal from the worker):
 
@@ -146,7 +146,7 @@ NO_TRACK=1 alchemy deploy
 `noTrack` only suppresses the account-hash attribute on state-store
 spans. To stop the worker from emitting signals at all, you'd need
 to remove the OTLP layer in your own fork of `Api.ts`, or run a
-custom HTTP state store via [/guides/custom-state-store](/guides/custom-state-store).
+custom HTTP state store via [/state-store/custom-state-store](/state-store/custom-state-store).
 
 ## Questions
 

@@ -45,7 +45,7 @@ export interface KvEntries extends Resource<
  * Entries are stored with a `{namespace}:{key}` prefix to allow multiple
  * logical groups within a single store. Updates use batched optimistic
  * concurrency with automatic ETag retry.
- *
+ * @resource
  * @section Managing Entries
  * @example Basic Entries
  * ```typescript
@@ -195,6 +195,11 @@ export const KvEntriesProvider = () =>
       });
 
       return {
+        // Non-listable: a KvEntries resource is a logical group of key/value
+        // data keyed entirely by its parent store ARN + namespace (both chosen
+        // by the user). There is no account-wide API to enumerate these groups,
+        // and the entries are managed content rather than nuke-able infra.
+        list: () => Effect.succeed([]),
         read: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
             return output;

@@ -70,7 +70,7 @@ const toScheduleExpression = (value: string) =>
  * Plain English durations like `"1 hour"` are normalized to `rate(...)`
  * expressions automatically. Full `rate(...)` and `cron(...)` expressions are
  * also accepted as-is.
- *
+ * @binding
  * @example Run a task every hour
  * ```typescript
  * yield* AWS.ECS.every("HourlyJob", "1 hour", {

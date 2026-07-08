@@ -23,8 +23,10 @@ import {
 import { devCommand } from "./commands/dev.ts";
 import { loginCommand } from "./commands/login.ts";
 import { logsCommand } from "./commands/logs.ts";
+import { unsafeCommand } from "./commands/nuke.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { stateCommand } from "./commands/state.ts";
+import { syncCommand } from "./commands/sync.ts";
 import { tailCommand } from "./commands/tail.ts";
 import { selectCli } from "./selectCli.ts";
 
@@ -41,6 +43,8 @@ const root = Command.make("alchemy", {}).pipe(
     loginCommand,
     profileCommand,
     stateCommand,
+    syncCommand,
+    unsafeCommand,
   ]),
 );
 

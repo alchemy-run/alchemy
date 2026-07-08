@@ -65,7 +65,7 @@ export interface BaseDatabaseProps {
 
   /**
    * Name of the table used to track applied migrations.
-   * @default "planetscale_migrations"
+   * @default "__alchemy_migrations"
    */
   migrationsTable?: string;
 

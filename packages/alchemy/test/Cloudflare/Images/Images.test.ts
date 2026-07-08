@@ -37,7 +37,13 @@ const TINY_PNG = new Uint8Array(
 // answers 200 (and surface its body if it doesn't, so a real failure isn't
 // hidden by the retry loop).
 const looksLikeCloudflarePlaceholder = (body: string) =>
-  body.includes("There is nothing here yet") || /Error\s+\d{3,4}/i.test(body);
+  body.includes("There is nothing here yet") ||
+  // The "Error 1104 / Script not found" page renders the word "Error" and
+  // the code in separate HTML tags, so match the page's own markers rather
+  // than a contiguous "Error NNNN" string.
+  body.includes("Script not found") ||
+  body.includes("cf-error-code") ||
+  /Error\s+\d{3,4}/i.test(body);
 
 const postImage = (url: string) =>
   HttpClient.execute(

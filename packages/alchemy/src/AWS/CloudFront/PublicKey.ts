@@ -1,6 +1,7 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -70,7 +71,7 @@ export interface PublicKey extends Resource<
  *
  * The key body is immutable after creation — changing `encodedKey` triggers
  * a replacement (CloudFront returns no API to rotate a key in place).
- *
+ * @resource
  * @section Creating Public Keys
  * @example PEM-encoded RSA public key
  * ```typescript
@@ -135,6 +136,33 @@ export const PublicKeyProvider = () =>
 
       return {
         stables: ["publicKeyId", "callerReference"],
+        list: () =>
+          Effect.gen(function* () {
+            // CloudFront is global (no region). `listPublicKeys` summaries lack
+            // CallerReference/ETag, so fetch each key's full config via
+            // `getById` to produce the same Attributes shape `read` returns.
+            const ids = yield* cloudfront.listPublicKeys.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.PublicKeyList?.Items ?? []).map((item) => item.Id),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              ids,
+              (publicKeyId) =>
+                getById(publicKeyId).pipe(
+                  Effect.map((found) =>
+                    found
+                      ? toAttrs(publicKeyId, found.config, found.etag)
+                      : undefined,
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.filter((row) => row !== undefined);
+          }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
           if (
@@ -143,7 +171,11 @@ export const PublicKeyProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          // Compare only when the old key is known — an Output-valued
+          // `encodedKey` doesn't survive a `creating`-state round-trip (it
+          // deserializes as `undefined`).
           if (
+            olds.encodedKey !== undefined &&
             isResolved(olds.encodedKey) &&
             extractValue(olds.encodedKey) !== extractValue(news.encodedKey)
           ) {

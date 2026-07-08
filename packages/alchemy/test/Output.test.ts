@@ -7,6 +7,8 @@ import { inMemoryState } from "@/State/InMemoryState";
 import type { ResourceState } from "@/State/ResourceState";
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -96,6 +98,71 @@ describe("Output.evaluate", () => {
           const [result] = yield* Output.evaluate([secret], {});
           expect(Redacted.isRedacted(result)).toBe(true);
           expect(Redacted.value(result)).toBe("hunter2");
+        }),
+      ),
+    );
+  });
+
+  describe("Config", () => {
+    it.effect("resolves a Config value at the top level", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(Config.succeed(1337), {});
+          expect(result).toBe(1337);
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config value nested inside an object", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            { port: Config.succeed(8080), host: "localhost" },
+            {},
+          );
+          expect(result).toEqual({ port: 8080, host: "localhost" });
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config value nested inside an array", () =>
+      provideState(
+        Effect.gen(function* () {
+          const [result] = yield* Output.evaluate([Config.succeed(42)], {});
+          expect(result).toBe(42);
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config against the ConfigProvider environment", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            { port: Config.number("PORT").pipe(Config.withDefault(1337)) },
+            {},
+          ).pipe(
+            Effect.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { PORT: "8080" } }),
+              ),
+            ),
+          );
+          expect(result).toEqual({ port: 8080 });
+        }),
+      ),
+    );
+
+    it.effect("a Config resolving to a Redacted keeps it wrapped", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            Config.succeed(Redacted.make("hunter2")),
+            {},
+          );
+          expect(Redacted.isRedacted(result)).toBe(true);
+          expect(
+            Redacted.value(result as unknown as Redacted.Redacted<string>),
+          ).toBe("hunter2");
         }),
       ),
     );
@@ -771,6 +838,56 @@ describe("Output coercion guard", () => {
       /Output\.(interpolate|map)/,
     );
   });
+});
+
+describe("Redacted stack-output serialization (regression #598)", () => {
+  // A resource whose attribute is a `Redacted<string>` — e.g. `Random.text`,
+  // which pr-package's AuthTokenValue exposes. When such an attribute flows
+  // into a Stack output it is JSON-serialized for persistence to state /
+  // Doppler / GH secrets. `JSON.stringify(Redacted)` returns the literal
+  // string "<redacted>", so a publisher reading the output would send
+  // `Bearer <redacted>` instead of the real token. The fix is to unwrap with
+  // `Output.map(Redacted.value)` before returning it from the stack.
+  const SECRET = "1486c434bd35732a185d1712c587ddfafd9e1c8d7a94fb15cf6ece51128";
+  const redactedResource = () => {
+    const src = fakeResource<
+      "Alchemy.Random",
+      { text: Redacted.Redacted<string> }
+    >("Alchemy.Random", "AuthTokenValue");
+    return (Output.of(src) as any).text as Output.Output<
+      Redacted.Redacted<string>
+    >;
+  };
+  const env = { AuthTokenValue: { text: Redacted.make(SECRET) } };
+
+  it.effect(
+    'a raw Redacted output serializes to the literal "<redacted>" (the bug)',
+    () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(redactedResource(), env);
+          // The evaluated value is still a Redacted, and persisting it as a
+          // stack output (JSON) loses the real token.
+          expect(Redacted.isRedacted(result)).toBe(true);
+          expect(JSON.stringify({ authToken: result })).toBe(
+            '{"authToken":"<redacted>"}',
+          );
+        }),
+      ),
+  );
+
+  it.effect("Output.map(Redacted.value) emits the real token (the fix)", () =>
+    provideState(
+      Effect.gen(function* () {
+        const expr = redactedResource().pipe(Output.map(Redacted.value));
+        const result = yield* Output.evaluate(expr, env);
+        expect(result).toBe(SECRET);
+        expect(JSON.stringify({ authToken: result })).toBe(
+          `{"authToken":"${SECRET}"}`,
+        );
+      }),
+    ),
+  );
 });
 
 describe("Output.isOutput / isExpr", () => {

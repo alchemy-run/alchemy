@@ -8,11 +8,13 @@ import * as Effect from "effect/Effect";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { fileURLToPath } from "node:url";
 import { openWebSocket, waitForExit } from "./fixtures/process-effect.ts";
 import { runtimes } from "./fixtures/runtimes.ts";
 
-const FIXTURE_TS = new URL("./fixtures/rpc-server-entry.ts", import.meta.url)
-  .pathname;
+const FIXTURE_TS = fileURLToPath(
+  new URL("./fixtures/rpc-server-entry.ts", import.meta.url),
+);
 
 const ADDRESS_RE = /<ALCHEMY_RPC_ADDRESS>(.+?)<\/ALCHEMY_RPC_ADDRESS>/;
 
@@ -77,7 +79,11 @@ for (const runtime of runtimes()) {
             // Drive a real RPC call through a session websocket. capnweb's
             // surface is Promise-based, so we wrap exactly at the boundary
             // and let everything above and below stay in Effect.
-            const stub = newWebSocketRpcSession(url) as RpcStub<RpcProxyApi>;
+
+            // TODO(sam): tsgo vomits here, so we cast to any.
+            const stub = (newWebSocketRpcSession as any)(
+              url,
+            ) as RpcStub<RpcProxyApi>;
             const result = yield* Effect.promise(async () => {
               const provider = await stub.getProvider("Test.Echo");
               const handlers = unwrapRpcHandlers(provider as any) as {

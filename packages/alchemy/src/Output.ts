@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -22,7 +23,15 @@ export const of = <R extends ResourceLike>(
   : RefExpr<R["Attributes"]> => {
   if (isRef(resource)) {
     const metadata = getRefMetadata(resource);
-    return new RefExpr(metadata.stack, metadata.stage, metadata.id) as any;
+    return new RefExpr(
+      metadata.stack,
+      metadata.stage,
+      metadata.id,
+      // Surface the target's resource type as a statically-known
+      // property so duck-typing classifiers (Worker env bindings)
+      // identify the ref exactly like a locally-declared resource.
+      metadata.type !== undefined ? { Type: metadata.type } : undefined,
+    ) as any;
   }
   return new ResourceExpr(resource) as any;
 };
@@ -376,6 +385,12 @@ export class RefExpr<A> extends BaseExpr<A, never> {
     public readonly stack: string | undefined,
     public readonly stage: string | undefined,
     public readonly resourceId: string,
+    /**
+     * Statically-known properties of the ref's target (currently its
+     * resource `Type`), served as literals by the proxy instead of
+     * `PropExpr`s — mirrors {@link ResourceExpr}'s `stables`.
+     */
+    readonly stables?: Record<string, any>,
   ) {
     super();
     return proxy(this);
@@ -501,7 +516,9 @@ function proxy(self: any): any {
           ? self
           : prop === inspect
             ? target[inspect]
-            : isResourceExpr(self) && self.stables && prop in self.stables
+            : (isResourceExpr(self) || isRefExpr(self)) &&
+                self.stables &&
+                prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
               : prop in self
                 ? typeof self[prop as keyof typeof self] === "function" &&
@@ -554,7 +571,7 @@ export const evaluate: <A, Req = never>(
   },
 ) => Effect.Effect<
   A,
-  InvalidReferenceError | MissingSourceError,
+  InvalidReferenceError | MissingSourceError | Config.ConfigError,
   State.State | Req
 > = (expr, upstream) =>
   Effect.gen(function* () {
@@ -644,9 +661,12 @@ export const evaluate: <A, Req = never>(
     }
     if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
-    } else if (Redacted.isRedacted(expr)) {
-      return expr;
-    } else if (Duration.isDuration(expr)) {
+    } else if (Config.isConfig(expr)) {
+      // Resolve Config against the deploy environment — see resolveInput in
+      // Plan.ts for rationale. `Config.redacted` resolves to a `Redacted`,
+      // which stays opaque via the branch below.
+      return yield* evaluate(yield* expr, upstream);
+    } else if (Duration.isDuration(expr) || Redacted.isRedacted(expr)) {
       // Opaque value — see resolveInput in Plan.ts for rationale.
       return expr;
     } else if (typeof expr === "object" && expr !== null) {

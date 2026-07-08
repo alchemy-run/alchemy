@@ -17,6 +17,7 @@ import { ExecutionContext } from "../../ExecutionContext.ts";
 import { makeEntrypointLayer } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
 import {
@@ -31,6 +32,8 @@ import {
   Worker,
   WorkerEnvironment,
   WorkerExecutionContext,
+  deferredExecutionContext,
+  fromExecutionContext,
 } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
@@ -68,24 +71,31 @@ export const makeWorkerBridge = (
     return eff
       .pipe(
         Effect.flatMap(([eff, context]) =>
-          Effect.provide(
-            eff,
-            pipe(
-              Layer.succeedContext(context),
-              Layer.provideMerge(Layer.succeedContext(context)),
-              Layer.provideMerge(Layer.succeed(WorkerExecutionContext, ctx)),
-              Layer.provideMerge(
+          eff.pipe(
+            // Per-event services take precedence over the captured init
+            // context: the init context carries the *deferred*
+            // WorkerExecutionContext (yieldable in the top-level closure)
+            // and the isolate-lifetime instance Scope, both of which must
+            // be shadowed by the real per-event ones here so that
+            // `Effect.addFinalizer` in a handler attaches to the request
+            // scope (closed into `ctx.waitUntil` below).
+            Effect.provide(
+              Layer.mergeAll(
+                Layer.succeed(
+                  WorkerExecutionContext,
+                  fromExecutionContext(ctx),
+                ),
                 Layer.succeed(ExecutionContext, {
                   scope,
                   cache: {},
                 }),
+                Layer.succeed(Scope.Scope, scope),
               ),
             ),
+            Effect.provide(Layer.succeedContext(context)),
           ),
         ),
-        Effect.provide(
-          Layer.provideMerge(globalContext, Layer.succeed(Scope.Scope, scope)),
-        ),
+        Effect.provide(globalContext),
         Effect.runPromiseExit,
       )
       .finally(() =>
@@ -142,16 +152,18 @@ export const makeWorkerBridge = (
                     );
                   }
                   const result = dispatcher(...args);
-                  // A streaming RPC method returns a `Stream` directly rather
-                  // than an `Effect`. Lift it into the success channel so the
-                  // inner effect resolves to the `Stream` and `handleRpcExit`
-                  // can encode it as a stream envelope. Anything else is the
-                  // `Effect` it claims to be (its resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` also handles).
+                  // Effects (including nested-RPC values built by
+                  // `asEffectOrStream`, which are Effects *branded* as Streams)
+                  // must be run as effects — their resolved value may itself be
+                  // a `Stream`, which `handleRpcExit` then encodes. Only a
+                  // *genuine* `Stream` (not an Effect) is lifted into the
+                  // success channel so `handleRpcExit` encodes it directly.
                   return Effect.succeed([
-                    Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : (result as Effect.Effect<any>),
+                    Effect.isEffect(result)
+                      ? (result as Effect.Effect<any>)
+                      : Stream.isStream(result)
+                        ? Effect.succeed(result)
+                        : (result as Effect.Effect<any>),
                     Context.empty(),
                   ] as const);
                 }),
@@ -217,6 +229,16 @@ export const getWorkerExport = <Export = any>({
     Logger.layer([Logger.consolePretty()]),
   );
 
+  // Fallback Scope for init-phase code paths where the Layer machinery
+  // doesn't provide a build scope of its own. Never closed (workerd has no
+  // isolate-teardown hook). Note the entrypoint layer is rebuilt per event
+  // (each event runs in a fresh runtime with its own memo map), and a layer
+  // build provides its own scope to the init effect — so init-level
+  // finalizers actually attach to that build scope and fire at the end of
+  // each event, not here. Handlers get the request scope from
+  // `processEvent`, which closes into `ctx.waitUntil` after the response.
+  const instanceScope = Scope.makeUnsafe();
+
   const globalContext = Layer.unwrap(
     cloudflare_workers.pipe(
       Effect.map(({ env }) =>
@@ -241,12 +263,30 @@ export const getWorkerExport = <Export = any>({
             ),
           ),
           Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
+          // Init-phase ExecutionContext: yieldable from the Worker's
+          // top-level closure (and Layers); its RuntimeContext-colored
+          // methods defer to the real per-event context provided by
+          // `processEvent`.
+          Layer.provideMerge(
+            Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
+          ),
+          Layer.provideMerge(
+            Layer.succeed(
+              CloudflareEnvironment,
+              // TODO(sam): fix this with maybe a CloudflareAccountId Effect service
+              // @ts-expect-error - this is hacky, but we only need and have this property
+              Effect.succeed({
+                account: (env as any).ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
+              }),
+            ),
+          ),
           Layer.provideMerge(
             Layer.succeed(
               MinimumLogLevel,
               (env as any).DEBUG ? "Debug" : "Info",
             ),
           ),
+          Layer.provideMerge(Layer.succeed(Scope.Scope, instanceScope)),
         ),
       ),
     ),
@@ -284,15 +324,17 @@ export const makeRpcProxy = (
                 );
               }
               const result = dispatcher(...args);
-              // A streaming RPC method returns a `Stream` directly rather than
-              // an `Effect`. Lift it into the success channel so the resulting
-              // `Exit.value` is the `Stream` and `handleRpcExit` can encode it
-              // as a stream envelope. Anything else is the `Effect` it claims
-              // to be and is run normally (its resolved value may itself be a
-              // `Stream`, which `handleRpcExit` also handles).
-              return Stream.isStream(result)
-                ? Effect.succeed(result)
-                : (result as Effect.Effect<any>);
+              // Effects (including nested-RPC values built by
+              // `asEffectOrStream`, which are Effects *branded* as Streams)
+              // must be run as effects — their resolved value may itself be a
+              // `Stream`, which `handleRpcExit` then encodes. Only a *genuine*
+              // `Stream` (not an Effect) is lifted into the success channel so
+              // `handleRpcExit` encodes it directly.
+              return Effect.isEffect(result)
+                ? (result as Effect.Effect<any>)
+                : Stream.isStream(result)
+                  ? Effect.succeed(result)
+                  : (result as Effect.Effect<any>);
             }),
             processEvent,
           )

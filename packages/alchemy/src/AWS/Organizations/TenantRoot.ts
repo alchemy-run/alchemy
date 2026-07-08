@@ -174,7 +174,7 @@ const toLogicalIdSegment = (value: string) =>
  * tenant root. The broader `RootRoot` concept is an Alchemy control-plane
  * abstraction over many such tenant roots deployed into separate management
  * accounts, not a nested AWS Organizations feature.
- *
+ * @resource
  * @section Creating A Tenant Root
  * @example Tenant With Baseline Accounts
  * ```typescript

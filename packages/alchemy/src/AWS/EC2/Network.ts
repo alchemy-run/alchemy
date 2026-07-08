@@ -1,7 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { EIP as EIPResource } from "./EIP.ts";
 import { EIP } from "./EIP.ts";
 import type { InternetGateway as InternetGatewayResource } from "./InternetGateway.ts";
@@ -102,7 +102,7 @@ export type Network = Effect.Success<ReturnType<typeof Network>>;
  *
  * The helper still returns the underlying canonical resources so callers can
  * keep composing with raw `AWS.EC2.*` APIs when they need more control.
- *
+ * @resource
  * @example Minimal network
  * ```typescript
  * const network = yield* AWS.EC2.Network("AppNetwork", {
@@ -306,7 +306,7 @@ export const Network = (id: string, props: NetworkProps) =>
         }
       }
 
-      const region = yield* Region;
+      const { region } = yield* AWSEnvironment.current;
       const gatewayEndpoints: VpcEndpointResource[] = [];
       for (const service of uniqueGatewayEndpoints(props.gatewayEndpoints)) {
         gatewayEndpoints.push(

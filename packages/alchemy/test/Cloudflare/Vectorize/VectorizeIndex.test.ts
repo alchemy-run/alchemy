@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import { expect } from "@effect/vitest";
@@ -16,12 +17,12 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete index with explicit dimensions", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("DefaultIndex", {
+      Cloudflare.Vectorize.Index("DefaultIndex", {
         dimensions: 768,
         metric: "cosine",
       }),
@@ -46,12 +47,12 @@ test.provider("create and delete index with explicit dimensions", (stack) =>
 
 test.provider("create index from a preset", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("PresetIndex", {
+      Cloudflare.Vectorize.Index("PresetIndex", {
         preset: "@cf/baai/bge-base-en-v1.5",
         description: "preset index",
       }),
@@ -73,12 +74,12 @@ test.provider("create index from a preset", (stack) =>
 
 test.provider("replaces index when dimensions change", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ReplaceIndex", {
+      Cloudflare.Vectorize.Index("ReplaceIndex", {
         dimensions: 32,
         metric: "cosine",
       }),
@@ -87,7 +88,7 @@ test.provider("replaces index when dimensions change", (stack) =>
     expect(index.metric).toEqual("cosine");
 
     const replaced = yield* stack.deploy(
-      Cloudflare.VectorizeIndex("ReplaceIndex", {
+      Cloudflare.Vectorize.Index("ReplaceIndex", {
         dimensions: 64,
         metric: "euclidean",
       }),
@@ -103,6 +104,30 @@ test.provider("replaces index when dimensions change", (stack) =>
     yield* stack.destroy();
 
     yield* waitForDelete(accountId, replaced.indexName);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed index", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const index = yield* stack.deploy(
+      Cloudflare.Vectorize.Index("ListIndex", {
+        dimensions: 768,
+        metric: "cosine",
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.Vectorize.Index);
+    const all = yield* provider.list();
+
+    expect(all.some((x) => x.indexName === index.indexName)).toBe(true);
+
+    yield* stack.destroy();
+
+    yield* waitForDelete(accountId, index.indexName);
   }).pipe(logLevel),
 );
 

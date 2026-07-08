@@ -7,7 +7,7 @@
  *   ```typescript twoslash
  *   // @errors: 2345
  *   import { Bucket } from "./bucket.ts";
- * + const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+ * + const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
  *   ```
  *
  * How it works:

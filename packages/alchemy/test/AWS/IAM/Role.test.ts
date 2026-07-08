@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
@@ -91,6 +92,136 @@ test.provider("create, update, and delete role", (stack) =>
     ).toMatchObject({
       env: "prod",
     });
+
+    yield* stack.destroy();
+
+    const deleted = yield* IAM.getRole({
+      RoleName: role.roleName,
+    }).pipe(Effect.option);
+    expect(deleted._tag).toBe("None");
+  }),
+);
+
+test.provider(
+  "folds binding-supplied policy statements into an inline policy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Phase 1: a consumer binds policy statements to the role; the provider
+      // folds them into the synthesized `alchemy-bindings` inline policy.
+      const role = yield* stack.deploy(
+        Effect.gen(function* () {
+          const role = yield* Role("BoundRole", {
+            assumeRolePolicyDocument: assumeRolePolicy,
+          });
+          yield* role.bind`Allow(test, s3:GetObject)`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["s3:GetObject"],
+                Resource: ["arn:aws:s3:::example-bucket/*"],
+              },
+            ],
+          });
+          return role;
+        }),
+      );
+
+      const bound = yield* IAM.getRolePolicy({
+        RoleName: role.roleName,
+        PolicyName: "alchemy-bindings",
+      });
+      const boundDoc = JSON.parse(decodeURIComponent(bound.PolicyDocument)) as {
+        Statement: Array<{ Action: string[]; Resource: string[] }>;
+      };
+      expect(boundDoc.Statement).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            Action: ["s3:GetObject"],
+            Resource: ["arn:aws:s3:::example-bucket/*"],
+          }),
+        ]),
+      );
+
+      // Phase 2: re-deploy without the binding; the inline policy is removed.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Role("BoundRole", {
+            assumeRolePolicyDocument: assumeRolePolicy,
+          });
+        }),
+      );
+
+      const afterUnbind = yield* IAM.getRolePolicy({
+        RoleName: role.roleName,
+        PolicyName: "alchemy-bindings",
+      }).pipe(Effect.option);
+      expect(afterUnbind._tag).toBe("None");
+
+      yield* stack.destroy();
+    }),
+);
+
+test.provider("bindings can supply the role's trust policy", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    // A bare role with no `assumeRolePolicyDocument`; the binding supplies the
+    // trust statement instead.
+    const role = yield* stack.deploy(
+      Effect.gen(function* () {
+        const role = yield* Role("TrustBoundRole", {});
+        yield* role.bind`Trust(test, lambda)`({
+          assumeRolePolicyStatements: [
+            {
+              Effect: "Allow",
+              Principal: { Service: "lambda.amazonaws.com" },
+              Action: ["sts:AssumeRole"],
+            },
+          ],
+        });
+        return role;
+      }),
+    );
+
+    const live = yield* IAM.getRole({ RoleName: role.roleName });
+    const trust = JSON.parse(
+      decodeURIComponent(live.Role.AssumeRolePolicyDocument!),
+    ) as { Statement: Array<{ Principal?: { Service?: string } }> };
+    expect(trust.Statement).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Principal: { Service: "lambda.amazonaws.com" },
+        }),
+      ]),
+    );
+
+    yield* stack.destroy();
+  }),
+);
+
+test.provider("list enumerates the deployed role", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const role = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Role("ListRole", {
+          assumeRolePolicyDocument: assumeRolePolicy,
+          tags: {
+            env: "test",
+          },
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Role);
+    const all = yield* provider.list();
+
+    const found = all.find((r) => r.roleName === role.roleName);
+    expect(found).toBeDefined();
+    expect(found?.roleArn).toBe(role.roleArn);
 
     yield* stack.destroy();
 

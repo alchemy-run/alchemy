@@ -1,13 +1,13 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type ClusterName = string;
@@ -65,7 +65,7 @@ export interface Cluster extends Resource<
 
 /**
  * An Amazon ECS cluster for running tasks and services.
- *
+ * @resource
  * @section Creating Clusters
  * @example Default Cluster
  * ```typescript
@@ -78,9 +78,6 @@ export const ClusterProvider = () =>
   Provider.effect(
     Cluster,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({
           key,
@@ -154,7 +151,68 @@ export const ClusterProvider = () =>
             tags: output?.tags ?? {},
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every cluster ARN in the account/region, paginating
+            // listClusters exhaustively.
+            const arns = yield* ecs.listClusters.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.clusterArns ?? []),
+              ),
+            );
+            if (arns.length === 0) {
+              return [];
+            }
+            // describeClusters accepts at most 100 clusters per call; batch.
+            const batches: string[][] = [];
+            for (let i = 0; i < arns.length; i += 100) {
+              batches.push(arns.slice(i, i + 100));
+            }
+            const described = yield* Effect.forEach(
+              batches,
+              (clusters) =>
+                ecs
+                  .describeClusters({
+                    clusters,
+                    include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+                  })
+                  .pipe(Effect.map((res) => res.clusters ?? [])),
+              { concurrency: 5 },
+            );
+            return described.flat().flatMap((cluster) => {
+              if (!cluster.clusterArn) {
+                return [];
+              }
+              const tags = Object.fromEntries(
+                (cluster.tags ?? [])
+                  .filter(
+                    (t): t is { key: string; value: string } =>
+                      typeof t.key === "string" && typeof t.value === "string",
+                  )
+                  .map((t) => [t.key, t.value]),
+              );
+              return [
+                {
+                  clusterArn: cluster.clusterArn as ClusterArn,
+                  clusterName: cluster.clusterName!,
+                  status: cluster.status ?? "ACTIVE",
+                  settings: cluster.settings ?? [],
+                  configuration: cluster.configuration,
+                  capacityProviders: cluster.capacityProviders ?? [],
+                  defaultCapacityProviderStrategy:
+                    cluster.defaultCapacityProviderStrategy ?? [],
+                  serviceConnectDefaults: cluster.serviceConnectDefaults
+                    ?.namespace
+                    ? { namespace: cluster.serviceConnectDefaults.namespace }
+                    : undefined,
+                  tags,
+                },
+              ];
+            });
+          }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const clusterName = yield* toClusterName(id, news);
           const clusterArn =
             `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}` as ClusterArn;

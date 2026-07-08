@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -42,6 +43,7 @@ export interface DBParameterGroup extends Resource<
 
 /**
  * An RDS DB parameter group, useful for Aurora cluster instances.
+ * @resource
  */
 export const DBParameterGroup = Resource<DBParameterGroup>(
   "AWS.RDS.DBParameterGroup",
@@ -86,6 +88,38 @@ export const DBParameterGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        list: () =>
+          // AWS account/region collection (pattern (a)): exhaustively paginate
+          // describeDBParameterGroups and map each group to the exact `read`
+          // Attributes shape. `read` derives `tags` from the cached output
+          // (the describe response does not surface tags), so list returns
+          // `tags: {}` to match — a future read/delete can hydrate them.
+          rds.describeDBParameterGroups.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.DBParameterGroups ?? [])
+                  .filter(
+                    (
+                      g,
+                    ): g is rds.DBParameterGroup & {
+                      DBParameterGroupName: string;
+                    } =>
+                      g.DBParameterGroupName != null &&
+                      // AWS-managed `default.*` groups cannot be deleted
+                      // (InvalidDBParameterGroupStateFault) — don't enumerate.
+                      !g.DBParameterGroupName.startsWith("default."),
+                  )
+                  .map((g) => ({
+                    dbParameterGroupName: g.DBParameterGroupName,
+                    dbParameterGroupArn: g.DBParameterGroupArn,
+                    family: g.DBParameterGroupFamily ?? "",
+                    description: g.Description,
+                    tags: {} as Record<string, string>,
+                  })),
+              ),
+            ),
+          ),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbParameterGroupName ??

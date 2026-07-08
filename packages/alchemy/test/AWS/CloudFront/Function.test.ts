@@ -1,4 +1,6 @@
 import * as AWS from "@/AWS";
+import { Function } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { expect } from "@effect/vitest";
@@ -41,6 +43,52 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(deployed.fn.functionName);
+    }),
+  { timeout: 300_000 },
+);
+
+// BLOCKED by a distilled typing bug: distilled `aws` service `cloudfront`,
+// operation `listFunctions`, requires `FunctionConfig.Comment` (S.String) but
+// CloudFront omits `Comment` in `listFunctions` responses for functions created
+// without one. Any account containing a comment-less function makes the
+// response decode fail with:
+//   SchemaError: Missing key
+//     at ["FunctionList"]["Items"][0]["FunctionConfig"]["Comment"]
+// Fix (coordinator-owned): make `FunctionConfig.Comment` optional —
+//   distilled/packages/aws/patches/cloudfront.json
+//   { "structures": { "FunctionConfig": { "members": { "Comment": { "optional": true } } } } }
+// then regenerate the cloudfront service. Verified: with that patch the list()
+// op enumerates all functions and this test passes live. Once patched, enable
+// by setting ALCHEMY_TEST_CLOUDFRONT_FUNCTION_LIST=true.
+test.provider.skipIf(
+  process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true" ||
+    process.env.ALCHEMY_TEST_CLOUDFRONT_FUNCTION_LIST !== "true",
+)(
+  "list enumerates the deployed CloudFront Function",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AWS.CloudFront.Function("ListFn", {
+            comment: "list handler",
+            code: `async function handler(event) {
+  return event.request;
+}`,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Function);
+      const all = yield* provider.list();
+
+      expect(all.some((fn) => fn.functionName === deployed.functionName)).toBe(
+        true,
+      );
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(deployed.functionName);
     }),
   { timeout: 300_000 },
 );

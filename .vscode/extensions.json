@@ -1,0 +1,16 @@
+{
+  // The Effect diagnostics (e.g. `anyUnknownInErrorContext`) are produced by a
+  // tsgo binary patched via `effect-tsgo patch`. That patched binary lives in
+  // this workspace's `node_modules/@typescript/native-preview` and is run by the
+  // "TypeScript (Native Preview)" extension.
+  //
+  // After installing, enable it once per machine:
+  //   1. Trust this workspace.
+  //   2. Command Palette -> "TypeScript (Native Preview): Select Version"
+  //      -> "Use Workspace Version" (points at node_modules/@typescript/native-preview).
+  //      (This sets the workspace opt-in flag; the workspace `tsdk` setting is
+  //      otherwise ignored and the extension falls back to its own UNPATCHED
+  //      bundled tsgo — no Effect diagnostics.)
+  //   3. "TypeScript (Native Preview): Restart" if squiggles don't appear.
+  "recommendations": ["TypeScriptTeam.native-preview"]
+}

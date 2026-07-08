@@ -26,6 +26,7 @@ export interface TrustedServiceAccess extends Resource<
 
 /**
  * Enables trusted access for an AWS service principal.
+ * @resource
  */
 export const TrustedServiceAccess = Resource<TrustedServiceAccess>(
   "AWS.Organizations.TrustedServiceAccess",
@@ -44,10 +45,57 @@ export const TrustedServiceAccessProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          return yield* readTrustedServiceAccess(
-            output?.servicePrincipal ?? olds!.servicePrincipal,
-          );
+          const servicePrincipal =
+            output?.servicePrincipal ?? olds?.servicePrincipal;
+          if (servicePrincipal === undefined) {
+            // Output-valued props don't survive a `creating`-state round-trip
+            // (they deserialize as `undefined`) — report "not found" so the
+            // engine re-drives the create.
+            return undefined;
+          }
+          return yield* readTrustedServiceAccess(servicePrincipal);
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every service principal granted trusted access to the
+            // organization. The list response already carries the full `read`
+            // shape (servicePrincipal + dateEnabled), so each enabled principal
+            // maps directly to one Attributes — no per-item hydration needed.
+            const principals = yield* retryOrganizations(
+              collectPages(
+                (NextToken) =>
+                  organizations.listAWSServiceAccessForOrganization({
+                    NextToken,
+                  }),
+                (page) => page.EnabledServicePrincipals,
+              ),
+            );
+
+            return principals
+              .filter(
+                (
+                  candidate,
+                ): candidate is organizations.EnabledServicePrincipal & {
+                  ServicePrincipal: string;
+                } => candidate.ServicePrincipal != null,
+              )
+              .map(
+                (candidate) =>
+                  ({
+                    servicePrincipal: candidate.ServicePrincipal,
+                    dateEnabled: candidate.DateEnabled,
+                  }) satisfies TrustedServiceAccess["Attributes"],
+              );
+          }).pipe(
+            // Not an org management account (or lacking access) — there's no
+            // organization to enumerate, so degrade to an empty list.
+            Effect.catchTags({
+              AWSOrganizationsNotInUseException: () =>
+                Effect.succeed([] as TrustedServiceAccess["Attributes"][]),
+              AccessDeniedException: () =>
+                Effect.succeed([] as TrustedServiceAccess["Attributes"][]),
+            }),
+          ),
         reconcile: Effect.fn(function* ({ news, session }) {
           // Observe — fetch live trusted-access state. We never trust prior
           // `output` blindly; if access was disabled out-of-band we re-enable.

@@ -8,14 +8,14 @@ import { JobsQueue, JobsQueueLive } from "./JobsQueue.ts";
 export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
   "ApiTask",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     cpu: 512,
     memory: 1024,
     port: 3000,
   },
   Effect.gen(function* () {
     const queue = yield* JobsQueue;
-    const sendMessage = yield* AWS.SQS.SendMessage.bind(queue);
+    const sendMessage = yield* AWS.SQS.SendMessage(queue);
 
     return {
       fetch: Effect.gen(function* () {
@@ -59,8 +59,8 @@ export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
     Effect.provide(
       Layer.mergeAll(
         JobsQueueLive,
-        AWS.SQS.SendMessageLive,
-        AWS.SQS.DeleteMessageBatchLive,
+        AWS.SQS.SendMessageHttp,
+        AWS.SQS.DeleteMessageBatchHttp,
       ),
     ),
   ),

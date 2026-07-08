@@ -1,14 +1,14 @@
+import { ConfigError } from "@distilled.cloud/core/errors";
 import {
   Credentials,
   DEFAULT_API_BASE_URL,
 } from "@distilled.cloud/planetscale/Credentials";
-import { ConfigError } from "@distilled.cloud/core/errors";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, Profile } from "../Auth/Profile.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
 import {
   PLANETSCALE_AUTH_PROVIDER_NAME,
   type PlanetscaleAuthConfig,
@@ -42,18 +42,21 @@ export const fromToken = (input: {
   organization: string;
   apiBaseUrl?: string;
 }) =>
-  Layer.succeed(Credentials, {
-    tokenId:
-      typeof input.token === "string"
-        ? Redacted.make(input.token)
-        : input.token,
-    token:
-      typeof input.token === "string"
-        ? Redacted.make(input.token)
-        : input.token,
-    organization: input.organization,
-    apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
-  });
+  Layer.succeed(
+    Credentials,
+    Effect.succeed({
+      tokenId:
+        typeof input.token === "string"
+          ? Redacted.make(input.token)
+          : input.token,
+      token:
+        typeof input.token === "string"
+          ? Redacted.make(input.token)
+          : input.token,
+      organization: input.organization,
+      apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    }),
+  );
 
 /**
  * Build a PlanetScale `Credentials` Layer that resolves credentials via the
@@ -64,7 +67,7 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const profile = yield* Profile;
+      const profile = yield* AlchemyProfile;
       const auth = yield* getAuthProvider<
         PlanetscaleAuthConfig,
         PlanetscaleResolvedCredentials
@@ -91,6 +94,8 @@ export const fromAuthProvider = () =>
               message: `Failed to resolve Planetscale credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
             }),
         ),
+        Effect.orDie,
+        Effect.cached,
       );
     }),
   );
