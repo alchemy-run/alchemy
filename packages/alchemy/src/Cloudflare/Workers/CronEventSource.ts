@@ -15,14 +15,26 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * - **Deploy-time**: attaches the cron expression to the host Worker's
  *   Cron Triggers.
  * - **Runtime**: registers a `scheduled` listener that runs your Effect on
- *   each fire. The handler receives Cloudflare's `ScheduledController` —
- *   `controller.scheduledTime` is the fire time and `controller.cron` is
- *   the expression that fired.
+ *   each fire. The handler receives Cloudflare's `ScheduledController`,
+ *   which has three members:
+ *   - `controller.scheduledTime` — the fire time in milliseconds since the
+ *     Unix epoch.
+ *   - `controller.cron` — the cron expression that fired.
+ *   - `controller.noRetry()` — opts the invocation out of Cloudflare's
+ *     retry-on-failure. Only meaningful when the scheduled invocation can
+ *     actually fail — see the retry note below.
  *
  * Requires `CronEventSourceLive` provided on the Worker's Effect.
- * A failing handler won't crash the Worker — the event source catches the
- * failure and moves on; log or report errors inside the handler if you
- * need visibility into failed runs.
+ *
+ * **Failure & retry semantics**: a failing handler won't crash the Worker —
+ * the event source catches the failure and moves on. That also means
+ * Cloudflare never observes a failed invocation, so its platform-level
+ * retry (and `controller.noRetry()`) never comes into play here. Express
+ * retry declaratively with `Effect.retry` inside the handler, and log or
+ * report errors if you need visibility into failed runs. In async Workers
+ * the opposite holds: a `scheduled` handler that throws (or rejects) marks
+ * the invocation failed and Cloudflare may retry it — call
+ * `controller.noRetry()` before rethrowing to suppress that.
  *
  * Async (non-Effect) Workers don't use `cron` — they attach schedules with
  * the Worker's `crons` prop and export their own `scheduled` handler from
@@ -119,6 +131,24 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *       case "0 0 * * *":
  *         await purgeExpired();
  *         break;
+ *     }
+ *   },
+ * };
+ * ```
+ *
+ * @example Suppress retry for permanent failures with `controller.noRetry()`
+ * ```typescript
+ * // src/worker.ts — a thrown error marks the invocation failed and
+ * // Cloudflare may retry it; noRetry() opts this fire out of that.
+ * export default {
+ *   async scheduled(controller: ScheduledController) {
+ *     try {
+ *       await syncFeeds();
+ *     } catch (error) {
+ *       if (isPermanentFailure(error)) {
+ *         controller.noRetry();
+ *       }
+ *       throw error; // still recorded as a failed invocation
  *     }
  *   },
  * };
