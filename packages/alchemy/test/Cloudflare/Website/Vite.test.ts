@@ -397,6 +397,81 @@ test.provider(
 );
 
 test.provider(
+  "Vite: main overrides the worker entry from the Vite config",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(doFixtureDir, {
+        prefix: "alchemy-vite-main-",
+        tempRoot,
+        entries: [
+          "alchemy.run.ts",
+          "index.html",
+          "package.json",
+          "vite.config.ts",
+          "src",
+        ],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      // The fixture's vite.config.ts points the ssr environment at
+      // `src/worker.ts`. `main` must take precedence and deploy
+      // `src/worker-main.ts`, which re-exports the Durable Object and
+      // additionally answers `/api/entry`.
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("ViteMain", {
+            ...viteProps(rootDir, memoInclude),
+            main: "src/worker-main.ts",
+            compatibility: {
+              date: "2026-03-17",
+              flags: ["nodejs_compat"],
+            },
+            assets: {
+              runWorkerFirst: ["/api/*"],
+            },
+            env: {
+              Counter: Cloudflare.DurableObject<ViteDoCounter>("Counter", {
+                className: "Counter",
+              }),
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+
+      const entry = yield* fetchJsonReady<{ entry: string }>(
+        `${site.url!}/api/entry`,
+      );
+      expect(entry.entry).toBe("worker-main");
+
+      const reset = yield* fetchJsonReady<{ ok: boolean }>(
+        `${site.url!}/api/reset`,
+      );
+      expect(reset.ok).toBe(true);
+
+      const first = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/count`,
+      );
+      expect(first.count).toBe(1);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+test.provider(
   "Vite: React Router RSC deploys from a distilled manifest",
   (stack) =>
     Effect.gen(function* () {

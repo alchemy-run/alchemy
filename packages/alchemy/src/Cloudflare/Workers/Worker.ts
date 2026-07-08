@@ -557,6 +557,23 @@ export interface WorkerProps<
 
 export interface ViteOptions {
   /**
+   * Overrides the module that becomes the deployed Worker entry, forwarded
+   * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
+   * from the Vite root (`rootDir`).
+   *
+   * By default the entry environment's own entry (the server bundle the
+   * framework produces) is deployed. Point `main` at a custom module when
+   * the deployed Worker must export more than the framework's fetch
+   * handler — e.g. Durable Object classes or additional handlers wrapping
+   * the framework handler.
+   *
+   * @example
+   * ```typescript
+   * vite: { main: "worker/index.ts" }
+   * ```
+   */
+  main?: string;
+  /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
    */

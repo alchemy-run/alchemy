@@ -1055,6 +1055,7 @@ export const LiveWorkerProvider = () =>
             )).filter(([_, value]) => value !== undefined),
           ),
           {
+            main: props.vite?.main,
             compatibilityDate: compatibility.date,
             compatibilityFlags: compatibility.flags,
             viteEnvironments: props.vite?.viteEnvironments,

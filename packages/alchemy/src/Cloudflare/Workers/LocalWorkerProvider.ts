@@ -328,6 +328,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          viteMain: props.vite?.main,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
           env: props.env,
@@ -418,6 +419,7 @@ export const LocalWorkerProvider = () =>
           rootDir,
           worker.env ?? {},
           {
+            main: worker.viteMain,
             compatibilityDate: worker.compatibility.date,
             compatibilityFlags: worker.compatibility.flags,
             viteEnvironments: worker.viteEnvironments,
