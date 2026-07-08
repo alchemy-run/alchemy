@@ -902,11 +902,14 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *
  * The init closure is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the
- * built services. Treat init as pure assembly — resolve services, bind
- * resources, build handlers. Its build scope is never closed (workerd has
- * no isolate-teardown hook), so a finalizer added in the init closure never
- * runs; anything that needs cleanup belongs in a handler, where
- * `Effect.addFinalizer` attaches to the per-event scope.
+ * built services. Resolve services, bind resources, build handlers there —
+ * one-shot I/O that caches a plain value (e.g. fetching a secret for a
+ * client) is fine, but nothing disposable: the build scope is never closed
+ * (workerd has no isolate-teardown hook), so a finalizer added in the init
+ * closure never runs, and I/O-backed objects (sockets, response bodies) are
+ * pinned to the request that created them. Anything that needs cleanup
+ * belongs in a handler, where `Effect.addFinalizer` attaches to the
+ * per-event scope.
  *
  * @example Post-response cleanup with a scope finalizer
  * ```typescript

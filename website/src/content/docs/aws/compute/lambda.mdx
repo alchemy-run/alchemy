@@ -271,18 +271,26 @@ You now have a deployable Lambda with a public URL.
 
 The init closure runs **once per sandbox**, at cold start —
 everything it builds (bindings, SDK clients) is reused by every
-invocation. Each invocation then runs with a **fresh `Scope`** that
-is settled *inline* before the handler returns: Lambda freezes the
-sandbox after the response, so unlike Workers there is no
-`waitUntil` to detach cleanup to — `Effect.addFinalizer` in a
-handler runs before the response leaves.
+invocation. Each invocation then runs with a **fresh `Scope`**,
+released after the response is returned.
 
-Init-level finalizers run at **sandbox shutdown**. A Lambda sandbox
-with no registered extensions is killed with no signal at all, so
-the generated entry registers an internal extension with the
-Extensions API — that makes Lambda send `SIGTERM` and allow 500 ms
-before `SIGKILL`, and the entry uses the window to close the
-instance scope:
+Post-response cleanup works because the generated entry registers an
+**internal extension** with the Extensions API. Lambda returns the
+function response to the client as soon as the handler produces it,
+but keeps the environment running until every registered extension
+signals done — alchemy holds that signal until the invocation's
+queued finalizers settle. The effect is workerd's `ctx.waitUntil`:
+`Effect.addFinalizer` in a handler runs *after* the response,
+without blocking it. The window extends the billed invocation and is
+capped by the function timeout (queued work is raced against the
+invocation deadline), and `Drizzle.postgres` uses it to close its
+per-invocation pool off the response path.
+
+The same extension registration buys the **Shutdown phase**: a
+sandbox with no registered extensions is killed with no signal at
+all; with one, Lambda sends `SIGTERM` and allows 500 ms before
+`SIGKILL`, and the entry uses the window to close the instance
+scope:
 
 ```typescript
 Effect.gen(function* () {
@@ -295,12 +303,11 @@ Effect.gen(function* () {
 });
 ```
 
-Treat it as best-effort: half a second, and not delivered on hard
-failures (a timeout reset kills the runtime without the signal).
-Flush caches and close connections there; anything that *must*
-happen belongs in the handler, scoped to the invocation —
-`Drizzle.postgres` opens its pool on the first query of an
-invocation and closes it before the response returns. See
+Treat instance-level cleanup as best-effort: half a second, and not
+delivered on hard failures (a timeout reset kills the runtime
+without the signal). Flush caches and close connections there;
+anything that *must* happen belongs in the handler, scoped to the
+invocation. See
 [Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
 for the model across all runtimes.
 

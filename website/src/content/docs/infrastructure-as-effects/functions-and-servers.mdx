@@ -290,12 +290,19 @@ lifetimes, and each has its own `Scope`:
 The constructor runs **once per instance** — a Worker isolate, a
 Lambda sandbox, a server process. Everything it builds (bindings,
 SDK clients, Layers) is assembled once and reused by every event.
-Treat it as pure assembly: resolve services, build clients, return
-handlers. Don't perform I/O or acquire connections there.
+One-shot I/O that produces a plain value is fine here — fetching a
+secret and caching it for a client, reading config — that's exactly
+what once-per-instance is for. What doesn't belong at init is
+anything **disposable**: connections, pools, streams, or any
+resource with a finalizer. The instance scope closes at shutdown at
+best (never on workerd), so cleanup registered here is best-effort
+or never — and on workerd, I/O *objects* (sockets, response bodies)
+are pinned to the request that created them and can't be reused
+across events anyway.
 
 Each event then runs your handler with a **fresh `Scope`**. Anything
-that needs I/O or cleanup belongs here — acquired lazily, released
-when the event settles:
+disposable belongs here — acquired lazily, released when the event
+settles:
 
 ```typescript
 fetch: Effect.gen(function* () {

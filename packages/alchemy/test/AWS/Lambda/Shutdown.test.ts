@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { expect } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -69,6 +70,29 @@ test.provider(
         }),
       );
       expect(registered).toBe(true);
+
+      // Post-response window: the handler registers a 2 s request-scope
+      // finalizer, but the extension holds the Invoke phase open after the
+      // response is returned — so a warm request must come back well under
+      // the finalizer's duration...
+      const [elapsed, warm] = yield* client
+        .get(fn.functionUrl!)
+        .pipe(Effect.timed);
+      expect(warm.status).toBe(200);
+      expect(Duration.toMillis(elapsed)).toBeLessThan(2_000);
+
+      // ...while the finalizer still runs and its marker reaches the logs.
+      const requestFinalized = yield* filterLogs(
+        logGroupName,
+        '"ALCHEMY_REQUEST_FINALIZED"',
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (found) => found,
+          times: 20,
+        }),
+      );
+      expect(requestFinalized).toBe(true);
 
       yield* stack.destroy();
     }),

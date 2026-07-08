@@ -79,19 +79,25 @@ export const postgres = <
         }
         let memo = cache.get(symbol);
         if (memo === undefined) {
-          // Two concurrent first queries can race past this check and each
-          // build a pool. That's benign: both pools attach their `end` to
-          // the same execution scope, so the loser is one wasted pool for
-          // one execution, never a leak.
-          memo = yield* Effect.gen(function* () {
-            const pgCtx = yield* Layer.buildWithScope(
-              PgClient.layer({ url: yield* connectionString }),
-              scope,
-            );
-            return yield* PgDrizzle.makeWithDefaults(config).pipe(
-              Effect.provideContext(pgCtx),
-            );
-          }).pipe(Effect.cached);
+          // Construct the cached effect and insert it SYNCHRONOUSLY — no
+          // yield between the miss and the set — so a concurrent first
+          // query joins this memo instead of racing past the check and
+          // building a second pool. `Effect.cached`'s construction is
+          // synchronous (it only allocates the memo cell; the underlying
+          // build runs on first evaluation), so `runSync` cannot block.
+          memo = Effect.runSync(
+            Effect.cached(
+              Effect.gen(function* () {
+                const pgCtx = yield* Layer.buildWithScope(
+                  PgClient.layer({ url: yield* connectionString }),
+                  scope,
+                );
+                return yield* PgDrizzle.makeWithDefaults(config).pipe(
+                  Effect.provideContext(pgCtx),
+                );
+              }),
+            ),
+          );
           cache.set(symbol, memo);
         }
         return yield* memo;
