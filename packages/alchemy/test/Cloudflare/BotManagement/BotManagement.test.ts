@@ -78,8 +78,16 @@ const restoreSbfm = (zoneId: string, original: ObservedConfig) =>
     yield* botManagement.putBotManagement({ zoneId, ...body });
   }).pipe(Effect.ignore);
 
+// Setting `sbfm_definitely_automated` to anything but "allow" makes the
+// standing zone answer every automated request (curl, fetch, vitest HTTP
+// assertions) with a managed challenge — breaking every live suite that
+// drives the zone over HTTP, and an interrupted run leaves the setting
+// behind. The mutating lifecycle tests are therefore opt-in; the adopt and
+// list tests below always run.
+const destructive = !!process.env.CLOUDFLARE_TEST_BOT_MANAGEMENT;
+
 describe.sequential("BotManagement", () => {
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "manages SBFM settings on the zone singleton and restores them on destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -197,7 +205,7 @@ describe.sequential("BotManagement", () => {
     { timeout: 240_000 },
   );
 
-  test.provider(
+  test.provider.skipIf(!destructive)(
     "toggles a boolean SBFM field and restores it on destroy",
     (stack) =>
       Effect.gen(function* () {
