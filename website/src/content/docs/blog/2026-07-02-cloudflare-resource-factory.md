@@ -32,7 +32,7 @@ hours. The PR description, in its entirety:
 
 > Using Fable to generate all missing cloudflare resources
 
-Volume is not the hard part. Deterministic codegen has been
+Deterministic codegen has been
 producing SDKs and IaC providers from API specs for years, and
 AI makes it even cheaper. The problem is that code generated
 from a spec is only as truthful as the spec, and real APIs
