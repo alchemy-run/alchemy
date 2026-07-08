@@ -1,6 +1,11 @@
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
-import { inMemoryState } from "@/State";
+import {
+  inMemoryState,
+  isResourceState,
+  State,
+  type ResourceState,
+} from "@/State";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -134,5 +139,116 @@ describe("Docker.Container", { concurrent: false }, () => {
         expect(second.id).not.toBe(first.id);
         expect(second.ports["80/tcp"]).toBe(secondPort);
       }),
+  );
+
+  // Rewrite the container's persisted row into the wedged shape an
+  // interrupted deploy leaves behind: `creating`, no attributes, and the
+  // Output-valued `image` prop lost in the round-trip (#736).
+  const wedgeContainerRow = (stack: { readonly name: string }) =>
+    Effect.gen(function* () {
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) && r.row.resourceType === "Docker.Container",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error("no Docker.Container state row found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: { ...wedged.row.props, image: undefined },
+        },
+      });
+    });
+
+  test.provider.skipIf(!isDockerReady)(
+    "read recovers a creating-state container whose image prop was lost (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const docker = yield* Docker.Docker;
+
+        const deployContainer = () =>
+          stack.deploy(
+            // No explicit name: the engine-generated physical name is stable
+            // across both deploys, so `read` can find the live container.
+            Docker.Container("read-recovery-container", {
+              image: "nginx:alpine",
+              start: false,
+            }),
+          );
+
+        const created = yield* deployContainer();
+        // Safety net: remove the container if the test dies mid-way.
+        yield* Effect.addFinalizer(() =>
+          docker.container.remove(created.name, true).pipe(Effect.ignore),
+        );
+
+        yield* wedgeContainerRow(stack);
+
+        // Before the fix this crashed in `read` with
+        // `TypeError: undefined is not an object (evaluating 'image.imageRef')`.
+        const recovered = yield* deployContainer();
+        // Same container id — read/reconcile converged on the existing
+        // container instead of creating a duplicate.
+        expect(recovered.id).toBe(created.id);
+        expect(recovered.imageRef).toBe("nginx:alpine");
+
+        yield* stack.destroy();
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider.skipIf(!isDockerReady)(
+    "diff recreates a creating-state container that vanished after its image prop was lost (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const docker = yield* Docker.Docker;
+
+        const deployContainer = () =>
+          stack.deploy(
+            Docker.Container("diff-recovery-container", {
+              image: "nginx:alpine",
+              start: false,
+            }),
+          );
+
+        const created = yield* deployContainer();
+        // Safety net: remove the container if the test dies mid-way.
+        yield* Effect.addFinalizer(() =>
+          docker.container.remove(created.name, true).pipe(Effect.ignore),
+        );
+
+        yield* wedgeContainerRow(stack);
+        // Remove the container out-of-band so recovery `read` misses and the
+        // engine falls through to `diff` with the junk creating-row props.
+        yield* docker.container.remove(created.name, true);
+
+        // Before the fix this crashed in `diff` with
+        // `TypeError: undefined is not an object (evaluating 'image.imageRef')`.
+        const recovered = yield* deployContainer();
+        expect(recovered.id).not.toBe(created.id);
+        expect(recovered.imageRef).toBe("nginx:alpine");
+        expect(recovered.status).toBe("created");
+
+        yield* stack.destroy();
+      }),
+    { timeout: 240_000 },
   );
 });

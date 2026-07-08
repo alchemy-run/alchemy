@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import { expect } from "@effect/vitest";
@@ -10,10 +11,12 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import {
+  CERT_2,
   CERT_3,
   CERT_4,
   CERT_8,
   CERT_9,
+  KEY_2,
   KEY_3,
   KEY_4,
   KEY_8,
@@ -209,6 +212,79 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, replaced.certificateId);
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "recovers a creating-state row whose Output-valued certificate was lost (#736)",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      // Dedicated PEM (CERT_2): the other hostname-certificate tests own
+      // CERT_3/4/8/9; CERT_2 is otherwise only used by the *zone-level*
+      // Certificate suite, which is a separate Cloudflare collection.
+      yield* stack.destroy();
+      yield* purgeCertificates(zoneId, [CERT_2]);
+
+      const deployCert = () =>
+        stack.deploy(
+          Cloudflare.OriginTlsClientAuth.HostnameCertificate("WedgedHostCert", {
+            zoneId,
+            certificate: CERT_2,
+            privateKey: Redacted.make(KEY_2),
+          }),
+        );
+
+      const created = yield* deployCert();
+      expect(created.certificateId).toBeDefined();
+
+      // Rewrite the persisted row into the wedged shape an interrupted deploy
+      // leaves behind when `certificate` was Output-valued: `creating`, no
+      // attributes, and the certificate lost in the round-trip (#736).
+      const state = yield* yield* State;
+      const stage = "test"; // scratch stacks default to the "test" stage
+      const fqns = yield* state.list({ stack: stack.name, stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const wedged = rows.find(
+        (r): r is { fqn: string; row: ResourceState } =>
+          isResourceState(r.row) &&
+          r.row.resourceType ===
+            "Cloudflare.OriginTlsClientAuth.HostnameCertificate",
+      );
+      if (!wedged) {
+        return yield* Effect.die(
+          new Error("no HostnameCertificate state row found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: wedged.fqn,
+        value: {
+          ...wedged.row,
+          status: "creating",
+          attr: undefined,
+          props: { ...wedged.row.props, certificate: undefined },
+        },
+      });
+
+      // `read` cannot content-match without `olds.certificate`, so planning
+      // falls through to `diff` with the junk olds. Before the fix this
+      // crashed with `TypeError: undefined is not an object (evaluating
+      // 'pem.trim')` in normalizePem; after it, diff falls through and
+      // reconcile re-adopts the live certificate by PEM content.
+      const recovered = yield* deployCert();
+      expect(recovered.certificateId).toEqual(created.certificateId);
+
+      yield* stack.destroy();
+
+      yield* waitForGone(zoneId, recovered.certificateId);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );

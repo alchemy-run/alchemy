@@ -2,14 +2,11 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import Stack from "./fixtures/rpc-do-namespace-do-rpc/stack.ts";
 import { WorkerRpcs as RpcWorkerWorkerRpcs } from "./fixtures/rpc-worker-rpc-http/group.ts";
 import RpcWorkerStack from "./fixtures/rpc-worker-rpc-http/stack.ts";
@@ -17,6 +14,11 @@ import RpcWorkerStack from "./fixtures/rpc-worker-rpc-http/stack.ts";
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
+
+// `Test.rpcClientLayer` guards the transport against edge-generated HTML
+// bodies (workers.dev placeholder, error pages) that the RPC protocol would
+// otherwise surface as an opaque `RpcClientDefect`; see Test/Http.ts.
+const rpcClientLayer = Test.rpcClientLayer;
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -48,14 +50,6 @@ const resetCounter = (url: string, id: string) =>
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     yield* client.post(`${url}/counter/${id}/reset`).pipe(retryHttp);
   });
-
-const rpcClientLayer = (url: string) =>
-  RpcClient.layerProtocolHttp({ url }).pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
-    ),
-  );
 
 const readinessRetries = 15;
 

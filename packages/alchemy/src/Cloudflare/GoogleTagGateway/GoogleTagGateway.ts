@@ -189,7 +189,10 @@ export const GoogleTagGatewayProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId =
-        output?.zoneId ?? (olds ? yield* resolve(olds.zone) : undefined);
+        // `olds.zone` may be `undefined` when a `creating` row was persisted
+        // before upstream Outputs resolved — report "not found" then.
+        output?.zoneId ??
+        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* googleTagGateway.getConfig({ zoneId }).pipe(
         // Zone deleted out-of-band — the config is gone with it.

@@ -2,7 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
 import * as Provider from "@/Provider";
-import { State } from "@/State";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "@effect/vitest";
@@ -709,6 +709,104 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         yield* assertTableIsDeleted(tableName);
       }),
     { timeout: 360_000 },
+  );
+
+  // Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+  //
+  // An interrupted first deploy persists the table as `status: "creating"`
+  // with no attributes — and Output-valued props do not survive the state
+  // round-trip: they deserialize as `undefined`. Plan's recovery branch first
+  // calls `provider.read` with those junk olds; if read misses, it then calls
+  // `provider.diff` against the same junk olds, which crashed in
+  // `Object.entries(olds.attributes)` when `attributes` was lost.
+  //
+  // Simulate exactly that state row after a real deploy, then delete the
+  // table out-of-band so `read` cannot recover it by name (a live table would
+  // be recovered and `diff` would never run against the junk olds), and
+  // assert the next deploy falls through diff and recreates the table.
+  test.provider(
+    "recovers a creating-state row that lost its attributes prop (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployTable = () =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return yield* Table("WedgedTable", {
+                partitionKey: "id",
+                attributes: { id: "S" },
+              });
+            }),
+          );
+
+        const created = yield* deployTable();
+
+        // Rewrite the table's persisted row into the wedged shape an
+        // interrupted deploy leaves behind: `creating`, no attributes, and
+        // the `attributes` prop lost in the state round-trip.
+        const state = yield* yield* State;
+        const stage = "test"; // scratch stacks default to the "test" stage
+        const fqns = yield* state.list({ stack: stack.name, stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state
+            .get({ stack: stack.name, stage, fqn })
+            .pipe(Effect.map((row) => ({ fqn, row }))),
+        );
+        const wedged = rows.find(
+          (r): r is { fqn: string; row: ResourceState } =>
+            isResourceState(r.row) &&
+            r.row.resourceType === "AWS.DynamoDB.Table",
+        );
+        if (!wedged) {
+          return yield* Effect.die(
+            new Error("no AWS.DynamoDB.Table state row found after deploy"),
+          );
+        }
+        yield* state.set({
+          stack: stack.name,
+          stage,
+          fqn: wedged.fqn,
+          value: {
+            ...wedged.row,
+            status: "creating",
+            attr: undefined,
+            props: {
+              ...wedged.row.props,
+              attributes: undefined,
+            },
+          },
+        });
+
+        // Delete the table out-of-band so the recovery `read` misses.
+        yield* logTestStep(
+          `deleting ${created.tableName} out-of-band to force a read miss`,
+        );
+        yield* DynamoDB.deleteTable({ TableName: created.tableName }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "ResourceInUseException",
+            schedule: Schedule.fixed("2 seconds").pipe(
+              Schedule.both(Schedule.recurs(10)),
+            ),
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+        yield* assertTableIsDeleted(created.tableName);
+
+        // Before the fix this crashed in plan's diff with
+        // `TypeError: undefined is not an object (evaluating 'olds.attributes')`.
+        const recovered = yield* deployTable();
+        expect(recovered.tableName).toEqual(created.tableName);
+
+        const actual = yield* DynamoDB.describeTable({
+          TableName: recovered.tableName,
+        });
+        expect(actual.Table?.TableArn).toEqual(recovered.tableArn);
+
+        yield* stack.destroy();
+        yield* assertTableIsDeleted(recovered.tableName);
+      }),
+    { timeout: 240_000 },
   );
 
   const assertTableIsDeleted = Effect.fn(function* (tableName: string) {

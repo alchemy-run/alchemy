@@ -4,11 +4,9 @@ import { poll } from "@/Util/poll.ts";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
@@ -128,16 +126,11 @@ const rpcUntilReady = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const withCounterKey = (key: string) =>
   HttpClient.mapRequest(HttpClientRequest.setHeader("x-counter-key", key));
 
-// Build a typed `RpcClient<CounterRpcs>` against WorkerA's URL.
-// Every call rides through the same JSON edge as the worker.dev URL,
-// so we share the readiness retry below at the test layer.
-const rpcClientLayer = (url: string) =>
-  RpcClient.layerProtocolHttp({ url }).pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, RpcSerialization.ndjson),
-    ),
-  );
+// WorkerA's typed RPC transport is `Test.rpcClientLayer` (see Test/Http.ts).
+// Its transport-level retry fires only on non-ndjson responses — edge pages
+// that prove the handler never ran (see `isEdgeNotReadyRpc` above) — so it
+// is safe for the non-idempotent increment bodies below.
+const rpcClientLayer = Test.rpcClientLayer;
 
 // Drive a typed `RpcClient<CounterRpcs>` body against WorkerA's URL.
 // Each call gets its own scope (so the client is freed promptly).

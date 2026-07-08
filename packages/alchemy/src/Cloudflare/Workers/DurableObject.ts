@@ -230,7 +230,7 @@ export class DurableObjectScope extends Context.Service<
  * ```
  *
  * There are two ways to define a Durable Object. See the
- * {@link https://alchemy.run/concepts/platform | Platform concept} page
+ * [Functions & Servers](/infrastructure-as-effects/functions-and-servers) page
  * for the full explanation.
  *
  * - **Inline** — Effect implementation passed directly, single file.

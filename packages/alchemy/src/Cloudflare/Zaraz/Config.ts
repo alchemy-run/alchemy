@@ -253,7 +253,10 @@ export const ConfigProvider = () =>
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const zoneId =
-        output?.zoneId ?? (olds ? yield* resolve(olds.zone) : undefined);
+        // `olds.zone` may be `undefined` when a `creating` row was persisted
+        // before upstream Outputs resolved — report "not found" then.
+        output?.zoneId ??
+        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       return yield* observe(zoneId);
     }),

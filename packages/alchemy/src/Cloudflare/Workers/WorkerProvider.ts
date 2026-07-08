@@ -1713,7 +1713,7 @@ export const LiveWorkerProvider = () =>
             };
           }
         }),
-        precreate: Effect.fn(function* ({ id, news, session }) {
+        precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createWorkerName(id, news.name);
           // A Workers for Platforms user worker can't be pre-created: precreate
@@ -1744,14 +1744,35 @@ export const LiveWorkerProvider = () =>
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
           const exportMap = news.exports ?? {};
-          const durableObjects = Object.keys(exportMap)
+          // A worker hosts Durable Object classes from two independent sources:
+          // Effect-native DO *exports* (classes defined in the worker entry) and
+          // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`
+          // that fronts a Container image. The placeholder must declare *every*
+          // hosted class so each namespace is created here. A class that exists
+          // only as a binding (a container-fronted DO) is otherwise absent from
+          // this stub, and a resource caught in a worker<->container dependency
+          // cycle — which resolves `worker.durableObjectNamespaces[className]`
+          // against the precreate stub rather than the final reconcile output —
+          // fails because the namespace id it needs never surfaced.
+          const exportDerived = Object.keys(exportMap)
             .filter((logicalId) => isDurableObjectExport(exportMap[logicalId]))
-            .map((logicalId) => ({
-              logicalId,
-              className: logicalId,
-            }));
+            .map((logicalId) => ({ logicalId, className: logicalId }));
+          const durableObjects = mergeDurableObjectClasses(
+            exportDerived,
+            getDurableObjectBindings(bindings, name),
+          );
           const doClasses = durableObjects.map((binding) => binding.className);
-          const containers = doClasses.map((className) => ({ className }));
+          // Only attach container metadata for classes actually fronted by a
+          // Container binding (mirrors reconcile's `containerClassNames`).
+          // Mapping every DO class to a container would wrongly mark plain DOs
+          // as container-backed in the placeholder.
+          const containers = Array.from(
+            new Set(
+              bindings.flatMap((b) =>
+                (b.data.containers ?? []).map((c) => c.className),
+              ),
+            ),
+          ).map((className) => ({ className }));
           const alchemyDoTags = durableObjects.map(
             ({ logicalId, className }) =>
               `alchemy:do:${logicalId}:${className}`,
@@ -2230,6 +2251,25 @@ function bumpMigrationTagVersion(
   const version = oldTag.match(/^(alchemy:)?v(\d+)$/)?.[2];
   if (!version) return "alchemy:v1";
   return `alchemy:v${parseInt(version, 10) + 1}`;
+}
+
+/**
+ * Merges a worker's export-derived and binding-derived Durable Object class
+ * lists for the precreate placeholder, deduping by class name. The
+ * binding-derived entry wins on a collision so the `alchemy:do:` tag keys off
+ * the same logical id (the binding sid) that `reconcile` writes.
+ */
+function mergeDurableObjectClasses(
+  exportDerived: ReadonlyArray<{ logicalId: string; className: string }>,
+  bindingDerived: ReadonlyArray<{ logicalId: string; className: string }>,
+) {
+  return Array.from(
+    new Map(
+      [...exportDerived, ...bindingDerived].map(
+        (binding) => [binding.className, binding] as const,
+      ),
+    ).values(),
+  );
 }
 
 function getDurableObjectBindings(
