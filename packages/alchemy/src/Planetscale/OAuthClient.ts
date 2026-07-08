@@ -25,12 +25,17 @@ export interface Authorization {
 /**
  * Registered PlanetScale OAuth application credentials.
  *
- * Unlike Cloudflare, PlanetScale OAuth has **no PKCE flow** — exchanging the
- * authorization code (and refreshing the token) requires the application's
- * `client_secret`. There is no way to keep that secret out of a distributed
- * CLI, so it ships here: the exposure is the same posture as a public
- * `client_id` (a stolen refresh token is usable, exactly like Cloudflare's
- * secret-less refresh), and it can be rotated by cutting a new release.
+ * Unlike Cloudflare, PlanetScale OAuth has **no public-client flow** — the
+ * token endpoint requires client authentication for every grant (PKCE is
+ * advertised in their discovery doc but does not lift that requirement), so
+ * exchanging the authorization code (and refreshing the token) requires the
+ * application's `client_secret`. There is no way to keep that secret out of
+ * a distributed CLI, so it ships here: the exposure is the same posture as a
+ * public `client_id` (a stolen refresh token is usable, exactly like
+ * Cloudflare's secret-less refresh), and it can be rotated by cutting a new
+ * release. PlanetScale's own CLI ships its OAuth `client_secret` in source
+ * the same way:
+ * https://github.com/planetscale/cli/blob/main/internal/auth/authenticator.go
  *
  * Registered at https://app.planetscale.com with redirect URI
  * {@link OAUTH_REDIRECT_URI}. Scopes are configured on the application
