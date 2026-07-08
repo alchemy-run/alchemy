@@ -50,19 +50,15 @@ the resource. It's a patch to the SDK, followed by
 regeneration. The catch-all error types exist only to surface
 gaps; nothing is allowed to handle them.
 
-That inverts where AI-generated code usually goes wrong.
-Untyped failure handling is exactly the place agents
-hallucinate — matching on message substrings, guessing at
-status codes, swallowing errors that deserved to propagate.
-Under this rule the agent can't do any of that, because the
-only way to make its code typecheck is to first make the SDK
-tell the truth.
+Untyped failure handling is where AI-generated code usually
+goes wrong: matching on message substrings, guessing at status
+codes, swallowing errors that should have propagated. The rule
+takes that option away — the code doesn't typecheck until the
+SDK knows about the error.
 
-The rule is the mechanism; the flywheel is what it produces.
-Every red test either fixes a resource or improves the SDK —
-and a better SDK makes the next resource, the next test, and
-the next agent faster and more correct. Work doesn't just get
-done; it compounds.
+It also makes the work compound. Every red test either fixes a
+resource or improves the SDK, and a better SDK makes the next
+resource, the next test, and the next agent more correct.
 
 ## One turn of the flywheel
 
