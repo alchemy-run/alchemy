@@ -6,13 +6,17 @@ import * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type * as Serverless from "../../Serverless/index.ts";
+import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
+  WorkerExecutionContext,
   WorkerTypeId,
+  deferredExecutionContext,
   type WorkerEvent,
 } from "./Worker.ts";
+import type { WorkflowExport } from "../Workflows/Workflow.ts";
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
@@ -21,7 +25,7 @@ export interface WorkerRuntimeContext extends Serverless.FunctionContext {
 
 export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
-  const exports: Record<string, any> = {};
+  const exports: Record<string, DurableObjectExport | WorkflowExport> = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
 
@@ -106,7 +110,13 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       Effect.sync(() => {
         exports[name] = value;
       }),
-    planServices: Layer.succeed(WorkerEnvironment, {}),
+    planServices: Layer.mergeAll(
+      Layer.succeed(WorkerEnvironment, {}),
+      // Lets the init closure `yield*` WorkerExecutionContext during plan;
+      // its RuntimeContext-colored methods can't run until a real handler
+      // provides the live per-event context.
+      Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
+    ),
     exports: Effect.gen(function* () {
       const handlers = yield* Effect.all(listeners, {
         concurrency: "unbounded",
@@ -123,11 +133,24 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             env,
             context,
           };
+          const effects: Effect.Effect<unknown>[] = [];
           for (const handler of handlers) {
             const eff = handler(event);
             if (Effect.isEffect(eff)) {
-              return [eff, services];
+              effects.push(eff);
             }
+          }
+          if (effects.length === 1) {
+            return [effects[0], services];
+          }
+          if (effects.length > 1) {
+            return [
+              Effect.all(effects, {
+                concurrency: "unbounded",
+                discard: true,
+              }),
+              services,
+            ];
           }
           return [
             Effect.die(
@@ -145,7 +168,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       // layer the fetch path uses, then envelope-encodes the result so
       // `Effect.fail` round-trips as `RpcErrorEnvelope` and `Stream` as
       // `RpcStreamEnvelope` (consumers wrap the binding with
-      // `toPromiseApi`/`bindWorker` to decode).
+      // `toRpcAsync`/`bindWorker` to decode).
 
       return {
         ...exports,

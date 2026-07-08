@@ -1,1 +1,1 @@
-export { LogGroup, LogGroupProvider } from "./LogGroup.ts";
+export { LogGroup, LogGroupProvider, type LogGroupClass } from "./LogGroup.ts";

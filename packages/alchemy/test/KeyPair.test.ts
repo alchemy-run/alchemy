@@ -1,5 +1,6 @@
 import * as NodeCrypto from "node:crypto";
 import { KeyPair, KeyPairProvider } from "@/KeyPair";
+import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
@@ -81,6 +82,23 @@ describe("Alchemy.KeyPair", () => {
         Redacted.value(first.privateKey),
       );
       expect(second.publicKey).toBe(first.publicKey);
+    }),
+  );
+
+  test.provider("list returns [] for the non-listable keypair", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* KeyPair("list-key");
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(KeyPair);
+      expect(yield* provider.list()).toEqual([]);
+
+      yield* stack.destroy();
     }),
   );
 });

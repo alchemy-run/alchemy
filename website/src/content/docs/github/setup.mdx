@@ -1,0 +1,52 @@
+---
+title: Setup
+description: Connect alchemy to GitHub — account, credentials, and profiles.
+---
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as GitHub from "alchemy/GitHub";
+
+providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
+```
+
+The next `alchemy login` adds a `GitHub` step with three options:
+
+- **`gh` CLI** — shells out to `gh auth token` (recommended).
+- **Environment variables** — reads `GITHUB_ACCESS_TOKEN`, falling back
+  to `GITHUB_TOKEN` (good for CI).
+- **Stored PAT** — a personal access token entered interactively,
+  saved under `~/.alchemy/credentials/<profile>/`.
+
+When `CI=true`, the login step skips the prompt and selects the
+environment-variables method automatically.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Token scopes
+
+- `repo` — always required.
+- `workflow` — when you manage [Actions secrets and variables](/github/actions-config).
+- `delete_repo` — only when you opt a [repository](/github/repository)
+  into deletion via `destroy()`. Repositories default to retain on
+  removal, so most tokens never need it.
+
+## Programmatic credentials
+
+Skip profiles entirely by building the credentials layer from a token
+you already have in hand — useful in tests:
+
+```typescript
+Effect.provide(GitHub.fromToken(token))
+```
+
+`fromToken` accepts a plain string or a `Redacted` value. To read from
+the environment instead, `GitHub.fromEnv()` builds the same layer from
+`GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN`.
+
+## Next steps
+
+- [GitHub overview](/github) — resources and compositions.

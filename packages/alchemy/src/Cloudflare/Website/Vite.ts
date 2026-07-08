@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import type { MemoOptions } from "../../Build/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
@@ -7,26 +6,14 @@ import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
+  type ViteOptions,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
 } from "../Workers/Worker.ts";
-export interface ViteProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets"> {
-  /**
-   * Root directory passed to Vite's `root` option.
-   * Defaults to the current working directory (`process.cwd()`).
-   */
-  rootDir?: string;
-  /**
-   * Controls which files are hashed to decide whether a rebuild is needed.
-   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
-   * lockfile. Provide explicit globs to narrow the scope.
-   *
-   * @see {@link MemoOptions}
-   */
-  memo?: MemoOptions;
+
+export interface ViteProps<Bindings extends WorkerBindingProps = {}>
+  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -46,6 +33,8 @@ export interface ViteProps<
  * unchanged projects skip the build and deploy entirely.
  *
  * @resource
+ * @product Website
+ * @category Workers & Compute
  *
  * @section Deploying a Static Site
  * For a pure static site (no SSR), a single call is all you need.
@@ -54,16 +43,16 @@ export interface ViteProps<
  *
  * @example Static Vite site
  * ```typescript
- * const site = yield* Cloudflare.Vite("Website");
+ * const site = yield* Cloudflare.Website.Vite("Website");
  * ```
  *
  * @section SSR Frameworks
- * For SSR frameworks like TanStack Start, SolidStart, or Nuxt, enable
+ * For SSR frameworks like TanStack Start or SolidStart, enable
  * `nodejs_compat` so the server bundle can use Node.js APIs.
  *
  * @example TanStack Start
  * ```typescript
- * const app = yield* Cloudflare.Vite("TanStackStart", {
+ * const app = yield* Cloudflare.Website.Vite("TanStackStart", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
@@ -72,12 +61,31 @@ export interface ViteProps<
  *
  * @example SolidStart with worker-first routing
  * ```typescript
- * const app = yield* Cloudflare.Vite("SolidStart", {
+ * const app = yield* Cloudflare.Website.Vite("SolidStart", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
- *   assets: {
- *     config: { runWorkerFirst: true },
+ *   assets: { runWorkerFirst: true },
+ * });
+ * ```
+ *
+ * @section React Server Components
+ * Frameworks that emit more than one server environment (e.g. React
+ * Server Components, which split into an `rsc` environment and an `ssr`
+ * environment) need `viteEnvironments` to declare which environment
+ * produces the deployed Worker entry and which additional server
+ * environments to bundle alongside it. The `client` environment is
+ * always deployed as static assets.
+ *
+ * @example React Router with RSC
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("ReactRouterRSC", {
+ *   compatibility: {
+ *     flags: ["nodejs_compat"],
+ *   },
+ *   viteEnvironments: {
+ *     entry: "rsc",
+ *     children: ["ssr"],
  *   },
  * });
  * ```
@@ -88,15 +96,13 @@ export interface ViteProps<
  *
  * @example Vue SPA
  * ```typescript
- * const app = yield* Cloudflare.Vite("Vue", {
+ * const app = yield* Cloudflare.Website.Vite("Vue", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
  *   assets: {
- *     config: {
- *       htmlHandling: "auto-trailing-slash",
- *       notFoundHandling: "single-page-application",
- *     },
+ *     htmlHandling: "auto-trailing-slash",
+ *     notFoundHandling: "single-page-application",
  *   },
  * });
  * ```
@@ -108,7 +114,7 @@ export interface ViteProps<
  *
  * @example Narrowing the memo scope
  * ```typescript
- * const site = yield* Cloudflare.Vite("Docs", {
+ * const site = yield* Cloudflare.Website.Vite("Docs", {
  *   memo: {
  *     include: ["src/**", "content/**", "package.json"],
  *   },
@@ -123,7 +129,7 @@ export interface ViteProps<
  *
  * @example Declaring a Worker class
  * ```typescript
- * class Website extends Cloudflare.Vite<Website>()("Website", {
+ * class Website extends Cloudflare.Website.Vite<Website>()("Website", {
  *   compatibility: { flags: ["nodejs_compat"] },
  * }) {}
  *
@@ -174,6 +180,7 @@ export const Vite: {
             vite: {
               rootDir: props?.rootDir,
               memo: props?.memo,
+              viteEnvironments: props?.viteEnvironments,
             },
           }),
         ),

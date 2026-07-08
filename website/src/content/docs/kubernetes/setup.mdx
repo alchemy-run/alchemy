@@ -1,0 +1,87 @@
+---
+title: Setup
+description: AWS credentials are the credentials — no kubeconfig.
+---
+
+There is no `Kubernetes.providers()` function to register. The
+Kubernetes helpers bind objects onto an `AWS.EKS.Cluster`, and the EKS
+Cluster provider reconciles them — so a Stack that deploys Kubernetes
+objects needs only the AWS providers:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "AwsEksExample",
+  {
+    providers: AWS.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // EKS.AutoCluster, Kubernetes.Namespace, Kubernetes.Job, ...
+  }),
+);
+```
+
+This is the exact shape of
+[examples/aws-eks](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/aws-eks) —
+`import * as Kubernetes from "alchemy/Kubernetes"` brings in the object
+helpers, and `AWS.providers()` covers everything they need.
+
+## Authentication
+
+Alchemy authenticates to the Kubernetes API with your AWS credentials:
+it mints a `k8s-aws-v1.<presigned STS token>` bearer token per request
+and trusts the cluster via its `certificateAuthorityData` attribute. No
+kubeconfig, no `KUBECONFIG` env var, no Kubernetes-specific token —
+configuring AWS credentials is the whole setup, and
+[AWS Setup](/aws/setup) is the canonical home for that.
+
+## Cluster access
+
+The IAM principal running the deploy needs Kubernetes API access on the
+cluster. `EKS.AutoCluster` grants it to the cluster creator
+automatically (`bootstrapClusterCreatorAdminPermissions: true`); grant
+any other principal access with an `EKS.AccessEntry`, as the example
+does:
+
+```typescript
+const clusterAdmin = yield* EKS.AccessEntry("ClusterAdmin", {
+  clusterName: cluster.cluster.clusterName,
+  principalArn: clusterAdminPrincipalArn,
+  accessPolicies: [
+    {
+      policyArn:
+        "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy",
+      accessScope: { type: "cluster" },
+    },
+  ],
+});
+```
+
+Without an access entry (or creator permissions), the presigned token
+authenticates but the Kubernetes API rejects the request — access
+entries are how EKS maps IAM principals to Kubernetes permissions.
+
+## Inspecting with kubectl (optional)
+
+Alchemy never needs kubectl, but you can still point it at the cluster
+to inspect what a deploy produced:
+
+```sh
+aws eks update-kubeconfig --name alchemy-eks-auto-example --region "$AWS_REGION"
+kubectl get pods -n demo
+```
+
+This is read-side only — the objects themselves are declared in
+TypeScript and reconciled by the deploy.
+
+## Next steps
+
+- [Kubernetes overview](/kubernetes) — the supported objects and how the hub fits together.
+- [Objects as bindings](/kubernetes/objects-as-bindings) — how helpers bind objects onto the Cluster and how apply works.
+- [EKS](/aws/compute/eks) — provisioning the cluster and composed workloads.

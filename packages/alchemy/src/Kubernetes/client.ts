@@ -1,10 +1,10 @@
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import { Region } from "@distilled.cloud/aws/Region";
 import { AwsClient } from "aws4fetch";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as https from "node:https";
+import { AWSEnvironment } from "../AWS/Environment.ts";
 import {
   buildKubernetesObjectPath,
   chunkByApplyRank,
@@ -32,7 +32,7 @@ const fieldManager = "alchemy";
 
 const createBearerToken = Effect.fn(function* (clusterName: string) {
   const credentials = yield* yield* Credentials;
-  const region = yield* Region;
+  const { region } = yield* AWSEnvironment.current;
 
   const client = new AwsClient({
     accessKeyId: Redacted.value(credentials.accessKeyId),

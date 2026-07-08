@@ -208,7 +208,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
         return credentials;
       });
 
-    const configureOAuth = Effect.fnUntraced(function* (profileName: string) {
+    const configureOAuth = Effect.fn(function* (profileName: string) {
       const oauthCreds = yield* oauthLogin(profileName);
 
       // Use the just-issued access token to list the user's orgs and let
@@ -233,7 +233,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       return { method: "oauth" as const, organization };
     });
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const tokenId = yield* Clank.text({
         message: "Planetscale Service Token ID",
         validate: (v) => (v.length === 0 ? "Required" : undefined),
@@ -301,7 +301,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when(
           { method: "env" },
-          Effect.fnUntraced(function* () {
+          Effect.fn(function* () {
             const tokenId = yield* getEnvRedactedRequired(
               "PLANETSCALE_API_TOKEN_ID",
             );

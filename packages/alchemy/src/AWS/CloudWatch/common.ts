@@ -36,7 +36,7 @@ export const createManagedTags = Effect.fn(function* (
 ) {
   return {
     ...(yield* createInternalTags(id)),
-    ...(tags ?? {}),
+    ...tags,
   };
 });
 

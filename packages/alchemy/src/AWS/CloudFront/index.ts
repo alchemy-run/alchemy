@@ -24,3 +24,4 @@ export {
   ResponseHeadersPolicy,
   ResponseHeadersPolicyProvider,
 } from "./ResponseHeadersPolicy.ts";
+export { VpcOrigin, VpcOriginProvider } from "./VpcOrigin.ts";

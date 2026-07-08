@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 
@@ -7,7 +6,6 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -15,6 +13,7 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { QueueArn } from "../SQS/Queue.ts";
 
@@ -76,7 +75,7 @@ export interface EventBusProps {
 
 /**
  * An Amazon EventBridge event bus for receiving and routing events.
- *
+ * @resource
  * @section Creating Event Buses
  * @example Custom Event Bus
  * ```typescript
@@ -121,9 +120,6 @@ export const EventBusProvider = () =>
   Provider.effect(
     EventBus,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createEventBusName = (id: string, props: { name?: string } = {}) =>
         Effect.gen(function* () {
           if (props.name) {
@@ -177,7 +173,38 @@ export const EventBusProvider = () =>
             ? attrs
             : Unowned(attrs);
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every event bus in the ambient account/region via
+            // manual NextToken pagination (listEventBuses is not a paginated
+            // distilled op). The AWS-managed `default` bus is excluded — the
+            // EventBus resource cannot manage it (name "default" is reserved).
+            const attrs: {
+              eventBusName: EventBusName;
+              eventBusArn: EventBusArn;
+              description?: string;
+            }[] = [];
+            let nextToken: string | undefined;
+            do {
+              const page = yield* eventbridge.listEventBuses({
+                NextToken: nextToken,
+              });
+              for (const bus of page.EventBuses ?? []) {
+                if (!bus.Name || !bus.Arn || bus.Name === "default") {
+                  continue;
+                }
+                attrs.push({
+                  eventBusName: bus.Name,
+                  eventBusArn: bus.Arn as EventBusArn,
+                  description: bus.Description,
+                });
+              }
+              nextToken = page.NextToken;
+            } while (nextToken);
+            return attrs;
+          }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const eventBusName =
             output?.eventBusName ?? (yield* createEventBusName(id, news));
           const eventBusArn = (output?.eventBusArn ??

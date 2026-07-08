@@ -1,9 +1,9 @@
 import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -213,15 +213,97 @@ export interface VpcEndpoint extends Resource<
   never,
   Providers
 > {}
+/**
+ * A VPC endpoint that connects your VPC privately to an AWS service (or a
+ * service behind a Gateway Load Balancer) without traversing the public
+ * internet, a NAT gateway, or an internet gateway.
+ *
+ * The `vpcEndpointType` selects how the connection is realized:
+ * - `"Gateway"` — for S3 and DynamoDB; traffic is directed by adding routes to
+ *   the route tables in `routeTableIds` (no hourly cost).
+ * - `"Interface"` — for most other AWS services; provisions elastic network
+ *   interfaces in `subnetIds`, guarded by `securityGroupIds`, and optionally
+ *   resolves the service's public DNS name privately via `privateDnsEnabled`.
+ * - `"GatewayLoadBalancer"` — routes traffic through a third-party appliance
+ *   fleet fronted by a Gateway Load Balancer.
+ *
+ * Changing `vpcId`, `serviceName`, or `vpcEndpointType` replaces the endpoint;
+ * route tables, subnets, security groups, DNS, and the policy update in place.
+ *
+ * @resource
+ * @section Gateway Endpoints
+ * Gateway endpoints target S3 and DynamoDB and work by injecting a prefix-list
+ * route into each route table you list, so requests to the service stay on the
+ * AWS network.
+ * @example S3 Gateway Endpoint
+ * ```typescript
+ * const s3Endpoint = yield* AWS.EC2.VpcEndpoint("S3Endpoint", {
+ *   vpcId: vpc.vpcId,
+ *   serviceName: "com.amazonaws.us-east-1.s3",
+ *   vpcEndpointType: "Gateway",
+ *   routeTableIds: [privateRouteTable.routeTableId],
+ *   tags: { Name: "s3-endpoint" },
+ * });
+ * ```
+ * Listing the private subnets' route tables in `routeTableIds` lets those
+ * subnets reach S3 directly, removing NAT data-processing charges for S3 traffic
+ * and keeping it off the public internet.
+ *
+ * @section Interface Endpoints
+ * Interface endpoints place an ENI in each chosen subnet and are reached over
+ * private IPs; enabling private DNS lets existing SDK calls resolve to the
+ * endpoint transparently.
+ * @example Secrets Manager Interface Endpoint
+ * ```typescript
+ * const secretsEndpoint = yield* AWS.EC2.VpcEndpoint("SecretsEndpoint", {
+ *   vpcId: vpc.vpcId,
+ *   serviceName: "com.amazonaws.us-east-1.secretsmanager",
+ *   vpcEndpointType: "Interface",
+ *   subnetIds: [privateSubnet.subnetId],
+ *   securityGroupIds: [endpointSecurityGroup.groupId],
+ *   privateDnsEnabled: true,
+ *   ipAddressType: "ipv4",
+ *   dnsOptions: {
+ *     dnsRecordIpType: "ipv4",
+ *   },
+ * });
+ * ```
+ * The endpoint gets an interface in each `subnetIds` entry, `securityGroupIds`
+ * controls who may reach those interfaces, and `privateDnsEnabled: true` makes
+ * the service's default DNS name resolve to the endpoint; `ipAddressType` and
+ * `dnsOptions` tune the IP family used for the interfaces and their DNS records.
+ *
+ * @section Restricting Access with a Policy
+ * @example Endpoint Policy Limiting Access to One Bucket
+ * ```typescript
+ * const s3Endpoint = yield* AWS.EC2.VpcEndpoint("RestrictedS3Endpoint", {
+ *   vpcId: vpc.vpcId,
+ *   serviceName: "com.amazonaws.us-east-1.s3",
+ *   vpcEndpointType: "Gateway",
+ *   routeTableIds: [privateRouteTable.routeTableId],
+ *   policyDocument: JSON.stringify({
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: "*",
+ *         Action: ["s3:GetObject"],
+ *         Resource: ["arn:aws:s3:::my-bucket/*"],
+ *       },
+ *     ],
+ *   }),
+ * });
+ * ```
+ * `policyDocument` attaches an endpoint policy (JSON) that constrains which
+ * service actions and resources can be reached through the endpoint; omit it to
+ * allow full access to the service.
+ */
 export const VpcEndpoint = Resource<VpcEndpoint>("AWS.EC2.VpcEndpoint");
 
 export const VpcEndpointProvider = () =>
   Provider.effect(
     VpcEndpoint,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
@@ -244,48 +326,52 @@ export const VpcEndpointProvider = () =>
                 ),
           ),
         );
+      // const { accountId, region } = yield* AWSEnvironment.current;
 
-      const toAttrs = (ep: ec2.VpcEndpoint): VpcEndpoint["Attributes"] => ({
-        vpcEndpointId: ep.VpcEndpointId as VpcEndpointId,
-        vpcEndpointArn:
-          `arn:aws:ec2:${region}:${accountId}:vpc-endpoint/${ep.VpcEndpointId}` as VpcEndpointArn,
-        vpcEndpointType: ep.VpcEndpointType!,
-        vpcId: ep.VpcId as VpcId,
-        serviceName: ep.ServiceName!,
-        state: ep.State!,
-        policyDocument: ep.PolicyDocument,
-        routeTableIds: ep.RouteTableIds,
-        subnetIds: ep.SubnetIds,
-        groups: ep.Groups?.map((g) => ({
-          groupId: g.GroupId!,
-          groupName: g.GroupName!,
-        })),
-        privateDnsEnabled: ep.PrivateDnsEnabled,
-        requesterManaged: ep.RequesterManaged,
-        networkInterfaceIds: ep.NetworkInterfaceIds,
-        dnsEntries: ep.DnsEntries?.map((d) => ({
-          dnsName: d.DnsName,
-          hostedZoneId: d.HostedZoneId,
-        })),
-        creationTimestamp:
-          ep.CreationTimestamp instanceof Date
-            ? ep.CreationTimestamp.toISOString()
-            : (ep.CreationTimestamp as string | undefined),
-        ownerId: ep.OwnerId,
-        ipAddressType: ep.IpAddressType,
-        dnsOptions: ep.DnsOptions
-          ? {
-              dnsRecordIpType: ep.DnsOptions.DnsRecordIpType,
-              privateDnsOnlyForInboundResolverEndpoint:
-                ep.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint,
-            }
-          : undefined,
-        lastError: ep.LastError
-          ? {
-              code: ep.LastError.Code,
-              message: ep.LastError.Message,
-            }
-          : undefined,
+      const toAttrs = Effect.fn(function* (ep: ec2.VpcEndpoint) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        return {
+          vpcEndpointId: ep.VpcEndpointId as VpcEndpointId,
+          vpcEndpointArn:
+            `arn:aws:ec2:${region}:${accountId}:vpc-endpoint/${ep.VpcEndpointId}` as VpcEndpointArn,
+          vpcEndpointType: ep.VpcEndpointType!,
+          vpcId: ep.VpcId as VpcId,
+          serviceName: ep.ServiceName!,
+          state: ep.State!,
+          policyDocument: ep.PolicyDocument,
+          routeTableIds: ep.RouteTableIds,
+          subnetIds: ep.SubnetIds,
+          groups: ep.Groups?.map((g) => ({
+            groupId: g.GroupId!,
+            groupName: g.GroupName!,
+          })),
+          privateDnsEnabled: ep.PrivateDnsEnabled,
+          requesterManaged: ep.RequesterManaged,
+          networkInterfaceIds: ep.NetworkInterfaceIds,
+          dnsEntries: ep.DnsEntries?.map((d) => ({
+            dnsName: d.DnsName,
+            hostedZoneId: d.HostedZoneId,
+          })),
+          creationTimestamp:
+            ep.CreationTimestamp instanceof Date
+              ? ep.CreationTimestamp.toISOString()
+              : (ep.CreationTimestamp as string | undefined),
+          ownerId: ep.OwnerId,
+          ipAddressType: ep.IpAddressType,
+          dnsOptions: ep.DnsOptions
+            ? {
+                dnsRecordIpType: ep.DnsOptions.DnsRecordIpType,
+                privateDnsOnlyForInboundResolverEndpoint:
+                  ep.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint,
+              }
+            : undefined,
+          lastError: ep.LastError
+            ? {
+                code: ep.LastError.Code,
+                message: ep.LastError.Message,
+              }
+            : undefined,
+        } satisfies VpcEndpoint["Attributes"];
       });
 
       return {
@@ -294,8 +380,24 @@ export const VpcEndpointProvider = () =>
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
           const ep = yield* describeVpcEndpoint(output.vpcEndpointId);
-          return toAttrs(ep);
+          return yield* toAttrs(ep);
         }),
+
+        list: () =>
+          Effect.gen(function* () {
+            const endpoints = yield* ec2.describeVpcEndpoints.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.VpcEndpoints ?? []).filter(
+                    (ep): ep is ec2.VpcEndpoint & { VpcEndpointId: string } =>
+                      ep.VpcEndpointId != null,
+                  ),
+                ),
+              ),
+            );
+            return yield* Effect.forEach(endpoints, (ep) => toAttrs(ep));
+          }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
@@ -459,8 +561,13 @@ export const VpcEndpointProvider = () =>
           }
 
           if ((ep.PolicyDocument ?? undefined) !== news.policyDocument) {
-            modifications.PolicyDocument = news.policyDocument ?? "";
-            modifications.ResetPolicy = !news.policyDocument;
+            // AWS rejects passing both a policy document and the reset flag in
+            // the same call — choose exactly one.
+            if (news.policyDocument) {
+              modifications.PolicyDocument = news.policyDocument;
+            } else {
+              modifications.ResetPolicy = true;
+            }
             hasModifications = true;
           }
 
@@ -520,7 +627,7 @@ export const VpcEndpointProvider = () =>
 
           // Re-read final state.
           const final = yield* describeVpcEndpoint(vpcEndpointId);
-          return toAttrs(final);
+          return yield* toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

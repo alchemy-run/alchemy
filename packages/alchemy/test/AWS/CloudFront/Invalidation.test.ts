@@ -3,6 +3,7 @@ import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
 import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
@@ -110,6 +111,18 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
       yield* assertDistributionDeleted(deployed.distribution.distributionId);
     }),
   { timeout: 600_000 },
+);
+
+test.provider(
+  "list returns [] for the non-listable ephemeral invalidation",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(
+        AWS.CloudFront.Invalidation,
+      );
+      const all = yield* provider.list();
+      expect(all).toEqual([]);
+    }),
 );
 
 const assertDistributionDeleted = (distributionId: string) =>

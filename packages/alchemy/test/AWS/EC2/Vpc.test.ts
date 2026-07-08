@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
@@ -72,6 +73,29 @@ test.provider.skip("create, update, delete vpc", (stack) =>
     yield* stack.destroy();
 
     yield* assertVpcDeleted(vpc.vpcId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed vpc", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Vpc("ListVpc", {
+          cidrBlock: "10.0.0.0/16",
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Vpc);
+    const all = yield* provider.list();
+
+    expect(all.some((v) => v.vpcId === deployed.vpcId)).toBe(true);
+
+    yield* stack.destroy();
+
+    yield* assertVpcDeleted(deployed.vpcId);
   }).pipe(logLevel),
 );
 

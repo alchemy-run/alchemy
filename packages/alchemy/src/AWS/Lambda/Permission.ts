@@ -1,6 +1,7 @@
 import type * as lambda from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -81,7 +82,7 @@ export interface Permission extends Resource<
 /**
  * A Lambda permission that grants an AWS service or another account permission to
  * invoke a function.
- *
+ * @resource
  * @section Granting Permissions
  * @example S3 Notification Permission
  * ```typescript
@@ -90,7 +91,7 @@ export interface Permission extends Resource<
  *   functionName: yield* fn.functionArn(),
  *   principal: "s3.amazonaws.com",
  *   sourceArn: yield* bucket.bucketArn,
- *   sourceAccount: (yield* AWSEnvironment).accountId,
+ *   sourceAccount: (yield* AWSEnvironment.current).accountId,
  * });
  * ```
  *
@@ -126,8 +127,75 @@ export const PermissionProvider = () =>
           delimiter: "-",
         });
 
+      type PermissionAttrs = { statementId: string; functionName: string };
+
       return {
         stables: ["statementId", "functionName"],
+        list: () =>
+          Effect.gen(function* () {
+            // Lambda has no list-permissions API. A Permission is a single
+            // statement (Sid) inside a function's resource policy, so we fan
+            // out: enumerate every function in the ambient account/region
+            // (paginated listFunctions), getPolicy per function, parse the
+            // policy JSON, and emit one Attributes per statement Sid.
+            const functionNames = yield* Lambda.listFunctions.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Functions ?? [])
+                    .map((fn) => fn.FunctionName)
+                    .filter((name): name is string => name != null),
+                ),
+              ),
+            );
+
+            const perFunction = yield* Effect.forEach(
+              functionNames,
+              (functionName) =>
+                Effect.gen(function* () {
+                  const { Policy } = yield* Lambda.getPolicy({
+                    FunctionName: functionName,
+                  });
+                  if (!Policy) return [] as PermissionAttrs[];
+                  const policy = yield* Effect.try({
+                    try: () =>
+                      JSON.parse(Policy) as {
+                        Statement?: { Sid?: string } | { Sid?: string }[];
+                      },
+                    catch: (cause) => new Error("invalid policy", { cause }),
+                  }).pipe(
+                    // A malformed/non-JSON policy yields no permissions
+                    // rather than failing the whole enumeration.
+                    Effect.orElseSucceed(() => ({
+                      Statement: [] as { Sid?: string }[],
+                    })),
+                  );
+                  const statements = Array.isArray(policy.Statement)
+                    ? policy.Statement
+                    : policy.Statement
+                      ? [policy.Statement]
+                      : [];
+                  return statements
+                    .filter(
+                      (s): s is { Sid: string } => typeof s.Sid === "string",
+                    )
+                    .map(
+                      (s): PermissionAttrs => ({
+                        statementId: s.Sid,
+                        functionName,
+                      }),
+                    );
+                }).pipe(
+                  // Functions with no resource policy / removed out of band
+                  // between list and getPolicy — skip them.
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed([] as PermissionAttrs[]),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return perFunction.flat();
+          }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           if (news.functionName !== olds.functionName) {

@@ -64,7 +64,7 @@ export const wrapRpcHandlers = <T extends Record<string, any>>(
         ? streamKeys?.includes(key)
           ? wrapRpcStreamHandler(value)
           : wrapRpcEffectHandler(value)
-        : typeof value === "object" && value !== null
+        : typeof value === "object" && value !== null && !Array.isArray(value)
           ? wrapRpcHandlers(value)
           : value,
     ]),
@@ -82,7 +82,7 @@ export const unwrapRpcHandlers = <T extends Record<string, any>>(
         ? streamKeys?.includes(key)
           ? unwrapRpcStreamHandler(value)
           : unwrapRpcEffectHandler(value)
-        : typeof value === "object" && value !== null
+        : typeof value === "object" && value !== null && !Array.isArray(value)
           ? unwrapRpcHandlers(value)
           : value,
     ]),

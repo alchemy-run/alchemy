@@ -33,7 +33,18 @@ export const isApiGatewayProxyEvent = (
 
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   const safeHandler = Http.safeHttpEffect(handler);
-  return (event: any) => {
+  return (
+    event: any,
+  ):
+    | Effect.Effect<
+        APIGatewayProxyResult | LambdaFunctionURLResult,
+        never,
+        Exclude<
+          Effect.Services<typeof handler>,
+          HttpServerRequest.HttpServerRequest | Scope
+        >
+      >
+    | undefined => {
     if (isFunctionURLEvent(event)) {
       const webRequest = functionUrlEventToWebRequest(event);
       const request = HttpServerRequest.fromWeb(webRequest).modify({

@@ -105,7 +105,7 @@ const selectAccount = (accessToken: string) =>
     const response = yield* list({});
     const accounts = response.result;
     if (accounts.length === 0) {
-      yield* new AuthError({
+      return yield* new AuthError({
         message: "Cloudflare: no accounts found for this credential.",
       });
     }
@@ -126,6 +126,43 @@ const selectAccount = (accessToken: string) =>
     }).pipe(retryOnce);
   }).pipe((e) => withOAuthCredentials(accessToken, e));
 
+/**
+ * Cloudflare account IDs are 32 lowercase hex characters. Placeholder
+ * values ("", "-", "dummy", …) end up interpolated into API paths and
+ * surface as baffling `InvalidRoute: Could not route to
+ * /accounts/<value>/...` errors, so reject them up front with an
+ * actionable message instead.
+ */
+const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/i;
+
+export const validateAccountId = (
+  accountId: string | undefined,
+  source: string,
+): Effect.Effect<string, AuthError> => {
+  const trimmed = accountId?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return Effect.fail(
+      new AuthError({
+        message:
+          `Cloudflare account ID is missing (${source}). ` +
+          "Set CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy login' and provide your account ID " +
+          "(found in the Cloudflare dashboard under Workers & Pages → Account details).",
+      }),
+    );
+  }
+  if (!ACCOUNT_ID_PATTERN.test(trimmed)) {
+    return Effect.fail(
+      new AuthError({
+        message:
+          `'${trimmed}' is not a valid Cloudflare account ID (${source}) — expected 32 hex characters. ` +
+          "Copy the account ID from the Cloudflare dashboard (Workers & Pages → Account details) " +
+          "into CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy login'.",
+      }),
+    );
+  }
+  return Effect.succeed(trimmed.toLowerCase());
+};
+
 const promptAccountId = () =>
   getEnv("CLOUDFLARE_ACCOUNT_ID").pipe(
     Effect.flatMap((envAccountId) =>
@@ -133,6 +170,10 @@ const promptAccountId = () =>
         message: "Cloudflare Account ID (Enter to skip)",
         placeholder: envAccountId ?? "",
         defaultValue: envAccountId ?? "",
+        validate: (v) =>
+          v.trim().length === 0 || ACCOUNT_ID_PATTERN.test(v.trim())
+            ? undefined
+            : "Expected a 32-character hex account ID (Workers & Pages → Account details)",
       }).pipe(retryOnce),
     ),
   );
@@ -200,7 +241,7 @@ export const CloudflareAuth = AuthProviderLayer<
         return credentials;
       });
 
-    const loginStored = Effect.fnUntraced(function* (profileName: string) {
+    const loginStored = Effect.fn(function* (profileName: string) {
       const credentialType = yield* Clank.select({
         message: "Cloudflare credential type",
         options: [
@@ -263,7 +304,7 @@ export const CloudflareAuth = AuthProviderLayer<
       );
     });
 
-    const configureOAuth = Effect.fnUntraced(function* (profileName: string) {
+    const configureOAuth = Effect.fn(function* (profileName: string) {
       const scopes = yield* promptOAuthScopes();
 
       const oauthCreds = yield* oauthLogin(profileName, scopes);
@@ -323,8 +364,14 @@ export const CloudflareAuth = AuthProviderLayer<
       Match.value(config).pipe(
         Match.when(
           { method: "env" },
-          Effect.fnUntraced(function* () {
-            const accountId = yield* getEnvRequired("CLOUDFLARE_ACCOUNT_ID");
+          Effect.fn(function* () {
+            const accountId = yield* getEnvRequired(
+              "CLOUDFLARE_ACCOUNT_ID",
+            ).pipe(
+              Effect.flatMap((id) =>
+                validateAccountId(id, "from the CLOUDFLARE_ACCOUNT_ID env var"),
+              ),
+            );
             const apiToken = yield* getEnvRedacted("CLOUDFLARE_API_TOKEN");
             if (apiToken) {
               return {
@@ -363,29 +410,43 @@ export const CloudflareAuth = AuthProviderLayer<
                           "Cloudflare stored credentials not found. Run: alchemy-effect login --configure",
                       }),
                     )
-                  : Effect.succeed(
-                      Match.value(creds).pipe(
+                  : Effect.gen(function* () {
+                      // The account ID prompt is skippable, so stored
+                      // credentials may carry an empty accountId; fall
+                      // back to the env var before validating.
+                      const envAccountId = yield* getEnv(
+                        "CLOUDFLARE_ACCOUNT_ID",
+                      );
+                      const accountId = yield* validateAccountId(
+                        creds.accountId?.trim() || envAccountId,
+                        `stored for profile '${profileName}'`,
+                      );
+                      return Match.value(creds).pipe(
                         Match.when({ type: "apiToken" }, (c) => ({
                           type: "apiToken" as const,
                           apiToken: Redacted.make(c.apiToken),
-                          accountId: c.accountId,
+                          accountId,
                           source: { type: "stored" as const },
                         })),
                         Match.when({ type: "apiKey" }, (c) => ({
                           type: "apiKey" as const,
                           apiKey: Redacted.make(c.apiKey),
                           email: Redacted.make(c.email),
-                          accountId: c.accountId,
+                          accountId,
                           source: { type: "stored" as const },
                         })),
                         Match.exhaustive,
-                      ),
-                    ),
+                      );
+                    }),
               ),
             ),
         ),
         Match.when({ method: "oauth" }, (cfg) =>
           Effect.gen(function* () {
+            const accountId = yield* validateAccountId(
+              cfg.accountId,
+              `configured for profile '${profileName}'`,
+            );
             const creds = yield* store.read<OAuthClient.OAuthCredentials>(
               profileName,
               "cf-oauth",
@@ -421,7 +482,7 @@ export const CloudflareAuth = AuthProviderLayer<
               type: "oauth" as const,
               accessToken: Redacted.make(fresh.access),
               expires: fresh.expires,
-              accountId: cfg.accountId,
+              accountId,
               source: { type: "oauth" as const },
             };
           }),
@@ -664,6 +725,8 @@ export const ALL_SCOPES = {
     "See and change Cloudflare Workers KV Storage data such as keys and namespaces",
   "workers_observability:read":
     "Grants read access to Cloudflare Workers Observability",
+  "workers_observability:write":
+    "Grants read and write access to Cloudflare Workers Observability",
   "workers_observability_telemetry:write":
     "Grants write access to Cloudflare Workers Observability Telemetry API",
   "workers_routes:write":
@@ -694,6 +757,7 @@ export const DEFAULT_SCOPES = [
   "vectorize:write",
   "workers_kv:write",
   "workers_observability:read",
+  "workers_observability:write",
   "workers_observability_telemetry:write",
   "workers_routes:write",
   "workers_scripts:write",

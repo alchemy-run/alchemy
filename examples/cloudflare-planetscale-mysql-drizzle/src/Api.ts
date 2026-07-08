@@ -13,19 +13,25 @@ import { relations, Users } from "./schema.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.filename,
+    main: import.meta.url,
     compatibility: {
       date: "2026-03-17",
       flags: ["nodejs_compat"],
     },
   },
   Effect.gen(function* () {
-    const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
 
     return {
       fetch: Effect.gen(function* () {
         const connectionString = yield* conn.connectionString;
-        const db = drizzle(Redacted.value(connectionString), {
+        const db = drizzle({
+          connection: {
+            uri: Redacted.value(connectionString),
+            // mysql2's text/binary parsers JIT via `new Function(...)`,
+            // which Cloudflare Workers' isolate disallows.
+            disableEval: true,
+          },
           schema,
           relations,
           mode: "default",
@@ -125,5 +131,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.HyperdriveBindingLive))),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.Hyperdrive.ConnectBinding))),
 ) {}
