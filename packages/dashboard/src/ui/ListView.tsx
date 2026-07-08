@@ -1,4 +1,5 @@
 import type { ListGroup } from "alchemy/Dashboard/Projections";
+import { LayoutGroup, MotionConfig, motion } from "motion/react";
 import { memo, useMemo } from "react";
 import { Search, X } from "lucide-react";
 import {
@@ -34,6 +35,17 @@ import {
 } from "../theme.ts";
 import { safeUI, uiCtxOf, useRegistry } from "../uiRegistry.ts";
 import { ResourceIcon } from "./Icon.tsx";
+
+// Subtle, shared easing for the whole list: rows FLIP between groups via
+// layoutId, sections settle as their contents change. Hoisted so memoized
+// rows keep prop identity. MotionConfig reducedMotion="user" turns it all
+// off for prefers-reduced-motion.
+const ROW_TRANSITION = {
+  layout: { type: "tween", duration: 0.28, ease: [0.25, 0.1, 0.25, 1] },
+  opacity: { duration: 0.22 },
+} as const;
+const ROW_INITIAL = { opacity: 0 } as const;
+const ROW_ANIMATE = { opacity: 1 } as const;
 
 const GROUP_LABELS: Record<ListGroup, string> = {
   failed: "Failed",
@@ -85,31 +97,47 @@ export const ListView = memo(function ListView() {
     );
   }
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <FilterBar />
-      {visibleGroups.length === 0 && (
-        <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
-          No resources match the filter
-        </p>
-      )}
-      {visibleGroups.map((group) => (
-        <section key={group.group}>
-          <h2 className={`${EYEBROW} mb-2 flex items-center gap-2`}>
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: GROUP_COLORS[group.group] }}
-            />
-            {GROUP_LABELS[group.group]}
-            <span className="text-[var(--alc-fg-4)]">{group.nodes.length}</span>
-          </h2>
-          <div className="overflow-hidden rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)] shadow-[var(--alc-shadow-sm)]">
-            {group.nodes.map((node) => (
-              <Row key={node.fqn} fqn={node.fqn} />
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
+    <MotionConfig reducedMotion="user">
+      <LayoutGroup>
+        <div className="mx-auto max-w-4xl space-y-6 p-6">
+          <FilterBar />
+          {visibleGroups.length === 0 && (
+            <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
+              No resources match the filter
+            </p>
+          )}
+          {visibleGroups.map((group) => (
+            <motion.section
+              key={group.group}
+              layout
+              initial={ROW_INITIAL}
+              animate={ROW_ANIMATE}
+              transition={ROW_TRANSITION}
+            >
+              <h2 className={`${EYEBROW} mb-2 flex items-center gap-2`}>
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ background: GROUP_COLORS[group.group] }}
+                />
+                {GROUP_LABELS[group.group]}
+                <span className="text-[var(--alc-fg-4)]">
+                  {group.nodes.length}
+                </span>
+              </h2>
+              {/* NO overflow-hidden: a row flying in from another group is
+                  rendered in its new parent mid-flight and would be clipped
+                  invisible; first:/last: rounding on the rows keeps the
+                  container's corners instead */}
+              <div className="rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)] shadow-[var(--alc-shadow-sm)]">
+                {group.nodes.map((node) => (
+                  <Row key={node.fqn} fqn={node.fqn} />
+                ))}
+              </div>
+            </motion.section>
+          ))}
+        </div>
+      </LayoutGroup>
+    </MotionConfig>
   );
 });
 
@@ -158,9 +186,14 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
   const color = ui?.color ?? CLOUD_COLORS[cloudOf(node.type)] ?? NEUTRAL_COLOR;
 
   return (
-    <button
+    <motion.button
+      layout
+      layoutId={fqn}
+      initial={ROW_INITIAL}
+      animate={ROW_ANIMATE}
+      transition={ROW_TRANSITION}
       onClick={() => setSelectedFqn(fqn)}
-      className={`flex w-full items-center gap-3 border-t border-[var(--alc-hairline)] px-4 py-2 text-left text-[12.5px] transition-colors duration-[var(--alc-dur-fast)] first:border-t-0 hover:bg-[var(--alc-bg-elev-2)] ${
+      className={`flex w-full items-center gap-3 border-t border-[var(--alc-hairline)] px-4 py-2 text-left text-[12.5px] transition-colors duration-[var(--alc-dur-fast)] first:rounded-t-[var(--alc-radius-lg)] first:border-t-0 last:rounded-b-[var(--alc-radius-lg)] hover:bg-[var(--alc-bg-elev-2)] ${
         selected ? "bg-[var(--alc-accent-12)]" : ""
       }`}
     >
@@ -218,7 +251,7 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
           {status}
         </span>
       </span>
-    </button>
+    </motion.button>
   );
 });
 
