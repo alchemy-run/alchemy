@@ -257,34 +257,6 @@ blocker is platform behavior, not our code — got skip-gated
 with the exact typed error recorded instead of burning an
 hour.
 
-That last rule matters for Cloudflare, which gates entire
-products behind plans — Magic Transit, Total TLS, custom
-hostnames. The factory couldn't lifecycle-test those on our
-account, but it pinned the gate itself into the type system:
-the rejection patched as a typed error, plus a probe test that
-always runs:
-
-```typescript
-// test/Cloudflare/MagicTransit/StaticRoute.test.ts
-test.provider(
-  "unentitled accounts surface the typed MagicTransitNotOnboarded error",
-  (stack) =>
-    Effect.gen(function* () {
-      // ... resolve accountId; no-op early if this account is entitled ...
-      const error = yield* magicTransit
-        .listRoutes({ accountId })
-        .pipe(Effect.flip);
-      expect(["MagicTransitNotOnboarded", "Forbidden"]).toContain(error._tag);
-    }),
-);
-
-test.provider.skipIf(!entitled)("list enumerates the deployed static route", ...);
-```
-
-An entitled account flips one environment variable and the
-full lifecycle suite runs unchanged. 136 of the 288 test files
-carry gates like this.
-
 Every test follows one shape: deploy, verify **out-of-band**
 by querying the API directly through distilled, mutate, verify
 again, destroy, and prove the destroy by watching the resource
@@ -365,10 +337,12 @@ centralized.
 And the map has known edges. When beta.56 shipped, twenty of
 distilled's 114 services had no patches at all, and over a
 thousand operations still carried only default transport
-errors — mostly paths no resource exercises yet.
-Entitlement-gated lifecycles are pinned by probes but not run
-in anger on our account. The corpus is a record of every road
-actually driven, not a claim that every road is paved.
+errors — mostly paths no resource exercises yet. Products
+gated behind plans we don't have (Magic Transit, Total TLS)
+are implemented and tested up to the gate, but their live
+lifecycles aren't exercised on our account. The corpus is a
+record of every road actually driven, not a claim that every
+road is paved.
 
 ## Where this lands
 
