@@ -1,32 +1,39 @@
 import * as Effect from "effect/Effect";
-import type { Input } from "../../Input.ts";
+import type * as Redacted from "effect/Redacted";
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { Secret, type StoreSecretProps } from "../SecretsStore/Secret.ts";
-import {
-  GatewayProvider,
-  type GatewayProviderProps,
-} from "./GatewayProvider.ts";
+import { Secret } from "../SecretsStore/Secret.ts";
+import { GatewayProvider } from "./GatewayProvider.ts";
 
-type GatewayProviderInputProps = {
-  [K in keyof GatewayProviderProps]: Input<GatewayProviderProps[K]>;
-};
-
-export type ProviderKeyProps = Omit<
-  GatewayProviderInputProps,
-  "alias" | "secretId"
-> & {
+export interface ProviderKeyProps {
+  /**
+   * The AI Gateway the provider key belongs to. The gateway must have its
+   * `storeId` set to a Secrets Store id — Cloudflare resolves the key inside
+   * that store. Changing the gateway triggers a replacement.
+   */
+  gatewayId: string;
+  /**
+   * The upstream provider the key authenticates against (e.g. `openai`,
+   * `anthropic`, `workers-ai`). Changing the provider triggers a
+   * replacement.
+   */
+  providerSlug: string;
   /**
    * The Secrets Store attached to the AI Gateway via `storeId`.
    */
-  store: Input<StoreSecretProps["store"]>;
+  store: {
+    storeId: string;
+    accountId: string;
+  };
   /**
    * The provider API key. Stored in Cloudflare Secrets Store and never bound
    * into the Worker runtime.
    */
-  value: Input<StoreSecretProps["value"]>;
+  value: Redacted.Redacted<string>;
   /**
-   * Alias distinguishing multiple keys for the same provider.
+   * Alias distinguishing multiple keys for the same provider. Changing the
+   * alias renames the backing secret, replacing it and the provider config.
    * @default "default"
    */
   alias?: string;
@@ -34,7 +41,24 @@ export type ProviderKeyProps = Omit<
    * Optional free-form description on the Secrets Store secret.
    */
   comment?: string;
-};
+  /**
+   * Whether this key is the gateway's default credential for the provider
+   * (used when a request does not name a specific key).
+   * @default false
+   */
+  defaultConfig?: boolean;
+  /**
+   * Maximum number of requests allowed per `rateLimitPeriod` through this
+   * key. Omit for no limit. Changing the limit triggers a replacement
+   * (Cloudflare exposes no update API for provider configs).
+   */
+  rateLimit?: number;
+  /**
+   * The rate limit window in seconds.
+   * @default 60
+   */
+  rateLimitPeriod?: number;
+}
 
 export type ProviderKey = {
   /**
@@ -109,7 +133,7 @@ export type ProviderKey = {
  *
  * @see https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/
  */
-export const ProviderKey = (id: string, props: ProviderKeyProps) =>
+export const ProviderKey = (id: string, props: InputProps<ProviderKeyProps>) =>
   Effect.gen(function* () {
     const alias = props.alias ?? "default";
     const secret = yield* Secret("Secret", {
