@@ -401,6 +401,104 @@ test.provider("cors rules are added, updated, and removed", (stack) =>
   }).pipe(logLevel),
 );
 
+test.provider("cors reconciliation converges drift and adoption", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const bucketName = "alchemy-test-r2-cors-drift";
+    const rangeReads = {
+      id: "range-reads",
+      allowed: {
+        methods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
+        origins: ["https://map.example.com"],
+        headers: ["range"],
+      },
+      exposeHeaders: ["etag"],
+      maxAgeSeconds: 3600,
+    };
+    const foreignRule = {
+      id: "foreign",
+      allowed: {
+        methods: ["DELETE" as const],
+        origins: ["https://other.example.com"],
+      },
+    };
+
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("DriftCorsBucket", {
+          name: bucketName,
+          cors: [rangeReads],
+        });
+      }),
+    );
+
+    // Drift: overwrite the CORS configuration out-of-band.
+    yield* r2.putBucketCors({
+      accountId,
+      bucketName,
+      rules: [foreignRule],
+    });
+
+    // Re-deploy with a changed rule. Reconcile diffs desired against
+    // *observed* cloud state (not olds), so the foreign rule is replaced
+    // even though olds still describes the original rule.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("DriftCorsBucket", {
+          name: bucketName,
+          cors: [{ ...rangeReads, maxAgeSeconds: 7200 }],
+        });
+      }),
+    );
+
+    const repaired = yield* r2.getBucketCors({ accountId, bucketName });
+    expect(repaired.rules).toHaveLength(1);
+    expect(repaired.rules?.[0]?.id).toEqual("range-reads");
+    expect(repaired.rules?.[0]?.maxAgeSeconds).toEqual(7200);
+
+    // Adoption: re-drift the CORS config, then wipe local state so the next
+    // deploy adopts via `read` (output defined, olds undefined).
+    yield* r2.putBucketCors({
+      accountId,
+      bucketName,
+      rules: [foreignRule],
+    });
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: "test",
+        fqn: "DriftCorsBucket",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("DriftCorsBucket", {
+          name: bucketName,
+          cors: [rangeReads],
+        });
+      }),
+    );
+    expect(adopted.bucketName).toEqual(bucketName);
+    expect(adopted.cors).toHaveLength(1);
+    expect(adopted.cors[0]?.id).toEqual("range-reads");
+
+    const converged = yield* r2.getBucketCors({ accountId, bucketName });
+    expect(converged.rules).toHaveLength(1);
+    expect(converged.rules?.[0]?.id).toEqual("range-reads");
+    expect(converged.rules?.[0]?.allowed.origins).toEqual([
+      "https://map.example.com",
+    ]);
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(bucketName, accountId);
+  }).pipe(logLevel),
+);
+
 // R2 bucket creates are eventually consistent — a read immediately after
 // deploy can briefly return NoSuchBucket until the bucket propagates.
 const getBucketWhenReady = Effect.fn(function* (
