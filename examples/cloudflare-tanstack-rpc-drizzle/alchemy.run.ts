@@ -42,6 +42,9 @@ export default Alchemy.Stack(
     const hd = yield* Hyperdrive;
     const website = yield* Website;
 
+    // Backend does not need to be yielded here.
+    // The service binding adds it to the resource graph automatically, and there's no direct URL.
+
     return {
       websiteUrl: website.url.as<string>(),
       branchId: branch.branchId,
