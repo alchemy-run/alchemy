@@ -282,18 +282,3 @@ test.provider(
     }),
   { timeout: 240_000 },
 );
-
-// NOTE — distilled patch needed (do not apply here; reported to coordinator):
-//   service: route-53
-//   structures.ListResourceRecordSetsResponse.members.ResourceRecordSets.optional: true
-//
-// Route53 omits the `<ResourceRecordSets>` element entirely when a
-// `ListResourceRecordSets` page is empty (e.g. when `StartRecordName` points
-// past the last record — exactly what the provider's `read`/`findRecord`
-// adoption probe does for a brand-new record). distilled currently marks the
-// member required, so the response fails to parse with:
-//   SchemaError: Missing key at ["ResourceRecordSets"]
-// This blocks deploying any record through the Alchemy engine (the greenfield
-// adoption probe in Plan.ts), so this test seeds the record out of band. Once
-// the member is optional, `findRecord` should also coalesce
-// `response.ResourceRecordSets ?? []`.
