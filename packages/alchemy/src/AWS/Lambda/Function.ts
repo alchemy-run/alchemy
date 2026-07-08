@@ -928,14 +928,48 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
+import * as Scope from "effect/Scope";
 import { MinimumLogLevel } from "effect/References";
 
 import entrypoint from ${JSON.stringify(importPath)};
+
+// Register an internal extension so Lambda grants this runtime a Shutdown
+// phase. Without any registered extension the sandbox is killed with no
+// signal at all (0 ms); with an internal extension Lambda sends SIGTERM and
+// allows 500 ms before SIGKILL. A registered extension must also signal
+// readiness via the blocking \`/event/next\` long-poll or the Init phase
+// hangs — for an internal extension subscribed to no events that call never
+// resolves, so it is deliberately fired un-awaited. Registration failure is
+// non-fatal — the function still works, it just gets no shutdown window.
+// https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtime-environment.html
+if (process.env.AWS_LAMBDA_RUNTIME_API) {
+  const extensionApi = \`http://\${process.env.AWS_LAMBDA_RUNTIME_API}/2020-01-01/extension\`;
+  try {
+    const registration = await fetch(\`\${extensionApi}/register\`, {
+      method: "POST",
+      headers: { "Lambda-Extension-Name": "alchemy-graceful-shutdown" },
+      body: JSON.stringify({ events: [] }),
+    });
+    const extensionId = registration.headers.get("lambda-extension-identifier");
+    if (extensionId) {
+      void fetch(\`\${extensionApi}/event/next\`, {
+        headers: { "Lambda-Extension-Identifier": extensionId },
+      }).catch(() => undefined);
+    }
+  } catch {}
+}
+
+// Instance scope: the sandbox-lifetime layer build lives under it, and it is
+// closed on SIGTERM (Lambda's Shutdown phase) so init-level finalizers run
+// before the sandbox dies. Each invocation still gets its own request scope
+// from the handler dispatch.
+const instanceScope = Scope.makeUnsafe();
 
 const tag = Context.Service("${Self.key}")
 const layer = makeEntrypointLayer(tag, entrypoint);
@@ -962,33 +996,52 @@ const stack = Layer.effect(
   )
 );
 
-const handlerEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.handler),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        )
-      ),
+const entryLayer = layer.pipe(
+  Layer.provideMerge(stack),
+  Layer.provideMerge(Credentials.fromEnv()),
+  Layer.provideMerge(Region.fromEnv()),
+  Layer.provideMerge(platform),
+  Layer.provideMerge(
+    Layer.succeed(
+      ConfigProvider.ConfigProvider,
+      ConfigProvider.fromEnv()
     )
   ),
-  Effect.scoped
+  Layer.provideMerge(
+    Layer.succeed(
+      MinimumLogLevel,
+      process.env.DEBUG ? "Debug" : "Info",
+    )
+  ),
 );
 
-export default await Effect.runPromise(handlerEffect)
+// Build the layer stack against the instance scope (not a transient
+// \`Effect.provide\`/\`Effect.scoped\` region) so services and init-level
+// finalizers live for the sandbox and are released at Shutdown.
+const handlerEffect = Layer.buildWithScope(entryLayer, instanceScope).pipe(
+  Effect.flatMap((context) =>
+    tag.pipe(
+      Effect.flatMap(func => func.RuntimeContext.exports),
+      Effect.flatMap(exports => exports.handler),
+      Effect.provideContext(context),
+    )
+  ),
+  Scope.provide(instanceScope),
+);
+
+const handler = await Effect.runPromise(handlerEffect);
+
+// Lambda's Shutdown phase: close the instance scope so init-level
+// finalizers run, then exit inside the 500 ms budget. SIGKILL follows if we
+// overstay, so finalizers must be fast and best-effort.
+process.on("SIGTERM", () => {
+  console.log("[alchemy] SIGTERM — closing instance scope");
+  Effect.runPromise(Scope.close(instanceScope, Exit.void))
+    .catch((error) => console.error("[alchemy] shutdown finalizers failed", error))
+    .finally(() => process.exit(0));
+});
+
+export default handler;
 `,
               ),
             );

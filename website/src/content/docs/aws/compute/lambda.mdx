@@ -267,6 +267,43 @@ bun test test/integ.test.ts
 
 You now have a deployable Lambda with a public URL.
 
+## Sandbox scope vs invocation scope
+
+The init closure runs **once per sandbox**, at cold start —
+everything it builds (bindings, SDK clients) is reused by every
+invocation. Each invocation then runs with a **fresh `Scope`** that
+is settled *inline* before the handler returns: Lambda freezes the
+sandbox after the response, so unlike Workers there is no
+`waitUntil` to detach cleanup to — `Effect.addFinalizer` in a
+handler runs before the response leaves.
+
+Init-level finalizers run at **sandbox shutdown**. A Lambda sandbox
+with no registered extensions is killed with no signal at all, so
+the generated entry registers an internal extension with the
+Extensions API — that makes Lambda send `SIGTERM` and allow 500 ms
+before `SIGKILL`, and the entry uses the window to close the
+instance scope:
+
+```typescript
+Effect.gen(function* () {
+  // init: runs once per sandbox
+  yield* Effect.addFinalizer(() =>
+    // runs in the 500 ms SIGTERM window at sandbox spin-down
+    flushTelemetry().pipe(Effect.ignore),
+  );
+  return { fetch: /* per-invocation */ };
+});
+```
+
+Treat it as best-effort: half a second, and not delivered on hard
+failures (a timeout reset kills the runtime without the signal).
+Flush caches and close connections there; anything that *must*
+happen belongs in the handler, scoped to the invocation —
+`Drizzle.postgres` opens its pool on the first query of an
+invocation and closes it before the response returns. See
+[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+for the model across all runtimes.
+
 ## Where next
 
 - [S3](/aws/data/s3) — add a bucket and bind read/write operations

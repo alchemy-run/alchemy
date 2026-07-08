@@ -140,6 +140,24 @@ Effect.gen(function* () {
 `task` threads the binding's service requirement through
 automatically — no extra plumbing inside the step.
 
+## Run scope
+
+Each run-invocation of the body gets a **fresh `Scope`**, threaded
+into every `task` step and closed when the invocation settles (the
+workflow runtime has no `waitUntil`, so it settles inline). Because
+a workflow can hibernate between steps — a `sleep`, a
+`waitForEvent` — an instance may span several run-invocations, each
+with its own scope; completed tasks replay from the journal, so
+scoped resources are only re-acquired by steps that actually
+execute.
+
+Per-run resources like `Drizzle.postgres` pools follow this: the
+pool opens on the first query inside a step, is reused by every
+later step in the same invocation, and closes when the invocation
+settles. The workflow's init closure shares the isolate-lifetime
+layer build with the hosting Worker — pure assembly, no cleanup; see
+[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope).
+
 ## Trigger from a Worker
 
 Yield the workflow class in a Worker's init phase to get a typed

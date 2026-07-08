@@ -197,6 +197,34 @@ clients across a trust boundary — where payloads need schema
 validation before they touch your code — reach for
 [Effect RPC](/cloudflare/apis/effect-rpc) instead.
 
+## Isolate scope vs request scope
+
+The Worker's init closure runs **once per isolate**: the bridge
+builds your layers on the first event, and every later event —
+fetch, RPC, cron, queue — reuses them. Each event then runs with a
+**fresh `Scope`** that the bridge closes after the response via
+`ctx.waitUntil`, so `Effect.addFinalizer` in a handler runs after
+the response is sent without blocking it:
+
+```typescript
+fetch: Effect.gen(function* () {
+  yield* Effect.addFinalizer(() => flushMetrics().pipe(Effect.ignore));
+  return HttpServerResponse.text("ok");
+}),
+```
+
+Streaming responses and WebSocket upgrades transfer ownership of the
+request scope to the stream — its finalizers run when the stream
+completes instead of when the handler returns.
+
+workerd has no isolate-teardown hook, so a finalizer added in the
+init closure **never runs** — acquire anything that needs cleanup
+(connections, pools) inside handlers, where it's scoped to the
+event. `Drizzle.postgres` follows this pattern: one pool per event,
+opened on the first query, closed when the event settles. See
+[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+for the model across all runtimes.
+
 ## Custom domains
 
 The `workers.dev` URL is for development. To serve a Worker from
