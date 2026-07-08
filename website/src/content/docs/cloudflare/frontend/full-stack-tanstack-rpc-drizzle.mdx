@@ -69,7 +69,7 @@ export class Todo extends Schema.Class<Todo>("Todo")({
 
 export class TodoNotFound extends Schema.TaggedErrorClass<TodoNotFound>()(
   "TodoNotFound",
-  { id: Schema.Number },
+  { message: Schema.String, id: Schema.Number },
 ) {}
 
 export class TodoRpcs extends RpcGroup.make(
@@ -129,16 +129,16 @@ import * as Effect from "effect/Effect";
 export const NeonDatabase = Effect.gen(function* () {
   const { stage } = yield* Alchemy.Stack;
 
-  const schema = yield* Drizzle.Schema("app-schema", {
+  const schema = yield* Drizzle.Schema("Schema", {
     schema: "./src/backend/schema.ts",
     out: "./migrations",
   });
 
   const project = stage.startsWith("pr-")
-    ? yield* Neon.Project.ref("app-db", { stage: `staging-${stage}` })
-    : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
+    ? yield* Neon.Project.ref("Database", { stage: `staging-${stage}` })
+    : yield* Neon.Project("Database", { region: "aws-us-east-1" });
 
-  const branch = yield* Neon.Branch("app-branch", {
+  const branch = yield* Neon.Branch("Branch", {
     project,
     migrationsDir: schema.out,
   });
@@ -148,11 +148,21 @@ export const NeonDatabase = Effect.gen(function* () {
 
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDatabase;
-  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+  return yield* Cloudflare.Hyperdrive.Connection("Hyperdrive", {
     origin: branch.origin,
+    caching: { disabled: true },
   });
 });
 ```
+
+:::note
+Hyperdrive caches read query results for 60 seconds by default. This todo app
+wants writes to be visible immediately, so it disables caching and keeps
+Hyperdrive purely for connection pooling. Tune this to your own consistency
+needs — a common pattern is to run **two** connections, one cached (for reads
+that tolerate eventual consistency, in exchange for speed) and one uncached (for
+reads that must be immediately consistent).
+:::
 
 :::tip
 The `pr-*` branch above lets ephemeral preview stages reference a shared
@@ -163,11 +173,16 @@ its own walk-through in [Shared database across stages](/cloudflare/data/shared-
 ## 3. The backend RPC Worker
 
 `Cloudflare.Workers.RpcWorker` takes the `RpcGroup` directly in props and serves it.
-Inside Init we bind Hyperdrive once and build a Drizzle client; the handlers
-then run a query per procedure. Database failures are unexpected, so we
-`Effect.orDie` them into defects — that keeps each handler's typed error channel
-aligned with its RPC schema (`never` for list/create, `TodoNotFound` for
-toggle/delete).
+We pass `url: false` because this backend is only ever reached through the
+private service binding — there's no need for a public `workers.dev` URL. Inside
+Init we bind Hyperdrive once and build a Drizzle client; the handlers then run a
+query per procedure. Database failures are unexpected, so we `Effect.orDie` them
+into defects — that keeps each handler's typed error channel aligned with its RPC
+schema (`never` for list/create, `TodoNotFound` for toggle/delete).
+
+Note the pipe order for `toggleTodo`/`deleteTodo`: `Effect.orDie` comes **before**
+the `flatMap`, so only the database errors become defects. The `TodoNotFound`
+we raise inside the `flatMap` stays a normal, typed failure the client can catch.
 
 ```typescript
 // src/backend/api.ts
@@ -183,7 +198,7 @@ import { relations, Todos } from "./schema.ts";
 
 export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   "Backend",
-  { main: import.meta.filename, schema: TodoRpcs },
+  { main: import.meta.filename, url: false, schema: TodoRpcs },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.postgres(conn.connectionString, { relations });
@@ -216,10 +231,12 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
           .where(eq(Todos.id, id))
           .returning()
           .pipe(
+            Effect.orDie, // DB errors -> defects; TodoNotFound below stays a failure
             Effect.flatMap(([row]) =>
-              row ? Effect.succeed(new Todo(row)) : new TodoNotFound({ id }),
+              row
+                ? Effect.succeed(new Todo(row))
+                : new TodoNotFound({ message: `Todo ${id} not found`, id }),
             ),
-            Effect.orDie,
           ),
 
       deleteTodo: ({ id }) =>
@@ -228,10 +245,12 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
           .where(eq(Todos.id, id))
           .returning()
           .pipe(
-            Effect.flatMap(([row]) =>
-              row ? Effect.succeed(row.id) : new TodoNotFound({ id }),
-            ),
             Effect.orDie,
+            Effect.flatMap(([row]) =>
+              row
+                ? Effect.succeed(row.id)
+                : new TodoNotFound({ message: `Todo ${id} not found`, id }),
+            ),
           ),
     });
 
@@ -247,8 +266,8 @@ A few things worth calling out:
 - `new Todo(row)` works because the Drizzle row's shape matches the `Todo`
   schema (including `createdAt: Schema.Date`). The class instance is then
   encoded by the RPC server and decoded back into a `Todo` on the client.
-- A missing row yields `new TodoNotFound({ id })` — a yieldable tagged error —
-  which the client receives as a typed value, not an HTTP status code.
+- A missing row yields `new TodoNotFound({ message, id })` — a yieldable tagged
+  error — which the client receives as a typed value, not an HTTP status code.
 - The serialization (`RpcSerialization.layerJson`) **must** match the client.
 
 ## 4. Wire it into the Stack
@@ -289,12 +308,14 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const { branch } = yield* NeonDatabase;
     const hd = yield* Hyperdrive;
-    const backend = yield* Backend;
     const website = yield* Website;
+
+    // `Backend` doesn't need to be yielded here: the `BACKEND` service binding
+    // on `Website` already pulls it into the resource graph, and it has no
+    // public URL of its own (`url: false`), so there's nothing to return.
 
     return {
       websiteUrl: website.url.as<string>(),
-      backendUrl: backend.url.as<string>(),
       branchId: branch.branchId,
       hyperdriveId: hd.hyperdriveId,
     };
@@ -308,45 +329,36 @@ reads `env.BACKEND` from it.
 ## 5. The `/rpc` proxy route
 
 The browser can't open a service binding, so a TanStack Start server route
-forwards RPC traffic to the backend. Declaring an `ANY` handler lets it pass
-through whatever method/body the RPC protocol sends:
+forwards RPC traffic to the backend. An `ANY` handler passes whatever
+method/body the RPC protocol sends straight through to the binding — the
+incoming `Request` is forwarded as-is:
 
 ```typescript
 // src/routes/rpc.ts
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "../env.ts";
+import { env } from "cloudflare:workers";
 
 export const Route = createFileRoute("/rpc")({
   server: {
     handlers: {
-      ANY: async ({ request }) => {
-        const contentType = request.headers.get("content-type");
-        return await env.BACKEND.fetch("https://backend/rpc", {
-          method: request.method,
-          headers: contentType ? { "content-type": contentType } : undefined,
-          body: request.body ? await request.text() : undefined,
-          signal: request.signal,
-          redirect: "manual",
-        });
-      },
+      ANY: async ({ request }) => env.BACKEND.fetch(request),
     },
   },
 });
 ```
 
-`env` is a small proxy over `cloudflare:workers` so the binding resolves both in
-`alchemy dev` and in production:
+To type `env.BACKEND`, augment the `cloudflare:workers` module with `WebsiteEnv`
+in an ambient declaration:
 
 ```typescript
-// src/env.ts
-import * as cf from "cloudflare:workers";
+// src/env.d.ts
 import type { WebsiteEnv } from "../alchemy.run.ts";
 
-export const env = new Proxy({} as WebsiteEnv, {
-  get(_, prop) {
-    return cf.env[prop as keyof typeof cf.env];
-  },
-});
+declare module "cloudflare:workers" {
+  namespace Cloudflare {
+    interface Env extends WebsiteEnv {}
+  }
+}
 ```
 
 ## 6. The atom RPC client
