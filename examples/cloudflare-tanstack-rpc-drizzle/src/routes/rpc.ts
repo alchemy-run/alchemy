@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
-import type { WebsiteEnv } from "../../alchemy.run.ts";
 
 /**
  * Same-origin proxy for the browser's `AtomRpc` client. The browser can't use a
@@ -13,18 +12,7 @@ export const Route = createFileRoute("/rpc")({
   server: {
     handlers: {
       ANY: async ({ request }) => {
-        return await (env as WebsiteEnv).BACKEND.fetch("https://backend/rpc", {
-          method: request.method,
-          headers: request.body
-            ? {
-                "content-type":
-                  request.headers.get("content-type") ?? "application/json",
-              }
-            : undefined,
-          body: request.body ? await request.text() : undefined,
-          signal: request.signal,
-          redirect: "manual",
-        });
+        return await env.BACKEND.fetch(request);
       },
     },
   },

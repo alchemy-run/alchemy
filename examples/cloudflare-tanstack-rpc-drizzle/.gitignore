@@ -3,3 +3,4 @@ node_modules
 .nitro
 .output
 dist
+!src/env.d.ts

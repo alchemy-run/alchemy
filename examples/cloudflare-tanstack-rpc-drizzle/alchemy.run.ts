@@ -40,12 +40,10 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const { branch } = yield* NeonDatabase;
     const hd = yield* Hyperdrive;
-    const backend = yield* Backend;
     const website = yield* Website;
 
     return {
       websiteUrl: website.url.as<string>(),
-      backendUrl: backend.url.as<string>(),
       branchId: branch.branchId,
       hyperdriveId: hd.hyperdriveId,
     };

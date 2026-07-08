@@ -58,9 +58,8 @@ describe.each([true, false])(
     test(
       "deploys and exposes urls + db identifiers",
       Effect.gen(function* () {
-        const { websiteUrl, backendUrl, branchId, hyperdriveId } = yield* stack;
+        const { websiteUrl, branchId, hyperdriveId } = yield* stack;
         expect(websiteUrl).toBeString();
-        expect(backendUrl).toBeString();
         expect(branchId).toBeString();
         expect(hyperdriveId).toBeString();
       }),

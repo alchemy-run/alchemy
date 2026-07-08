@@ -19,6 +19,7 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   "Backend",
   {
     main: import.meta.filename,
+    url: false, // disable workers.dev URL; we use the service binding instead
     schema: TodoRpcs,
   },
   Effect.gen(function* () {
@@ -56,7 +57,7 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
           .where(eq(Todos.id, id))
           .returning()
           .pipe(
-            Effect.orDie,
+            Effect.orDie, // this comes before flatMap so that database errors are converted to defects, while TodoNotFound remains a failure
             Effect.flatMap(([row]) =>
               row
                 ? Effect.succeed(new Todo(row))
