@@ -1,7 +1,6 @@
-import type { ListGroup } from "alchemy/Dashboard/Projections";
 import { LayoutGroup, MotionConfig, motion } from "motion/react";
 import { memo, useMemo } from "react";
-import { Search, X } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import {
   dashboardStore,
   isDimmed,
@@ -22,7 +21,6 @@ import {
   chipStyle,
   CLOUD_COLORS,
   cloudOf,
-  EYEBROW,
   NEUTRAL_COLOR,
   PLAN_COLORS,
   PLAN_LABELS,
@@ -30,6 +28,7 @@ import {
   RESULT_LABELS,
   serviceOf,
   statusColor,
+  statusInFlight,
   SUNK_INPUT,
   typeName,
 } from "../theme.ts";
@@ -47,46 +46,32 @@ const ROW_TRANSITION = {
 const ROW_INITIAL = { opacity: 0 } as const;
 const ROW_ANIMATE = { opacity: 1 } as const;
 
-const GROUP_LABELS: Record<ListGroup, string> = {
-  failed: "Failed",
-  "in-flight": "In flight",
-  pending: "Pending",
-  completed: "Completed",
-  other: "Other",
-};
-
-const GROUP_COLORS: Record<ListGroup, string> = {
-  failed: "var(--alc-danger)",
-  "in-flight": "var(--alc-warn)",
-  pending: "var(--alc-muted)",
-  completed: "var(--alc-success)",
-  other: "var(--alc-muted)",
-};
-
 /**
- * The List view: structure nodes grouped by effective status in pipeline
- * order (the `listGroupsOf` projection). Group membership comes from the
- * projection; each row then subscribes to its OWN fqn's node/decoration
- * slice, so a decorate patch re-renders exactly that row.
+ * The List view: ONE flat list in a STABLE alphabetical order. Rows never
+ * move while a deployment runs — group-by-status was tried and re-bucketed
+ * rows on every transition, which read as chaos. Instead each row's
+ * indicators (plan chip, spinner, result chip, status color) change in
+ * place; motion only eases genuine structural changes (a node entering or
+ * leaving the stack).
  */
 export const ListView = memo(function ListView() {
   const groups = useProjection("list");
   const filter = useFilter();
 
-  // the filter REMOVES rows here (unlike the canvas, which dims); empty
-  // groups disappear with their rows
-  const visibleGroups = useMemo(() => {
+  // flatten the projection's groups and impose a stable, state-independent
+  // order; the filter REMOVES rows here (unlike the canvas, which dims)
+  const rows = useMemo(() => {
+    const all = groups.flatMap((group) => group.nodes);
+    all.sort(
+      (a, b) =>
+        a.logicalId.localeCompare(b.logicalId) || a.fqn.localeCompare(b.fqn),
+    );
     const query = filter.trim().toLowerCase();
     if (query === "") {
-      return groups;
+      return all;
     }
     const state = dashboardStore.getState();
-    return groups
-      .map((group) => ({
-        ...group,
-        nodes: group.nodes.filter((node) => !isDimmed(state, node.fqn)),
-      }))
-      .filter((group) => group.nodes.length > 0);
+    return all.filter((node) => !isDimmed(state, node.fqn));
   }, [groups, filter]);
 
   if (groups.length === 0) {
@@ -99,42 +84,20 @@ export const ListView = memo(function ListView() {
   return (
     <MotionConfig reducedMotion="user">
       <LayoutGroup>
-        <div className="mx-auto max-w-4xl space-y-6 p-6">
+        <div className="mx-auto max-w-4xl space-y-4 p-6">
           <FilterBar />
-          {visibleGroups.length === 0 && (
+          {rows.length === 0 && (
             <p className="p-8 text-center font-serif text-[15px] text-[var(--alc-fg-3)]">
               No resources match the filter
             </p>
           )}
-          {visibleGroups.map((group) => (
-            <motion.section
-              key={group.group}
-              layout
-              initial={ROW_INITIAL}
-              animate={ROW_ANIMATE}
-              transition={ROW_TRANSITION}
-            >
-              <h2 className={`${EYEBROW} mb-2 flex items-center gap-2`}>
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: GROUP_COLORS[group.group] }}
-                />
-                {GROUP_LABELS[group.group]}
-                <span className="text-[var(--alc-fg-4)]">
-                  {group.nodes.length}
-                </span>
-              </h2>
-              {/* NO overflow-hidden: a row flying in from another group is
-                  rendered in its new parent mid-flight and would be clipped
-                  invisible; first:/last: rounding on the rows keeps the
-                  container's corners instead */}
-              <div className="rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)] shadow-[var(--alc-shadow-sm)]">
-                {group.nodes.map((node) => (
-                  <Row key={node.fqn} fqn={node.fqn} />
-                ))}
-              </div>
-            </motion.section>
-          ))}
+          {rows.length > 0 && (
+            <div className="rounded-[var(--alc-radius-lg)] border border-[var(--alc-hairline-2)] bg-[var(--alc-bg-elev-1)] shadow-[var(--alc-shadow-sm)]">
+              {rows.map((node) => (
+                <Row key={node.fqn} fqn={node.fqn} />
+              ))}
+            </div>
+          )}
         </div>
       </LayoutGroup>
     </MotionConfig>
@@ -241,14 +204,18 @@ const Row = memo(function Row({ fqn }: { fqn: string }) {
           </span>
         ) : null}
         <span
-          className="inline-flex items-center gap-1.5"
+          className="inline-flex w-28 items-center gap-1.5"
           style={{ color: statusColor(status) }}
         >
-          <span
-            className="h-1.5 w-1.5 rounded-full"
-            style={{ background: statusColor(status) }}
-          />
-          {status}
+          {statusInFlight(status) ? (
+            <Loader2 size={12} className="shrink-0 animate-spin" />
+          ) : (
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ background: statusColor(status) }}
+            />
+          )}
+          <span className="truncate">{status}</span>
         </span>
       </span>
     </motion.button>
