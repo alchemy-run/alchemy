@@ -68,6 +68,13 @@ function ToolCard(part: {
   );
 }
 
+const suggestions = [
+  "wager 10 coins on a d20",
+  "wager 100 coins on a d6", // over the approval threshold — parks an ask
+  "roll two d8s and tell me if I beat a 10",
+  "what games can we play here?",
+];
+
 export function App() {
   const [input, setInput] = useState("");
   const { messages, sendMessage, status } = useChat({
@@ -81,6 +88,22 @@ export function App() {
         <span className="status">{status}</span>
       </header>
       <main>
+        {messages.length === 0 && (
+          <div className="suggestions">
+            <p className="suggestions-hint">
+              The croupier is at the table. Try one of these:
+            </p>
+            {suggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                className="suggestion"
+                onClick={() => sendMessage({ text: suggestion })}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
         {messages.map((message) => (
           <div key={message.id} className={`message ${message.role}`}>
             {message.parts.map((part, index) => {
