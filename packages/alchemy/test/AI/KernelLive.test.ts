@@ -52,6 +52,17 @@ You are a chief of staff who cannot do arithmetic at all. For any
 arithmetic question, delegate the ENTIRE question to ${Mathematician}
 verbatim, then repeat its final answer as plain digits.` {}
 
+class Auditor extends AI.Agent<Auditor>()("Auditor")`
+You are a strict auditor. Verify claims independently and answer in
+EXACTLY the JSON format you are asked for — nothing else.` {}
+
+class AuditedCompute extends AI.Loop<AuditedCompute>()("AuditedCompute")`
+You compute arithmetic expressions step by step. Use ${Multiply} for
+every single multiplication, one call per step.
+${AI.until(S.Struct({ answer: S.Number }))`the expression is fully computed`}
+${AI.check(Auditor)`re-derive the arithmetic yourself and accept only an exactly correct answer`}
+${AI.budget({ iterations: 6 })}` {}
+
 // ─── physics ─────────────────────────────────────────────────────
 
 const ModelLive = AnthropicLanguageModel.layer({
@@ -547,6 +558,57 @@ status in one short sentence.` {}
         if (outcome._tag === "Completed") {
           expect(outcome.text.toLowerCase()).toMatch(/launch|dandelion/);
         }
+      }),
+    { timeout: 120_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "AI.check: a real judge ratifies a real loop's claim",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const kernelLayer = AI.memory.pipe(Layer.provide(ModelLive));
+        const { value, trace } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const compute = yield* kernel.interpret(AuditedCompute);
+            const value = yield* compute.dispatch(
+              "Compute 7 * 8 and resolve with the final answer.",
+            );
+            const trace = yield* Stream.runCollect(
+              kernel
+                .trace("AuditedCompute")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "run.resolved"),
+                ),
+            );
+            return { value, trace };
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              kernelLayer,
+              harness.layer,
+              AI.layer(Auditor).pipe(
+                Layer.provide([kernelLayer, RuntimeContext.phantom]),
+              ),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        // the claim was graded before it was believed: the verdict row
+        // precedes the acceptance in the loop's own Trace
+        const types = trace.map((event) => event.type);
+        expect(types).toContain("check.requested");
+        expect(types.indexOf("check.verdict")).toBeLessThan(
+          types.indexOf("run.resolved"),
+        );
+        const verdict = trace.find((event) => event.type === "check.verdict")!;
+        expect((verdict.payload as any).verdict).toBe("goal-met");
+        // and the ratified value is correct
+        expect(value).toEqual({ answer: 56 });
+        expect(harness.invocations).toContainEqual({ a: 7, b: 8 });
       }),
     { timeout: 120_000 },
   );

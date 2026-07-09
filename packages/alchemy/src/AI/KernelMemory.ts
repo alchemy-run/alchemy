@@ -17,6 +17,7 @@ import * as Toolkit from "effect/unstable/ai/Toolkit";
 import { isAgent } from "./Agent.ts";
 import { Ask, AskHub, makeMemoryAskHub } from "./Ask.ts";
 import { type Budget, isBudget } from "./Budget.ts";
+import { type Check, isCheck } from "./Check.ts";
 import { BudgetExceeded, KernelError, Refused } from "./Errors.ts";
 import { type Halt, isHalt } from "./Halt.ts";
 import { eventId } from "./Ids.ts";
@@ -674,6 +675,43 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         const budget = (term.refs.find(isBudget) as Budget | undefined)?.limits;
         const policy = yield* KernelPolicy;
 
+        // ── the check (§2.5/§8.2): maker/checker on the stop condition.
+        // The verifier is a positional arrow the KERNEL invokes at the
+        // boundary — never a tool the worker may consult or impersonate.
+        // Its tag resolves from ambient context like any delegate, so its
+        // tool physics (run/read, never edit) are a Layer-composition
+        // fact.
+        const checkRef = term.refs.find(isCheck) as
+          | Check<any, any[]>
+          | undefined;
+        const judge =
+          checkRef === undefined
+            ? undefined
+            : yield* Effect.serviceOption(checkRef.agent as never).pipe(
+                Effect.flatMap(
+                  Option.match({
+                    onSome: (service) =>
+                      Effect.succeed(
+                        service as {
+                          dispatch: (
+                            item: unknown,
+                          ) => Effect.Effect<unknown, unknown, never>;
+                        },
+                      ),
+                    onNone: () =>
+                      Effect.die(
+                        new Error(
+                          `check agent ${checkRef.agent["~alchemy/Name"]} has no implementation in context (Req should have caught this)`,
+                        ),
+                      ),
+                  }),
+                ),
+              );
+        const checkInstructions =
+          checkRef?.template !== undefined
+            ? renderTemplate(checkRef.template, checkRef.refs)
+            : undefined;
+
         // halt-as-tool (§2.5/§9.3): the cheapest correct AI.until. The
         // model ends a run by CALLING a tool, so resolution flows through
         // the same command/settlement discipline as everything else;
@@ -766,14 +804,19 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           children,
         );
 
+        const haltProse = renderTemplate(halt.template, halt.refs);
         const system =
           renderTemplate(term.template, term.refs) +
           "\n\n# Halt condition\n" +
-          `This run ends when: ${renderTemplate(halt.template, halt.refs)}\n` +
+          `This run ends when: ${haltProse}\n` +
           "When that condition is met, call the `resolve` tool" +
           (haltSchema !== undefined ? " with the result value" : "") +
           ". If you conclude the goal is unachievable, call `give_up` " +
-          "with your evidence. Keep working until you call one of them.";
+          "with your evidence. Keep working until you call one of them." +
+          (judge !== undefined
+            ? "\nYour resolution will be independently verified; rejected " +
+              "resolutions come back with feedback."
+            : "");
 
         const maxIterations = budget?.iterations ?? policy.maxIterations ?? 24;
         const tokenCeiling =
@@ -832,16 +875,79 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                   );
                 }
 
-                // resolution first: an achieved goal trumps a give-up
+                // resolution first: an achieved goal trumps a give-up —
+                // but with a check ref, the claim is GRADED before it is
+                // believed (§8.2: the worker's claim of done-ness is not
+                // a signal)
+                let rejection: string | undefined;
                 if (currentRun.resolved !== undefined) {
-                  yield* run.emitRow(
-                    run.session,
-                    "run.resolved",
-                    run.session,
-                    "resolved",
-                    { iterations },
-                  );
-                  return currentRun.resolved.value;
+                  if (judge !== undefined) {
+                    yield* run.emitRow(
+                      run.session,
+                      "check.requested",
+                      run.session,
+                      `check-${iterations}`,
+                      { iterations },
+                    );
+                    const graded = yield* judge.dispatch(
+                      "You are the VERIFIER for a loop run — maker/checker " +
+                        "applies: the worker's claim of done-ness is not a " +
+                        "signal; verify independently.\n" +
+                        // the judge needs the run's mandate, not just the
+                        // claim: without the work item there is nothing to
+                        // verify AGAINST (a gap the live tests caught)
+                        `The run's work item: ${asText(item)}\n` +
+                        `Halt condition: ${haltProse}\n` +
+                        "The worker claims the run is complete" +
+                        (currentRun.resolved.value === undefined
+                          ? "."
+                          : ` with value: ${asText(currentRun.resolved.value)}`) +
+                        (checkInstructions !== undefined
+                          ? `\nRing grading instructions: ${checkInstructions}`
+                          : "") +
+                        '\nRespond with ONLY a JSON object: {"verdict":"goal-met"} ' +
+                        'to accept, or {"verdict":"off-goal","reason":"…"} to ' +
+                        "reject with actionable feedback.",
+                    );
+                    const verdict = parseVerdict(graded);
+                    if (verdict === undefined) {
+                      // check-failed (§9.3): a broken judge NEVER silently
+                      // re-loops; the memory kernel parks as a defect (the
+                      // ledger makes this a durable park in Phase 3)
+                      return yield* Effect.die(
+                        new Error(
+                          `check-failed: the ${termName} verifier returned an ungradable verdict`,
+                        ),
+                      );
+                    }
+                    yield* run.emitRow(
+                      run.session,
+                      "check.verdict",
+                      run.session,
+                      `verdict-${iterations}`,
+                      { iterations, ...verdict },
+                    );
+                    if (verdict.verdict === "off-goal") {
+                      // the claim is rejected: the resolution is discarded
+                      // and the judge's feedback becomes the next
+                      // iteration's first input (§2.5 off-goal arm)
+                      currentRun = {};
+                      rejection =
+                        "The verifier rejected your resolution: " +
+                        `${verdict.reason ?? "no reason given"}. Continue ` +
+                        "working and call `resolve` again when genuinely done.";
+                    }
+                  }
+                  if (rejection === undefined) {
+                    yield* run.emitRow(
+                      run.session,
+                      "run.resolved",
+                      run.session,
+                      "resolved",
+                      { iterations },
+                    );
+                    return currentRun.resolved!.value;
+                  }
                 }
                 if (currentRun.refusal !== undefined) {
                   yield* run.emitRow(
@@ -900,12 +1006,14 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                   `iteration-${iterations}`,
                   { iterations, cumulativeTokens },
                 );
-                // fold = carry the transcript; nag = the bounded reminder
+                // fold = carry the transcript; the boundary input is the
+                // judge's rejection when there is one, else the bounded nag
                 transcript = state.messages;
                 input = toMessages(
-                  "The run has not ended: the halt condition is not met and " +
-                    "you have not given up. Continue working. When done, call " +
-                    "`resolve`; if truly blocked, call `give_up` with evidence.",
+                  rejection ??
+                    "The run has not ended: the halt condition is not met and " +
+                      "you have not given up. Continue working. When done, call " +
+                      "`resolve`; if truly blocked, call `give_up` with evidence.",
                 );
               }
             }),
@@ -989,6 +1097,40 @@ interface SteerCell {
 
 const asText = (value: unknown): string =>
   typeof value === "string" ? value : JSON.stringify(value);
+
+/**
+ * Extract the judge's verdict from its (agent) dispatch outcome: the
+ * first JSON object in the completed text with a recognized `verdict`.
+ * `undefined` = ungradable ⇒ check-failed, never a silent re-loop.
+ */
+const parseVerdict = (
+  outcome: unknown,
+): { verdict: "goal-met" | "off-goal"; reason?: string } | undefined => {
+  if (
+    typeof outcome !== "object" ||
+    outcome === null ||
+    (outcome as { _tag?: unknown })._tag !== "Completed"
+  ) {
+    return undefined;
+  }
+  const match = /\{[\s\S]*\}/.exec((outcome as { text: string }).text);
+  if (match === null) return undefined;
+  try {
+    const parsed = JSON.parse(match[0]) as {
+      verdict?: unknown;
+      reason?: unknown;
+    };
+    if (parsed.verdict !== "goal-met" && parsed.verdict !== "off-goal") {
+      return undefined;
+    }
+    return {
+      verdict: parsed.verdict,
+      ...(typeof parsed.reason === "string" && { reason: parsed.reason }),
+    };
+  } catch {
+    return undefined;
+  }
+};
 
 const compileTools = Effect.fn(function* (
   refs: ReadonlyArray<unknown>,

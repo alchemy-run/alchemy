@@ -9,6 +9,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
@@ -1183,6 +1184,194 @@ describe("the loop runtime", () => {
       // the fold carried the transcript: iteration 3 still sees round 1
       expect(promptText(calls[2]!)).toContain("still looking");
     }),
+  );
+
+  it.effect(
+    "AI.check: the verifier rejects a claim, then ratifies the fix",
+    () =>
+      Effect.gen(function* () {
+        class Judge extends AI.Agent<Judge>()("Judge")`
+You are the judge. Grade strictly; never trust the worker.` {}
+        class CheckedQuest extends AI.Loop<CheckedQuest>()("CheckedQuest")`
+Find the answer using ${Grep}.
+${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}
+${AI.check(Judge)`the answer must equal 42 exactly`}
+${AI.budget({ iterations: 4 })}` {}
+
+        let judgeCalls = 0;
+        let questRounds = 0;
+        const calls: LanguageModel.ProviderOptions[] = [];
+        const model = Layer.effect(
+          LanguageModel.LanguageModel,
+          LanguageModel.make({
+            generateText: () => Effect.die(new Error("streamText only")),
+            streamText: (options) =>
+              Stream.suspend(() => {
+                calls.push(options);
+                if (
+                  JSON.stringify(options.prompt).includes("You are the judge")
+                ) {
+                  judgeCalls++;
+                  return Stream.fromIterable([
+                    ...text(
+                      judgeCalls === 1
+                        ? '{"verdict":"off-goal","reason":"41 is not 42, recount"}'
+                        : '{"verdict":"goal-met"}',
+                    ),
+                    finish("stop"),
+                  ]);
+                }
+                questRounds++;
+                return Stream.fromIterable(
+                  questRounds === 1
+                    ? [
+                        toolCall("c1", "resolve", {
+                          value: JSON.stringify({ answer: 41 }),
+                        }),
+                        finish("tool-calls"),
+                      ]
+                    : questRounds === 2
+                      ? [...text("claimed 41"), finish("stop")]
+                      : questRounds === 3
+                        ? [
+                            toolCall("c2", "resolve", {
+                              value: JSON.stringify({ answer: 42 }),
+                            }),
+                            finish("tool-calls"),
+                          ]
+                        : [...text("claimed 42"), finish("stop")],
+                );
+              }),
+          }),
+        );
+
+        const kernelLayer = AI.memory.pipe(Layer.provide(model));
+        const { value, trace } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const quest = yield* kernel.interpret(CheckedQuest);
+            const value = yield* (
+              quest as AI.LoopService<unknown, unknown, unknown>
+            ).dispatch("find it");
+            const trace = yield* Stream.runCollect(
+              kernel
+                .trace("CheckedQuest")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "run.resolved"),
+                ),
+            );
+            return { value, trace };
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              kernelLayer,
+              AI.layer(Judge).pipe(
+                Layer.provide([kernelLayer, RuntimeContext.phantom]),
+              ),
+              Layer.succeed(Grep, (() =>
+                Effect.succeed("42 spotted")) as never),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        // the fixed claim was ratified
+        expect(value).toEqual({ answer: 42 });
+        expect(judgeCalls).toBe(2);
+        // the judge saw the halt prose, the claim, and the ring instructions
+        const judgePrompt = JSON.stringify(
+          calls.find((c) =>
+            JSON.stringify(c.prompt).includes("You are the judge"),
+          )!.prompt,
+        );
+        expect(judgePrompt).toContain("the numeric answer is found");
+        expect(judgePrompt).toContain('{\\"answer\\":41}');
+        expect(judgePrompt).toContain("must equal 42 exactly");
+        // the rejection became the next iteration's first input
+        const questPrompts = calls.filter(
+          (c) => !JSON.stringify(c.prompt).includes("You are the judge"),
+        );
+        expect(promptText(questPrompts[2]!)).toContain(
+          "The verifier rejected your resolution: 41 is not 42",
+        );
+        // the grading rowed into the Trace: requested before verdict
+        const types = trace.map((event) => event.type);
+        expect(types.indexOf("check.requested")).toBeGreaterThan(-1);
+        expect(types.indexOf("check.requested")).toBeLessThan(
+          types.indexOf("check.verdict"),
+        );
+      }),
+  );
+
+  it.effect(
+    "an ungradable verdict is check-failed — never a silent re-loop",
+    () =>
+      Effect.gen(function* () {
+        class Rubber extends AI.Agent<Rubber>()("Rubber")`
+You are the rubber stamp.` {}
+        class StampedQuest extends AI.Loop<StampedQuest>()("StampedQuest")`
+Find the answer with ${Grep}.
+${AI.until(S.Struct({ answer: S.Number }))`the answer is found`}
+${AI.check(Rubber)}
+${AI.budget({ iterations: 3 })}` {}
+
+        let questRounds = 0;
+        const model = Layer.effect(
+          LanguageModel.LanguageModel,
+          LanguageModel.make({
+            generateText: () => Effect.die(new Error("streamText only")),
+            streamText: (options) =>
+              Stream.suspend(() => {
+                if (JSON.stringify(options.prompt).includes("rubber stamp")) {
+                  // no JSON: ungradable
+                  return Stream.fromIterable([
+                    ...text("LGTM!"),
+                    finish("stop"),
+                  ]);
+                }
+                questRounds++;
+                return Stream.fromIterable(
+                  questRounds === 1
+                    ? [
+                        toolCall("c1", "resolve", {
+                          value: JSON.stringify({ answer: 7 }),
+                        }),
+                        finish("tool-calls"),
+                      ]
+                    : [...text("claimed"), finish("stop")],
+                );
+              }),
+          }),
+        );
+        const kernelLayer = AI.memory.pipe(Layer.provide(model));
+        const exit = yield* Effect.exit(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const kernel = yield* AI.Kernel;
+              const quest = yield* kernel.interpret(StampedQuest);
+              return yield* (
+                quest as AI.LoopService<unknown, unknown, unknown>
+              ).dispatch("find it");
+            }),
+          ).pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                kernelLayer,
+                AI.layer(Rubber).pipe(
+                  Layer.provide([kernelLayer, RuntimeContext.phantom]),
+                ),
+                Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+                RuntimeContext.phantom,
+              ),
+            ),
+          ),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(String(exit.cause)).toContain("check-failed");
+        }
+      }),
   );
 
   it.effect("perpetual charters are rejected until the trigger runtime", () =>
