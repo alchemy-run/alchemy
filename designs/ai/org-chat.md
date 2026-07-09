@@ -88,6 +88,110 @@ The hierarchy **is** the interpolation graph: `Helpdesk → {Support,
 Engineering}`, `Engineering → {Sage, Scout}`. The UI's sidebar is a
 fold over `refs`.
 
+## 2.5 User-defined Process kinds (`Channel` is not ours to ship)
+
+The §2 sketch hides a wrong implication: that `Channel` is a primitive
+we provide. The actual goal is stronger — **users define their own
+process kinds**, customized for integration with their app, and
+instantiate them like any term:
+
+```ts
+class General extends Channel<General>()("General")`
+Casual chat for everyone. ${Sage} hangs out here.` {}
+```
+
+### The rule: a kind is a macro plus a decorator
+
+A kind must never require kernel knowledge — otherwise every kernel
+(memory, Cloudflare) needs code for every user kind and the extension
+point is dead. So a kind is defined entirely in term-space and
+Layer-space:
+
+1. **Macro (term-level):** the kind *lowers* to a plain `Process`.
+   Its charter scaffolding — the "you are a channel; simulate the
+   room" prose, the standard refs (`${AI.on(ChannelMessage)}`,
+   `${PostMessage}`, `${AI.never}`) — is spliced around the instance's
+   template by **template composition** (templates are data: concat
+   the strings arrays, concat the refs). The kernel sees an ordinary
+   `Process` term; `InterpretableTerm` stays `Agent | Process`.
+2. **Decorator (Layer-level):** the kind *wraps* the interpreted
+   `ProcessService` with its **service extension** — the verbs that
+   make it app-shaped:
+
+   ```ts
+   interface ChannelService extends ProcessService<never, Message> {
+     post(message: Message): Effect<void>          // EventBus.publish
+     timeline(after?: number): Stream<Message>     // Trace projection
+     threads(): Effect<ReadonlyArray<ThreadRef>>   // run registry read
+   }
+   ```
+
+   Every extra verb is implemented over **existing seams** (EventBus,
+   Trace, admission ledger) — the service builder is an Effect with its
+   own requirements, discharged by ordinary Layer composition. No new
+   kernel authority is minted; a kind can only re-package what any
+   consumer of the seams could do.
+3. **Meta (topology-level):** the term carries `~alchemy/Subkind:
+   "Channel"` (while `~alchemy/Kind` stays `"Process"`) plus a
+   user-defined `meta` blob. `AI.topology` reports both, the serving
+   tier passes them through untouched, and the app maps subkind →
+   component. This is the whole "extend the DSL with their own
+   interface" story for v1: **interface = service verbs (code) + meta
+   (UI)** — deliberately not a component-schema DSL.
+
+### Sketch of the kind constructor
+
+```ts
+const Channel = AI.kind("Channel", {
+  // spliced AROUND each instance's template (which becomes ${body})
+  charter: (name) => AI.charter`
+You are the #${name} channel of the workspace. Messages arrive; you
+decide how the room responds — you never answer yourself. ${AI.body}
+Open a thread for anything non-trivial. Use ${PostMessage} to speak
+as the room.
+${AI.on(ChannelMessage)}
+${AI.never`every message gets a response or an explicit pass`}`,
+
+  // decorates the interpreted ProcessService; Req here = EventBus etc.
+  service: Effect.fn(function* (process, term) {
+    const bus = yield* AI.EventBus;
+    const kernel = yield* AI.Kernel;
+    return {
+      ...process,
+      post: (message) => bus.publish(ChannelMessage, message),
+      timeline: (after) => projectMessages(kernel.trace(term.name, after)),
+    } satisfies ChannelService;
+  }),
+
+  meta: { category: "channel", icon: "hash" },
+})
+```
+
+`AI.layer(General)` then does what it always did — `kernel.interpret`
+— plus the kind's decorator; the tag `General` resolves to
+`ChannelService`. Instances remain free to interpolate their own
+members and tools (scaffold refs ∪ instance refs is the term's `Req`).
+
+### Consequences worth writing down
+
+- **`Group`, `Helpdesk`, and even our §2 `Engineering` become
+  userland.** The org-chat example ships as *proof of the kind
+  mechanism*, not as new primitives — `Channel` and `Group` are defined
+  in the example, next to the app that consumes their meta.
+- **Agent stays primitive (for now).** A kind sets control parameters
+  through scaffold refs; Agent's specialization is *kernel policy*
+  (the no-tool-calls halt is lore, not a ref), so it cannot be
+  expressed as a kind today. If that ever changes, Agent collapsing
+  into `AI.kind` would be the confirmation the abstraction is right.
+- **Kinds nest into the ordinary type machinery**: `ProcessOut/In/Err`
+  are derived from the *composed* refs, so a kind that scaffolds
+  `AI.on(ChannelMessage)` gives every instance `In = Message` for
+  free, and `AI.never` gives `Out = never`. The types teach the same
+  lesson as the charter.
+- **Two new mechanical utilities** fall out: `AI.charter` (template
+  composition with a `${AI.body}` splice point) and the `AI.kind`
+  constructor typing. Both are term-space, testable without a kernel.
+
 ## 3. Primitive extensions (each small, each independently testable)
 
 1. **`AI.topology(term)`** — a pure walk over a term's refs producing
@@ -153,16 +257,27 @@ Same vendored component stack (chat-apps.md), new shell:
 
 ## 5. Research projects
 
+- **R0 (kinds — the extension mechanism, §2.5):** template composition
+  (`AI.charter` + `${AI.body}` splice), the `AI.kind` constructor
+  typing (composed-refs channel derivation; `Context.Service<Self,
+  KindService>`), service decoration in `AI.layer`, subkind + meta
+  through topology. The org example is the proof: `Channel`/`Group`
+  live in userland. **Open questions:** can a kind's scaffold refs be
+  overridden per instance (probably no — scaffold is constitutional)?
+  do kinds compose (a kind extending a kind — defer)? how does a
+  decorator's Req surface in `AI.layer`'s type (must join the Layer's
+  requirements)?
 - **R1 (topology):** the `AI.topology` fold; how groups render vs
   channels; whether membership (who's "in" a channel) is exactly the
   agent refs or needs joins.
 - **R2 (threads as runs):** run-key steering under `AI.concurrency > 1`
   — the typed-steering design deferred from Phase 2 becomes load-bearing
-  here. This is the riskiest piece; do it second, behind a test.
-- **R3 (the room simulator):** prompt-engineering the Channel charter —
-  who-responds-first judgment, parallel dispatch discipline, steer
-  etiquette ("relay the early answer, don't restart the slow run").
-  KernelPrompts-style colocation; OrgStress-style scripted test.
+  here. This is the riskiest piece; isolate it behind tests.
+- **R3 (the room simulator):** prompt-engineering the Channel kind's
+  scaffold — who-responds-first judgment, parallel dispatch discipline,
+  steer etiquette ("relay the early answer, don't restart the slow
+  run"). Lives in the KIND's charter (userland KernelPrompts-style
+  colocation); OrgStress-style scripted test.
 - **R4 (message semantics):** is a message a trigger event, a steer, or
   both? Proposal: new message in channel = trigger (new run) unless it
   addresses an open thread → steer of that run. The channel charter
@@ -174,12 +289,18 @@ Same vendored component stack (chat-apps.md), new shell:
 
 ## 6. Build order
 
-1. `AI.topology` + `GET /api/topology` + sidebar (pure wins, no risk).
-2. `PostMessage` + `message.posted` rows + `ChannelView` projection +
-   channel timeline UI (the org becomes visible).
-3. `steer_run` tool + completion-steer wiring in the channel charter
-   (parallelism becomes coordinated).
-4. Threads as run identity (R2 — the hard one, isolated behind tests).
-5. The demo org (`#support`, `#engineering`, Helpdesk group) + the room
-   simulator charters + an OrgStress-style live test.
-6. Presence + polish; then hosting research (R5).
+1. **R0 first — the kind mechanism** (`AI.charter`, `AI.kind`,
+   decorator in `AI.layer`, subkind in topology), proven by a scripted
+   test defining a toy kind. Everything downstream builds ON it; doing
+   it later means rebuilding `Channel` twice.
+2. `AI.topology` + `GET /api/topology` + sidebar (pure wins, no risk).
+3. `PostMessage` + `message.posted` rows + `ChannelView` projection +
+   channel timeline UI (the org becomes visible) — `Channel` defined in
+   the example via `AI.kind`.
+4. `steer_run` tool + completion-steer wiring in the Channel kind's
+   scaffold (parallelism becomes coordinated).
+5. Threads as run identity (R2 — the hard one, isolated behind tests).
+6. The demo org (`#support`, `#engineering`, Helpdesk group as kind
+   instances) + the room-simulator scaffold + an OrgStress-style live
+   test.
+7. Presence + polish; then hosting research (R5).
