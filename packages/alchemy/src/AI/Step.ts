@@ -90,10 +90,16 @@ export const initialState = (options: {
   readonly session: string;
   readonly maxModelCalls?: number;
   readonly maxTokens?: number;
+  /**
+   * Seed transcript — the carried state of an outer loop's previous
+   * iteration (the kernel-default fold). The machine treats it exactly
+   * like messages it accumulated itself: pairing repair composes over it.
+   */
+  readonly messages?: ReadonlyArray<Prompt.Message>;
 }): StepState => ({
   session: options.session,
   stepIndex: 0,
-  messages: [],
+  messages: options.messages ?? [],
   pending: [],
   settled: [],
   steerQueue: [],
@@ -205,7 +211,12 @@ export const step = (
 
   switch (feedback._tag) {
     case "Dispatched": {
-      return callModel({ ...next, messages: [...feedback.input] });
+      // append: the state may carry a seeded transcript (an outer loop's
+      // previous iteration); the fresh input continues it
+      return callModel({
+        ...next,
+        messages: [...next.messages, ...feedback.input],
+      });
     }
 
     case "Steered": {

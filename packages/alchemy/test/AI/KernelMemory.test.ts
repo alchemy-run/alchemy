@@ -499,29 +499,164 @@ describe("the in-memory Kernel", () => {
       });
     }),
   );
+});
 
-  it.effect(
-    "loop terms are honestly rejected until the loop runtime lands",
-    () =>
-      Effect.gen(function* () {
-        const model = scriptedModel([]);
-        const result = yield* Effect.result(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const kernel = yield* AI.Kernel;
-              // a non-agent term: the kernel must fail typed, not die
-              return yield* kernel.interpret({
-                "~alchemy/Kind": "Loop",
-                "~alchemy/Name": "NotYet",
-              } as never);
-            }),
-          ).pipe(Effect.provide(AI.memory.pipe(Layer.provide(model.layer)))),
-        );
-        expect(result._tag).toBe("Failure");
-        if (result._tag === "Failure") {
-          expect(result.failure).toBeInstanceOf(AI.KernelError);
-          expect((result.failure as AI.KernelError).term).toBe("NotYet");
-        }
-      }),
+// ─── the loop runtime (§2.5) ─────────────────────────────────────
+
+class Quest extends AI.Loop<Quest>()("Quest")`
+Find the answer using ${Grep}.
+${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}
+${AI.budget({ iterations: 3 })}` {}
+
+class Forever extends AI.Loop<Forever>()("Forever")`
+Watch the horizon.
+${AI.never`health = a heartbeat row every iteration`}` {}
+
+/** Interpret + dispatch one work item through the Quest loop. */
+const questThrough = (
+  script: ReadonlyArray<Turn>,
+  loop: {
+    "~alchemy/Name": string;
+  } = Quest,
+) => {
+  const model = scriptedModel(script);
+  const program = Effect.scoped(
+    Effect.gen(function* () {
+      const kernel = yield* AI.Kernel;
+      const quest = yield* kernel.interpret(loop as never);
+      return yield* Effect.result(
+        (quest as AI.LoopService<unknown, unknown, unknown>).dispatch(
+          "find the answer",
+        ),
+      );
+    }),
+  );
+  return Effect.map(
+    program.pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          AI.memory.pipe(Layer.provide(model.layer)),
+          Layer.succeed(Grep, (() => Effect.succeed("42 spotted")) as never),
+          RuntimeContext.phantom,
+        ),
+      ),
+    ),
+    (result) => ({ result, ...model }),
+  );
+};
+
+describe("the loop runtime", () => {
+  it.effect("halt-as-tool: resolve ends the run with the typed value", () =>
+    Effect.gen(function* () {
+      const { result, calls } = yield* questThrough([
+        // round 1: the model resolves; round 2: it stops talking
+        () => [
+          toolCall("c1", "resolve", { value: JSON.stringify({ answer: 42 }) }),
+          finish("tool-calls"),
+        ],
+        () => [...text("resolved"), finish("stop")],
+      ]);
+      expect(result._tag).toBe("Success");
+      if (result._tag === "Success") {
+        expect(result.success).toEqual({ answer: 42 });
+      }
+      // the charter advertises the synthetic tools alongside grep
+      expect(calls[0]!.tools.map((tool) => tool.name).sort()).toEqual([
+        "give_up",
+        "grep",
+        "resolve",
+      ]);
+      // the halt prose was compiled into the system prompt
+      expect(promptText(calls[0]!)).toContain("Halt condition");
+      expect(promptText(calls[0]!)).toContain("the numeric answer is found");
+    }),
+  );
+
+  it.effect("a schema-invalid resolve bounces back for self-correction", () =>
+    Effect.gen(function* () {
+      const { result, calls } = yield* questThrough([
+        () => [
+          toolCall("c1", "resolve", {
+            value: JSON.stringify({ answer: "not a number" }),
+          }),
+          finish("tool-calls"),
+        ],
+        () => [
+          toolCall("c2", "resolve", { value: JSON.stringify({ answer: 7 }) }),
+          finish("tool-calls"),
+        ],
+        () => [...text("fixed"), finish("stop")],
+      ]);
+      // the failed resolve came back as a model-visible tool error
+      expect(promptText(calls[1]!)).toContain("resolve rejected");
+      expect(result._tag).toBe("Success");
+      if (result._tag === "Success") {
+        expect(result.success).toEqual({ answer: 7 });
+      }
+    }),
+  );
+
+  it.effect("give_up refuses the run as a typed Refused", () =>
+    Effect.gen(function* () {
+      const { result } = yield* questThrough([
+        () => [
+          toolCall("c1", "give_up", {
+            reason: "the corpus has no numbers in it",
+          }),
+          finish("tool-calls"),
+        ],
+        () => [...text("gave up"), finish("stop")],
+      ]);
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure).toBeInstanceOf(AI.Refused);
+        expect((result.failure as AI.Refused).reason).toContain("no numbers");
+      }
+    }),
+  );
+
+  it.effect("the iteration budget exceeds as a typed BudgetExceeded", () =>
+    Effect.gen(function* () {
+      // every turn completes without resolving; the boundary nags twice,
+      // then the charter's iterations: 3 ceiling fires
+      const evasive: Turn = () => [...text("still looking"), finish("stop")];
+      const { result, calls } = yield* questThrough([
+        evasive,
+        evasive,
+        evasive,
+      ]);
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure).toBeInstanceOf(AI.BudgetExceeded);
+        const budget = result.failure as AI.BudgetExceeded;
+        expect(budget.limit).toBe("iterations");
+        expect(budget.used).toBe(3);
+        expect(budget.budget).toBe(3);
+      }
+      // iteration 2's prompt carries the boundary nag
+      expect(calls).toHaveLength(3);
+      expect(promptText(calls[1]!)).toContain("The run has not ended");
+      // the fold carried the transcript: iteration 3 still sees round 1
+      expect(promptText(calls[2]!)).toContain("still looking");
+    }),
+  );
+
+  it.effect("perpetual charters are rejected until the trigger runtime", () =>
+    Effect.gen(function* () {
+      const model = scriptedModel([]);
+      const result = yield* Effect.result(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            return yield* kernel.interpret(Forever as never);
+          }),
+        ).pipe(Effect.provide(AI.memory.pipe(Layer.provide(model.layer)))),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure).toBeInstanceOf(AI.KernelError);
+        expect((result.failure as AI.KernelError).term).toBe("Forever");
+      }
+    }),
   );
 });

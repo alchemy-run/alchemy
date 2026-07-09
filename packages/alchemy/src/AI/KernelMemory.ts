@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,11 +14,13 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
-import * as Context from "effect/Context";
 import { isAgent } from "./Agent.ts";
-import { KernelError } from "./Errors.ts";
+import { type Budget, isBudget } from "./Budget.ts";
+import { BudgetExceeded, KernelError, Refused } from "./Errors.ts";
+import { type Halt, isHalt } from "./Halt.ts";
 import { eventId } from "./Ids.ts";
 import { Kernel, type KernelService } from "./Kernel.ts";
+import { isLoop } from "./Loop.ts";
 import type { Parameter } from "./Parameter.ts";
 import { renderTemplate } from "./Render.ts";
 import * as Step from "./Step.ts";
@@ -26,50 +29,47 @@ import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
 
 /**
  * The in-memory reference Kernel (design §2.6) — the smallest honest
- * implementation of the interpretation pipeline (§1.5 → §2.4):
+ * implementation of the interpretation pipeline (§1.5 → §2.4 → §2.5):
  *
- * 1. **Compile** — walk the agent term's refs; each `Tool<Self>` tag is
+ * 1. **Compile** — walk the term's refs; each `Tool<Self>` tag is
  *    resolved from the *ambient context* (which is why `interpret`
  *    carries the term's `Req`), its parameters become an `effect/ai`
  *    tool schema, and its rendered template becomes the description.
- 2. **Drive** — interpretation forks the term's **ring** (`forkScoped`,
+ *    A Loop charter's `AI.until` additionally compiles to **halt-as-tool**
+ *    (§2.5): synthetic `resolve` (input schema = the halt schema) and
+ *    `give_up` tools the kernel owns.
+ * 2. **Drive** — interpretation forks the term's **ring** (`forkScoped`,
  *    lifetime = the interpretation Scope): one serial loop draining one
  *    admission mailbox. `dispatch` = admit + join a reply seat; `send` =
- *    admit alone. Inside a turn the {@link Step} machine owns control;
- *    this kernel is just its command interpreter.
- *    `disableToolCallResolution: true` is load-bearing (§9.3):
- *    `effect/ai` never executes tools, the kernel does, so every
- *    settlement passes through the step machine's
- *    transcript/pairing/ceiling discipline.
+ *    admit alone. An Agent run is ONE step-machine turn; a Loop run
+ *    **iterates** turns per work item — same machine, same ring, with
+ *    the boundary between iterations doing the §2.5 work (steer drain
+ *    via the park, ceilings, fold = carry the transcript, nag when the
+ *    model stops without resolving). `disableToolCallResolution: true`
+ *    is load-bearing (§9.3): `effect/ai` never executes tools.
  * 3. **Settle** — tool failures are model-visible results, never thrown
- *    (`Err = never` is a theorem); harness failures (`AiError`) are
- *    defects.
- *
+ *    (`Err = never` on agents is a theorem); a Loop's typed exits are
+ *    `Refused` (ratified give-up) and `BudgetExceeded` (charter budget);
+ *    harness failures are defects.
  * 4. **Persist** — every external effect is preceded by a durable Trace
- *    row (§2.7 write-ahead: `model.requested` before the wire call,
- *    `tool.requested` before execution, terminals after) committed
- *    through the {@link TraceStore} seam — resolved via
- *    `Effect.serviceOption` with the in-memory store as the internal
- *    default (the §2.6 seam pattern), so `kernel.events` / `kernel.trace`
- *    are real streams and a different backend is one Layer away.
+ *    row (§2.7 write-ahead) through the {@link TraceStore} seam.
  *
- * Deliberately absent (later build-order steps): the loop runtime
- * (trigger/halt/fold/check refs) and the StepState stash (recovery).
- * `dispatch` resolves with the turn's {@link Step.HaltOutcome} until the
- * kernel `Message` type lands.
- */
-/**
- * The kernel-default agent policy — the execution ring's ceilings
- * (§8.2: control parameters of the innermost ring are kernel lore, never
- * charter prose). A `Context.Reference`: it has a default, so providing
- * it is optional — `Layer.succeed(KernelPolicy, { … })` tightens the
- * ceilings for a deployment or a test. Loop-charter `AI.budget` refs
- * will *narrow* these, never widen them.
+ * Deliberately absent (later build-order steps): trigger streams feeding
+ * `run()` (EventSource channels), `AI.check`/`AI.fold` agents at the
+ * boundary (the defaults apply: no check, transcript-carry fold), the
+ * StepState stash (recovery), and N-consecutive `Refused` ratification
+ * (a single evidence-bearing give_up refuses). Perpetual charters
+ * (`AI.never` / no halt) are rejected until the trigger runtime lands.
  */
 export const KernelPolicy = Context.Reference<{
   readonly maxModelCalls: number;
   /** Token ceiling per turn; unlimited when absent. */
   readonly maxTokens?: number;
+  /**
+   * Iteration cap for budget-less loops (a harness guard, not a budget).
+   * @default 24
+   */
+  readonly maxIterations?: number;
 }>("alchemy/AI/KernelPolicy", {
   defaultValue: () => ({ maxModelCalls: 24 }),
 });
@@ -83,6 +83,32 @@ const usageTokens = (usage: {
   usage.outputTokens.total === undefined
     ? undefined
     : (usage.inputTokens.total ?? 0) + (usage.outputTokens.total ?? 0);
+
+/** Parse a Budget token limit: `"5M"`, `"200k"`, `"120000"`. */
+const parseTokenBudget = (limit: string): number => {
+  const match = /^(\d+(?:\.\d+)?)\s*([kKmM])?$/.exec(limit.trim());
+  if (match === null) {
+    throw new Error(`unparseable token budget: ${JSON.stringify(limit)}`);
+  }
+  const scale =
+    match[2] === undefined ? 1 : match[2].toLowerCase() === "k" ? 1e3 : 1e6;
+  return Number(match[1]) * scale;
+};
+
+/** The result a ring's turn runner hands back to its run driver. */
+interface TurnResult {
+  readonly outcome: Step.HaltOutcome;
+  readonly state: Step.StepState;
+}
+
+type RunTurn = (options: {
+  /** Turn-unique session key (command ids derive from it). */
+  readonly session: string;
+  /** Carried transcript from the previous iteration (the default fold). */
+  readonly seed: ReadonlyArray<Prompt.Message>;
+  /** This turn's fresh input (the work item or the boundary nag). */
+  readonly input: ReadonlyArray<Prompt.Message>;
+}) => Effect.Effect<TurnResult>;
 
 export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
   Layer.effect(
@@ -99,56 +125,88 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
       );
       let oneShot = 0;
 
-      const interpretAgent = Effect.fn(function* (term: {
-        "~alchemy/Name": string;
-        template: TemplateStringsArray;
-        refs: unknown[];
+      /**
+       * The ring: ONE serial loop per process term, started when the
+       * Layer is built (forkScoped — release the Layer, the ring dies).
+       * `send` and `dispatch` are admissions into the same mailbox; a
+       * run never executes outside the ring, so single-writer discipline
+       * holds by construction. This is the local analogue of the Durable
+       * Object kernel: the mailbox is the admission ledger, `Queue.take`
+       * is the alarm wake.
+       */
+      const makeRing = Effect.fn(function* (options: {
+        readonly termName: string;
+        readonly system: string;
+        readonly compiled: CompiledTools;
+        readonly policy: { maxModelCalls: number; maxTokens?: number };
+        /** Serve one work item; a Loop's typed exits ride the error channel. */
+        readonly runItem: (
+          item: unknown,
+          run: {
+            readonly session: string;
+            readonly runTurn: RunTurn;
+            readonly emitRow: (
+              session: string,
+              type: string,
+              cause: string,
+              kind: string,
+              payload?: unknown,
+            ) => Effect.Effect<unknown>;
+          },
+        ) => Effect.Effect<unknown, unknown>;
       }) {
-        const termName = term["~alchemy/Name"];
-        const system = renderTemplate(term.template, term.refs);
-        const compiled = yield* compileTools(term.refs);
-        // ceilings from the ambient policy (a Reference: defaults apply
-        // when no Layer provides it)
-        const policy = yield* KernelPolicy;
+        const { termName, system, compiled, policy } = options;
 
         // Steering (§2.4/§9.3): a steer is an admission, never an
         // interruption. Mid-turn it lands in the ACTIVE turn's feedback
-        // inbox as `Steered` — the step machine holds it and promotes at
-        // the next model-call boundary. Between turns it parks here and
-        // enters the next turn ahead of its `Dispatched`, so the machine
-        // promotes it into round 1 (a held steer is a standing order,
-        // not a round-2 afterthought). Single-threaded mutation is safe:
-        // only the ring fiber reads, and JS gives us atomicity.
+        // inbox as `Steered`; between turns it parks here and enters the
+        // next turn ahead of its Dispatched (round-1 promotion). For a
+        // Loop this IS the §2.5 boundary drain: parked steers enter the
+        // next iteration's first round. Single-threaded mutation is safe.
         const parkedSteers: Prompt.Message[] = [];
         let activeInbox: Step.Feedback[] | undefined;
-        // set by interrupt(): the command loop abandons not-yet-started
-        // commands of the current batch (they settle as aborted via the
-        // machine's Interrupt arm) — in-flight I/O is never fiber-killed
+        // set by interrupt(): un-started commands of the current batch
+        // are abandoned (the machine settles them as aborted results);
+        // in-flight I/O is never fiber-killed
         let interruptRequested = false;
 
-        const turn = Effect.fn(function* (item: unknown) {
-          const session = `${termName}#${oneShot++}`;
-          // durable Trace rows for this ring (§2.7): deterministic ids,
-          // seq assigned by the store inside the commit
+        const emitRow = (
+          session: string,
+          type: string,
+          cause: string,
+          kind: string,
+          payload?: unknown,
+        ) =>
+          store.commit([
+            {
+              v: 1,
+              type,
+              id: eventId(cause, kind),
+              durable: true,
+              ring: [termName],
+              session,
+              cause,
+              payload,
+            },
+          ]);
+
+        const runTurn: RunTurn = Effect.fn(function* ({
+          session,
+          seed,
+          input,
+        }) {
           const emit = (
             type: string,
             cause: string,
             kind: string,
             payload?: unknown,
-          ) =>
-            store.commit([
-              {
-                v: 1,
-                type,
-                id: eventId(cause, kind),
-                durable: true,
-                ring: [termName],
-                session,
-                cause,
-                payload,
-              },
-            ]);
-          let state = Step.initialState({ session, ...policy });
+          ) => emitRow(session, type, cause, kind, payload);
+
+          let state = Step.initialState({
+            session,
+            messages: seed,
+            ...policy,
+          });
           let steerOrdinal = 0;
           // parked steers precede Dispatched: the machine queues them
           // first, so round 1's boundary already promotes them
@@ -161,196 +219,196 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                   },
                 ]
               : []),
-            { _tag: "Dispatched", input: toMessages(item) },
+            { _tag: "Dispatched", input },
           ];
           activeInbox = inbox;
           interruptRequested = false; // an old interrupt never leaks forward
 
-          while (true) {
-            const feedback = inbox.shift();
-            if (feedback === undefined) {
-              return yield* Effect.die(
-                new Error(`step machine stalled without halting (${session})`),
-              );
-            }
-            if (feedback._tag === "Interrupt" && inbox.length > 0) {
-              // already-paid work folds into the transcript first (its
-              // commands are abandoned by the flag); the interrupt then
-              // settles whatever remains un-run
-              inbox.push(feedback);
-              continue;
-            }
-            if (feedback._tag === "Steered") {
-              // a steer is a durable admission — it must survive recovery
-              // and be visible to folds, so it rows into the Trace
-              yield* emit("turn.steered", session, `steer-${steerOrdinal++}`, {
-                messages: feedback.messages.length,
-              });
-            }
-            const [next, commands] = Step.step(state, feedback);
-            state = next;
+          try {
+            while (true) {
+              const feedback = inbox.shift();
+              if (feedback === undefined) {
+                return yield* Effect.die(
+                  new Error(
+                    `step machine stalled without halting (${session})`,
+                  ),
+                );
+              }
+              if (feedback._tag === "Interrupt" && inbox.length > 0) {
+                // already-paid work folds into the transcript first (its
+                // commands are abandoned by the flag); the interrupt then
+                // settles whatever remains un-run
+                inbox.push(feedback);
+                continue;
+              }
+              if (feedback._tag === "Steered") {
+                // a steer is a durable admission — it must survive
+                // recovery and be visible to folds, so it rows the Trace
+                yield* emit(
+                  "turn.steered",
+                  session,
+                  `steer-${steerOrdinal++}`,
+                  { messages: feedback.messages.length },
+                );
+              }
+              const [next, commands] = Step.step(state, feedback);
+              state = next;
 
-            for (const command of commands) {
-              // an interrupt abandons commands that haven't started; the
-              // machine's Interrupt arm settles them as aborted results
-              if (interruptRequested && command._tag !== "Halt") break;
-              switch (command._tag) {
-                case "CallModel": {
-                  // write-ahead: the intent row is durable BEFORE the wire call
-                  yield* emit("model.requested", command.id, "request");
+              for (const command of commands) {
+                // an interrupt abandons commands that haven't started
+                if (interruptRequested && command._tag !== "Halt") break;
+                switch (command._tag) {
+                  case "CallModel": {
+                    // write-ahead: durable intent BEFORE the wire call
+                    yield* emit("model.requested", command.id, "request");
 
-                  // fold the streaming parts into the distilled ModelOutcome;
-                  // text deltas fan out to the firehose as LIVE events
-                  // (durable: false — no seq, invisible to the trace, §2.3)
-                  const folded = {
-                    text: "",
-                    toolCalls: [] as Step.PendingToolCall[],
-                    finishReason: "unknown",
-                    tokens: undefined as number | undefined,
-                    usage: undefined as unknown,
-                    deltas: 0,
-                  };
-                  yield* model
-                    .streamText({
-                      prompt: Prompt.fromMessages([
-                        Prompt.makeMessage("system", { content: system }),
-                        ...command.messages,
-                      ]),
-                      toolkit: compiled.toolkit as never,
-                      disableToolCallResolution: true,
-                    })
-                    .pipe(
-                      // widened: the `as never` toolkit collapses the inferred
-                      // Tools to {}, which drops tool-call from the part union
-                      Stream.runForEach((part: Response.AnyPart) => {
-                        switch (part.type) {
-                          case "text-delta":
-                            return Effect.sync(() => {
-                              folded.text += part.delta;
-                              return folded.deltas++;
-                            }).pipe(
-                              Effect.flatMap((ordinal) =>
-                                store.commit([
-                                  {
-                                    v: 1,
-                                    type: "model.delta",
-                                    id: eventId(
-                                      command.id,
-                                      "delta",
-                                      String(ordinal),
-                                    ),
-                                    durable: false,
-                                    ring: [termName],
-                                    session,
-                                    cause: command.id,
-                                    payload: { delta: part.delta },
-                                  },
-                                ]),
-                              ),
-                              Effect.asVoid,
-                            );
-                          case "tool-call":
-                            return Effect.sync(() => {
-                              folded.toolCalls.push({
-                                callId: part.id,
-                                name: part.name,
-                                params: part.params,
+                    // fold streaming parts into the distilled ModelOutcome;
+                    // text deltas fan out to the firehose as LIVE events
+                    // (durable: false — invisible to the trace, §2.3)
+                    const folded = {
+                      text: "",
+                      toolCalls: [] as Step.PendingToolCall[],
+                      finishReason: "unknown",
+                      tokens: undefined as number | undefined,
+                      usage: undefined as unknown,
+                      deltas: 0,
+                    };
+                    yield* model
+                      .streamText({
+                        prompt: Prompt.fromMessages([
+                          Prompt.makeMessage("system", { content: system }),
+                          ...command.messages,
+                        ]),
+                        toolkit: compiled.toolkit as never,
+                        disableToolCallResolution: true,
+                      })
+                      .pipe(
+                        // widened: the `as never` toolkit collapses the
+                        // inferred Tools to {}, dropping tool-call parts
+                        Stream.runForEach((part: Response.AnyPart) => {
+                          switch (part.type) {
+                            case "text-delta":
+                              return Effect.sync(() => {
+                                folded.text += part.delta;
+                                return folded.deltas++;
+                              }).pipe(
+                                Effect.flatMap((ordinal) =>
+                                  store.commit([
+                                    {
+                                      v: 1,
+                                      type: "model.delta",
+                                      id: eventId(
+                                        command.id,
+                                        "delta",
+                                        String(ordinal),
+                                      ),
+                                      durable: false,
+                                      ring: [termName],
+                                      session,
+                                      cause: command.id,
+                                      payload: { delta: part.delta },
+                                    },
+                                  ]),
+                                ),
+                                Effect.asVoid,
+                              );
+                            case "tool-call":
+                              return Effect.sync(() => {
+                                folded.toolCalls.push({
+                                  callId: part.id,
+                                  name: part.name,
+                                  params: part.params,
+                                });
                               });
-                            });
-                          case "finish":
-                            return Effect.sync(() => {
-                              folded.finishReason = part.reason;
-                              folded.usage = part.usage;
-                              folded.tokens = usageTokens(part.usage);
-                            });
-                          default:
-                            return Effect.void;
-                        }
-                      }),
-                      // harness failure, not an agent error (Err = never)
-                      Effect.orDie,
-                    );
+                            case "finish":
+                              return Effect.sync(() => {
+                                folded.finishReason = part.reason;
+                                folded.usage = part.usage;
+                                folded.tokens = usageTokens(part.usage);
+                              });
+                            default:
+                              return Effect.void;
+                          }
+                        }),
+                        // harness failure, not an agent error
+                        Effect.orDie,
+                      );
 
-                  yield* emit("model.completed", command.id, "response", {
-                    finishReason: folded.finishReason,
-                    usage: folded.usage,
-                    toolCalls: folded.toolCalls.map((call) => call.callId),
-                  });
-                  inbox.push({
-                    _tag: "ModelResponse",
-                    commandId: command.id,
-                    outcome: {
-                      text: folded.text,
-                      toolCalls: folded.toolCalls,
+                    yield* emit("model.completed", command.id, "response", {
                       finishReason: folded.finishReason,
-                      tokens: folded.tokens,
-                    },
-                  });
-                  break;
-                }
-                case "CallTool": {
-                  // write-ahead: intent before execution (§2.7)
-                  yield* emit("tool.requested", command.id, "request", {
-                    callId: command.callId,
-                    name: command.name,
-                  });
-                  const handler = compiled.handlers.get(command.name);
-                  const settled = handler
-                    ? yield* Effect.result(handler(command.params))
-                    : Result.fail(`no such tool: ${command.name}`);
-                  const isFailure = Result.isFailure(settled);
-                  yield* emit(
-                    isFailure ? "tool.failed" : "tool.completed",
-                    command.id,
-                    "result",
-                    { callId: command.callId, name: command.name },
-                  );
-                  inbox.push({
-                    _tag: "ToolSettled",
-                    callId: command.callId,
-                    isFailure,
-                    result: Result.isSuccess(settled)
-                      ? settled.success
-                      : // model-visible failure text, never a thrown error
-                        String(
-                          (settled as Result.Failure<unknown, unknown>).failure,
-                        ),
-                  });
-                  break;
-                }
-                case "Halt": {
-                  // a steer that raced the final round is not lost — it
-                  // parks and enters the next turn's round 1
-                  for (const remaining of inbox) {
-                    if (remaining._tag === "Steered") {
-                      parkedSteers.push(...remaining.messages);
-                    }
+                      usage: folded.usage,
+                      toolCalls: folded.toolCalls.map((call) => call.callId),
+                    });
+                    inbox.push({
+                      _tag: "ModelResponse",
+                      commandId: command.id,
+                      outcome: {
+                        text: folded.text,
+                        toolCalls: folded.toolCalls,
+                        finishReason: folded.finishReason,
+                        tokens: folded.tokens,
+                      },
+                    });
+                    break;
                   }
-                  yield* emit("turn.halted", command.id, "halt", {
-                    outcome: command.outcome._tag,
-                    ...(command.outcome._tag === "Interrupted" && {
-                      abandoned: command.outcome.abandoned,
-                    }),
-                  });
-                  return command.outcome;
+                  case "CallTool": {
+                    // write-ahead: intent before execution (§2.7)
+                    yield* emit("tool.requested", command.id, "request", {
+                      callId: command.callId,
+                      name: command.name,
+                    });
+                    const handler = compiled.handlers.get(command.name);
+                    const settled = handler
+                      ? yield* Effect.result(handler(command.params))
+                      : Result.fail(`no such tool: ${command.name}`);
+                    const isFailure = Result.isFailure(settled);
+                    yield* emit(
+                      isFailure ? "tool.failed" : "tool.completed",
+                      command.id,
+                      "result",
+                      { callId: command.callId, name: command.name },
+                    );
+                    inbox.push({
+                      _tag: "ToolSettled",
+                      callId: command.callId,
+                      isFailure,
+                      result: Result.isSuccess(settled)
+                        ? settled.success
+                        : // model-visible failure text, never thrown
+                          String(
+                            (settled as Result.Failure<unknown, unknown>)
+                              .failure,
+                          ),
+                    });
+                    break;
+                  }
+                  case "Halt": {
+                    // a steer racing the final round parks for the next turn
+                    for (const remaining of inbox) {
+                      if (remaining._tag === "Steered") {
+                        parkedSteers.push(...remaining.messages);
+                      }
+                    }
+                    yield* emit("turn.halted", command.id, "halt", {
+                      outcome: command.outcome._tag,
+                      ...(command.outcome._tag === "Interrupted" && {
+                        abandoned: command.outcome.abandoned,
+                      }),
+                    });
+                    return { outcome: command.outcome, state };
+                  }
                 }
               }
             }
+          } finally {
+            activeInbox = undefined;
           }
         });
 
-        // The ring: ONE serial loop per process term, started when the
-        // Layer is built (forkScoped ties its lifetime to the interpretation
-        // Scope — release the Layer, the ring dies). `send` and `dispatch`
-        // are both admissions into the same mailbox; a turn never runs
-        // outside the ring, so single-writer discipline holds by
-        // construction. This is the local analogue of the Durable Object
-        // kernel, where the mailbox is the admission ledger and the wake is
-        // an alarm instead of Queue.take.
         interface Admission {
           readonly item: unknown;
           /** Present iff a dispatcher is joined on the outcome. */
-          readonly reply?: Deferred.Deferred<Step.HaltOutcome>;
+          readonly reply?: Deferred.Deferred<unknown, unknown>;
         }
         const mailbox = yield* Queue.unbounded<Admission>();
         const ring = yield* Effect.forkScoped(
@@ -358,21 +416,18 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             Effect.flatMap(Queue.take(mailbox), (admission) =>
               Effect.flatMap(
                 Effect.exit(
-                  turn(admission.item).pipe(
-                    // whatever way the turn ends, later steers park
-                    Effect.ensuring(
-                      Effect.sync(() => {
-                        activeInbox = undefined;
-                      }),
-                    ),
-                  ),
+                  options.runItem(admission.item, {
+                    session: `${termName}#${oneShot++}`,
+                    runTurn,
+                    emitRow,
+                  }),
                 ),
                 (exit) =>
                   admission.reply !== undefined
                     ? Deferred.done(admission.reply, exit)
                     : Exit.isFailure(exit)
                       ? Effect.logWarning(
-                          "memory kernel: unobserved turn failed",
+                          "memory kernel: unobserved run failed",
                           exit.cause,
                         )
                       : Effect.void,
@@ -381,16 +436,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           ),
         );
 
-        const todo = (what: string) =>
-          Effect.die(
-            new Error(`memory kernel: ${what} lands with the loop runtime`),
-          );
-
         return {
           // dispatch = send + join: same admission path, plus a reply seat
           dispatch: (item: unknown) =>
             Effect.gen(function* () {
-              const reply = yield* Deferred.make<Step.HaltOutcome>();
+              const reply = yield* Deferred.make<unknown, unknown>();
               yield* Queue.offer(mailbox, { item, reply });
               return yield* Deferred.await(reply);
             }),
@@ -401,7 +451,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           run: () => Fiber.join(ring),
           // steer = mid-run admission: into the active turn's feedback
           // inbox (promoted at its next boundary), or parked for the
-          // next turn's round 1 when the ring is idle
+          // next turn's/iteration's round 1 when nothing is active
           steer: (input: unknown) =>
             Effect.sync(() => {
               const messages = toMessages(input);
@@ -413,8 +463,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             }),
           // interrupt = Scope authority as a control admission (§0.6):
           // never a fiber kill. The active turn settles its in-flight
-          // batch (aborted results for the unfinished) and halts as
-          // Interrupted; an idle ring has nothing to interrupt.
+          // batch and halts as Interrupted; idle rings have nothing to
+          // interrupt.
           interrupt: () =>
             Effect.sync(() => {
               if (activeInbox !== undefined) {
@@ -425,17 +475,297 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         };
       });
 
+      // ── Agent: a run is ONE turn at kernel-default control parameters ──
+
+      const interpretAgent = Effect.fn(function* (term: {
+        "~alchemy/Name": string;
+        template: TemplateStringsArray;
+        refs: unknown[];
+      }) {
+        const policy = yield* KernelPolicy;
+        const compiled = yield* compileTools(term.refs);
+        return yield* makeRing({
+          termName: term["~alchemy/Name"],
+          system: renderTemplate(term.template, term.refs),
+          compiled,
+          policy,
+          runItem: (item, run) =>
+            Effect.map(
+              run.runTurn({
+                session: run.session,
+                seed: [],
+                input: toMessages(item),
+              }),
+              (result) => result.outcome,
+            ),
+        });
+      });
+
+      // ── Loop: a run ITERATES turns per work item (§2.5) ──────────────
+
+      const interpretLoop = Effect.fn(function* (term: {
+        "~alchemy/Name": string;
+        template: TemplateStringsArray;
+        refs: unknown[];
+      }) {
+        const termName = term["~alchemy/Name"];
+        const halt = term.refs.find(isHalt) as Halt | undefined;
+        if (halt === undefined || halt.mode !== "until") {
+          return yield* Effect.fail(
+            new KernelError({
+              term: termName,
+              message:
+                "the memory kernel runs bounded loops only (AI.until) — perpetual rings land with the trigger runtime",
+            }),
+          );
+        }
+        const budget = (term.refs.find(isBudget) as Budget | undefined)?.limits;
+        const policy = yield* KernelPolicy;
+
+        // halt-as-tool (§2.5/§9.3): the cheapest correct AI.until. The
+        // model ends a run by CALLING a tool, so resolution flows through
+        // the same command/settlement discipline as everything else;
+        // schema-invalid resolves bounce back as tool errors for
+        // self-correction.
+        const haltSchema = halt.schema;
+        // set per run by runItem; written by the synthetic handlers.
+        // Single-writer ring makes this safe.
+        let currentRun: { resolved?: { value: unknown }; refusal?: string } =
+          {};
+        // The advertised wire schema is a JSON-encoded STRING, not the
+        // halt schema itself: effect/ai decodes tool-call parts against
+        // the advertised schema at the stream layer, and a schema-invalid
+        // resolve must bounce back as a tool error for self-correction
+        // (§2.5) — never kill the stream. A string always wire-decodes;
+        // the KERNEL parses and validates strictly in the handler, and
+        // the halt prose in the system prompt carries the shape.
+        const syntheticTools: AiTool.Any[] = [
+          AiTool.make("resolve", {
+            description:
+              "Call when the halt condition is met. This ends the run" +
+              (haltSchema !== undefined
+                ? ". `value` is the run's result as a JSON-encoded string" +
+                  " matching the halt condition's shape."
+                : "."),
+            parameters: (haltSchema !== undefined
+              ? S.Struct({ value: S.String })
+              : S.Struct({})) as never,
+          }),
+          AiTool.make("give_up", {
+            description:
+              "Call ONLY when you have concrete evidence the goal is " +
+              "unachievable. `reason` must state the blocker and the evidence.",
+            parameters: S.Struct({ reason: S.String }) as never,
+          }),
+        ];
+        const syntheticHandlers = new Map<
+          string,
+          (params: unknown) => Effect.Effect<unknown, unknown>
+        >([
+          [
+            "resolve",
+            (params) => {
+              if (haltSchema === undefined) {
+                currentRun.resolved = { value: undefined };
+                return Effect.succeed("resolved: the run will halt");
+              }
+              const raw = (params as { value?: unknown } | undefined)?.value;
+              let parsed: unknown;
+              try {
+                parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+              } catch (error) {
+                return Effect.fail(
+                  `resolve rejected — value is not valid JSON: ${String(error)}`,
+                );
+              }
+              const decoded = S.decodeUnknownResult(haltSchema as never)(
+                parsed,
+              );
+              if (Result.isFailure(decoded)) {
+                // model-visible bounce: self-correct and resolve again
+                return Effect.fail(
+                  `resolve rejected — value does not match the halt schema: ${String(decoded.failure)}`,
+                );
+              }
+              currentRun.resolved = { value: decoded.success };
+              return Effect.succeed("resolved: the run will halt");
+            },
+          ],
+          [
+            "give_up",
+            (params) => {
+              currentRun.refusal = String(
+                (params as { reason?: unknown } | undefined)?.reason ??
+                  "no reason given",
+              );
+              return Effect.succeed("acknowledged: the run will refuse");
+            },
+          ],
+        ]);
+
+        const compiled = yield* compileTools(term.refs, {
+          tools: syntheticTools,
+          handlers: syntheticHandlers,
+        });
+
+        const system =
+          renderTemplate(term.template, term.refs) +
+          "\n\n# Halt condition\n" +
+          `This run ends when: ${renderTemplate(halt.template, halt.refs)}\n` +
+          "When that condition is met, call the `resolve` tool" +
+          (haltSchema !== undefined ? " with the result value" : "") +
+          ". If you conclude the goal is unachievable, call `give_up` " +
+          "with your evidence. Keep working until you call one of them.";
+
+        const maxIterations = budget?.iterations ?? policy.maxIterations ?? 24;
+        const tokenCeiling =
+          budget?.tokens !== undefined
+            ? parseTokenBudget(budget.tokens)
+            : undefined;
+
+        const service = yield* makeRing({
+          termName,
+          system,
+          compiled,
+          policy,
+          runItem: (item, run) =>
+            Effect.gen(function* () {
+              currentRun = {};
+              let transcript: ReadonlyArray<Prompt.Message> = [];
+              let input = toMessages(item);
+              let iterations = 0;
+              let cumulativeTokens = 0;
+
+              while (true) {
+                iterations++;
+                const { outcome, state } = yield* run.runTurn({
+                  session: `${run.session}/i${iterations}`,
+                  seed: transcript,
+                  input,
+                });
+                cumulativeTokens += state.tokensUsed;
+
+                // a turn-level harness ceiling inside a budgeted loop is
+                // the loop's typed exit; without a budget it is a defect
+                if (outcome._tag === "BudgetExceeded") {
+                  if (budget === undefined) {
+                    return yield* Effect.die(
+                      new Error(
+                        `loop ${termName} hit the per-turn harness ceiling (${outcome.limit}) without a charter budget`,
+                      ),
+                    );
+                  }
+                  return yield* Effect.fail(
+                    new BudgetExceeded({
+                      loop: termName,
+                      limit:
+                        outcome.limit === "tokens" ? "tokens" : "iterations",
+                      budget: outcome.budget,
+                      used: outcome.used,
+                    }),
+                  );
+                }
+                if (outcome._tag === "Interrupted") {
+                  return yield* Effect.die(
+                    new Error(
+                      "interim: interrupted loop runs surface with the kernel Message type",
+                    ),
+                  );
+                }
+
+                // resolution first: an achieved goal trumps a give-up
+                if (currentRun.resolved !== undefined) {
+                  yield* run.emitRow(
+                    run.session,
+                    "run.resolved",
+                    run.session,
+                    "resolved",
+                    { iterations },
+                  );
+                  return currentRun.resolved.value;
+                }
+                if (currentRun.refusal !== undefined) {
+                  yield* run.emitRow(
+                    run.session,
+                    "run.refused",
+                    run.session,
+                    "refused",
+                    { iterations, reason: currentRun.refusal },
+                  );
+                  return yield* Effect.fail(
+                    new Refused({
+                      loop: termName,
+                      reason: currentRun.refusal,
+                      observed: 1,
+                    }),
+                  );
+                }
+
+                // ── the §2.5 boundary: ceilings, fold, nag ──
+                if (
+                  tokenCeiling !== undefined &&
+                  cumulativeTokens >= tokenCeiling
+                ) {
+                  return yield* Effect.fail(
+                    new BudgetExceeded({
+                      loop: termName,
+                      limit: "tokens",
+                      budget: budget!.tokens!,
+                      used: cumulativeTokens,
+                      resumeHint: "raise the token budget to resume",
+                    }),
+                  );
+                }
+                if (iterations >= maxIterations) {
+                  if (budget?.iterations === undefined) {
+                    return yield* Effect.die(
+                      new Error(
+                        `loop ${termName} exceeded the kernel's default iteration guard (${maxIterations}) without a charter budget`,
+                      ),
+                    );
+                  }
+                  return yield* Effect.fail(
+                    new BudgetExceeded({
+                      loop: termName,
+                      limit: "iterations",
+                      budget: budget.iterations,
+                      used: iterations,
+                      resumeHint: "raise the iteration budget to resume",
+                    }),
+                  );
+                }
+                yield* run.emitRow(
+                  run.session,
+                  "run.iteration",
+                  run.session,
+                  `iteration-${iterations}`,
+                  { iterations, cumulativeTokens },
+                );
+                // fold = carry the transcript; nag = the bounded reminder
+                transcript = state.messages;
+                input = toMessages(
+                  "The run has not ended: the halt condition is not met and " +
+                    "you have not given up. Continue working. When done, call " +
+                    "`resolve`; if truly blocked, call `give_up` with evidence.",
+                );
+              }
+            }),
+        });
+        return service;
+      });
+
       return Kernel.of({
         interpret: ((term: any) =>
           isAgent(term)
             ? interpretAgent(term)
-            : Effect.fail(
-                new KernelError({
-                  term: String(term?.["~alchemy/Name"] ?? term),
-                  message:
-                    "memory kernel interprets Agent terms only (loop runtime is a later build-order step)",
-                }),
-              )) as KernelService["interpret"],
+            : isLoop(term)
+              ? interpretLoop(term)
+              : Effect.fail(
+                  new KernelError({
+                    term: String(term?.["~alchemy/Name"] ?? term),
+                    message: "not an interpretable (process) term",
+                  }),
+                )) as KernelService["interpret"],
         events: store.events,
         trace: (ring, after) => store.trace(ring, after),
       });
@@ -464,12 +794,21 @@ const isParam = (ref: unknown): ref is Parameter =>
   ref !== null &&
   (ref as Record<string, unknown>)["~alchemy/Kind"] === "Param";
 
-const compileTools = Effect.fn(function* (refs: ReadonlyArray<unknown>) {
-  const aiTools: AiTool.Any[] = [];
+const compileTools = Effect.fn(function* (
+  refs: ReadonlyArray<unknown>,
+  synthetic?: {
+    readonly tools: ReadonlyArray<AiTool.Any>;
+    readonly handlers: ReadonlyMap<
+      string,
+      (params: unknown) => Effect.Effect<unknown, unknown>
+    >;
+  },
+) {
+  const aiTools: AiTool.Any[] = [...(synthetic?.tools ?? [])];
   const handlers = new Map<
     string,
     (params: unknown) => Effect.Effect<unknown, unknown>
-  >();
+  >(synthetic?.handlers ?? []);
 
   for (const ref of refs) {
     if (!isToolTerm(ref)) continue;

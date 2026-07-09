@@ -39,6 +39,13 @@ You are a careful mathematician. You never do arithmetic yourself:
 use ${Multiply} for every multiplication, then state the result as
 plain digits (no thousands separators).` {}
 
+class Compute extends AI.Loop<Compute>()("Compute")`
+You compute arithmetic expressions step by step. You never do
+arithmetic yourself: use ${Multiply} for every single multiplication,
+one call per step.
+${AI.until(S.Struct({ answer: S.Number }))`the expression is fully computed`}
+${AI.budget({ iterations: 6 })}` {}
+
 // ─── physics ─────────────────────────────────────────────────────
 
 const ModelLive = AnthropicLanguageModel.layer({
@@ -258,6 +265,32 @@ describe("memory kernel × live Anthropic", () => {
         expect(outcome).toMatchObject({ _tag: "Interrupted", abandoned: [] });
       }),
     { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "a real Loop run: iterated tool use, resolved via halt-as-tool",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const result = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const compute = yield* kernel.interpret(Compute);
+            // (3 × 4) × 5 forces two dependent multiply calls before the
+            // model can resolve with the typed answer
+            return yield* compute.dispatch(
+              "Compute (3 * 4) * 5 and resolve with the final answer.",
+            );
+          }),
+        ).pipe(Effect.provide(harness.layer));
+
+        // the typed halt value came back through resolve
+        expect(result).toEqual({ answer: 60 });
+        // both real multiplications went through OUR tool
+        expect(harness.invocations).toContainEqual({ a: 3, b: 4 });
+        expect(harness.invocations).toContainEqual({ a: 12, b: 5 });
+      }),
+    { timeout: 120_000 },
   );
 
   it.effect.skipIf(apiKey === undefined)(

@@ -29,12 +29,21 @@ export type LoopOut<Refs extends any[]> = [
  * Derives a loop's `In` channel — the union of its triggers' work-item
  * types. `AI.each(issue)` contributes the parameter's schema type,
  * `AI.on(source)` the event schema, `AI.every` contributes `void`.
+ *
+ * A charter with no trigger refs is dispatch-driven: `In = unknown`
+ * (any work item may be admitted), not `never` — a `never` inbox would
+ * make `dispatch` uncallable, which is the perpetual-loop treatment and
+ * belongs to the halt, not the trigger.
  */
-export type LoopIn<Refs extends any[]> = Refs[number] extends infer R
-  ? R extends Trigger<infer In, any>
-    ? In
-    : never
-  : never;
+export type LoopIn<Refs extends any[]> = [
+  Extract<Refs[number], Trigger<any, any>>,
+] extends [never]
+  ? unknown
+  : Refs[number] extends infer R
+    ? R extends Trigger<infer In, any>
+      ? In
+      : never
+    : never;
 
 /**
  * Derives a loop's error channel from its refs:
