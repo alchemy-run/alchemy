@@ -14,6 +14,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as AiErrorModule from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AI from "@/AI/index.ts";
@@ -669,6 +670,111 @@ describe("spawn-and-continue (§2.8)", () => {
       expect(promptText(chiefPrompts[2]!)).toContain(
         "Background run Sage#bg0 completed: the answer is 42",
       );
+    }),
+  );
+});
+
+// ─── provider-failure resilience ─────────────────────────────────
+
+describe("provider-failure resilience", () => {
+  const retryableFailure = () =>
+    AiErrorModule.make({
+      module: "Test",
+      method: "streamText",
+      reason: new AiErrorModule.InternalProviderError({
+        description: "Server error",
+      }),
+    });
+  const fatalFailure = () =>
+    AiErrorModule.make({
+      module: "Test",
+      method: "streamText",
+      reason: new AiErrorModule.AuthenticationError({ kind: "InvalidKey" }),
+    });
+
+  // it.live: the retry backoff sleeps on the real clock (TestClock trap)
+  it.live("retryable wire failures retry with a CLEAN re-fold", () =>
+    Effect.gen(function* () {
+      // attempts 1 and 2 stream real deltas, then die mid-stream; attempt
+      // 3 succeeds. A regression in the per-attempt re-fold would leak
+      // the dead attempts' deltas into the transcript (double-append).
+      let attempts = 0;
+      const model = Layer.effect(
+        LanguageModel.LanguageModel,
+        LanguageModel.make({
+          generateText: () => Effect.die(new Error("streamText only")),
+          streamText: () =>
+            Stream.suspend(() => {
+              attempts++;
+              return attempts < 3
+                ? Stream.concat(
+                    Stream.fromIterable(text("gar", "bage")),
+                    Stream.fail(retryableFailure() as never),
+                  )
+                : Stream.fromIterable([...text("clean"), finish("stop")]);
+            }),
+        }),
+      );
+      const outcome = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          return (yield* librarian.dispatch("go")) as AI.Step.HaltOutcome;
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model)),
+            Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      expect(attempts).toBe(3);
+      expect(outcome).toMatchObject({ _tag: "Completed", text: "clean" });
+      // the failed attempts' partial text never leaked into the outcome
+      expect((outcome as { text: string }).text).not.toContain("gar");
+    }),
+  );
+
+  it.effect("non-retryable failures are defects, not retried", () =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      const model = Layer.effect(
+        LanguageModel.LanguageModel,
+        LanguageModel.make({
+          generateText: () => Effect.die(new Error("streamText only")),
+          streamText: () =>
+            Stream.suspend(() => {
+              attempts++;
+              return Stream.fail(fatalFailure() as never);
+            }),
+        }),
+      );
+      const exit = yield* Effect.exit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const librarian = yield* kernel.interpret(Librarian);
+            return yield* librarian.dispatch("go");
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              AI.memory.pipe(Layer.provide(model)),
+              Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+              RuntimeContext.phantom,
+            ),
+          ),
+        ),
+      );
+      // one attempt only — an auth failure retried 4 times would be 4
+      // useless wire calls (and worse for quota errors)
+      expect(attempts).toBe(1);
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(String(exit.cause)).toContain("InvalidKey");
+      }
     }),
   );
 });
