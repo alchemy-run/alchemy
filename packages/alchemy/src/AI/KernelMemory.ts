@@ -54,10 +54,9 @@ import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
  *    are real streams and a different backend is one Layer away.
  *
  * Deliberately absent (later build-order steps): the loop runtime
- * (trigger/halt/fold/check refs), steering across fibers, the StepState
- * stash (recovery), and budget accounting off usage. `dispatch` resolves
- * with the turn's {@link Step.HaltOutcome} until the kernel `Message`
- * type lands.
+ * (trigger/halt/fold/check refs), `interrupt`, and the StepState stash
+ * (recovery). `dispatch` resolves with the turn's
+ * {@link Step.HaltOutcome} until the kernel `Message` type lands.
  */
 /**
  * The kernel-default agent policy — the execution ring's ceilings
@@ -112,6 +111,17 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // when no Layer provides it)
         const policy = yield* KernelPolicy;
 
+        // Steering (§2.4/§9.3): a steer is an admission, never an
+        // interruption. Mid-turn it lands in the ACTIVE turn's feedback
+        // inbox as `Steered` — the step machine holds it and promotes at
+        // the next model-call boundary. Between turns it parks here and
+        // enters the next turn ahead of its `Dispatched`, so the machine
+        // promotes it into round 1 (a held steer is a standing order,
+        // not a round-2 afterthought). Single-threaded mutation is safe:
+        // only the ring fiber reads, and JS gives us atomicity.
+        const parkedSteers: Prompt.Message[] = [];
+        let activeInbox: Step.Feedback[] | undefined;
+
         const turn = Effect.fn(function* (item: unknown) {
           const session = `${termName}#${oneShot++}`;
           // durable Trace rows for this ring (§2.7): deterministic ids,
@@ -135,9 +145,21 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               },
             ]);
           let state = Step.initialState({ session, ...policy });
+          let steerOrdinal = 0;
+          // parked steers precede Dispatched: the machine queues them
+          // first, so round 1's boundary already promotes them
           const inbox: Step.Feedback[] = [
+            ...(parkedSteers.length > 0
+              ? [
+                  {
+                    _tag: "Steered" as const,
+                    messages: parkedSteers.splice(0),
+                  },
+                ]
+              : []),
             { _tag: "Dispatched", input: toMessages(item) },
           ];
+          activeInbox = inbox;
 
           while (true) {
             const feedback = inbox.shift();
@@ -145,6 +167,13 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               return yield* Effect.die(
                 new Error(`step machine stalled without halting (${session})`),
               );
+            }
+            if (feedback._tag === "Steered") {
+              // a steer is a durable admission — it must survive recovery
+              // and be visible to folds, so it rows into the Trace
+              yield* emit("turn.steered", session, `steer-${steerOrdinal++}`, {
+                messages: feedback.messages.length,
+              });
             }
             const [next, commands] = Step.step(state, feedback);
             state = next;
@@ -274,11 +303,19 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                   });
                   break;
                 }
-                case "Halt":
+                case "Halt": {
+                  // a steer that raced the final round is not lost — it
+                  // parks and enters the next turn's round 1
+                  for (const remaining of inbox) {
+                    if (remaining._tag === "Steered") {
+                      parkedSteers.push(...remaining.messages);
+                    }
+                  }
                   yield* emit("turn.halted", command.id, "halt", {
                     outcome: command.outcome._tag,
                   });
                   return command.outcome;
+                }
               }
             }
           }
@@ -301,15 +338,26 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         const ring = yield* Effect.forkScoped(
           Effect.forever(
             Effect.flatMap(Queue.take(mailbox), (admission) =>
-              Effect.flatMap(Effect.exit(turn(admission.item)), (exit) =>
-                admission.reply !== undefined
-                  ? Deferred.done(admission.reply, exit)
-                  : Exit.isFailure(exit)
-                    ? Effect.logWarning(
-                        "memory kernel: unobserved turn failed",
-                        exit.cause,
-                      )
-                    : Effect.void,
+              Effect.flatMap(
+                Effect.exit(
+                  turn(admission.item).pipe(
+                    // whatever way the turn ends, later steers park
+                    Effect.ensuring(
+                      Effect.sync(() => {
+                        activeInbox = undefined;
+                      }),
+                    ),
+                  ),
+                ),
+                (exit) =>
+                  admission.reply !== undefined
+                    ? Deferred.done(admission.reply, exit)
+                    : Exit.isFailure(exit)
+                      ? Effect.logWarning(
+                          "memory kernel: unobserved turn failed",
+                          exit.cause,
+                        )
+                      : Effect.void,
               ),
             ),
           ),
@@ -333,7 +381,18 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             Effect.asVoid(Queue.offer(mailbox, { item })),
           // the ring is already serving; run joins its (unbounded) life
           run: () => Fiber.join(ring),
-          steer: () => todo("steer"),
+          // steer = mid-run admission: into the active turn's feedback
+          // inbox (promoted at its next boundary), or parked for the
+          // next turn's round 1 when the ring is idle
+          steer: (input: unknown) =>
+            Effect.sync(() => {
+              const messages = toMessages(input);
+              if (activeInbox !== undefined) {
+                activeInbox.push({ _tag: "Steered", messages });
+              } else {
+                parkedSteers.push(...messages);
+              }
+            }),
           interrupt: () => todo("interrupt"),
         };
       });

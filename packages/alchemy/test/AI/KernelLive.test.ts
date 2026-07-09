@@ -187,6 +187,45 @@ describe("memory kernel × live Anthropic", () => {
   );
 
   it.effect.skipIf(apiKey === undefined)(
+    "a mid-turn steer changes the model's course at the next boundary",
+    () =>
+      Effect.gen(function* () {
+        const steerRef: {
+          current?: (input: unknown) => Effect.Effect<void, never, any>;
+        } = {};
+        // the multiply tool steers its own agent mid-turn: by the time the
+        // model composes its final answer (round 2), the steer is promoted
+        const steeringLayer = Layer.mergeAll(
+          AI.memory.pipe(Layer.provide(ModelLive)),
+          Layer.succeed(Multiply, ((input: { a: number; b: number }) =>
+            steerRef.current!(
+              "IMPORTANT change of plan: include the word 'pineapple' somewhere in your final answer.",
+            ).pipe(Effect.as({ product: input.a * input.b }))) as never),
+          RuntimeContext.phantom,
+        );
+
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const mathematician = yield* kernel.interpret(Mathematician);
+            steerRef.current = (input) => mathematician.steer(input);
+            return (yield* mathematician.dispatch(
+              "What is 19 multiplied by 21?",
+            )) as AI.Step.HaltOutcome;
+          }),
+        ).pipe(Effect.provide(steeringLayer));
+
+        expect(outcome._tag).toBe("Completed");
+        if (outcome._tag === "Completed") {
+          // the model saw the steer at the round-2 boundary and obeyed
+          expect(outcome.text.toLowerCase()).toContain("pineapple");
+          expect(outcome.text).toContain("399");
+        }
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
     "the live turn journals its Trace write-ahead (§2.7)",
     () =>
       Effect.gen(function* () {

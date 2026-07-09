@@ -367,6 +367,78 @@ describe("the in-memory Kernel", () => {
     }),
   );
 
+  it.effect("a steer while idle parks and enters the next turn's ROUND 1", () =>
+    Effect.gen(function* () {
+      const model = scriptedModel([() => [...text("ok"), finish("stop")]]);
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          // the ring is idle: this parks as a standing order
+          yield* librarian.steer("always answer in French");
+          yield* librarian.dispatch("find x");
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model.layer)),
+            Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      // the FIRST wire call already carries the parked steer
+      expect(model.calls).toHaveLength(1);
+      expect(promptText(model.calls[0]!)).toContain("always answer in French");
+    }),
+  );
+
+  it.effect("a mid-turn steer promotes at the next model-call boundary", () =>
+    Effect.gen(function* () {
+      const model = scriptedModel([
+        () => [toolCall("c1", "grep", { pattern: "x" }), finish("tool-calls")],
+        () => [...text("pivoting"), finish("stop")],
+      ]);
+      // the tool handler steers its own agent mid-turn — the cheapest way
+      // to guarantee the steer lands while the turn is active
+      const steerRef: {
+        current?: (input: unknown) => Effect.Effect<void, never, any>;
+      } = {};
+      const trace = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          steerRef.current = (input) => librarian.steer(input);
+          yield* librarian.dispatch("find x");
+          return yield* Stream.runCollect(
+            kernel
+              .trace("Librarian")
+              .pipe(Stream.takeUntil((event) => event.type === "turn.halted")),
+          );
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model.layer)),
+            Layer.succeed(Grep, (() =>
+              steerRef.current!("stop searching, summarize what you have").pipe(
+                Effect.as("partial results"),
+              )) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      // round 1 never saw the steer; round 2 (the next boundary) did
+      expect(model.calls).toHaveLength(2);
+      expect(promptText(model.calls[0]!)).not.toContain("stop searching");
+      expect(promptText(model.calls[1]!)).toContain(
+        "stop searching, summarize what you have",
+      );
+      // the steer is a durable admission: it rowed into the Trace
+      expect(trace.some((event) => event.type === "turn.steered")).toBe(true);
+    }),
+  );
+
   it.effect(
     "loop terms are honestly rejected until the loop runtime lands",
     () =>
