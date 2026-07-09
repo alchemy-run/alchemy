@@ -18,9 +18,11 @@
  * - `GET /api/asks` / `POST /api/asks/:id` — the Ask control plane.
  * - `POST /api/steer` / `POST /api/interrupt` — process authority.
  */
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -51,7 +53,20 @@ export interface AgentApiOptions {
    * Omit them by omitting this.
    */
   readonly process?: Pick<ProcessService<any, any, any>, "steer" | "interrupt">;
+  /**
+   * Smooth streaming (the AI SDK `smoothStream` design): providers emit
+   * sentence-sized text deltas (Anthropic: 50–80+ chars), which render
+   * as stutter-steps. When set, text/reasoning deltas are re-split into
+   * word-sized deltas paced this many milliseconds apart, so the UI
+   * paints a steady token flow. Off by default (tests and machine
+   * consumers want the raw wire).
+   */
+  readonly smoothing?: { readonly delayMs: number };
 }
+
+/** Split a delta into word-sized pieces (whitespace rides its word). */
+const splitWords = (delta: string): ReadonlyArray<string> =>
+  delta.match(/\S+\s*|\s+/g) ?? [delta];
 
 /**
  * The routes Layer. Serve it with:
@@ -76,9 +91,37 @@ export const agentApi = (options: AgentApiOptions = {}) =>
           { headers: SSE_HEADERS },
         );
 
+      const smoothing = options.smoothing;
+      const smooth =
+        smoothing === undefined
+          ? (chunks: Stream.Stream<UIMessageChunk>) => chunks
+          : (chunks: Stream.Stream<UIMessageChunk>) =>
+              chunks.pipe(
+                // sequential flatMap: order is preserved; only delta
+                // chunks are split and paced, everything else passes
+                // through immediately
+                Stream.flatMap(
+                  (chunk): Stream.Stream<UIMessageChunk> =>
+                    chunk.type === "text-delta" ||
+                    chunk.type === "reasoning-delta"
+                      ? Stream.fromIterable(splitWords(chunk.delta)).pipe(
+                          Stream.map(
+                            (word): UIMessageChunk => ({
+                              ...chunk,
+                              delta: word,
+                            }),
+                          ),
+                          Stream.schedule(
+                            Schedule.spaced(Duration.millis(smoothing.delayMs)),
+                          ),
+                        )
+                      : Stream.make(chunk),
+                ),
+              );
+
       const chunkWindow = (chunks: Stream.Stream<UIMessageChunk>) =>
         sse(
-          chunks.pipe(
+          smooth(chunks).pipe(
             Stream.map(sseFrame),
             Stream.concat(Stream.make(SSE_DONE)),
           ),

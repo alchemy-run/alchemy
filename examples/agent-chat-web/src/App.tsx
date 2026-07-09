@@ -8,7 +8,7 @@
  */
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   Message,
   MessageContent,
@@ -104,6 +104,27 @@ function MessagePart({ part, index }: { part: Part; index: number }) {
 }
 
 /**
+ * Memoized on message identity: useChat only replaces the object of the
+ * message that changed, so a streaming delta re-renders ONE message row
+ * instead of the whole transcript.
+ */
+const MessageView = memo(function MessageView({
+  message,
+}: {
+  message: UIMessage;
+}) {
+  return (
+    <Message from={message.role}>
+      <MessageContent>
+        {message.parts.map((part, index) => (
+          <MessagePart key={index} part={part} index={index} />
+        ))}
+      </MessageContent>
+    </Message>
+  );
+});
+
+/**
  * One conversation. Keyed by conversation id from `App`, so switching
  * chats remounts with the saved transcript as initial messages —
  * `defaultScrollPosition="last-anchor"` then reopens the thread at the
@@ -121,6 +142,9 @@ function Chat({
     id: conversationId,
     messages: initialMessages,
     transport: new DefaultChatTransport({ api: "/api/chat" }),
+    // batch stream updates to ~20fps: word-paced deltas would otherwise
+    // force a React render per word
+    experimental_throttle: 50,
   });
   const isBusy = status === "submitted" || status === "streaming";
   const lastMessage = messages.at(-1);
@@ -154,13 +178,7 @@ function Chat({
                       messageId={message.id}
                       scrollAnchor={message.role === "user"}
                     >
-                      <Message from={message.role}>
-                        <MessageContent>
-                          {message.parts.map((part, index) => (
-                            <MessagePart key={index} part={part} index={index} />
-                          ))}
-                        </MessageContent>
-                      </Message>
+                      <MessageView message={message} />
                     </MessageScrollerItem>
                   ))}
                   {waiting && (

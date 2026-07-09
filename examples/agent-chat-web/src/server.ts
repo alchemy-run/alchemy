@@ -100,7 +100,9 @@ const SessionsLive = Layer.effect(
   ]),
 );
 
-const Server = HttpRouter.serve(AI.Api.agentApi()).pipe(
+// smoothing: providers emit sentence-sized deltas (Anthropic: 50-80+
+// chars); re-split into word-paced deltas so the UI paints token flow
+const Server = HttpRouter.serve(AI.Api.agentApi({ smoothing: { delayMs: 15 } })).pipe(
   Layer.provide([SessionsLive, kernelLayer]),
   // idleTimeout: 0 — Bun.serve defaults to killing connections idle
   // for 10s, which severs SSE windows mid-run
