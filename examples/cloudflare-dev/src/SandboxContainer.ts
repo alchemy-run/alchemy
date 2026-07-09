@@ -23,7 +23,7 @@ export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
   })),
   Effect.gen(function* () {
     return SandboxContainer.of({
-      fetch: Effect.sync(() =>
+      fetch: Effect.succeed(
         HttpServerResponse.text(
           `Hello from Sandbox container! GREETING=${process.env.GREETING}`,
         ),

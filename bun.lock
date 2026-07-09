@@ -994,9 +994,9 @@
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
-    "@distilled.cloud/cloudflare-rolldown-plugin": "0.13.0",
-    "@distilled.cloud/cloudflare-runtime": "0.13.0",
-    "@distilled.cloud/cloudflare-vite-plugin": "0.13.0",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "0.13.1",
+    "@distilled.cloud/cloudflare-runtime": "0.13.1",
+    "@distilled.cloud/cloudflare-vite-plugin": "0.13.1",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
@@ -1291,11 +1291,11 @@
 
     "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@workspace:distilled/packages/cloudflare"],
 
-    "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.13.0", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "magic-string": "^0.30.21", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.1", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["rolldown", "vite"] }, "sha512-fIgXLhJR7M9wLYKH5q5gFlGTjIvTBSCduujJMLZN+WPB5Z1OQPMPBJIV/f28i8UxfskjGE+fnzAlW09SmyBFdA=="],
+    "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.13.1", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "magic-string": "^0.30.21", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.1", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["rolldown", "vite"] }, "sha512-WP/mDpnmLy6L6IEXGu5VmRI/1dX/KHuPm3bXX8bHnpPROjL2fJ6yS1sCBabmTXyhMRVsmJrcStaCcMRZ9Tcfxg=="],
 
-    "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@0.13.0", "", { "dependencies": { "@alchemy.run/node-utils": "^0.0.5", "workerd": "1.20260704.1" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.28.1", "@effect/platform-bun": ">=4.0.0-beta.78 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.78 || >=4.0.0", "effect": ">=4.0.0-beta.78 || >=4.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-4DcvRIpBEkG1ClJnQY0GoSSSQ+1bgOam22xp7P+CSjIhqcIrznUHjh4vdKc+Glk4PMkVWkG1MxRx3oQ6OCvrug=="],
+    "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@0.13.1", "", { "dependencies": { "@alchemy.run/node-utils": "^0.0.5", "workerd": "1.20260704.1" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.28.1", "@effect/platform-bun": ">=4.0.0-beta.78 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.78 || >=4.0.0", "effect": ">=4.0.0-beta.78 || >=4.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-bqZ/gUjnRF/mC2VyyD0z2WBo5zWYbyTOKmwCh8Te2KylW8wVIBi6eKdZsRRR0Krne0vzdx188ErZoTP2ZnQLBA=="],
 
-    "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@0.13.0", "", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "0.13.0" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.28.1", "@distilled.cloud/cloudflare-runtime": "0.13.0", "@effect/platform-bun": ">=4.0.0-beta.78 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.78 || >=4.0.0", "effect": ">=4.0.0-beta.78 || >=4.0.0", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-zvsb1trYhLmswonrFD584DbYm3cP+n3PrxpGQ6ImHPW9Dwq038VmBPdFLuyeR7Fu4gbKzP8Q52mgeYnkwBzGgg=="],
+    "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@0.13.1", "", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "0.13.1" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.28.1", "@distilled.cloud/cloudflare-runtime": "0.13.1", "@effect/platform-bun": ">=4.0.0-beta.78 || >=4.0.0", "@effect/platform-node": ">=4.0.0-beta.78 || >=4.0.0", "effect": ">=4.0.0-beta.78 || >=4.0.0", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-oI1hhRWkLQrOh9i/RLwqFuU/ZsJdi0Da1MBk9H2J3/lEFDM9kgaQUjFaOyBaWwp8A88GQFsEmTWomu7dEeAR7g=="],
 
     "@distilled.cloud/coinbase": ["@distilled.cloud/coinbase@workspace:distilled/packages/coinbase"],
 
