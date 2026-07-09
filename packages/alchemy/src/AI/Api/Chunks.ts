@@ -18,7 +18,7 @@
  */
 import * as Stream from "effect/Stream";
 import type { KernelEvent } from "../Kernel.ts";
-import type { UIMessageChunk } from "./Protocol.ts";
+import type { UIMessage, UIMessageChunk } from "./Protocol.ts";
 
 export interface ChunkFoldState {
   /** `start` emitted? */
@@ -218,6 +218,80 @@ export const sessionEvents = <E>(
     Stream.filter((event) => event.session === session),
     Stream.takeUntil((event) => event.type === "turn.halted"),
   );
+
+/**
+ * Materialize one run's chunks into the assistant `UIMessage` — the
+ * transcript's write path (designs/ai/serving.md §2). Parts appear in
+ * first-touch order; tool and ask parts reconcile in place as their
+ * later chunks land, mirroring how `useChat` itself builds the message.
+ */
+export const chunksToMessage = (
+  chunks: ReadonlyArray<UIMessageChunk>,
+): UIMessage => {
+  let id = "assistant";
+  const order: string[] = [];
+  const parts = new Map<string, Record<string, unknown>>();
+  const touch = (key: string, part: Record<string, unknown>) => {
+    if (!parts.has(key)) order.push(key);
+    parts.set(key, { ...parts.get(key), ...part });
+  };
+  for (const chunk of chunks) {
+    switch (chunk.type) {
+      case "start":
+        if (chunk.messageId !== undefined) id = chunk.messageId;
+        break;
+      case "text-start":
+        touch(`text:${chunk.id}`, { type: "text", text: "" });
+        break;
+      case "text-delta": {
+        const key = `text:${chunk.id}`;
+        touch(key, {
+          type: "text",
+          text: String(parts.get(key)?.text ?? "") + chunk.delta,
+        });
+        break;
+      }
+      case "text-end":
+        touch(`text:${chunk.id}`, { state: "done" });
+        break;
+      case "tool-input-available":
+        touch(`tool:${chunk.toolCallId}`, {
+          type: "dynamic-tool",
+          toolName: chunk.toolName,
+          toolCallId: chunk.toolCallId,
+          state: "input-available",
+          input: chunk.input,
+        });
+        break;
+      case "tool-output-available":
+        touch(`tool:${chunk.toolCallId}`, {
+          state: "output-available",
+          output: chunk.output,
+        });
+        break;
+      case "tool-output-error":
+        touch(`tool:${chunk.toolCallId}`, {
+          state: "output-error",
+          errorText: chunk.errorText,
+        });
+        break;
+      case "data-ask":
+        touch(`ask:${chunk.id}`, {
+          type: "data-ask",
+          id: chunk.id,
+          data: chunk.data,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+  return {
+    id,
+    role: "assistant",
+    parts: order.map((key) => parts.get(key)!) as unknown as UIMessage["parts"],
+  };
+};
 
 /** Fold a run's events into the UI message chunk stream. */
 export const toChunks = <E>(

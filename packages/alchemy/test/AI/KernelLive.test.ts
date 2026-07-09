@@ -21,6 +21,7 @@ import * as S from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { makeChatSessions } from "@/AI/Api/ChatSessions.ts";
 import { sessionEvents, toChunks } from "@/AI/Api/Chunks.ts";
 import { sseFrame } from "@/AI/Api/Protocol.ts";
 import * as AI from "@/AI/index.ts";
@@ -770,5 +771,59 @@ ${AI.never`health = one log_answer call per alarm`}` {}
         for (const chunk of chunks) expect(sseFrame(chunk)).toContain("data: ");
       }),
     { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "ChatSessions serves a live two-message conversation",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const transcript = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const mathematician = yield* kernel.interpret(Mathematician);
+            const sessions = yield* makeChatSessions({
+              process: mathematician,
+            });
+
+            const message = (id: string, text: string) =>
+              ({
+                id,
+                role: "user",
+                parts: [{ type: "text", text }],
+              }) as const;
+
+            yield* Stream.runDrain(
+              sessions.send(
+                "conv-live",
+                message("u1", "What is 12 multiplied by 12?"),
+              ),
+            );
+            yield* Stream.runDrain(
+              sessions.send("conv-live", message("u2", "Now multiply 7 by 6.")),
+            );
+            return yield* sessions.transcript("conv-live");
+          }),
+        ).pipe(Effect.provide([harness.layer, AI.AskHubMemory]));
+
+        // both exchanges materialized, in order
+        expect(transcript.map((m) => m.role)).toEqual([
+          "user",
+          "assistant",
+          "user",
+          "assistant",
+        ]);
+        const textOf = (m: (typeof transcript)[number]) =>
+          m.parts
+            .filter((p) => p.type === "text")
+            .map((p) => String(p.text))
+            .join("");
+        expect(textOf(transcript[1]!)).toContain("144");
+        expect(textOf(transcript[3]!)).toContain("42");
+        // the real tool was invoked through the serving path
+        expect(harness.invocations).toContainEqual({ a: 12, b: 12 });
+        expect(harness.invocations).toContainEqual({ a: 7, b: 6 });
+      }),
+    { timeout: 120_000 },
   );
 });

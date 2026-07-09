@@ -126,7 +126,22 @@ control plane may move to `HttpApi` when it grows.
   returns), but the AI SDK expects tool parts *inside* their step — so
   the fold closes a step lazily at the next round boundary rather than
   at `model.completed`.
-- ☐ `ChatSessions` (transcript view; admission; fold; ask mapping).
+- ✅ **`ChatSessions`** (`ChatSessions.ts`): the conversation registry.
+  `send(conversationId, message)` appends the user half, **admits** the
+  item to the process ring (`ProcessService.send` — fire-and-forget, so
+  the run lives on the ring's fiber), and returns the run's chunk
+  window; the window is correlated by watching the firehose for the
+  admission's `run.admitted` row and following that session to the
+  halt. When the window closes — attached or not — the collected chunks
+  materialize into the assistant `UIMessage` (`chunksToMessage`, parts
+  reconciled in place the way `useChat` builds them) and land in the
+  transcript. Asks flow through the same service: parked asks surface
+  via `asks`, answers via `answer`, and the chunk stream shows the
+  `data-ask` part flip pending → answered on one stable part id.
+  Correlation note: item-equality matching on `run.admitted` is exact
+  for distinct items; two conversations racing identical items on one
+  ring could cross-correlate — acceptable now, fixed for real when
+  admission returns its session key (Phase 2 typed admission).
 - ☐ `AgentApi` HTTP layer + in-process and live tests.
 - ☐ `examples/agent-chat-web` (React `useChat` proof).
 
