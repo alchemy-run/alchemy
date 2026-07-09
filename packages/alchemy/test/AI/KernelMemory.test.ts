@@ -155,6 +155,50 @@ describe("the in-memory Kernel", () => {
     }),
   );
 
+  // regression: Tool tags once had no ServiceMap key, so two tools in
+  // one context both resolved to the LAST-provided handler (found by
+  // the dice-parlor example: roll_dice executed the approval physics)
+  it.effect("two tools in one context keep their own physics", () =>
+    Effect.gen(function* () {
+      const left = AI.Parameter("left", S.Number)`the left operand`;
+      class Add extends AI.Tool<Add>()("add")`Add one to ${left}.` {}
+      class Negate extends AI.Tool<Negate>()("negate")`Negate ${left}.` {}
+      class Clerk extends AI.Agent<Clerk>()("Clerk")`
+Use ${Add} and ${Negate} as told.` {}
+
+      const model = scriptedModel([
+        () => [
+          toolCall("c1", "add", { left: 41 }),
+          toolCall("c2", "negate", { left: 5 }),
+          finish("tool-calls"),
+        ],
+        () => [...text("done"), finish("stop")],
+      ]);
+      const { calls } = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const clerk = yield* kernel.interpret(Clerk);
+          yield* clerk.dispatch("compute");
+          return { calls: model.calls };
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model.layer)),
+            Layer.succeed(Add, ((input: { left: number }) =>
+              Effect.succeed(input.left + 1)) as never),
+            Layer.succeed(Negate, ((input: { left: number }) =>
+              Effect.succeed(-input.left)) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      // each call reached ITS handler: add(41) = 42, negate(5) = -5
+      expect(promptText(calls[1]!)).toContain("42");
+      expect(promptText(calls[1]!)).toContain("-5");
+    }),
+  );
+
   it.effect("executes tools itself and feeds results back to the model", () =>
     Effect.gen(function* () {
       const seen: unknown[] = [];

@@ -162,7 +162,26 @@ control plane may move to `HttpApi` when it grows.
   whole HTTP path. Reconnect of an in-flight chat window is served by
   the trace endpoint for now; a `useChat`-native resume route rides
   the deferred ladder.
-- ☐ `examples/agent-chat-web` (React `useChat` proof).
+- ✅ **`examples/agent-chat-web`**: the React proof. Stock `useChat` +
+  `DefaultChatTransport({ api: "/api/chat" })` — no custom transport,
+  no adapter. The client renders three part kinds: `text`,
+  `dynamic-tool` (tool cards), and `data-ask` (approval card posting
+  to `/api/asks/:id`). The server (`server.ts`) is ~100 lines: an
+  `AI.Agent` term (a dice-parlor croupier), two tool Layers,
+  `ChatSessions`, `agentApi()`, `BunHttpServer`. Verified over the
+  wire: tool round streams, approval flow parks → answers → resumes,
+  Vite build passes. Two lessons banked:
+  - **Bun's `idleTimeout` defaults to 10s** and severs SSE windows
+    mid-run — serve with `idleTimeout: 0`.
+  - The example exposed a latent **Tool tag collision**: `makeTool`
+    produced tags with no ServiceMap key, so every tool in one context
+    resolved to the last-provided handler (`roll_dice` executed the
+    approval physics). Tests never caught it because each existing
+    suite provided one tool per context or scoped physics per-agent
+    via `AI.layer`. Fixed by grafting a real
+    `Context.Service` tag (`alchemy/AI/Tool/{name}`) onto the callable
+    term via the prototype chain — `class extends` would have broken
+    the `Grep(impl)` ToolImpl call form. Tool names are now identity.
 
 ## Deferred ladder
 

@@ -1,4 +1,4 @@
-import type * as Context from "effect/Context";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
@@ -94,13 +94,28 @@ export const Tool: {
         (template: TemplateStringsArray, ...refs: any[]) =>
           makeTool(name, template, refs)) as any;
 
-const makeTool = (name: string, template: TemplateStringsArray, refs: any[]) =>
-  Object.assign(
-    function (impl: (props: any) => Effect.Effect<any, any, any>) {},
-    {
-      "~alchemy/Kind": "Tool",
-      "~alchemy/Name": name,
-      refs,
-      template,
-    },
-  ) as any;
+// The Context.Service tag is what gives each Tool a distinct ServiceMap
+// key (`alchemy/AI/Tool/{name}`) — without it every Tool resolves to the
+// same (undefined) key and the last-provided handler silently serves ALL
+// tools in the context. The tag is grafted on via the prototype chain
+// (not `class extends`) because the term must stay CALLABLE: `Grep(impl)`
+// is the ToolImpl form, and calling a class throws.
+const makeTool = (
+  name: string,
+  template: TemplateStringsArray,
+  refs: any[],
+) => {
+  const term = function (impl: (props: any) => Effect.Effect<any, any, any>) {
+    return { "~alchemy/Kind": "ToolImpl", tool: term, impl };
+  };
+  Object.setPrototypeOf(
+    term,
+    Context.Service<any, any>()(`alchemy/AI/Tool/${name}`),
+  );
+  return Object.assign(term, {
+    "~alchemy/Kind": "Tool",
+    "~alchemy/Name": name,
+    refs,
+    template,
+  }) as any;
+};

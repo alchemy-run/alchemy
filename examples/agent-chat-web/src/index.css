@@ -1,0 +1,136 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #0b0e14;
+  color: #e6e6e6;
+}
+
+.chat {
+  max-width: 42rem;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 1rem 1.25rem 0.5rem;
+  border-bottom: 1px solid #1d2230;
+}
+
+header h1 {
+  font-size: 1rem;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+.status {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+main {
+  flex: 1;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.message p {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.75rem;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.message.user p {
+  background: #1e3a8a;
+  margin-left: 20%;
+}
+
+.message.assistant p {
+  background: #151a26;
+  margin-right: 20%;
+}
+
+.card {
+  margin-right: 20%;
+  border: 1px solid #1d2230;
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  background: #10141d;
+}
+
+.card-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.card .state {
+  font-weight: 400;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.card-body.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: #9ca3af;
+  word-break: break-all;
+}
+
+.card.ask {
+  border-color: #7c5e10;
+}
+
+.ask-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+button {
+  background: #1e3a8a;
+  color: #e6e6e6;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+button.deny {
+  background: #3f1d1d;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+form {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem 1.25rem;
+  border-top: 1px solid #1d2230;
+}
+
+form input {
+  flex: 1;
+  background: #10141d;
+  border: 1px solid #1d2230;
+  border-radius: 0.5rem;
+  color: #e6e6e6;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+}
