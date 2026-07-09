@@ -30,46 +30,6 @@ if (fixtureScript.includes(" ") || urlServerScript.includes(" ")) {
   );
 }
 
-describe("extractUrl", () => {
-  it("returns a plain URL when it is the only match", () => {
-    expect(Command.extractUrl("Local: http://localhost:5173/")).toBe(
-      "http://localhost:5173/",
-    );
-  });
-
-  it("favors a localhost URL over an unrelated URL printed first", () => {
-    // Astro prints a docs link on a content error before the dev server
-    // prints its own localhost URL. See issue #695.
-    const buffer =
-      "see https://docs.astro.build/en/guides/content-collections/\n" +
-      "  ➜  Local:   http://localhost:5001/\n";
-    expect(Command.extractUrl(buffer)).toBe("http://localhost:5001/");
-  });
-
-  it("favors an IP URL over an unrelated URL printed first", () => {
-    const buffer =
-      "update available https://example.com/release\n" +
-      "ready - started server on http://127.0.0.1:3000\n";
-    expect(Command.extractUrl(buffer)).toBe("http://127.0.0.1:3000");
-  });
-
-  it("falls back to a non-local URL when no local URL is present", () => {
-    expect(
-      Command.extractUrl("docs https://docs.astro.build/en/guides/x/"),
-    ).toBe("https://docs.astro.build/en/guides/x/");
-  });
-
-  it("strips ANSI escapes before matching", () => {
-    expect(Command.extractUrl("\x1b[36mhttp://localhost:5173/\x1b[0m")).toBe(
-      "http://localhost:5173/",
-    );
-  });
-
-  it("returns undefined when there is no URL", () => {
-    expect(Command.extractUrl("no url here")).toBeUndefined();
-  });
-});
-
 const isAlive = (pid: number) =>
   Effect.sync(() => {
     try {
@@ -488,3 +448,43 @@ test.provider("errors when the command fails in first 5 seconds", (stack) =>
     expect(error.reason.stderr).toContain("I'm not feeling it...");
   }),
 );
+
+describe("extractUrl", () => {
+  it("returns a plain URL when it is the only match", () => {
+    expect(Command.extractUrl("Local: http://localhost:5173/")).toBe(
+      "http://localhost:5173/",
+    );
+  });
+
+  it("favors a localhost URL over an unrelated URL printed first", () => {
+    // Astro prints a docs link on a content error before the dev server
+    // prints its own localhost URL. See issue #695.
+    const buffer =
+      "see https://docs.astro.build/en/guides/content-collections/\n" +
+      "  ➜  Local:   http://localhost:5001/\n";
+    expect(Command.extractUrl(buffer)).toBe("http://localhost:5001/");
+  });
+
+  it("favors an IP URL over an unrelated URL printed first", () => {
+    const buffer =
+      "update available https://example.com/release\n" +
+      "ready - started server on http://127.0.0.1:3000\n";
+    expect(Command.extractUrl(buffer)).toBe("http://127.0.0.1:3000");
+  });
+
+  it("falls back to a non-local URL when no local URL is present", () => {
+    expect(
+      Command.extractUrl("docs https://docs.astro.build/en/guides/x/"),
+    ).toBe("https://docs.astro.build/en/guides/x/");
+  });
+
+  it("strips ANSI escapes before matching", () => {
+    expect(Command.extractUrl("\x1b[36mhttp://localhost:5173/\x1b[0m")).toBe(
+      "http://localhost:5173/",
+    );
+  });
+
+  it("returns undefined when there is no URL", () => {
+    expect(Command.extractUrl("no url here")).toBeUndefined();
+  });
+});
