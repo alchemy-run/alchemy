@@ -9,6 +9,7 @@ import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
+import type * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
@@ -340,66 +341,88 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                       usage: undefined as unknown,
                       deltas: 0,
                     };
-                    yield* model
-                      .streamText({
-                        prompt: Prompt.fromMessages([
-                          Prompt.makeMessage("system", { content: system }),
-                          ...command.messages,
-                        ]),
-                        toolkit: compiled.toolkit as never,
-                        disableToolCallResolution: true,
-                      })
-                      .pipe(
-                        // widened: the `as never` toolkit collapses the
-                        // inferred Tools to {}, dropping tool-call parts
-                        Stream.runForEach((part: Response.AnyPart) => {
-                          switch (part.type) {
-                            case "text-delta":
-                              return Effect.sync(() => {
-                                folded.text += part.delta;
-                                return folded.deltas++;
-                              }).pipe(
-                                Effect.flatMap((ordinal) =>
-                                  store.commit([
-                                    {
-                                      v: 1,
-                                      type: "model.delta",
-                                      id: eventId(
-                                        command.id,
-                                        "delta",
-                                        String(ordinal),
-                                      ),
-                                      durable: false,
-                                      ring: [termName],
-                                      session,
-                                      cause: command.id,
-                                      payload: { delta: part.delta },
-                                    },
-                                  ]),
-                                ),
-                                Effect.asVoid,
-                              );
-                            case "tool-call":
-                              return Effect.sync(() => {
-                                folded.toolCalls.push({
-                                  callId: part.id,
-                                  name: part.name,
-                                  params: part.params,
+                    // each retry attempt starts from a clean fold — a
+                    // half-consumed failed stream must never double-append
+                    const attempt = Effect.suspend(() => {
+                      folded.text = "";
+                      folded.toolCalls = [];
+                      folded.finishReason = "unknown";
+                      folded.tokens = undefined;
+                      folded.usage = undefined;
+                      folded.deltas = 0;
+                      return model
+                        .streamText({
+                          prompt: Prompt.fromMessages([
+                            Prompt.makeMessage("system", { content: system }),
+                            ...command.messages,
+                          ]),
+                          toolkit: compiled.toolkit as never,
+                          disableToolCallResolution: true,
+                        })
+                        .pipe(
+                          // widened: the `as never` toolkit collapses the
+                          // inferred Tools to {}, dropping tool-call parts
+                          Stream.runForEach((part: Response.AnyPart) => {
+                            switch (part.type) {
+                              case "text-delta":
+                                return Effect.sync(() => {
+                                  folded.text += part.delta;
+                                  return folded.deltas++;
+                                }).pipe(
+                                  Effect.flatMap((ordinal) =>
+                                    store.commit([
+                                      {
+                                        v: 1,
+                                        type: "model.delta",
+                                        id: eventId(
+                                          command.id,
+                                          "delta",
+                                          String(ordinal),
+                                        ),
+                                        durable: false,
+                                        ring: [termName],
+                                        session,
+                                        cause: command.id,
+                                        payload: { delta: part.delta },
+                                      },
+                                    ]),
+                                  ),
+                                  Effect.asVoid,
+                                );
+                              case "tool-call":
+                                return Effect.sync(() => {
+                                  folded.toolCalls.push({
+                                    callId: part.id,
+                                    name: part.name,
+                                    params: part.params,
+                                  });
                                 });
-                              });
-                            case "finish":
-                              return Effect.sync(() => {
-                                folded.finishReason = part.reason;
-                                folded.usage = part.usage;
-                                folded.tokens = usageTokens(part.usage);
-                              });
-                            default:
-                              return Effect.void;
-                          }
-                        }),
-                        // harness failure, not an agent error
-                        Effect.orDie,
-                      );
+                              case "finish":
+                                return Effect.sync(() => {
+                                  folded.finishReason = part.reason;
+                                  folded.usage = part.usage;
+                                  folded.tokens = usageTokens(part.usage);
+                                });
+                              default:
+                                return Effect.void;
+                            }
+                          }),
+                        );
+                    });
+                    // transient provider failures (5xx, rate limits,
+                    // network resets) retry with bounded backoff — the
+                    // provider marks retryability; everything else is a
+                    // harness failure (a defect, not an agent error)
+                    yield* attempt.pipe(
+                      Effect.retry({
+                        // the `as never` toolkit collapses the inferred
+                        // error union; the wire errors are AiError
+                        while: (error: AiError.AiError) => error.isRetryable,
+                        schedule: Schedule.exponential("500 millis"),
+                        times: 4,
+                      }),
+                      Effect.orDie,
+                    );
 
                     yield* emit("model.completed", command.id, "response", {
                       finishReason: folded.finishReason,
