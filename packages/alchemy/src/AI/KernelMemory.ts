@@ -483,8 +483,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         refs: unknown[];
       }) {
         const policy = yield* KernelPolicy;
-        const compiled = yield* compileTools(term.refs);
-        return yield* makeRing({
+        // late-bound: completion steers from background delegations route
+        // to this ring's own steer verb once the ring exists (§2.8)
+        const steerCell: SteerCell = {};
+        const compiled = yield* compileTools(term.refs, undefined, steerCell);
+        const service = yield* makeRing({
           termName: term["~alchemy/Name"],
           system: renderTemplate(term.template, term.refs),
           compiled,
@@ -499,6 +502,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               (result) => result.outcome,
             ),
         });
+        steerCell.current = service.steer;
+        return service;
       });
 
       // ── Loop: a run ITERATES turns per work item (§2.5) ──────────────
@@ -605,10 +610,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           ],
         ]);
 
-        const compiled = yield* compileTools(term.refs, {
-          tools: syntheticTools,
-          handlers: syntheticHandlers,
-        });
+        const steerCell: SteerCell = {};
+        const compiled = yield* compileTools(
+          term.refs,
+          { tools: syntheticTools, handlers: syntheticHandlers },
+          steerCell,
+        );
 
         const system =
           renderTemplate(term.template, term.refs) +
@@ -753,6 +760,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               }
             }),
         });
+        steerCell.current = service.steer;
         return service;
       });
 
@@ -822,6 +830,16 @@ const summarizeDelegation = (
   return Effect.succeed(value);
 };
 
+/** Late-bound access to the host ring's own steer verb (§2.8): the
+ * delegation compiler runs before the ring exists, so completion steers
+ * route through this cell, wired right after `makeRing` returns. */
+interface SteerCell {
+  current?: (input: unknown) => Effect.Effect<void, never, never>;
+}
+
+const asText = (value: unknown): string =>
+  typeof value === "string" ? value : JSON.stringify(value);
+
 const compileTools = Effect.fn(function* (
   refs: ReadonlyArray<unknown>,
   synthetic?: {
@@ -831,6 +849,7 @@ const compileTools = Effect.fn(function* (
       (params: unknown) => Effect.Effect<unknown, unknown>
     >;
   },
+  steerCell?: SteerCell,
 ) {
   const aiTools: AiTool.Any[] = [...(synthetic?.tools ?? [])];
   const handlers = new Map<
@@ -838,14 +857,30 @@ const compileTools = Effect.fn(function* (
     (params: unknown) => Effect.Effect<unknown, unknown>
   >(synthetic?.handlers ?? []);
 
+  // background-run bookkeeping for this host (§2.8 spawn-and-continue).
+  // Forks live in the interpretation Scope: release the host's Layer and
+  // pending background dispatches die with the ring.
+  const scope = yield* Effect.scope;
+  const backgroundRuns = new Map<
+    string,
+    {
+      delegate: string;
+      status: "running" | "completed" | "failed";
+      summary?: string;
+    }
+  >();
+  let spawnOrdinal = 0;
+  let hasDelegates = false;
+
   for (const ref of refs) {
-    // ── delegation (§1.5 Stage A): an interpolated Agent/Loop becomes a
-    // tool whose handler is the DELEGATE'S dispatch. The tag resolves
-    // the live ProcessService from ambient context — which ring serves
-    // it, with which tool physics, is entirely the Layer graph's
+    // ── delegation (§1.5 Stage A / §2.8): an interpolated Agent/Loop
+    // becomes a tool whose handler is the DELEGATE'S dispatch. The tag
+    // resolves the live ProcessService from ambient context — which ring
+    // serves it, with which tool physics, is entirely the Layer graph's
     // decision (per-agent physics, shared vs private delegates).
     if (isAgent(ref) || isLoop(ref)) {
       const name = ref["~alchemy/Name"];
+      hasDelegates = true;
       const delegate = yield* Effect.serviceOption(ref as never);
       if (Option.isNone(delegate)) {
         return yield* Effect.die(
@@ -857,27 +892,74 @@ const compileTools = Effect.fn(function* (
       const service = delegate.value as {
         dispatch: (item: unknown) => Effect.Effect<unknown, unknown, never>;
       };
+      const call = (task: unknown) =>
+        service.dispatch(task).pipe(
+          Effect.flatMap(summarizeDelegation),
+          // typed loop exits (Refused/BudgetExceeded) become
+          // model-visible failure text for the caller
+          Effect.mapError((error) => String(error)),
+        );
       aiTools.push(
         AiTool.make(name, {
           description:
-            `Delegate a task to ${name} and receive its distilled ` +
-            `result. ${name}'s charter: ${renderTemplate(
+            `Delegate a task to ${name}. With background=false (default) ` +
+            `this blocks and returns ${name}'s distilled result; with ` +
+            `background=true it returns a run key immediately and the ` +
+            `result arrives later as a steer message (poll with ` +
+            `check_runs). ${name}'s charter: ${renderTemplate(
               (ref as { template: TemplateStringsArray }).template,
               (ref as { refs: unknown[] }).refs,
             )}`,
-          parameters: S.Struct({ task: S.String }) as never,
+          parameters: S.Struct({
+            task: S.String,
+            background: S.optionalKey(S.Boolean),
+          }) as never,
         }),
       );
-      handlers.set(name, (params) =>
-        service
-          .dispatch((params as { task?: unknown } | undefined)?.task ?? params)
-          .pipe(
-            Effect.flatMap(summarizeDelegation),
-            // typed loop exits (Refused/BudgetExceeded) become
-            // model-visible failure text for the caller
-            Effect.mapError((error) => String(error)),
-          ),
-      );
+      handlers.set(name, (params) => {
+        const input = params as
+          | { task?: unknown; background?: unknown }
+          | undefined;
+        const task = input?.task ?? params;
+
+        // sync call (§2.8 pattern 1): admit + join
+        if (input?.background !== true) return call(task);
+
+        // spawn-and-continue (§2.8 pattern 3): send now; the settled
+        // result arrives at the HOST's next boundary as a steer (or
+        // parks for its next run) — the host never polls, never blocks
+        return Effect.gen(function* () {
+          const runKey = `${name}#bg${spawnOrdinal++}`;
+          backgroundRuns.set(runKey, { delegate: name, status: "running" });
+          yield* Effect.result(call(task)).pipe(
+            Effect.flatMap((result) => {
+              const [status, summary] = Result.isSuccess(result)
+                ? (["completed", asText(result.success)] as const)
+                : ([
+                    "failed",
+                    asText(
+                      (result as Result.Failure<unknown, unknown>).failure,
+                    ),
+                  ] as const);
+              backgroundRuns.set(runKey, {
+                delegate: name,
+                status,
+                summary,
+              });
+              return (
+                steerCell?.current?.(
+                  `Background run ${runKey} ${status}: ${summary}`,
+                ) ?? Effect.void
+              );
+            }),
+            Effect.forkIn(scope),
+          );
+          return (
+            `spawned background run ${runKey}; its distilled result will ` +
+            "arrive as a steer message. Poll with check_runs if needed."
+          );
+        });
+      });
       continue;
     }
 
@@ -910,6 +992,34 @@ const compileTools = Effect.fn(function* (
           Object.fromEntries(params.map((p) => [p["~alchemy/Name"], p.schema])),
         ) as never,
       }),
+    );
+  }
+
+  // check-in (§2.8): a pure read over the background-run registry —
+  // status is derived from settled state, never a wake. Only compiled
+  // when the term can actually delegate.
+  if (hasDelegates) {
+    aiTools.push(
+      AiTool.make("check_runs", {
+        description:
+          "Check the status of background runs you spawned. Returns one " +
+          "line per run: key, status (running | completed | failed), and " +
+          "the distilled result when settled.",
+        parameters: S.Struct({ reason: S.optionalKey(S.String) }) as never,
+      }),
+    );
+    handlers.set("check_runs", () =>
+      Effect.sync(() =>
+        backgroundRuns.size === 0
+          ? "no background runs"
+          : [...backgroundRuns.entries()]
+              .map(
+                ([key, run]) =>
+                  `${key} [${run.delegate}] ${run.status}` +
+                  (run.summary === undefined ? "" : `: ${run.summary}`),
+              )
+              .join("\n"),
+      ),
     );
   }
 

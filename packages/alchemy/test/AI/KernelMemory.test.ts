@@ -570,6 +570,106 @@ describe("delegation", () => {
   );
 });
 
+describe("spawn-and-continue (§2.8)", () => {
+  it.effect("background delegation returns a key; the result steers back", () =>
+    Effect.gen(function* () {
+      // two rings share one wire: route by system prompt so the test is
+      // deterministic regardless of fiber interleaving
+      let chiefCalls = 0;
+      const calls: LanguageModel.ProviderOptions[] = [];
+      const model = Layer.effect(
+        LanguageModel.LanguageModel,
+        LanguageModel.make({
+          generateText: () => Effect.die(new Error("streamText only")),
+          streamText: (options) =>
+            Stream.suspend(() => {
+              calls.push(options);
+              if (promptText(options).includes("You are the sage")) {
+                return Stream.fromIterable([
+                  ...text("the answer is 42"),
+                  finish("stop"),
+                ]);
+              }
+              chiefCalls++;
+              return Stream.fromIterable(
+                chiefCalls === 1
+                  ? [
+                      toolCall("d1", "Sage", {
+                        task: "find the answer",
+                        background: true,
+                      }),
+                      finish("tool-calls"),
+                    ]
+                  : chiefCalls === 2
+                    ? [...text("spawned; standing by"), finish("stop")]
+                    : [
+                        ...text("the background run reported 42"),
+                        finish("stop"),
+                      ],
+              );
+            }),
+        }),
+      );
+
+      const kernelLayer = AI.memory.pipe(Layer.provide(model));
+      const { first, second } = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const chief = yield* kernel.interpret(Chief);
+          // turn 1: spawn in background, then end the turn
+          const first = (yield* chief.dispatch(
+            "find the answer, in the background",
+          )) as AI.Step.HaltOutcome;
+          // wait until the SAGE's run has halted (rows are truth)
+          yield* Stream.runCollect(
+            kernel
+              .trace("Sage")
+              .pipe(Stream.takeUntil((event) => event.type === "turn.halted")),
+          );
+          // the completion steer parked (chief was idle); turn 2 sees it
+          const second = (yield* chief.dispatch(
+            "what happened?",
+          )) as AI.Step.HaltOutcome;
+          return { first, second };
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            kernelLayer,
+            AI.layer(Sage).pipe(
+              Layer.provide([kernelLayer, RuntimeContext.phantom]),
+            ),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+
+      expect(first._tag).toBe("Completed");
+      expect(second).toMatchObject({
+        _tag: "Completed",
+        text: "the background run reported 42",
+      });
+      const chiefPrompts = calls.filter(
+        (options) => !promptText(options).includes("You are the sage"),
+      );
+      // chief round 1: check_runs was advertised alongside the delegate
+      expect(chiefPrompts[0]!.tools.map((tool) => tool.name).sort()).toEqual([
+        "Sage",
+        "check_runs",
+      ]);
+      // chief round 2 (same turn): the spawn returned a RUN KEY, not a result
+      expect(promptText(chiefPrompts[1]!)).toContain(
+        "spawned background run Sage#bg0",
+      );
+      expect(promptText(chiefPrompts[1]!)).not.toContain("the answer is 42");
+      // chief turn 2 round 1: the parked completion steer was promoted
+      expect(promptText(chiefPrompts[2]!)).toContain(
+        "Background run Sage#bg0 completed: the answer is 42",
+      );
+    }),
+  );
+});
+
 // ─── the loop runtime (§2.5) ─────────────────────────────────────
 
 class Quest extends AI.Loop<Quest>()("Quest")`

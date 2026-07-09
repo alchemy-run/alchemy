@@ -340,6 +340,60 @@ describe("memory kernel × live Anthropic", () => {
   );
 
   it.effect.skipIf(apiKey === undefined)(
+    "spawn-and-continue: a background delegation steers its result back",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const kernelLayer = AI.memory.pipe(Layer.provide(ModelLive));
+        const layers = Layer.mergeAll(
+          kernelLayer,
+          AI.layer(Mathematician).pipe(
+            Layer.provide([kernelLayer, harness.layer, RuntimeContext.phantom]),
+          ),
+          RuntimeContext.phantom,
+        );
+        const { first, second } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const chief = yield* kernel.interpret(Chief);
+            const first = (yield* chief.dispatch(
+              "Delegate this to Mathematician with background=true, then " +
+                "immediately end your turn by replying exactly 'spawned': " +
+                "What is 21 multiplied by 47?",
+            )) as AI.Step.HaltOutcome;
+            // rows are truth: wait for the delegate's run to halt
+            yield* Stream.runCollect(
+              kernel
+                .trace("Mathematician")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                ),
+            ).pipe(Effect.timeout("60 seconds"), Effect.orDie);
+            // the parked completion steer enters this turn's round 1
+            const second = (yield* chief.dispatch(
+              "What did the background run report? Answer with the number.",
+            )) as AI.Step.HaltOutcome;
+            return { first, second };
+          }),
+        ).pipe(Effect.provide(layers));
+
+        // the spawn returned immediately (no result in turn 1)…
+        expect(first._tag).toBe("Completed");
+        if (first._tag === "Completed") {
+          expect(first.text).not.toContain("987");
+        }
+        // …the delegate really ran the tool in the background…
+        expect(harness.invocations).toContainEqual({ a: 21, b: 47 });
+        // …and the steered-back result reached turn 2
+        expect(second._tag).toBe("Completed");
+        if (second._tag === "Completed") {
+          expect(second.text).toContain("987");
+        }
+      }),
+    { timeout: 180_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
     "the live turn journals its Trace write-ahead (§2.7)",
     () =>
       Effect.gen(function* () {
