@@ -71,14 +71,6 @@ export const ScalingPolicy = Resource<ScalingPolicy>(
   "AWS.AutoScaling.ScalingPolicy",
 );
 
-const isAutoScalingGroupResource = (
-  value: unknown,
-): value is AutoScalingGroupResource =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  (value as { Type?: string }).Type === "AWS.AutoScaling.AutoScalingGroup";
-
 export const ScalingPolicyProvider = () =>
   Provider.effect(
     ScalingPolicy,
@@ -88,18 +80,33 @@ export const ScalingPolicyProvider = () =>
           ? Effect.succeed(props.policyName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
 
+      // Derive the group name from either spelling of `autoScalingGroup`. A
+      // whole AutoScalingGroup resource resolves to its bare Attributes
+      // before reaching the provider — the resource `Type` marker does not
+      // survive resolution — so narrow on the attributes shape, never on
+      // `Type`. May also receive `undefined`: an Output-valued
+      // `autoScalingGroup` doesn't survive a `creating`-state round-trip
+      // (it deserializes as `undefined`), and recovery paths hand those
+      // props back as `olds`.
       const toAutoScalingGroupName = (
-        input: ScalingPolicyProps["autoScalingGroup"],
-      ) =>
-        isAutoScalingGroupResource(input)
-          ? (input.autoScalingGroupName as unknown as string)
-          : (input as unknown as string);
+        input: ScalingPolicyProps["autoScalingGroup"] | undefined,
+      ): string | undefined =>
+        typeof input === "string"
+          ? input
+          : typeof (input as { autoScalingGroupName?: unknown } | undefined)
+                ?.autoScalingGroupName === "string"
+            ? (input as unknown as { autoScalingGroupName: string })
+                .autoScalingGroupName
+            : undefined;
 
+      // `describePolicies` searches account-wide when no AutoScalingGroupName
+      // is given; policy names are unique physical names, so a name-only
+      // lookup still identifies our policy during state recovery.
       const describePolicy = ({
         autoScalingGroupName,
         policyName,
       }: {
-        autoScalingGroupName: string;
+        autoScalingGroupName: string | undefined;
         policyName: string;
       }) =>
         autoscaling
@@ -147,10 +154,17 @@ export const ScalingPolicyProvider = () =>
           const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
+          // ASG change → replace, but only when both sides are known — a
+          // half-created state row may have lost an Output-valued
+          // `autoScalingGroup`, and an unknown old ASG must fall through to
+          // the create/update recovery path rather than force a replacement.
+          const oldGroupName = toAutoScalingGroupName(olds.autoScalingGroup);
+          const newGroupName = toAutoScalingGroupName(news.autoScalingGroup);
           if (
             oldName !== newName ||
-            toAutoScalingGroupName(olds.autoScalingGroup) !==
-              toAutoScalingGroupName(news.autoScalingGroup)
+            (oldGroupName !== undefined &&
+              newGroupName !== undefined &&
+              oldGroupName !== newGroupName)
           ) {
             return { action: "replace" } as const;
           }
@@ -165,7 +179,7 @@ export const ScalingPolicyProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const autoScalingGroupName =
             output?.autoScalingGroupName ??
-            toAutoScalingGroupName(olds!.autoScalingGroup);
+            toAutoScalingGroupName(olds?.autoScalingGroup);
           const policyName =
             output?.policyName ?? (yield* toName(id, olds ?? {}));
           const policy = yield* describePolicy({

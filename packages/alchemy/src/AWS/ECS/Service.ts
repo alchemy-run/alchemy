@@ -381,10 +381,20 @@ export const ServiceProvider = () =>
   Provider.effect(
     Service,
     Effect.gen(function* () {
-      const clusterArnOf = (cluster: ServiceProps["cluster"] | ClusterArn) =>
+      // Derive the cluster ARN from either form of the `cluster` prop. May
+      // legitimately receive `undefined`: a `creating` state row persisted
+      // before upstream Outputs resolved can't round-trip an Output-valued
+      // `cluster` (it deserializes as `undefined`), and recovery paths hand
+      // those props back as `olds`.
+      const clusterArnOf = (
+        cluster: ServiceProps["cluster"] | ClusterArn | undefined,
+      ): ClusterArn | undefined =>
         typeof cluster === "string"
-          ? cluster
-          : (((cluster as any).clusterArn ?? cluster) as string);
+          ? (cluster as ClusterArn)
+          : typeof (cluster as { clusterArn?: unknown } | undefined)
+                ?.clusterArn === "string"
+            ? ((cluster as { clusterArn: string }).clusterArn as ClusterArn)
+            : undefined;
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({ key, value }));
 
@@ -555,8 +565,18 @@ export const ServiceProvider = () =>
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
-          // cluster change → replace (a service can't move clusters).
-          if (clusterArnOf(olds.cluster) !== clusterArnOf(news.cluster)) {
+          // cluster change → replace (a service can't move clusters). Only
+          // when both sides are known — a half-created state row may have
+          // lost an Output-valued `cluster` (see `clusterArnOf`), and an
+          // unknown old cluster must fall through to the create/update
+          // recovery path rather than force a replacement.
+          const oldClusterArn = clusterArnOf(olds.cluster);
+          const newClusterArn = clusterArnOf(news.cluster);
+          if (
+            oldClusterArn !== undefined &&
+            newClusterArn !== undefined &&
+            oldClusterArn !== newClusterArn
+          ) {
             return { action: "replace", deleteFirst: true } as const;
           }
           // Truly-immutable post-create fields. Everything else (desiredCount,
@@ -587,11 +607,20 @@ export const ServiceProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
+          const clusterArn = output?.clusterArn ?? clusterArnOf(olds?.cluster);
+          if (clusterArn === undefined) {
+            // No attributes and no recoverable cluster from the persisted
+            // props (an Output-valued `cluster` doesn't survive a
+            // `creating`-state round-trip). We can't locate the service, so
+            // report "not found" — the engine re-drives the create and
+            // reconcile converges on any half-created service by name.
+            return undefined;
+          }
           const serviceName =
             output?.serviceName ?? (yield* toServiceName(id, olds ?? {}));
           const described = yield* ecs
             .describeServices({
-              cluster: output?.clusterArn ?? clusterArnOf(olds!.cluster),
+              cluster: clusterArn,
               services: [serviceName],
               include: ["TAGS"],
             })

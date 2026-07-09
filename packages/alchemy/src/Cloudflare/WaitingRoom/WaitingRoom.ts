@@ -290,7 +290,9 @@ export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
  *
  * @see https://developers.cloudflare.com/waiting-room/
  */
-export const WaitingRoom = Resource<WaitingRoom>(TypeId);
+export const WaitingRoom = Resource<WaitingRoom>(TypeId, {
+  aliases: ["Cloudflare.WaitingRoom"],
+});
 
 /**
  * Returns true if the given value is a WaitingRoom resource.

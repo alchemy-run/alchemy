@@ -65,16 +65,15 @@ test(
   "AsyncWorker increments the Counter Durable Object across requests",
   Effect.gen(function* () {
     const { asyncWorker } = yield* stack;
-    const url = asyncWorker!;
 
-    const first = yield* HttpClient.get(new URL("/counter", url));
+    const first = yield* HttpClient.get(new URL("/counter", asyncWorker));
     expect(first.status).toBe(200);
     const firstBody = yield* first.text;
     const firstMatch = firstBody.match(/^Hello, world! (\d+)$/);
     expect(firstMatch).not.toBeNull();
     const firstCount = Number(firstMatch![1]);
 
-    const second = yield* HttpClient.get(new URL("/counter", url));
+    const second = yield* HttpClient.get(new URL("/counter", asyncWorker));
     expect(second.status).toBe(200);
     const secondBody = yield* second.text;
     const secondMatch = secondBody.match(/^Hello, world! (\d+)$/);
@@ -89,8 +88,7 @@ test(
   "AsyncWorker serves assets",
   Effect.gen(function* () {
     const { asyncWorker } = yield* stack;
-    const url = asyncWorker!;
-    const response = yield* HttpClient.get(new URL("/", url));
+    const response = yield* HttpClient.get(new URL("/", asyncWorker));
     expect(response.status).toBe(200);
     const body = yield* response.text;
     expect(body).toMatch("<h1>Hello, world!</h1>");
@@ -101,7 +99,7 @@ test(
   "AsyncWorker receives bindings, including variables and secrets",
   Effect.gen(function* () {
     const { asyncWorker } = yield* stack;
-    const response = yield* HttpClient.get(new URL("/env", asyncWorker!));
+    const response = yield* HttpClient.get(new URL("/env", asyncWorker));
     expect(response.status).toBe(200);
     const body = yield* response.json;
     expect(body).toMatchObject({
@@ -116,12 +114,13 @@ test(
   "AsyncWorker sends and receives messages on the queue",
   Effect.gen(function* () {
     const { asyncWorker } = yield* stack;
-    const url = asyncWorker!;
     const body = { text: "hello", sentAt: Date.now() };
-    yield* HttpClient.post(new URL("/queue/send", url), {
+    yield* HttpClient.post(new URL("/queue/send", asyncWorker), {
       body: yield* HttpBody.json(body),
     }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-    const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
+    const message = yield* HttpClient.get(
+      new URL("/queue/messages", asyncWorker),
+    ).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
       Effect.map(cast<Schema.Json, Array<Message>>),
@@ -158,7 +157,7 @@ test(
   Effect.gen(function* () {
     const { effectWorker } = yield* stack;
 
-    const response = yield* HttpClient.get(effectWorker!);
+    const response = yield* HttpClient.get(effectWorker);
     expect(response.status).toBe(200);
 
     const body = (yield* response.json) as {
@@ -174,12 +173,13 @@ test(
   "EffectWorker sends and receives messages on the queue",
   Effect.gen(function* () {
     const { effectWorker } = yield* stack;
-    const url = effectWorker!;
     const body = { text: "hello", sentAt: Date.now() };
-    yield* HttpClient.post(new URL("/queue/send", url), {
+    yield* HttpClient.post(new URL("/queue/send", effectWorker), {
       body: yield* HttpBody.json(body),
     }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-    const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
+    const message = yield* HttpClient.get(
+      new URL("/queue/messages", effectWorker),
+    ).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
       Effect.map(cast<Schema.Json, Array<Message>>),
@@ -218,7 +218,7 @@ test(
   Effect.gen(function* () {
     const { asyncWorker } = yield* stack;
 
-    const response = yield* HttpClient.get(new URL("/wasm", asyncWorker!));
+    const response = yield* HttpClient.get(new URL("/wasm", asyncWorker));
     expect(response.status).toBe(200);
     const body = (yield* response.json) as { result: number };
     expect(body.result).toBe(7);
@@ -230,7 +230,7 @@ test(
   Effect.gen(function* () {
     const { effectWorker } = yield* stack;
 
-    const response = yield* HttpClient.get(new URL("/wasm", effectWorker!));
+    const response = yield* HttpClient.get(new URL("/wasm", effectWorker));
     expect(response.status).toBe(200);
     const body = (yield* response.json) as { result: number };
     expect(body.result).toBe(7);
@@ -292,20 +292,22 @@ test(
   "EffectWorker drives NotifyWorkflow to completion with secret + KV roundtrip",
   Effect.gen(function* () {
     const { effectWorker } = yield* stack;
-    yield* exerciseWorkflow(effectWorker!, "effect");
+    yield* exerciseWorkflow(effectWorker, "effect");
   }),
-  { timeout: 180_000 },
+  { timeout: 60_000 },
 );
 
 test(
   "EffectWorker fetches a URL in a sandbox",
   Effect.gen(function* () {
     const { effectWorker } = yield* stack;
-    const url = effectWorker!;
-    const response = yield* HttpClient.get(new URL("/sandbox", url));
+    const response = yield* HttpClient.get(new URL("/sandbox", effectWorker));
     expect(response.status).toBe(200);
-    const body = (yield* response.text) as string;
-    expect(body).toBe("Hello from Sandbox container!");
+    const body = yield* response.text;
+    // The container echoes its `GREETING` env var, proving env vars flow
+    // through to the container (via the application config on a live deploy,
+    // and via `ctx.container.start({ env })` in local dev).
+    expect(body).toBe("Hello from Sandbox container! GREETING=hello-from-env");
   }),
   { timeout: 180_000 },
 );

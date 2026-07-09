@@ -12,11 +12,13 @@ import * as Effect from "effect/Effect";
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Lambda MicroVM network connectors are a preview feature. Creation provisions
-// ENIs in the VPC and can take several minutes to reach ACTIVE, and the API
-// requires an account that is onboarded to the preview. Gate the live
+// ENIs in the VPC and can take several minutes to reach ACTIVE (we've observed
+// the full lifecycle blowing a 25-minute budget and leaking its VPC — which
+// then starves the account's 5-VPC quota and fails unrelated EC2 suites), and
+// the API requires an account that is onboarded to the preview. Gate the live
 // lifecycle behind LAMBDA_TEST_NETWORK_CONNECTOR=1 so an entitled account runs
 // it unchanged.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!process.env.LAMBDA_TEST_NETWORK_CONNECTOR)(
   "create, update, list, delete network connector",
   (stack) =>
     Effect.gen(function* () {

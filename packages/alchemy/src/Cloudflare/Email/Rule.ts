@@ -84,7 +84,9 @@ export type Rule = Resource<
  * });
  * ```
  */
-export const Rule = Resource<Rule>("Cloudflare.Email.Rule");
+export const Rule = Resource<Rule>("Cloudflare.Email.Rule", {
+  aliases: ["Cloudflare.EmailRule"],
+});
 
 export const RuleProvider = () =>
   Provider.succeed(Rule, {

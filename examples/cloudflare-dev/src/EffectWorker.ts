@@ -73,8 +73,10 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
             );
           }
           const instance = yield* workflow.create({
-            roomId,
-            message: "hello from workflow",
+            params: {
+              roomId,
+              message: "hello from workflow",
+            },
           });
           return yield* HttpServerResponse.json({ instanceId: instance.id });
         } else if (url.pathname.startsWith("/workflow/status/")) {

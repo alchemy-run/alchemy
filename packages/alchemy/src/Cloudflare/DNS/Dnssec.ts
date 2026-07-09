@@ -190,7 +190,9 @@ export type Dnssec = Resource<
  * });
  * ```
  */
-export const Dnssec = Resource<Dnssec>(TypeId);
+export const Dnssec = Resource<Dnssec>(TypeId, {
+  aliases: ["Cloudflare.Dns.Dnssec"],
+});
 
 /**
  * Returns true if the given value is a Dnssec resource.

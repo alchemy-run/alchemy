@@ -56,10 +56,18 @@ export const DelegatedAdministratorProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
+          const accountId = output?.accountId ?? olds?.accountId;
+          const servicePrincipal =
+            output?.servicePrincipal ?? olds?.servicePrincipal;
+          if (accountId === undefined || servicePrincipal === undefined) {
+            // Output-valued props don't survive a `creating`-state round-trip
+            // (they deserialize as `undefined`) — report "not found" so the
+            // engine re-drives the create.
+            return undefined;
+          }
           return yield* readDelegatedAdministrator({
-            accountId: output?.accountId ?? olds!.accountId,
-            servicePrincipal:
-              output?.servicePrincipal ?? olds!.servicePrincipal,
+            accountId,
+            servicePrincipal,
           });
         }),
         list: () =>

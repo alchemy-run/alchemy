@@ -8,6 +8,10 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 
 export interface AliasProps {
   /**
@@ -31,6 +35,13 @@ export interface AliasProps {
    * function version.
    */
   routingConfig?: Lambda.AliasRoutingConfiguration;
+  /**
+   * Asynchronous invocation settings (retries, event age, destinations)
+   * scoped to this alias. Omit to remove any existing alias-level config and
+   * fall back to Lambda's defaults (2 retries, 6-hour max event age, no
+   * destinations).
+   */
+  eventInvokeConfig?: EventInvokeConfig;
 }
 
 export interface Alias extends Resource<
@@ -97,6 +108,24 @@ export interface Alias extends Resource<
  *   routingConfig: {
  *     AdditionalVersionWeights: {
  *       "3": 0.1,
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * @section Async Invocation
+ * @example Alias-Scoped Retry Behavior
+ * ```typescript
+ * const alias = yield* Alias("LiveAlias", {
+ *   functionName: fn.functionName,
+ *   functionVersion: "2",
+ *   aliasName: "live",
+ *   eventInvokeConfig: {
+ *     maximumRetryAttempts: 0,
+ *     destinationConfig: {
+ *       OnFailure: {
+ *         Destination: queue.queueArn,
+ *       },
  *     },
  *   },
  * });
@@ -284,6 +313,12 @@ export const AliasProvider = () =>
             );
           }
 
+          yield* syncEventInvokeConfig({
+            functionName: news.functionName,
+            qualifier: attrs.aliasName,
+            config: news.eventInvokeConfig,
+          });
+
           yield* session.note(
             `Alias ${attrs.aliasName} on ${attrs.functionName}`,
           );
@@ -291,6 +326,13 @@ export const AliasProvider = () =>
           return attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
+          // The alias-scoped async config does not die with the alias — clear
+          // it first so a later alias of the same name starts clean.
+          yield* syncEventInvokeConfig({
+            functionName: output.functionName,
+            qualifier: output.aliasName,
+            config: undefined,
+          });
           yield* retryOnAliasConflict(
             Lambda.deleteAlias({
               FunctionName: output.functionName,

@@ -18,6 +18,7 @@ test.provider("diff replaces a volume when labels change", () =>
     const volumeProvider = yield* Provider.findProvider(Docker.Volume);
     const volumeDiff = yield* volumeProvider.diff!({
       id: "data",
+      fqn: "data",
       instanceId: "instance",
       olds: { name: "data", labels: { usage: "old" } },
       news: { name: "data", labels: { usage: "new" } },

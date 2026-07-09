@@ -178,7 +178,10 @@ export const InfrastructureTargetProvider = () =>
       // ownership markers, so gate adoption behind Unowned.
       const hostname = olds?.hostname ?? output?.hostname;
       if (!hostname) return undefined;
-      const desiredIp = olds ? resolvedIp(olds.ip) : output?.ip;
+      // `olds.ip` may be `undefined` when a `creating` row was persisted
+      // before upstream Outputs resolved — fall back to the output hint.
+      const desiredIp =
+        olds?.ip !== undefined ? resolvedIp(olds.ip) : output?.ip;
       const match = yield* findByIdentity(acct, hostname, desiredIp);
       if (match) return Unowned(toAttributes(match, acct));
       return undefined;

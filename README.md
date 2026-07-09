@@ -53,6 +53,21 @@ One `bind()` wires the binding, env var, and typed connection — at deploy time
 bun add alchemy@next effect@next
 ```
 
+## GitHub Action
+
+Use the root action to deploy `prod` from `main`, deploy PR previews as
+`staging-{number}`, and destroy PR previews when the PR closes:
+
+```yaml
+- uses: alchemy-run/alchemy-effect@v1
+  env:
+    CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+The workflow must install the `alchemy` CLI before this action runs.
+
 ## Bootstrap with an AI coding agent
 
 Paste this into Claude Code, Cursor, or any agent that can fetch a URL:

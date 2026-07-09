@@ -47,7 +47,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```
  *
  * @section SSR Frameworks
- * For SSR frameworks like TanStack Start, SolidStart, or Nuxt, enable
+ * For SSR frameworks like TanStack Start or SolidStart, enable
  * `nodejs_compat` so the server bundle can use Node.js APIs.
  *
  * @example TanStack Start
@@ -65,9 +65,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
- *   assets: {
- *     config: { runWorkerFirst: true },
- *   },
+ *   assets: { runWorkerFirst: true },
  * });
  * ```
  *
@@ -81,10 +79,29 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *
  * @example React Router with RSC
  * ```typescript
- * const app = yield* Cloudflare.Vite("ReactRouterRSC", {
+ * const app = yield* Cloudflare.Website.Vite("ReactRouterRSC", {
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *   },
+ *   viteEnvironments: {
+ *     entry: "rsc",
+ *     children: ["ssr"],
+ *   },
+ * });
+ * ```
+ *
+ * @section Custom Worker Entry
+ * By default the deployed Worker entry is the server bundle the
+ * framework produces. When the Worker must export more than the
+ * framework's fetch handler — Durable Object classes, additional
+ * handlers — point `main` at your own module that wraps the framework
+ * handler and re-exports the extras. `main` takes precedence over any
+ * entry configured in the Vite config.
+ *
+ * @example Custom entry hosting Durable Objects
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("App", {
+ *   main: "worker/index.ts",
  *   viteEnvironments: {
  *     entry: "rsc",
  *     children: ["ssr"],
@@ -103,10 +120,8 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *     flags: ["nodejs_compat"],
  *   },
  *   assets: {
- *     config: {
- *       htmlHandling: "auto-trailing-slash",
- *       notFoundHandling: "single-page-application",
- *     },
+ *     htmlHandling: "auto-trailing-slash",
+ *     notFoundHandling: "single-page-application",
  *   },
  * });
  * ```
@@ -182,6 +197,7 @@ export const Vite: {
             ...props,
             main: undefined!,
             vite: {
+              main: props?.main,
               rootDir: props?.rootDir,
               memo: props?.memo,
               viteEnvironments: props?.viteEnvironments,

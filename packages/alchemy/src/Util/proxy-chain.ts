@@ -59,19 +59,15 @@ export const proxyChain = <T>(cached: Effect.Effect<T, any, any>): T =>
 const chain = (
   cached: Effect.Effect<unknown, any, any>,
   ops: ReadonlyArray<Op> = [],
-): unknown =>
-  new Proxy(function () {} as any, {
+): unknown => {
+  const effect = Effect.flatMap(
+    cached,
+    (root) => replay(root, ops) as Effect.Effect<unknown, unknown, unknown>,
+  );
+  return new Proxy(function () {}, {
     get(_, prop) {
-      if (prop === Symbol.iterator) {
-        // `yield* proxy` — produce the resolved Effect's iterator.
-        return function () {
-          const eff = Effect.flatMap(
-            cached,
-            (root) =>
-              replay(root, ops) as Effect.Effect<unknown, unknown, unknown>,
-          );
-          return (eff as any)[Symbol.iterator]();
-        };
+      if (Reflect.has(effect, prop)) {
+        return Reflect.get(effect, prop);
       }
       return chain(cached, [...ops, { kind: "get", prop }]);
     },
@@ -79,3 +75,4 @@ const chain = (
       return chain(cached, [...ops, { kind: "call", args }]);
     },
   });
+};

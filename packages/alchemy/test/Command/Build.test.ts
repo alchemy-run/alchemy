@@ -98,6 +98,43 @@ test.provider(
   { timeout: 60000 },
 );
 
+test.provider(
+  "input hash folds in the build command and env",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fixture = yield* makeTemporaryFixture();
+
+      const deploy = (props: Partial<Command.BuildProps>) =>
+        stack.deploy(
+          Command.Build("test-build", {
+            command: "bash build.sh",
+            cwd: fixture.cwd,
+            outdir: "dist",
+            ...props,
+          }),
+        );
+
+      const withEnvA = yield* deploy({ env: { API_URL: "https://a.example" } });
+
+      // Same source tree + outdir, only the env differs: the build must not be
+      // judged reusable, so the input hash must change.
+      const withEnvB = yield* deploy({ env: { API_URL: "https://b.example" } });
+      expect(withEnvB.hash.input).not.toBe(withEnvA.hash.input);
+
+      // Likewise a change to the command string busts the input hash.
+      const withCommand = yield* deploy({
+        command: "bash build.sh dummy",
+        env: { API_URL: "https://b.example" },
+      });
+      expect(withCommand.hash.input).not.toBe(withEnvB.hash.input);
+
+      yield* stack.destroy();
+    }),
+  { timeout: 60000 },
+);
+
 test.provider("rebuilds memoized output if outdir is missing", (stack) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

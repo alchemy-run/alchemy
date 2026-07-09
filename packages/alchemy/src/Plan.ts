@@ -324,6 +324,7 @@ export const make = <A>(
                 ? provider
                     .diff({
                       id: resource.LogicalId,
+                      fqn: resource.FQN,
                       olds: oldProps,
                       instanceId: oldState.instanceId,
                       news: props,
@@ -730,6 +731,7 @@ export const make = <A>(
               const readResult = yield* provider
                 .read({
                   id,
+                  fqn,
                   instanceId: adoptInstanceId,
                   olds: news,
                   output: undefined,
@@ -813,6 +815,7 @@ export const make = <A>(
                 const attr = yield* provider
                   .read({
                     id,
+                    fqn,
                     instanceId: oldState.instanceId,
                     olds: oldState.props,
                     output: oldState.attr,
@@ -837,6 +840,7 @@ export const make = <A>(
               provider
                 ?.diff?.({
                   id,
+                  fqn,
                   olds: oldProps,
                   instanceId: oldState.instanceId,
                   output: oldState.attr,
@@ -1232,6 +1236,7 @@ export const make = <A>(
                   attr = yield* provider
                     .read({
                       id: logicalId,
+                      fqn,
                       instanceId: oldState.instanceId,
                       olds: oldState.props as never,
                       output: oldState.attr as never,

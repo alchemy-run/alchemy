@@ -214,7 +214,9 @@ export type KeylessCertificate = Resource<
  *
  * @see https://developers.cloudflare.com/ssl/keyless-ssl/
  */
-export const KeylessCertificate = Resource<KeylessCertificate>(TypeId);
+export const KeylessCertificate = Resource<KeylessCertificate>(TypeId, {
+  aliases: ["Cloudflare.KeylessCertificate"],
+});
 
 /**
  * Returns true if the given value is a KeylessCertificate resource.

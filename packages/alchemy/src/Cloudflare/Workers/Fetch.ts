@@ -7,7 +7,7 @@ import * as Stream from "effect/Stream";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import * as UrlParams from "effect/unstable/http/UrlParams";
+import * as Url from "effect/unstable/http/Url";
 import * as Binding from "../../Binding.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
 
@@ -70,7 +70,7 @@ const doFetch = (
   HttpClientResponse.HttpClientResponse,
   HttpClientError.RequestError
 > => {
-  const urlResult = UrlParams.makeUrl(
+  const urlResult = Url.make(
     request.url,
     request.urlParams,
     request.hash.pipe(Option.getOrUndefined),

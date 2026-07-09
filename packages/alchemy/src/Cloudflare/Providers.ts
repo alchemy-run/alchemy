@@ -684,31 +684,46 @@ export const providers = () =>
     ),
     Layer.provide(DockerLive),
     Layer.provideMerge(localRuntimeServices()),
-    Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(CloudflareApiLive()),
+    Layer.orDie,
+  );
+
+/**
+ * The foundation every effect tree that talks to the Cloudflare API
+ * shares — credentials resolved through the Alchemy auth provider,
+ * account environment, Access, profile + credential store — plus a
+ * blanket retry policy applied to every Cloudflare API call.
+ *
+ * Used by {@link providers} and the Cloudflare state store
+ * ({@link ../Cloudflare/StateStore/State.ts state}) so that provider
+ * lifecycle operations and state-store init/bootstrap probes retry
+ * transient failures the same way; without it the state-store
+ * subdomain/script/secrets probes run on the SDK's shorter default
+ * policy and surface throttling ("Please wait and consider throttling
+ * your request speed") to users.
+ *
+ * The retry policy extends `Retry.makeDefault`'s transient detection
+ * (throttling / 5xx / network) with Cloudflare-specific
+ * misleadingly-tagged transient cases the SDK doesn't yet mark
+ * retryable — see `cloudflareRetryFactory` below. Deliberately
+ * narrow: we ONLY add cases where the message unambiguously indicates
+ * a transient infrastructure failure (not a real auth/permission
+ * failure). Auto-retrying ambiguous cases like `Unauthorized:
+ * Authentication error` would silently loop on genuinely invalid
+ * tokens.
+ *
+ * TODO(distilled): once
+ * https://github.com/alchemy-run/distilled/pull/233 lands, the retry
+ * wrapper can collapse back to `Retry.makeDefault`.
+ */
+export const CloudflareApiLive = () =>
+  Credentials.fromAuthProvider().pipe(
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
     Layer.provideMerge(ProfileLive),
     Layer.provideMerge(CredentialsStoreLive),
-    // Apply a blanket retry policy to every Cloudflare API call. Extends
-    // `Retry.makeDefault`'s transient detection (throttling / 5xx /
-    // network) with one Cloudflare-specific misleadingly-tagged
-    // transient case the SDK doesn't yet mark retryable — see
-    // `cloudflareRetryFactory` below. Without this, the matching brief
-    // CF infrastructure blips surface as test failures and resource
-    // leaks.
-    //
-    // Deliberately narrow: we ONLY add cases where the message
-    // unambiguously indicates a transient infrastructure failure (not
-    // a real auth/permission failure). Auto-retrying ambiguous cases
-    // like `Unauthorized: Authentication error` would silently loop on
-    // genuinely invalid tokens.
-    //
-    // TODO(distilled): once
-    // https://github.com/alchemy-run/distilled/pull/233 lands, this
-    // wrapper can collapse back to `Retry.makeDefault`.
     Layer.provideMerge(Layer.succeed(Retry.Retry, cloudflareRetryFactory)),
-    Layer.orDie,
   );
 
 const cloudflareRetryFactory: Retry.Factory = (lastError) => {

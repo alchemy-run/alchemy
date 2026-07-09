@@ -106,6 +106,7 @@ export type TrustedDomain = Resource<
  */
 export const TrustedDomain = Resource<TrustedDomain>(
   EmailSecurityTrustedDomainTypeId,
+  { aliases: ["Cloudflare.EmailSecurity.TrustedDomain"] },
 );
 
 /**

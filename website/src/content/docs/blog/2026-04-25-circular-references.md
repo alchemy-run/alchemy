@@ -291,7 +291,7 @@ only invokes it when a cycle is actually present.
 
 ## Where to go next
 
-- [Guides › Circular Bindings](/guides/circular-bindings) —
+- [Guides › Circular Bindings](/infrastructure-as-effects/circular-bindings) —
   the step-by-step Worker A ↔ Worker B walkthrough.
 - [`Cloudflare/Workers/Worker.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/Cloudflare/Workers/Worker.ts)
   — the canonical `precreate` reference, including Durable

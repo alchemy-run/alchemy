@@ -778,47 +778,51 @@ describe("Lambda external packages", () => {
     );
   });
 
-  it.effect("fails when installed package files cannot be read", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
-        prefix: "alchemy-external-artifact-read-error-",
-      });
+  // `chmod 0o000` cannot make a directory unreadable on Windows, so the
+  // failure under test is unreproducible there.
+  it.effect.skipIf(process.platform === "win32")(
+    "fails when installed package files cannot be read",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-external-artifact-read-error-",
+        });
 
-      try {
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
-        );
+        try {
+          yield* fs.writeFileString(
+            path.join(root, "package.json"),
+            JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+          );
 
-        const error = yield* installPackages({
-          cwd: root,
-          install: ["sharp"],
-          architecture: "arm64",
-          runNpmInstall: (directory) =>
-            Effect.gen(function* () {
-              yield* fs.writeFileString(
-                path.join(directory, "package.json"),
-                JSON.stringify({
-                  private: true,
-                  dependencies: { sharp: "^0.34.5" },
-                }),
-              );
-              yield* fs.writeFileString(
-                path.join(directory, "package-lock.json"),
-                "{}",
-              );
-              yield* fs.chmod(directory, 0o000);
-            }),
-        }).pipe(Effect.flip);
-        expect(error.message).toBe(
-          "Failed to read installed Lambda external packages",
-        );
-      } finally {
-        yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
+          const error = yield* installPackages({
+            cwd: root,
+            install: ["sharp"],
+            architecture: "arm64",
+            runNpmInstall: (directory) =>
+              Effect.gen(function* () {
+                yield* fs.writeFileString(
+                  path.join(directory, "package.json"),
+                  JSON.stringify({
+                    private: true,
+                    dependencies: { sharp: "^0.34.5" },
+                  }),
+                );
+                yield* fs.writeFileString(
+                  path.join(directory, "package-lock.json"),
+                  "{}",
+                );
+                yield* fs.chmod(directory, 0o000);
+              }),
+          }).pipe(Effect.flip);
+          expect(error.message).toBe(
+            "Failed to read installed Lambda external packages",
+          );
+        } finally {
+          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect(

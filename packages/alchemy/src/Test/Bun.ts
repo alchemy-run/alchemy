@@ -14,7 +14,11 @@ import * as Core from "./Core.ts";
 export {
   executeWhenReady,
   getWhenReady,
+  guardContentType,
+  guardedFetchLayer,
+  rpcClientLayer,
   WorkerNotReady,
+  type EdgeGuardOptions,
   type WhenReadyOptions,
 } from "./Http.ts";
 

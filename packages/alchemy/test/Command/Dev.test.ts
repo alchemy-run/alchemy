@@ -1,7 +1,7 @@
 import * as Command from "@/Command/index.ts";
 import * as Provider from "@/Provider.ts";
 import * as Test from "@/Test/Vitest";
-import { assert, expect } from "@effect/vitest";
+import { assert, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
@@ -316,6 +316,69 @@ test.provider(
 );
 
 test.provider(
+  "favors a localhost URL over an unrelated URL printed first (#695)",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "url-favor-local",
+            // A docs link is printed first (as Astro does on a content
+            // error), then the dev server prints its own localhost URL.
+            URL_LINE: "https://docs.astro.build/en/guides/content-collections/",
+            URL_LINE_2: "  ➜  Local:   http://localhost:5001/",
+            URL_DELAY_2_MS: "300",
+          },
+        }),
+      );
+
+      expect(output.url).toBe("http://localhost:5001/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "url-favor-local");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
+  "falls back to a non-local URL when no localhost URL appears (#695)",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "url-fallback",
+            // Only a non-local URL is ever printed — it should still surface.
+            URL_LINE: "https://docs.astro.build/en/guides/content-collections/",
+          },
+        }),
+      );
+
+      expect(output.url).toBe(
+        "https://docs.astro.build/en/guides/content-collections/",
+      );
+
+      const { pid } = yield* waitForPidFile(pidFile, "url-fallback");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
   "returns undefined when no URL is printed within the timeout",
   (stack) =>
     Effect.gen(function* () {
@@ -385,3 +448,43 @@ test.provider("errors when the command fails in first 5 seconds", (stack) =>
     expect(error.reason.stderr).toContain("I'm not feeling it...");
   }),
 );
+
+describe("extractUrl", () => {
+  it("returns a plain URL when it is the only match", () => {
+    expect(Command.extractUrl("Local: http://localhost:5173/")).toBe(
+      "http://localhost:5173/",
+    );
+  });
+
+  it("favors a localhost URL over an unrelated URL printed first", () => {
+    // Astro prints a docs link on a content error before the dev server
+    // prints its own localhost URL. See issue #695.
+    const buffer =
+      "see https://docs.astro.build/en/guides/content-collections/\n" +
+      "  ➜  Local:   http://localhost:5001/\n";
+    expect(Command.extractUrl(buffer)).toBe("http://localhost:5001/");
+  });
+
+  it("favors an IP URL over an unrelated URL printed first", () => {
+    const buffer =
+      "update available https://example.com/release\n" +
+      "ready - started server on http://127.0.0.1:3000\n";
+    expect(Command.extractUrl(buffer)).toBe("http://127.0.0.1:3000");
+  });
+
+  it("falls back to a non-local URL when no local URL is present", () => {
+    expect(
+      Command.extractUrl("docs https://docs.astro.build/en/guides/x/"),
+    ).toBe("https://docs.astro.build/en/guides/x/");
+  });
+
+  it("strips ANSI escapes before matching", () => {
+    expect(Command.extractUrl("\x1b[36mhttp://localhost:5173/\x1b[0m")).toBe(
+      "http://localhost:5173/",
+    );
+  });
+
+  it("returns undefined when there is no URL", () => {
+    expect(Command.extractUrl("no url here")).toBeUndefined();
+  });
+});

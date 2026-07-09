@@ -145,7 +145,9 @@ export type Account = Resource<
  *
  * @see https://developers.cloudflare.com/tenant/how-to/manage-accounts/
  */
-export const Account = Resource<Account>(TypeId);
+export const Account = Resource<Account>(TypeId, {
+  aliases: ["Cloudflare.Account"],
+});
 
 /**
  * Returns true if the given value is an Account resource.

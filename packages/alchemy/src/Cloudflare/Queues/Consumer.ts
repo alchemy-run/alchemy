@@ -115,7 +115,9 @@ export type Consumer = Resource<
  * });
  * ```
  */
-export const Consumer = Resource<Consumer>("Cloudflare.Queues.Consumer");
+export const Consumer = Resource<Consumer>("Cloudflare.Queues.Consumer", {
+  aliases: ["Cloudflare.QueueConsumer"],
+});
 
 // Cloudflare allows a single Worker consumer per queue, so the
 // first match in the paginated stream is the only one. Using
