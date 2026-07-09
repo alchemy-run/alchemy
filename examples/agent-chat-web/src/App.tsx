@@ -1,72 +1,55 @@
 /**
- * The whole client is stock `useChat` — the server speaks the AI SDK
- * UI message stream verbatim, so there is no custom transport, no
- * adapter, nothing agent-specific here except rendering two part
- * kinds: `dynamic-tool` (the kernel's tool calls) and `data-ask`
- * (the Ask protocol's approval card, answered via the control plane).
+ * The reference alchemy chat app (designs/ai/chat-apps.md): stock
+ * `useChat` over the serving tier's AI SDK wire, scroll behavior from
+ * `MessageScroller` (anchored turns, live-edge follow, jump-to-latest
+ * — never moves the reader against their intent), and one switch over
+ * `message.parts`: AI Elements for the standard parts, `AskCard` for
+ * the Ask protocol.
  */
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useState } from "react";
-
-type AskData = {
-  askId: string;
-  status: "pending" | "answered";
-  payload: { kind: string; text: string };
-  verdict?: string;
-};
-
-const answerAsk = (askId: string, verdict: "approved" | "denied") =>
-  fetch(`/api/asks/${encodeURIComponent(askId)}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ verdict }),
-  });
-
-function AskCard({ data }: { data: AskData }) {
-  return (
-    <div className="card ask">
-      <div className="card-title">
-        {data.status === "pending" ? "approval needed" : `ask ${data.verdict}`}
-      </div>
-      <div className="card-body">{data.payload.text}</div>
-      {data.status === "pending" && (
-        <div className="ask-actions">
-          <button onClick={() => answerAsk(data.askId, "approved")}>
-            Approve
-          </button>
-          <button
-            className="deny"
-            onClick={() => answerAsk(data.askId, "denied")}
-          >
-            Deny
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ToolCard(part: {
-  toolName?: string;
-  state?: string;
-  input?: unknown;
-  output?: unknown;
-  errorText?: string;
-}) {
-  return (
-    <div className="card tool">
-      <div className="card-title">
-        {part.toolName} <span className="state">{part.state}</span>
-      </div>
-      <div className="card-body mono">
-        {JSON.stringify(part.input)}
-        {part.output !== undefined && <> → {JSON.stringify(part.output)}</>}
-        {part.errorText !== undefined && <> ✗ {part.errorText}</>}
-      </div>
-    </div>
-  );
-}
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
+import { type AskData, AskCard } from "@/components/ask-card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
+import { Spinner } from "@/components/ui/spinner";
+import { DicesIcon } from "lucide-react";
+import type { UIMessage } from "ai";
 
 const suggestions = [
   "wager 10 coins on a d20",
@@ -75,74 +58,142 @@ const suggestions = [
   "what games can we play here?",
 ];
 
+type Part = UIMessage["parts"][number];
+
+function MessagePart({ part, index }: { part: Part; index: number }) {
+  if (part.type === "text") {
+    return <MessageResponse key={index}>{part.text}</MessageResponse>;
+  }
+  if (part.type === "dynamic-tool") {
+    return (
+      <Tool key={part.toolCallId}>
+        <ToolHeader
+          type="dynamic-tool"
+          toolName={part.toolName}
+          state={part.state}
+        />
+        <ToolContent>
+          <ToolInput input={part.input} />
+          <ToolOutput
+            output={part.state === "output-available" ? part.output : undefined}
+            errorText={part.state === "output-error" ? part.errorText : undefined}
+          />
+        </ToolContent>
+      </Tool>
+    );
+  }
+  if (part.type === "data-ask") {
+    return <AskCard key={(part as { id?: string }).id} data={part.data as AskData} />;
+  }
+  return null;
+}
+
 export function App() {
-  const [input, setInput] = useState("");
+  const [text, setText] = useState("");
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
+  const isBusy = status === "submitted" || status === "streaming";
+  const lastMessage = messages.at(-1);
+  const waiting =
+    isBusy &&
+    (lastMessage?.role !== "assistant" || lastMessage.parts.length === 0);
 
   return (
-    <div className="chat">
-      <header>
-        <h1>the dice parlor</h1>
-        <span className="status">{status}</span>
+    <div className="dark flex h-dvh flex-col bg-background text-foreground">
+      <header className="flex items-baseline justify-between border-b px-4 py-3">
+        <h1 className="text-sm font-semibold tracking-wide">
+          the dice parlor
+        </h1>
+        <span className="text-xs text-muted-foreground">{status}</span>
       </header>
-      <main>
-        {messages.length === 0 && (
-          <div className="suggestions">
-            <p className="suggestions-hint">
-              The croupier is at the table. Try one of these:
-            </p>
-            {suggestions.map((suggestion) => (
-              <button
-                key={suggestion}
-                className="suggestion"
-                onClick={() => sendMessage({ text: suggestion })}
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
+
+      <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col">
+        {messages.length === 0 ? (
+          <Empty className="flex-1">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <DicesIcon />
+              </EmptyMedia>
+              <EmptyTitle>The croupier is at the table</EmptyTitle>
+              <EmptyDescription>
+                Wager imaginary coins, roll real dice. Big wagers need your
+                approval.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <MessageScrollerProvider autoScroll>
+            <MessageScroller className="flex-1">
+              <MessageScrollerViewport>
+                <MessageScrollerContent aria-busy={isBusy} className="px-4 py-6">
+                  {messages.map((message) => (
+                    <MessageScrollerItem
+                      key={message.id}
+                      messageId={message.id}
+                      scrollAnchor={message.role === "user"}
+                    >
+                      <Message from={message.role}>
+                        <MessageContent>
+                          {message.parts.map((part, index) => (
+                            <MessagePart key={index} part={part} index={index} />
+                          ))}
+                        </MessageContent>
+                      </Message>
+                    </MessageScrollerItem>
+                  ))}
+                  {waiting && (
+                    <MessageScrollerItem messageId="waiting">
+                      <Marker role="status">
+                        <MarkerIcon>
+                          <Spinner className="size-3" />
+                        </MarkerIcon>
+                        <MarkerContent>
+                          <Shimmer>The croupier is thinking…</Shimmer>
+                        </MarkerContent>
+                      </Marker>
+                    </MessageScrollerItem>
+                  )}
+                </MessageScrollerContent>
+              </MessageScrollerViewport>
+              <MessageScrollerButton />
+            </MessageScroller>
+          </MessageScrollerProvider>
         )}
-        {messages.map((message) => (
-          <div key={message.id} className={`message ${message.role}`}>
-            {message.parts.map((part, index) => {
-              if (part.type === "text") {
-                return <p key={index}>{part.text}</p>;
-              }
-              if (part.type === "dynamic-tool") {
-                return <ToolCard key={index} {...(part as object)} />;
-              }
-              if (part.type === "data-ask") {
-                return (
-                  <AskCard
-                    key={(part as { id?: string }).id ?? index}
-                    data={(part as { data: AskData }).data}
-                  />
-                );
-              }
-              return null;
-            })}
-          </div>
-        ))}
-      </main>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (input.trim().length === 0) return;
-          sendMessage({ text: input });
-          setInput("");
-        }}
-      >
-        <input
-          value={input}
-          placeholder="wager 10 coins on a d20…"
-          onChange={(event) => setInput(event.currentTarget.value)}
-        />
-        <button type="submit" disabled={status !== "ready"}>
-          Send
-        </button>
-      </form>
+
+        <div className="flex flex-col gap-2 px-4 pb-4">
+          {messages.length === 0 && (
+            <Suggestions>
+              {suggestions.map((suggestion) => (
+                <Suggestion
+                  key={suggestion}
+                  suggestion={suggestion}
+                  onClick={(s) => sendMessage({ text: s })}
+                />
+              ))}
+            </Suggestions>
+          )}
+          <PromptInput
+            onSubmit={(message) => {
+              const value = message.text?.trim();
+              if (!value || isBusy) return;
+              sendMessage({ text: value });
+              setText("");
+            }}
+          >
+            <PromptInputBody>
+              <PromptInputTextarea
+                value={text}
+                onChange={(event) => setText(event.currentTarget.value)}
+                placeholder="wager 10 coins on a d20…"
+              />
+            </PromptInputBody>
+            <PromptInputFooter className="justify-end">
+              <PromptInputSubmit status={status} disabled={!text.trim()} />
+            </PromptInputFooter>
+          </PromptInput>
+        </div>
+      </div>
     </div>
   );
 }
