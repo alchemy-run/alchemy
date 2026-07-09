@@ -90,6 +90,25 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * @section Custom Worker Entry
+ * By default the deployed Worker entry is the server bundle the
+ * framework produces. When the Worker must export more than the
+ * framework's fetch handler — Durable Object classes, additional
+ * handlers — point `main` at your own module that wraps the framework
+ * handler and re-exports the extras. `main` takes precedence over any
+ * entry configured in the Vite config.
+ *
+ * @example Custom entry hosting Durable Objects
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("App", {
+ *   main: "worker/index.ts",
+ *   viteEnvironments: {
+ *     entry: "rsc",
+ *     children: ["ssr"],
+ *   },
+ * });
+ * ```
+ *
  * @section Single-Page Applications
  * For SPAs (React, Vue, etc.), configure asset handling so all
  * routes fall back to `index.html`.
@@ -178,6 +197,7 @@ export const Vite: {
             ...props,
             main: undefined!,
             vite: {
+              main: props?.main,
               rootDir: props?.rootDir,
               memo: props?.memo,
               viteEnvironments: props?.viteEnvironments,

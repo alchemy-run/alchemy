@@ -203,6 +203,7 @@ export const sync = (
       const observed = yield* provider
         .read({
           id: logicalId,
+          fqn,
           instanceId,
           olds: old.props as never,
           output: old.attr as never,
@@ -220,6 +221,7 @@ export const sync = (
         const attr = yield* provider
           .reconcile({
             id: logicalId,
+            fqn,
             instanceId,
             news: old.props as never,
             olds: undefined,
@@ -273,6 +275,7 @@ export const sync = (
       const attr = yield* provider
         .reconcile({
           id: logicalId,
+          fqn,
           instanceId,
           news: old.props as never,
           olds: old.props as never,

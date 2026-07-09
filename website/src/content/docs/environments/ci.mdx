@@ -215,21 +215,22 @@ By the end you'll have:
 
    export default Alchemy.Stack(
      "my-app",
-     { providers: /* ... */ },
+     { providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()) },
      Effect.gen(function* () {
        const app = yield* App;
+   +   const github = yield* GitHub.GitHubEnv;
 
-   +   if (process.env.PULL_REQUEST) {
+   +   if (github?.pr) {
    +     yield* GitHub.Comment("preview-comment", {
-   +       owner: "your-org",
-   +       repository: "your-repo",
-   +       issueNumber: Number(process.env.PULL_REQUEST),
+   +       owner: github.owner,
+   +       repository: github.repository,
+   +       issueNumber: github.pr,
    +       body: Output.interpolate`
    +         ## Preview Deployed
    +
    +         **URL:** ${app.url}
    +
-   +         Built from commit ${process.env.GITHUB_SHA?.slice(0, 7)}
+   +         Built from commit ${github.sha.slice(0, 7)}
    +
    +         ---
    +         _This comment updates automatically with each push._

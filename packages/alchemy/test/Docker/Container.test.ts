@@ -23,6 +23,7 @@ test.provider("diff replaces a container when its image changes", () =>
     const containerProvider = yield* Provider.findProvider(Docker.Container);
     const containerDiff = yield* containerProvider.diff!({
       id: "web",
+      fqn: "web",
       instanceId: "instance",
       olds: { name: "web", image: "nginx:alpine" },
       news: { name: "web", image: "nginx:1.27-alpine" },
@@ -250,5 +251,39 @@ describe("Docker.Container", { concurrent: false }, () => {
         yield* stack.destroy();
       }),
     { timeout: 240_000 },
+  );
+
+  test.provider.skipIf(!isDockerReady)(
+    "applies a healthcheck with unit-suffixed durations",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        // `normalizeDuration` used to emit a bare nanosecond count (e.g.
+        // `1000000000`), which `docker container create` rejects with "missing
+        // unit in duration" — so this deploy would fail outright before the fix.
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-container", {
+            image: "nginx:alpine",
+            healthcheck: {
+              cmd: "true",
+              interval: "1 second",
+              timeout: "2 seconds",
+              retries: 3,
+              startPeriod: "1 second",
+            },
+            start: true,
+          }),
+        );
+        expect(container.status).toBe("running");
+
+        // Docker reports the configured durations back in nanoseconds — assert
+        // they round-tripped rather than being dropped or truncated.
+        const info = yield* docker.container.inspect(container.name);
+        const health = info?.Config.Healthcheck;
+        expect(health?.Interval).toBe(1_000_000_000);
+        expect(health?.Timeout).toBe(2_000_000_000);
+        expect(health?.Retries).toBe(3);
+        expect(health?.StartPeriod).toBe(1_000_000_000);
+      }),
   );
 });

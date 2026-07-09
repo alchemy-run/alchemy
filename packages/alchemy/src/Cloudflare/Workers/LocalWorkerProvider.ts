@@ -60,7 +60,7 @@ import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
-import { sha256 } from "../../Util/index.ts";
+import { sha256, unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
@@ -296,9 +296,7 @@ export const LocalWorkerProvider = () =>
                 port: origin.port,
                 user: origin.user,
                 database: origin.database,
-                password: Redacted.isRedacted(origin.password)
-                  ? Redacted.value(origin.password)
-                  : origin.password,
+                password: unwrapRedacted(origin.password),
                 sslmode: origin.sslmode,
               };
             }
@@ -310,7 +308,10 @@ export const LocalWorkerProvider = () =>
                   `Container ${container.className} has no dev image`,
                 );
               }
-              containers[container.className] = container.dev;
+              containers[container.className] = {
+                ...container.dev,
+                env: unwrapRedacted(container.dev.env),
+              };
             }
           }
         }
@@ -328,6 +329,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          viteMain: props.vite?.main,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
           env: props.env,
@@ -418,6 +420,7 @@ export const LocalWorkerProvider = () =>
           rootDir,
           worker.env ?? {},
           {
+            main: worker.viteMain,
             compatibilityDate: worker.compatibility.date,
             compatibilityFlags: worker.compatibility.flags,
             viteEnvironments: worker.viteEnvironments,
@@ -478,6 +481,7 @@ export const LocalWorkerProvider = () =>
             ]),
           ),
           domains: [url],
+          routes: [],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
           ),
@@ -545,6 +549,7 @@ export const LocalWorkerProvider = () =>
             tags: [],
             durableObjectNamespaces,
             domains: url ? [url] : [],
+            routes: [],
             crons: Array.from(
               new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
             ),
@@ -576,6 +581,7 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces: {},
               accountId,
               domains: [],
+              routes: [],
               crons: news.crons ?? [],
             } satisfies Worker["Attributes"];
           }

@@ -19,6 +19,7 @@ const callDiff = (olds: DBInstanceProps, news: DBInstanceProps) =>
     const provider = yield* Provider.findProvider(DBInstance);
     return yield* provider.diff!({
       id: "TestInstance",
+      fqn: "TestInstance",
       instanceId: "test-instance",
       olds,
       news,

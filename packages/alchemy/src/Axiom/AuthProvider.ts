@@ -328,9 +328,6 @@ export const AxiomAuth = AuthProviderLayer<
             Match.exhaustive,
           );
         }),
-        Effect.catch((e) =>
-          Console.error(`  Failed to retrieve credentials: ${e}`),
-        ),
       );
 
     return {

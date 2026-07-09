@@ -1094,10 +1094,40 @@ export const aliasedWidgetProvider = () =>
     }),
   });
 
+// FqnProbe — echoes the identity the engine threads into each handler input
+// (`id` and `fqn`) back out as attributes. Lets a test assert that the engine
+// passes the resource's real fully-qualified name — namespace path + logical
+// id — which differs from the bare logical `id` for namespaced resources.
+
+export interface FqnProbe extends Resource<
+  "Test.FqnProbe",
+  {},
+  {
+    id: string;
+    fqn: string;
+  }
+> {}
+
+export const FqnProbe = Resource<FqnProbe>("Test.FqnProbe");
+
+export const fqnProbeProvider = () =>
+  Provider.succeed(FqnProbe, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news }) {
+      if (!isResolved(news)) return undefined;
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, fqn }) {
+      return { id, fqn };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
     bucketProvider(),
+    fqnProbeProvider(),
     queueProvider(),
     functionProvider(),
     bindingTargetProvider(),

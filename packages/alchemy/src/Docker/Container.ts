@@ -418,5 +418,8 @@ const normalizeDuration = (
 ): string | undefined => {
   if (!input) return undefined;
   const duration = Duration.fromInputUnsafe(input);
-  return Duration.toNanosUnsafe(duration).toString();
+  // Docker parses `--health-*` durations with Go's `time.ParseDuration`, which
+  // requires a unit suffix — a bare nanosecond count is rejected with "missing
+  // unit in duration". `ns` is the lossless Go-duration rendering of the nanos.
+  return `${Duration.toNanosUnsafe(duration).toString()}ns`;
 };

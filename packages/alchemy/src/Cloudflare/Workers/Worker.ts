@@ -35,6 +35,7 @@ import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
+import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
@@ -295,6 +296,28 @@ export type NormalizedBindings<
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
+export interface WorkerRouteConfig {
+  /**
+   * URL pattern to match incoming requests against, e.g.
+   * `"subdomain.example.com/*"` or `"example.com/api/*"`.
+   */
+  pattern: string;
+  /**
+   * Cloudflare zone ID. Equivalent to Wrangler's `zone_id`.
+   */
+  zoneId?: string;
+  /**
+   * Cloudflare zone name, e.g. `"example.com"`. Equivalent to Wrangler's
+   * `zone_name`.
+   */
+  zoneName?: string;
+  /**
+   * Zone reference — a zone ID, zone name, or `{ zoneId, name? }` object.
+   * Alternative to `zoneId` / `zoneName`.
+   */
+  zone?: ZoneReference;
+}
+
 export interface WorkerProps<
   Bindings extends WorkerBindingProps = any,
   Assets extends WorkerAssetsConfig | undefined =
@@ -425,6 +448,13 @@ export interface WorkerProps<
   /**
    * Cron expressions that trigger the Worker's scheduled handler.
    *
+   * This is how async (non-Effect) Workers configure Cron Triggers — the
+   * entry module exports its own `scheduled` handler and this prop attaches
+   * the schedules at deploy time. Effect-native Workers usually skip this
+   * prop and call `Cloudflare.Workers.cron(expression, handler)` in the Init
+   * phase instead, which attaches the expression and registers the runtime
+   * listener in one step.
+   *
    * Pass an empty array to remove all Cron Triggers.
    */
   crons?: string[];
@@ -434,6 +464,13 @@ export interface WorkerProps<
    * already exist in the account.
    */
   domain?: string | string[];
+  /**
+   * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
+   * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
+   * `pattern`. When the zone is omitted, it is inferred from the pattern's
+   * hostname.
+   */
+  routes?: WorkerRouteConfig[];
   /**
    * Extra bundler options applied on top of the standard rolldown input/output
    * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
@@ -520,6 +557,23 @@ export interface WorkerProps<
 
 export interface ViteOptions {
   /**
+   * Overrides the module that becomes the deployed Worker entry, forwarded
+   * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
+   * from the Vite root (`rootDir`).
+   *
+   * By default the entry environment's own entry (the server bundle the
+   * framework produces) is deployed. Point `main` at a custom module when
+   * the deployed Worker must export more than the framework's fetch
+   * handler — e.g. Durable Object classes or additional handlers wrapping
+   * the framework handler.
+   *
+   * @example
+   * ```typescript
+   * vite: { main: "worker/index.ts" }
+   * ```
+   */
+  main?: string;
+  /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
    */
@@ -572,6 +626,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
     domains: string[];
+    routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
     hash?: {
       assets: string | undefined;
@@ -786,6 +841,17 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * {
  *   main: import.meta.url,
  *   assets: "./public",
+ * }
+ * ```
+ *
+ * @example Zone routes
+ * ```typescript
+ * {
+ *   main: import.meta.filename,
+ *   routes: [
+ *     { pattern: "api.example.com/*", zoneName: "example.com" },
+ *     { pattern: "example.com/api/*", zoneId: "<YOUR_ZONE_ID>" },
+ *   ],
  * }
  * ```
  *

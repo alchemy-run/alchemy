@@ -6,6 +6,7 @@ export * from "./Gateway.ts";
 export * from "./GatewayDynamicRouting.ts";
 export * from "./GatewayProvider.ts";
 export * from "./LanguageModel.ts";
+export * from "./ProviderKey.ts";
 export * from "./QueryGateway.ts";
 export * from "./QueryGatewayBinding.ts";
 export * from "./QuerySearch.ts";

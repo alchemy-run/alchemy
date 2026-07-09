@@ -584,6 +584,7 @@ const executeNode = (
           attr = yield* node.provider
             .precreate({
               id: logicalId,
+              fqn,
               news: node.props,
               session: scopedSession,
               instanceId,
@@ -643,6 +644,7 @@ const executeNode = (
         attr = yield* node.provider
           .reconcile({
             id: logicalId,
+            fqn,
             news,
             instanceId,
             bindings: bindingOutputs,
@@ -765,6 +767,7 @@ const executeNode = (
         const attr = yield* node.provider
           .reconcile({
             id: logicalId,
+            fqn,
             news,
             instanceId,
             bindings: bindingOutputs,
@@ -887,6 +890,7 @@ const executeNode = (
               yield* node.provider
                 .delete({
                   id: logicalId,
+                  fqn,
                   instanceId: old.instanceId,
                   olds: old.props as never,
                   output: old.attr,
@@ -933,6 +937,7 @@ const executeNode = (
           attr = yield* node.provider
             .precreate({
               id: logicalId,
+              fqn,
               news: node.props,
               session: scopedSession,
               instanceId,
@@ -993,6 +998,7 @@ const executeNode = (
         attr = yield* node.provider
           .reconcile({
             id: logicalId,
+            fqn,
             news,
             instanceId,
             bindings: bindingOutputs,
@@ -1346,6 +1352,7 @@ const converge = Effect.fn(function* (
       const attr = yield* node.provider
         .reconcile({
           id: logicalId,
+          fqn,
           news: newProps,
           instanceId,
           bindings: newBindings,
@@ -1648,6 +1655,7 @@ const collectGarbage = Effect.fn(function* (
               yield* provider
                 .delete({
                   id: logicalId,
+                  fqn,
                   instanceId,
                   olds: props as never,
                   output: attr,

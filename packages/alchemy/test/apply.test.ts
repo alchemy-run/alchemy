@@ -26,6 +26,7 @@ import {
   DeleteFirstResource,
   DeletedBindingRegressionTarget,
   DurationResource,
+  FqnProbe,
   Function,
   KindStablesResource,
   PhasedTarget,
@@ -4332,6 +4333,30 @@ describe("artifacts", () => {
         expect(updated.right.artifactValue).toEqual("right-v2");
         expect((yield* getState("Left/Shared"))?.status).toEqual("updated");
         expect((yield* getState("Right/Shared"))?.status).toEqual("updated");
+      }),
+  );
+});
+
+describe("resource identity (fqn) threading", () => {
+  test.provider(
+    "threads the resource's fully-qualified name into handler inputs, distinct from the logical id",
+    (stack) =>
+      Effect.gen(function* () {
+        // Deploy the probe under a namespace so its FQN ("Parent/leaf") is
+        // NOT its bare logical id ("leaf"). The provider echoes both the `id`
+        // and `fqn` it received back out as attributes.
+        const { probe } = yield* Effect.gen(function* () {
+          const probe = yield* Effect.gen(function* () {
+            return yield* FqnProbe("leaf", {});
+          }).pipe(Namespace.push("Parent"));
+          return { probe };
+        }).pipe(stack.deploy);
+
+        // The engine passes the leaf logical id as `id` and the full
+        // namespace-qualified name as `fqn`.
+        expect(probe.id).toEqual("leaf");
+        expect(probe.fqn).toEqual("Parent/leaf");
+        expect((yield* getState("Parent/leaf"))?.status).toEqual("created");
       }),
   );
 });

@@ -547,6 +547,10 @@ export default defineConfig({
                   link: "/cloudflare/frontend/tanstack-start",
                 },
                 {
+                  label: "Full-stack RPC + Drizzle",
+                  link: "/cloudflare/frontend/full-stack-tanstack-rpc-drizzle",
+                },
+                {
                   label: "React Router",
                   link: "/cloudflare/frontend/react-router",
                 },
