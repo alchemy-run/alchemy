@@ -10,7 +10,7 @@ import EffectfulStack from "./fixtures/effectful/stack.ts";
 import ExternalStack from "./fixtures/external/stack.ts";
 import RemoteStack from "./fixtures/remote/stack.ts";
 
-describe.each([
+describe.concurrent.each([
   {
     dev: true,
     stage: "test-local",
@@ -23,11 +23,13 @@ describe.each([
   },
 ])("Container (dev: $dev)", ({ dev, stage, timeout }) => {
   // We need to create a new test context for each test case because the
+  // local runner stops running after the root scope is closed, which happens
+  // in an afterAll hook registered by `Test.make`.
   const make = () =>
     Test.make({
       providers: Cloudflare.providers(),
-      stage,
       state: Cloudflare.state(),
+      stage,
       dev,
     });
 
