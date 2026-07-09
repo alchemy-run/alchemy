@@ -309,5 +309,5 @@ test(
     // and via `ctx.container.start({ env })` in local dev).
     expect(body).toBe("Hello from Sandbox container! GREETING=hello-from-env");
   }),
-  { timeout: 180_000 },
+  { timeout: 60_000 },
 );
