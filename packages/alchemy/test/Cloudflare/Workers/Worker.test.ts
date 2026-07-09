@@ -1046,6 +1046,83 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
+  // State-migration: Worker state written by older Alchemy versions stored
+  // `domains` as `https://<hostname>` URL strings with the workers.dev URL
+  // mixed in (beta.45–57) or as `{ id, hostname, zoneId }` objects
+  // (<= beta.44), and had no `allUrls`. A deploy on top of either shape must
+  // not crash the diff/reconcile and must rewrite the attributes to the
+  // current shape (bare hostnames aligned with `allUrls`).
+  test.provider("redeploy coerces legacy domains state", (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deploy = (date: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("LegacyStateWorker", {
+              main,
+              compatibility: { date },
+            });
+          }),
+        );
+
+      const v1 = yield* deploy("2024-01-01");
+      const workersDevHost = new URL(v1.url!).hostname;
+
+      // Rewrite the persisted attributes to a legacy shape. The stale
+      // custom-domain entry ("app.example.com") was never attached on
+      // Cloudflare, so the redeploy must also converge state back to the
+      // observed cloud truth rather than trusting the record.
+      const writeLegacyAttr = (legacy: {
+        url: string | undefined;
+        domains: unknown[];
+      }) =>
+        Effect.gen(function* () {
+          const state = yield* yield* State;
+          const key = {
+            stack: stack.name,
+            stage: "test",
+            fqn: "LegacyStateWorker",
+          };
+          const current = yield* state.get(key);
+          expect(current).toBeDefined();
+          const attr = { ...(current as any).attr, ...legacy };
+          delete attr.allUrls;
+          yield* state.set({
+            ...key,
+            value: { ...(current as any), attr },
+          });
+        }).pipe(Effect.provide(stack.state));
+
+      // beta.45–57: URL strings, workers.dev mixed in, no allUrls.
+      yield* writeLegacyAttr({
+        url: "https://app.example.com",
+        domains: ["https://app.example.com", `https://${workersDevHost}`],
+      });
+
+      const v2 = yield* deploy("2024-01-02");
+      expect(v2.url).toEqual(`https://${workersDevHost}`);
+      expect(v2.allUrls).toEqual([`https://${workersDevHost}`]);
+      expect(v2.domains).toEqual([workersDevHost]);
+
+      // <= beta.44: `{ id, hostname, zoneId }` objects.
+      yield* writeLegacyAttr({
+        url: undefined,
+        domains: [{ id: "legacy", hostname: "app.example.com", zoneId: "z" }],
+      });
+
+      const v3 = yield* deploy("2024-01-03");
+      expect(v3.url).toEqual(`https://${workersDevHost}`);
+      expect(v3.allUrls).toEqual([`https://${workersDevHost}`]);
+      expect(v3.domains).toEqual([workersDevHost]);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+    }).pipe(logLevel),
+  );
+
   // Canonical `list()` test (account collection): deploy a real Worker and
   // assert it shows up in the exhaustively-paginated account-wide listing.
   test.provider("list enumerates the deployed worker", (stack) =>
