@@ -322,6 +322,7 @@
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@effect/ai-anthropic": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",

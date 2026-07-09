@@ -10,6 +10,14 @@ export type ToolParameters<Refs> = {
   >["schema"]["Type"];
 };
 
+/**
+ * A `Tool` term is a **capability term** (with `Parameter` — design §1
+ * taxonomy): never interpreted by the Kernel, it is compiled *into* its
+ * host process term's turns — the template becomes the toolkit
+ * description, the interpolated `Parameter` refs become the schema, and
+ * the `<Self>()` tag resolves its implementation (the physics) from
+ * ambient context. A tool has no inbox, no runs, and no ring.
+ */
 export interface Tool<
   Name extends string = string,
   Refs extends any[] = any[],

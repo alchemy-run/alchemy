@@ -1,5 +1,12 @@
 import * as S from "effect/Schema";
 
+/**
+ * A `Parameter` term is a **capability term** (with `Tool` — design §1
+ * taxonomy): pure vocabulary, never interpreted. Spliced into a `Tool`'s
+ * template it becomes one field of that tool's parameters schema; its
+ * own template is the field's description. Description and schema are
+ * one artifact.
+ */
 export type Parameter<
   Name extends string = string,
   Schema extends S.Top = S.Top,
