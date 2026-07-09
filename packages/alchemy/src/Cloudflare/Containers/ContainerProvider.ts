@@ -213,6 +213,7 @@ export const LiveContainerProvider = () =>
             dev: {
               context: contextDir,
               dockerfile: path.join(contextDir, "Dockerfile"),
+              env: props.env,
             },
           };
         }
@@ -228,7 +229,7 @@ export const LiveContainerProvider = () =>
             imageRef: makeRef(imageHash),
             imageHash,
             // The local runtime pulls this image directly (no build context).
-            dev: { imageUri: props.image },
+            dev: { imageUri: props.image, env: props.env },
           };
         }
 
@@ -249,7 +250,7 @@ export const LiveContainerProvider = () =>
           imageHash,
           // The local runtime builds the user's Dockerfile against the same
           // (already real-path'd) context directory.
-          dev: { context, dockerfile },
+          dev: { context, dockerfile, env: props.env },
         };
       });
 
