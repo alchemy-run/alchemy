@@ -60,6 +60,12 @@ const RequestApprovalLive = Layer.succeed(RequestApproval, ((input: {
 
 const ModelLive = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
+  config: {
+    // extended thinking: reasoning deltas stream to the UI live (they
+    // are never journaled — absent from trace replay by design)
+    thinking: { type: "enabled", budget_tokens: 2048 },
+    max_tokens: 4096,
+  },
 }).pipe(
   Layer.provide(
     AnthropicClient.layer({

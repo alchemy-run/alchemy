@@ -21,6 +21,11 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import {
@@ -63,6 +68,14 @@ type Part = UIMessage["parts"][number];
 function MessagePart({ part, index }: { part: Part; index: number }) {
   if (part.type === "text") {
     return <MessageResponse key={index}>{part.text}</MessageResponse>;
+  }
+  if (part.type === "reasoning") {
+    return (
+      <Reasoning isStreaming={part.state === "streaming"}>
+        <ReasoningTrigger />
+        <ReasoningContent>{part.text}</ReasoningContent>
+      </Reasoning>
+    );
   }
   if (part.type === "dynamic-tool") {
     return (

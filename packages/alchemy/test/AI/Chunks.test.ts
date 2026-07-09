@@ -193,6 +193,61 @@ describe("KernelEvent → UIMessageChunk", () => {
     }),
   );
 
+  it.effect("reasoning streams live and is absent from replay by design", () =>
+    Effect.gen(function* () {
+      const reasoningScript: ReadonlyArray<Turn> = [
+        () =>
+          [
+            { type: "reasoning-start", id: "r1" },
+            { type: "reasoning-delta", id: "r1", delta: "the corpus " },
+            { type: "reasoning-delta", id: "r1", delta: "says 42" },
+            { type: "reasoning-end", id: "r1" },
+            ...text("it is 42"),
+            finish("stop"),
+          ] as unknown as Array<Response.StreamPartEncoded>,
+      ];
+      const { live, trace } = yield* runTurn.pipe(
+        Effect.scoped,
+        Effect.provide(layers(reasoningScript)),
+      );
+      const session = live.find((e) => e.session !== undefined)!.session!;
+
+      // LIVE: reasoning block precedes the text block, correctly fenced
+      const chunks = yield* Stream.runCollect(
+        toChunks(sessionEvents(Stream.fromIterable(live), session)),
+      );
+      expect(chunks.map((chunk) => chunk.type)).toEqual([
+        "start",
+        "start-step",
+        "reasoning-start",
+        "reasoning-delta",
+        "reasoning-delta",
+        "reasoning-end",
+        "text-start",
+        "text-delta",
+        "text-end",
+        "finish-step",
+        "finish",
+      ]);
+      const reasoning = chunks
+        .filter((c) => c.type === "reasoning-delta")
+        .map((c) => (c as { delta: string }).delta)
+        .join("");
+      expect(reasoning).toBe("the corpus says 42");
+
+      // REPLAY: reasoning is live-only — no reasoning chunks, text intact
+      const replayed = yield* Stream.runCollect(
+        toChunks(sessionEvents(Stream.fromIterable(trace), session)),
+      );
+      expect(replayed.every((c) => !c.type.startsWith("reasoning"))).toBe(true);
+      const replayText = replayed
+        .filter((c) => c.type === "text-delta")
+        .map((c) => (c as { delta: string }).delta)
+        .join("");
+      expect(replayText).toBe("it is 42");
+    }),
+  );
+
   it.effect("live and replay folds agree on the final assistant text", () =>
     Effect.gen(function* () {
       const { live, trace } = yield* runTurn.pipe(

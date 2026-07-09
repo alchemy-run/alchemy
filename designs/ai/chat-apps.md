@@ -235,11 +235,14 @@ suggestions, attachments, empty states.
 
 Ordered; each is small and independently shippable:
 
-1. **Reasoning parts.** Anthropic streams `reasoning-delta` parts; our
-   step fold currently only journals text deltas. Extend the turn fold
-   to accumulate reasoning (live-only deltas, like text) and the chunk
-   fold to emit `reasoning-start/delta/end` — the `Reasoning`
-   component then works for free. Protocol schema addition included.
+1. **Reasoning parts.** ✅ Done. `reasoning-delta` stream parts ride the
+   live `model.delta` event with `kind: "reasoning"`; the chunk fold
+   fences them into `reasoning-start/delta/end` blocks (closed before
+   the text block opens). **Reasoning is live-only by design** — never
+   journaled, absent from trace replay (consistent with the AI SDK's
+   opt-in `sendReasoning`; keeps the Trace lean). The example enables
+   Anthropic extended thinking (`config.thinking`) and renders the
+   `Reasoning` component; verified over the wire with a tool round.
 2. **`data-run` part.** Delegation tools already summarize; emit a
    custom part when a delegation/spawn happens so the UI can render a
    `RunCard` instead of a generic tool card.

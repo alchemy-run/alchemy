@@ -389,6 +389,34 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                                   ),
                                   Effect.asVoid,
                                 );
+                              // reasoning is LIVE-ONLY (never journaled):
+                              // it renders while streaming and is absent
+                              // from trace replay by design
+                              case "reasoning-delta":
+                                return Effect.sync(() => folded.deltas++).pipe(
+                                  Effect.flatMap((ordinal) =>
+                                    store.commit([
+                                      {
+                                        v: 1,
+                                        type: "model.delta",
+                                        id: eventId(
+                                          command.id,
+                                          "delta",
+                                          String(ordinal),
+                                        ),
+                                        durable: false,
+                                        ring: [termName],
+                                        session,
+                                        cause: command.id,
+                                        payload: {
+                                          delta: part.delta,
+                                          kind: "reasoning",
+                                        },
+                                      },
+                                    ]),
+                                  ),
+                                  Effect.asVoid,
+                                );
                               case "tool-call":
                                 return Effect.sync(() => {
                                   folded.toolCalls.push({

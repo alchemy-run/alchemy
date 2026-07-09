@@ -33,6 +33,8 @@ export interface ChunkFoldState {
   readonly stepOpen: boolean;
   /** The open text block's id (the model command that streams it). */
   readonly openTextId: string | undefined;
+  /** The open reasoning block's id. Reasoning is live-only (§ replay). */
+  readonly openReasoningId: string | undefined;
   /** Whether any text was streamed via deltas this turn. */
   readonly sawDeltas: boolean;
   /** Pending ask payloads by askId — merged into the answered update. */
@@ -43,6 +45,7 @@ export const initialChunkFoldState: ChunkFoldState = {
   started: false,
   stepOpen: false,
   openTextId: undefined,
+  openReasoningId: undefined,
   sawDeltas: false,
   asks: new Map(),
 };
@@ -78,7 +81,29 @@ export const foldEvent = (
       break;
 
     case "model.delta": {
+      // reasoning deltas ride the same live event, marked by kind —
+      // they open their own block (typically before the text block)
+      if (payload.kind === "reasoning") {
+        const blockId = `${event.cause ?? "text"}:r`;
+        if (next.openReasoningId !== blockId) {
+          if (next.openReasoningId !== undefined) {
+            chunks.push({ type: "reasoning-end", id: next.openReasoningId });
+          }
+          chunks.push({ type: "reasoning-start", id: blockId });
+          next = { ...next, openReasoningId: blockId };
+        }
+        chunks.push({
+          type: "reasoning-delta",
+          id: blockId,
+          delta: String(payload.delta ?? ""),
+        });
+        break;
+      }
       const blockId = event.cause ?? "text";
+      if (next.openReasoningId !== undefined) {
+        chunks.push({ type: "reasoning-end", id: next.openReasoningId });
+        next = { ...next, openReasoningId: undefined };
+      }
       if (next.openTextId !== blockId) {
         if (next.openTextId !== undefined) {
           chunks.push({ type: "text-end", id: next.openTextId });
@@ -95,6 +120,10 @@ export const foldEvent = (
     }
 
     case "model.completed":
+      if (next.openReasoningId !== undefined) {
+        chunks.push({ type: "reasoning-end", id: next.openReasoningId });
+        next = { ...next, openReasoningId: undefined };
+      }
       if (next.openTextId !== undefined) {
         chunks.push({ type: "text-end", id: next.openTextId });
         next = { ...next, openTextId: undefined };
@@ -253,6 +282,20 @@ export const chunksToMessage = (
       }
       case "text-end":
         touch(`text:${chunk.id}`, { state: "done" });
+        break;
+      case "reasoning-start":
+        touch(`reasoning:${chunk.id}`, { type: "reasoning", text: "" });
+        break;
+      case "reasoning-delta": {
+        const key = `reasoning:${chunk.id}`;
+        touch(key, {
+          type: "reasoning",
+          text: String(parts.get(key)?.text ?? "") + chunk.delta,
+        });
+        break;
+      }
+      case "reasoning-end":
+        touch(`reasoning:${chunk.id}`, { state: "done" });
         break;
       case "tool-input-available":
         touch(`tool:${chunk.toolCallId}`, {

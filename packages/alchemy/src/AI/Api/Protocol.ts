@@ -52,6 +52,21 @@ export const TextEndChunk = S.Struct({
   id: S.String,
 });
 
+/** Reasoning blocks: start → deltas → end, keyed by block id. */
+export const ReasoningStartChunk = S.Struct({
+  type: S.tag("reasoning-start"),
+  id: S.String,
+});
+export const ReasoningDeltaChunk = S.Struct({
+  type: S.tag("reasoning-delta"),
+  id: S.String,
+  delta: S.String,
+});
+export const ReasoningEndChunk = S.Struct({
+  type: S.tag("reasoning-end"),
+  id: S.String,
+});
+
 /** Tool calls: input announced, then settled output (or error). */
 export const ToolInputStartChunk = S.Struct({
   type: S.tag("tool-input-start"),
@@ -109,6 +124,9 @@ export const UIMessageChunk = S.Union([
   TextStartChunk,
   TextDeltaChunk,
   TextEndChunk,
+  ReasoningStartChunk,
+  ReasoningDeltaChunk,
+  ReasoningEndChunk,
   ToolInputStartChunk,
   ToolInputAvailableChunk,
   ToolOutputAvailableChunk,

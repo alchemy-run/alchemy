@@ -32,6 +32,15 @@ describe("the UI message stream wire format", () => {
     expect(sseFrame({ type: "text-end", id: "t1" })).toBe(
       'data: {"type":"text-end","id":"t1"}\n\n',
     );
+    expect(sseFrame({ type: "reasoning-start", id: "r1" })).toBe(
+      'data: {"type":"reasoning-start","id":"r1"}\n\n',
+    );
+    expect(sseFrame({ type: "reasoning-delta", id: "r1", delta: "hmm" })).toBe(
+      'data: {"type":"reasoning-delta","id":"r1","delta":"hmm"}\n\n',
+    );
+    expect(sseFrame({ type: "reasoning-end", id: "r1" })).toBe(
+      'data: {"type":"reasoning-end","id":"r1"}\n\n',
+    );
     expect(
       sseFrame({
         type: "tool-input-start",
