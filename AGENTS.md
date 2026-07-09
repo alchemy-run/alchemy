@@ -555,6 +555,13 @@ Why this matters: consumers can build cloud-agnostic services on top of bindings
 
 After implementing, re-export the contract and implementation layers from the service's `index.ts` (but keep the shared `{Cap}Binding.ts`/`{Cap}Http.ts` scaffolding un-exported).
 
+### Isolate scope vs request scope (runtime bridges)
+
+**Layer construction is isolate-scoped; the effects built services expose are request-scoped.**
+
+- **At layer build / Worker init (instance scope)** a layer MAY resolve services and env/config, register listeners and `bind` declarations, assemble `Effect.fn` clients, and perform one-shot I/O that produces a plain cached value (e.g. fetch a secret and cache it for a client). It MUST NOT acquire **disposable** resources — connections, pools, streams, anything with a finalizer (`Layer.scoped` / `Effect.acquireRelease` / init-level `Effect.addFinalizer`) — or retain I/O-backed *objects* or promises across events (workerd pins them to the creating request's IoContext). The runtime bridges (Worker event, Durable Object call, Workflow run, Lambda invoke) build the layer stack **once per instance** on the first event. Instance finalizers run at instance shutdown at best: **never on workerd** (no teardown hook), and in a **best-effort 500 ms SIGTERM window on Lambda** (the generated entry registers an internal extension to obtain it and closes the instance scope on SIGTERM; not delivered on hard failures). Server processes (Containers, ECS Tasks) close their root scope on graceful exit.
+- **At request scope**, anything needing I/O or cleanup is an effect requiring `Scope.Scope`, acquired lazily per call. Every bridge provides a fresh `Scope` per event; `Effect.addFinalizer` in a handler attaches to it and runs after the response (registered with `ctx.waitUntil` on workerd; settled inline on Lambda). Per-request memoization keys on the scope object (`yield* Effect.scope`) — see [Drizzle/Postgres.ts](./packages/alchemy/src/Drizzle/Postgres.ts) for the canonical WeakMap pattern. One pool/socket per event is the law on workerd (sockets are IoContext-pinned); Hyperdrive is the cross-request pooler.
+
 :::tip
 If you need to know what AWS region or account ID the resource is being created/updated in, you can use this inside any of the lifecycle operations.
 

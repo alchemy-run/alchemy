@@ -393,6 +393,25 @@ If you want schema-*validated* procedures (payload validation,
 tagged error schemas shared with external clients), reach for
 [Effect RPC](/cloudflare/apis/effect-rpc) on a Worker instead.
 
+## Call scope vs isolate scope
+
+A Durable Object shares its isolate's layer build with the Worker
+that hosts it — the entrypoint's init runs **once per isolate**, and
+every DO activation (including hibernatable-WebSocket wakes, which
+re-run the constructor) reuses it. Each method call, `fetch`,
+`alarm`, or WebSocket event then runs with a **fresh `Scope`**,
+closed via `state.waitUntil` after the call settles — so
+`Effect.addFinalizer` inside a method runs after the RPC response is
+returned, and a returned `Stream` keeps the scope alive until it
+finishes draining.
+
+As everywhere on workerd, there is no isolate-teardown hook: cleanup
+belongs in methods (call scope), not in the constructor or init.
+Per-call resources like `Drizzle.postgres` pools open lazily inside
+the method and close with its scope. See
+[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+for the model across all runtimes.
+
 ## Where next
 
 Guides that build on Durable Objects:

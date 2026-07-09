@@ -60,7 +60,7 @@ import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
-import { sha256 } from "../../Util/index.ts";
+import { sha256, unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
@@ -296,9 +296,7 @@ export const LocalWorkerProvider = () =>
                 port: origin.port,
                 user: origin.user,
                 database: origin.database,
-                password: Redacted.isRedacted(origin.password)
-                  ? Redacted.value(origin.password)
-                  : origin.password,
+                password: unwrapRedacted(origin.password),
                 sslmode: origin.sslmode,
               };
             }
@@ -310,7 +308,10 @@ export const LocalWorkerProvider = () =>
                   `Container ${container.className} has no dev image`,
                 );
               }
-              containers[container.className] = container.dev;
+              containers[container.className] = {
+                ...container.dev,
+                env: unwrapRedacted(container.dev.env),
+              };
             }
           }
         }

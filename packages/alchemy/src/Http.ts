@@ -16,6 +16,17 @@ export type HttpEffect<Req = never> = Effect.Effect<
   HttpServerRequest | Scope | Req
 >;
 
+/**
+ * `effect`'s HttpEffect brands a request scope as "ejected" when ownership
+ * is transferred to a consumer that outlives the handler's return — a
+ * streaming response body, a WebSocket upgrade, an RPC stream. Bridges check
+ * this before their close-on-return path: an ejected scope is closed by its
+ * new owner when it finishes, not by the bridge.
+ */
+const scopeEjected = Symbol.for("effect/http/HttpEffect/scopeEjected");
+
+export const isScopeEjected = (scope: Scope) => scopeEjected in scope;
+
 export const serve = <Req = never>(
   handler: Effect.Effect<
     HttpServerResponse.HttpServerResponse,

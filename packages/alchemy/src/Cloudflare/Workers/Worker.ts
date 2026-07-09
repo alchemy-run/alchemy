@@ -966,11 +966,16 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * closure and used from any handler; its methods are `RuntimeContext`-
  * colored, so they can only run inside a handler.
  *
- * The init closure itself is evaluated per event (its Layer is rebuilt for
- * each event's runtime), so treat it as stateless setup: bind resources and
- * build handlers there, but attach cleanup to handler scopes — a finalizer
- * added in the init closure runs at the end of every event, not once per
- * Worker.
+ * The init closure is evaluated once per isolate: the bridge builds the
+ * Worker's layer stack on the first event and every later event reuses the
+ * built services. Resolve services, bind resources, build handlers there —
+ * one-shot I/O that caches a plain value (e.g. fetching a secret for a
+ * client) is fine, but nothing disposable: the build scope is never closed
+ * (workerd has no isolate-teardown hook), so a finalizer added in the init
+ * closure never runs, and I/O-backed objects (sockets, response bodies) are
+ * pinned to the request that created them. Anything that needs cleanup
+ * belongs in a handler, where `Effect.addFinalizer` attaches to the
+ * per-event scope.
  *
  * @example Post-response cleanup with a scope finalizer
  * ```typescript
