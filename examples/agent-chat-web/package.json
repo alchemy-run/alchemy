@@ -10,7 +10,7 @@
   },
   "type": "module",
   "scripts": {
-    "server": "bun run server.ts",
+    "server": "bun run src/server.ts",
     "dev": "vite",
     "build": "vite build"
   },

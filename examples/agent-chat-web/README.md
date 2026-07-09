@@ -28,7 +28,7 @@ Try: `wager 10 coins on a d20` (tool call), then
 
 ## What to look at
 
-- [server.ts](./server.ts) — the whole backend: an `AI.Agent` term,
+- [src/server.ts](./src/server.ts) — the whole backend: an `AI.Agent` term,
   two tool Layers, `ChatSessions`, `agentApi()`, a Bun HTTP server.
 - [src/App.tsx](./src/App.tsx) — stock `useChat` plus rendering for
   `dynamic-tool` and `data-ask` parts.

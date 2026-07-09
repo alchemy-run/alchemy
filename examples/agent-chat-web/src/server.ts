@@ -2,8 +2,8 @@
  * The local agent server: an Anthropic-backed alchemy agent served
  * over the AI SDK UI message stream (designs/ai/serving.md).
  *
- *   ANTHROPIC_API_KEY=sk-… bun run server.ts   # port 8787
- *   bun run dev                                # Vite proxies /api + /v1
+ *   ANTHROPIC_API_KEY=sk-… bun run server   # port 8787
+ *   bun run dev                             # Vite proxies /api + /v1
  *
  * The interesting part is what ISN'T here: no chat loop, no SSE
  * framing, no session bookkeeping. The agent is a term, the kernel
