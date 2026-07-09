@@ -162,7 +162,7 @@ export const DevProviderLocal = () =>
               duration: "5 seconds",
               // No localhost/IP URL appeared in time — fall back to any other
               // URL we saw (or `undefined` if the process stayed silent).
-              orElse: () => Effect.sync(() => fallbackUrl),
+              orElse: () => Effect.succeed(fallbackUrl),
             }),
           ),
           child.exitCode.pipe(
