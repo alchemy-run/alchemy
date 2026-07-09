@@ -33,6 +33,7 @@ const logLevel = Effect.provideService(
 );
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
+const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
 const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
 const reactRouterRscFixtureDir = pathe.resolve(
   import.meta.dirname,
@@ -119,6 +120,60 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/792.
+//
+// A pure client-only Vite project (no vite.config.ts, no plugins, no worker
+// entry) resolves as `appType: "spa"`, so the Cloudflare Vite plugin declares
+// no `builder.buildApp`. On Vite 8, `builder.buildApp()` then runs post-order
+// `buildApp` hooks *before* the default environment builds — which used to make
+// our build-output plugin resolve while the client output was still undefined,
+// so the deploy died with "Vite build produced neither assets nor server
+// output". Detecting completion in `writeBundle` (per environment) instead of a
+// post-order `buildApp` hook fixes it; this test proves the SPA path deploys.
+test.provider(
+  "Vite: client-only SPA (no config, no plugins) builds and serves assets",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(spaFixtureDir, {
+        prefix: "alchemy-vite-spa-",
+        tempRoot,
+        entries: ["index.html", "package.json", "src"],
+      });
+      const indexPath = path.join(rootDir, "index.html");
+      const memoInclude = ["index.html", "src/**", "package.json"];
+
+      const marker = `vite-spa-${Date.now()}`;
+      yield* fs.writeFileString(indexPath, htmlPage(marker));
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "FixViteSpa",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      expect(site.hash?.input).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, marker, {
+        timeout: "120 seconds",
+        label: "spa marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
     }).pipe(logLevel),
   { timeout: 360_000 },
 );

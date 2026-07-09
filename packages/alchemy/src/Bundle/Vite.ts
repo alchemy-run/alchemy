@@ -1,6 +1,5 @@
 import type { NonEmptyArray } from "effect/Array";
 import * as Cause from "effect/Cause";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -45,41 +44,24 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     string,
     Effect.Effect<BundleFile, BundleError>
   >();
-  const deferred = yield* Deferred.make<ViteBuildOutput, BundleError>();
-  const isEnvironmentBuilt = new Map<string, boolean>();
-
-  // We used to detect a completed build using a `buildApp` hook. However, if the user's framework
-  // doesn't also provide a `buildApp` hook, ours may be called before the build is complete.
-  // As a workaround, we record each environment in `configResolved`, track when it's finished building
-  // by setting the value to `true` in `writeBundle`, and emitting the build output when all environments are built.
-  const onEnvironmentBuilt = (environment: string) => {
-    isEnvironmentBuilt.set(environment, true);
-    if (Array.from(isEnvironmentBuilt.values()).every(Boolean)) {
-      Deferred.doneUnsafe(
-        deferred,
-        Effect.succeed({
-          clientDirectory,
-          serverBundle: makeServerBundle(),
-        }),
-      );
-    }
-  };
 
   const plugin: vite.Plugin = {
     name: "alchemy:build-output",
     sharedDuringBuild: true,
-    async configResolved(config) {
-      for (const environment of Object.keys(config.environments)) {
-        isEnvironmentBuilt.set(environment, false);
-      }
-    },
+    // Collect the client output directory and server chunks as each
+    // environment writes its bundle. We deliberately do NOT resolve the build
+    // result from a `buildApp` hook: on Vite 8, when a project declares no
+    // `builder.buildApp` (e.g. a plain client-only SPA), `builder.buildApp()`
+    // runs post-order `buildApp` hooks *before* the default environment builds,
+    // so a hook fires while the output is still empty (issue #792). Instead,
+    // `viteBuild` reads `output` *after* `builder.buildApp()` resolves — by
+    // which point every environment that actually built has run `writeBundle`.
     async writeBundle(_, bundle) {
       if (this.environment.name === "client") {
         clientDirectory = path.resolve(
           this.environment.config.root,
           this.environment.config.build.outDir,
         );
-        onEnvironmentBuilt(this.environment.name);
         return;
       }
       const files = Object.values(bundle);
@@ -130,7 +112,6 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           );
         }),
       );
-      onEnvironmentBuilt(this.environment.name);
     },
   };
 
@@ -212,6 +193,13 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
 
   return {
     plugin,
-    output: Deferred.await(deferred),
+    // Read lazily so callers observe the state collected during the build.
+    // Only safe to await *after* `builder.buildApp()` has resolved.
+    output: Effect.sync(
+      (): ViteBuildOutput => ({
+        clientDirectory,
+        serverBundle: makeServerBundle(),
+      }),
+    ),
   };
 });
