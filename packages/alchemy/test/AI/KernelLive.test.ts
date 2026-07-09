@@ -18,6 +18,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as AI from "@/AI/index.ts";
@@ -391,6 +392,86 @@ describe("memory kernel × live Anthropic", () => {
         }
       }),
     { timeout: 180_000 },
+  );
+
+  // it.live: this test sleeps on the real clock (the hanging tool and the
+  // poll schedule would freeze forever under it.effect's TestClock)
+  it.live.skipIf(apiKey === undefined)(
+    "interrupt cascades: cancelling the Chief frees a stuck Mathematician",
+    () =>
+      Effect.gen(function* () {
+        // the delegate's multiply hangs for 60s — an interrupt on the
+        // PARENT must fiber-interrupt it through both rings, long before
+        // the hang resolves on its own
+        const invocations: Array<{ a: number; b: number }> = [];
+        const HangingMultiply = Layer.succeed(Multiply, ((input: {
+          a: number;
+          b: number;
+        }) =>
+          Effect.gen(function* () {
+            invocations.push(input);
+            yield* Effect.sleep("60 seconds");
+            return { product: input.a * input.b };
+          })) as never);
+
+        const kernelLayer = AI.memory.pipe(Layer.provide(ModelLive));
+        const { outcome, mathHalt, elapsed } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const chief = yield* kernel.interpret(Chief);
+            const startedAt = Date.now();
+            const running = yield* Effect.forkChild(
+              chief.dispatch("What is 33 multiplied by 77?"),
+            );
+            // wait until the delegate is genuinely stuck in the tool
+            yield* Effect.repeat(
+              Effect.sync(() => invocations.length),
+              {
+                schedule: Schedule.spaced("250 millis"),
+                until: (count) => count > 0,
+                times: 120,
+              },
+            );
+            yield* chief.interrupt();
+            const outcome = (yield* Fiber.join(running)) as AI.Step.HaltOutcome;
+            const elapsed = Date.now() - startedAt;
+            const mathTrace = yield* Stream.runCollect(
+              kernel
+                .trace("Mathematician")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                ),
+            );
+            return {
+              outcome,
+              mathHalt: mathTrace[mathTrace.length - 1]!,
+              elapsed,
+            };
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              kernelLayer,
+              AI.layer(Mathematician).pipe(
+                Layer.provide([
+                  kernelLayer,
+                  HangingMultiply,
+                  RuntimeContext.phantom,
+                ]),
+              ),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        // the parent settled as Interrupted…
+        expect(outcome._tag).toBe("Interrupted");
+        // …the cascade reached the delegate's ring…
+        expect((mathHalt.payload as any).outcome).toBe("Interrupted");
+        // …and nobody waited out the 60s hang
+        expect(elapsed).toBeLessThan(45_000);
+      }),
+    { timeout: 120_000 },
   );
 
   it.effect.skipIf(apiKey === undefined)(

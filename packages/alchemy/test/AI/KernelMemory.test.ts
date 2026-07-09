@@ -7,6 +7,7 @@
  * kernel-default halt.
  */
 import { describe, expect, it } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -667,6 +668,189 @@ describe("spawn-and-continue (§2.8)", () => {
         "Background run Sage#bg0 completed: the answer is 42",
       );
     }),
+  );
+});
+
+// ─── interrupt cascade (§2.8b) ───────────────────────────────────
+
+class Digger extends AI.Agent<Digger>()("Digger")`
+You are the digger. Dig with ${Grep} until told otherwise.` {}
+
+class Boss extends AI.Agent<Boss>()("Boss")`
+You are the boss. Delegate all digging to ${Digger}.` {}
+
+describe("interrupt cascade (§2.8b)", () => {
+  it.effect("interrupting the parent cancels its in-flight delegate", () =>
+    Effect.gen(function* () {
+      // route by charter: the boss delegates, the digger digs
+      const model = Layer.effect(
+        LanguageModel.LanguageModel,
+        LanguageModel.make({
+          generateText: () => Effect.die(new Error("streamText only")),
+          streamText: (options) =>
+            Stream.suspend(() =>
+              Stream.fromIterable(
+                JSON.stringify(options.prompt).includes("You are the digger")
+                  ? [
+                      toolCall("g1", "grep", { pattern: "gold" }),
+                      finish("tool-calls"),
+                    ]
+                  : [
+                      toolCall("d1", "Digger", { task: "dig for gold" }),
+                      finish("tool-calls"),
+                    ],
+              ),
+            ),
+        }),
+      );
+
+      // the digger's grep BLOCKS until cancelled — the cascade must
+      // fiber-interrupt it through two rings
+      const started = yield* Deferred.make<void>();
+      let grepInterrupted = false;
+      const BlockingGrep = Layer.succeed(Grep, ((_input: unknown) =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(started, void 0);
+          yield* Effect.never;
+        }).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              grepInterrupted = true;
+            }),
+          ),
+        )) as never);
+
+      const kernelLayer = AI.memory.pipe(Layer.provide(model));
+      const { outcome, diggerTrace } = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const boss = yield* kernel.interpret(Boss);
+          const running = yield* Effect.forkChild(boss.dispatch("dig!"));
+          // wait until the delegate is genuinely mid-tool
+          yield* Deferred.await(started);
+          yield* boss.interrupt();
+          const outcome = (yield* Fiber.join(running)) as AI.Step.HaltOutcome;
+          const diggerTrace = yield* Stream.runCollect(
+            kernel
+              .trace("Digger")
+              .pipe(Stream.takeUntil((event) => event.type === "turn.halted")),
+          );
+          return { outcome, diggerTrace };
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            kernelLayer,
+            AI.layer(Digger).pipe(
+              Layer.provide([
+                kernelLayer,
+                BlockingGrep,
+                RuntimeContext.phantom,
+              ]),
+            ),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+
+      // the parent settled as Interrupted (not deadlocked on the child)
+      expect(outcome._tag).toBe("Interrupted");
+      // the cascade reached the child: its turn halted as Interrupted…
+      const halt = diggerTrace[diggerTrace.length - 1]!;
+      expect(halt.type).toBe("turn.halted");
+      expect((halt.payload as any).outcome).toBe("Interrupted");
+      // …and the blocking tool execution was genuinely fiber-interrupted
+      expect(grepInterrupted).toBe(true);
+    }),
+  );
+
+  it.effect(
+    "interrupting the parent tombstones queued (never-run) admissions",
+    () =>
+      Effect.gen(function* () {
+        // the boss spawns task A in the BACKGROUND (occupies the digger's
+        // serial ring) then delegates task B synchronously (queued behind
+        // A). Interrupting the boss must cancel BOTH: A mid-tool, B before
+        // it ever runs a turn.
+        let diggerTurns = 0;
+        const model = Layer.effect(
+          LanguageModel.LanguageModel,
+          LanguageModel.make({
+            generateText: () => Effect.die(new Error("streamText only")),
+            streamText: (options) =>
+              Stream.suspend(() => {
+                if (
+                  JSON.stringify(options.prompt).includes("You are the digger")
+                ) {
+                  diggerTurns++;
+                  return Stream.fromIterable([
+                    toolCall("g1", "grep", { pattern: "gold" }),
+                    finish("tool-calls"),
+                  ]);
+                }
+                return Stream.fromIterable([
+                  toolCall("d1", "Digger", {
+                    task: "task A",
+                    background: true,
+                  }),
+                  toolCall("d2", "Digger", { task: "task B" }),
+                  finish("tool-calls"),
+                ]);
+              }),
+          }),
+        );
+
+        const started = yield* Deferred.make<void>();
+        const BlockingGrep = Layer.succeed(Grep, ((_input: unknown) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(started, void 0);
+            yield* Effect.never;
+          })) as never);
+
+        const kernelLayer = AI.memory.pipe(Layer.provide(model));
+        const { outcome, diggerHalts } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const boss = yield* kernel.interpret(Boss);
+            const running = yield* Effect.forkChild(boss.dispatch("dig twice"));
+            yield* Deferred.await(started); // A is mid-tool; B is queued
+            yield* boss.interrupt();
+            const outcome = (yield* Fiber.join(running)) as AI.Step.HaltOutcome;
+            // rows are truth: wait for A's halt, then let the ring drain
+            const diggerHalts = yield* Stream.runCollect(
+              kernel
+                .trace("Digger")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                ),
+            );
+            yield* Effect.yieldNow;
+            return { outcome, diggerHalts };
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              kernelLayer,
+              AI.layer(Digger).pipe(
+                Layer.provide([
+                  kernelLayer,
+                  BlockingGrep,
+                  RuntimeContext.phantom,
+                ]),
+              ),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        expect(outcome._tag).toBe("Interrupted");
+        // task A's turn was interrupted; task B NEVER became a turn — the
+        // digger's model was consulted exactly once
+        expect(
+          (diggerHalts[diggerHalts.length - 1]!.payload as any).outcome,
+        ).toBe("Interrupted");
+        expect(diggerTurns).toBe(1);
+      }),
   );
 });
 

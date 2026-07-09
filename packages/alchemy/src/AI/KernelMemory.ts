@@ -95,6 +95,21 @@ const parseTokenBudget = (limit: string): number => {
   return Number(match[1]) * scale;
 };
 
+/**
+ * Internal, kernel-to-kernel surface (§2.8b): rings built by this kernel
+ * expose a cancellable admission alongside the public verbs, so a parent
+ * ring's interrupt can cancel exactly *its* child admissions (queued →
+ * tombstone; active → control admission). Custom Layers that implement a
+ * process tag by hand simply don't carry it — the cascade then degrades
+ * to nothing for that child (the ledger makes this durable in Phase 3).
+ */
+const internalAdmit = Symbol.for("alchemy/AI/KernelMemory/admit");
+
+interface AdmissionHandle {
+  readonly await: Effect.Effect<unknown, unknown>;
+  readonly cancel: Effect.Effect<void>;
+}
+
 /** The result a ring's turn runner hands back to its run driver. */
 interface TurnResult {
   readonly outcome: Step.HaltOutcome;
@@ -154,6 +169,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             ) => Effect.Effect<unknown>;
           },
         ) => Effect.Effect<unknown, unknown>;
+        /**
+         * In-flight delegations of this ring (§2.8b): `interrupt` fans
+         * out to every registered child before settling its own turn —
+         * authority flows down, no orphaned token burn.
+         */
+        readonly children?: Set<{ readonly cancel: Effect.Effect<void> }>;
       }) {
         const { termName, system, compiled, policy } = options;
 
@@ -166,9 +187,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         const parkedSteers: Prompt.Message[] = [];
         let activeInbox: Step.Feedback[] | undefined;
         // set by interrupt(): un-started commands of the current batch
-        // are abandoned (the machine settles them as aborted results);
-        // in-flight I/O is never fiber-killed
+        // are abandoned (the machine settles them as aborted results)
         let interruptRequested = false;
+        // completed by interrupt(): the IN-FLIGHT tool execution is raced
+        // against this and settles as an aborted result — a delegation
+        // blocked on a slow child unblocks immediately (§2.8b)
+        let interruptSignal: Deferred.Deferred<void> | undefined;
 
         const emitRow = (
           session: string,
@@ -223,6 +247,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           ];
           activeInbox = inbox;
           interruptRequested = false; // an old interrupt never leaks forward
+          interruptSignal = yield* Deferred.make<void>();
 
           try {
             while (true) {
@@ -358,8 +383,22 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                       name: command.name,
                     });
                     const handler = compiled.handlers.get(command.name);
+                    // raced against the interrupt signal: an interrupt
+                    // fiber-interrupts the in-flight execution and settles
+                    // it as an aborted, model-visible result (§2.8b) —
+                    // a delegation blocked on a slow child unblocks NOW
+                    const signal = interruptSignal!;
                     const settled = handler
-                      ? yield* Effect.result(handler(command.params))
+                      ? yield* Effect.result(
+                          Effect.raceFirst(
+                            handler(command.params),
+                            Deferred.await(signal).pipe(
+                              Effect.andThen(
+                                Effect.fail("aborted by interrupt"),
+                              ),
+                            ),
+                          ),
+                        )
                       : Result.fail(`no such tool: ${command.name}`);
                     const isFailure = Result.isFailure(settled);
                     yield* emit(
@@ -409,41 +448,95 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           readonly item: unknown;
           /** Present iff a dispatcher is joined on the outcome. */
           readonly reply?: Deferred.Deferred<unknown, unknown>;
+          /** Tombstoned by a cascade cancel; the ring skips it. */
+          cancelled?: boolean;
         }
         const mailbox = yield* Queue.unbounded<Admission>();
+        let current: Admission | undefined;
         const ring = yield* Effect.forkScoped(
           Effect.forever(
             Effect.flatMap(Queue.take(mailbox), (admission) =>
-              Effect.flatMap(
-                Effect.exit(
-                  options.runItem(admission.item, {
-                    session: `${termName}#${oneShot++}`,
-                    runTurn,
-                    emitRow,
-                  }),
-                ),
-                (exit) =>
-                  admission.reply !== undefined
-                    ? Deferred.done(admission.reply, exit)
-                    : Exit.isFailure(exit)
-                      ? Effect.logWarning(
-                          "memory kernel: unobserved run failed",
-                          exit.cause,
-                        )
-                      : Effect.void,
-              ),
+              // cancelled while queued: reply already settled by cancel
+              admission.cancelled === true
+                ? Effect.void
+                : Effect.flatMap(
+                    Effect.exit(
+                      Effect.suspend(() => {
+                        current = admission;
+                        return options.runItem(admission.item, {
+                          session: `${termName}#${oneShot++}`,
+                          runTurn,
+                          emitRow,
+                        });
+                      }).pipe(
+                        Effect.ensuring(
+                          Effect.sync(() => {
+                            current = undefined;
+                          }),
+                        ),
+                      ),
+                    ),
+                    (exit) =>
+                      admission.reply !== undefined
+                        ? Effect.asVoid(Deferred.done(admission.reply, exit))
+                        : Exit.isFailure(exit)
+                          ? Effect.logWarning(
+                              "memory kernel: unobserved run failed",
+                              exit.cause,
+                            )
+                          : Effect.void,
+                  ),
             ),
           ),
         );
 
+        const requestInterrupt = Effect.suspend(() => {
+          if (activeInbox === undefined) return Effect.void;
+          interruptRequested = true;
+          activeInbox.push({ _tag: "Interrupt" });
+          // release the in-flight tool execution (raced in CallTool)
+          return interruptSignal !== undefined
+            ? Effect.asVoid(Deferred.succeed(interruptSignal, void 0))
+            : Effect.void;
+        });
+
+        /**
+         * Internal cancellable admission (§2.8b) — the substrate for
+         * `dispatch` and for the delegation compiler's cascade. `cancel`
+         * is run-addressed: a queued admission tombstones (its reply
+         * settles as Interrupted without ever running); the ACTIVE
+         * admission interrupts the ring's current turn — safe on shared
+         * delegates because the ring is serial: active means *this* item.
+         */
+        const admit = (item: unknown) =>
+          Effect.gen(function* () {
+            const reply = yield* Deferred.make<unknown, unknown>();
+            const admission: Admission = { item, reply };
+            yield* Queue.offer(mailbox, admission);
+            return {
+              await: Deferred.await(reply),
+              cancel: Effect.suspend(() => {
+                admission.cancelled = true;
+                const settle = Effect.asVoid(
+                  Deferred.done(
+                    reply,
+                    Exit.succeed({
+                      _tag: "Interrupted",
+                      abandoned: [],
+                    } satisfies Step.HaltOutcome),
+                  ),
+                );
+                return current === admission
+                  ? Effect.andThen(requestInterrupt, settle)
+                  : settle;
+              }),
+            };
+          });
+
         return {
           // dispatch = send + join: same admission path, plus a reply seat
           dispatch: (item: unknown) =>
-            Effect.gen(function* () {
-              const reply = yield* Deferred.make<unknown, unknown>();
-              yield* Queue.offer(mailbox, { item, reply });
-              return yield* Deferred.await(reply);
-            }),
+            Effect.flatMap(admit(item), (handle) => handle.await),
           // send = the admission half alone (fire-and-forget)
           send: (item: unknown) =>
             Effect.asVoid(Queue.offer(mailbox, { item })),
@@ -461,17 +554,20 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 parkedSteers.push(...messages);
               }
             }),
-          // interrupt = Scope authority as a control admission (§0.6):
-          // never a fiber kill. The active turn settles its in-flight
-          // batch and halts as Interrupted; idle rings have nothing to
-          // interrupt.
+          // interrupt = Scope authority as a control admission (§0.6),
+          // CASCADING (§2.8b): children first — every in-flight
+          // delegation is cancelled on its own ring — then the active
+          // turn settles its batch and halts as Interrupted. Idle rings
+          // have nothing to interrupt.
           interrupt: () =>
-            Effect.sync(() => {
-              if (activeInbox !== undefined) {
-                interruptRequested = true;
-                activeInbox.push({ _tag: "Interrupt" });
-              }
+            Effect.gen(function* () {
+              const children = [...(options.children ?? [])];
+              yield* Effect.forEach(children, (child) => child.cancel, {
+                discard: true,
+              });
+              yield* requestInterrupt;
             }),
+          [internalAdmit]: admit,
         };
       });
 
@@ -486,12 +582,19 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // late-bound: completion steers from background delegations route
         // to this ring's own steer verb once the ring exists (§2.8)
         const steerCell: SteerCell = {};
-        const compiled = yield* compileTools(term.refs, undefined, steerCell);
+        const children = new Set<{ readonly cancel: Effect.Effect<void> }>();
+        const compiled = yield* compileTools(
+          term.refs,
+          undefined,
+          steerCell,
+          children,
+        );
         const service = yield* makeRing({
           termName: term["~alchemy/Name"],
           system: renderTemplate(term.template, term.refs),
           compiled,
           policy,
+          children,
           runItem: (item, run) =>
             Effect.map(
               run.runTurn({
@@ -611,10 +714,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         ]);
 
         const steerCell: SteerCell = {};
+        const children = new Set<{ readonly cancel: Effect.Effect<void> }>();
         const compiled = yield* compileTools(
           term.refs,
           { tools: syntheticTools, handlers: syntheticHandlers },
           steerCell,
+          children,
         );
 
         const system =
@@ -637,6 +742,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           system,
           compiled,
           policy,
+          children,
           runItem: (item, run) =>
             Effect.gen(function* () {
               currentRun = {};
@@ -850,6 +956,7 @@ const compileTools = Effect.fn(function* (
     >;
   },
   steerCell?: SteerCell,
+  children?: Set<{ readonly cancel: Effect.Effect<void> }>,
 ) {
   const aiTools: AiTool.Any[] = [...(synthetic?.tools ?? [])];
   const handlers = new Map<
@@ -891,14 +998,35 @@ const compileTools = Effect.fn(function* (
       }
       const service = delegate.value as {
         dispatch: (item: unknown) => Effect.Effect<unknown, unknown, never>;
+        [internalAdmit]?: (item: unknown) => Effect.Effect<AdmissionHandle>;
       };
-      const call = (task: unknown) =>
-        service.dispatch(task).pipe(
+      const distill = (raw: Effect.Effect<unknown, unknown>) =>
+        raw.pipe(
           Effect.flatMap(summarizeDelegation),
           // typed loop exits (Refused/BudgetExceeded) become
           // model-visible failure text for the caller
           Effect.mapError((error) => String(error)),
         );
+      /**
+       * Cascade-registered call (§2.8b): admit on the child's ring and
+       * register the admission with the HOST's children set for the
+       * lifetime of the join — a host interrupt cancels exactly this
+       * admission (tombstone if queued, control admission if active).
+       */
+      const call = (task: unknown): Effect.Effect<unknown, string> => {
+        const admitChild = service[internalAdmit];
+        if (admitChild === undefined || children === undefined) {
+          return distill(service.dispatch(task));
+        }
+        return Effect.gen(function* () {
+          const handle = yield* admitChild(task);
+          const entry = { cancel: handle.cancel };
+          children.add(entry);
+          return yield* distill(handle.await).pipe(
+            Effect.ensuring(Effect.sync(() => children.delete(entry))),
+          );
+        });
+      };
       aiTools.push(
         AiTool.make(name, {
           description:
