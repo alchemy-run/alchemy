@@ -46,16 +46,40 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     Effect.Effect<BundleFile, BundleError>
   >();
   const deferred = yield* Deferred.make<ViteBuildOutput, BundleError>();
+  const isEnvironmentBuilt = new Map<string, boolean>();
+
+  // We used to detect a completed build using a `buildApp` hook. However, if the user's framework
+  // doesn't also provide a `buildApp` hook, ours may be called before the build is complete.
+  // As a workaround, we record each environment in `configResolved`, track when it's finished building
+  // by setting the value to `true` in `writeBundle`, and emitting the build output when all environments are built.
+  const onEnvironmentBuilt = (environment: string) => {
+    isEnvironmentBuilt.set(environment, true);
+    if (Array.from(isEnvironmentBuilt.values()).every(Boolean)) {
+      Deferred.doneUnsafe(
+        deferred,
+        Effect.succeed({
+          clientDirectory,
+          serverBundle: makeServerBundle(),
+        }),
+      );
+    }
+  };
 
   const plugin: vite.Plugin = {
     name: "alchemy:build-output",
     sharedDuringBuild: true,
+    async configResolved(config) {
+      for (const environment of Object.keys(config.environments)) {
+        isEnvironmentBuilt.set(environment, false);
+      }
+    },
     async writeBundle(_, bundle) {
       if (this.environment.name === "client") {
         clientDirectory = path.resolve(
           this.environment.config.root,
           this.environment.config.build.outDir,
         );
+        onEnvironmentBuilt(this.environment.name);
         return;
       }
       const files = Object.values(bundle);
@@ -106,18 +130,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           );
         }),
       );
-    },
-    buildApp: {
-      order: "post",
-      async handler() {
-        Deferred.doneUnsafe(
-          deferred,
-          Effect.succeed({
-            clientDirectory,
-            serverBundle: makeServerBundle(),
-          }),
-        );
-      },
+      onEnvironmentBuilt(this.environment.name);
     },
   };
 
