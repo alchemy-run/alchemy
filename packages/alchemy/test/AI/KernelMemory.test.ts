@@ -501,6 +501,75 @@ describe("the in-memory Kernel", () => {
   );
 });
 
+// ─── delegation (§1.5 Stage A) ───────────────────────────────────
+
+class Sage extends AI.Agent<Sage>()("Sage")`
+You are the sage. Answer questions truthfully and briefly.` {}
+
+class Chief extends AI.Agent<Chief>()("Chief")`
+You are the chief. For any question, delegate to ${Sage} and repeat
+its answer verbatim.` {}
+
+describe("delegation", () => {
+  it.effect(
+    "an interpolated Agent becomes a tool whose handler dispatches",
+    () =>
+      Effect.gen(function* () {
+        const model = scriptedModel([
+          // 1: Chief's ring — sees the Sage delegation tool and uses it
+          () => [
+            toolCall("d1", "Sage", { task: "what is the answer?" }),
+            finish("tool-calls"),
+          ],
+          // 2: Sage's ring — its OWN charter, serving the delegated task
+          () => [...text("the answer is 42"), finish("stop")],
+          // 3: Chief's round 2 — the distilled result came back
+          () => [...text("the sage says: the answer is 42"), finish("stop")],
+        ]);
+        const kernelLayer = AI.memory.pipe(Layer.provide(model.layer));
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const chief = yield* kernel.interpret(Chief);
+            return (yield* chief.dispatch(
+              "what is the answer?",
+            )) as AI.Step.HaltOutcome;
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              kernelLayer,
+              // the delegate's ring comes from its own kernel-default Layer
+              AI.layer(Sage).pipe(
+                Layer.provide([kernelLayer, RuntimeContext.phantom]),
+              ),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        expect(outcome).toMatchObject({
+          _tag: "Completed",
+          text: "the sage says: the answer is 42",
+        });
+        expect(model.calls).toHaveLength(3);
+        // call 1: the Chief was offered Sage as a tool, charter included
+        const advertised = model.calls[0]!.tools.find(
+          (tool) => tool.name === "Sage",
+        );
+        expect(advertised).toBeDefined();
+        expect(advertised!.description).toContain("You are the sage");
+        // call 2 ran on the SAGE's ring: its own charter is the system
+        // prompt and the Chief's transcript is nowhere in sight
+        expect(promptText(model.calls[1]!)).toContain("You are the sage");
+        expect(promptText(model.calls[1]!)).not.toContain("You are the chief");
+        expect(promptText(model.calls[1]!)).toContain("what is the answer?");
+        // call 3: the Chief got the DISTILLED result, not Sage's transcript
+        expect(promptText(model.calls[2]!)).toContain("the answer is 42");
+      }),
+  );
+});
+
 // ─── the loop runtime (§2.5) ─────────────────────────────────────
 
 class Quest extends AI.Loop<Quest>()("Quest")`

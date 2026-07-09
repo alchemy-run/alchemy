@@ -794,6 +794,32 @@ const isParam = (ref: unknown): ref is Parameter =>
   ref !== null &&
   (ref as Record<string, unknown>)["~alchemy/Kind"] === "Param";
 
+/**
+ * Summarize a delegate's dispatch result for the caller's transcript —
+ * the subagent-summary pattern (§2.5 upward channel 1): the caller sees
+ * a distilled result, never the delegate's transcript. Abnormal ends
+ * surface as model-visible tool failures.
+ */
+const summarizeDelegation = (
+  value: unknown,
+): Effect.Effect<unknown, string> => {
+  if (typeof value === "object" && value !== null && "_tag" in value) {
+    const outcome = value as Step.HaltOutcome;
+    switch (outcome._tag) {
+      case "Completed":
+        return Effect.succeed(outcome.text);
+      case "BudgetExceeded":
+        return Effect.fail(
+          `the delegate exceeded its ${outcome.limit} budget (${outcome.used}/${outcome.budget})`,
+        );
+      case "Interrupted":
+        return Effect.fail("the delegate was interrupted");
+    }
+  }
+  // a Loop delegate resolves with its typed halt value
+  return Effect.succeed(value);
+};
+
 const compileTools = Effect.fn(function* (
   refs: ReadonlyArray<unknown>,
   synthetic?: {
@@ -811,6 +837,48 @@ const compileTools = Effect.fn(function* (
   >(synthetic?.handlers ?? []);
 
   for (const ref of refs) {
+    // ── delegation (§1.5 Stage A): an interpolated Agent/Loop becomes a
+    // tool whose handler is the DELEGATE'S dispatch. The tag resolves
+    // the live ProcessService from ambient context — which ring serves
+    // it, with which tool physics, is entirely the Layer graph's
+    // decision (per-agent physics, shared vs private delegates).
+    if (isAgent(ref) || isLoop(ref)) {
+      const name = ref["~alchemy/Name"];
+      const delegate = yield* Effect.serviceOption(ref as never);
+      if (Option.isNone(delegate)) {
+        return yield* Effect.die(
+          new Error(
+            `delegate ${name} has no implementation in context — provide AI.layer(${name}) or a custom Layer (Req should have caught this)`,
+          ),
+        );
+      }
+      const service = delegate.value as {
+        dispatch: (item: unknown) => Effect.Effect<unknown, unknown, never>;
+      };
+      aiTools.push(
+        AiTool.make(name, {
+          description:
+            `Delegate a task to ${name} and receive its distilled ` +
+            `result. ${name}'s charter: ${renderTemplate(
+              (ref as { template: TemplateStringsArray }).template,
+              (ref as { refs: unknown[] }).refs,
+            )}`,
+          parameters: S.Struct({ task: S.String }) as never,
+        }),
+      );
+      handlers.set(name, (params) =>
+        service
+          .dispatch((params as { task?: unknown } | undefined)?.task ?? params)
+          .pipe(
+            Effect.flatMap(summarizeDelegation),
+            // typed loop exits (Refused/BudgetExceeded) become
+            // model-visible failure text for the caller
+            Effect.mapError((error) => String(error)),
+          ),
+      );
+      continue;
+    }
+
     if (!isToolTerm(ref)) continue;
     const name = ref["~alchemy/Name"];
 

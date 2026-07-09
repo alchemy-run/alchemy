@@ -46,6 +46,11 @@ one call per step.
 ${AI.until(S.Struct({ answer: S.Number }))`the expression is fully computed`}
 ${AI.budget({ iterations: 6 })}` {}
 
+class Chief extends AI.Agent<Chief>()("Chief")`
+You are a chief of staff who cannot do arithmetic at all. For any
+arithmetic question, delegate the ENTIRE question to ${Mathematician}
+verbatim, then repeat its final answer as plain digits.` {}
+
 // ─── physics ─────────────────────────────────────────────────────
 
 const ModelLive = AnthropicLanguageModel.layer({
@@ -289,6 +294,47 @@ describe("memory kernel × live Anthropic", () => {
         // both real multiplications went through OUR tool
         expect(harness.invocations).toContainEqual({ a: 3, b: 4 });
         expect(harness.invocations).toContainEqual({ a: 12, b: 5 });
+      }),
+    { timeout: 120_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "delegation: Chief → Mathematician → multiply, distilled back up",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const kernelLayer = AI.memory.pipe(Layer.provide(ModelLive));
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const chief = yield* kernel.interpret(Chief);
+            return (yield* chief.dispatch(
+              "What is 63 multiplied by 127?",
+            )) as AI.Step.HaltOutcome;
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              kernelLayer,
+              AI.layer(Mathematician).pipe(
+                Layer.provide([
+                  kernelLayer,
+                  harness.layer,
+                  RuntimeContext.phantom,
+                ]),
+              ),
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        // the full chain ran: Chief delegated, the Mathematician used the
+        // real tool, and the distilled answer came back up
+        expect(harness.invocations).toContainEqual({ a: 63, b: 127 });
+        expect(outcome._tag).toBe("Completed");
+        if (outcome._tag === "Completed") {
+          expect(outcome.text).toContain("8001");
+        }
       }),
     { timeout: 120_000 },
   );
