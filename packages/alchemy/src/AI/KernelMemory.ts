@@ -7,18 +7,19 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
-import * as Stream from "effect/Stream";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import { isAgent } from "./Agent.ts";
 import { KernelError } from "./Errors.ts";
+import { eventId } from "./Ids.ts";
 import { Kernel, type KernelService } from "./Kernel.ts";
 import type { Parameter } from "./Parameter.ts";
 import { renderTemplate } from "./Render.ts";
 import * as Step from "./Step.ts";
 import type { Tool } from "./Tool.ts";
+import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
 
 /**
  * The in-memory reference Kernel (design §2.6) — the smallest honest
@@ -41,16 +42,33 @@ import type { Tool } from "./Tool.ts";
  *    (`Err = never` is a theorem); harness failures (`AiError`) are
  *    defects.
  *
+ * 4. **Persist** — every external effect is preceded by a durable Trace
+ *    row (§2.7 write-ahead: `model.requested` before the wire call,
+ *    `tool.requested` before execution, terminals after) committed
+ *    through the {@link TraceStore} seam — resolved via
+ *    `Effect.serviceOption` with the in-memory store as the internal
+ *    default (the §2.6 seam pattern), so `kernel.events` / `kernel.trace`
+ *    are real streams and a different backend is one Layer away.
+ *
  * Deliberately absent (later build-order steps): the loop runtime
- * (trigger/halt/fold/check refs), steering across fibers, the durable
- * Trace, and event emission. `dispatch` resolves with the turn's
- * {@link Step.HaltOutcome} until the kernel `Message` type lands.
+ * (trigger/halt/fold/check refs), steering across fibers, the StepState
+ * stash (recovery), and budget accounting off usage. `dispatch` resolves
+ * with the turn's {@link Step.HaltOutcome} until the kernel `Message`
+ * type lands.
  */
 export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
   Layer.effect(
     Kernel,
     Effect.gen(function* () {
       const model = yield* LanguageModel.LanguageModel;
+      const store = yield* Effect.serviceOption(TraceStore).pipe(
+        Effect.flatMap(
+          Option.match({
+            onSome: Effect.succeed,
+            onNone: () => makeMemoryTraceStore,
+          }),
+        ),
+      );
       let oneShot = 0;
 
       const interpretAgent = Effect.fn(function* (term: {
@@ -58,11 +76,32 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         template: TemplateStringsArray;
         refs: unknown[];
       }) {
+        const termName = term["~alchemy/Name"];
         const system = renderTemplate(term.template, term.refs);
         const compiled = yield* compileTools(term.refs);
 
         const turn = Effect.fn(function* (item: unknown) {
-          const session = `${term["~alchemy/Name"]}#${oneShot++}`;
+          const session = `${termName}#${oneShot++}`;
+          // durable Trace rows for this ring (§2.7): deterministic ids,
+          // seq assigned by the store inside the commit
+          const emit = (
+            type: string,
+            cause: string,
+            kind: string,
+            payload?: unknown,
+          ) =>
+            store.commit([
+              {
+                v: 1,
+                type,
+                id: eventId(cause, kind),
+                durable: true,
+                ring: [termName],
+                session,
+                cause,
+                payload,
+              },
+            ]);
           let state = Step.initialState({ session });
           const inbox: Step.Feedback[] = [
             { _tag: "Dispatched", input: toMessages(item) },
@@ -81,6 +120,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             for (const command of commands) {
               switch (command._tag) {
                 case "CallModel": {
+                  // write-ahead: the intent row is durable BEFORE the wire call
+                  yield* emit("model.requested", command.id, "request");
                   const response = yield* model
                     .generateText({
                       prompt: Prompt.fromMessages([
@@ -92,36 +133,54 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     })
                     // harness failure, not an agent error (Err = never)
                     .pipe(Effect.orDie);
+                  const toolCalls = (
+                    response.toolCalls as ReadonlyArray<{
+                      id: string;
+                      name: string;
+                      params: unknown;
+                    }>
+                  ).map((part) => ({
+                    callId: part.id,
+                    name: part.name,
+                    params: part.params,
+                  }));
+                  yield* emit("model.completed", command.id, "response", {
+                    finishReason: response.finishReason,
+                    usage: response.usage,
+                    toolCalls: toolCalls.map((call) => call.callId),
+                  });
                   inbox.push({
                     _tag: "ModelResponse",
                     commandId: command.id,
                     outcome: {
                       text: response.text,
-                      toolCalls: (
-                        response.toolCalls as ReadonlyArray<{
-                          id: string;
-                          name: string;
-                          params: unknown;
-                        }>
-                      ).map((part) => ({
-                        callId: part.id,
-                        name: part.name,
-                        params: part.params,
-                      })),
+                      toolCalls,
                       finishReason: response.finishReason,
                     },
                   });
                   break;
                 }
                 case "CallTool": {
+                  // write-ahead: intent before execution (§2.7)
+                  yield* emit("tool.requested", command.id, "request", {
+                    callId: command.callId,
+                    name: command.name,
+                  });
                   const handler = compiled.handlers.get(command.name);
                   const settled = handler
                     ? yield* Effect.result(handler(command.params))
                     : Result.fail(`no such tool: ${command.name}`);
+                  const isFailure = Result.isFailure(settled);
+                  yield* emit(
+                    isFailure ? "tool.failed" : "tool.completed",
+                    command.id,
+                    "result",
+                    { callId: command.callId, name: command.name },
+                  );
                   inbox.push({
                     _tag: "ToolSettled",
                     callId: command.callId,
-                    isFailure: Result.isFailure(settled),
+                    isFailure,
                     result: Result.isSuccess(settled)
                       ? settled.success
                       : // model-visible failure text, never a thrown error
@@ -132,6 +191,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                   break;
                 }
                 case "Halt":
+                  yield* emit("turn.halted", command.id, "halt", {
+                    outcome: command.outcome._tag,
+                  });
                   return command.outcome;
               }
             }
@@ -203,8 +265,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     "memory kernel interprets Agent terms only (loop runtime is a later build-order step)",
                 }),
               )) as KernelService["interpret"],
-        events: Stream.empty,
-        trace: () => Stream.empty,
+        events: store.events,
+        trace: (ring, after) => store.trace(ring, after),
       });
     }),
   );

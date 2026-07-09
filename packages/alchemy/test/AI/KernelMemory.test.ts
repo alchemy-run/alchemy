@@ -228,6 +228,48 @@ describe("the in-memory Kernel", () => {
     }),
   );
 
+  it.effect("a turn writes its Trace ahead of its effects (§2.7)", () =>
+    Effect.gen(function* () {
+      const model = scriptedModel([
+        () => [toolCall("c1", "grep", { pattern: "x" }), finish("tool-calls")],
+        () => [text("done"), finish("stop")],
+      ]);
+      const trace = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          yield* librarian.dispatch("find x");
+          // the ring path is the term name; replay the whole trace
+          return yield* Stream.runCollect(
+            kernel.trace("Librarian").pipe(Stream.take(7)),
+          );
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model.layer)),
+            Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      // write-ahead order: every effect's intent row precedes its terminal
+      expect(trace.map((event) => event.type)).toEqual([
+        "model.requested",
+        "model.completed",
+        "tool.requested",
+        "tool.completed",
+        "model.requested",
+        "model.completed",
+        "turn.halted",
+      ]);
+      // durable rows carry a contiguous per-ring cursor
+      expect(trace.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+      // usage rode the model terminal (budget accounting's future input)
+      expect((trace[1]!.payload as any).usage).toBeDefined();
+    }),
+  );
+
   it.effect(
     "loop terms are honestly rejected until the loop runtime lands",
     () =>
