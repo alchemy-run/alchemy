@@ -11,6 +11,7 @@
     // resolve alchemy from source (same as the bun export condition the
     // server runs with) instead of the built lib/ types
     "paths": {
+      "@/*": ["./src/*"],
       "alchemy": ["../../packages/alchemy/src/index.ts"],
       "alchemy/AI": ["../../packages/alchemy/src/AI/index.ts"],
       "alchemy/*": ["../../packages/alchemy/src/*.ts"]
