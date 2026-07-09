@@ -142,7 +142,26 @@ control plane may move to `HttpApi` when it grows.
   for distinct items; two conversations racing identical items on one
   ring could cross-correlate — acceptable now, fixed for real when
   admission returns its session key (Phase 2 typed admission).
-- ☐ `AgentApi` HTTP layer + in-process and live tests.
+- ✅ **`AgentApi`** (`AgentApi.ts`): the routes as an `HttpRouter.use`
+  Layer — harness-agnostic (Bun today, the Ring DO later). `POST
+  /api/chat` decodes the `useChat` body, admits the last user message
+  via `ChatSessions`, and hand-frames the SSE window (the AI SDK's
+  framing is a byte-level contract; no codec re-derivation). `GET
+  /api/chat/:id` serves the materialized transcript. `GET
+  /v1/stream/:ring?offset=N` is the durable-streams-shaped trace
+  window (each frame's SSE id is its `seq`, so resumption is the same
+  cursor). `GET/POST /api/asks[/:id]` is the Ask control plane (ask
+  ids contain `/` — percent-encoded on the wire); `POST /api/steer` /
+  `/api/interrupt` expose process authority when a handle is given.
+  Services resolve at Layer build (not per request), so the routes
+  Layer requires `ChatSessions | Kernel` and handlers stay
+  requirement-free. Tested end to end over a real ephemeral-port HTTP
+  server + client: chat SSE (headers, chunk envelope, tool payloads,
+  `[DONE]`), ask round-trip over HTTP unblocking a parked run, trace
+  replay with contiguous seqs, and a live-Anthropic run through the
+  whole HTTP path. Reconnect of an in-flight chat window is served by
+  the trace endpoint for now; a `useChat`-native resume route rides
+  the deferred ladder.
 - ☐ `examples/agent-chat-web` (React `useChat` proof).
 
 ## Deferred ladder

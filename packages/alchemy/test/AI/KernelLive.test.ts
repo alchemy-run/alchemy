@@ -20,8 +20,13 @@ import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { makeChatSessions } from "@/AI/Api/ChatSessions.ts";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import { agentApi } from "@/AI/Api/AgentApi.ts";
+import { ChatSessions, makeChatSessions } from "@/AI/Api/ChatSessions.ts";
 import { sessionEvents, toChunks } from "@/AI/Api/Chunks.ts";
 import { sseFrame } from "@/AI/Api/Protocol.ts";
 import * as AI from "@/AI/index.ts";
@@ -825,5 +830,72 @@ ${AI.never`health = one log_answer call per alarm`}` {}
         expect(harness.invocations).toContainEqual({ a: 7, b: 6 });
       }),
     { timeout: 120_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "the HTTP API serves a live agent over the AI SDK wire",
+    () => {
+      const invocations: Array<{ a: number; b: number }> = [];
+      const kernelLayer = AI.memory.pipe(Layer.provide(ModelLive));
+      const SessionsLive = Layer.effect(
+        ChatSessions,
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const process = yield* kernel.interpret(Mathematician);
+          return ChatSessions.of(yield* makeChatSessions({ process }));
+        }),
+      ).pipe(
+        Layer.provide([
+          kernelLayer,
+          AI.AskHubMemory,
+          Layer.succeed(Multiply, ((input: { a: number; b: number }) =>
+            Effect.sync(() => {
+              invocations.push(input);
+              return { product: input.a * input.b };
+            })) as never),
+          RuntimeContext.phantom,
+        ]),
+      );
+
+      const app = HttpRouter.serve(agentApi(), {
+        disableListenLog: true,
+      }).pipe(
+        Layer.provide([SessionsLive, kernelLayer]),
+        Layer.provideMerge(NodeHttpServer.layerTest),
+      );
+
+      return Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* client.execute(
+          HttpClientRequest.post("/api/chat").pipe(
+            HttpClientRequest.bodyJsonUnsafe({
+              id: "live-http",
+              messages: [
+                {
+                  id: "u1",
+                  role: "user",
+                  parts: [
+                    {
+                      type: "text",
+                      text: "What is 111 multiplied by 111?",
+                    },
+                  ],
+                },
+              ],
+            }),
+          ),
+        );
+        expect(response.headers["x-vercel-ai-ui-message-stream"]).toBe("v1");
+        const body = yield* response.text;
+
+        // a real model's turn arrived as the AI SDK wire format
+        expect(body).toContain('"type":"start"');
+        expect(body).toContain('"type":"tool-input-available"');
+        expect(body).toContain("12321");
+        expect(body.trimEnd().endsWith("data: [DONE]")).toBe(true);
+        expect(invocations).toContainEqual({ a: 111, b: 111 });
+      }).pipe(Effect.provide(app));
+    },
+    { timeout: 90_000 },
   );
 });
