@@ -1071,13 +1071,16 @@ describe.concurrent("Cloudflare.Worker", () => {
       const v1 = yield* deploy("2024-01-01");
       const workersDevHost = new URL(v1.url!).hostname;
 
-      // Rewrite the persisted attributes to a legacy shape. The stale
+      // Rewrite the persisted record to a legacy shape. The stale
       // custom-domain entry ("app.example.com") was never attached on
       // Cloudflare, so the redeploy must also converge state back to the
-      // observed cloud truth rather than trusting the record.
-      const writeLegacyAttr = (legacy: {
+      // observed cloud truth rather than trusting the record. `props`
+      // optionally gains the pre-redesign keys so `olds` reaching the diff
+      // looks exactly like a record an old deploy persisted.
+      const writeLegacyRecord = (legacy: {
         url: string | undefined;
         domains: unknown[];
+        legacyProps?: Record<string, unknown>;
       }) =>
         Effect.gen(function* () {
           const state = yield* yield* State;
@@ -1088,16 +1091,24 @@ describe.concurrent("Cloudflare.Worker", () => {
           };
           const current = yield* state.get(key);
           expect(current).toBeDefined();
-          const attr = { ...(current as any).attr, ...legacy };
+          const attr = {
+            ...(current as any).attr,
+            url: legacy.url,
+            domains: legacy.domains,
+          };
           delete attr.allUrls;
           yield* state.set({
             ...key,
-            value: { ...(current as any), attr },
+            value: {
+              ...(current as any),
+              attr,
+              props: { ...(current as any).props, ...legacy.legacyProps },
+            },
           });
         }).pipe(Effect.provide(stack.state));
 
       // beta.45–57: URL strings, workers.dev mixed in, no allUrls.
-      yield* writeLegacyAttr({
+      yield* writeLegacyRecord({
         url: "https://app.example.com",
         domains: ["https://app.example.com", `https://${workersDevHost}`],
       });
@@ -1107,10 +1118,16 @@ describe.concurrent("Cloudflare.Worker", () => {
       expect(v2.allUrls).toEqual([`https://${workersDevHost}`]);
       expect(v2.domains).toEqual([workersDevHost]);
 
-      // <= beta.44: `{ id, hostname, zoneId }` objects.
-      yield* writeLegacyAttr({
+      // <= beta.44: `{ id, hostname, zoneId }` objects — and the props the
+      // old code persisted alongside them (`url`/`subdomain` keys), so the
+      // diff's `olds` carries the pre-redesign prop shape too.
+      yield* writeLegacyRecord({
         url: undefined,
         domains: [{ id: "legacy", hostname: "app.example.com", zoneId: "z" }],
+        legacyProps: {
+          url: true,
+          subdomain: { enabled: true, previewsEnabled: true },
+        },
       });
 
       const v3 = yield* deploy("2024-01-03");
@@ -1121,6 +1138,85 @@ describe.concurrent("Cloudflare.Worker", () => {
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
     }).pipe(logLevel),
+  );
+
+  // The real upgrade path for a bare Worker: the user's props are byte-for-
+  // byte identical before and after upgrading Alchemy, so the *only* thing
+  // that can trigger the state migration is the metadata hash (its surface
+  // changed: `url`/`subdomain` keys out, `workersDev` in). The migration
+  // must be a one-time update — and a downstream resource consuming
+  // `worker.allUrls` (absent from legacy state) must re-resolve through it
+  // and settle back to noop.
+  test.provider(
+    "props-identical redeploy migrates legacy state via the metadata hash",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        // Never changes across the test — like a user who upgrades Alchemy
+        // without touching their stack code.
+        const program = Effect.gen(function* () {
+          const worker = yield* Cloudflare.Worker("BareUpstream", {
+            main,
+            compatibility: { date: "2024-01-01" },
+          });
+          yield* Cloudflare.Alerting.NotificationWebhook("Hook", {
+            url: worker.allUrls.pipe(Output.map((urls) => urls[0]!)),
+          });
+          return worker;
+        });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        const v1 = yield* stack.deploy(program);
+        const workersDevHost = new URL(v1.url!).hostname;
+
+        // Rewrite the record to what an old deploy persisted: URL-string
+        // domains, no allUrls, and a metadata hash computed over the old
+        // surface (any value the new code can't reproduce).
+        yield* Effect.gen(function* () {
+          const state = yield* yield* State;
+          const key = { stack: stack.name, stage: "test", fqn: "BareUpstream" };
+          const current = yield* state.get(key);
+          expect(current).toBeDefined();
+          const attr = {
+            ...(current as any).attr,
+            url: `https://${workersDevHost}`,
+            domains: [`https://${workersDevHost}`],
+            hash: { ...(current as any).attr.hash, metadata: "legacy" },
+          };
+          delete attr.allUrls;
+          yield* state.set({ ...key, value: { ...(current as any), attr } });
+        }).pipe(Effect.provide(stack.state));
+
+        // Identical props still plan as an update — driven by the metadata
+        // hash alone. The downstream's `allUrls` reference is unresolvable
+        // from legacy state (never marked stable), so it takes a one-time
+        // update alongside the migration.
+        const migrationPlan = yield* stack.plan(program);
+        expect(actionOf(migrationPlan, "BareUpstream")).toBe("update");
+        expect(actionOf(migrationPlan, "Hook")).toBe("update");
+
+        const migrated = yield* stack.deploy(program);
+        expect(migrated.url).toEqual(`https://${workersDevHost}`);
+        expect(migrated.allUrls).toEqual([`https://${workersDevHost}`]);
+        expect(migrated.domains).toEqual([workersDevHost]);
+
+        // Migration is one-time: the same props now settle as a full noop,
+        // including the downstream (allUrls is present and stable again).
+        const settledPlan = yield* stack.plan(program);
+        expect(actionOf(settledPlan, "BareUpstream")).toBe("noop");
+        expect(actionOf(settledPlan, "Hook")).toBe("noop");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 240_000 },
   );
 
   // Canonical `list()` test (account collection): deploy a real Worker and
