@@ -42,6 +42,9 @@ export const LocalContainerProvider = () =>
     ContainerPlatform,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
       // Resolve the `dev` image plus a content hash for change detection.
       // Cached per run (`Artifacts.cached`, keyed by resource id) so repeated
       // diffs/reconciles in a single dev session don't re-bundle or re-hash.
@@ -64,7 +67,10 @@ export const LocalContainerProvider = () =>
             const { context, dockerfile, hash } =
               yield* prepareContainerBuildContext(id, news);
             return {
-              dev: { context, dockerfile } as DevContainerImage,
+              dev: {
+                context: path.relative(process.cwd(), context),
+                dockerfile: path.relative(context, dockerfile),
+              } as DevContainerImage,
               hash,
             };
           }
@@ -81,8 +87,6 @@ export const LocalContainerProvider = () =>
           // Variant 3 — user-supplied Dockerfile + build context directory.
           // The runtime builds the user's Dockerfile against the (real-path'd)
           // context, exactly like the live provider's `external` variant.
-          const fs = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
           const context = yield* fs.realPath(news.context ?? ".");
           const dockerfile = news.dockerfile
             ? yield* fs.realPath(news.dockerfile)
@@ -90,7 +94,10 @@ export const LocalContainerProvider = () =>
           const contextHash = yield* hashDirectory({ cwd: context });
           const dockerfileContent = yield* fs.readFileString(dockerfile);
           return {
-            dev: { context, dockerfile } as DevContainerImage,
+            dev: {
+              context: path.relative(process.cwd(), context),
+              dockerfile: path.relative(context, dockerfile),
+            } as DevContainerImage,
             hash: yield* sha256Object({
               contextHash,
               dockerfile: dockerfileContent,

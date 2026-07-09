@@ -213,8 +213,8 @@ export const LiveContainerProvider = () =>
             imageRef: makeRef(imageHash),
             imageHash,
             dev: {
-              context: contextDir,
-              dockerfile: path.join(contextDir, "Dockerfile"),
+              context: path.relative(process.cwd(), contextDir),
+              dockerfile: "Dockerfile",
               env,
             },
           };
@@ -252,7 +252,11 @@ export const LiveContainerProvider = () =>
           imageHash,
           // The local runtime builds the user's Dockerfile against the same
           // (already real-path'd) context directory.
-          dev: { context, dockerfile, env },
+          dev: {
+            context: path.relative(process.cwd(), context),
+            dockerfile: path.relative(context, dockerfile),
+            env,
+          },
         };
       });
 
