@@ -184,6 +184,15 @@ describe("the agent HTTP API", () => {
         "user",
         "assistant",
       ]);
+
+      // GET /api/chats indexes the conversation, titled by its first
+      // user message
+      const index = (yield* (yield* client.get("/api/chats")).json) as {
+        conversations: Array<{ id: string; title: string; messages: number }>;
+      };
+      expect(index.conversations).toEqual([
+        { id: "conv-1", title: "find the answer", messages: 2 },
+      ]);
     }).pipe(
       Effect.provide(
         appLayer(

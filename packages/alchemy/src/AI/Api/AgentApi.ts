@@ -110,6 +110,12 @@ export const agentApi = (options: AgentApiOptions = {}) =>
         ),
       );
 
+      yield* router.add("GET", "/api/chats", () =>
+        Effect.map(sessions.conversations, (conversations) =>
+          HttpServerResponse.jsonUnsafe({ conversations }),
+        ),
+      );
+
       yield* router.add("GET", "/api/chat/:id", () =>
         Effect.gen(function* () {
           const params = yield* HttpRouter.params;

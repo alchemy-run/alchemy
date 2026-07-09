@@ -246,8 +246,12 @@ Ordered; each is small and independently shippable:
 2. **`data-run` part.** Delegation tools already summarize; emit a
    custom part when a delegation/spawn happens so the UI can render a
    `RunCard` instead of a generic tool card.
-3. **`GET /api/chats`** — conversation index for a sidebar (serving
-   tier; trivial over the ChatSessions map).
+3. **`GET /api/chats`** — ✅ Done. `ChatSessions.conversations` indexes
+   the transcript map (titled by the first user message); the sidebar
+   lists it, `new chat` mints a client UUID, and reopening a saved
+   conversation loads the transcript into `useChat` with
+   `defaultScrollPosition="last-anchor"` — rule 11's "reopen at the
+   last user message" comes straight from the scroller.
 4. **Reconnect route** (`GET /api/chat/:id/stream`) — resume a live
    window from the trace cursor so a refresh mid-run reattaches
    (the fold already handles replay; this is just a route).

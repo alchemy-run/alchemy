@@ -32,7 +32,16 @@ import {
   type UIMessageChunk,
 } from "./Protocol.ts";
 
+export interface ConversationSummary {
+  readonly id: string;
+  /** The first user message's text — the sidebar label. */
+  readonly title: string;
+  readonly messages: number;
+}
+
 export interface ChatSessionsService {
+  /** The conversation index (insertion order). */
+  readonly conversations: Effect.Effect<ReadonlyArray<ConversationSummary>>;
   /** The materialized transcript for one conversation. */
   transcript(conversationId: string): Effect.Effect<ReadonlyArray<UIMessage>>;
   /**
@@ -74,6 +83,19 @@ export const makeChatSessions = (options: {
     };
 
     return {
+      conversations: Effect.sync(() =>
+        [...transcripts.entries()].map(([id, messages]) => ({
+          id,
+          title:
+            messages
+              .find((message) => message.role === "user")
+              ?.parts.filter((part) => part.type === "text")
+              .map((part) => String((part as { text?: unknown }).text ?? ""))
+              .join("") ?? id,
+          messages: messages.length,
+        })),
+      ),
+
       transcript: (conversationId) =>
         Effect.sync(() => transcripts.get(conversationId) ?? []),
 

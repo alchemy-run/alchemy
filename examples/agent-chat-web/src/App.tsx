@@ -8,7 +8,7 @@
  */
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Message,
   MessageContent,
@@ -55,7 +55,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
-import { ActivityIcon, DicesIcon } from "lucide-react";
+import { ActivityIcon, DicesIcon, PlusIcon } from "lucide-react";
 import type { UIMessage } from "ai";
 
 const suggestions = [
@@ -103,9 +103,23 @@ function MessagePart({ part, index }: { part: Part; index: number }) {
   return null;
 }
 
-export function App() {
+/**
+ * One conversation. Keyed by conversation id from `App`, so switching
+ * chats remounts with the saved transcript as initial messages —
+ * `defaultScrollPosition="last-anchor"` then reopens the thread at the
+ * last user message (scroll rule 11), not the absolute bottom.
+ */
+function Chat({
+  conversationId,
+  initialMessages,
+}: {
+  conversationId: string;
+  initialMessages: UIMessage[];
+}) {
   const [text, setText] = useState("");
   const { messages, sendMessage, status } = useChat({
+    id: conversationId,
+    messages: initialMessages,
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
   const isBusy = status === "submitted" || status === "streaming";
@@ -114,30 +128,8 @@ export function App() {
     isBusy &&
     (lastMessage?.role !== "assistant" || lastMessage.parts.length === 0);
 
-  const [showTrace, setShowTrace] = useState(false);
-
   return (
-    <div className="dark flex h-dvh flex-col bg-background text-foreground">
-      <header className="flex items-center justify-between border-b px-4 py-3">
-        <h1 className="text-sm font-semibold tracking-wide">
-          the dice parlor
-        </h1>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">{status}</span>
-          <Button
-            variant={showTrace ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => setShowTrace((current) => !current)}
-          >
-            <ActivityIcon className="size-3.5" />
-            trace
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
-      <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col">
+    <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col">
         {messages.length === 0 ? (
           <Empty className="flex-1">
             <EmptyHeader>
@@ -152,7 +144,7 @@ export function App() {
             </EmptyHeader>
           </Empty>
         ) : (
-          <MessageScrollerProvider autoScroll>
+          <MessageScrollerProvider autoScroll defaultScrollPosition="last-anchor">
             <MessageScroller className="flex-1">
               <MessageScrollerViewport>
                 <MessageScrollerContent aria-busy={isBusy} className="px-4 py-6">
@@ -222,8 +214,106 @@ export function App() {
             </PromptInputFooter>
           </PromptInput>
         </div>
-      </div>
-      {showTrace && <TracePanel ring="Croupier" />}
+    </div>
+  );
+}
+
+interface ConversationSummary {
+  id: string;
+  title: string;
+  messages: number;
+}
+
+export function App() {
+  const [showTrace, setShowTrace] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationId, setConversationId] = useState<string>(() =>
+    crypto.randomUUID(),
+  );
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+
+  const refreshIndex = () =>
+    fetch("/api/chats")
+      .then((response) => response.json())
+      .then((body: { conversations: ConversationSummary[] }) =>
+        setConversations(body.conversations),
+      )
+      .catch(() => {});
+
+  useEffect(() => {
+    void refreshIndex();
+    const timer = setInterval(refreshIndex, 5_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const openConversation = async (id: string) => {
+    const body = (await (await fetch(`/api/chat/${id}`)).json()) as {
+      messages: UIMessage[];
+    };
+    setInitialMessages(body.messages);
+    setConversationId(id);
+  };
+
+  const newConversation = () => {
+    setInitialMessages([]);
+    setConversationId(crypto.randomUUID());
+  };
+
+  return (
+    <div className="dark flex h-dvh flex-col bg-background text-foreground">
+      <header className="flex items-center justify-between border-b px-4 py-3">
+        <h1 className="text-sm font-semibold tracking-wide">
+          the dice parlor
+        </h1>
+        <Button
+          variant={showTrace ? "secondary" : "ghost"}
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => setShowTrace((current) => !current)}
+        >
+          <ActivityIcon className="size-3.5" />
+          trace
+        </Button>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-56 min-h-0 flex-col border-r">
+          <div className="p-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-1.5 text-xs"
+              onClick={newConversation}
+            >
+              <PlusIcon className="size-3.5" />
+              New chat
+            </Button>
+          </div>
+          <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            {conversations.map((conversation) => (
+              <button
+                key={conversation.id}
+                type="button"
+                onClick={() => void openConversation(conversation.id)}
+                className={`w-full truncate rounded px-2 py-1.5 text-left text-xs hover:bg-accent ${
+                  conversation.id === conversationId
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {conversation.title || conversation.id}
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <Chat
+          key={conversationId}
+          conversationId={conversationId}
+          initialMessages={initialMessages}
+        />
+
+        {showTrace && <TracePanel ring="Croupier" />}
       </div>
     </div>
   );
