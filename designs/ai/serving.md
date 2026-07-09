@@ -183,6 +183,15 @@ control plane may move to `HttpApi` when it grows.
     term via the prototype chain — `class extends` would have broken
     the `Grep(impl)` ToolImpl call form. Tool names are now identity.
 
+## The chat app layer
+
+How chat apps are built *on top of* this serving tier — philosophy
+(shadcn's scroll engineering as normative UX law, open-code component
+vendoring, transcripts as projections of Trace facts), the part→
+component mapping, package choices, and the kernel gaps the UI
+surfaces (reasoning parts, `data-run`, conversation index) — is
+designed in **[chat-apps.md](./chat-apps.md)**.
+
 ## Deferred ladder
 
 1. WebSocket transport + multi-client broadcast (`useAgentChat`
