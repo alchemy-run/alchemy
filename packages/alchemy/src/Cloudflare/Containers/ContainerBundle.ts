@@ -1,12 +1,20 @@
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
+import {
+  findCwdForBundle,
+  getStableContextDir,
+  resolveMainPath,
+} from "../../Bundle/TempRoot.ts";
+import { Docker } from "../../Docker/Docker.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import { sha256Object } from "../../Util/sha256.ts";
 import type {
   ContainerApplication,
   ContainerApplicationProps,
@@ -289,4 +297,76 @@ await Effect.runPromise(serverEffect).catch((err) => {
   }));
 
   return { files, hash: bundleOutput.hash };
+});
+
+/**
+ * Bundle an Effect-native container `main` and materialize it (plus the
+ * generated Dockerfile) into a stable Docker build context directory, then
+ * return the paths + content hash of that context.
+ *
+ * This is the local-dev image shape (`ContainerImage.Build`) that
+ * `@distilled.cloud/cloudflare-runtime` consumes: it `docker build`s the
+ * `dockerfile` against the `context` directory. Shared between the local
+ * provider (which serves this context to the runtime as the `dev` image) and
+ * the live provider (which persists the same deterministic context path as
+ * `dev` so a subsequent `alchemy dev` run has an image to build even though the
+ * live deploy pushed to Cloudflare's registry instead).
+ *
+ * The context directory is deterministic for a given resource id, so live and
+ * local agree on the path. Callers that want to skip re-bundling on an
+ * unchanged resource should wrap this in {@link Artifacts.cached}.
+ */
+export const prepareContainerBuildContext = Effect.fn(function* (
+  id: string,
+  news: ContainerApplicationProps,
+) {
+  const { dotAlchemy } = yield* AlchemyContext;
+  const docker = yield* Docker;
+  const path = yield* Path.Path;
+
+  const main = news.main;
+  if (!main) {
+    return yield* Effect.die(
+      new Error("Container requires a `main` entrypoint."),
+    );
+  }
+  const runtime = news.runtime ?? "bun";
+  const context = yield* getStableContextDir(
+    process.cwd(),
+    dotAlchemy,
+    `${id}-container`,
+  );
+  const dockerfileContent = buildFinalDockerfile(
+    news.dockerfile,
+    runtime,
+    news.external,
+    news.autoInstallExternals,
+  );
+  const [bundle] = yield* Effect.all(
+    [
+      bundleContainerProgram({
+        id,
+        main,
+        runtime,
+        handler: news.handler,
+        isExternal: news.isExternal,
+        external: news.external,
+        outdir: context,
+      }),
+      docker.materialize({
+        context,
+        dockerfile: dockerfileContent,
+        files: [],
+      }),
+    ],
+    { concurrency: "unbounded" },
+  );
+  return {
+    context,
+    dockerfile: path.join(context, "Dockerfile"),
+    hash: yield* sha256Object({
+      bundle: bundle.hash,
+      dockerfileContent,
+    }),
+  };
 });

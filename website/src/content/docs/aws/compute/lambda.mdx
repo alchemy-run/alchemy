@@ -267,6 +267,58 @@ bun test test/integ.test.ts
 
 You now have a deployable Lambda with a public URL.
 
+## Sandbox scope vs invocation scope
+
+The init closure runs **once per sandbox**, at cold start —
+everything it builds (bindings, SDK clients) is reused by every
+invocation. Each invocation then runs with a **fresh `Scope`** that
+is settled *inline* before the handler returns — so
+`Effect.addFinalizer` in a handler runs before the response leaves,
+and request finalizers should be fast (closing a pool is
+milliseconds).
+
+:::caution[There is no `waitUntil` on Lambda — request finalizers block the response]
+No mechanism delivers post-response work reliably on Lambda. A
+buffered invocation's response is not released to the caller until
+the entire Invoke phase completes, so deferring cleanup past the
+handler (we measured an extension-held post-response window) still
+shows up as response latency — and environments whose invoke phase
+is held open this way get recycled. Dangling promises resume on a
+later thaw at best: TCP connections rarely survive the freeze, and a
+crash or timeout reset drops the work entirely — silent data loss
+for anything that mattered.
+
+The contract is blocking and honest: request finalizers run before
+the response, keep them cheap, and anything that must not be lost
+gets written durably (a queue, a table) inside the handler itself.
+:::
+
+Init-level finalizers run at **sandbox shutdown**. A Lambda sandbox
+with no registered extensions is killed with no signal at all, so
+the generated entry registers an internal extension with the
+Extensions API — that makes Lambda send `SIGTERM` and allow 500 ms
+before `SIGKILL`, and the entry uses the window to close the
+instance scope:
+
+```typescript
+Effect.gen(function* () {
+  // init: runs once per sandbox
+  yield* Effect.addFinalizer(() =>
+    // runs in the 500 ms SIGTERM window at sandbox spin-down
+    flushTelemetry().pipe(Effect.ignore),
+  );
+  return { fetch: /* per-invocation */ };
+});
+```
+
+Treat instance-level cleanup as best-effort: half a second, and not
+delivered on hard failures (a timeout reset kills the runtime
+without the signal). Flush caches and close connections there;
+anything that *must* happen belongs in the handler, scoped to the
+invocation. See
+[Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
+for the model across all runtimes.
+
 ## Where next
 
 - [S3](/aws/data/s3) — add a bucket and bind read/write operations
