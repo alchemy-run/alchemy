@@ -1053,10 +1053,6 @@ Find the answer using ${Grep}.
 ${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}
 ${AI.budget({ iterations: 3 })}` {}
 
-class Forever extends AI.Loop<Forever>()("Forever")`
-Watch the horizon.
-${AI.never`health = a heartbeat row every iteration`}` {}
-
 /** Interpret + dispatch one work item through the Quest loop. */
 const questThrough = (
   script: ReadonlyArray<Turn>,
@@ -1374,22 +1370,125 @@ ${AI.budget({ iterations: 3 })}` {}
       }),
   );
 
-  it.effect("perpetual charters are rejected until the trigger runtime", () =>
+  it.effect(
+    "undeclared perpetuity (no halt at all) is linted at interpret",
+    () =>
+      Effect.gen(function* () {
+        class NoHalt extends AI.Loop<NoHalt>()("NoHalt")`
+Just keep working with ${Grep}.` {}
+        const model = scriptedModel([]);
+        const result = yield* Effect.result(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const kernel = yield* AI.Kernel;
+              return yield* kernel.interpret(NoHalt as never);
+            }),
+          ).pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                AI.memory.pipe(Layer.provide(model.layer)),
+                Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+                RuntimeContext.phantom,
+              ),
+            ),
+          ),
+        );
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure).toBeInstanceOf(AI.KernelError);
+          expect((result.failure as AI.KernelError).message).toContain(
+            "undeclared perpetuity",
+          );
+        }
+      }),
+  );
+});
+
+// ─── the trigger runtime (§2.5) ──────────────────────────────────
+
+const Ping = AI.EventSource(
+  "test.ping",
+  S.Struct({ n: S.Number, note: S.String }),
+);
+
+const observation = AI.Parameter(
+  "observation",
+  S.String,
+)`what you observed in the work item`;
+
+class Recorder extends AI.Tool<Recorder>()("record")`
+Record ${observation} in the log. Call this for every work item.` {}
+
+class Watcher extends AI.Loop<Watcher>()("Watcher")`
+You watch for pings. For every work item, call ${Recorder} with the
+ping's note, then stop.
+${AI.on(Ping)}
+${AI.never`health = one record row per ping`}` {}
+
+describe("the trigger runtime (§2.5)", () => {
+  it.effect("run() serves a kernel-internal EventSource as admissions", () =>
     Effect.gen(function* () {
-      const model = scriptedModel([]);
-      const result = yield* Effect.result(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const kernel = yield* AI.Kernel;
-            return yield* kernel.interpret(Forever as never);
-          }),
-        ).pipe(Effect.provide(AI.memory.pipe(Layer.provide(model.layer)))),
+      // every Watcher turn: record the input, then quiesce
+      let rounds = 0;
+      const model = Layer.effect(
+        LanguageModel.LanguageModel,
+        LanguageModel.make({
+          generateText: () => Effect.die(new Error("streamText only")),
+          streamText: () =>
+            Stream.suspend(() =>
+              Stream.fromIterable(
+                ++rounds % 2 === 1
+                  ? [
+                      toolCall(`c${rounds}`, "record", {
+                        observation: `saw ping ${rounds}`,
+                      }),
+                      finish("tool-calls"),
+                    ]
+                  : [...text("recorded"), finish("stop")],
+              ),
+            ),
+        }),
       );
-      expect(result._tag).toBe("Failure");
-      if (result._tag === "Failure") {
-        expect(result.failure).toBeInstanceOf(AI.KernelError);
-        expect((result.failure as AI.KernelError).term).toBe("Forever");
-      }
+      const recorded: string[] = [];
+      const RecorderLive = Layer.succeed(Recorder, ((input: {
+        observation: string;
+      }) =>
+        Effect.sync(() => {
+          recorded.push(input.observation);
+          return "logged";
+        })) as never);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const bus = yield* AI.EventBus;
+          const watcher = yield* kernel.interpret(Watcher);
+          // serve the ring's triggers in the background
+          yield* Effect.forkChild(watcher.run());
+          yield* Effect.yieldNow;
+          // the world pings twice
+          yield* bus.publish(Ping, { n: 1, note: "first" });
+          yield* bus.publish(Ping, { n: 2, note: "second" });
+          // rows are truth: wait for two halted turns (clock-free poll)
+          for (let spins = 0; spins < 50_000; spins++) {
+            if (recorded.length >= 2) return;
+            yield* Effect.yieldNow;
+          }
+          return yield* Effect.die(new Error("pings never served"));
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide([model, AI.EventBusMemory])),
+            AI.EventBusMemory,
+            RecorderLive,
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+
+      // both events became runs, in order, on the one serial ring
+      expect(recorded).toEqual(["saw ping 1", "saw ping 3"]);
     }),
   );
 });

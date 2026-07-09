@@ -14,11 +14,15 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
+import * as Duration from "effect/Duration";
+import * as Schedule from "effect/Schedule";
 import { isAgent } from "./Agent.ts";
 import { Ask, AskHub, makeMemoryAskHub } from "./Ask.ts";
 import { type Budget, isBudget } from "./Budget.ts";
 import { type Check, isCheck } from "./Check.ts";
 import { BudgetExceeded, KernelError, Refused } from "./Errors.ts";
+import { EventBus, makeMemoryEventBus } from "./EventBus.ts";
+import { type EventChannelService, isEventSource } from "./EventSource.ts";
 import { type Halt, isHalt } from "./Halt.ts";
 import { eventId } from "./Ids.ts";
 import { Kernel, type KernelService } from "./Kernel.ts";
@@ -27,6 +31,7 @@ import type { Parameter } from "./Parameter.ts";
 import { renderTemplate } from "./Render.ts";
 import * as Step from "./Step.ts";
 import type { Tool } from "./Tool.ts";
+import { type Cron, isTrigger, type Trigger } from "./Trigger.ts";
 import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
 
 /**
@@ -151,6 +156,17 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           }),
         ),
       );
+      // the harness event bus seam: delivery for kernel-internal
+      // EventSources (Channel = never). Tests provide EventBusMemory to
+      // hold the publishing side.
+      const eventBus = yield* Effect.serviceOption(EventBus).pipe(
+        Effect.flatMap(
+          Option.match({
+            onSome: Effect.succeed,
+            onNone: () => makeMemoryEventBus,
+          }),
+        ),
+      );
       let oneShot = 0;
 
       /**
@@ -188,6 +204,13 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
          * authority flows down, no orphaned token burn.
          */
         readonly children?: Set<{ readonly cancel: Effect.Effect<void> }>;
+        /**
+         * The trigger streams (§2.5): `run()` drains them into the
+         * mailbox as unjoined admissions — the trigger-lift. Subscribed
+         * at interpretation time (the two-phase bind's plan half);
+         * consumed when the ring is served.
+         */
+        readonly triggers?: ReadonlyArray<Stream.Stream<unknown>>;
       }) {
         const { termName, system, compiled, policy } = options;
 
@@ -585,8 +608,24 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           // send = the admission half alone (fire-and-forget)
           send: (item: unknown) =>
             Effect.asVoid(Queue.offer(mailbox, { item })),
-          // the ring is already serving; run joins its (unbounded) life
-          run: () => Fiber.join(ring),
+          // run = the trigger-lift (§2.5): drain the trigger streams
+          // into the mailbox as unjoined admissions, forever; without
+          // triggers it degenerates to joining the ring's unbounded life
+          run: () =>
+            options.triggers === undefined || options.triggers.length === 0
+              ? Fiber.join(ring)
+              : Effect.andThen(
+                  Stream.runDrain(
+                    Stream.mergeAll(options.triggers, {
+                      concurrency: "unbounded",
+                    }).pipe(
+                      Stream.tap((item) =>
+                        Effect.asVoid(Queue.offer(mailbox, { item })),
+                      ),
+                    ),
+                  ),
+                  Fiber.join(ring),
+                ),
           // steer = mid-run admission: into the active turn's feedback
           // inbox (promoted at its next boundary), or parked for the
           // next turn's/iteration's round 1 when nothing is active
@@ -663,17 +702,109 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
       }) {
         const termName = term["~alchemy/Name"];
         const halt = term.refs.find(isHalt) as Halt | undefined;
-        if (halt === undefined || halt.mode !== "until") {
+        if (halt === undefined) {
+          // the §1.4 lint: undeclared perpetuity. The missing exit is a
+          // type (Out = never); running it requires DECLARING it
           return yield* Effect.fail(
             new KernelError({
               term: termName,
               message:
-                "the memory kernel runs bounded loops only (AI.until) — perpetual rings land with the trigger runtime",
+                "undeclared perpetuity: wire an AI.until halt or declare the ring perpetual with AI.never",
             }),
           );
         }
         const budget = (term.refs.find(isBudget) as Budget | undefined)?.limits;
         const policy = yield* KernelPolicy;
+
+        // ── triggers (§2.5): subscribe at interpretation time (the
+        // two-phase bind's plan half); run() drains the streams. `each`
+        // contributes nothing here — the ring's mailbox IS the durable
+        // queue and send() is its producer.
+        const triggerStreams: Stream.Stream<unknown>[] = [];
+        for (const trigger of term.refs.filter(isTrigger) as Trigger<
+          any,
+          any
+        >[]) {
+          if (trigger.mode === "every") {
+            const expression = (trigger.sources[0] as Cron).expression;
+            if (Option.isNone(Duration.fromInput(expression as never))) {
+              return yield* Effect.die(
+                new Error(
+                  `AI.every(${JSON.stringify(expression)}): cron expressions land with the Cloudflare harness — the memory kernel supports durations ("30 seconds", "1 hour")`,
+                ),
+              );
+            }
+            triggerStreams.push(
+              Stream.fromSchedule(
+                Schedule.spaced(expression as Duration.Input),
+              ).pipe(Stream.map(() => `tick: scheduled wake (${expression})`)),
+            );
+          } else if (trigger.mode === "on") {
+            for (const source of trigger.sources.filter(isEventSource)) {
+              if (source.channel !== undefined) {
+                // channel-backed: resolve the family tag from ambient
+                // context; subscribe = provision (plan half) + stream
+                const channel = yield* Effect.serviceOption(
+                  source.channel as never,
+                ).pipe(
+                  Effect.flatMap(
+                    Option.match({
+                      onSome: (service) =>
+                        Effect.succeed(service as EventChannelService),
+                      onNone: () =>
+                        Effect.die(
+                          new Error(
+                            `event channel for ${source["~alchemy/Name"]} has no Layer in context (Req should have caught this)`,
+                          ),
+                        ),
+                    }),
+                  ),
+                );
+                triggerStreams.push(yield* channel.subscribe(source));
+              } else {
+                // kernel-internal: the harness bus delivers
+                triggerStreams.push(yield* eventBus.subscribe(source));
+              }
+            }
+          }
+        }
+
+        // ── perpetual rings (AI.never): now legal — each work item is
+        // served as ONE kernel-default turn (agent semantics per item);
+        // the RING never resolves. Health is the Trace, not an exit.
+        if (halt.mode === "never") {
+          const steerCell: SteerCell = {};
+          const children = new Set<{ readonly cancel: Effect.Effect<void> }>();
+          const compiled = yield* compileTools(
+            term.refs,
+            undefined,
+            steerCell,
+            children,
+          );
+          const service = yield* makeRing({
+            termName,
+            system:
+              renderTemplate(term.template, term.refs) +
+              "\n\nThis is a perpetual ring: you serve one work item per " +
+              "run, forever. Health prose: " +
+              renderTemplate(halt.template, halt.refs),
+            compiled,
+            policy,
+            children,
+            triggers: triggerStreams,
+            runItem: (item, run) =>
+              Effect.map(
+                run.runTurn({
+                  session: run.session,
+                  seed: [],
+                  input: toMessages(item),
+                }),
+                (result) => result.outcome,
+              ),
+          });
+          steerCell.current = service.steer;
+          return service;
+        }
 
         // ── the check (§2.5/§8.2): maker/checker on the stop condition.
         // The verifier is a positional arrow the KERNEL invokes at the
@@ -830,6 +961,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           compiled,
           policy,
           children,
+          triggers: triggerStreams,
           runItem: (item, run) =>
             Effect.gen(function* () {
               currentRun = {};

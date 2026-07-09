@@ -613,6 +613,69 @@ status in one short sentence.` {}
     { timeout: 120_000 },
   );
 
+  // it.live: run() + the poll wait on the real clock
+  it.live.skipIf(apiKey === undefined)(
+    "the trigger runtime: a world event wakes a perpetual ring",
+    () =>
+      Effect.gen(function* () {
+        const Alarm = AI.EventSource(
+          "live.alarm",
+          S.Struct({ question: S.String }),
+        );
+        const note = AI.Parameter("note", S.String)`your answer, tersely`;
+        class LogAnswer extends AI.Tool<LogAnswer>()("log_answer")`
+Log ${note} as the answer to the work item. Call exactly once per item.` {}
+        class NightWatch extends AI.Loop<NightWatch>()("NightWatch")`
+You answer questions that arrive as work items. For each item, compute
+the answer and call ${LogAnswer} with it, then stop.
+${AI.on(Alarm)}
+${AI.never`health = one log_answer call per alarm`}` {}
+
+        const logged: string[] = [];
+        const LogLive = Layer.succeed(LogAnswer, ((input: { note: string }) =>
+          Effect.sync(() => {
+            logged.push(input.note);
+            return "logged";
+          })) as never);
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const bus = yield* AI.EventBus;
+            const watch = yield* kernel.interpret(NightWatch);
+            yield* Effect.forkChild(watch.run());
+            yield* Effect.sleep("100 millis");
+            // the world rings the alarm
+            yield* bus.publish(Alarm, {
+              question: "What is 25 multiplied by 4? Answer in plain digits.",
+            });
+            yield* Effect.repeat(
+              Effect.sync(() => logged.length),
+              {
+                schedule: Schedule.spaced("500 millis"),
+                until: (count) => count > 0,
+                times: 120,
+              },
+            );
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              AI.memory.pipe(Layer.provide([ModelLive, AI.EventBusMemory])),
+              AI.EventBusMemory,
+              LogLive,
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        // the event woke the ring; the model served it and logged the answer
+        expect(logged.length).toBeGreaterThan(0);
+        expect(logged[0]).toContain("100");
+      }),
+    { timeout: 120_000 },
+  );
+
   it.effect.skipIf(apiKey === undefined)(
     "the live turn journals its Trace write-ahead (§2.7)",
     () =>

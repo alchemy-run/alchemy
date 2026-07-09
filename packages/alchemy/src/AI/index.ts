@@ -3,6 +3,7 @@ export * from "./Ask.ts";
 export * from "./Budget.ts";
 export * from "./Check.ts";
 export * from "./Errors.ts";
+export * from "./EventBus.ts";
 export * from "./EventSource.ts";
 export * from "./Fold.ts";
 export * from "./Halt.ts";
