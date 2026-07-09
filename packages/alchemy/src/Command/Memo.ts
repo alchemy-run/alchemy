@@ -16,10 +16,14 @@ import { sha256, sha256Object } from "../Util/sha256.ts";
  */
 export interface MemoOptions {
   /**
-   * Glob patterns of files to hash. Paths are relative to the working directory.
+   * Glob patterns of files to hash. Paths are relative to the working
+   * directory and may reach outside it with `../` segments — useful in a
+   * monorepo where the build consumes sibling workspace packages that the
+   * default (files under the working directory) does not cover.
    *
    * @default ["**\/*"] (all files, filtered by `exclude`)
    * @example ["src/**", "package.json", "tsconfig.json"]
+   * @example ["**\/*", "../env/src/**"] (also rebuild when a sibling workspace package changes)
    */
   include?: string[];
   /**
@@ -141,7 +145,14 @@ const Memo = Effect.gen(function* () {
     if (lockfile && !files.includes(lockfile)) {
       files.push(lockfile);
     }
-    return files.sort();
+    // Absolute include patterns produce absolute matches; normalize them to
+    // cwd-relative (like the lockfile above) so `hashFiles` resolves them
+    // correctly and machine-specific path prefixes never leak into the hash.
+    return files
+      .map((file) =>
+        path.isAbsolute(file) ? path.relative(options.cwd, file) : file,
+      )
+      .sort();
   });
 
   const hashFiles = Effect.fn(function* (

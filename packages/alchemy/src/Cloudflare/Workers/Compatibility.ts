@@ -23,6 +23,13 @@ const CROSS_REQUEST_PROMISE_RESOLUTION =
 // need to be specified anymore"), so it is only appended for older dates.
 const CROSS_REQUEST_PROMISE_RESOLUTION_DEFAULT_ON = "2024-10-14";
 
+// The compatibility date from which `nodejs_compat` selects the full (v2)
+// Node.js compatibility mode. Older dates get the legacy v1 mode, which
+// lacks APIs the build-side unenv transform relies on (e.g.
+// `process.getBuiltinModule`) — deploying that combination fails at script
+// startup, so the default flag is only applied from this date onward.
+const NODEJS_COMPAT_V2_DATE = "2024-09-23";
+
 export const getCompatibility = (props: WorkerProps) => {
   const userFlags = props.compatibility?.flags ?? [];
   if (
@@ -41,11 +48,18 @@ export const getCompatibility = (props: WorkerProps) => {
     date,
     flags: [
       ...userFlags,
+      // Every Worker gets `nodejs_compat` by default — Effect-native Workers
+      // need it for the bundled Effect runtime, and external Workers (plain
+      // `export default { fetch }` entrypoints, vite builds) routinely import
+      // `node:*` built-ins. Without it the bundle uploads fine but Cloudflare
+      // rejects the script with `No such module "node:crypto"` (#796).
       ...(props.isExternal
-        ? []
+        ? // ISO dates compare lexically.
+          date >= NODEJS_COMPAT_V2_DATE
+          ? ["nodejs_compat"]
+          : []
         : [
             "nodejs_compat",
-            // ISO dates compare lexically.
             ...(date < CROSS_REQUEST_PROMISE_RESOLUTION_DEFAULT_ON
               ? [CROSS_REQUEST_PROMISE_RESOLUTION]
               : []),

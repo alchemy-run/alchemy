@@ -6,7 +6,11 @@ import * as Command from "../../Command/index.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { effectClass } from "../../Util/effect.ts";
+import {
+  effectClass,
+  isYieldableEffectLike,
+  type YieldableEffectLike,
+} from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
@@ -167,6 +171,23 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
+ * @example Rebuilding when a sibling workspace package changes
+ * The default scope only hashes files under `cwd` (plus the nearest
+ * lockfile), so edits to a sibling workspace package the app imports do
+ * not retrigger the build on their own. Add the sibling's sources with a
+ * `../` include glob:
+ * ```typescript
+ * const site = yield* Cloudflare.Website.StaticSite("Web", {
+ *   cwd: "apps/web",
+ *   command: "npm run build",
+ *   outdir: "dist",
+ *   main: "./src/worker.ts",
+ *   memo: {
+ *     include: ["**\/*", "../../packages/env/src/**"],
+ *   },
+ * });
+ * ```
+ *
  * @section Class Form
  * Calling `StaticSite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both
@@ -233,7 +254,7 @@ const makeStaticSite = <
             cwd:
               props.dev.cwd ??
               (typeof props.cwd === "string" ? props.cwd : undefined),
-            env: serializeEnv(props.dev.env ?? props.env),
+            env: yield* serializeEnv(props.dev.env ?? props.env),
           }).pipe(
             Effect.map((d) =>
               Output.map(d.url, (url) => ({
@@ -250,7 +271,7 @@ const makeStaticSite = <
           cwd: props.cwd,
           memo: props.memo,
           outdir: props.outdir,
-          env: serializeEnv(props.env),
+          env: yield* serializeEnv(props.env),
         });
 
     // Pure-static sites don't need a custom Worker entrypoint —
@@ -278,17 +299,56 @@ const makeStaticSite = <
     });
   }).pipe(Namespace.push(id));
 
-const serializeEnv = (
+/**
+ * Serialize the site's `env` for the build/dev subprocess. The same record
+ * doubles as the Worker's binding props, so entries may be plain strings,
+ * `Redacted` secrets, `effect/Config` values, `Output` references, or
+ * binding Effects:
+ *
+ * - strings and `Redacted` values pass through unchanged
+ * - `Config` (and any other runnable Effect) is resolved here, at stack
+ *   construction — passing it through unresolved would hand the subprocess
+ *   the JSON-serialized `Config` object (`{"_id":"Config"}`) instead of its
+ *   value (#796)
+ * - `Output` references pass through raw; `Command.Build`/`Command.Dev`
+ *   declare `env` as plain strings so the engine resolves them at reconcile
+ * - binding Effects (`~alchemy/Kind`-marked, e.g. a `WorkerLoader`) have no
+ *   env-var representation and are dropped
+ * - remaining plain values (numbers, JSON objects) are stringified
+ */
+const serializeEnv = Effect.fn(function* (
   env: Input<
     | WorkerBindingProps
     | Record<string, string | Redacted.Redacted<string>>
     | undefined
   >,
-) =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).flatMap(([k, v]) => {
-      if (v === undefined) return [];
-      if (typeof v === "string" || Redacted.isRedacted(v)) return [[k, v]];
-      return [[k, JSON.stringify(v)]];
-    }),
-  );
+) {
+  const entries: [string, unknown][] = [];
+  for (const [k, v] of Object.entries(env ?? {})) {
+    if (v === undefined) continue;
+    if (typeof v === "string" || Redacted.isRedacted(v) || Output.isOutput(v)) {
+      entries.push([k, v]);
+    } else if (isYieldableEffectLike(v)) {
+      const resolved = yield* asEffect(
+        v as YieldableEffectLike<unknown, unknown, never>,
+      ).pipe(Effect.orDie);
+      if (resolved === undefined) continue;
+      entries.push([
+        k,
+        typeof resolved === "string" || Redacted.isRedacted(resolved)
+          ? resolved
+          : JSON.stringify(resolved),
+      ]);
+    } else if (typeof v === "object" && "~alchemy/Kind" in (v as object)) {
+      // A binding Effect (e.g. WorkerLoader) — deploy-time only, nothing to
+      // expose to the build subprocess.
+      continue;
+    } else {
+      entries.push([k, JSON.stringify(v)]);
+    }
+  }
+  return Object.fromEntries(entries) as Record<
+    string,
+    string | Redacted.Redacted<string>
+  >;
+});
