@@ -110,9 +110,22 @@ control plane may move to `HttpApi` when it grows.
   abort`, step boundaries, text blocks, tool input/output, `data-ask`,
   `error`), lenient `UIMessage`/`ChatRequest` decoding (unknown part
   types never reject a transcript), SSE framing + golden wire tests.
-- ☐ Kernel enrichment: durable `run.admitted` row (work item + world
-  identity — closes the transcript-derivability gap), tool `params`/
-  `result` payloads; the pure `KernelEvent → UIMessageChunk` adapter.
+- ✅ **Kernel enrichment + the fold** (`Chunks.ts`): every run now
+  opens with a durable `run.admitted` row carrying the work item (the
+  run's input is reconstructible from the Trace alone); `tool.requested`
+  carries `params`, `tool.completed/.failed` carry `result`, and a
+  `Completed` `turn.halted` carries the final `text`. The
+  `KernelEvent → UIMessageChunk` fold is one pure state machine
+  (`foldEvent`) shared by both sources: the **live** firehose streams
+  `model.delta` rows as text deltas, while a **trace replay** (deltas
+  are live-only) synthesizes the text block from the halt row — so
+  reconnects render the full message and the two paths cannot drift
+  (tested for agreement against real kernel emissions, scripted and
+  live). One wrinkle worth recording: kernel event order is
+  `model.completed` *then* `tool.*` (tools run after the wire call
+  returns), but the AI SDK expects tool parts *inside* their step — so
+  the fold closes a step lazily at the next round boundary rather than
+  at `model.completed`.
 - ☐ `ChatSessions` (transcript view; admission; fold; ask mapping).
 - ☐ `AgentApi` HTTP layer + in-process and live tests.
 - ☐ `examples/agent-chat-web` (React `useChat` proof).

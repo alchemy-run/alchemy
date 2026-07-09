@@ -287,7 +287,7 @@ describe("the in-memory Kernel", () => {
           yield* librarian.dispatch("find x");
           // the ring path is the term name; replay the whole trace
           return yield* Stream.runCollect(
-            kernel.trace("Librarian").pipe(Stream.take(7)),
+            kernel.trace("Librarian").pipe(Stream.take(8)),
           );
         }),
       ).pipe(
@@ -299,8 +299,10 @@ describe("the in-memory Kernel", () => {
           ),
         ),
       );
-      // write-ahead order: every effect's intent row precedes its terminal
+      // write-ahead order: the admission is a durable fact, and every
+      // effect's intent row precedes its terminal
       expect(trace.map((event) => event.type)).toEqual([
+        "run.admitted",
         "model.requested",
         "model.completed",
         "tool.requested",
@@ -310,9 +312,11 @@ describe("the in-memory Kernel", () => {
         "turn.halted",
       ]);
       // durable rows carry a contiguous per-ring cursor
-      expect(trace.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+      expect(trace.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
       // usage rode the model terminal (budget accounting's future input)
-      expect((trace[1]!.payload as any).usage).toBeDefined();
+      expect((trace[2]!.payload as any).usage).toBeDefined();
+      // the admission carries the work item (transcript derivability)
+      expect((trace[0]!.payload as any).item).toBe("find x");
     }),
   );
 

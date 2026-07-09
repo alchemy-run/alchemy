@@ -21,6 +21,8 @@ import * as S from "effect/Schema";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { sessionEvents, toChunks } from "@/AI/Api/Chunks.ts";
+import { sseFrame } from "@/AI/Api/Protocol.ts";
 import * as AI from "@/AI/index.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
@@ -697,8 +699,10 @@ ${AI.never`health = one log_answer call per alarm`}` {}
         ).pipe(Effect.provide(harness.layer));
 
         const types = trace.map((event) => event.type);
-        // the turn opens with a journaled intent and closes with the halt
-        expect(types[0]).toBe("model.requested");
+        // the run opens with its durable admission (the work item is a
+        // fact), then the journaled intent, and closes with the halt
+        expect(types[0]).toBe("run.admitted");
+        expect(types[1]).toBe("model.requested");
         expect(types[types.length - 1]).toBe("turn.halted");
         // the real tool call was journaled: intent before terminal
         expect(types.indexOf("tool.requested")).toBeGreaterThan(-1);
@@ -716,6 +720,54 @@ ${AI.never`health = one log_answer call per alarm`}` {}
         expect(trace.map((event) => event.seq)).toEqual(
           trace.map((_, index) => index + 1),
         );
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "a live turn's trace folds into a valid UI message stream",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const trace = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const mathematician = yield* kernel.interpret(Mathematician);
+            yield* mathematician.dispatch("What is 19 multiplied by 21?");
+            return yield* Stream.runCollect(
+              kernel
+                .trace("Mathematician")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                ),
+            );
+          }),
+        ).pipe(Effect.provide(harness.layer));
+
+        const session = trace.find((e) => e.type === "run.admitted")!.session!;
+        const chunks = yield* Stream.runCollect(
+          toChunks(sessionEvents(Stream.fromIterable(trace), session)),
+        );
+
+        // the protocol envelope
+        expect(chunks[0]!.type).toBe("start");
+        expect(chunks[chunks.length - 1]!.type).toBe("finish");
+        // the real tool call rendered as protocol parts with payloads
+        const input = chunks.find((c) => c.type === "tool-input-available")!;
+        expect((input as { toolName: string }).toolName).toBe("multiply");
+        expect((input as { input: unknown }).input).toEqual({ a: 19, b: 21 });
+        const output = chunks.find((c) => c.type === "tool-output-available")!;
+        expect((output as { output: { product: number } }).output.product).toBe(
+          399,
+        );
+        // replay reconstructed the assistant text from the halt row
+        const text = chunks
+          .filter((c) => c.type === "text-delta")
+          .map((c) => (c as { delta: string }).delta)
+          .join("");
+        expect(text).toContain("399");
+        // and every chunk survives the golden wire encoding
+        for (const chunk of chunks) expect(sseFrame(chunk)).toContain("data: ");
       }),
     { timeout: 60_000 },
   );

@@ -442,10 +442,13 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     break;
                   }
                   case "CallTool": {
-                    // write-ahead: intent before execution (§2.7)
+                    // write-ahead: intent before execution (§2.7); params
+                    // ride the row so UIs can render the call from the
+                    // Trace alone
                     yield* emit("tool.requested", command.id, "request", {
                       callId: command.callId,
                       name: command.name,
+                      params: command.params,
                     });
                     const handler = compiled.handlers.get(command.name);
                     // the Ask service scoped to THIS command (§2.4): a
@@ -498,23 +501,23 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                         )
                       : Result.fail(kernelPrompts.noSuchTool(command.name));
                     const isFailure = Result.isFailure(settled);
+                    const result = Result.isSuccess(settled)
+                      ? settled.success
+                      : // model-visible failure text, never thrown
+                        String(
+                          (settled as Result.Failure<unknown, unknown>).failure,
+                        );
                     yield* emit(
                       isFailure ? "tool.failed" : "tool.completed",
                       command.id,
                       "result",
-                      { callId: command.callId, name: command.name },
+                      { callId: command.callId, name: command.name, result },
                     );
                     inbox.push({
                       _tag: "ToolSettled",
                       callId: command.callId,
                       isFailure,
-                      result: Result.isSuccess(settled)
-                        ? settled.success
-                        : // model-visible failure text, never thrown
-                          String(
-                            (settled as Result.Failure<unknown, unknown>)
-                              .failure,
-                          ),
+                      result,
                     });
                     break;
                   }
@@ -527,6 +530,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     }
                     yield* emit("turn.halted", command.id, "halt", {
                       outcome: command.outcome._tag,
+                      // the final text rides the row so a transcript view
+                      // can finalize the assistant message from the Trace
+                      ...(command.outcome._tag === "Completed" && {
+                        text: command.outcome.text,
+                      }),
                       ...(command.outcome._tag === "Interrupted" && {
                         abandoned: command.outcome.abandoned,
                       }),
@@ -560,11 +568,27 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     Effect.exit(
                       Effect.suspend(() => {
                         current = admission;
-                        return options.runItem(admission.item, {
-                          session: `${termName}#${oneShot++}`,
-                          runTurn,
-                          emitRow,
-                        });
+                        const session = `${termName}#${oneShot++}`;
+                        // the admission is a durable fact (§2.7): without
+                        // it the run's INPUT is not reconstructible from
+                        // the Trace — the serving tier's transcript view
+                        // derives its user half from this row
+                        return Effect.andThen(
+                          emitRow(
+                            session,
+                            "run.admitted",
+                            session,
+                            "admitted",
+                            {
+                              item: admission.item,
+                            },
+                          ),
+                          options.runItem(admission.item, {
+                            session,
+                            runTurn,
+                            emitRow,
+                          }),
+                        );
                       }).pipe(
                         Effect.ensuring(
                           Effect.sync(() => {
