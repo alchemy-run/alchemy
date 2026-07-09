@@ -148,9 +148,16 @@ function Chat({
   });
   const isBusy = status === "submitted" || status === "streaming";
   const lastMessage = messages.at(-1);
-  const waiting =
-    isBusy &&
-    (lastMessage?.role !== "assistant" || lastMessage.parts.length === 0);
+  // dead air is real model lag (measured ~1-3s per round: each tool
+  // round is a fresh wire call waiting on time-to-first-token). Cover
+  // every stall where the run is busy but nothing is visibly streaming
+  // — before the first part AND between rounds — with the shimmer.
+  const lastPart = lastMessage?.parts.at(-1);
+  const streamingNow =
+    lastPart !== undefined &&
+    (lastPart.type === "text" || lastPart.type === "reasoning") &&
+    (lastPart as { state?: string }).state === "streaming";
+  const waiting = isBusy && !streamingNow;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col">
