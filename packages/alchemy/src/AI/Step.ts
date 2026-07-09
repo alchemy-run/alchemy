@@ -62,15 +62,34 @@ export interface StepState {
   readonly steerQueue: ReadonlyArray<Prompt.Message>;
   /** Model calls made so far (the minimal ceiling this machine enforces). */
   readonly modelCalls: number;
+  /**
+   * Tokens consumed so far (input + output totals), accumulated
+   * transactionally in the same transition that records each
+   * `ModelResponse` — the per-command budget decrement (§2.4/§9.3).
+   */
+  readonly tokensUsed: number;
+  /**
+   * Model responses whose usage the provider did not report. Unknown
+   * usage is a *declared* count, not a silent zero — policy (fail the
+   * run, estimate, ignore) belongs to the ring, but the machine never
+   * lies about what it knows (§6 "budget enforcement under unknown
+   * usage").
+   */
+  readonly unknownUsage: number;
   /** The machine's phase — a closed set, serializable. */
   readonly phase: "idle" | "awaiting-model" | "awaiting-tools" | "halted";
-  /** Ceilings (kernel-default agent policy has only the model-call cap). */
-  readonly limits: { readonly maxModelCalls: number };
+  /** Ceilings — checked between any two commands, not per iteration. */
+  readonly limits: {
+    readonly maxModelCalls: number;
+    /** Token ceiling; unlimited when absent (kernel-default policy). */
+    readonly maxTokens?: number;
+  };
 }
 
 export const initialState = (options: {
   readonly session: string;
   readonly maxModelCalls?: number;
+  readonly maxTokens?: number;
 }): StepState => ({
   session: options.session,
   stepIndex: 0,
@@ -79,8 +98,13 @@ export const initialState = (options: {
   settled: [],
   steerQueue: [],
   modelCalls: 0,
+  tokensUsed: 0,
+  unknownUsage: 0,
   phase: "idle",
-  limits: { maxModelCalls: options.maxModelCalls ?? 24 },
+  limits: {
+    maxModelCalls: options.maxModelCalls ?? 24,
+    ...(options.maxTokens !== undefined && { maxTokens: options.maxTokens }),
+  },
 });
 
 // ─── commands (what the interpreter executes) ────────────────────
@@ -109,9 +133,11 @@ export type HaltOutcome =
   | { readonly _tag: "Completed"; readonly text: string }
   | {
       readonly _tag: "BudgetExceeded";
-      readonly limit: "modelCalls";
+      readonly limit: "modelCalls" | "tokens";
       readonly used: number;
       readonly budget: number;
+      /** Responses with unreported usage — the ceiling may undercount. */
+      readonly unknownUsage: number;
     };
 
 // ─── feedback (what the interpreter reports back) ────────────────
@@ -125,6 +151,11 @@ export interface ModelOutcome {
   readonly toolCalls: ReadonlyArray<PendingToolCall>;
   /** effect/ai FinishReason literal ("stop" | "length" | "tool-calls" | …). */
   readonly finishReason: string;
+  /**
+   * Token totals from the response's finish part; `undefined` when the
+   * provider reported none (counted in {@link StepState.unknownUsage}).
+   */
+  readonly tokens?: number;
 }
 
 export type Feedback =
@@ -154,7 +185,7 @@ export const step = (
   state: StepState,
   feedback: Feedback,
 ): readonly [StepState, ReadonlyArray<Command>] => {
-  const next: StepState = { ...state, stepIndex: state.stepIndex + 1 };
+  let next: StepState = { ...state, stepIndex: state.stepIndex + 1 };
 
   switch (feedback._tag) {
     case "Dispatched": {
@@ -172,6 +203,14 @@ export const step = (
     case "ModelResponse": {
       const { outcome } = feedback;
       const calls = outcome.toolCalls;
+
+      // transactional budget decrement: usage lands in the SAME transition
+      // that records the response — never a separate bookkeeping step
+      if (outcome.tokens === undefined) {
+        next = { ...next, unknownUsage: next.unknownUsage + 1 };
+      } else {
+        next = { ...next, tokensUsed: next.tokensUsed + outcome.tokens };
+      }
 
       // assistant message enters the transcript exactly as produced
       const assistant = Prompt.makeMessage("assistant", {
@@ -279,7 +318,22 @@ export const step = (
 const callModel = (
   state: StepState,
 ): readonly [StepState, ReadonlyArray<Command>] => {
-  if (state.modelCalls >= state.limits.maxModelCalls) {
+  const exceeded =
+    state.modelCalls >= state.limits.maxModelCalls
+      ? {
+          limit: "modelCalls" as const,
+          used: state.modelCalls,
+          budget: state.limits.maxModelCalls,
+        }
+      : state.limits.maxTokens !== undefined &&
+          state.tokensUsed >= state.limits.maxTokens
+        ? {
+            limit: "tokens" as const,
+            used: state.tokensUsed,
+            budget: state.limits.maxTokens,
+          }
+        : undefined;
+  if (exceeded !== undefined) {
     return [
       { ...state, phase: "halted" },
       [
@@ -288,9 +342,8 @@ const callModel = (
           id: commandId(state.session, state.stepIndex, 0),
           outcome: {
             _tag: "BudgetExceeded",
-            limit: "modelCalls",
-            used: state.modelCalls,
-            budget: state.limits.maxModelCalls,
+            ...exceeded,
+            unknownUsage: state.unknownUsage,
           },
         },
       ],

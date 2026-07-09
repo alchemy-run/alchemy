@@ -30,6 +30,7 @@ const modelSays = (
     text: outcome.text ?? "",
     toolCalls: outcome.toolCalls ?? [],
     finishReason: outcome.finishReason ?? "stop",
+    tokens: outcome.tokens,
   },
 });
 
@@ -162,6 +163,64 @@ describe("the pure step machine", () => {
     expect(third[0]).toMatchObject({
       _tag: "Halt",
       outcome: { _tag: "BudgetExceeded", limit: "modelCalls", budget: 1 },
+    });
+    expect(halted.phase).toBe("halted");
+  });
+
+  it("usage decrements transactionally; unknown usage is declared", () => {
+    let state = Step.initialState({ session: "s" });
+    [state] = Step.step(state, dispatched("go"));
+    [state] = Step.step(
+      state,
+      modelSays("m1", {
+        toolCalls: [{ callId: "c1", name: "bash", params: {} }],
+        finishReason: "tool-calls",
+        tokens: 120,
+      }),
+    );
+    // the decrement landed in the SAME transition as the response
+    expect(state.tokensUsed).toBe(120);
+    expect(state.unknownUsage).toBe(0);
+    [state] = Step.step(state, {
+      _tag: "ToolSettled",
+      callId: "c1",
+      isFailure: false,
+      result: "ok",
+    });
+    // a response with no reported usage is counted, never silently zero
+    [state] = Step.step(state, modelSays("m2", { text: "done" }));
+    expect(state.tokensUsed).toBe(120);
+    expect(state.unknownUsage).toBe(1);
+  });
+
+  it("the token ceiling fires between commands as a typed Halt", () => {
+    let state = Step.initialState({ session: "s", maxTokens: 100 });
+    [state] = Step.step(state, dispatched("go")); // 0 < 100: round 1 allowed
+    const [afterResponse, commands] = Step.step(
+      state,
+      modelSays("m1", {
+        toolCalls: [{ callId: "c1", name: "bash", params: {} }],
+        finishReason: "tool-calls",
+        tokens: 150,
+      }),
+    );
+    expect(commands.map((c) => c._tag)).toEqual(["CallTool"]); // batch runs
+    const [halted, next] = Step.step(afterResponse, {
+      _tag: "ToolSettled",
+      callId: "c1",
+      isFailure: false,
+      result: "ok",
+    });
+    // round 2 would need the wire; the ceiling fires first
+    expect(next[0]).toMatchObject({
+      _tag: "Halt",
+      outcome: {
+        _tag: "BudgetExceeded",
+        limit: "tokens",
+        used: 150,
+        budget: 100,
+        unknownUsage: 0,
+      },
     });
     expect(halted.phase).toBe("halted");
   });

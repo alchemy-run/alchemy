@@ -96,6 +96,43 @@ describe("memory kernel × live Anthropic", () => {
   );
 
   it.effect.skipIf(apiKey === undefined)(
+    "a real token ceiling halts the turn with real usage counts",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        // 1 token can never cover round 2: the first (real) wire call
+        // lands, its usage decrements the budget transactionally, and the
+        // ceiling fires before the second call is paid for
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const mathematician = yield* kernel.interpret(Mathematician);
+            return (yield* mathematician.dispatch(
+              "What is 87 multiplied by 93?",
+            )) as AI.Step.HaltOutcome;
+          }),
+        ).pipe(
+          Effect.provide(harness.layer),
+          Effect.provide(
+            Layer.succeed(AI.KernelPolicy, { maxModelCalls: 24, maxTokens: 1 }),
+          ),
+        );
+
+        expect(outcome._tag).toBe("BudgetExceeded");
+        if (outcome._tag === "BudgetExceeded") {
+          expect(outcome.limit).toBe("tokens");
+          expect(outcome.budget).toBe(1);
+          // real Anthropic usage was counted, not estimated
+          expect(outcome.used).toBeGreaterThan(100);
+          expect(outcome.unknownUsage).toBe(0);
+        }
+        // the model did reach for the tool before the ceiling cut it off
+        expect(harness.invocations).toEqual([{ a: 87, b: 93 }]);
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
     "the live turn journals its Trace write-ahead (§2.7)",
     () =>
       Effect.gen(function* () {

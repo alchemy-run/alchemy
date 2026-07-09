@@ -11,6 +11,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
+import * as Context from "effect/Context";
 import { isAgent } from "./Agent.ts";
 import { KernelError } from "./Errors.ts";
 import { eventId } from "./Ids.ts";
@@ -56,6 +57,32 @@ import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
  * with the turn's {@link Step.HaltOutcome} until the kernel `Message`
  * type lands.
  */
+/**
+ * The kernel-default agent policy — the execution ring's ceilings
+ * (§8.2: control parameters of the innermost ring are kernel lore, never
+ * charter prose). A `Context.Reference`: it has a default, so providing
+ * it is optional — `Layer.succeed(KernelPolicy, { … })` tightens the
+ * ceilings for a deployment or a test. Loop-charter `AI.budget` refs
+ * will *narrow* these, never widen them.
+ */
+export const KernelPolicy = Context.Reference<{
+  readonly maxModelCalls: number;
+  /** Token ceiling per turn; unlimited when absent. */
+  readonly maxTokens?: number;
+}>("alchemy/AI/KernelPolicy", {
+  defaultValue: () => ({ maxModelCalls: 24 }),
+});
+
+/** Sum a response's known token totals; `undefined` = provider reported none. */
+const usageTokens = (usage: {
+  readonly inputTokens: { readonly total: number | undefined };
+  readonly outputTokens: { readonly total: number | undefined };
+}): number | undefined =>
+  usage.inputTokens.total === undefined &&
+  usage.outputTokens.total === undefined
+    ? undefined
+    : (usage.inputTokens.total ?? 0) + (usage.outputTokens.total ?? 0);
+
 export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
   Layer.effect(
     Kernel,
@@ -79,6 +106,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         const termName = term["~alchemy/Name"];
         const system = renderTemplate(term.template, term.refs);
         const compiled = yield* compileTools(term.refs);
+        // ceilings from the ambient policy (a Reference: defaults apply
+        // when no Layer provides it)
+        const policy = yield* KernelPolicy;
 
         const turn = Effect.fn(function* (item: unknown) {
           const session = `${termName}#${oneShot++}`;
@@ -102,7 +132,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 payload,
               },
             ]);
-          let state = Step.initialState({ session });
+          let state = Step.initialState({ session, ...policy });
           const inbox: Step.Feedback[] = [
             { _tag: "Dispatched", input: toMessages(item) },
           ];
@@ -156,6 +186,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                       text: response.text,
                       toolCalls,
                       finishReason: response.finishReason,
+                      tokens: usageTokens(response.usage),
                     },
                   });
                   break;

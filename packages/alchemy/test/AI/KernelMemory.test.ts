@@ -228,6 +228,40 @@ describe("the in-memory Kernel", () => {
     }),
   );
 
+  it.effect("KernelPolicy token ceilings halt the turn as BudgetExceeded", () =>
+    Effect.gen(function* () {
+      // scripted usage is 2 tokens per response (1 in + 1 out); a ceiling
+      // of 1 lets round 1 run, then fires before round 2's wire call
+      const model = scriptedModel([
+        () => [toolCall("c1", "grep", { pattern: "x" }), finish("tool-calls")],
+      ]);
+      const outcome = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          return (yield* librarian.dispatch("dig")) as AI.Step.HaltOutcome;
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model.layer)),
+            Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+            Layer.succeed(AI.KernelPolicy, { maxModelCalls: 24, maxTokens: 1 }),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      expect(outcome).toMatchObject({
+        _tag: "BudgetExceeded",
+        limit: "tokens",
+        used: 2,
+        budget: 1,
+      });
+      // exactly one wire call was paid for — the ceiling preceded round 2
+      expect(model.calls).toHaveLength(1);
+    }),
+  );
+
   it.effect("a turn writes its Trace ahead of its effects (§2.7)", () =>
     Effect.gen(function* () {
       const model = scriptedModel([
