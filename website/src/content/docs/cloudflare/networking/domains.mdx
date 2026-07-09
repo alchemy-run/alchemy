@@ -120,7 +120,7 @@ export default Cloudflare.Worker(
   "Worker",
   {
     main: import.meta.url,
-    domain: "app.example.com",
+    domains: ["app.example.com"],
   },
   // ...
 );

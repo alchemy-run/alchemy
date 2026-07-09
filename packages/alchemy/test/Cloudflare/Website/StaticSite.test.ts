@@ -565,8 +565,7 @@ const staticSiteProps = (cwd: string): Cloudflare.Website.StaticSiteProps => ({
   cwd,
   outdir: "dist",
   main: workerEntry,
-  url: true as const,
-  subdomain: { enabled: true, previewsEnabled: true },
+  workersDev: true,
   compatibility: { date: "2024-01-01" },
 });
 

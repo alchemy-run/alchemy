@@ -296,6 +296,28 @@ export type NormalizedBindings<
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
+/**
+ * Fine-grained control over the Worker's `workers.dev` URLs.
+ */
+export interface WorkersDevConfig {
+  /**
+   * Serve the Worker at its stable `workers.dev` URL
+   * (`https://<worker-name>.<account-subdomain>.workers.dev`).
+   * @default true
+   */
+  url?: boolean;
+  /**
+   * Enable version preview URLs
+   * (`https://<version-prefix>-<worker-name>.<account-subdomain>.workers.dev`),
+   * a distinct URL per deployed version.
+   *
+   * When previews are enabled but {@link url} is `false`, the current
+   * version's preview URL becomes the Worker's primary `url` output.
+   * @default true
+   */
+  previews?: boolean;
+}
+
 export interface WorkerRouteConfig {
   /**
    * URL pattern to match incoming requests against, e.g.
@@ -341,8 +363,8 @@ export interface WorkerProps<
    * `/workers/dispatch/namespaces/:namespace/scripts` endpoints.
    *
    * User workers are not directly routable: they have no `workers.dev`
-   * subdomain, custom domains, or cron triggers, so {@link url},
-   * {@link domain}, and {@link crons} are ignored when this is set. Changing
+   * subdomain, custom domains, or cron triggers, so {@link workersDev},
+   * {@link domains}, and {@link crons} are ignored when this is set. Changing
    * the namespace (or moving a Worker in or out of one) replaces the Worker,
    * since an account-level script and a dispatch-namespace script are
    * distinct cloud resources.
@@ -351,10 +373,18 @@ export interface WorkerProps<
    */
   namespace?: string | DispatchNamespace;
   /**
-   * Whether to enable a workers.dev URL for this worker
+   * Controls the Worker's `workers.dev` URLs.
+   *
+   * - `true` (the default) — serve the Worker at its stable `workers.dev`
+   *   URL and enable version preview URLs.
+   * - `false` — no `workers.dev` URLs at all.
+   * - An object — toggle the stable URL and version previews independently,
+   *   e.g. `{ url: false, previews: true }` keeps the stable URL off while
+   *   each deployed version remains reachable at its preview URL.
+   *
    * @default true
    */
-  url?: boolean;
+  workersDev?: boolean | WorkersDevConfig;
   /**
    * Static assets to serve. Can be:
    * - A string path to the assets directory
@@ -362,10 +392,6 @@ export interface WorkerProps<
    * - An object with path and hash (e.g., from a Build resource)
    */
   assets?: Assets;
-  subdomain?: {
-    enabled?: boolean;
-    previewsEnabled?: boolean;
-  };
   /** @internal used by Cloudflare.Website.Vite resource */
   vite?: ViteOptions;
   logpush?: boolean;
@@ -459,11 +485,14 @@ export interface WorkerProps<
    */
   crons?: string[];
   /**
-   * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
-   * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
+   * Custom hostnames (e.g. `["app.example.com"]`) to bind to this Worker.
+   * The Cloudflare Zone is inferred from each hostname — the zone must
    * already exist in the account.
+   *
+   * Order matters: when {@link workersDev} is disabled, `domains[0]`
+   * becomes the Worker's primary `url` output.
    */
-  domain?: string | string[];
+  domains?: string[];
   /**
    * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
@@ -621,11 +650,31 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
      */
     namespace: string | undefined;
     logpush: boolean | undefined;
+    /**
+     * The most relevant URL the Worker is reachable at — always
+     * `allUrls[0]`, or `undefined` when the Worker is not reachable at any
+     * URL. Selection follows the {@link allUrls} ordering: in local dev the
+     * dev server's localhost URL; deployed with `workers.dev` enabled, the
+     * `workers.dev` URL (or the version preview URL when only previews are
+     * enabled); otherwise the first custom domain.
+     */
     url: string | undefined;
+    /**
+     * Every URL the Worker is reachable at, most relevant first:
+     * `[<preview URL>?, <workers.dev URL>?, <localhost URL>?,
+     * ...customDomains, ...<other dev network URLs>]`. Entries that don't
+     * apply are absent — e.g. a deployed Worker has no localhost URL, and a
+     * Worker with `workersDev: false` has no `workers.dev` URL.
+     */
+    allUrls: string[];
+    /**
+     * The hostnames of {@link allUrls}, aligned 1:1 — e.g.
+     * `["my-worker.my-account.workers.dev", "app.example.com"]`.
+     */
+    domains: string[];
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    domains: string[];
     routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
     hash?: {
@@ -842,6 +891,50 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *   main: import.meta.url,
  *   assets: "./public",
  * }
+ * ```
+ *
+ * @section URLs & Domains
+ * Every URL the Worker is reachable at is collected in `worker.allUrls`,
+ * most relevant first — and `worker.url` is always `allUrls[0]`.
+ * `worker.domains` holds the matching hostnames, aligned 1:1 with
+ * `allUrls`. The ordering is: version preview URL (when previews are the
+ * only workers.dev surface), the stable `workers.dev` URL, the local dev
+ * server's URL (in `alchemy dev`), then custom domains in the order you
+ * provided them.
+ *
+ * The `workersDev` prop controls the `workers.dev` URLs: `true` (the
+ * default) serves the stable URL and version previews, `false` disables
+ * both, and the object form toggles them independently.
+ *
+ * @example Default workers.dev behavior
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ * });
+ * // worker.url     === "https://api-app-prod.my-team.workers.dev"
+ * // worker.allUrls === ["https://api-app-prod.my-team.workers.dev"]
+ * // worker.domains === ["api-app-prod.my-team.workers.dev"]
+ * ```
+ *
+ * @example Custom domains as the primary URL
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   workersDev: false,
+ *   domains: ["api.example.com", "api-v2.example.com"],
+ * });
+ * // worker.url     === "https://api.example.com"
+ * // worker.allUrls === ["https://api.example.com", "https://api-v2.example.com"]
+ * // worker.domains === ["api.example.com", "api-v2.example.com"]
+ * ```
+ *
+ * @example Preview URLs only
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   workersDev: { url: false, previews: true },
+ * });
+ * // worker.url === "https://0a1b2c3d-api-app-prod.my-team.workers.dev"
  * ```
  *
  * @example Zone routes

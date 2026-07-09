@@ -18,7 +18,7 @@ const Website = Cloudflare.Website.StaticSite(
         : undefined,
     main: "./src/worker.ts",
     outdir: "dist",
-    domain: stack.stage === "prod" ? "v2.alchemy.run" : undefined,
+    domains: stack.stage === "prod" ? ["v2.alchemy.run"] : undefined,
     memo: {
       include: [
         "src/**",

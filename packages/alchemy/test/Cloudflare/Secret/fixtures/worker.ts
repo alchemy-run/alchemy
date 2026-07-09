@@ -24,7 +24,7 @@ export default class SecretsTestWorker extends Cloudflare.Worker<SecretsTestWork
   "SecretsTestWorker",
   {
     main: import.meta.url,
-    subdomain: { enabled: true, previewsEnabled: false },
+    workersDev: { url: true, previews: false },
   },
   Effect.gen(function* () {
     // Secret from a literal — `Alchemy.Secret` coerces the literal to

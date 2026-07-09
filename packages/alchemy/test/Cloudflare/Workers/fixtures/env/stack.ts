@@ -11,7 +11,7 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 export const AsyncWorker = Cloudflare.Worker("EnvAsyncWorker", {
   main: path.resolve(import.meta.dirname, "async.ts"),
-  url: true,
+  workersDev: true,
   env: {
     STR: "hello",
     NUM: 42,

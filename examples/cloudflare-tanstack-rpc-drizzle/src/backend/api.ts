@@ -19,7 +19,7 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   "Backend",
   {
     main: import.meta.filename,
-    url: false, // disable workers.dev URL; we use the service binding instead
+    workersDev: false, // no workers.dev URL; we use the service binding instead
     schema: TodoRpcs,
   },
   Effect.gen(function* () {

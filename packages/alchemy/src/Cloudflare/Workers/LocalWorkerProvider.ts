@@ -55,6 +55,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as os from "node:os";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
@@ -73,6 +74,47 @@ import { createWorkerName } from "./WorkerName.ts";
 
 type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
   dev: Extract<WorkerProps["dev"], { mode?: "worker" }>;
+};
+
+// Hosts that bind every interface — the dev server is then reachable at
+// `localhost` *and* at each LAN address, like Vite's `--host` output.
+const isWildcardHost = (host: string) =>
+  host === "0.0.0.0" || host === "::" || host === "[::]" || host === "*";
+
+/**
+ * Resolve every URL a local dev server is reachable at, most relevant
+ * first. A loopback or explicit host yields just that URL; a wildcard host
+ * (`0.0.0.0`, `::`) yields `http://localhost:<port>` followed by one URL
+ * per external IPv4 interface (`http://192.168.0.12:<port>`, ...) —
+ * mirroring Vite's "Local / Network" dev-server output.
+ */
+const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
+  Effect.sync(() => {
+    const port = serverUrl.port;
+    const host = serverUrl.hostname;
+    if (!isWildcardHost(host)) {
+      return [serverUrl.origin];
+    }
+    // `os.networkInterfaces()` is a sync, CPU-only syscall with no Effect
+    // platform equivalent — wrapped in `Effect.sync` so it participates in
+    // the runtime.
+    const interfaces = os.networkInterfaces();
+    const lanAddresses = Object.values(interfaces)
+      .flatMap((addresses) => addresses ?? [])
+      .filter((address) => address.family === "IPv4" && !address.internal)
+      .map((address) => address.address);
+    return [
+      `http://localhost:${port}`,
+      ...lanAddresses.map((address) => `http://${address}:${port}`),
+    ];
+  });
+
+const urlHostname = (url: string): string => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 };
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
@@ -463,15 +505,17 @@ export const LocalWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
-        const url = yield* (
-          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
-        ).pipe(Effect.map((url) => url.toString()));
+        const serverUrl = yield* props.vite
+          ? runVite(config, props.vite.rootDir)
+          : runWorker(config);
+        const allUrls = yield* resolveLocalUrls(serverUrl);
         return {
           workerId: config.name,
           workerName: config.name,
           namespace: undefined,
           logpush: undefined,
-          url,
+          url: allUrls[0],
+          allUrls,
           tags: [],
           durableObjectNamespaces: Object.fromEntries(
             config.durableObjectNamespaces.map((namespace) => [
@@ -479,7 +523,7 @@ export const LocalWorkerProvider = () =>
               namespace.uniqueKey,
             ]),
           ),
-          domains: [url],
+          domains: allUrls.map(urlHostname),
           routes: [],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
@@ -531,23 +575,24 @@ export const LocalWorkerProvider = () =>
             }
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const url =
+          const allUrls =
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
-                undefined
+                []
               : yield* maybeStartProxy(id, {
                   ...news.dev,
                   port: news.dev?.port ?? 1337,
-                }).pipe(Effect.map((proxy) => proxy.url.toString()));
+                }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
             workerId: name,
             workerName: name,
             namespace: undefined,
             logpush: undefined,
-            url,
+            url: allUrls[0],
+            allUrls,
             tags: [],
             durableObjectNamespaces,
-            domains: url ? [url] : [],
+            domains: allUrls.map(urlHostname),
             routes: [],
             crons: Array.from(
               new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
@@ -570,16 +615,18 @@ export const LocalWorkerProvider = () =>
               instances.delete(id);
             }
             const name = yield* createWorkerName(id, news.name);
+            const allUrls = news.dev.url ? [news.dev.url] : [];
             return {
               workerId: name,
               workerName: name,
               namespace: undefined,
               logpush: undefined,
-              url: news.dev.url,
+              url: allUrls[0],
+              allUrls,
               tags: [],
               durableObjectNamespaces: {},
               accountId,
-              domains: [],
+              domains: allUrls.map(urlHostname),
               routes: [],
               crons: news.crons ?? [],
             } satisfies Worker["Attributes"];
