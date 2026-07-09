@@ -15,6 +15,7 @@ import type * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import { isAgent } from "./Agent.ts";
+import { Ask, AskHub, makeMemoryAskHub } from "./Ask.ts";
 import { type Budget, isBudget } from "./Budget.ts";
 import { BudgetExceeded, KernelError, Refused } from "./Errors.ts";
 import { type Halt, isHalt } from "./Halt.ts";
@@ -135,6 +136,17 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           Option.match({
             onSome: Effect.succeed,
             onNone: () => makeMemoryTraceStore,
+          }),
+        ),
+      );
+      // the Ask hub seam (§2.4 Ask protocol): in-memory default; a
+      // harness (or test) provides its own Layer to hold the answering
+      // side
+      const askHub = yield* Effect.serviceOption(AskHub).pipe(
+        Effect.flatMap(
+          Option.match({
+            onSome: Effect.succeed,
+            onNone: () => makeMemoryAskHub,
           }),
         ),
       );
@@ -383,15 +395,47 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                       name: command.name,
                     });
                     const handler = compiled.handlers.get(command.name);
+                    // the Ask service scoped to THIS command (§2.4): a
+                    // tool that parks gets a deterministic ask id, a
+                    // durable ask.requested row BEFORE the park, and
+                    // ask.answered after — the park itself is just an
+                    // in-flight tool execution
+                    const provideAsk = (
+                      effect: Effect.Effect<unknown, unknown>,
+                    ) =>
+                      Effect.provideService(effect, Ask, (payload) =>
+                        Effect.gen(function* () {
+                          const askId = eventId(command.id, "ask");
+                          yield* emit("ask.requested", command.id, "ask", {
+                            askId,
+                            payload,
+                          });
+                          const answer = yield* askHub.ask({
+                            id: askId,
+                            ring: termName,
+                            session,
+                            payload,
+                          });
+                          yield* emit("ask.answered", command.id, "answer", {
+                            askId,
+                            verdict: answer.verdict,
+                            ...(answer.amendment !== undefined && {
+                              amendment: answer.amendment,
+                            }),
+                          });
+                          return answer;
+                        }),
+                      );
                     // raced against the interrupt signal: an interrupt
                     // fiber-interrupts the in-flight execution and settles
                     // it as an aborted, model-visible result (§2.8b) —
-                    // a delegation blocked on a slow child unblocks NOW
+                    // a delegation blocked on a slow child (or a parked
+                    // ask) unblocks NOW
                     const signal = interruptSignal!;
                     const settled = handler
                       ? yield* Effect.result(
                           Effect.raceFirst(
-                            handler(command.params),
+                            provideAsk(handler(command.params)),
                             Deferred.await(signal).pipe(
                               Effect.andThen(
                                 Effect.fail("aborted by interrupt"),
@@ -974,6 +1018,8 @@ const compileTools = Effect.fn(function* (
       delegate: string;
       status: "running" | "completed" | "failed";
       summary?: string;
+      /** Completed when the run settles — `wait_run`'s park seat. */
+      settled: Deferred.Deferred<void>;
     }
   >();
   let spawnOrdinal = 0;
@@ -1058,7 +1104,12 @@ const compileTools = Effect.fn(function* (
         // parks for its next run) — the host never polls, never blocks
         return Effect.gen(function* () {
           const runKey = `${name}#bg${spawnOrdinal++}`;
-          backgroundRuns.set(runKey, { delegate: name, status: "running" });
+          const settled = yield* Deferred.make<void>();
+          backgroundRuns.set(runKey, {
+            delegate: name,
+            status: "running",
+            settled,
+          });
           yield* Effect.result(call(task)).pipe(
             Effect.flatMap((result) => {
               const [status, summary] = Result.isSuccess(result)
@@ -1073,18 +1124,21 @@ const compileTools = Effect.fn(function* (
                 delegate: name,
                 status,
                 summary,
+                settled,
               });
-              return (
+              return Effect.andThen(
+                Effect.asVoid(Deferred.succeed(settled, void 0)),
                 steerCell?.current?.(
                   `Background run ${runKey} ${status}: ${summary}`,
-                ) ?? Effect.void
+                ) ?? Effect.void,
               );
             }),
             Effect.forkIn(scope),
           );
           return (
             `spawned background run ${runKey}; its distilled result will ` +
-            "arrive as a steer message. Poll with check_runs if needed."
+            "arrive as a steer message. Poll with check_runs, or block on " +
+            "it with wait_run."
           );
         });
       });
@@ -1148,6 +1202,38 @@ const compileTools = Effect.fn(function* (
               )
               .join("\n"),
       ),
+    );
+
+    // join (§2.8c): park until the correlated run settles — the same
+    // shape as waiting on a human (the park is an in-flight tool
+    // execution, raced by the interrupt signal like any other)
+    aiTools.push(
+      AiTool.make("wait_run", {
+        description:
+          "Block until the background run with the given key settles, " +
+          "then return its distilled result. Fails if the run failed.",
+        parameters: S.Struct({ key: S.String }) as never,
+      }),
+    );
+    handlers.set("wait_run", (params) =>
+      Effect.suspend(() => {
+        const key = (params as { key?: unknown } | undefined)?.key;
+        const run =
+          typeof key === "string" ? backgroundRuns.get(key) : undefined;
+        if (run === undefined) {
+          return Effect.fail(
+            `no background run with key ${JSON.stringify(key)} — see check_runs`,
+          );
+        }
+        return Deferred.await(run.settled).pipe(
+          Effect.flatMap(() => {
+            const latest = backgroundRuns.get(key as string)!;
+            return latest.status === "completed"
+              ? Effect.succeed(latest.summary ?? "completed")
+              : Effect.fail(latest.summary ?? "the run failed");
+          }),
+        );
+      }),
     );
   }
 

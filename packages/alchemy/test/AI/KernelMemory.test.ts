@@ -653,10 +653,11 @@ describe("spawn-and-continue (§2.8)", () => {
       const chiefPrompts = calls.filter(
         (options) => !promptText(options).includes("You are the sage"),
       );
-      // chief round 1: check_runs was advertised alongside the delegate
+      // chief round 1: the async surface was advertised with the delegate
       expect(chiefPrompts[0]!.tools.map((tool) => tool.name).sort()).toEqual([
         "Sage",
         "check_runs",
+        "wait_run",
       ]);
       // chief round 2 (same turn): the spawn returned a RUN KEY, not a result
       expect(promptText(chiefPrompts[1]!)).toContain(
@@ -667,6 +668,196 @@ describe("spawn-and-continue (§2.8)", () => {
       expect(promptText(chiefPrompts[2]!)).toContain(
         "Background run Sage#bg0 completed: the answer is 42",
       );
+    }),
+  );
+});
+
+// ─── the Ask protocol (§2.4) ─────────────────────────────────────
+
+const action = AI.Parameter("action", S.String)`the action needing approval`;
+
+class Approve extends AI.Tool<Approve>()("approve")`
+Request human approval for ${action}. Blocks until a decision arrives.` {}
+
+class Deployer extends AI.Agent<Deployer>()("Deployer")`
+You are the deployer. Before ANY deploy, request approval with
+${Approve}; obey the verdict.` {}
+
+/** A human-class tool: ordinary user code over the kernel's Ask service. */
+const ApproveViaAsk = Layer.succeed(Approve, ((input: { action: string }) =>
+  Effect.gen(function* () {
+    const ask = yield* AI.Ask;
+    const answer = yield* ask({ kind: "approval", text: input.action });
+    if (answer.verdict !== "approved") {
+      return yield* Effect.fail(`denied: ${answer.text ?? "no reason given"}`);
+    }
+    return `approved${answer.amendment !== undefined ? ` (${answer.amendment})` : ""}`;
+  })) as never);
+
+describe("the Ask protocol (§2.4)", () => {
+  const askScript = (finalText: string): ReadonlyArray<Turn> => [
+    () => [
+      toolCall("a1", "approve", { action: "deploy to prod" }),
+      finish("tool-calls"),
+    ],
+    () => [...text(finalText), finish("stop")],
+  ];
+
+  const deployThrough = (script: ReadonlyArray<Turn>, answer: AI.AskAnswer) => {
+    const model = scriptedModel(script);
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const kernel = yield* AI.Kernel;
+        const hub = yield* AI.AskHub;
+        const deployer = yield* kernel.interpret(Deployer);
+        const running = yield* Effect.forkChild(deployer.dispatch("ship it"));
+        // the world side: wait for the park, inspect it, answer it.
+        // (clock-free yield poll — it.effect's TestClock freezes
+        // Schedule.spaced, the same trap as the live-cascade test)
+        const pending = yield* Effect.gen(function* () {
+          for (let spins = 0; spins < 10_000; spins++) {
+            const asks = yield* hub.pending;
+            if (asks.length > 0) return asks;
+            yield* Effect.yieldNow;
+          }
+          return yield* Effect.die(new Error("no ask ever parked"));
+        });
+        yield* hub.answer(pending[0]!.id, answer);
+        const outcome = (yield* Fiber.join(running)) as AI.Step.HaltOutcome;
+        const trace = yield* Stream.runCollect(
+          kernel
+            .trace("Deployer")
+            .pipe(Stream.takeUntil((event) => event.type === "turn.halted")),
+        );
+        return { pending, outcome, trace, calls: model.calls };
+      }),
+    );
+    return program.pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          AI.memory.pipe(Layer.provide([model.layer, AI.AskHubMemory])),
+          AI.AskHubMemory,
+          ApproveViaAsk,
+          RuntimeContext.phantom,
+        ),
+      ),
+    );
+  };
+
+  it.effect("a tool parks on ask; the answer resumes the turn (approved)", () =>
+    Effect.gen(function* () {
+      const { pending, outcome, trace, calls } = yield* deployThrough(
+        askScript("deployed"),
+        {
+          verdict: "approved",
+          amendment: "approved for this session",
+        },
+      );
+      // the park was inspectable from the world side
+      expect(pending[0]!.ring).toBe("Deployer");
+      expect(pending[0]!.payload).toEqual({
+        kind: "approval",
+        text: "deploy to prod",
+      });
+      expect(outcome).toMatchObject({ _tag: "Completed", text: "deployed" });
+      // the verdict AND the amendment reached the model
+      expect(promptText(calls[1]!)).toContain(
+        "approved (approved for this session)",
+      );
+      // the park rowed into the Trace write-ahead: requested before answered
+      const types = trace.map((event) => event.type);
+      expect(types.indexOf("ask.requested")).toBeGreaterThan(-1);
+      expect(types.indexOf("ask.requested")).toBeLessThan(
+        types.indexOf("ask.answered"),
+      );
+    }),
+  );
+
+  it.effect("a denial is a model-visible result, never a thrown error", () =>
+    Effect.gen(function* () {
+      const { outcome, calls } = yield* deployThrough(
+        askScript("standing down"),
+        { verdict: "denied", text: "not during the freeze" },
+      );
+      // the turn survived the denial and reacted to it
+      expect(outcome).toMatchObject({
+        _tag: "Completed",
+        text: "standing down",
+      });
+      expect(promptText(calls[1]!)).toContain("denied: not during the freeze");
+    }),
+  );
+
+  it.effect("wait_run parks on a background run and returns its result", () =>
+    Effect.gen(function* () {
+      // the chief spawns in background, then immediately joins via
+      // wait_run — same turn, no steer needed
+      const model = scriptedModel([]);
+      const routed = Layer.effect(
+        LanguageModel.LanguageModel,
+        LanguageModel.make({
+          generateText: () => Effect.die(new Error("streamText only")),
+          streamText: (options) =>
+            Stream.suspend(() => {
+              model.calls.push(options);
+              const prompt = JSON.stringify(options.prompt);
+              if (prompt.includes("You are the sage")) {
+                return Stream.fromIterable([
+                  ...text("wisdom: 42"),
+                  finish("stop"),
+                ]);
+              }
+              const chiefRound = model.calls.filter(
+                (c) => !JSON.stringify(c.prompt).includes("You are the sage"),
+              ).length;
+              return Stream.fromIterable(
+                chiefRound === 1
+                  ? [
+                      toolCall("d1", "Sage", {
+                        task: "wisdom?",
+                        background: true,
+                      }),
+                      finish("tool-calls"),
+                    ]
+                  : chiefRound === 2
+                    ? [
+                        toolCall("w1", "wait_run", { key: "Sage#bg0" }),
+                        finish("tool-calls"),
+                      ]
+                    : [...text("joined: wisdom: 42"), finish("stop")],
+              );
+            }),
+        }),
+      );
+      const kernelLayer = AI.memory.pipe(Layer.provide(routed));
+      const outcome = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const chief = yield* kernel.interpret(Chief);
+          return (yield* chief.dispatch(
+            "spawn then join",
+          )) as AI.Step.HaltOutcome;
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            kernelLayer,
+            AI.layer(Sage).pipe(
+              Layer.provide([kernelLayer, RuntimeContext.phantom]),
+            ),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      expect(outcome).toMatchObject({
+        _tag: "Completed",
+        text: "joined: wisdom: 42",
+      });
+      // the join round saw the settled result
+      const chiefPrompts = model.calls.filter(
+        (c) => !JSON.stringify(c.prompt).includes("You are the sage"),
+      );
+      expect(promptText(chiefPrompts[2]!)).toContain("wisdom: 42");
     }),
   );
 });

@@ -474,6 +474,83 @@ describe("memory kernel × live Anthropic", () => {
     { timeout: 120_000 },
   );
 
+  // it.live: the pending-ask poll runs on the real clock
+  it.live.skipIf(apiKey === undefined)(
+    "the Ask protocol: a real turn parks on approval and resumes on the verdict",
+    () =>
+      Effect.gen(function* () {
+        const approvalAction = AI.Parameter(
+          "approvalAction",
+          S.String,
+        )`the action needing approval`;
+        class RequestApproval extends AI.Tool<RequestApproval>()(
+          "request_approval",
+        )`Request human approval for ${approvalAction}. Blocks until a
+decision arrives. Never act without it.` {}
+        class Launcher extends AI.Agent<Launcher>()("Launcher")`
+You launch rockets. Before ANY launch you MUST call
+${RequestApproval} and obey the verdict exactly. Report the final
+status in one short sentence.` {}
+
+        const ApprovalViaAsk = Layer.succeed(RequestApproval, ((input: {
+          approvalAction: string;
+        }) =>
+          Effect.gen(function* () {
+            const ask = yield* AI.Ask;
+            const answer = yield* ask({
+              kind: "approval",
+              text: input.approvalAction,
+            });
+            if (answer.verdict !== "approved") {
+              return yield* Effect.fail(
+                `denied: ${answer.text ?? "no reason given"}`,
+              );
+            }
+            return "approved — proceed";
+          })) as never);
+
+        const { pending, outcome } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const hub = yield* AI.AskHub;
+            const launcher = yield* kernel.interpret(Launcher);
+            const running = yield* Effect.forkChild(
+              launcher.dispatch("Launch the rocket named Dandelion."),
+            );
+            const pending = yield* hub.pending.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("500 millis"),
+                until: (asks) => asks.length > 0,
+                times: 120,
+              }),
+            );
+            yield* hub.answer(pending[0]!.id, { verdict: "approved" });
+            const outcome = (yield* Fiber.join(running)) as AI.Step.HaltOutcome;
+            return { pending, outcome };
+          }),
+        ).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              AI.memory.pipe(Layer.provide([ModelLive, AI.AskHubMemory])),
+              AI.AskHubMemory,
+              ApprovalViaAsk,
+              RuntimeContext.phantom,
+            ),
+          ),
+        );
+
+        // the model really parked: the ask was visible from the world side
+        expect(pending[0]!.ring).toBe("Launcher");
+        expect((pending[0]!.payload as AI.AskPayload).kind).toBe("approval");
+        // and the verdict let the turn complete
+        expect(outcome._tag).toBe("Completed");
+        if (outcome._tag === "Completed") {
+          expect(outcome.text.toLowerCase()).toMatch(/launch|dandelion/);
+        }
+      }),
+    { timeout: 120_000 },
+  );
+
   it.effect.skipIf(apiKey === undefined)(
     "the live turn journals its Trace write-ahead (§2.7)",
     () =>
