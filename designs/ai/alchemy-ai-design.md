@@ -692,6 +692,16 @@ The survey's most consistent finding, distilled to one rule: **occurrence is det
 
 Designed and tracked in **[designs/ai/serving.md](./serving.md)** — now **built** (Protocol schemas, the KernelEvent→chunk fold, ChatSessions, the AgentApi HTTP layer, and the `examples/agent-chat-web` proof, all live-tested). The one-paragraph summary: agents are served over the AI SDK v5 UI Message Stream protocol (SSE) so the existing frontend ecosystem (`useChat`, and later Cloudflare's `useAgentChat` via a transport swap) plugs in with zero client code; the kernel persists execution facts (the Trace) while the serving tier's conversation transcript is a *materialized view* of those facts (kernel stays session-free); the API only ever `send`s — a chat response is admission + a trace-subscription window, so disconnects kill the window and never the run, and reconnect is replay-from-cursor (the trace endpoint itself is durable-streams-shaped). Asks surface as `data-ask` parts (deliberately not the AI SDK's pre-execution approval part — a parked ask is mid-execution) answered via the control plane.
 
+### 2.11a Org Chat (the autonomous Discord/Slack)
+
+Proposed in **[designs/ai/org-chat.md](./org-chat.md)**: channels,
+groups, and agents are all process terms organized by interpolation;
+the Channel process simulates the room (who responds, threads,
+parallel dispatch, steer-on-early-finish); the UI's sidebar is a pure
+fold over the term graph (`AI.topology`); messages are kernel facts
+and timelines are Trace projections; a thread is a run (world identity
+= thread id — makes Phase-2 run-key steering load-bearing).
+
 ### 2.11 The chat-app layer (UI on top of the serving tier)
 
 Designed in **[designs/ai/chat-apps.md](./chat-apps.md)**. Three pillars: (1) shadcn's scroll-engineering rules ("never move the reader against their intent") adopted as normative UX law, with `MessageScroller` supplying the behavior and an alchemy corollary — ask reconciliations and background-run completions update in place, never steal scroll; (2) the open-code vendoring model — registry components committed to the repo, `@shadcn/react` as the single behavior dependency, mirroring the terms-vs-layers stance; (3) transcripts are projections of Trace facts, so the chat view and the engine-room trace panel are two zoom levels over one log. The UI surfaced four kernel/serving gaps, each independently shippable: reasoning deltas through the fold, a `data-run` part for delegations, a conversation index (`GET /api/chats`), and the mid-run reconnect route.
