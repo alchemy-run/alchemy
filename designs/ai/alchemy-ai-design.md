@@ -646,6 +646,30 @@ The batch boundary is *semantic*: it sits exactly where the write-ahead ordering
 
 **Memory-kernel implication (next small pieces):** implement `TraceStore.memory` (array + seq counter) and route the ring's emissions through it — this simultaneously un-stubs `kernel.events`/`kernel.trace` and gives the conformance suite its first two subjects (`memory` now, `doFiber` in Phase 3).
 
+### 2.8 Agent-to-agent communication (sync, async, spawn, check-in)
+
+There is no new channel here — the §2.5 constitution stands (upward: return value, events, typed errors; sideways: through the world only; never a private cross-ring pipe). Agent-to-agent communication is a *model-visible surface* over the `ProcessService` verbs we already have: `dispatch` **is** synchronous communication (admit + join), `send` **is** asynchronous (admit alone), and everything else composes.
+
+**The four patterns, most to least structured:**
+
+1. **Call (sync — landed).** The delegation tool's handler is the delegate's `dispatch`: the caller's turn blocks on the `CallTool` command until the delegate's ring resolves; the distilled result (subagent-summary pattern) is the tool result. Agent-as-function. Right when the parent has nothing better to do than wait.
+2. **Fan-out/collect (structured — no term, by prior decision).** Map-reduce over items is `Effect.forEach` + `concurrency` around pattern 1, barrier at the end. A pipeline without feedback is not a loop; it gets no vocabulary.
+3. **Spawn-and-continue (async — the new surface).** Composition, not invention:
+   - **`spawn`** = `send` on the delegate's ring **+** a completion route: when the child run halts, its terminal Trace event (which already carries `cause` = the parent's spawn command id) is delivered to the parent as a **steer** — "run `Engineer#42` completed: «distilled result»" — promoted at the parent's next model-call boundary like any other steer. This is the Mastra amendment (*background results arrive as steers*) realized: the parent never polls and never blocks; a result is a renewed mandate at a boundary. If the parent's run has already ended, the completion steer **parks** and enters its next run — the parked-steer semantics land this for free.
+   - **Check-in** = a pure read: a `check_runs` synthetic tool whose handler reads the child ring's Trace / admission ledger (status is *derived from rows* — `run.iteration`, `turn.halted` — never a wake). This is `AI.observe` semantics applied to children: observation resets no keepalive.
+   - **Join** = a `wait_for(runKey)` tool that parks the parent until the correlated completion arrives — which is the **Ask protocol with a run key instead of a human**. Waiting on a subagent and waiting on a person are the same protocol: same durable park row, same answer correlation, same amendment machinery. Build the park once (build-order item 6); get both.
+4. **Standing collaboration (peers).** Loops that talk through the world: one ring's tool side effects produce the EventSource stimuli that trigger another. Org-topology level; needs the trigger runtime, not communication machinery.
+
+**Decisions:**
+
+- **Sync vs async is the caller's per-call choice, not charter wiring.** The charter declares *who* may be delegated to (`${Engineer}` — capability by interpolation); whether one call blocks or backgrounds is the model's decision — a `background: boolean` param on the delegation tool (the Task-tool shape the survey validated). A control ref like `AI.async(Engineer)` would wire a runtime mood into the type system — wrong layer.
+- **Run identity is addressable.** `spawn` returns the child's run key (`(term, work item)` — the session key we already mint; in the DO harness, the child's admission-ledger row id). `check_runs` / `wait_for` / completion steers all correlate on it; `cause` provenance already stamps every event with the parent command.
+- **Interruption cascades down (the gap spawn exposes).** Scope authority: interrupting a parent run must interrupt its spawned children. Today even *sync* delegation violates this — the caller awaits a `Deferred` while the delegate runs on its own ring, so interrupting the caller orphans the delegate mid-burn. Fix: each run keeps a durable child registry (`cause`-linked rows); `interrupt` fans out as control admissions to child rings. This is §9's "durable cancel of parked work" hard problem made concrete — spawn is what makes it urgent, and the ledger (build-order item 5) is its substrate.
+- **Budgets lease, never net** (already resolved, Eve conflict #2): spawn reserves the child's grant against the parent's remainder at fork time, reconciles on settlement. Async fan-out is exactly why netting over-grants.
+- **The child's Trace is the parent's audit surface.** No transcript ever crosses rings — check-in and completion steers carry distilled rows, and a parent wanting more detail gets an `AI.observe`-style read grant, not the transcript.
+
+**Build order within this section:** (a) completion-steers + `background` param on delegation tools + `check_runs` (buildable now — needs only run-terminal events, parked steers, and `cause` correlation, all landed); (b) the child registry + interrupt cascade (with the ledger); (c) `wait_for` (with the Ask protocol, item 6); (d) peer topologies (with triggers, item 7's remainder).
+
 #### Phase 2 build order (synthesized from the effect/ai mapping reports)
 
 Seven reports (`designs/ai/reports/effect-ai.md` + `effect-ai-mapping-{pi-flue,ai-sdk,codex,opencode,mastra,eve}.md`, every API verified against the installed `.d.ts`/`.js`) converged on the substrate verdict — **effect/ai is safe to bet on**: it is strictly a turn library (one model round per call; no loop to fight), `Tool.dynamic`/`Toolkit.make` support runtime per-term assembly, `Usage` carries cache splits (USD budgets computable), streaming is id-keyed blocks, and every reason OpenCode abandoned the AI SDK is covered by the v4 providers or by our control inversion. The keystone everywhere: **`disableToolCallResolution: true`** — the kernel owns tool execution at command level.
