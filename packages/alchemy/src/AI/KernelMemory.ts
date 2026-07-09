@@ -546,10 +546,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               (haltSchema !== undefined
                 ? ". `value` is the run's result as a JSON-encoded string" +
                   " matching the halt condition's shape."
-                : "."),
+                : ". `note` is a one-line summary of what was achieved."),
+            // schema-less halts still need a non-empty params object:
+            // Anthropic rejects an empty struct's input_schema
             parameters: (haltSchema !== undefined
               ? S.Struct({ value: S.String })
-              : S.Struct({})) as never,
+              : S.Struct({ note: S.String })) as never,
           }),
           AiTool.make("give_up", {
             description:
