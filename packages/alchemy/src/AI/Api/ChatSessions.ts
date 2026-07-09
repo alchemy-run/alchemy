@@ -20,6 +20,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
+import * as Prompt from "effect/unstable/ai/Prompt";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { type AskAnswer, AskHub, type PendingAsk } from "../Ask.ts";
 import type { KernelError } from "../Errors.ts";
@@ -65,16 +66,50 @@ export class ChatSessions extends Context.Service<
   ChatSessionsService
 >()("alchemy/AI/Api/ChatSessions") {}
 
+/**
+ * The default work item: the CONVERSATION, not the last message. The
+ * kernel is session-free — a run's world state rides in its work item
+ * (§2.8) — so the serving tier must put the transcript there or every
+ * turn starts amnesiac ("do it again" → "do what?"). Prior turns
+ * become role-tagged messages (text parts only — tool mechanics live
+ * in the Trace, not the conversational memory).
+ */
+export const conversationItem = (
+  history: ReadonlyArray<UIMessage>,
+  message: UIMessage,
+): unknown => {
+  const turns = [...history, message]
+    .filter((entry) => entry.role === "user" || entry.role === "assistant")
+    .map((entry) => ({ role: entry.role, text: messageText(entry) }))
+    .filter((entry) => entry.text.length > 0);
+  // a single first message stays a plain string (the common case, and
+  // what run.admitted rows and delegation summaries render best)
+  if (turns.length === 1 && turns[0]!.role === "user") {
+    return turns[0]!.text;
+  }
+  return turns.map((turn) =>
+    Prompt.makeMessage(turn.role as "user" | "assistant", {
+      content: [Prompt.makePart("text", { text: turn.text })] as never,
+    }),
+  );
+};
+
 export const makeChatSessions = (options: {
   /** The interpreted process term the conversations drive. */
   readonly process: Pick<ProcessService<any, any, any>, "send">;
-  /** How a user message becomes the ring's work item. @default messageText */
-  readonly toItem?: (message: UIMessage) => unknown;
+  /**
+   * How a conversation becomes the ring's work item.
+   * @default conversationItem (full history + new message)
+   */
+  readonly toItem?: (
+    history: ReadonlyArray<UIMessage>,
+    message: UIMessage,
+  ) => unknown;
 }): Effect.Effect<ChatSessionsService, never, Kernel | AskHub> =>
   Effect.gen(function* () {
     const kernel = yield* Kernel;
     const askHub = yield* AskHub;
-    const toItem = options.toItem ?? messageText;
+    const toItem = options.toItem ?? conversationItem;
     const transcripts = new Map<string, UIMessage[]>();
 
     const appendTo = (conversationId: string, message: UIMessage) => {
@@ -102,8 +137,10 @@ export const makeChatSessions = (options: {
       send: (conversationId, message) =>
         Stream.unwrap(
           Effect.gen(function* () {
+            // history BEFORE this message — toItem composes both
+            const history = transcripts.get(conversationId) ?? [];
             appendTo(conversationId, message);
-            const item = toItem(message);
+            const item = toItem(history, message);
             // subscribe BEFORE admitting so the run.admitted row (and
             // every delta after it) is already flowing into the window
             const events = yield* Stream.toQueue(kernel.events, {

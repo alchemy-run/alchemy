@@ -65,19 +65,34 @@ const toolCall = (
 type Turn = () => Array<Response.StreamPartEncoded>;
 const scriptedModel = (script: ReadonlyArray<Turn>) => {
   let calls = 0;
-  return Layer.effect(
+  const prompts: LanguageModel.ProviderOptions[] = [];
+  const layer = Layer.effect(
     LanguageModel.LanguageModel,
     LanguageModel.make({
       generateText: () => Effect.die(new Error("streamText only")),
-      streamText: () =>
+      streamText: (options) =>
         Stream.suspend(() => {
+          prompts.push(options);
           const turn = script[calls++];
           if (turn === undefined) throw new Error("script exhausted");
           return Stream.fromIterable(turn());
         }),
     }),
   );
+  return { layer, prompts };
 };
+
+/** All text content of a model call's prompt, flattened. */
+const promptText = (options: LanguageModel.ProviderOptions): string =>
+  options.prompt.content
+    .flatMap((message) =>
+      typeof message.content === "string"
+        ? [message.content]
+        : message.content.map((part) =>
+            "text" in part ? String(part.text) : "",
+          ),
+    )
+    .join("\n");
 
 const userMessage = (id: string, textContent: string): UIMessage => ({
   id,
@@ -85,9 +100,9 @@ const userMessage = (id: string, textContent: string): UIMessage => ({
   parts: [{ type: "text", text: textContent }],
 });
 
-const layers = (script: ReadonlyArray<Turn>) =>
+const layers = (model: { layer: Layer.Layer<any> }) =>
   Layer.mergeAll(
-    AI.memory.pipe(Layer.provide([scriptedModel(script), AI.AskHubMemory])),
+    AI.memory.pipe(Layer.provide([model.layer, AI.AskHubMemory])),
     AI.AskHubMemory,
     Layer.succeed(Grep, (() => Effect.succeed("found: ch. 42")) as never),
     RuntimeContext.phantom,
@@ -96,13 +111,13 @@ const layers = (script: ReadonlyArray<Turn>) =>
 describe("ChatSessions", () => {
   it.effect("send windows the run and materializes the transcript", () =>
     Effect.gen(function* () {
-      const script: ReadonlyArray<Turn> = [
+      const model = scriptedModel([
         () => [
           toolCall("c1", "grep", { pattern: "answer" }),
           finish("tool-calls"),
         ],
         () => [...text("it is ", "42"), finish("stop")],
-      ];
+      ]);
       yield* Effect.scoped(
         Effect.gen(function* () {
           const kernel = yield* AI.Kernel;
@@ -138,16 +153,16 @@ describe("ChatSessions", () => {
           // other conversations are untouched
           expect(yield* sessions.transcript("conv-2")).toHaveLength(0);
         }),
-      ).pipe(Effect.provide(layers(script)));
+      ).pipe(Effect.provide(layers(model)));
     }),
   );
 
   it.effect("consecutive sends serialize on the ring, one view each", () =>
     Effect.gen(function* () {
-      const script: ReadonlyArray<Turn> = [
+      const model = scriptedModel([
         () => [...text("first"), finish("stop")],
         () => [...text("second"), finish("stop")],
-      ];
+      ]);
       yield* Effect.scoped(
         Effect.gen(function* () {
           const kernel = yield* AI.Kernel;
@@ -174,8 +189,19 @@ describe("ChatSessions", () => {
           expect(
             transcript[3]!.parts.find((p) => p.type === "text")!.text,
           ).toBe("second");
+
+          // REGRESSION (the amnesia bug): turn 2's work item must carry
+          // the conversation — the model's second call sees turn 1's
+          // user text AND assistant reply, not just "two"
+          expect(model.prompts).toHaveLength(2);
+          const secondPrompt = promptText(model.prompts[1]!);
+          expect(secondPrompt).toContain("one");
+          expect(secondPrompt).toContain("first");
+          expect(secondPrompt).toContain("two");
+          // and turn 1's call saw no phantom history
+          expect(promptText(model.prompts[0]!)).not.toContain("two");
         }),
-      ).pipe(Effect.provide(layers(script)));
+      ).pipe(Effect.provide(layers(model)));
     }),
   );
 
@@ -253,7 +279,7 @@ You are the steward. ALWAYS call ${RequestApproval} before answering.` {}
         Effect.provide(
           Layer.mergeAll(
             AI.memory.pipe(
-              Layer.provide([scriptedModel(script), AI.AskHubMemory]),
+              Layer.provide([scriptedModel(script).layer, AI.AskHubMemory]),
             ),
             AI.AskHubMemory,
             ApprovalLive,
