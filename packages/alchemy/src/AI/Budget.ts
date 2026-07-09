@@ -1,5 +1,5 @@
 /**
- * A control ref that bounds a {@link Loop} (or an {@link Agent} turn).
+ * A control ref that bounds a {@link Process} (or an {@link Agent} turn).
  *
  * "Goal met" is the exit that might never fire, so a bounded loop needs
  * ceilings alongside its halt: hard limits (tokens, wall-clock,
@@ -40,7 +40,7 @@ export const isBudget = (value: unknown): value is Budget =>
   (value as Record<string, unknown>)["~alchemy/Kind"] === "Budget";
 
 /**
- * A control ref that caps how many work items a {@link Loop} may have in
+ * A control ref that caps how many work items a {@link Process} may have in
  * flight at once. Fan-out gets no term of its own — a pipeline without
  * feedback is not a loop.
  *

@@ -1,7 +1,7 @@
 /**
  * Type-level tests for the AI term language (design §1):
  *
- * - refs interpolated in Agent/Loop templates flow into `Req`
+ * - refs interpolated in Agent/Process templates flow into `Req`
  * - nested control-ref templates (`AI.until`, `AI.check`, `AI.fold`) flow through
  * - capability denial by omission: an un-interpolated tool never appears in `Req`
  * - unhalted charters are typed perpetual (`Out = never`), not rejected
@@ -92,7 +92,7 @@ const ThreadCreated = AI.EventSource(
 // ─── loops — charters with typed control refs ────────────────────
 
 // the task loop — schema'd `until` (typed Out), `each` (typed In), budget (Err)
-class Fix extends AI.Loop<Fix>()("Fix")`
+class Fix extends AI.Process<Fix>()("Fix")`
 One issue, one loop, one task per iteration.
 
 ${AI.each(issue)} give ${Engineer} a completely fresh context:
@@ -111,7 +111,7 @@ every iteration, successful or not`}
 ${AI.budget({ tokens: "5M", wallClock: "2h", iterations: 12, stall: 3 })}` {}
 
 // the product loop — perpetual, nests Fix, never-halt with a nested ref
-class Flywheel extends AI.Loop<Flywheel>()("Flywheel")`
+class Flywheel extends AI.Process<Flywheel>()("Flywheel")`
 The development flywheel for alchemy-run repos.
 
 ${AI.on(IssueOpened, IssueLabeled)} run ${Triage}, then dispatch a
@@ -129,7 +129,7 @@ ${AI.fold(Scribe)`weekly: cluster threads; the top recurring
 confusion becomes a docs issue via ${CreateIssue}`}` {}
 
 // the system loop — observes Flywheel without inheriting its Req
-class Autoresearch extends AI.Loop<Autoresearch>()("Autoresearch")`
+class Autoresearch extends AI.Process<Autoresearch>()("Autoresearch")`
 ${AI.every("1 week")} study the traces of ${AI.observe(Flywheel)};
 you may ${AI.observe(Scribe)}'s folds too. Escalate via ${AskHuman}.
 
@@ -146,7 +146,7 @@ type IsEqual<A, B> =
     : false;
 
 type ChannelsOf<L> =
-  L extends AI.Loop<infer Out, infer In, infer Err, infer Req, any, any, any>
+  L extends AI.Process<infer Out, infer In, infer Err, infer Req, any, any, any>
     ? { out: Out; in: In; err: Err; req: Req }
     : never;
 
@@ -171,7 +171,7 @@ type _fix_no_searchIssues = Assert<Not<Has<FixC["req"], SearchIssues>>>;
 type _fix_no_approve = Assert<Not<Has<FixC["req"], Approve>>>;
 type _fix_no_askHuman = Assert<Not<Has<FixC["req"], AskHuman>>>;
 
-// nesting a Loop contributes the inner loop's tag
+// nesting a Process contributes the inner loop's tag
 type _fw_fix = Assert<Has<FlywheelC["req"], Fix>>;
 type _fw_triage = Assert<Has<FlywheelC["req"], Triage>>;
 type _fw_reviewer = Assert<Has<FlywheelC["req"], Reviewer>>;
@@ -254,20 +254,20 @@ type _dispatch_in = Assert<
 // signal makes the loop's runs Effect<never, …>, and the Kernel lints
 // undeclared perpetuity at interpretation time)
 
-class NoHalt extends AI.Loop<NoHalt>()("NoHalt")`
+class NoHalt extends AI.Process<NoHalt>()("NoHalt")`
 ${AI.each(issue)} run ${Engineer} forever, unsupervised.` {}
 
 type _nohalt_out = Assert<IsEqual<ChannelsOf<typeof NoHalt>["out"], never>>;
 
-// a Loop with a halt but no trigger still compiles (triggers not required)
-class Idle extends AI.Loop<Idle>()("Idle")`
+// a Process with a halt but no trigger still compiles (triggers not required)
+class Idle extends AI.Process<Idle>()("Idle")`
 Do nothing. ${AI.never`a perpetual no-op ring`}` {}
 
 // ─── runtime: terms are constructible pure data ──────────────────
 
 describe("AI term language", () => {
-  it("Loop terms are pure data", () => {
-    expect(Fix["~alchemy/Kind"]).toBe("Loop");
+  it("Process terms are pure data", () => {
+    expect(Fix["~alchemy/Kind"]).toBe("Process");
     expect(Fix["~alchemy/Name"]).toBe("Fix");
     expect(Fix.refs.some(AI.isHalt)).toBe(true);
     expect(Fix.refs.some(AI.isFold)).toBe(true);
@@ -327,7 +327,7 @@ describe("AI term language", () => {
 
   it("terms are Context tags with stable keys", () => {
     expect((Engineer as any).key).toBe("alchemy/AI/Agent/Engineer");
-    expect((Fix as any).key).toBe("alchemy/AI/Loop/Fix");
+    expect((Fix as any).key).toBe("alchemy/AI/Process/Fix");
   });
 });
 
@@ -353,7 +353,7 @@ describe("AI.lint", () => {
   });
 
   it("duplicate positional refs are errors", () => {
-    class TwoBudgets extends AI.Loop<TwoBudgets>()("TwoBudgets")`
+    class TwoBudgets extends AI.Process<TwoBudgets>()("TwoBudgets")`
     ${AI.never`perpetual`} ${AI.budget({ usd: "1" })}
     ${AI.budget({ usd: "2" })}` {}
     expect(AI.lint(TwoBudgets)).toEqual([
@@ -362,7 +362,7 @@ describe("AI.lint", () => {
   });
 
   it("until + never is a contradiction", () => {
-    class Confused extends AI.Loop<Confused>()("Confused")`
+    class Confused extends AI.Process<Confused>()("Confused")`
     ${AI.until`done`} ${AI.never`also forever?`}
     ${AI.budget({ usd: "1" })}` {}
     expect(AI.lint(Confused)).toEqual([

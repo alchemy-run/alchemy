@@ -23,7 +23,7 @@ import {
   Support,
   Triage,
 } from "../agents.ts";
-import { Autoresearch, Fix, Flywheel, Helpdesk } from "../loops.ts";
+import { Autoresearch, Fix, Flywheel, Helpdesk } from "../processes.ts";
 import { DiscordEventsLive, GitHubEventsLive } from "./events.ts";
 import { CloudflareKernelLive, Ring } from "./kernel.ts";
 import {

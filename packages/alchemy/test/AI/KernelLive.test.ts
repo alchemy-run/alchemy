@@ -48,7 +48,7 @@ You are a careful mathematician. You never do arithmetic yourself:
 use ${Multiply} for every multiplication, then state the result as
 plain digits (no thousands separators).` {}
 
-class Compute extends AI.Loop<Compute>()("Compute")`
+class Compute extends AI.Process<Compute>()("Compute")`
 You compute arithmetic expressions step by step. You never do
 arithmetic yourself: use ${Multiply} for every single multiplication,
 one call per step.
@@ -64,7 +64,7 @@ class Auditor extends AI.Agent<Auditor>()("Auditor")`
 You are a strict auditor. Verify claims independently and answer in
 EXACTLY the JSON format you are asked for — nothing else.` {}
 
-class AuditedCompute extends AI.Loop<AuditedCompute>()("AuditedCompute")`
+class AuditedCompute extends AI.Process<AuditedCompute>()("AuditedCompute")`
 You compute arithmetic expressions step by step. Use ${Multiply} for
 every single multiplication, one call per step.
 ${AI.until(S.Struct({ answer: S.Number }))`the expression is fully computed`}
@@ -293,7 +293,7 @@ describe("memory kernel × live Anthropic", () => {
   );
 
   it.effect.skipIf(apiKey === undefined)(
-    "a real Loop run: iterated tool use, resolved via halt-as-tool",
+    "a real Process run: iterated tool use, resolved via halt-as-tool",
     () =>
       Effect.gen(function* () {
         const harness = makeHarness();
@@ -633,7 +633,7 @@ status in one short sentence.` {}
         const note = AI.Parameter("note", S.String)`your answer, tersely`;
         class LogAnswer extends AI.Tool<LogAnswer>()("log_answer")`
 Log ${note} as the answer to the work item. Call exactly once per item.` {}
-        class NightWatch extends AI.Loop<NightWatch>()("NightWatch")`
+        class NightWatch extends AI.Process<NightWatch>()("NightWatch")`
 You answer questions that arrive as work items. For each item, compute
 the answer and call ${LogAnswer} with it, then stop.
 ${AI.on(Alarm)}

@@ -5,7 +5,7 @@ import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { Agent, AgentService } from "./Agent.ts";
 import type { KernelError } from "./Errors.ts";
-import type { Loop, LoopService } from "./Loop.ts";
+import type { Process, ProcessService } from "./Process.ts";
 
 /**
  * A single entry in the Trace — the persisted event stream that is the
@@ -51,7 +51,7 @@ export interface KernelEvent {
 }
 
 /**
- * The Kernel is the interpreter of **process terms** (Agent | Loop) —
+ * The Kernel is the interpreter of **process terms** (Agent | Process) —
  * one `Context.Service` with a deliberately small surface. Note the
  * vocabulary that is absent: memory, compaction, context, sandbox,
  * session-store, sub-agent, model. Those exist only as services that
@@ -76,7 +76,7 @@ export interface KernelEvent {
  */
 /**
  * The **process terms** — the only term class the Kernel interprets
- * (design §1 taxonomy). Agent and Loop denote the same object — a
+ * (design §1 taxonomy). Agent and Process denote the same object — a
  * Process `In → Run<Out, Err>` (see
  * designs/ai/reports/agent-loop-algebra.md); they differ only in *who
  * supplies the control parameters* (kernel defaults vs charter refs),
@@ -91,19 +91,19 @@ export interface KernelEvent {
  */
 export type InterpretableTerm =
   | Agent<any, any[], any, any>
-  | Loop<any, any, any, any, any, any[], any>;
+  | Process<any, any, any, any, any, any[], any>;
 
 /** The service an interpreted process term produces. */
 export type TermService<T> =
-  T extends Loop<infer Out, infer In, infer Err, any, any, any[], any>
-    ? LoopService<Out, In, Err>
+  T extends Process<infer Out, infer In, infer Err, any, any, any[], any>
+    ? ProcessService<Out, In, Err>
     : T extends Agent<any, any[], any, any>
       ? AgentService
       : never;
 
 /** The term's construction requirements (its refs' tags). */
 export type TermReq<T> =
-  T extends Loop<any, any, any, infer Req, any, any[], any>
+  T extends Process<any, any, any, infer Req, any, any[], any>
     ? Req
     : T extends Agent<any, any[], any, infer Req>
       ? Req
@@ -155,7 +155,7 @@ export class Kernel extends Context.Service<Kernel, KernelService>()(
  * )
  * ```
  *
- * Custom implementations bypass this entirely: an Agent/Loop class is an
+ * Custom implementations bypass this entirely: an Agent/Process class is an
  * ordinary `Context.Service` tag, so `Layer.effect(Engineer, impl)` works
  * — the kernel default is a convenience, not a privilege.
  */
@@ -164,8 +164,8 @@ export const layer: {
     term: A,
   ): Layer.Layer<A["Identifier"], never, Kernel | A["~alchemy/Req"]>;
   <
-    L extends Loop<any, any, any, any, any, any[], any> &
-      Context.Service<any, LoopService<any, any, any>>,
+    L extends Process<any, any, any, any, any, any[], any> &
+      Context.Service<any, ProcessService<any, any, any>>,
   >(
     term: L,
   ): Layer.Layer<L["Identifier"], never, Kernel | L["req"]>;

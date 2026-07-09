@@ -12,7 +12,7 @@
  *   cursor) plus the fold (the durability checkpoint, committed in the
  *   same transaction as the events that motivated it).
  * - `CloudflareKernelLive` — implements `AI.Kernel` over the Ring
- *   namespace: interpreting a Loop term routes its runs to the loop's DO
+ *   namespace: interpreting a Process term routes its runs to the loop's DO
  *   instance; `trace(ring, after)` is replay-then-tail over plane 2
  *   (rows are truth, wakes are hints).
  *
@@ -101,7 +101,7 @@ export const CloudflareKernelLive = Layer.effect(
     const rings = yield* Ring;
 
     return AI.Kernel.of({
-      // One interpretation method: Agent and Loop denote the same object
+      // One interpretation method: Agent and Process denote the same object
       // (a Process); they differ only in who supplies the control
       // parameters (kernel defaults vs charter refs).
       // TODO(Phase 2): the pure step machine (state, feedback) → commands,
@@ -110,7 +110,7 @@ export const CloudflareKernelLive = Layer.effect(
       // deliver the last fold), not command replay — §9.3.
       interpret: (term) =>
         Effect.gen(function* () {
-          if (!AI.isLoop(term)) return agentService();
+          if (!AI.isProcess(term)) return agentService();
 
           // A loop's runs live in its named DO instance. Subscribe the
           // charter's sources: resolve each source's channel tag from

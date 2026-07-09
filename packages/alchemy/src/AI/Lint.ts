@@ -2,7 +2,7 @@ import { isBudget, isConcurrency } from "./Budget.ts";
 import { isCheck } from "./Check.ts";
 import { isFold } from "./Fold.ts";
 import { isHalt } from "./Halt.ts";
-import type { Loop } from "./Loop.ts";
+import type { Process } from "./Process.ts";
 
 /**
  * A defect in a charter's control-ref wiring. `error`-severity issues
@@ -50,7 +50,7 @@ export interface LintIssue {
  *   a soft runaway: "goal met" is the exit that might never fire.
  */
 export const lint = (
-  loop: Loop<any, any, any, any, any, any[], any>,
+  loop: Process<any, any, any, any, any, any[], any>,
 ): LintIssue[] => {
   const issues: LintIssue[] = [];
   const refs: any[] = loop.refs;

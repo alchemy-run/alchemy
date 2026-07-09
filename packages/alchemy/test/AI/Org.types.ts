@@ -25,7 +25,12 @@ import {
 } from "./fixtures/org/agents.ts";
 import { DiscordEvents } from "./fixtures/org/discord-events.ts";
 import { GitHubEvents } from "./fixtures/org/github-events.ts";
-import { Autoresearch, Fix, Flywheel, Helpdesk } from "./fixtures/org/loops.ts";
+import {
+  Autoresearch,
+  Fix,
+  Flywheel,
+  Helpdesk,
+} from "./fixtures/org/processes.ts";
 import type {
   Approve,
   AskHuman,
@@ -48,7 +53,7 @@ type IsEqual<A, B> =
     : false;
 
 type ChannelsOf<L> =
-  L extends AI.Loop<infer Out, infer In, infer Err, infer Req, any, any, any>
+  L extends AI.Process<infer Out, infer In, infer Err, infer Req, any, any, any>
     ? { out: Out; in: In; err: Err; req: Req }
     : never;
 

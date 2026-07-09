@@ -10,7 +10,7 @@ export interface Cron {
 }
 
 /**
- * A control ref that wires a {@link Loop}'s wake-up source — the loop-side
+ * A control ref that wires a {@link Process}'s wake-up source — the loop-side
  * subscription to one or more world-side {@link EventSource}s (the topics),
  * a durable work queue, or a schedule.
  *

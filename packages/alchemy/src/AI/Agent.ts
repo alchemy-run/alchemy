@@ -7,7 +7,7 @@ import type { Services } from "./Services.ts";
  * interpolations declare the tools (and parameters) the agent may use.
  * Like all terms it is pure data — behavior comes from interpreters.
  *
- * Agent is one of the two **process terms** (with `Loop` — the
+ * Agent is one of the two **process terms** (with `Process` — the
  * `InterpretableTerm` union): the only term class the Kernel interprets,
  * each interpretation acquiring a ring (one serial admission loop) of
  * its own. The capability terms it splices (`Tool`, `Parameter`) are
@@ -15,7 +15,7 @@ import type { Services } from "./Services.ts";
  *
  * The `<Self>()` form makes the agent a `Context.Service` **tag**, so:
  *
- * - Interpolating `${Engineer}` in a Loop charter contributes the tag
+ * - Interpolating `${Engineer}` in a Process charter contributes the tag
  *   `Engineer` to the loop's `Req` — not the agent's tools. Transitivity
  *   moves from type-level bubbling to Layer composition.
  * - The agent's implementation is a Layer: the kernel-derived default
@@ -55,7 +55,7 @@ export interface Agent<
 
 /**
  * The live handle an `Agent` term interprets into — the same
- * {@link ProcessService} shape a Loop produces, with the channels
+ * {@link ProcessService} shape a Process produces, with the channels
  * supplied by **kernel defaults** instead of refs (see
  * designs/ai/reports/agent-loop-algebra.md):
  *

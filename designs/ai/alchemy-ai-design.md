@@ -66,7 +66,14 @@ Conventions preserved throughout: curried constructors, `~alchemy/Kind` discrimi
 
 ### 1.2 New term kinds
 
-#### 1.2.1 `Loop`
+> **Renamed (July 2026): `Loop` is now `Process`.** The agent-loop
+> algebra had already concluded Agent and Loop denote the same object —
+> a Process `In → Run<Out, Err>` — so the general term now carries the
+> general name: `AI.Process` is the charter-controlled process term and
+> `Agent` is its kernel-default specialization. Historical sections
+> below keep the original vocabulary; read `Loop` as `Process`.
+
+#### 1.2.1 `Loop` (now `Process`)
 
 Channel-first type parameters, mirroring `Effect<A, E, R>` — a loop is `In → Effect<Out, Err, Req>` lifted over a trigger stream, and every channel is **derived from the refs**:
 

@@ -1,6 +1,6 @@
 /**
  * The capstone: a locally running CODING agent, end to end. A bounded
- * Loop (`FixTests`) with real local physics — filesystem + shell,
+ * Process (`FixTests`) with real local physics — filesystem + shell,
  * sandboxed to a temp workspace — diagnoses a failing test suite, fixes
  * the source bug, verifies with `bun test`, and resolves via
  * halt-as-tool. The test then re-verifies out of band: the suite really
@@ -38,7 +38,7 @@ const apiKey = process.env.ANTHROPIC_API_KEY;
 
 // ─── the charter ─────────────────────────────────────────────────
 
-class FixTests extends AI.Loop<FixTests>()("FixTests")`
+class FixTests extends AI.Process<FixTests>()("FixTests")`
 You are a careful software engineer working alone in a sandboxed
 workspace. The test suite is failing. Diagnose and fix it:
 

@@ -1,5 +1,5 @@
 import type { Agent } from "./Agent.ts";
-import type { Loop } from "./Loop.ts";
+import type { Process } from "./Process.ts";
 
 /**
  * A control ref that references another term's *Trace* (its persisted event
@@ -26,9 +26,9 @@ import type { Loop } from "./Loop.ts";
 export interface Observe<
   T extends
     | Agent<any, any, any, any>
-    | Loop<any, any, any, any, any, any, any> =
+    | Process<any, any, any, any, any, any, any> =
     | Agent<any, any, any, any>
-    | Loop<any, any, any, any, any, any, any>,
+    | Process<any, any, any, any, any, any, any>,
 > {
   "~alchemy/Kind": "Observe";
   subject: T;
@@ -36,7 +36,9 @@ export interface Observe<
 
 /** Reference `subject`'s Trace read-only, without inheriting its `Req`. */
 export const observe = <
-  T extends Agent<any, any, any, any> | Loop<any, any, any, any, any, any, any>,
+  T extends
+    | Agent<any, any, any, any>
+    | Process<any, any, any, any, any, any, any>,
 >(
   subject: T,
 ): Observe<T> => ({

@@ -1202,7 +1202,7 @@ describe("interrupt cascade (§2.8b)", () => {
 
 // ─── the loop runtime (§2.5) ─────────────────────────────────────
 
-class Quest extends AI.Loop<Quest>()("Quest")`
+class Quest extends AI.Process<Quest>()("Quest")`
 Find the answer using ${Grep}.
 ${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}
 ${AI.budget({ iterations: 3 })}` {}
@@ -1220,7 +1220,7 @@ const questThrough = (
       const kernel = yield* AI.Kernel;
       const quest = yield* kernel.interpret(loop as never);
       return yield* Effect.result(
-        (quest as AI.LoopService<unknown, unknown, unknown>).dispatch(
+        (quest as AI.ProcessService<unknown, unknown, unknown>).dispatch(
           "find the answer",
         ),
       );
@@ -1342,7 +1342,7 @@ describe("the loop runtime", () => {
       Effect.gen(function* () {
         class Judge extends AI.Agent<Judge>()("Judge")`
 You are the judge. Grade strictly; never trust the worker.` {}
-        class CheckedQuest extends AI.Loop<CheckedQuest>()("CheckedQuest")`
+        class CheckedQuest extends AI.Process<CheckedQuest>()("CheckedQuest")`
 Find the answer using ${Grep}.
 ${AI.until(S.Struct({ answer: S.Number }))`the numeric answer is found`}
 ${AI.check(Judge)`the answer must equal 42 exactly`}
@@ -1401,7 +1401,7 @@ ${AI.budget({ iterations: 4 })}` {}
             const kernel = yield* AI.Kernel;
             const quest = yield* kernel.interpret(CheckedQuest);
             const value = yield* (
-              quest as AI.LoopService<unknown, unknown, unknown>
+              quest as AI.ProcessService<unknown, unknown, unknown>
             ).dispatch("find it");
             const trace = yield* Stream.runCollect(
               kernel
@@ -1458,7 +1458,7 @@ ${AI.budget({ iterations: 4 })}` {}
     Effect.gen(function* () {
       // the deterministic oracle: no judge ring, no tokens, un-gameable
       const graded: unknown[] = [];
-      class MachineQuest extends AI.Loop<MachineQuest>()("MachineQuest")`
+      class MachineQuest extends AI.Process<MachineQuest>()("MachineQuest")`
 Find the answer with ${Grep}.
 ${AI.until(S.Struct({ answer: S.Number }))`the answer is found`}
 ${AI.check(
@@ -1510,7 +1510,7 @@ ${AI.budget({ iterations: 4 })}` {}
           const kernel = yield* AI.Kernel;
           const quest = yield* kernel.interpret(MachineQuest);
           return yield* (
-            quest as AI.LoopService<unknown, unknown, unknown>
+            quest as AI.ProcessService<unknown, unknown, unknown>
           ).dispatch("find it");
         }),
       ).pipe(
@@ -1539,7 +1539,7 @@ ${AI.budget({ iterations: 4 })}` {}
       Effect.gen(function* () {
         class Rubber extends AI.Agent<Rubber>()("Rubber")`
 You are the rubber stamp.` {}
-        class StampedQuest extends AI.Loop<StampedQuest>()("StampedQuest")`
+        class StampedQuest extends AI.Process<StampedQuest>()("StampedQuest")`
 Find the answer with ${Grep}.
 ${AI.until(S.Struct({ answer: S.Number }))`the answer is found`}
 ${AI.check(Rubber)}
@@ -1580,7 +1580,7 @@ ${AI.budget({ iterations: 3 })}` {}
               const kernel = yield* AI.Kernel;
               const quest = yield* kernel.interpret(StampedQuest);
               return yield* (
-                quest as AI.LoopService<unknown, unknown, unknown>
+                quest as AI.ProcessService<unknown, unknown, unknown>
               ).dispatch("find it");
             }),
           ).pipe(
@@ -1607,7 +1607,7 @@ ${AI.budget({ iterations: 3 })}` {}
     "undeclared perpetuity (no halt at all) is linted at interpret",
     () =>
       Effect.gen(function* () {
-        class NoHalt extends AI.Loop<NoHalt>()("NoHalt")`
+        class NoHalt extends AI.Process<NoHalt>()("NoHalt")`
 Just keep working with ${Grep}.` {}
         const model = scriptedModel([]);
         const result = yield* Effect.result(
@@ -1652,7 +1652,7 @@ const observation = AI.Parameter(
 class Recorder extends AI.Tool<Recorder>()("record")`
 Record ${observation} in the log. Call this for every work item.` {}
 
-class Watcher extends AI.Loop<Watcher>()("Watcher")`
+class Watcher extends AI.Process<Watcher>()("Watcher")`
 You watch for pings. For every work item, call ${Recorder} with the
 ping's note, then stop.
 ${AI.on(Ping)}

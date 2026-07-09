@@ -15,7 +15,6 @@ export * from "./KernelPrompts.ts";
 export * from "./Lint.ts";
 export * from "./Render.ts";
 export * from "./Pairing.ts";
-export * from "./Loop.ts";
 export * from "./Observe.ts";
 export * from "./Parameter.ts";
 export * from "./Process.ts";

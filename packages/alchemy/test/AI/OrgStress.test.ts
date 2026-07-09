@@ -102,7 +102,7 @@ const vaultDoor =
 /** Shared vault state: the approval flips it, the door checks it. */
 const vault = { approved: false };
 
-class Coordinator extends AI.Loop<Coordinator>()("Coordinator")`
+class Coordinator extends AI.Process<Coordinator>()("Coordinator")`
 You coordinate a vault hunt. You have NO archive access of your own —
 the three clue numbers are held by ${ScoutAlpha}, ${ScoutBravo}, and
 ${ScoutCharlie}, one each.

@@ -1,7 +1,7 @@
 import * as Data from "effect/Data";
 
 /**
- * The typed abnormal exit of a budgeted {@link Loop}: raised by the kernel
+ * The typed abnormal exit of a budgeted {@link Process}: raised by the kernel
  * when a run exceeds one of its `AI.budget` ceilings — a hard limit
  * (tokens, wall-clock, iterations, dollars) or the no-progress detector
  * (`stall`).
@@ -28,7 +28,7 @@ export class BudgetExceeded extends Data.TaggedError("AI.BudgetExceeded")<{
 }> {}
 
 /**
- * The typed give-up of a bounded {@link Loop}: the run concluded that its
+ * The typed give-up of a bounded {@link Process}: the run concluded that its
  * halt condition (`Out`) is unachievable — distinct from `BudgetExceeded`
  * (nothing ran out) and from the halt (nothing was achieved).
  *

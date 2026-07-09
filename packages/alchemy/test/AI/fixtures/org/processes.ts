@@ -35,7 +35,7 @@ import { issue, pr, PullRequestRef } from "./vocabulary.ts";
  * maker/checker split — Engineer's claim of done-ness is not a signal);
  * the fold names who compresses it.
  */
-export class Fix extends AI.Loop<Fix>()("Fix")`
+export class Fix extends AI.Process<Fix>()("Fix")`
 One issue, one loop, one task per iteration.
 
 ${AI.each(issue)} give ${Engineer} a completely fresh context: the
@@ -60,7 +60,7 @@ ${AI.budget({ tokens: "5M", wallClock: "2h", iterations: 12, stall: 3 })}` {}
  * The product loop. Perpetual (`Out = never`); wakes on GitHub events
  * across both managed repositories and dispatches typed Fix runs.
  */
-export class Flywheel extends AI.Loop<Flywheel>()("Flywheel")`
+export class Flywheel extends AI.Process<Flywheel>()("Flywheel")`
 The development flywheel for the alchemy-run repositories.
 
 ${AI.on(Github.IssueOpened(alchemyEffect), Github.IssueOpened(distilled))}
@@ -89,7 +89,7 @@ ${AI.budget({ usd: "250", wallClock: "168h" })}` {}
  * The support loop. Perpetual, Discord-facing. Uses a bare fold — Scribe's
  * own template is the fold policy.
  */
-export class Helpdesk extends AI.Loop<Helpdesk>()("Helpdesk")`
+export class Helpdesk extends AI.Process<Helpdesk>()("Helpdesk")`
 ${AI.on(Discord.ThreadCreated({ guild: "alchemy", channel: "#help" }))}
 run ${Support}.
 
@@ -107,7 +107,7 @@ resolution rate is the health signal, folded weekly`}` {}
  * cannot be granted merge authority by any Layer; enforced by Req, not
  * prose. Its exit signal is a human act arriving as a GitHub event.
  */
-export class Autoresearch extends AI.Loop<Autoresearch>()("Autoresearch")`
+export class Autoresearch extends AI.Process<Autoresearch>()("Autoresearch")`
 ${AI.every("1 week")} study the traces of ${AI.observe(Flywheel)}
 and ${AI.observe(Helpdesk)}: cluster failures; find prompts
 correlated with reopened issues; find tools agents misuse or avoid.

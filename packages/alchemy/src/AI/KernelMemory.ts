@@ -33,7 +33,7 @@ import { type Halt, isHalt } from "./Halt.ts";
 import { eventId } from "./Ids.ts";
 import { Kernel, type KernelService } from "./Kernel.ts";
 import { kernelPrompts } from "./KernelPrompts.ts";
-import { isLoop } from "./Loop.ts";
+import { isProcess } from "./Process.ts";
 import type { Parameter } from "./Parameter.ts";
 import { renderTemplate } from "./Render.ts";
 import * as Step from "./Step.ts";
@@ -49,20 +49,20 @@ import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
  *    resolved from the *ambient context* (which is why `interpret`
  *    carries the term's `Req`), its parameters become an `effect/ai`
  *    tool schema, and its rendered template becomes the description.
- *    A Loop charter's `AI.until` additionally compiles to **halt-as-tool**
+ *    A Process charter's `AI.until` additionally compiles to **halt-as-tool**
  *    (§2.5): synthetic `resolve` (input schema = the halt schema) and
  *    `give_up` tools the kernel owns.
  * 2. **Drive** — interpretation forks the term's **ring** (`forkScoped`,
  *    lifetime = the interpretation Scope): one serial loop draining one
  *    admission mailbox. `dispatch` = admit + join a reply seat; `send` =
- *    admit alone. An Agent run is ONE step-machine turn; a Loop run
+ *    admit alone. An Agent run is ONE step-machine turn; a Process run
  *    **iterates** turns per work item — same machine, same ring, with
  *    the boundary between iterations doing the §2.5 work (steer drain
  *    via the park, ceilings, fold = carry the transcript, nag when the
  *    model stops without resolving). `disableToolCallResolution: true`
  *    is load-bearing (§9.3): `effect/ai` never executes tools.
  * 3. **Settle** — tool failures are model-visible results, never thrown
- *    (`Err = never` on agents is a theorem); a Loop's typed exits are
+ *    (`Err = never` on agents is a theorem); a Process's typed exits are
  *    `Refused` (ratified give-up) and `BudgetExceeded` (charter budget);
  *    harness failures are defects.
  * 4. **Persist** — every external effect is preceded by a durable Trace
@@ -190,7 +190,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         readonly system: string;
         readonly compiled: CompiledTools;
         readonly policy: { maxModelCalls: number; maxTokens?: number };
-        /** Serve one work item; a Loop's typed exits ride the error channel. */
+        /** Serve one work item; a Process's typed exits ride the error channel. */
         readonly runItem: (
           item: unknown,
           run: {
@@ -225,7 +225,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // interruption. Mid-turn it lands in the ACTIVE turn's feedback
         // inbox as `Steered`; between turns it parks here and enters the
         // next turn ahead of its Dispatched (round-1 promotion). For a
-        // Loop this IS the §2.5 boundary drain: parked steers enter the
+        // Process this IS the §2.5 boundary drain: parked steers enter the
         // next iteration's first round. Single-threaded mutation is safe.
         const parkedSteers: Prompt.Message[] = [];
         let activeInbox: Step.Feedback[] | undefined;
@@ -774,9 +774,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         return service;
       });
 
-      // ── Loop: a run ITERATES turns per work item (§2.5) ──────────────
+      // ── Process: a run ITERATES turns per work item (§2.5) ──────────────
 
-      const interpretLoop = Effect.fn(function* (term: {
+      const interpretProcess = Effect.fn(function* (term: {
         "~alchemy/Name": string;
         template: TemplateStringsArray;
         refs: unknown[];
@@ -1235,8 +1235,8 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         interpret: ((term: any) =>
           isAgent(term)
             ? interpretAgent(term)
-            : isLoop(term)
-              ? interpretLoop(term)
+            : isProcess(term)
+              ? interpretProcess(term)
               : Effect.fail(
                   new KernelError({
                     term: String(term?.["~alchemy/Name"] ?? term),
@@ -1297,7 +1297,7 @@ const summarizeDelegation = (
         return Effect.fail(kernelPrompts.delegateInterrupted());
     }
   }
-  // a Loop delegate resolves with its typed halt value
+  // a Process delegate resolves with its typed halt value
   return Effect.succeed(value);
 };
 
@@ -1381,12 +1381,12 @@ const compileTools = Effect.fn(function* (
   let hasDelegates = false;
 
   for (const ref of refs) {
-    // ── delegation (§1.5 Stage A / §2.8): an interpolated Agent/Loop
+    // ── delegation (§1.5 Stage A / §2.8): an interpolated Agent/Process
     // becomes a tool whose handler is the DELEGATE'S dispatch. The tag
     // resolves the live ProcessService from ambient context — which ring
     // serves it, with which tool physics, is entirely the Layer graph's
     // decision (per-agent physics, shared vs private delegates).
-    if (isAgent(ref) || isLoop(ref)) {
+    if (isAgent(ref) || isProcess(ref)) {
       const name = ref["~alchemy/Name"];
       hasDelegates = true;
       const delegate = yield* Effect.serviceOption(ref as never);

@@ -9,7 +9,7 @@ import { isAgent } from "./Agent.ts";
  *
  * - `Parameter` refs render as `{name}` — the placeholder the model is
  *   told to fill.
- * - `Tool` / `Agent` / `Loop` refs render as their declared name — prose
+ * - `Tool` / `Agent` / `Process` refs render as their declared name — prose
  *   mentions the collaborator; wiring stays out of band.
  * - Control refs (`Trigger`, `Halt`, `Fold`, `Check`, `Budget`,
  *   `Observe`, `Concurrency`) render as the empty string — they are
@@ -41,7 +41,7 @@ const displayRef = (ref: unknown): string => {
     case "Tool":
       return String(name);
     default:
-      return isAgent(ref) || kind === "Loop" ? String(name) : "";
+      return isAgent(ref) || kind === "Process" ? String(name) : "";
   }
 };
 

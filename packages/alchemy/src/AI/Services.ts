@@ -8,7 +8,7 @@ import type { Trigger } from "./Trigger.ts";
 /**
  * The requirement contributed by a single leaf ref — its **tag**:
  *
- * - a `Tool<Self>`, `Agent<Self>`, or `Loop<Self>` class is a
+ * - a `Tool<Self>`, `Agent<Self>`, or `Process<Self>` class is a
  *   `Context.Service`; interpolating it contributes the tag itself.
  *   Transitivity moved out of the type computation and into Layer
  *   composition: an agent's tools are requirements of the *agent's Layer*
@@ -40,7 +40,7 @@ type LeafServices<R> =
  * - everything else is a leaf.
  *
  * Nesting is deliberately capped at depth 1: control refs may contain
- * Tool/Agent/Loop refs, but not further control refs.
+ * Tool/Agent/Process refs, but not further control refs.
  */
 export type RefServices<R> =
   R extends Halt<infer Inner, any>
@@ -61,5 +61,3 @@ export type RefServices<R> =
 export type Services<Refs extends any[]> = Refs[number] extends infer A
   ? RefServices<A>
   : never;
-
-export type LoopServices<Refs extends any[]> = Services<Refs>;
