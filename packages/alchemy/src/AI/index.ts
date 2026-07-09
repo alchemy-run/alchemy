@@ -10,6 +10,7 @@ export * from "./Halt.ts";
 export * from "./Ids.ts";
 export * from "./Kernel.ts";
 export * from "./KernelMemory.ts";
+export * from "./KernelPrompts.ts";
 export * from "./Lint.ts";
 export * from "./Render.ts";
 export * from "./Pairing.ts";

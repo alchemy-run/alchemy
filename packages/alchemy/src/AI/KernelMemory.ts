@@ -19,13 +19,19 @@ import * as Schedule from "effect/Schedule";
 import { isAgent } from "./Agent.ts";
 import { Ask, AskHub, makeMemoryAskHub } from "./Ask.ts";
 import { type Budget, isBudget } from "./Budget.ts";
-import { type Check, isCheck } from "./Check.ts";
+import {
+  type Check,
+  type CheckVerdict,
+  isCheck,
+  type MachineCheck,
+} from "./Check.ts";
 import { BudgetExceeded, KernelError, Refused } from "./Errors.ts";
 import { EventBus, makeMemoryEventBus } from "./EventBus.ts";
 import { type EventChannelService, isEventSource } from "./EventSource.ts";
 import { type Halt, isHalt } from "./Halt.ts";
 import { eventId } from "./Ids.ts";
 import { Kernel, type KernelService } from "./Kernel.ts";
+import { kernelPrompts } from "./KernelPrompts.ts";
 import { isLoop } from "./Loop.ts";
 import type { Parameter } from "./Parameter.ts";
 import { renderTemplate } from "./Render.ts";
@@ -462,12 +468,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                             provideAsk(handler(command.params)),
                             Deferred.await(signal).pipe(
                               Effect.andThen(
-                                Effect.fail("aborted by interrupt"),
+                                Effect.fail(kernelPrompts.abortedByInterrupt()),
                               ),
                             ),
                           ),
                         )
-                      : Result.fail(`no such tool: ${command.name}`);
+                      : Result.fail(kernelPrompts.noSuchTool(command.name));
                     const isFailure = Result.isFailure(settled);
                     yield* emit(
                       isFailure ? "tool.failed" : "tool.completed",
@@ -785,9 +791,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             termName,
             system:
               renderTemplate(term.template, term.refs) +
-              "\n\nThis is a perpetual ring: you serve one work item per " +
-              "run, forever. Health prose: " +
-              renderTemplate(halt.template, halt.refs),
+              kernelPrompts.perpetualNote({
+                healthProse: renderTemplate(halt.template, halt.refs),
+              }),
             compiled,
             policy,
             children,
@@ -806,17 +812,23 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           return service;
         }
 
-        // ── the check (§2.5/§8.2): maker/checker on the stop condition.
-        // The verifier is a positional arrow the KERNEL invokes at the
-        // boundary — never a tool the worker may consult or impersonate.
-        // Its tag resolves from ambient context like any delegate, so its
-        // tool physics (run/read, never edit) are a Layer-composition
-        // fact.
+        // ── the check (§2.5/§8.2/§2.9): maker/checker on the stop
+        // condition. The verifier is a positional arrow the KERNEL
+        // invokes at the boundary — never a tool the worker may consult
+        // or impersonate. Two kinds of arrow (§2.9: occurrence is
+        // deterministic either way; only the judgment differs in kind):
+        // an Agent judge (fuzzy — resolves from ambient context like a
+        // delegate, its run/read-only physics a Layer fact) or a
+        // MachineCheck (a deterministic oracle the kernel calls directly).
         const checkRef = term.refs.find(isCheck) as
           | Check<any, any[]>
           | undefined;
+        const machineCheck =
+          checkRef !== undefined && !isAgent(checkRef.agent)
+            ? (checkRef.agent as MachineCheck)
+            : undefined;
         const judge =
-          checkRef === undefined
+          checkRef === undefined || machineCheck !== undefined
             ? undefined
             : yield* Effect.serviceOption(checkRef.agent as never).pipe(
                 Effect.flatMap(
@@ -862,12 +874,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // the halt prose in the system prompt carries the shape.
         const syntheticTools: AiTool.Any[] = [
           AiTool.make("resolve", {
-            description:
-              "Call when the halt condition is met. This ends the run" +
-              (haltSchema !== undefined
-                ? ". `value` is the run's result as a JSON-encoded string" +
-                  " matching the halt condition's shape."
-                : ". `note` is a one-line summary of what was achieved."),
+            description: kernelPrompts.resolveDescription({
+              hasSchema: haltSchema !== undefined,
+            }),
             // schema-less halts still need a non-empty params object:
             // Anthropic rejects an empty struct's input_schema
             parameters: (haltSchema !== undefined
@@ -875,9 +884,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               : S.Struct({ note: S.String })) as never,
           }),
           AiTool.make("give_up", {
-            description:
-              "Call ONLY when you have concrete evidence the goal is " +
-              "unachievable. `reason` must state the blocker and the evidence.",
+            description: kernelPrompts.giveUpDescription(),
             parameters: S.Struct({ reason: S.String }) as never,
           }),
         ];
@@ -890,7 +897,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             (params) => {
               if (haltSchema === undefined) {
                 currentRun.resolved = { value: undefined };
-                return Effect.succeed("resolved: the run will halt");
+                return Effect.succeed(kernelPrompts.resolveAck());
               }
               const raw = (params as { value?: unknown } | undefined)?.value;
               let parsed: unknown;
@@ -898,7 +905,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
               } catch (error) {
                 return Effect.fail(
-                  `resolve rejected — value is not valid JSON: ${String(error)}`,
+                  kernelPrompts.resolveInvalidJson(String(error)),
                 );
               }
               const decoded = S.decodeUnknownResult(haltSchema as never)(
@@ -907,11 +914,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               if (Result.isFailure(decoded)) {
                 // model-visible bounce: self-correct and resolve again
                 return Effect.fail(
-                  `resolve rejected — value does not match the halt schema: ${String(decoded.failure)}`,
+                  kernelPrompts.resolveSchemaMismatch(String(decoded.failure)),
                 );
               }
               currentRun.resolved = { value: decoded.success };
-              return Effect.succeed("resolved: the run will halt");
+              return Effect.succeed(kernelPrompts.resolveAck());
             },
           ],
           [
@@ -921,7 +928,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 (params as { reason?: unknown } | undefined)?.reason ??
                   "no reason given",
               );
-              return Effect.succeed("acknowledged: the run will refuse");
+              return Effect.succeed(kernelPrompts.giveUpAck());
             },
           ],
         ]);
@@ -938,16 +945,11 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         const haltProse = renderTemplate(halt.template, halt.refs);
         const system =
           renderTemplate(term.template, term.refs) +
-          "\n\n# Halt condition\n" +
-          `This run ends when: ${haltProse}\n` +
-          "When that condition is met, call the `resolve` tool" +
-          (haltSchema !== undefined ? " with the result value" : "") +
-          ". If you conclude the goal is unachievable, call `give_up` " +
-          "with your evidence. Keep working until you call one of them." +
-          (judge !== undefined
-            ? "\nYour resolution will be independently verified; rejected " +
-              "resolutions come back with feedback."
-            : "");
+          kernelPrompts.haltContract({
+            haltProse,
+            hasSchema: haltSchema !== undefined,
+            verified: judge !== undefined,
+          });
 
         const maxIterations = budget?.iterations ?? policy.maxIterations ?? 24;
         const tokenCeiling =
@@ -1013,7 +1015,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 // a signal)
                 let rejection: string | undefined;
                 if (currentRun.resolved !== undefined) {
-                  if (judge !== undefined) {
+                  if (judge !== undefined || machineCheck !== undefined) {
                     yield* run.emitRow(
                       run.session,
                       "check.requested",
@@ -1021,27 +1023,33 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                       `check-${iterations}`,
                       { iterations },
                     );
-                    const graded = yield* judge.dispatch(
-                      "You are the VERIFIER for a loop run — maker/checker " +
-                        "applies: the worker's claim of done-ness is not a " +
-                        "signal; verify independently.\n" +
-                        // the judge needs the run's mandate, not just the
-                        // claim: without the work item there is nothing to
-                        // verify AGAINST (a gap the live tests caught)
-                        `The run's work item: ${asText(item)}\n` +
-                        `Halt condition: ${haltProse}\n` +
-                        "The worker claims the run is complete" +
-                        (currentRun.resolved.value === undefined
-                          ? "."
-                          : ` with value: ${asText(currentRun.resolved.value)}`) +
-                        (checkInstructions !== undefined
-                          ? `\nRing grading instructions: ${checkInstructions}`
-                          : "") +
-                        '\nRespond with ONLY a JSON object: {"verdict":"goal-met"} ' +
-                        'to accept, or {"verdict":"off-goal","reason":"…"} to ' +
-                        "reject with actionable feedback.",
-                    );
-                    const verdict = parseVerdict(graded);
+                    // a machine verifier is invoked directly (no model,
+                    // no parse — a deterministic oracle); an agent judge
+                    // is dispatched and its verdict parsed from text
+                    const verdict: CheckVerdict | undefined =
+                      machineCheck !== undefined
+                        ? yield* machineCheck({
+                            workItem: item,
+                            haltProse,
+                            claim: currentRun.resolved.value,
+                          })
+                        : parseVerdict(
+                            yield* judge!.dispatch(
+                              kernelPrompts.verifierPrompt({
+                                // the judge needs the run's mandate, not
+                                // just the claim: without the work item
+                                // there is nothing to verify AGAINST (a
+                                // gap the live tests caught)
+                                workItem: asText(item),
+                                haltProse,
+                                claim:
+                                  currentRun.resolved.value === undefined
+                                    ? undefined
+                                    : asText(currentRun.resolved.value),
+                                ringInstructions: checkInstructions,
+                              }),
+                            ),
+                          );
                     if (verdict === undefined) {
                       // check-failed (§9.3): a broken judge NEVER silently
                       // re-loops; the memory kernel parks as a defect (the
@@ -1064,10 +1072,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                       // and the judge's feedback becomes the next
                       // iteration's first input (§2.5 off-goal arm)
                       currentRun = {};
-                      rejection =
-                        "The verifier rejected your resolution: " +
-                        `${verdict.reason ?? "no reason given"}. Continue ` +
-                        "working and call `resolve` again when genuinely done.";
+                      rejection = kernelPrompts.rejectionSteer(
+                        verdict.reason ?? "no reason given",
+                      );
                     }
                   }
                   if (rejection === undefined) {
@@ -1141,12 +1148,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 // fold = carry the transcript; the boundary input is the
                 // judge's rejection when there is one, else the bounded nag
                 transcript = state.messages;
-                input = toMessages(
-                  rejection ??
-                    "The run has not ended: the halt condition is not met and " +
-                      "you have not given up. Continue working. When done, call " +
-                      "`resolve`; if truly blocked, call `give_up` with evidence.",
-                );
+                input = toMessages(rejection ?? kernelPrompts.boundaryNag());
               }
             }),
         });
@@ -1210,10 +1212,14 @@ const summarizeDelegation = (
         return Effect.succeed(outcome.text);
       case "BudgetExceeded":
         return Effect.fail(
-          `the delegate exceeded its ${outcome.limit} budget (${outcome.used}/${outcome.budget})`,
+          kernelPrompts.delegateBudgetExceeded({
+            limit: outcome.limit,
+            used: outcome.used,
+            budget: outcome.budget,
+          }),
         );
       case "Interrupted":
-        return Effect.fail("the delegate was interrupted");
+        return Effect.fail(kernelPrompts.delegateInterrupted());
     }
   }
   // a Loop delegate resolves with its typed halt value
@@ -1235,9 +1241,7 @@ const asText = (value: unknown): string =>
  * first JSON object in the completed text with a recognized `verdict`.
  * `undefined` = ungradable ⇒ check-failed, never a silent re-loop.
  */
-const parseVerdict = (
-  outcome: unknown,
-): { verdict: "goal-met" | "off-goal"; reason?: string } | undefined => {
+const parseVerdict = (outcome: unknown): CheckVerdict | undefined => {
   if (
     typeof outcome !== "object" ||
     outcome === null ||
@@ -1252,13 +1256,15 @@ const parseVerdict = (
       verdict?: unknown;
       reason?: unknown;
     };
-    if (parsed.verdict !== "goal-met" && parsed.verdict !== "off-goal") {
-      return undefined;
+    if (parsed.verdict === "goal-met") return { verdict: "goal-met" };
+    if (parsed.verdict === "off-goal") {
+      return {
+        verdict: "off-goal",
+        reason:
+          typeof parsed.reason === "string" ? parsed.reason : "no reason given",
+      };
     }
-    return {
-      verdict: parsed.verdict,
-      ...(typeof parsed.reason === "string" && { reason: parsed.reason }),
-    };
+    return undefined;
   } catch {
     return undefined;
   }
@@ -1349,15 +1355,13 @@ const compileTools = Effect.fn(function* (
       };
       aiTools.push(
         AiTool.make(name, {
-          description:
-            `Delegate a task to ${name}. With background=false (default) ` +
-            `this blocks and returns ${name}'s distilled result; with ` +
-            `background=true it returns a run key immediately and the ` +
-            `result arrives later as a steer message (poll with ` +
-            `check_runs). ${name}'s charter: ${renderTemplate(
+          description: kernelPrompts.delegateDescription({
+            name,
+            charter: renderTemplate(
               (ref as { template: TemplateStringsArray }).template,
               (ref as { refs: unknown[] }).refs,
-            )}`,
+            ),
+          }),
           parameters: S.Struct({
             task: S.String,
             background: S.optionalKey(S.Boolean),
@@ -1403,17 +1407,13 @@ const compileTools = Effect.fn(function* (
               return Effect.andThen(
                 Effect.asVoid(Deferred.succeed(settled, void 0)),
                 steerCell?.current?.(
-                  `Background run ${runKey} ${status}: ${summary}`,
+                  kernelPrompts.completionSteer({ runKey, status, summary }),
                 ) ?? Effect.void,
               );
             }),
             Effect.forkIn(scope),
           );
-          return (
-            `spawned background run ${runKey}; its distilled result will ` +
-            "arrive as a steer message. Poll with check_runs, or block on " +
-            "it with wait_run."
-          );
+          return kernelPrompts.spawnAck(runKey);
         });
       });
       continue;
@@ -1457,10 +1457,7 @@ const compileTools = Effect.fn(function* (
   if (hasDelegates) {
     aiTools.push(
       AiTool.make("check_runs", {
-        description:
-          "Check the status of background runs you spawned. Returns one " +
-          "line per run: key, status (running | completed | failed), and " +
-          "the distilled result when settled.",
+        description: kernelPrompts.checkRunsDescription(),
         parameters: S.Struct({ reason: S.optionalKey(S.String) }) as never,
       }),
     );
@@ -1483,9 +1480,7 @@ const compileTools = Effect.fn(function* (
     // execution, raced by the interrupt signal like any other)
     aiTools.push(
       AiTool.make("wait_run", {
-        description:
-          "Block until the background run with the given key settles, " +
-          "then return its distilled result. Fails if the run failed.",
+        description: kernelPrompts.waitRunDescription(),
         parameters: S.Struct({ key: S.String }) as never,
       }),
     );

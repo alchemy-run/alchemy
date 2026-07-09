@@ -1,4 +1,32 @@
+import type * as Effect from "effect/Effect";
 import type { Agent } from "./Agent.ts";
+
+/** What the kernel hands the verifier at the boundary. */
+export interface CheckInput {
+  /** The run's work item — the mandate the claim is verified AGAINST. */
+  readonly workItem: unknown;
+  /** The halt condition's rendered prose. */
+  readonly haltProse: string;
+  /** The claimed resolve value; `undefined` for schema-less halts. */
+  readonly claim: unknown;
+}
+
+/** The verifier's ruling (§2.5). */
+export type CheckVerdict =
+  | { readonly verdict: "goal-met" }
+  | { readonly verdict: "off-goal"; readonly reason: string };
+
+/**
+ * A **machine** verifier — a pure arrow the kernel invokes directly, no
+ * model in the loop. When a deterministic oracle exists ("the test
+ * suite is the only oracle of done-ness"), it beats a fuzzy judge:
+ * zero tokens, zero drift, un-gameable. The check slot accepts either —
+ * `AI.check(Judge)` (fuzzy, an Agent with its own tools) or
+ * `AI.check((input) => runTheSuite(input))` (machine). §2.9: the
+ * *occurrence* of checking is deterministic either way; only the
+ * judgment differs in kind.
+ */
+export type MachineCheck = (input: CheckInput) => Effect.Effect<CheckVerdict>;
 
 /**
  * A control ref that assigns an {@link Agent} the verifier role — the
@@ -30,32 +58,38 @@ import type { Agent } from "./Agent.ts";
  * ```
  */
 export interface Check<
-  A extends Agent<any, any, any, any> = Agent<any, any, any, any>,
+  A = Agent<any, any, any, any> | MachineCheck,
   Refs extends any[] = any[],
 > {
   "~alchemy/Kind": "Check";
+  /** The verifier arrow: an Agent (fuzzy) or a {@link MachineCheck}. */
   agent: A;
   template: TemplateStringsArray | undefined;
   refs: Refs;
 }
 
 /**
- * Assign `agent` the verifier role. Usable bare (`AI.check(Judge)`) or as
- * a template tag with ring-specific grading instructions
- * (`AI.check(Judge)\`…\``).
+ * Assign the verifier role. An Agent judge is usable bare
+ * (`AI.check(Judge)`) or as a template tag with ring-specific grading
+ * instructions (`AI.check(Judge)\`…\``); a machine verifier is a pure
+ * arrow (`AI.check((input) => …)`) — no template (a deterministic
+ * oracle takes no prose).
  */
-export const check = <A extends Agent<any, any, any, any>>(
-  agent: A,
-): Check<A, []> &
-  (<const Refs extends any[]>(
-    template: TemplateStringsArray,
-    ...refs: Refs
-  ) => Check<A, Refs>) =>
+export const check: {
+  <A extends Agent<any, any, any, any>>(
+    agent: A,
+  ): Check<A, []> &
+    (<const Refs extends any[]>(
+      template: TemplateStringsArray,
+      ...refs: Refs
+    ) => Check<A, Refs>);
+  (machine: MachineCheck): Check<MachineCheck, []>;
+} = ((agent: unknown) =>
   Object.assign(
     (template: TemplateStringsArray, ...refs: any[]) =>
       makeCheck(agent, template, refs),
     makeCheck(agent, undefined, []),
-  ) as any;
+  )) as any;
 
 const makeCheck = (
   agent: unknown,

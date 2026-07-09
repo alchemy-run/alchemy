@@ -1300,6 +1300,85 @@ ${AI.budget({ iterations: 4 })}` {}
       }),
   );
 
+  it.effect("a MACHINE check verifies claims with zero model traffic", () =>
+    Effect.gen(function* () {
+      // the deterministic oracle: no judge ring, no tokens, un-gameable
+      const graded: unknown[] = [];
+      class MachineQuest extends AI.Loop<MachineQuest>()("MachineQuest")`
+Find the answer with ${Grep}.
+${AI.until(S.Struct({ answer: S.Number }))`the answer is found`}
+${AI.check(
+  (input): Effect.Effect<AI.CheckVerdict> =>
+    Effect.sync(() => {
+      graded.push(input.claim);
+      return (input.claim as { answer: number }).answer === 42
+        ? { verdict: "goal-met" }
+        : { verdict: "off-goal", reason: "the answer must be exactly 42" };
+    }),
+)}
+${AI.budget({ iterations: 4 })}` {}
+
+      let rounds = 0;
+      const calls: LanguageModel.ProviderOptions[] = [];
+      const model = Layer.effect(
+        LanguageModel.LanguageModel,
+        LanguageModel.make({
+          generateText: () => Effect.die(new Error("streamText only")),
+          streamText: (options) =>
+            Stream.suspend(() => {
+              calls.push(options);
+              rounds++;
+              return Stream.fromIterable(
+                rounds === 1
+                  ? [
+                      toolCall("c1", "resolve", {
+                        value: JSON.stringify({ answer: 41 }),
+                      }),
+                      finish("tool-calls"),
+                    ]
+                  : rounds === 2
+                    ? [...text("claimed 41"), finish("stop")]
+                    : rounds === 3
+                      ? [
+                          toolCall("c2", "resolve", {
+                            value: JSON.stringify({ answer: 42 }),
+                          }),
+                          finish("tool-calls"),
+                        ]
+                      : [...text("claimed 42"), finish("stop")],
+              );
+            }),
+        }),
+      );
+
+      const value = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const quest = yield* kernel.interpret(MachineQuest);
+          return yield* (
+            quest as AI.LoopService<unknown, unknown, unknown>
+          ).dispatch("find it");
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model)),
+            Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+
+      // both claims were graded by the oracle; only the correct one passed
+      expect(graded).toEqual([{ answer: 41 }, { answer: 42 }]);
+      expect(value).toEqual({ answer: 42 });
+      // every model call belonged to the WORKER — no judge traffic at all
+      expect(calls).toHaveLength(4);
+      // the machine rejection steered iteration 2, same as a fuzzy judge's
+      expect(promptText(calls[2]!)).toContain("must be exactly 42");
+    }),
+  );
+
   it.effect(
     "an ungradable verdict is check-failed — never a silent re-loop",
     () =>
