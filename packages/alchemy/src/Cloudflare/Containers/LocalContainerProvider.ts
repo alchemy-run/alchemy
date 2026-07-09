@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
@@ -16,7 +17,7 @@ import type {
 } from "./ContainerApplication.ts";
 import {
   createContainerApplicationName,
-  foldEnvIntoEnvironmentVariables,
+  makeContainerEnv,
   prepareContainerBuildContext,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
@@ -42,8 +43,15 @@ export const LocalContainerProvider = () =>
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       // Resolve the `dev` image plus a content hash for change detection.
-      // Cached per run (`Artifacts.cached`) so repeated diffs/reconciles in a
-      // single dev session don't re-bundle or re-hash.
+      // Cached per run (`Artifacts.cached`, keyed by resource id) so repeated
+      // diffs/reconciles in a single dev session don't re-bundle or re-hash.
+      //
+      // IMPORTANT: the cached result must stay env-free. The cache is warmed
+      // by `precreate`, which runs against unresolved props — binding-derived
+      // env values (e.g. an ApiToken's value/accountId) are still unresolved
+      // `Output`s there and get skipped. Caching env here would freeze that
+      // incomplete env and start the container without its bindings;
+      // `makeAttributes` attaches the freshly-computed env instead.
       const prepareImage = (id: string, news: ContainerApplicationProps) =>
         Effect.gen(function* () {
           // Variant 1 — Effect-native program. Bundle `main` and write it
@@ -56,7 +64,7 @@ export const LocalContainerProvider = () =>
             const { context, dockerfile, hash } =
               yield* prepareContainerBuildContext(id, news);
             return {
-              dev: { context, dockerfile, env: news.env } as DevContainerImage,
+              dev: { context, dockerfile } as DevContainerImage,
               hash,
             };
           }
@@ -65,7 +73,7 @@ export const LocalContainerProvider = () =>
           // directly; there is nothing to build.
           if (news.image) {
             return {
-              dev: { imageUri: news.image, env: news.env } as DevContainerImage,
+              dev: { imageUri: news.image } as DevContainerImage,
               hash: yield* sha256Object({ image: news.image }),
             };
           }
@@ -82,17 +90,17 @@ export const LocalContainerProvider = () =>
           const contextHash = yield* hashDirectory({ cwd: context });
           const dockerfileContent = yield* fs.readFileString(dockerfile);
           return {
-            dev: { context, dockerfile, env: news.env } as DevContainerImage,
+            dev: { context, dockerfile } as DevContainerImage,
             hash: yield* sha256Object({
               contextHash,
               dockerfile: dockerfileContent,
             }),
           };
-        }).pipe(Artifacts.cached("container-image"));
+        }).pipe(Artifacts.cached(`container-image:${id}`));
 
       const placeholderConfiguration = (
         props: ContainerApplicationProps,
-        accountId: string,
+        env: Record<string, string | Redacted.Redacted<string>>,
       ) =>
         normalizeNulls({
           image: "local",
@@ -103,10 +111,10 @@ export const LocalContainerProvider = () =>
           vcpu: props.vcpu,
           memory: props.memory,
           disk: props.disk,
-          environmentVariables: foldEnvIntoEnvironmentVariables(
-            props,
-            accountId,
-          ),
+          environmentVariables: Object.entries(env).map(([name, value]) => ({
+            name,
+            value: Redacted.isRedacted(value) ? Redacted.value(value) : value,
+          })),
           labels: props.labels,
           network: props.network,
           command: props.command,
@@ -126,6 +134,7 @@ export const LocalContainerProvider = () =>
         output: ContainerApplication["Attributes"] | undefined;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
+        const env = makeContainerEnv(news, accountId);
         const { dev, hash } = yield* prepareImage(id, news);
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
@@ -136,11 +145,11 @@ export const LocalContainerProvider = () =>
           maxInstances: news.maxInstances ?? 1,
           constraints: news.constraints,
           affinities: news.affinities,
-          configuration: placeholderConfiguration(news, accountId),
+          configuration: placeholderConfiguration(news, env),
           durableObjects: undefined,
           createdAt: new Date().toISOString(),
           version: 1,
-          dev,
+          dev: { ...dev, env },
           hash: { image: hash },
         } satisfies ContainerApplication["Attributes"];
       });

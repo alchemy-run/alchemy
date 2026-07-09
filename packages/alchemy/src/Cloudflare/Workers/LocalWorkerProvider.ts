@@ -54,6 +54,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
@@ -354,7 +355,10 @@ export const LocalWorkerProvider = () =>
 
       type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
-      const runWorker = Effect.fn(function* (worker: WorkerConfig) {
+      const runWorker = Effect.fn(function* (
+        worker: WorkerConfig,
+        gate: Semaphore.Semaphore,
+      ) {
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
@@ -383,23 +387,31 @@ export const LocalWorkerProvider = () =>
               : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
-            serveScoped(worker, bundle, proxy).pipe(
-              Effect.exit,
-              Effect.tap((exit) => {
-                if (exit._tag === "Success") {
-                  const message = Effect.log(
-                    `[${worker.id}] ${status === "update" ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
-                  );
-                  status = "update";
-                  return message;
-                } else {
-                  return Effect.logError(
-                    `[${worker.id}] Error`,
-                    Cause.squash(exit.cause),
-                  );
-                }
-              }),
-            ),
+            // The gate lets `teardownInstance` wait for an in-flight serve
+            // instead of interrupting it: interrupting `runtime.start`
+            // mid-flight leaks the half-started workerd and permanently
+            // poisons cloudflare-runtime's cached docker configuration
+            // (`Effect.cached` memoizes the interrupt exit forever), which
+            // bricks every subsequent worker start in this process.
+            gate
+              .withPermits(1)(serveScoped(worker, bundle, proxy))
+              .pipe(
+                Effect.exit,
+                Effect.tap((exit) => {
+                  if (exit._tag === "Success") {
+                    const message = Effect.log(
+                      `[${worker.id}] ${status === "update" ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
+                    );
+                    status = "update";
+                    return message;
+                  } else {
+                    return Effect.logError(
+                      `[${worker.id}] Error`,
+                      Cause.squash(exit.cause),
+                    );
+                  }
+                }),
+              ),
           ),
           Stream.runDrain,
           Effect.forkScoped,
@@ -453,19 +465,37 @@ export const LocalWorkerProvider = () =>
             Bundle.BundleError | WorkerValidationError | RuntimeError
           >;
           scope: Scope.Closeable;
+          gate: Semaphore.Semaphore;
         }
       >();
 
-      const runInstance = Effect.fn(function* (options: {
-        id: string;
-        props: WorkerPropsWithDev;
-        bindings: ResourceBinding<Worker["Binding"]>[];
-      }) {
+      // Wait for any in-flight workerd start to settle before interrupting.
+      // See the note on the serve gate in `runWorker`.
+      const teardownInstance = Effect.fn(function* (
+        id: string,
+        existing: NonNullable<ReturnType<(typeof instances)["get"]>>,
+      ) {
+        yield* existing.gate.withPermits(1)(Effect.void);
+        yield* Fiber.interrupt(existing.fiber);
+        yield* Scope.close(existing.scope, Exit.void);
+        instances.delete(id);
+      });
+
+      const runInstance = Effect.fn(function* (
+        options: {
+          id: string;
+          props: WorkerPropsWithDev;
+          bindings: ResourceBinding<Worker["Binding"]>[];
+        },
+        gate: Semaphore.Semaphore,
+      ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
         const url = yield* (
-          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
+          props.vite
+            ? runVite(config, props.vite.rootDir)
+            : runWorker(config, gate)
         ).pipe(Effect.map((url) => url.toString()));
         return {
           workerId: config.name,
@@ -566,9 +596,7 @@ export const LocalWorkerProvider = () =>
             const { accountId } = yield* yield* CloudflareEnvironment;
             const existing = instances.get(id);
             if (existing) {
-              yield* Fiber.interrupt(existing.fiber);
-              yield* Scope.close(existing.scope, Exit.void);
-              instances.delete(id);
+              yield* teardownInstance(id, existing);
             }
             const name = yield* createWorkerName(id, news.name);
             return {
@@ -598,16 +626,15 @@ export const LocalWorkerProvider = () =>
             yield* Effect.log(
               `[${options.id}] Changes detected, interrupting existing instance`,
             );
-            yield* Fiber.interrupt(existing.fiber);
-            yield* Scope.close(existing.scope, Exit.void);
-            instances.delete(options.id);
+            yield* teardownInstance(options.id, existing);
           }
           const scope = yield* Scope.fork(rootScope);
-          const fiber = yield* runInstance(options).pipe(
+          const gate = yield* Semaphore.make(1);
+          const fiber = yield* runInstance(options, gate).pipe(
             Effect.forkDetach,
             Scope.provide(scope),
           );
-          instances.set(options.id, { signature, fiber, scope });
+          instances.set(options.id, { signature, fiber, scope, gate });
           return yield* Fiber.join(fiber).pipe(
             Effect.onExit((exit) =>
               Effect.sync(() => {
@@ -621,9 +648,7 @@ export const LocalWorkerProvider = () =>
         delete: Effect.fn(function* ({ id }) {
           const existing = instances.get(id);
           if (existing) {
-            yield* Fiber.interrupt(existing.fiber);
-            yield* Scope.close(existing.scope, Exit.void);
-            instances.delete(id);
+            yield* teardownInstance(id, existing);
           }
         }),
       };
