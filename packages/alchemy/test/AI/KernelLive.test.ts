@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as AI from "@/AI/index.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
@@ -39,17 +40,6 @@ plain digits (no thousands separators).` {}
 
 // ─── physics ─────────────────────────────────────────────────────
 
-const invocations: Array<{ a: number; b: number }> = [];
-
-const MultiplyLive = Layer.succeed(Multiply, ((input: {
-  a: number;
-  b: number;
-}) =>
-  Effect.sync(() => {
-    invocations.push(input);
-    return { product: input.a * input.b };
-  })) as never);
-
 const ModelLive = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
 }).pipe(
@@ -61,11 +51,20 @@ const ModelLive = AnthropicLanguageModel.layer({
   Layer.provide(FetchHttpClient.layer),
 );
 
-const KernelLive = Layer.mergeAll(
-  AI.memory.pipe(Layer.provide(ModelLive)),
-  MultiplyLive,
-  RuntimeContext.phantom,
-);
+/** Per-test harness: a private invocation capture (tests run concurrently). */
+const makeHarness = () => {
+  const invocations: Array<{ a: number; b: number }> = [];
+  const layer = Layer.mergeAll(
+    AI.memory.pipe(Layer.provide(ModelLive)),
+    Layer.succeed(Multiply, ((input: { a: number; b: number }) =>
+      Effect.sync(() => {
+        invocations.push(input);
+        return { product: input.a * input.b };
+      })) as never),
+    RuntimeContext.phantom,
+  );
+  return { layer, invocations };
+};
 
 // ─── the test ────────────────────────────────────────────────────
 
@@ -74,6 +73,7 @@ describe("memory kernel × live Anthropic", () => {
     "one agent, one tool, one dispatch",
     () =>
       Effect.gen(function* () {
+        const harness = makeHarness();
         const outcome = yield* Effect.scoped(
           Effect.gen(function* () {
             const kernel = yield* AI.Kernel;
@@ -82,15 +82,59 @@ describe("memory kernel × live Anthropic", () => {
               "What is 1234 multiplied by 5678?",
             )) as AI.Step.HaltOutcome;
           }),
-        ).pipe(Effect.provide(KernelLive));
+        ).pipe(Effect.provide(harness.layer));
 
         // the model used OUR tool (executed by the kernel, not effect/ai)
-        expect(invocations).toEqual([{ a: 1234, b: 5678 }]);
+        expect(harness.invocations).toEqual([{ a: 1234, b: 5678 }]);
         // the kernel-default halt fired and the answer came back
         expect(outcome._tag).toBe("Completed");
         if (outcome._tag === "Completed") {
           expect(outcome.text).toContain("7006652");
         }
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "the live turn journals its Trace write-ahead (§2.7)",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const trace = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const mathematician = yield* kernel.interpret(Mathematician);
+            yield* mathematician.dispatch("What is 41 multiplied by 271?");
+            return yield* Stream.runCollect(
+              kernel
+                .trace("Mathematician")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                ),
+            );
+          }),
+        ).pipe(Effect.provide(harness.layer));
+
+        const types = trace.map((event) => event.type);
+        // the turn opens with a journaled intent and closes with the halt
+        expect(types[0]).toBe("model.requested");
+        expect(types[types.length - 1]).toBe("turn.halted");
+        // the real tool call was journaled: intent before terminal
+        expect(types.indexOf("tool.requested")).toBeGreaterThan(-1);
+        expect(types.indexOf("tool.requested")).toBeLessThan(
+          types.indexOf("tool.completed"),
+        );
+        // every wire call has a terminal carrying real Usage tokens
+        const completions = trace.filter((e) => e.type === "model.completed");
+        expect(completions.length).toBeGreaterThan(0);
+        for (const completion of completions) {
+          const usage = (completion.payload as any).usage;
+          expect(usage.inputTokens.total).toBeGreaterThan(0);
+        }
+        // the durable cursor is contiguous from 1
+        expect(trace.map((event) => event.seq)).toEqual(
+          trace.map((_, index) => index + 1),
+        );
       }),
     { timeout: 60_000 },
   );
