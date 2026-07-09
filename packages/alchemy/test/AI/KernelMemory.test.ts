@@ -439,6 +439,67 @@ describe("the in-memory Kernel", () => {
     }),
   );
 
+  it.effect("interrupt abandons the un-run batch remainder and halts", () =>
+    Effect.gen(function* () {
+      const model = scriptedModel([
+        () => [
+          toolCall("c1", "grep", { pattern: "a" }),
+          toolCall("c2", "grep", { pattern: "b" }),
+          finish("tool-calls"),
+        ],
+      ]);
+      const interruptRef: {
+        current?: () => Effect.Effect<void, never, any>;
+      } = {};
+      const ran: string[] = [];
+      const { outcome, trace } = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          interruptRef.current = () => librarian.interrupt();
+          const outcome = (yield* librarian.dispatch(
+            "find a and b",
+          )) as AI.Step.HaltOutcome;
+          const trace = yield* Stream.runCollect(
+            kernel
+              .trace("Librarian")
+              .pipe(Stream.takeUntil((event) => event.type === "turn.halted")),
+          );
+          return { outcome, trace };
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model.layer)),
+            // the FIRST tool interrupts its own agent; c2 must never run
+            Layer.succeed(Grep, ((input: { pattern: string }) =>
+              Effect.gen(function* () {
+                ran.push(input.pattern);
+                yield* interruptRef.current!();
+                return "partial";
+              })) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      // c1 ran and settled for real; c2 was abandoned un-run
+      expect(ran).toEqual(["a"]);
+      expect(outcome).toMatchObject({
+        _tag: "Interrupted",
+        abandoned: ["c2"],
+      });
+      // no second wire call was paid for
+      expect(model.calls).toHaveLength(1);
+      // the halt rowed into the Trace with the abandonment on record
+      const halt = trace[trace.length - 1]!;
+      expect(halt.type).toBe("turn.halted");
+      expect(halt.payload).toMatchObject({
+        outcome: "Interrupted",
+        abandoned: ["c2"],
+      });
+    }),
+  );
+
   it.effect(
     "loop terms are honestly rejected until the loop runtime lands",
     () =>

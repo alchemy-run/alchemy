@@ -225,6 +225,54 @@ describe("the pure step machine", () => {
     expect(halted.phase).toBe("halted");
   });
 
+  it("interrupt settles the batch: real results kept, the rest aborted", () => {
+    const calls = [
+      { callId: "c1", name: "grep", params: {} },
+      { callId: "c2", name: "read", params: {} },
+    ];
+    let state = Step.initialState({ session: "s" });
+    [state] = Step.step(state, dispatched("work"));
+    [state] = Step.step(
+      state,
+      modelSays("m1", { toolCalls: calls, finishReason: "tool-calls" }),
+    );
+    // c1 settles for real; c2 is still in flight when the interrupt lands
+    [state] = Step.step(state, {
+      _tag: "ToolSettled",
+      callId: "c1",
+      isFailure: false,
+      result: "real result",
+    });
+    const [halted, commands] = Step.step(state, { _tag: "Interrupt" });
+    expect(commands[0]).toMatchObject({
+      _tag: "Halt",
+      outcome: { _tag: "Interrupted", abandoned: ["c2"] },
+    });
+    expect(halted.phase).toBe("halted");
+    // the transcript is well-paired: both calls have results, in call order
+    const toolMessage = halted.messages[halted.messages.length - 1]!;
+    expect(toolMessage.role).toBe("tool");
+    const results = toolMessage.content as any[];
+    expect(results.map((r) => [r.id, r.isFailure, r.result])).toEqual([
+      ["c1", false, "real result"],
+      ["c2", true, AI.SYNTHETIC_ABORTED],
+    ]);
+    // idempotent pairing: repair-on-read finds nothing to fix
+    expect(AI.repairToolPairing(halted.messages)).toEqual(halted.messages);
+  });
+
+  it("interrupt with no batch in flight halts without a tool message", () => {
+    let state = Step.initialState({ session: "s" });
+    [state] = Step.step(state, dispatched("work"));
+    const before = state.messages.length;
+    const [halted, commands] = Step.step(state, { _tag: "Interrupt" });
+    expect(commands[0]).toMatchObject({
+      _tag: "Halt",
+      outcome: { _tag: "Interrupted", abandoned: [] },
+    });
+    expect(halted.messages).toHaveLength(before);
+  });
+
   it("is deterministic and StepState survives structuredClone", () => {
     const script: ReadonlyArray<AI.Step.Feedback> = [
       dispatched("work"),

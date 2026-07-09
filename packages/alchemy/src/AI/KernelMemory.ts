@@ -54,9 +54,9 @@ import { makeMemoryTraceStore, TraceStore } from "./TraceStore.ts";
  *    are real streams and a different backend is one Layer away.
  *
  * Deliberately absent (later build-order steps): the loop runtime
- * (trigger/halt/fold/check refs), `interrupt`, and the StepState stash
- * (recovery). `dispatch` resolves with the turn's
- * {@link Step.HaltOutcome} until the kernel `Message` type lands.
+ * (trigger/halt/fold/check refs) and the StepState stash (recovery).
+ * `dispatch` resolves with the turn's {@link Step.HaltOutcome} until the
+ * kernel `Message` type lands.
  */
 /**
  * The kernel-default agent policy — the execution ring's ceilings
@@ -121,6 +121,10 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
         // only the ring fiber reads, and JS gives us atomicity.
         const parkedSteers: Prompt.Message[] = [];
         let activeInbox: Step.Feedback[] | undefined;
+        // set by interrupt(): the command loop abandons not-yet-started
+        // commands of the current batch (they settle as aborted via the
+        // machine's Interrupt arm) — in-flight I/O is never fiber-killed
+        let interruptRequested = false;
 
         const turn = Effect.fn(function* (item: unknown) {
           const session = `${termName}#${oneShot++}`;
@@ -160,6 +164,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             { _tag: "Dispatched", input: toMessages(item) },
           ];
           activeInbox = inbox;
+          interruptRequested = false; // an old interrupt never leaks forward
 
           while (true) {
             const feedback = inbox.shift();
@@ -167,6 +172,13 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               return yield* Effect.die(
                 new Error(`step machine stalled without halting (${session})`),
               );
+            }
+            if (feedback._tag === "Interrupt" && inbox.length > 0) {
+              // already-paid work folds into the transcript first (its
+              // commands are abandoned by the flag); the interrupt then
+              // settles whatever remains un-run
+              inbox.push(feedback);
+              continue;
             }
             if (feedback._tag === "Steered") {
               // a steer is a durable admission — it must survive recovery
@@ -179,6 +191,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             state = next;
 
             for (const command of commands) {
+              // an interrupt abandons commands that haven't started; the
+              // machine's Interrupt arm settles them as aborted results
+              if (interruptRequested && command._tag !== "Halt") break;
               switch (command._tag) {
                 case "CallModel": {
                   // write-ahead: the intent row is durable BEFORE the wire call
@@ -313,6 +328,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                   }
                   yield* emit("turn.halted", command.id, "halt", {
                     outcome: command.outcome._tag,
+                    ...(command.outcome._tag === "Interrupted" && {
+                      abandoned: command.outcome.abandoned,
+                    }),
                   });
                   return command.outcome;
                 }
@@ -393,7 +411,17 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 parkedSteers.push(...messages);
               }
             }),
-          interrupt: () => todo("interrupt"),
+          // interrupt = Scope authority as a control admission (§0.6):
+          // never a fiber kill. The active turn settles its in-flight
+          // batch (aborted results for the unfinished) and halts as
+          // Interrupted; an idle ring has nothing to interrupt.
+          interrupt: () =>
+            Effect.sync(() => {
+              if (activeInbox !== undefined) {
+                interruptRequested = true;
+                activeInbox.push({ _tag: "Interrupt" });
+              }
+            }),
         };
       });
 

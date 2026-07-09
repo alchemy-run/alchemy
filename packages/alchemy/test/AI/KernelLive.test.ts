@@ -226,6 +226,41 @@ describe("memory kernel × live Anthropic", () => {
   );
 
   it.effect.skipIf(apiKey === undefined)(
+    "interrupt halts a real turn before the next round is paid for",
+    () =>
+      Effect.gen(function* () {
+        const interruptRef: {
+          current?: () => Effect.Effect<void, never, any>;
+        } = {};
+        const layer = Layer.mergeAll(
+          AI.memory.pipe(Layer.provide(ModelLive)),
+          // the tool interrupts its own agent: the settled result folds in,
+          // round 2 is never paid for, and the turn halts as Interrupted
+          Layer.succeed(Multiply, ((input: { a: number; b: number }) =>
+            interruptRef.current!().pipe(
+              Effect.as({ product: input.a * input.b }),
+            )) as never),
+          RuntimeContext.phantom,
+        );
+
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const mathematician = yield* kernel.interpret(Mathematician);
+            interruptRef.current = () => mathematician.interrupt();
+            return (yield* mathematician.dispatch(
+              "What is 55 multiplied by 89?",
+            )) as AI.Step.HaltOutcome;
+          }),
+        ).pipe(Effect.provide(layer));
+
+        // no Completed answer — the turn ended as a settled interruption
+        expect(outcome).toMatchObject({ _tag: "Interrupted", abandoned: [] });
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
     "the live turn journals its Trace write-ahead (§2.7)",
     () =>
       Effect.gen(function* () {

@@ -138,6 +138,11 @@ export type HaltOutcome =
       readonly budget: number;
       /** Responses with unreported usage — the ceiling may undercount. */
       readonly unknownUsage: number;
+    }
+  | {
+      readonly _tag: "Interrupted";
+      /** Tool calls that were settled as aborted by the interrupt. */
+      readonly abandoned: ReadonlyArray<string>;
     };
 
 // ─── feedback (what the interpreter reports back) ────────────────
@@ -177,6 +182,17 @@ export type Feedback =
   | {
       readonly _tag: "Steered";
       readonly messages: ReadonlyArray<Prompt.Message>;
+    }
+  | {
+      /**
+       * Scope authority (§0.6): a control admission through the same
+       * inbox, never a fiber kill. The machine settles the in-flight
+       * batch — real results for what completed, synthetic `aborted`
+       * failures for what didn't (the pairing invariant extends to
+       * abandonment) — and halts. The transcript stays well-paired, so
+       * a future re-dispatch resumes from honest state.
+       */
+      readonly _tag: "Interrupt";
     };
 
 // ─── the transition ──────────────────────────────────────────────
@@ -197,6 +213,42 @@ export const step = (
       return [
         { ...next, steerQueue: [...next.steerQueue, ...feedback.messages] },
         [],
+      ];
+    }
+
+    case "Interrupt": {
+      // settle the in-flight batch: real results for settled calls,
+      // synthetic aborted failures for the rest — order-stable, paired
+      const settledById = new Map(next.settled.map((s) => [s.callId, s]));
+      const abandoned = next.pending
+        .filter((call) => !settledById.has(call.callId))
+        .map((call) => call.callId);
+      const messages =
+        next.pending.length === 0
+          ? next.messages
+          : [
+              ...next.messages,
+              Prompt.makeMessage("tool", {
+                content: next.pending.map((call) => {
+                  const settled = settledById.get(call.callId);
+                  return Prompt.makePart("tool-result", {
+                    id: call.callId,
+                    name: call.name,
+                    isFailure: settled?.isFailure ?? true,
+                    result: settled?.result ?? SYNTHETIC_ABORTED,
+                  });
+                }),
+              }) as Prompt.Message,
+            ];
+      return [
+        { ...next, messages, pending: [], settled: [], phase: "halted" },
+        [
+          {
+            _tag: "Halt",
+            id: commandId(next.session, next.stepIndex, 0),
+            outcome: { _tag: "Interrupted", abandoned },
+          },
+        ],
       ];
     }
 
