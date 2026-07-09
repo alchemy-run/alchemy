@@ -1,3 +1,4 @@
+import { adopt, Unowned } from "@/AdoptPolicy";
 import { Cli } from "@/Cli/Cli";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -4961,4 +4962,69 @@ describe("type aliases", () => {
         }),
     );
   });
+});
+
+// Regression coverage for
+// https://github.com/alchemy-run/alchemy-effect/issues/793
+//
+// `Plan.make` used to `state.set(...)` the adopted `created` state during plan
+// construction. Because `alchemy plan` / `deploy --dry-run` build a plan the
+// exact same way a real deploy does, a read-only preview silently claimed
+// ownership of an unowned cloud resource — arming a later, unrelated deploy to
+// orphan-delete it. Plan construction must be side-effect-free: reading the
+// cloud resource is fine (needed for an accurate diff), but persisting the
+// adopted state may only happen when the plan node is applied.
+describe("engine-level adoption persists at apply, not plan (issue #793)", () => {
+  // A pre-existing, foreign-owned cloud resource that `read` always discovers
+  // — the exact shape that triggers an `--adopt` takeover.
+  const ownedAttrs: TestResource["Attributes"] = {
+    string: "hello",
+    stringArray: [],
+    stableString: "Adopted",
+    stableArray: ["Adopted"],
+    replaceString: undefined,
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+
+  const adoptHooks = Layer.succeed(TestResourceHooks, {
+    read: () => Effect.succeed(Unowned(ownedAttrs)),
+  });
+
+  test.provider(
+    "a dry-run plan writes nothing to the state store; applying persists",
+    (stack) =>
+      Effect.gen(function* () {
+        // ── dry-run: build a plan that adopts the unowned cloud resource ──
+        const plan = yield* TestResource("Adopted", { string: "hello" }).pipe(
+          adopt(true),
+          stack.plan,
+          Effect.provide(adoptHooks),
+        );
+
+        // The adopted state rides on the plan node as a forced update (so the
+        // provider re-syncs ownership tags / config) — it is not persisted.
+        expect(plan.resources.Adopted!.action).toBe("update");
+        expect(plan.resources.Adopted!.state?.status).toBe("created");
+
+        // The critical invariant of #793: planning persisted nothing, so a
+        // read-only `alchemy plan` / `--dry-run` cannot arm a later deploy to
+        // orphan-delete the live resource.
+        expect(yield* getState("Adopted")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
+
+        // ── apply: the same config now deploys. Because plan didn't persist,
+        // the resource is still adoptable here. ──
+        yield* TestResource("Adopted", { string: "hello" }).pipe(
+          adopt(true),
+          stack.deploy,
+          Effect.provide(adoptHooks),
+        );
+
+        // Applying DOES persist the adopted state.
+        const persisted = yield* getState("Adopted");
+        expect(["created", "updated"]).toContain(persisted?.status);
+        expect(yield* listState()).toEqual(["Adopted"]);
+      }),
+  );
 });

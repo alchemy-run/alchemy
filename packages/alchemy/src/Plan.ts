@@ -698,21 +698,32 @@ export const make = <A>(
             //   - `Unowned(attrs)`   → exists but is *not* ours
             //
             // Routing:
-            //   - owned                          → persist `created` state
+            //   - owned                          → adopt the `created` state
             //                                      from attrs and continue
             //                                      through the normal diff
             //                                      path (so subsequent props
             //                                      drift produces an update).
-            //   - unowned + adopt enabled        → take over: persist `created`
-            //                                      state and let the next
-            //                                      update overwrite tags / etc.
+            //   - unowned + adopt enabled        → take over: adopt the
+            //                                      `created` state and let the
+            //                                      next update overwrite tags.
             //   - unowned + adopt disabled       → fail with
             //                                      `OwnedBySomeoneElse`.
+            //
+            // Plan construction is side-effect-free: the adopted `created`
+            // state is only held in-memory here (to drive the diff) and rides
+            // onto the plan node as `node.state`. Persisting it to the state
+            // store happens exclusively during APPLY of that node (the update
+            // lifecycle commits `updating` / `updated` carrying this state).
+            // If planning persisted here, a mere `alchemy plan` / `--dry-run`
+            // would claim ownership of an unowned cloud resource, arming a
+            // later unrelated deploy to orphan-delete it. See
+            // https://github.com/alchemy-run/alchemy-effect/issues/793.
+            //
             // After a cold-start adoption (engine just discovered an
             // existing cloud resource via `read`), force the engine's
             // normal `update` path so the provider can re-sync ownership
             // tags, configuration, etc. against the desired props.
-            // Adoption persists state with `props: news`, so the default
+            // Adoption carries state with `props: news`, so the default
             // diff sees no drift and would noop — which would leave any
             // foreign-owned tags / divergent config in place. Forcing
             // update keeps the deploy idempotent: if cloud state already
@@ -767,12 +778,13 @@ export const make = <A>(
                   downstream,
                   removalPolicy: resource.RemovalPolicy,
                 } satisfies CreatedResourceState;
-                yield* state.set({
-                  stack: stackName,
-                  stage: stage,
-                  fqn,
-                  value: adoptedState,
-                });
+                // In-memory only — do NOT persist here. Plan.make runs for
+                // `alchemy plan` / `deploy --dry-run` too, so a `state.set`
+                // would mutate persistent state during a read-only preview.
+                // The adopted state rides onto the plan node via `oldState`
+                // (→ `node.state`) and is persisted at APPLY time by the
+                // update lifecycle's `updating` / `updated` commits. See
+                // https://github.com/alchemy-run/alchemy-effect/issues/793.
                 oldState = adoptedState;
                 forceUpdateAfterAdoption = true;
               }

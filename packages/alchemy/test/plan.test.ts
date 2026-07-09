@@ -2891,14 +2891,20 @@ describe("engine-level adoption", () => {
       // can't detect from `props` alone.
       expect(plan.resources.Adopted!.action).toBe("update");
 
+      // Planning no longer persists the adopted state (issue #793): it rides
+      // on the plan node and is only committed to the store at apply time.
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
+      expect((node.state as any)?.attr).toMatchObject({ string: "hello" });
+
       const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted?.status).toBe("created");
-      expect((persisted as any)?.attr).toMatchObject({ string: "hello" });
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -2921,22 +2927,29 @@ describe("engine-level adoption", () => {
       // foreign-owned to subsequent deploys).
       expect(plan.resources.Adopted!.action).toBe("update");
 
-      const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted?.status).toBe("created");
+      // The adopted state rides on the plan node, not the store (issue #793).
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
 
       // The Unowned brand must be fully scrubbed from anything that
-      // reaches the state store — both via the public `Unowned.is`
-      // check *and* via direct symbol inspection (in case someone
-      // accidentally uses `Symbol.for` rather than `Unowned.is`).
-      const persistedAttr = (persisted as any)?.attr as object;
-      expect(Unowned.is(persistedAttr)).toBe(false);
-      expect(Object.getOwnPropertySymbols(persistedAttr).length).toBe(0);
-      expect(JSON.stringify(persistedAttr)).not.toContain("Unowned");
+      // reaches the plan node (and, at apply, the state store) — both via
+      // the public `Unowned.is` check *and* via direct symbol inspection
+      // (in case someone accidentally uses `Symbol.for` rather than
+      // `Unowned.is`).
+      const adoptedAttr = (node.state as any)?.attr as object;
+      expect(Unowned.is(adoptedAttr)).toBe(false);
+      expect(Object.getOwnPropertySymbols(adoptedAttr).length).toBe(0);
+      expect(JSON.stringify(adoptedAttr)).not.toContain("Unowned");
+
+      // Planning wrote nothing to the store.
+      const state = yield* yield* State;
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
@@ -2993,13 +3006,19 @@ describe("engine-level adoption", () => {
 
       expect(plan.resources.Adopted!.action).toBe("update");
 
+      // Adopted state rides on the plan node; planning persists nothing
+      // (issue #793).
+      const node = plan.resources.Adopted!;
+      expect(node.state?.status).toBe("created");
+
       const state = yield* yield* State;
-      const persisted = yield* state.get({
-        stack: TEST_STACK,
-        stage: TEST_STAGE,
-        fqn: "Adopted",
-      });
-      expect(persisted?.status).toBe("created");
+      expect(
+        yield* state.get({
+          stack: TEST_STACK,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toBeUndefined();
     }),
   );
 
