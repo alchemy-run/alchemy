@@ -125,13 +125,22 @@ export const agentApi = (options: AgentApiOptions = {}) =>
       );
 
       // ── the trace window: durable-streams-shaped ─────────────────
+      // ?offset=N  → replay from the cursor, then tail live (never ends)
+      // &limit=M   → bounded backfill: exactly M rows, then the stream
+      //              COMPLETES — the scroll-back page, not a tail
       yield* router.add("GET", "/v1/stream/:ring", (request) =>
         Effect.gen(function* () {
           const params = yield* HttpRouter.params;
           const url = new URL(request.url, "http://localhost");
           const offset = Number(url.searchParams.get("offset") ?? "0");
+          const limitParam = url.searchParams.get("limit");
+          const limit = limitParam === null ? undefined : Number(limitParam);
+          const window = kernel.trace(params.ring!, offset);
           return sse(
-            kernel.trace(params.ring!, offset).pipe(
+            (limit === undefined
+              ? window
+              : window.pipe(Stream.take(limit))
+            ).pipe(
               Stream.map(
                 (event) =>
                   `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`,

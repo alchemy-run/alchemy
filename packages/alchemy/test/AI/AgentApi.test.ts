@@ -309,6 +309,18 @@ describe("the agent HTTP API", () => {
         1, 2, 3, 4, 5, 6, 7, 8,
       ]);
       expect(events.at(-1).type).toBe("turn.halted");
+
+      // &limit=M is the scroll-back page: exactly M rows from the
+      // offset, then the response COMPLETES (no tail to hang on)
+      const page = yield* Effect.flatMap(
+        client.get("/v1/stream/Librarian?offset=2&limit=3"),
+        (paged) => paged.text,
+      );
+      const pagedSeqs = page
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map((line) => JSON.parse(line.slice("data: ".length)).seq);
+      expect(pagedSeqs).toEqual([3, 4, 5]);
     }).pipe(
       Effect.provide(
         appLayer(
