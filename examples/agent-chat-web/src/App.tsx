@@ -157,7 +157,15 @@ function Chat({
     lastPart !== undefined &&
     (lastPart.type === "text" || lastPart.type === "reasoning") &&
     (lastPart as { state?: string }).state === "streaming";
-  const waiting = isBusy && !streamingNow;
+  // a parked ask is NOT the agent working — it's waiting on the human,
+  // and the ask card already says so; the shimmer would be a lie
+  const pendingAsk =
+    lastMessage?.parts.some(
+      (part) =>
+        part.type === "data-ask" &&
+        (part as { data?: { status?: string } }).data?.status === "pending",
+    ) ?? false;
+  const waiting = isBusy && !streamingNow && !pendingAsk;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col">
