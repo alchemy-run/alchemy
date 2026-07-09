@@ -52,7 +52,12 @@ export type ReasoningProps = ComponentProps<typeof Collapsible> & {
   duration?: number;
 };
 
-const AUTO_CLOSE_DELAY = 1000;
+// Collapse AT the streaming boundary, not after a grace period. The
+// upstream 1000ms delay meant the answer had already streamed in below
+// by the time the block collapsed — yanking the text the reader had
+// started reading (scroll rule 12: keep the reader's place when layout
+// changes). At the boundary there is nothing below to displace yet.
+const AUTO_CLOSE_DELAY = 0;
 const MS_IN_S = 1000;
 
 export const Reasoning = memo(
@@ -207,18 +212,41 @@ export type ReasoningContentProps = ComponentProps<
 const streamdownPlugins = { cjk, code, math, mermaid };
 
 export const ReasoningContent = memo(
-  ({ className, children, ...props }: ReasoningContentProps) => (
-    <CollapsibleContent
-      className={cn(
-        "mt-4 text-sm",
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-        className
-      )}
-      {...props}
-    >
-      <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
-    </CollapsibleContent>
-  )
+  ({ className, children, ...props }: ReasoningContentProps) => {
+    const { isStreaming } = useReasoning();
+    const wellRef = useRef<HTMLDivElement>(null);
+
+    // while streaming, the well tails its own content (ChatGPT-style):
+    // the reader sees the latest thinking without the block growing
+    useEffect(() => {
+      if (isStreaming && wellRef.current) {
+        wellRef.current.scrollTop = wellRef.current.scrollHeight;
+      }
+    }, [isStreaming, children]);
+
+    return (
+      <CollapsibleContent
+        className={cn(
+          "mt-4 text-sm",
+          "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+          className
+        )}
+        {...props}
+      >
+        <div
+          ref={wellRef}
+          className={cn(
+            // BOUNDED well while streaming: the open block never exceeds
+            // ~6 lines, so any layout shift it can cause is small and
+            // predictable. Once settled (user re-opens it), full height.
+            isStreaming && "max-h-40 overflow-y-auto",
+          )}
+        >
+          <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
+        </div>
+      </CollapsibleContent>
+    );
+  }
 );
 
 Reasoning.displayName = "Reasoning";

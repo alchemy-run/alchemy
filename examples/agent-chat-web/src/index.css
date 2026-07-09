@@ -78,3 +78,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Animated collapse for Radix collapsibles (Reasoning, Tool cards):
+   height glides over 200ms instead of snapping, so a collapsing block
+   reads as motion rather than a layout jump (scroll rule 12). */
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+[data-slot="collapsible-content"] {
+  overflow: hidden;
+}
+
+[data-slot="collapsible-content"][data-state="open"] {
+  animation: collapsible-down 200ms ease-out;
+}
+
+[data-slot="collapsible-content"][data-state="closed"] {
+  animation: collapsible-up 200ms ease-out;
+}
