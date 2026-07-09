@@ -14,6 +14,7 @@ import * as AnthropicClient from "@effect/ai-anthropic/AnthropicClient";
 import * as AnthropicLanguageModel from "@effect/ai-anthropic/AnthropicLanguageModel";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
@@ -128,6 +129,59 @@ describe("memory kernel × live Anthropic", () => {
         }
         // the model did reach for the tool before the ceiling cut it off
         expect(harness.invocations).toEqual([{ a: 87, b: 93 }]);
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(apiKey === undefined)(
+    "real streaming: deltas hit the firehose live, the trace stays durable",
+    () =>
+      Effect.gen(function* () {
+        const harness = makeHarness();
+        const { events, trace } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const kernel = yield* AI.Kernel;
+            const mathematician = yield* kernel.interpret(Mathematician);
+            // subscribe to the firehose BEFORE dispatching
+            const firehose = yield* Effect.forkChild(
+              Stream.runCollect(
+                kernel.events.pipe(
+                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                ),
+              ),
+            );
+            yield* Effect.yieldNow;
+            yield* mathematician.dispatch("What is 12 multiplied by 34?");
+            const events = yield* Fiber.join(firehose);
+            const trace = yield* Stream.runCollect(
+              kernel
+                .trace("Mathematician")
+                .pipe(
+                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                ),
+            );
+            return { events, trace };
+          }),
+        ).pipe(Effect.provide(harness.layer));
+
+        // Anthropic really streamed: text arrived as live deltas
+        const deltas = events.filter((event) => event.type === "model.delta");
+        expect(deltas.length).toBeGreaterThan(0);
+        for (const delta of deltas) {
+          expect(delta.durable).toBe(false);
+          expect(delta.seq).toBeUndefined();
+          expect(typeof (delta.payload as any).delta).toBe("string");
+        }
+        // reassembling the deltas reproduces the final answer text
+        const streamed = deltas
+          .map((event) => (event.payload as any).delta as string)
+          .join("");
+        expect(streamed).toContain("408");
+        // the durable trace never saw a delta, and its cursor is contiguous
+        expect(trace.every((event) => event.type !== "model.delta")).toBe(true);
+        expect(trace.map((event) => event.seq)).toEqual(
+          trace.map((_, index) => index + 1),
+        );
       }),
     { timeout: 60_000 },
   );

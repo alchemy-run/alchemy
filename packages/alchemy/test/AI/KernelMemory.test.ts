@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -30,7 +31,7 @@ You are the librarian. Use ${Grep} to find passages before answering.` {}
 
 type Turn = (
   options: LanguageModel.ProviderOptions,
-) => Array<Response.PartEncoded>;
+) => Array<Response.StreamPartEncoded>;
 
 const usage = {
   inputTokens: {
@@ -42,7 +43,7 @@ const usage = {
   outputTokens: { total: 1, text: 1, reasoning: undefined },
 };
 
-const finish = (reason: string): Response.PartEncoded =>
+const finish = (reason: string): Response.StreamPartEncoded =>
   // `response: undefined` — the runtime schema wants the key present even
   // though the encoded interface marks it optional
   ({
@@ -50,23 +51,30 @@ const finish = (reason: string): Response.PartEncoded =>
     reason,
     usage,
     response: undefined,
-  }) as unknown as Response.PartEncoded;
+  }) as unknown as Response.StreamPartEncoded;
 
-const text = (content: string): Response.PartEncoded =>
-  ({ type: "text", text: content }) as unknown as Response.PartEncoded;
+/** A streamed text block: start → one delta per chunk → end. */
+const text = (
+  ...chunks: ReadonlyArray<string>
+): Array<Response.StreamPartEncoded> =>
+  [
+    { type: "text-start", id: "t1" },
+    ...chunks.map((delta) => ({ type: "text-delta", id: "t1", delta })),
+    { type: "text-end", id: "t1" },
+  ] as unknown as Array<Response.StreamPartEncoded>;
 
 const toolCall = (
   id: string,
   name: string,
   params: unknown,
-): Response.PartEncoded =>
+): Response.StreamPartEncoded =>
   ({
     type: "tool-call",
     id,
     name,
     params,
     providerExecuted: false,
-  }) as unknown as Response.PartEncoded;
+  }) as unknown as Response.StreamPartEncoded;
 
 /** Scripted model: turn N answers with script[N]; records every call. */
 const scriptedModel = (script: ReadonlyArray<Turn>) => {
@@ -74,14 +82,15 @@ const scriptedModel = (script: ReadonlyArray<Turn>) => {
   const layer = Layer.effect(
     LanguageModel.LanguageModel,
     LanguageModel.make({
-      generateText: (options) =>
-        Effect.sync(() => {
+      generateText: () =>
+        Effect.die(new Error("the kernel drives streamText only")),
+      streamText: (options) =>
+        Stream.suspend(() => {
           calls.push(options);
           const turn = script[calls.length - 1];
           if (turn === undefined) throw new Error("script exhausted");
-          return turn(options);
+          return Stream.fromIterable(turn(options));
         }),
-      streamText: () => Stream.die(new Error("streaming is not scripted")),
     }),
   );
   return { layer, calls };
@@ -126,7 +135,7 @@ describe("the in-memory Kernel", () => {
   it.effect("compiles the term: system prompt + advertised toolkit", () =>
     Effect.gen(function* () {
       const { calls } = yield* dispatchThrough(
-        [() => [text("the answer is 42"), finish("stop")]],
+        [() => [...text("the answer is 42"), finish("stop")]],
         () => Effect.succeed("unused"),
       );
       expect(calls).toHaveLength(1);
@@ -152,7 +161,7 @@ describe("the in-memory Kernel", () => {
             toolCall("c1", "grep", { pattern: "answer" }),
             finish("tool-calls"),
           ],
-          () => [text("found it in ch. 42"), finish("stop")],
+          () => [...text("found it in ", "ch. 42"), finish("stop")],
         ],
         (input) =>
           Effect.sync(() => {
@@ -180,7 +189,7 @@ describe("the in-memory Kernel", () => {
             toolCall("c1", "grep", { pattern: "x" }),
             finish("tool-calls"),
           ],
-          () => [text("the corpus is unreadable"), finish("stop")],
+          () => [...text("the corpus is unreadable"), finish("stop")],
         ],
         () => Effect.fail("EACCES: permission denied"),
       );
@@ -194,7 +203,7 @@ describe("the in-memory Kernel", () => {
   it.effect("one ring serves many admissions serially", () =>
     Effect.gen(function* () {
       // every turn is a single text response; the script tolerates N turns
-      const answer: Turn = () => [text("ok"), finish("stop")];
+      const answer: Turn = () => [...text("ok"), finish("stop")];
       const model = scriptedModel([answer, answer, answer]);
       const order: string[] = [];
       const outcomes = yield* Effect.scoped(
@@ -266,7 +275,7 @@ describe("the in-memory Kernel", () => {
     Effect.gen(function* () {
       const model = scriptedModel([
         () => [toolCall("c1", "grep", { pattern: "x" }), finish("tool-calls")],
-        () => [text("done"), finish("stop")],
+        () => [...text("done"), finish("stop")],
       ]);
       const trace = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -301,6 +310,60 @@ describe("the in-memory Kernel", () => {
       expect(trace.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5, 6, 7]);
       // usage rode the model terminal (budget accounting's future input)
       expect((trace[1]!.payload as any).usage).toBeDefined();
+    }),
+  );
+
+  it.effect("text deltas stream to the firehose live, never to the trace", () =>
+    Effect.gen(function* () {
+      const model = scriptedModel([
+        () => [...text("str", "eam", "ed"), finish("stop")],
+      ]);
+      const { deltas, trace } = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          // subscribe to the firehose BEFORE dispatching
+          const firehose = yield* Effect.forkChild(
+            Stream.runCollect(
+              kernel.events.pipe(
+                Stream.takeUntil((event) => event.type === "turn.halted"),
+              ),
+            ),
+          );
+          yield* Effect.yieldNow;
+          yield* librarian.dispatch("go");
+          const events = yield* Fiber.join(firehose);
+          const trace = yield* Stream.runCollect(
+            kernel
+              .trace("Librarian")
+              .pipe(Stream.takeUntil((event) => event.type === "turn.halted")),
+          );
+          return {
+            deltas: events.filter((event) => event.type === "model.delta"),
+            trace,
+          };
+        }),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            AI.memory.pipe(Layer.provide(model.layer)),
+            Layer.succeed(Grep, (() => Effect.succeed("ok")) as never),
+            RuntimeContext.phantom,
+          ),
+        ),
+      );
+      // the firehose saw each chunk, in order, as a LIVE (unsequenced) event
+      expect(deltas.map((event) => (event.payload as any).delta)).toEqual([
+        "str",
+        "eam",
+        "ed",
+      ]);
+      for (const delta of deltas) {
+        expect(delta.durable).toBe(false);
+        expect(delta.seq).toBeUndefined();
+      }
+      // the durable trace never saw them (§2.3: a delta cannot advance a cursor)
+      expect(trace.every((event) => event.type !== "model.delta")).toBe(true);
     }),
   );
 

@@ -7,8 +7,10 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
+import type * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import * as Context from "effect/Context";
@@ -152,8 +154,20 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                 case "CallModel": {
                   // write-ahead: the intent row is durable BEFORE the wire call
                   yield* emit("model.requested", command.id, "request");
-                  const response = yield* model
-                    .generateText({
+
+                  // fold the streaming parts into the distilled ModelOutcome;
+                  // text deltas fan out to the firehose as LIVE events
+                  // (durable: false — no seq, invisible to the trace, §2.3)
+                  const folded = {
+                    text: "",
+                    toolCalls: [] as Step.PendingToolCall[],
+                    finishReason: "unknown",
+                    tokens: undefined as number | undefined,
+                    usage: undefined as unknown,
+                    deltas: 0,
+                  };
+                  yield* model
+                    .streamText({
                       prompt: Prompt.fromMessages([
                         Prompt.makeMessage("system", { content: system }),
                         ...command.messages,
@@ -161,32 +175,71 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                       toolkit: compiled.toolkit as never,
                       disableToolCallResolution: true,
                     })
-                    // harness failure, not an agent error (Err = never)
-                    .pipe(Effect.orDie);
-                  const toolCalls = (
-                    response.toolCalls as ReadonlyArray<{
-                      id: string;
-                      name: string;
-                      params: unknown;
-                    }>
-                  ).map((part) => ({
-                    callId: part.id,
-                    name: part.name,
-                    params: part.params,
-                  }));
+                    .pipe(
+                      // widened: the `as never` toolkit collapses the inferred
+                      // Tools to {}, which drops tool-call from the part union
+                      Stream.runForEach((part: Response.AnyPart) => {
+                        switch (part.type) {
+                          case "text-delta":
+                            return Effect.sync(() => {
+                              folded.text += part.delta;
+                              return folded.deltas++;
+                            }).pipe(
+                              Effect.flatMap((ordinal) =>
+                                store.commit([
+                                  {
+                                    v: 1,
+                                    type: "model.delta",
+                                    id: eventId(
+                                      command.id,
+                                      "delta",
+                                      String(ordinal),
+                                    ),
+                                    durable: false,
+                                    ring: [termName],
+                                    session,
+                                    cause: command.id,
+                                    payload: { delta: part.delta },
+                                  },
+                                ]),
+                              ),
+                              Effect.asVoid,
+                            );
+                          case "tool-call":
+                            return Effect.sync(() => {
+                              folded.toolCalls.push({
+                                callId: part.id,
+                                name: part.name,
+                                params: part.params,
+                              });
+                            });
+                          case "finish":
+                            return Effect.sync(() => {
+                              folded.finishReason = part.reason;
+                              folded.usage = part.usage;
+                              folded.tokens = usageTokens(part.usage);
+                            });
+                          default:
+                            return Effect.void;
+                        }
+                      }),
+                      // harness failure, not an agent error (Err = never)
+                      Effect.orDie,
+                    );
+
                   yield* emit("model.completed", command.id, "response", {
-                    finishReason: response.finishReason,
-                    usage: response.usage,
-                    toolCalls: toolCalls.map((call) => call.callId),
+                    finishReason: folded.finishReason,
+                    usage: folded.usage,
+                    toolCalls: folded.toolCalls.map((call) => call.callId),
                   });
                   inbox.push({
                     _tag: "ModelResponse",
                     commandId: command.id,
                     outcome: {
-                      text: response.text,
-                      toolCalls,
-                      finishReason: response.finishReason,
-                      tokens: usageTokens(response.usage),
+                      text: folded.text,
+                      toolCalls: folded.toolCalls,
+                      finishReason: folded.finishReason,
+                      tokens: folded.tokens,
                     },
                   });
                   break;
