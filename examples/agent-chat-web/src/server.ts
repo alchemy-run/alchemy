@@ -62,9 +62,12 @@ const ModelLive = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
   config: {
     // extended thinking: reasoning deltas stream to the UI live (they
-    // are never journaled — absent from trace replay by design)
-    thinking: { type: "enabled", budget_tokens: 2048 },
-    max_tokens: 4096,
+    // are never journaled — absent from trace replay by design).
+    // Keep the budget SMALL and the ceiling ROOMY: thinking counts
+    // toward max_tokens, and a runaway think that hits the ceiling
+    // ends the turn with finishReason "length" and ZERO visible text.
+    thinking: { type: "enabled", budget_tokens: 1024 },
+    max_tokens: 8192,
   },
 }).pipe(
   Layer.provide(

@@ -102,8 +102,10 @@ export const agentApi = (options: AgentApiOptions = {}) =>
                 // through immediately
                 Stream.flatMap(
                   (chunk): Stream.Stream<UIMessageChunk> =>
-                    chunk.type === "text-delta" ||
-                    chunk.type === "reasoning-delta"
+                    // pace TEXT only: thinking can run to thousands of
+                    // words, and word-pacing it adds tens of seconds of
+                    // artificial playback between the user and the answer
+                    chunk.type === "text-delta"
                       ? Stream.fromIterable(splitWords(chunk.delta)).pipe(
                           Stream.map(
                             (word): UIMessageChunk => ({
