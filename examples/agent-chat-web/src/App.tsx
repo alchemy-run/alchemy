@@ -36,6 +36,8 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { type AskData, AskCard } from "@/components/ask-card";
+import { TracePanel } from "@/components/trace-panel";
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -53,7 +55,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
-import { DicesIcon } from "lucide-react";
+import { ActivityIcon, DicesIcon } from "lucide-react";
 import type { UIMessage } from "ai";
 
 const suggestions = [
@@ -112,15 +114,29 @@ export function App() {
     isBusy &&
     (lastMessage?.role !== "assistant" || lastMessage.parts.length === 0);
 
+  const [showTrace, setShowTrace] = useState(false);
+
   return (
     <div className="dark flex h-dvh flex-col bg-background text-foreground">
-      <header className="flex items-baseline justify-between border-b px-4 py-3">
+      <header className="flex items-center justify-between border-b px-4 py-3">
         <h1 className="text-sm font-semibold tracking-wide">
           the dice parlor
         </h1>
-        <span className="text-xs text-muted-foreground">{status}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{status}</span>
+          <Button
+            variant={showTrace ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => setShowTrace((current) => !current)}
+          >
+            <ActivityIcon className="size-3.5" />
+            trace
+          </Button>
+        </div>
       </header>
 
+      <div className="flex min-h-0 flex-1">
       <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col">
         {messages.length === 0 ? (
           <Empty className="flex-1">
@@ -206,6 +222,8 @@ export function App() {
             </PromptInputFooter>
           </PromptInput>
         </div>
+      </div>
+      {showTrace && <TracePanel ring="Croupier" />}
       </div>
     </div>
   );
