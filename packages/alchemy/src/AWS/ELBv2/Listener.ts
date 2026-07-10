@@ -40,7 +40,11 @@ export interface ListenerProps {
   /**
    * The default (and any additional SNI) certificate ARNs. The first entry is
    * the default certificate; the rest are attached as SNI certificates.
-   * Prefer this over the legacy single {@link certificateArn}.
+   * Declarative over the full SNI list: certificates attached out of band
+   * (including via standalone `ListenerCertificate` resources) are removed on
+   * reconcile. Omit this prop and use `certificateArn` +
+   * `ListenerCertificate` attachments to manage SNI certificates
+   * independently. Prefer this over the legacy single {@link certificateArn}.
    */
   certificates?: string[];
   /**
@@ -388,31 +392,38 @@ export const ListenerProvider = () =>
 
       // Sync additional SNI certificates — observed ↔ desired. The default
       // certificate (certs[0]) is carried by modifyListener and is excluded
-      // from the SNI set.
-      const desiredSni = new Set(certs.slice(1));
-      const observedCerts = yield* elbv2
-        .describeListenerCertificates({ ListenerArn: listenerArn })
-        .pipe(
-          Effect.catchTag("ListenerNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+      // from the SNI set. Only the explicit plural `certificates` prop is
+      // declarative over the FULL list: pruning is skipped otherwise so that
+      // standalone `ListenerCertificate` attachments (managed outside this
+      // resource) are not torn off on every reconcile.
+      if (news.certificates !== undefined) {
+        const desiredSni = new Set(certs.slice(1));
+        const observedCerts = yield* elbv2
+          .describeListenerCertificates({ ListenerArn: listenerArn })
+          .pipe(
+            Effect.catchTag("ListenerNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        const observedSni = (observedCerts?.Certificates ?? [])
+          .filter((c) => !c.IsDefault && c.CertificateArn)
+          .map((c) => c.CertificateArn!);
+        const toAdd = [...desiredSni].filter(
+          (arn) => !observedSni.includes(arn),
         );
-      const observedSni = (observedCerts?.Certificates ?? [])
-        .filter((c) => !c.IsDefault && c.CertificateArn)
-        .map((c) => c.CertificateArn!);
-      const toAdd = [...desiredSni].filter((arn) => !observedSni.includes(arn));
-      const toRemove = observedSni.filter((arn) => !desiredSni.has(arn));
-      if (toAdd.length > 0) {
-        yield* elbv2.addListenerCertificates({
-          ListenerArn: listenerArn,
-          Certificates: toAdd.map((arn) => ({ CertificateArn: arn })),
-        });
-      }
-      if (toRemove.length > 0) {
-        yield* elbv2.removeListenerCertificates({
-          ListenerArn: listenerArn,
-          Certificates: toRemove.map((arn) => ({ CertificateArn: arn })),
-        });
+        const toRemove = observedSni.filter((arn) => !desiredSni.has(arn));
+        if (toAdd.length > 0) {
+          yield* elbv2.addListenerCertificates({
+            ListenerArn: listenerArn,
+            Certificates: toAdd.map((arn) => ({ CertificateArn: arn })),
+          });
+        }
+        if (toRemove.length > 0) {
+          yield* elbv2.removeListenerCertificates({
+            ListenerArn: listenerArn,
+            Certificates: toRemove.map((arn) => ({ CertificateArn: arn })),
+          });
+        }
       }
 
       yield* session.note(listenerArn);

@@ -33,6 +33,7 @@ import {
   hasTags,
 } from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";
+import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -530,12 +531,6 @@ export const TaskProvider = () =>
         return env;
       });
 
-      const decodeAuthorizationToken = (token: string) => {
-        const decoded = Buffer.from(token, "base64").toString("utf8");
-        const [, password] = decoded.split(":", 2);
-        return password;
-      };
-
       const bundleProgram = Effect.fn(function* (id: string, props: TaskProps) {
         const handler = props.handler ?? "default";
         const realMain = yield* resolveMainPath(props.main);
@@ -706,18 +701,6 @@ await Effect.runPromise(program).catch((err) => {
 
         const dockerfile = props.docker?.dockerfile ?? generatedDockerfile;
 
-        const auth = yield* ecr.getAuthorizationToken({});
-        const credentials = auth.authorizationData?.[0];
-        if (!credentials?.authorizationToken || !credentials.proxyEndpoint) {
-          return yield* Effect.die(
-            new Error("Failed to get ECR authorization token"),
-          );
-        }
-        const password = decodeAuthorizationToken(
-          credentials.authorizationToken,
-        );
-        const registry = credentials.proxyEndpoint.replace(/^https?:\/\//, "");
-
         yield* docker.materialize({
           context: contextDir,
           dockerfile: dockerfile,
@@ -737,18 +720,11 @@ await Effect.runPromise(program).catch((err) => {
           props.runtimePlatform?.cpuArchitecture === "ARM64"
             ? "linux/arm64"
             : "linux/amd64";
-        yield* docker.image.build({
-          tag: imageUri,
+        return yield* buildAndPushEcrImage(docker, {
+          imageUri,
           context: contextDir,
           platform: buildPlatform,
         });
-        yield* docker.image.push(imageUri, {
-          username: "AWS",
-          password,
-          server: registry,
-        });
-
-        return imageUri;
       });
 
       const registerTaskDefinition = Effect.fn(function* ({

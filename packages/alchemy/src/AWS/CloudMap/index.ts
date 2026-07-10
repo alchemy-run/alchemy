@@ -1,0 +1,12 @@
+export * from "./DeregisterInstance.ts";
+export * from "./DeregisterInstanceHttp.ts";
+export * from "./DiscoverInstances.ts";
+export * from "./DiscoverInstancesHttp.ts";
+export * from "./HttpNamespace.ts";
+export * from "./InstanceRegistration.ts";
+export * from "./PrivateDnsNamespace.ts";
+export * from "./PublicDnsNamespace.ts";
+export * from "./RegisterInstance.ts";
+export * from "./RegisterInstanceHttp.ts";
+export * from "./Service.ts";
+export { awaitOperation, CloudMapOperationFailed } from "./internal.ts";

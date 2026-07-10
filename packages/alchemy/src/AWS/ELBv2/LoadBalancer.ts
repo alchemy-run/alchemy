@@ -1,6 +1,13 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+
+/** Internal: the ALB is still visible after `deleteLoadBalancer`. */
+class LoadBalancerStillDeleting extends Data.TaggedError(
+  "LoadBalancerStillDeleting",
+)<{}> {}
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -459,6 +466,34 @@ export const LoadBalancerProvider = () =>
                 "LoadBalancerNotFoundException",
                 () => Effect.void,
               ),
+            );
+
+          // `deleteLoadBalancer` returns immediately, but the ALB's ENIs
+          // linger for a minute or two afterwards and block deletion of any
+          // subnet or security group they occupy. Wait until the balancer is
+          // fully gone so downstream network resources tear down on the first
+          // attempt instead of spinning on dependency-violation retries.
+          yield* elbv2
+            .describeLoadBalancers({
+              LoadBalancerArns: [output.loadBalancerArn],
+            })
+            .pipe(
+              Effect.flatMap(() =>
+                Effect.fail(new LoadBalancerStillDeleting()),
+              ),
+              Effect.catchTag(
+                "LoadBalancerNotFoundException",
+                () => Effect.void,
+              ),
+              Effect.retry({
+                while: (e) => e._tag === "LoadBalancerStillDeleting",
+                schedule: Schedule.fixed("5 seconds").pipe(
+                  Schedule.both(Schedule.recurs(48)),
+                ),
+              }),
+              // Best-effort: if it is somehow still visible after ~4 min, let
+              // the downstream deletes retry rather than fail the teardown.
+              Effect.catchTag("LoadBalancerStillDeleting", () => Effect.void),
             );
         }),
       };

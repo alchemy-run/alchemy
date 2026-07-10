@@ -1,0 +1,116 @@
+// Self-signed test certificates, generated ONCE with openssl and checked in
+// per the fixtures doctrine (never generate key material at test time):
+//
+//   openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem \
+//     -days 3650 -subj "/CN=<domain>"
+//
+// The keys are throwaway fixtures for importing certificates into ACM in the
+// testing account; they secure nothing.
+
+/**
+ * Self-signed certificate for `default.elbv2-test.alchemy.internal` (RSA 2048, expires 2036). Used as the HTTPS listener's default certificate.
+ */
+export const DEFAULT_CERT_PEM = `-----BEGIN CERTIFICATE-----
+MIIC2DCCAcACCQCnUKfB/KgQezANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDDCNk
+ZWZhdWx0LmVsYnYyLXRlc3QuYWxjaGVteS5pbnRlcm5hbDAeFw0yNjA3MTAwMzUz
+NTZaFw0zNjA3MDcwMzUzNTZaMC4xLDAqBgNVBAMMI2RlZmF1bHQuZWxidjItdGVz
+dC5hbGNoZW15LmludGVybmFsMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+AQEAr3CgEE62mEI7gIybRuZr7GMv8bvRDcnZbtGF+nM3gpXmK9gRCup/exilhEH2
+HBMOUdehTAZKX/821uf7JE5mfCxpfctnqMl7hwC7Jqvi0PnttOGEzPpE0YcW6rYh
+zDiCKNvVhzpveVyEVHKrjp4Nv9gBvhYu+UMpGQurg33xILSy6B2RisDoqhEAHY+3
+HukRQMFmAF3H3nAMN5e1E6c0lKfdHOjnLc5mzGHLTi43vG14g8lQdi3MPUfAmOrs
+TWWRsVI2YUA42Z1n62HJI9J0bNXyQMz/+vo9Yvq3HHZx5jayCGhEIAfhK2C1Xw51
++hTIkRrZfBBNopnngBjAo9zQgwIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQArvanX
+0VVXT2JeWh28pGQUWHtO8oKtQJsdd5b52P0BJrfykHb+Dz6QqPyd4GrtXF49+mIe
+NN3DDmVIUhi1GPOyi+xEnkEo4kJEpfXXSKxsX7y8KbSD0mthKcIcg4uu+3hH/0qq
+U+6aoRI9xOGLCzPo7KcjhJ8FJFbM9FYn+H0QyuwLX9rbA1K1MQbaKHVVT/0HxXSj
+cEcFczAkeob9Uy6erGMuPEK0H4XnFGhlpcGldpgBRvmcqhHkeDeCV1NtRhkbkpkh
+KfQixe3o7Gcy3EHHLhYXVQABu5k9KHfTK/MpGZXEF92wdesDqWOUkwL9lOFnLJub
+3kl021GraD0wytTG
+-----END CERTIFICATE-----`;
+
+/**
+ * Private key for {@link DEFAULT_CERT_PEM}.
+ */
+export const DEFAULT_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCvcKAQTraYQjuA
+jJtG5mvsYy/xu9ENydlu0YX6czeCleYr2BEK6n97GKWEQfYcEw5R16FMBkpf/zbW
+5/skTmZ8LGl9y2eoyXuHALsmq+LQ+e204YTM+kTRhxbqtiHMOIIo29WHOm95XIRU
+cquOng2/2AG+Fi75QykZC6uDffEgtLLoHZGKwOiqEQAdj7ce6RFAwWYAXcfecAw3
+l7UTpzSUp90c6OctzmbMYctOLje8bXiDyVB2Lcw9R8CY6uxNZZGxUjZhQDjZnWfr
+Yckj0nRs1fJAzP/6+j1i+rccdnHmNrIIaEQgB+ErYLVfDnX6FMiRGtl8EE2imeeA
+GMCj3NCDAgMBAAECggEBAJxwWlqQReP5U2OqfZ+4Qk40mAD/UEfyUK+vp7+PU9Ve
+4zL/ZRsNxYU3kgggZVvdZix2kf7fsRxu0DDMBTb3rg1V8O9aHGH23+6fKUMvjH56
+Dov3eNrq48jOpBHBPNwFG5Nhi8McyWA3rkw7QF1Y9Lu32r3svBBK4e/SZytGd2iI
+HsSmOUXML3NszkiRbUINaBzKk1KVmaA7uehX99rbKqUbuX1nynsGlfkxAH4iRaYa
++lgNqRluGMRy7kcvlnDIW2CXfL66hFaeSBKwpTj1VzKfsvqTS2E8hL8sjFjwe543
+QdQBKUyOYzqcbSUfFGwhK95zMVMvEb+yo0kBXsmF/ikCgYEA2vkheznpyuB1YLC3
+4qHepc69dk/8PqCh0fClJCifwiXfTczIUCWwXA4bv70KaA1QjZCrAVT6A4yImfK4
+h9q4ArtfngDSqhm+b0PHhwLevfP5EDDItgf2ibVipEaMiceh9qzLmJVsCKccVtLq
+na9OX5mXOmgGQ0WM6yAnXkPlNoUCgYEAzRsJU2dWVVTRqv4niVYmoDsuEHozngqa
+aJJHCXp0lX+gF9/Xc4yivF7J+4mgzO+LhKKp4l8J2gSQDlKxmVMzGNiKgEYB14QB
+wmD1EJ26QpLjfaTfu48KPyHzgiC+lYu4f+O7Rrjq+EI+XnG7iQGLtIM4m74y7N2D
+/GO1FxFcrWcCgYBPHdqCCm+1dJoUYGVgRjoK0ILV/5pVCnbNQtR4FxF59XMUShxK
+EQQCjrpp8aST6dOkApQ2u/xFUf59GRyhQV5g5lBq50M2YGzVCLlLx7axDTh9KBMs
+6f2izd2hGzhmA7I6TT6Wl85b5f0wRa6tYIzBr93bJYC1x6hdv9VZktB7fQKBgBBY
+kkKyXqAIVXliLfZ1BjkI3l/zzT9QKwQgfEbWGop7lF+yuDH+SE3o5AIG8ujCQoU8
+jXt8BYX5jR2HG55TkiPtxgP5EFaDr7w1C/LaDykVGco+pJIHEVL8urJpN6clbnvK
+w3ccb6V/agcO21pM5DxrpMxMuTRFZyprK9h9yrwLAoGBAIUOmL36rc0m1VhjJMOk
+T+ZIJtVOURzlTpP00X7lB0GGpmx9fO/HmDcmTA5fFifq17Uesu3n26s3lyvFNr63
+d5dspHbkLO/OXpyrso0Ar6mdzlfB5wQC7j4vLkTZ+9AdgqzefoZ+R/0SONlwoodg
+pHoCPm+ed9XcEXcCqQt8y8YT
+-----END PRIVATE KEY-----`;
+
+/**
+ * Self-signed certificate for `sni.elbv2-test.alchemy.internal` (RSA 2048, expires 2036). Attached as an additional SNI certificate via `ListenerCertificate`.
+ */
+export const SNI_CERT_PEM = `-----BEGIN CERTIFICATE-----
+MIIC0DCCAbgCCQCLZ23ZFriL/jANBgkqhkiG9w0BAQsFADAqMSgwJgYDVQQDDB9z
+bmkuZWxidjItdGVzdC5hbGNoZW15LmludGVybmFsMB4XDTI2MDcxMDAzNTM1NloX
+DTM2MDcwNzAzNTM1NlowKjEoMCYGA1UEAwwfc25pLmVsYnYyLXRlc3QuYWxjaGVt
+eS5pbnRlcm5hbDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMOCzt8o
+y6rJpyNr8Mv6WEfnKZSHrXY6WzTrisi0iKR9dlIBkmNbRsKTQL2gUUnykRKcTnHa
+R16Sajf6WgcNi3Tue3L4ekiI4gt284/bSaB+mnauo10WAmcRAe40fWeSoLkaJjYt
+HRYs0ZUpKH/2u9U/S0maDaa+yqEqacJueU9bvbxKcGTPCu3DO/cd0DwRRXbkHL+6
+cHgBZLkJLTtZCGbI/O+imVHYGIxRQ4cG2rhhbaINAJpO5HF5vRB7XKaCo/D0XhX4
+WJByWiFbHn2T/Lb3q9vNiolKMdPqg7xyzHwbIeLAh5P/dK/i/pTicS00R/IZrf5w
+82FC99N4REq1JHkCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEADvrSfJZgfEYkswrq
+sAZ+II613v9G74iijaI2m7wrOiiJFkc3/euH4UDW9Qst/dqcEoSEhm8NVua42lR1
+Siw4kWVPOqd3+FIsiftniIR/ozIL8XU1WM3u2w0k/yZdmmDF9++UORw9MBEpOudb
++AKz6I3krF+Q/PV+m7rXETtHaxLy8MslOX4nXvQ2e13KTRBMvSW9zcSca7xF98rA
+89F7hLnUg8u0obOrMXxtpXXjPTbagY6ECzyF33bYOE05uy3dDP3MAv7Jxr9cxeOd
+V3uqwcheFO5WISGVbyZE7UN02pxvZfsLZhhrDXwSx8KoviGtztBlC4f7YsJ5KF05
+qcCD6A==
+-----END CERTIFICATE-----`;
+
+/**
+ * Private key for {@link SNI_CERT_PEM}.
+ */
+export const SNI_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDDgs7fKMuqyacj
+a/DL+lhH5ymUh612Ols064rItIikfXZSAZJjW0bCk0C9oFFJ8pESnE5x2kdekmo3
++loHDYt07nty+HpIiOILdvOP20mgfpp2rqNdFgJnEQHuNH1nkqC5GiY2LR0WLNGV
+KSh/9rvVP0tJmg2mvsqhKmnCbnlPW728SnBkzwrtwzv3HdA8EUV25By/unB4AWS5
+CS07WQhmyPzvoplR2BiMUUOHBtq4YW2iDQCaTuRxeb0Qe1ymgqPw9F4V+FiQcloh
+Wx59k/y296vbzYqJSjHT6oO8csx8GyHiwIeT/3Sv4v6U4nEtNEfyGa3+cPNhQvfT
+eERKtSR5AgMBAAECggEBAL9qPmg2ZNDdhYokkCjk/bHIHOmSvL3X/JwfUE2Yk3+Y
+ZlN7vnsQToMJ8IS3hV7E4kw6RIMrllx9NQmBTstA85yUMMErjW2ettFKsMPTio5b
+5Zb0/HSSq9+Ew0MYmP7ijAEuHONF4Ahp8Pf8x+4g/12VDn0NGvh6K6EHCWyXBKYw
+EYKSMcfealJ1ZK2wJROHxvxrOxRIPfvfhYiahpejJdmfIE2xlOLzHnMRg2+81WRb
+ARjP6i40vvx10XQ+ey8h/mzUvKYm+VMdxAHeGo/1yf9wYjIHdCcdJhR/l1uw1dkr
+8JxvQSUyKagKVGa0c/j7c70BNx/bRXxw89gzWECNLgECgYEA5/58QStHGEzKWHi8
+JU8bZc04PbGD4agcy+augfVjmivBmUgBsxbmK+tq2KvR3We8vqRZNQXZi0GBYlYk
+SQLdbiBaD9EbqwOY9p/WAL9WO1aBSMKcoks2PQ/j0tdUCaMdgtO0yhoKTMS/4tn5
+k3U3mxZfTWNrfAUcqsG0qgE0QfECgYEA173i6fhOLtrffDXDqVjTGs5ywXQNBfJD
+SuzAE46xgLEzv3bZl3xkrkBpVf4j8NB1S5EIYewUAlExm6hCPIUgeN0eN8FQCE0g
+yxDndFhPHG8/PeuGhOMGrGJ2Ik2itHHKwKa0rUrE8rO6KNQS4C/HQdnG9/UZ1zYk
+KVD/TcupAwkCgYAlN+yTP/At89PakbQNgD1y/ZNyQlJYF3JXO/DvJIEQMMjkYGr1
+Yk0W6rO/gwEuNgBPzWoKWZ/m+WFad1tm4zDHBCWut+tqai9WEZpxkECzUFN5as9a
+MhrHfQ8dujHfQe3wGSq96aORYVcve6zQfVOoa9RqQ/LweJl6w4zKYVsS4QKBgQCE
+nidEp+x3hPfoRKx4BzANxGZqYMo4o4mWHx6bZxXaBBPJWGe9ZSwGqXWW9NhnCd1w
+jEDY4OQT4JFcG/xLc5JYeaQ/pcdqsu67pTKCJF7NHd2EVKmmOmA5y3TO9WZVAbYe
+4tshw1p5zt1ah7LquLQF2LckaThvQMrN0wp9afoE8QKBgHRDqvGfp2LAW+YgGQLi
+K6336phWvUzIPnsN2O4K51JObtoEY8dC8ViM0gMiB8JSEqLfv642zM9hssXIiV+t
+Qm7XN5xozjo/TUY0oOOdFbYVwRgGAwmJYREZlmxVsNpKdDmB7lvBx8s6jNEFnXTn
+errfpx2Y/DE5zcMhjnJqkG8e
+-----END PRIVATE KEY-----`;

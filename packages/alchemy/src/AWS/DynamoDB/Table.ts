@@ -1512,8 +1512,16 @@ export const TableProvider = () =>
 
           // Sync base attributes — observed ↔ desired.
           const desiredBillingMode = news.billingMode ?? "PAY_PER_REQUEST";
+          // DynamoDB omits `BillingModeSummary` for tables that have always
+          // been PROVISIONED — fall back to the observed throughput (on-demand
+          // tables report 0 read capacity) so an unchanged PROVISIONED table
+          // does not trigger a spurious `updateTable` (which DynamoDB rejects
+          // with "provisioned throughput will not change").
           const observedBillingMode =
-            state.table.BillingModeSummary?.BillingMode ?? "PAY_PER_REQUEST";
+            state.table.BillingModeSummary?.BillingMode ??
+            ((state.table.ProvisionedThroughput?.ReadCapacityUnits ?? 0) > 0
+              ? "PROVISIONED"
+              : "PAY_PER_REQUEST");
           const observedProvisionedThroughput = state.table
             .ProvisionedThroughput
             ? {

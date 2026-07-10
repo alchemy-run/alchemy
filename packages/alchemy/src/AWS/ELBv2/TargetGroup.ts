@@ -70,10 +70,13 @@ export interface TargetGroup extends Resource<
   {
     targetGroupArn: TargetGroupArn;
     targetGroupName: TargetGroupName;
-    port: number;
-    protocol: string;
+    /** Undefined for `lambda` target groups (they have no port). */
+    port: number | undefined;
+    /** Undefined for `lambda` target groups (they have no protocol). */
+    protocol: string | undefined;
     targetType: string;
-    vpcId: string;
+    /** Undefined for `lambda` target groups (they are not VPC-scoped). */
+    vpcId: string | undefined;
     tags: Record<string, string>;
   },
   never,
@@ -93,6 +96,14 @@ export interface TargetGroup extends Resource<
  *   port: 80,
  *   protocol: "HTTP",
  *   targetType: "ip",
+ * });
+ * ```
+ *
+ * @example Lambda target group
+ * ```typescript
+ * // No vpc/port/protocol — the target is a Lambda function.
+ * const tg = yield* TargetGroup("fn", {
+ *   targetType: "lambda",
  * });
  * ```
  *
@@ -183,10 +194,10 @@ export const TargetGroupProvider = () =>
           }
           return {
             ...output,
-            port: targetGroup.Port!,
-            protocol: targetGroup.Protocol!,
+            port: targetGroup.Port,
+            protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
-            vpcId: targetGroup.VpcId!,
+            vpcId: targetGroup.VpcId,
           };
         }),
         // Target groups are account/region-scoped. Exhaustively paginate
@@ -232,10 +243,10 @@ export const TargetGroupProvider = () =>
                   return {
                     targetGroupArn: tg.TargetGroupArn as TargetGroupArn,
                     targetGroupName: tg.TargetGroupName!,
-                    port: tg.Port!,
-                    protocol: tg.Protocol!,
+                    port: tg.Port,
+                    protocol: tg.Protocol,
                     targetType: tg.TargetType!,
-                    vpcId: tg.VpcId!,
+                    vpcId: tg.VpcId,
                     tags,
                   };
                 }),
@@ -263,15 +274,20 @@ export const TargetGroupProvider = () =>
 
           // Ensure — create if missing. Stable axes (vpcId, port, protocol,
           // targetType) are handled by diff so we don't deal with mismatch.
+          // Lambda target groups have no port/protocol/VPC — the API rejects
+          // those members, so omit them entirely.
+          const isLambdaTarget = news.targetType === "lambda";
           if (!targetGroup?.TargetGroupArn) {
             const created = yield* elbv2.createTargetGroup({
               Name: name,
-              Port: news.port,
-              Protocol: news.protocol ?? "HTTP",
-              ProtocolVersion: news.protocolVersion,
-              VpcId: news.vpcId,
+              Port: isLambdaTarget ? undefined : news.port,
+              Protocol: isLambdaTarget ? undefined : (news.protocol ?? "HTTP"),
+              ProtocolVersion: isLambdaTarget
+                ? undefined
+                : news.protocolVersion,
+              VpcId: isLambdaTarget ? undefined : news.vpcId,
               TargetType: news.targetType ?? "ip",
-              IpAddressType: news.ipAddressType,
+              IpAddressType: isLambdaTarget ? undefined : news.ipAddressType,
               HealthCheckPath: news.healthCheckPath,
               HealthCheckPort: news.healthCheckPort,
               HealthCheckProtocol: news.healthCheckProtocol,
@@ -380,10 +396,10 @@ export const TargetGroupProvider = () =>
           return {
             targetGroupArn,
             targetGroupName: targetGroup.TargetGroupName!,
-            port: targetGroup.Port!,
-            protocol: targetGroup.Protocol!,
+            port: targetGroup.Port,
+            protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
-            vpcId: targetGroup.VpcId!,
+            vpcId: targetGroup.VpcId,
             tags: desiredTags,
           };
         }),

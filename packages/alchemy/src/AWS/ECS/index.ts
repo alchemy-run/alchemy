@@ -11,3 +11,4 @@ export * from "./Service.ts";
 export * from "./StopTask.ts";
 export * from "./StopTaskHttp.ts";
 export * from "./Task.ts";
+export * from "./TaskDefinition.ts";
