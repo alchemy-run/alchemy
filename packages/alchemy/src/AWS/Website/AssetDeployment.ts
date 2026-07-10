@@ -384,10 +384,12 @@ const retryForBucketReadiness = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         Schedule.exponential("100 millis"),
         Schedule.recurs(30),
       ]).pipe(
-        Schedule.map(([duration]) =>
-          Duration.isGreaterThan(duration, Duration.seconds(2))
-            ? Duration.seconds(2)
-            : duration,
+        Schedule.modifyDelay(({ duration }) =>
+          Effect.succeed(
+            Duration.isGreaterThan(duration, Duration.seconds(2))
+              ? Duration.seconds(2)
+              : duration,
+          ),
         ),
       ),
     }),
