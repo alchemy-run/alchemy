@@ -19,7 +19,11 @@ export interface LintIssue {
     | "multiple-folds"
     | "multiple-checks"
     | "undeclared-perpetuity"
-    | "unbounded-until";
+    | "unbounded-until"
+    | "perpetual-check"
+    | "perpetual-fold"
+    | "perpetual-budget"
+    | "perpetual-multistep";
   readonly message: string;
 }
 
@@ -89,6 +93,59 @@ export const lint = (
       code: "unbounded-until",
       message: `charter "${loop["~alchemy/Name"]}" has a bounded exit but no AI.budget — "goal met" is the exit that might never fire`,
     });
+  }
+
+  // perpetual/goal doctrine (reassess §D): a perpetual ring (AI.never)
+  // serves one kernel-default turn per work item; the run machinery
+  // (check/fold/budget) is run-scoped and has nothing to bind to.
+  // Warnings, not errors, for now: the doctrine is new and existing
+  // Flywheel-style fixtures (perpetual + fold + delegates) predate the
+  // server/goal split. They harden to errors once those migrate.
+  const perpetual = halts.some((h) => h.mode === "never");
+  if (perpetual) {
+    if (refs.some(isCheck)) {
+      issues.push({
+        severity: "warning",
+        code: "perpetual-check",
+        message: `charter "${loop["~alchemy/Name"]}" is perpetual (AI.never) but declares AI.check — a check grades a resolution claim, and a perpetual run never claims. Make it a goal (AI.until) or drop the check.`,
+      });
+    }
+    if (refs.some(isFold)) {
+      issues.push({
+        severity: "warning",
+        code: "perpetual-fold",
+        message: `charter "${loop["~alchemy/Name"]}" is perpetual (AI.never) but declares AI.fold — the fold is run-scoped and a perpetual run is a single turn with nothing to carry.`,
+      });
+    }
+    if (budgets.length > 0) {
+      issues.push({
+        severity: "warning",
+        code: "perpetual-budget",
+        message: `charter "${loop["~alchemy/Name"]}" is perpetual (AI.never) with an AI.budget — a budget that stops the SERVER is an outage, not an exit. Clarify per-item semantics or move the budget onto the goal the ring dispatches.`,
+      });
+    }
+    // multi-step per-item work with no run boundary: the tell is
+    // delegation refs (Agents/Processes) on a perpetual ring — a
+    // single default turn can't await a delegate's result meaningfully.
+    // Agent/Process terms are CLASSES (typeof "function"), so guard on
+    // both object and function — the same footgun isAgent/isProcess fix.
+    const delegates = refs.filter((ref) => {
+      if (
+        (typeof ref !== "object" && typeof ref !== "function") ||
+        ref === null
+      ) {
+        return false;
+      }
+      const kind = (ref as Record<string, unknown>)["~alchemy/Kind"];
+      return kind === "Agent" || kind === "Process";
+    });
+    if (delegates.length > 0) {
+      issues.push({
+        severity: "warning",
+        code: "perpetual-multistep",
+        message: `charter "${loop["~alchemy/Name"]}" is perpetual (AI.never) but delegates to ${delegates.length} agent/process ref(s) — multi-step per-item work has no run boundary. Consider AI.until (a goal run per item), or a deterministic AI.process handler.`,
+      });
+    }
   }
 
   for (const [code, count] of [

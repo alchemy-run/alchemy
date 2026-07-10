@@ -334,9 +334,20 @@ describe("AI term language", () => {
 // ─── lint: charter cardinality & coherence ───────────────────────
 
 describe("AI.lint", () => {
-  it("well-formed charters are clean", () => {
+  it("well-formed goal charters are clean", () => {
     expect(AI.lint(Fix)).toEqual([]);
-    expect(AI.lint(Flywheel)).toEqual([]);
+  });
+
+  it("a perpetual coordinator with fold + delegates is flagged (§D doctrine)", () => {
+    // Flywheel is the pre-split perpetual-LLM-coordinator: AI.never with
+    // a fold and agent delegates. The doctrine says this should be a
+    // deterministic server dispatching goal runs — warned, not errored,
+    // until the fixture migrates.
+    expect(
+      AI.lint(Flywheel)
+        .map((issue) => issue.code)
+        .sort(),
+    ).toEqual(["perpetual-fold", "perpetual-multistep"]);
   });
 
   it("undeclared perpetuity is a warning; explicit AI.never is not", () => {
@@ -356,17 +367,17 @@ describe("AI.lint", () => {
     class TwoBudgets extends AI.Process<TwoBudgets>()("TwoBudgets")`
     ${AI.never`perpetual`} ${AI.budget({ usd: "1" })}
     ${AI.budget({ usd: "2" })}` {}
-    expect(AI.lint(TwoBudgets)).toEqual([
+    expect(AI.lint(TwoBudgets)).toContainEqual(
       expect.objectContaining({ severity: "error", code: "multiple-budgets" }),
-    ]);
+    );
   });
 
   it("until + never is a contradiction", () => {
     class Confused extends AI.Process<Confused>()("Confused")`
     ${AI.until`done`} ${AI.never`also forever?`}
     ${AI.budget({ usd: "1" })}` {}
-    expect(AI.lint(Confused)).toEqual([
+    expect(AI.lint(Confused)).toContainEqual(
       expect.objectContaining({ severity: "error", code: "conflicting-halts" }),
-    ]);
+    );
   });
 });
