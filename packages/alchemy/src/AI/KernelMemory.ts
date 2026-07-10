@@ -30,7 +30,11 @@ import {
 } from "./Check.ts";
 import { BudgetExceeded, KernelError, Refused } from "./Errors.ts";
 import { EventBus, makeMemoryEventBus } from "./EventBus.ts";
-import { type EventChannelService, isEventSource } from "./EventSource.ts";
+import {
+  type EventChannelService,
+  type EventSource,
+  isEventSource,
+} from "./EventSource.ts";
 import { type Halt, isHalt } from "./Halt.ts";
 import { eventId } from "./Ids.ts";
 import { Kernel, type KernelService } from "./Kernel.ts";
@@ -183,6 +187,35 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
       // contributes nothing here — the ring's mailbox IS the durable
       // queue and send() is its producer. Shared by the model-driven
       // interpretProcess and the deterministic `process` handler path.
+      // subscribe one EventSource → its runtime stream (channel-backed
+      // resolves the family tag from ambient context; kernel-internal
+      // goes through the harness bus). Shared by triggers and by
+      // machine-observed halts (reassess §B).
+      const subscribeSource = Effect.fn(function* (
+        source: EventSource<any, any, any>,
+      ) {
+        if (source.channel !== undefined) {
+          const channel = yield* Effect.serviceOption(
+            source.channel as never,
+          ).pipe(
+            Effect.flatMap(
+              Option.match({
+                onSome: (service) =>
+                  Effect.succeed(service as EventChannelService),
+                onNone: () =>
+                  Effect.die(
+                    new Error(
+                      `event channel for ${source["~alchemy/Name"]} has no Layer in context (Req should have caught this)`,
+                    ),
+                  ),
+              }),
+            ),
+          );
+          return yield* channel.subscribe(source);
+        }
+        return yield* eventBus.subscribe(source);
+      });
+
       const subscribeTriggers = Effect.fn(function* (
         refs: ReadonlyArray<unknown>,
       ) {
@@ -204,27 +237,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
             );
           } else if (trigger.mode === "on") {
             for (const source of trigger.sources.filter(isEventSource)) {
-              if (source.channel !== undefined) {
-                const channel = yield* Effect.serviceOption(
-                  source.channel as never,
-                ).pipe(
-                  Effect.flatMap(
-                    Option.match({
-                      onSome: (service) =>
-                        Effect.succeed(service as EventChannelService),
-                      onNone: () =>
-                        Effect.die(
-                          new Error(
-                            `event channel for ${source["~alchemy/Name"]} has no Layer in context (Req should have caught this)`,
-                          ),
-                        ),
-                    }),
-                  ),
-                );
-                triggerStreams.push(yield* channel.subscribe(source));
-              } else {
-                triggerStreams.push(yield* eventBus.subscribe(source));
-              }
+              triggerStreams.push(yield* subscribeSource(source));
             }
           }
         }
@@ -925,6 +938,84 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                   input: toMessages(item),
                 }),
                 (result) => result.outcome,
+              ),
+          });
+          steerCell.current = service.steer;
+          return service;
+        }
+
+        // ── machine-observed exit (reassess §B): the WORLD declares the
+        // end, not the model's claim. No resolve/give_up tools — the
+        // model works the item with its own tools; the run settles when
+        // the exit source delivers a matching event (Out = the payload).
+        // Reconciler doctrine: the model may CAUSE the event (closing the
+        // issue), but the run settles on OBSERVING it. v1: one work round
+        // then park on the exit (agent-closes and human-closes both work;
+        // multi-round-before-park and steer-during-park are follow-ups).
+        if (halt.source !== undefined) {
+          const source = halt.source;
+          const match = halt.match ?? (() => true);
+          const steerCell: SteerCell = {};
+          const children = new Set<{ readonly cancel: Effect.Effect<void> }>();
+          const compiled = yield* compileTools(
+            term.refs,
+            undefined,
+            steerCell,
+            children,
+          );
+          const service = yield* makeRing({
+            termName,
+            system: renderTemplate(term.template, term.refs),
+            compiled,
+            policy,
+            children,
+            triggers: triggerStreams,
+            runItem: (item, run) =>
+              // scoped: the exit watcher fiber dies when the run returns
+              Effect.scoped(
+                Effect.gen(function* () {
+                  // watch the exit source; the first matching event settles
+                  const exit = yield* Deferred.make<unknown>();
+                  const stream = yield* subscribeSource(source);
+                  yield* Effect.forkScoped(
+                    Stream.runForEach(stream, (event) =>
+                      match(item, event)
+                        ? Effect.asVoid(Deferred.succeed(exit, event))
+                        : Effect.void,
+                    ),
+                  );
+                  // one work round: the model does what it can (comment,
+                  // call a close tool, …) — its own action may cause the
+                  // exit event
+                  const { outcome } = yield* run.runTurn({
+                    session: `${run.session}/i1`,
+                    seed: [],
+                    input: toMessages(item),
+                  });
+                  if (outcome._tag === "Interrupted") {
+                    return yield* Effect.die(
+                      new Error("interim: interrupted source-halt run"),
+                    );
+                  }
+                  // PARK until the world declares the exit (returns
+                  // immediately if the turn already caused it)
+                  yield* run.emitRow(
+                    run.session,
+                    "run.parked",
+                    run.session,
+                    "parked",
+                    {},
+                  );
+                  const value = yield* Deferred.await(exit);
+                  yield* run.emitRow(
+                    run.session,
+                    "run.resolved",
+                    run.session,
+                    "resolved",
+                    { observed: true },
+                  );
+                  return value;
+                }),
               ),
           });
           steerCell.current = service.steer;

@@ -1,7 +1,8 @@
 import type * as S from "effect/Schema";
+import type { EventSource } from "./EventSource.ts";
 
 /**
- * A control ref that wires a {@link Loop}'s exit signal.
+ * A control ref that wires a {@link Process}'s exit signal.
  *
  * A charter that wires no halt is typed as perpetual (`Out = never`) — the
  * absence of an exit signal is carried by the loop's own type, not by a
@@ -11,23 +12,24 @@ import type * as S from "effect/Schema";
  * for an exit) is what `AI.never` is for, and the Kernel lints undeclared
  * perpetuity at interpretation time.
  *
- * The halt determines the loop's `Out` channel:
+ * The halt determines the process's `Out` channel, and the exit has
+ * three SOURCES (reassess §B), symmetric with triggers (`AI.on(source)`
+ * derives `In`; `AI.until(source)` derives `Out`):
  *
- * - `AI.until\`…\`` — halts when the prose condition (backed by the
- *   interpolated signals, e.g. `${Bash}`) is met. `Out = void`.
- * - `AI.until(schema)\`…\`` — as above, but a halted run resolves with a
- *   value of the schema's type. `Out = Schema["Type"]`.
- * - `AI.never\`…\`` — an explicit declaration that the ring is perpetual;
- *   the prose must name the health signals that substitute for an exit.
- *   `Out = never` — the ring's `run` is an `Effect<never, …>` that never
- *   returns, which is exactly what Effect already means by `never`.
+ * - **model-declared** — `AI.until\`…\`` / `AI.until(schema)\`…\``: the
+ *   model ends the run by calling the `resolve` tool when it judges the
+ *   prose condition met. `Out = void` or `Schema["Type"]`.
+ * - **machine-observed** — `AI.until(eventSource)`: the run ends when a
+ *   world event arrives (a GitHub issue closing, a CI run going green).
+ *   There is NO `resolve` tool — the world declares the exit, not the
+ *   model's claim (the reconciler doctrine transposed to exits:
+ *   observation > claim). `Out =` the event's payload; the source's
+ *   channel tag joins `Req`.
+ * - **perpetual** — `AI.never\`…\``: no exit. `Out = never`.
  *
- * The halt condition is a nested template: simultaneously human-readable
- * policy and a typed dependency on concrete signals. Nested refs flow into
- * the loop's `Req`. The signal may equally be produced by a machine
- * (`${Bash}` reports green) or by a human (`a maintainer closes the
- * experiment`, arriving as a GitHub event) — bounded-by-machine and
- * bounded-by-human are the same type.
+ * For model-declared halts the condition is a nested template: both
+ * human-readable policy and a typed dependency on interpolated signals,
+ * whose refs flow into the process's `Req`.
  */
 export interface Halt<Refs extends any[] = any[], Out = void> {
   "~alchemy/Kind": "Halt";
@@ -37,6 +39,21 @@ export interface Halt<Refs extends any[] = any[], Out = void> {
   schema: S.Top | undefined;
   template: TemplateStringsArray;
   refs: Refs;
+  /**
+   * A machine-observed exit: the run settles when this source delivers a
+   * matching event (no `resolve` tool). Present iff `AI.until(source)`.
+   * Stored loosely (`any`) so the `Out`-parameterized `match` never
+   * makes `Halt<_, never>` fail `Extract<_, Halt<any, any>>` by
+   * contravariance; the caller-facing types come from the `until`
+   * overload's return, not these fields.
+   */
+  source?: EventSource<any, any, any>;
+  /**
+   * Correlates events to runs: settle only when `match(item, event)`.
+   * Defaults to "any event from the source" — correct for single-run
+   * demos; concurrent runs need a per-item predicate (e.g. issue number).
+   */
+  match?: (item: any, event: any) => boolean;
 }
 
 /**
@@ -47,21 +64,46 @@ export interface Halt<Refs extends any[] = any[], Out = void> {
  * halting itself is the only payload (`Out = void`).
  */
 export const until: {
+  // model-declared, no value
   <const Refs extends any[]>(
     template: TemplateStringsArray,
     ...refs: Refs
   ): Halt<Refs, void>;
+  // machine-observed: the world event IS the exit (Out = event payload)
+  <In, Channel>(
+    source: EventSource<In, Channel, any>,
+    match?: (item: any, event: In) => boolean,
+  ): Halt<[EventSource<In, Channel, any>], In>;
+  // model-declared, typed value
   <Schema extends S.Top>(
     schema: Schema,
   ): <const Refs extends any[]>(
     template: TemplateStringsArray,
     ...refs: Refs
   ) => Halt<Refs, Schema["Type"]>;
-} = ((first: TemplateStringsArray | S.Top, ...refs: any[]) =>
-  isTemplate(first)
-    ? makeHalt("until", undefined, first, refs)
-    : (template: TemplateStringsArray, ...refs: any[]) =>
-        makeHalt("until", first, template, refs)) as any;
+} = ((first: TemplateStringsArray | S.Top | EventSource, ...rest: any[]) => {
+  if (isTemplate(first)) return makeHalt("until", undefined, first, rest);
+  if (isEventSourceLike(first)) {
+    // a machine-observed halt: source in refs (so its channel tag joins
+    // Req), no prose template of its own
+    const halt = makeHalt(
+      "until",
+      (first as EventSource).schema,
+      Object.assign([""], { raw: [""] }) as unknown as TemplateStringsArray,
+      [first],
+    );
+    halt.source = first as EventSource;
+    halt.match = rest[0];
+    return halt;
+  }
+  return (template: TemplateStringsArray, ...refs: any[]) =>
+    makeHalt("until", first as S.Top, template, refs);
+}) as any;
+
+const isEventSourceLike = (value: unknown): value is EventSource =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as Record<string, unknown>)["~alchemy/Kind"] === "EventSource";
 
 /**
  * Explicitly declare a perpetual ring (`Out = never`). The prose must name

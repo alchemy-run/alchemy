@@ -1,9 +1,18 @@
 import type * as Context from "effect/Context";
 import type { Check } from "./Check.ts";
+import type { EventSource } from "./EventSource.ts";
 import type { Fold } from "./Fold.ts";
 import type { Halt } from "./Halt.ts";
 import type { ToolImpl } from "./Tool.ts";
 import type { Trigger } from "./Trigger.ts";
+
+/** The channel tags of any EventSource refs (machine-observed halts). */
+type EventChannels<R> =
+  R extends EventSource<any, infer Channel, any>
+    ? [Channel] extends [never]
+      ? never
+      : Channel
+    : never;
 
 /**
  * The requirement contributed by a single leaf ref — its **tag**:
@@ -44,7 +53,11 @@ type LeafServices<R> =
  */
 export type RefServices<R> =
   R extends Halt<infer Inner, any>
-    ? LeafServices<Inner[number]>
+    ?
+        // a machine-observed halt (`AI.until(source)`) carries its exit
+        // EventSource in refs — its channel tag must join Req, exactly like
+        // a trigger's (reassess §B)
+        LeafServices<Inner[number]> | EventChannels<Inner[number]>
     : R extends Fold<infer A, infer Inner>
       ? LeafServices<A> | LeafServices<Inner[number]>
       : R extends Check<infer A, infer Inner>
