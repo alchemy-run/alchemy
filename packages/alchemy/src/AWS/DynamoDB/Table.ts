@@ -47,7 +47,13 @@ export type ScalarAttributeType = "S" | "N" | "B";
 export type TableProps = {
   /**
    * Name of the table. If omitted, Alchemy generates a deterministic physical
-   * name from the stack, stage, and logical ID.
+   * name from the stack, stage, and logical ID, suffixed with the instance ID
+   * so replacements can create the successor table before deleting the old one.
+   *
+   * Changing this property replaces the table. If the name is hard-coded,
+   * replacement-triggering changes (key schema, attribute types, LSIs, GSI
+   * key changes) delete the old table first and then recreate it under the
+   * same name, since DynamoDB table names are unique per account/region.
    */
   tableName?: string;
   /**
@@ -1007,17 +1013,33 @@ export const TableProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
+          // Renaming the table always replaces. The successor's name cannot
+          // collide with the predecessor's, so the default
+          // create-before-delete replacement flow applies.
+          if (news.tableName !== olds.tableName) {
+            return { action: "replace" } as const;
+          }
+          // For every other replacement trigger the physical name stays the
+          // same. Engine-generated names embed the instance id, which is
+          // re-minted on replacement, so the successor gets a fresh name and
+          // create-before-delete works. A hard-coded `tableName` cannot
+          // change — DynamoDB table names are unique per account/region, so
+          // the successor's createTable would collide with the still-live
+          // predecessor and mis-adopt it. Delete the old generation first in
+          // that case; `delete` waits until the name is fully released.
+          const replace =
+            news.tableName !== undefined
+              ? ({ action: "replace", deleteFirst: true } as const)
+              : ({ action: "replace" } as const);
           if (
-            // TODO(sam): if the name is hard-coded, REPLACE is impossible - we need a suffix
-            news.tableName !== olds.tableName ||
             olds.partitionKey !== news.partitionKey ||
             olds.sortKey !== news.sortKey
           ) {
-            return { action: "replace" } as const;
+            return replace;
           }
           for (const [name, type] of Object.entries(olds.attributes ?? {})) {
             if (news.attributes[name] !== type) {
-              return { action: "replace" } as const;
+              return replace;
             }
           }
           if (
@@ -1026,18 +1048,18 @@ export const TableProvider = () =>
               { localSecondaryIndexes: news.localSecondaryIndexes ?? [] },
             )
           ) {
-            return { action: "replace" } as const;
+            return replace;
           }
           const { requiresReplacement } = diffGlobalSecondaryIndexes(
             olds.globalSecondaryIndexes,
             news.globalSecondaryIndexes,
           );
           if (requiresReplacement) {
-            return { action: "replace" } as const;
+            return replace;
           }
-          // TODO(sam):
-          // Replacements:
-          // 1. if you change ImportSourceSpecification
+          // ImportSourceSpecification (importTable) is out of scope — see
+          // processes/AWS/catalog/serverless-data.md (import/export are
+          // long-running jobs, deferred as effectful functions).
         }),
 
         reconcile: Effect.fn(function* ({

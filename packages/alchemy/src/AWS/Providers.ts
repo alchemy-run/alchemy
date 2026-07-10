@@ -55,6 +55,7 @@ import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
+import * as SSM from "./SSM/index.ts";
 import * as Website from "./Website/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -201,6 +202,7 @@ export const providers = () =>
       SNS.Subscription,
       SNS.Topic,
       SQS.Queue,
+      SSM.Parameter,
       Website.AssetDeployment,
     ]),
   ).pipe(
@@ -345,6 +347,7 @@ export const providers = () =>
           SNS.SubscriptionProvider(),
           SNS.TopicProvider(),
           SQS.QueueProvider(),
+          SSM.ParameterProvider(),
           Website.AssetDeploymentProvider(),
         ),
       ),

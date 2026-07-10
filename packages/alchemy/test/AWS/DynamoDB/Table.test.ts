@@ -592,6 +592,114 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     { timeout: 240_000 },
   );
 
+  test.provider(
+    "changing the key schema replaces the table under a new physical name",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting key schema replacement test");
+        yield* stack.destroy();
+
+        yield* logTestStep("deploying baseline table (partitionKey=id)");
+        const original = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("KeySchemaTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+
+        yield* logTestStep("deploying replacement (partitionKey=pk)");
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("KeySchemaTable", {
+              partitionKey: "pk",
+              attributes: { pk: "S" },
+            });
+          }),
+        );
+
+        // Replacement mints a new instance id, so the engine-generated
+        // physical name changes: the successor is created under a fresh name
+        // (create-before-delete) and the old table is deleted afterwards.
+        expect(replaced.tableName).not.toEqual(original.tableName);
+        expect(replaced.partitionKey).toEqual("pk");
+        yield* assertTableIsDeleted(original.tableName);
+
+        const successor = yield* DynamoDB.describeTable({
+          TableName: replaced.tableName,
+        });
+        expect(successor.Table?.KeySchema).toEqual([
+          { AttributeName: "pk", KeyType: "HASH" },
+        ]);
+
+        yield* logTestStep("destroying key schema replacement test table");
+        yield* stack.destroy();
+
+        yield* assertTableIsDeleted(replaced.tableName);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "hard-coded table name is replaced in place (delete before create)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting pinned-name replacement test");
+        yield* stack.destroy();
+
+        // Deterministic physical name — identical on every run of this case.
+        const tableName = "alchemy-test-ddb-pinned-replace";
+
+        yield* logTestStep("deploying pinned-name table without sort key");
+        const original = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("PinnedNameTable", {
+              tableName,
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+        expect(original.tableName).toEqual(tableName);
+        expect(original.sortKey).toBeUndefined();
+
+        yield* logTestStep("deploying replacement with a sort key");
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("PinnedNameTable", {
+              tableName,
+              partitionKey: "id",
+              sortKey: "sk",
+              attributes: { id: "S", sk: "S" },
+            });
+          }),
+        );
+
+        // The pinned name cannot change, so the engine must delete the old
+        // generation first and recreate under the same name: same physical
+        // name, new physical table (fresh TableId), new key schema.
+        expect(replaced.tableName).toEqual(tableName);
+        expect(replaced.tableId).not.toEqual(original.tableId);
+        expect(replaced.sortKey).toEqual("sk");
+
+        const successor = yield* DynamoDB.describeTable({
+          TableName: tableName,
+        });
+        expect(successor.Table?.TableId).toEqual(replaced.tableId);
+        expect(successor.Table?.KeySchema).toEqual([
+          { AttributeName: "id", KeyType: "HASH" },
+          { AttributeName: "sk", KeyType: "RANGE" },
+        ]);
+
+        yield* logTestStep("destroying pinned-name replacement test table");
+        yield* stack.destroy();
+
+        yield* assertTableIsDeleted(tableName);
+      }),
+    { timeout: 240_000 },
+  );
+
   // Engine-level adoption: a table tagged with this stack/stage/id is
   // silently adopted on a fresh state store; a table tagged with a
   // different logical id is rejected unless `adopt(true)` is supplied.

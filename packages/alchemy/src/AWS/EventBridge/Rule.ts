@@ -299,10 +299,14 @@ export const RuleProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
+          // The engine guarantees `olds` is fully resolved before calling
+          // `read` (Plan.ts guards every read site with `isResolved`), so
+          // props can be used directly to derive identity.
           const ruleName =
-            output?.ruleName ?? (yield* createRuleName(id, olds));
+            output?.ruleName ??
+            (yield* createRuleName(id, { name: olds?.name }));
           const eventBusName =
-            output?.eventBusName ?? olds.eventBusName ?? "default";
+            output?.eventBusName ?? olds?.eventBusName ?? "default";
           const described = yield* eventbridge
             .describeRule({
               Name: ruleName,

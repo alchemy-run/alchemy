@@ -114,6 +114,8 @@ export interface DBInstanceProps {
   dbParameterGroupName?: string;
   /**
    * VPC security groups attached to the instance. In-place modify.
+   * Ignored for Aurora cluster members (`dbClusterIdentifier` set) — security
+   * groups are managed on the DB cluster instead.
    */
   vpcSecurityGroupIds?: string[];
   /**
@@ -573,7 +575,12 @@ export const DBInstanceProvider = () =>
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
                 DeletionProtection: news.deletionProtection,
                 NetworkType: news.networkType,
-                VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+                // Cluster members inherit VPC security groups from the DB
+                // cluster; passing them fails with InvalidParameterCombination
+                // ("Set vpc security group for the DB Cluster").
+                VpcSecurityGroupIds: news.dbClusterIdentifier
+                  ? undefined
+                  : news.vpcSecurityGroupIds,
                 PubliclyAccessible: news.publiclyAccessible,
                 PromotionTier: news.promotionTier,
                 AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
@@ -643,7 +650,13 @@ export const DBInstanceProvider = () =>
             setIf("PromotionTier", news.promotionTier, observed.PromotionTier);
             setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
             setIf("CopyTagsToSnapshot", news.copyTagsToSnapshot, observed.CopyTagsToSnapshot); // prettier-ignore
-            if (news.vpcSecurityGroupIds !== undefined) {
+            // Security groups on Aurora cluster members are managed by the DB
+            // cluster (ModifyDBCluster), so only sync them for standalone
+            // instances.
+            if (
+              news.vpcSecurityGroupIds !== undefined &&
+              news.dbClusterIdentifier === undefined
+            ) {
               core.VpcSecurityGroupIds = news.vpcSecurityGroupIds;
               coreDirty = true;
             }

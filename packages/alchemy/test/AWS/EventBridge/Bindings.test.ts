@@ -1,0 +1,239 @@
+import * as AWS from "@/AWS";
+import * as Core from "@/Test/Core";
+import * as Test from "@/Test/Vitest";
+import * as SQS from "@distilled.cloud/aws/sqs";
+import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { describe } from "vitest";
+
+import EventBridgeTestFunctionLive, {
+  BusAndQueues,
+  BusAndQueuesLive,
+  EventBridgeTestFunction,
+} from "./handler.ts";
+
+const testOptions = { providers: AWS.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "EventBridgeBindings");
+
+// Lambda function URL cold-start (DNS, IAM propagation, init) can take well
+// over 60s on a fresh deploy under parallel-suite load. Budget ~150s.
+const readinessPolicy = Schedule.fixed("2 seconds").pipe(
+  Schedule.both(Schedule.recurs(75)),
+);
+
+let baseUrl: string;
+let customQueueUrl: string;
+let defaultQueueUrl: string;
+
+class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
+  readonly status: number;
+  readonly body: string;
+}> {}
+
+// Retry transient 5xx from the fixture (cold re-init under parallel load);
+// a genuine 4xx/assertion failure is surfaced immediately.
+const send = (request: HttpClientRequest.HttpClientRequest) =>
+  HttpClient.execute(request).pipe(
+    Effect.flatMap((response) =>
+      response.status >= 500
+        ? response.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(
+                new TransientUpstream({ status: response.status, body }),
+              ),
+            ),
+          )
+        : Effect.succeed(response),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "TransientUpstream",
+      schedule: Schedule.exponential("500 millis").pipe(
+        Schedule.both(Schedule.recurs(6)),
+      ),
+    }),
+  );
+
+class EventNotDelivered extends Data.TaggedError("EventNotDelivered") {}
+
+interface DeliveredEvent {
+  source: string;
+  detailType: string;
+  detail: { marker: string };
+}
+
+// EventBridge rules on a freshly-created bus take a while to propagate; events
+// published before the rule is active are silently dropped (EventBridge does
+// not retro-deliver). So publish-then-poll in a bounded loop: each iteration
+// re-publishes the marker event and long-polls the sink queue for it.
+// Worst case ~= 18 * (publish + 5s long poll) ~= 95s, within the 120s test
+// timeout.
+const publishUntilReceived = Effect.fn(function* (
+  route: string,
+  queueUrl: string,
+  marker: string,
+) {
+  return yield* Effect.gen(function* () {
+    const publishResponse = yield* send(
+      HttpClientRequest.bodyJsonUnsafe(
+        HttpClientRequest.post(`${baseUrl}${route}`),
+        { marker },
+      ),
+    ).pipe(Effect.flatMap((r) => r.json));
+    expect(publishResponse).toHaveProperty("failedEntryCount", 0);
+
+    const result = yield* SQS.receiveMessage({
+      QueueUrl: queueUrl,
+      MaxNumberOfMessages: 10,
+      WaitTimeSeconds: 5,
+    });
+    const match = (result.Messages ?? [])
+      .flatMap((message) =>
+        message.Body ? [JSON.parse(message.Body) as DeliveredEvent] : [],
+      )
+      .find((body) => body.detail?.marker === marker);
+    if (!match) {
+      yield* Effect.logInfo(
+        `EventBridge test: no matching event on ${route} yet (rule still propagating?)`,
+      );
+      return yield* Effect.fail(new EventNotDelivered());
+    }
+    return match;
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "EventNotDelivered",
+      schedule: Schedule.fixed("5 seconds").pipe(
+        Schedule.both(Schedule.recurs(17)),
+      ),
+    }),
+  );
+});
+
+describe("EventBridge Bindings", () => {
+  beforeAll(
+    Effect.gen(function* () {
+      yield* Effect.logInfo(
+        "EventBridge test setup: destroying previous resources",
+      );
+      yield* sharedStack.destroy();
+
+      yield* Effect.logInfo("EventBridge test setup: deploying fixture");
+      const { fn, custom, dflt } = yield* sharedStack.deploy(
+        Effect.gen(function* () {
+          const { customQueue, defaultQueue } = yield* BusAndQueues;
+          const fn = yield* EventBridgeTestFunction;
+          return { fn, custom: customQueue, dflt: defaultQueue };
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(EventBridgeTestFunctionLive, BusAndQueuesLive),
+          ),
+        ),
+      );
+
+      expect(fn.functionUrl).toBeTruthy();
+      baseUrl = fn.functionUrl!.replace(/\/+$/, "");
+      customQueueUrl = custom.queueUrl;
+      defaultQueueUrl = dflt.queueUrl;
+
+      yield* Effect.logInfo(
+        `EventBridge test setup: probing readiness at ${baseUrl}/health`,
+      );
+      yield* HttpClient.get(`${baseUrl}/health`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        ),
+        Effect.tapError((error) =>
+          Effect.logWarning(
+            `EventBridge test setup: fixture not ready yet (${String(error)})`,
+          ),
+        ),
+        Effect.retry({ schedule: readinessPolicy }),
+      );
+      yield* Effect.logInfo("EventBridge test setup: fixture ready");
+    }),
+    { timeout: 240_000 },
+  );
+
+  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+
+  describe("PutEvents", () => {
+    test.provider("publishes an event to the custom bus", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/publish-custom`),
+            { marker: "put-events-custom-direct" },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          failedEntryCount: number;
+          entries: Array<{ EventId?: string }>;
+        };
+
+        expect(response.failedEntryCount).toBe(0);
+        expect(response.entries).toHaveLength(1);
+        expect(response.entries[0].EventId).toBeTruthy();
+      }),
+    );
+
+    test.provider("publishes an event to the default bus", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.bodyJsonUnsafe(
+            HttpClientRequest.post(`${baseUrl}/publish-default`),
+            { marker: "put-events-default-direct" },
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          failedEntryCount: number;
+          entries: Array<{ EventId?: string }>;
+        };
+
+        expect(response.failedEntryCount).toBe(0);
+        expect(response.entries).toHaveLength(1);
+        expect(response.entries[0].EventId).toBeTruthy();
+      }),
+    );
+  });
+
+  describe("EventSource", () => {
+    test.provider(
+      "consume loop receives custom-bus events",
+      (_stack) =>
+        Effect.gen(function* () {
+          const event = yield* publishUntilReceived(
+            "/publish-custom",
+            customQueueUrl,
+            "consume-loop-custom",
+          );
+
+          expect(event.source).toBe("alchemy.test.custom");
+          expect(event.detailType).toBe("TestEvent");
+          expect(event.detail.marker).toBe("consume-loop-custom");
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "consume loop receives default-bus events",
+      (_stack) =>
+        Effect.gen(function* () {
+          const event = yield* publishUntilReceived(
+            "/publish-default",
+            defaultQueueUrl,
+            "consume-loop-default",
+          );
+
+          expect(event.source).toBe("alchemy.test.default");
+          expect(event.detailType).toBe("TestEvent");
+          expect(event.detail.marker).toBe("consume-loop-default");
+        }),
+      { timeout: 120_000 },
+    );
+  });
+});

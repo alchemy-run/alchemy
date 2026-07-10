@@ -2,6 +2,7 @@ import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
+import * as Output from "../../Output.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
@@ -22,8 +23,12 @@ export const PutEventsHttp = Layer.effect(
               accountId: string;
               region: string;
             }>;
+          // Pass the ARN as an unresolved Output — binding data is resolved
+          // by the engine before the host reconciles. Eagerly yielding here
+          // (during plan) produces a deferred object that serializes into an
+          // invalid IAM policy (MalformedPolicyDocumentException).
           const resource = bus
-            ? yield* yield* bus.eventBusArn
+            ? Output.interpolate`${bus.eventBusArn}`
             : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
           yield* host.bind`Allow(${host}, AWS.EventBridge.PutEvents(${bus ?? "default"}))`(

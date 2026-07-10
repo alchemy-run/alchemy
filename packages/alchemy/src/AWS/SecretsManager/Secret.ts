@@ -1,6 +1,7 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -112,6 +113,32 @@ const toTagRecord = (
       .map((tag) => [tag.Key, tag.Value]),
   );
 
+/**
+ * Bounded retry through the async `ForceDeleteWithoutRecovery` window
+ * (`InvalidRequestException` "already scheduled for deletion"; force
+ * deletions complete within seconds).
+ *
+ * Expressed as an explicitly-typed helper: inlining `Effect.retry` here
+ * leaves `Retry.Return`'s conditional type unresolved in the provider's
+ * inferred layer type, which TypeScript's declaration emit widens to an
+ * `unknown` R — poisoning the whole `AWS.providers()` union for every
+ * downstream consumer.
+ */
+const retryThroughDeletionWindow = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) =>
+      e._tag === "InvalidRequestException" &&
+      ((e as { Message?: string }).Message?.includes(
+        "scheduled for deletion",
+      ) ??
+        false),
+    schedule: Schedule.fixed("2 seconds").pipe(
+      Schedule.both(Schedule.recurs(10)),
+    ),
+  });
+
 export const SecretProvider = () =>
   Provider.effect(
     Secret,
@@ -158,7 +185,7 @@ export const SecretProvider = () =>
       });
 
       const readSecret = Effect.fn(function* (secretId: string) {
-        return yield* secretsmanager
+        const described = yield* secretsmanager
           .describeSecret({
             SecretId: secretId,
           })
@@ -167,6 +194,11 @@ export const SecretProvider = () =>
               Effect.succeed(undefined),
             ),
           );
+        // A secret with `DeletedDate` set is scheduled for deletion (our
+        // delete uses `ForceDeleteWithoutRecovery`, which still completes
+        // asynchronously). It cannot be updated, so treat it as missing —
+        // reconcile recreates it once the pending deletion finishes.
+        return described?.DeletedDate ? undefined : described;
       });
 
       return {
@@ -213,22 +245,33 @@ export const SecretProvider = () =>
 
           // Ensure — create if missing. Tolerate `ResourceExistsException`
           // by re-describing; the sync step below converges metadata and
-          // value.
+          // value. Recreating a physical name right after our own
+          // `ForceDeleteWithoutRecovery` can race the asynchronous deletion
+          // and fail with `InvalidRequestException` ("already scheduled for
+          // deletion") — force deletions complete within seconds, so retry
+          // through that window (bounded).
           if (!observed?.ARN) {
-            yield* secretsmanager
-              .createSecret({
-                Name: secretName,
-                Description: news.description,
-                KmsKeyId: news.kmsKeyId,
-                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                  Key,
-                  Value,
-                })),
-                ...(yield* createValue(news)),
-              })
-              .pipe(
-                Effect.catchTag("ResourceExistsException", () => Effect.void),
-              );
+            // Data-FIRST `Effect.retry(self, options)`: the data-last form
+            // infers `Retry.Options<E>`'s `E` from BOTH `while` and the
+            // schedule's input slot (`unknown` for `Schedule.fixed`), and the
+            // unioned candidates collapse this provider's layer to an
+            // `unknown` R that then poisons all of `AWS.providers()`.
+            yield* retryThroughDeletionWindow(
+              secretsmanager
+                .createSecret({
+                  Name: secretName,
+                  Description: news.description,
+                  KmsKeyId: news.kmsKeyId,
+                  Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                    Key,
+                    Value,
+                  })),
+                  ...(yield* createValue(news)),
+                })
+                .pipe(
+                  Effect.catchTag("ResourceExistsException", () => Effect.void),
+                ),
+            );
             observed = yield* readSecret(secretName);
           }
 

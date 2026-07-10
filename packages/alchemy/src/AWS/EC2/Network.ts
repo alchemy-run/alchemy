@@ -1,7 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
-import { AWSEnvironment } from "../Environment.ts";
 import type { EIP as EIPResource } from "./EIP.ts";
 import { EIP } from "./EIP.ts";
 import type { InternetGateway as InternetGatewayResource } from "./InternetGateway.ts";
@@ -306,20 +306,28 @@ export const Network = (id: string, props: NetworkProps) =>
         }
       }
 
-      const { region } = yield* AWSEnvironment.current;
       const gatewayEndpoints: VpcEndpointResource[] = [];
-      for (const service of uniqueGatewayEndpoints(props.gatewayEndpoints)) {
-        gatewayEndpoints.push(
-          yield* VpcEndpoint(`${toEndpointId(service)}Endpoint`, {
-            vpcId: vpc.vpcId,
-            serviceName: `com.amazonaws.${region}.${service}`,
-            vpcEndpointType: "Gateway",
-            routeTableIds: privateRouteTables.map(
-              (table) => table.routeTableId,
-            ),
-            tags,
-          }),
-        );
+      const endpointServices = uniqueGatewayEndpoints(props.gatewayEndpoints);
+      if (endpointServices.length > 0) {
+        // Resolve the region lazily and via the `Region` service, which is
+        // provided both at deploy time and by the Lambda runtime.
+        // `AWSEnvironment` is deploy-time-only: this layer is re-executed at
+        // Function init, where `AWS::Environment` is not provided and
+        // resolving it crashes the runtime.
+        const region = yield* yield* Region;
+        for (const service of endpointServices) {
+          gatewayEndpoints.push(
+            yield* VpcEndpoint(`${toEndpointId(service)}Endpoint`, {
+              vpcId: vpc.vpcId,
+              serviceName: `com.amazonaws.${region}.${service}`,
+              vpcEndpointType: "Gateway",
+              routeTableIds: privateRouteTables.map(
+                (table) => table.routeTableId,
+              ),
+              tags,
+            }),
+          );
+        }
       }
 
       return {
@@ -368,6 +376,20 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
         new Error(
           "EC2.Network availabilityZones count must be a positive integer",
         ),
+      );
+    }
+
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      // Inside a deployed Function this composition is re-executed at init,
+      // where every `yield* Subnet(...)` resolves its attributes from the
+      // injected environment — the zone names below only shape input props
+      // that the runtime ignores. Skip ec2:DescribeAvailabilityZones
+      // entirely: the function role does not (and should not) have that
+      // permission, so calling it at init crashes with UnauthorizedOperation.
+      const region = yield* yield* Region;
+      return Array.from(
+        { length: desiredCount },
+        (_, index) => `${region}${String.fromCharCode(97 + index)}`,
       );
     }
 

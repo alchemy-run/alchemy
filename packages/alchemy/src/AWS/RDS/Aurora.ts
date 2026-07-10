@@ -499,7 +499,10 @@ export const Aurora = (id: string, props: AuroraProps) =>
         engineVersion,
         dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
         dbParameterGroupName: parameterGroup?.dbParameterGroupName,
-        vpcSecurityGroupIds: securityGroupIds,
+        // No vpcSecurityGroupIds: cluster members inherit security groups from
+        // the DB cluster. Passing them here fails with "The requested DB
+        // Instance will be a member of a DB Cluster. Set vpc security group
+        // for the DB Cluster."
         publiclyAccessible: props.instance?.publiclyAccessible ?? false,
         promotionTier: props.instance?.promotionTier ?? 0,
         autoMinorVersionUpgrade:
@@ -524,7 +527,8 @@ export const Aurora = (id: string, props: AuroraProps) =>
             engineVersion,
             dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
             dbParameterGroupName: parameterGroup?.dbParameterGroupName,
-            vpcSecurityGroupIds: securityGroupIds,
+            // No vpcSecurityGroupIds: security groups belong on the DB
+            // cluster, not its member instances (see Writer above).
             publiclyAccessible: props.instance?.publiclyAccessible ?? false,
             promotionTier: index + 1,
             autoMinorVersionUpgrade:

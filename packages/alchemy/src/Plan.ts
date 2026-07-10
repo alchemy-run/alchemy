@@ -823,7 +823,15 @@ export const make = <A>(
               // A create may have succeeded before state persistence failed. If the
               // provider can recover an attribute snapshot, keep driving the same
               // create instead of starting over blindly.
-              if (provider.read) {
+              //
+              // `creating` state persists the RAW plan-time props, which may
+              // still contain unresolved Output expressions (e.g. a name
+              // referencing an upstream created in the same failed deploy).
+              // `read` implementations derive identity from `olds` when
+              // `output` is undefined (as it is here), so handing them
+              // unresolved exprs crashes. Skip the probe — same behavior as
+              // a read that found nothing — and re-drive the create.
+              if (provider.read && isResolved(oldState.props)) {
                 const attr = yield* provider
                   .read({
                     id,
@@ -1244,7 +1252,14 @@ export const make = <A>(
               const resourceType = oldState.resourceType;
               const provider = yield* findProviderByType(resourceType);
               if (oldState.attr === undefined) {
-                if (provider.read) {
+                // Attr-less state comes from a failed create, whose persisted
+                // props are the RAW plan-time props and may contain unresolved
+                // Output expressions. `read` derives identity from `olds` when
+                // `output` is undefined (as it is here), so unresolved exprs
+                // would crash the provider. Skip recovery — the delete then
+                // proceeds with `attr: undefined`, exactly as it does for
+                // providers without `read`.
+                if (provider.read && isResolved(oldState.props)) {
                   attr = yield* provider
                     .read({
                       id: logicalId,

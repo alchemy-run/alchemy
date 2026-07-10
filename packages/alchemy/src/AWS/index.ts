@@ -34,4 +34,5 @@ export * as Scheduler from "./Scheduler/index.ts";
 export * as SecretsManager from "./SecretsManager/index.ts";
 export * as SNS from "./SNS/index.ts";
 export * as SQS from "./SQS/index.ts";
+export * as SSM from "./SSM/index.ts";
 export * as Website from "./Website/index.ts";

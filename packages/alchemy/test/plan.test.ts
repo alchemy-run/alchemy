@@ -3346,3 +3346,85 @@ describe("type aliases", () => {
     );
   });
 });
+
+describe("read is never handed unresolved persisted props", () => {
+  // A failed create persists `creating` state carrying the RAW plan-time
+  // props, which may contain unresolved Output expressions (e.g. a prop
+  // referencing an upstream resource that was never created). Providers
+  // derive identity from `olds` inside `read` when `output` is undefined,
+  // so the engine must skip the read probe entirely rather than hand it
+  // unresolved exprs (see the isResolved guards in Plan.ts).
+
+  const creatingWithUnresolvedProps = (fqn: string): ResourceState => ({
+    instanceId,
+    providerVersion: 0,
+    logicalId: fqn,
+    fqn,
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "creating",
+    props: {
+      // an unresolved Output expression, exactly as persisted by a create
+      // that failed before its upstream dependencies resolved
+      string: Output.literal("unresolved") as any,
+    },
+    attr: undefined,
+    bindings: [],
+    downstream: [],
+  });
+
+  const trackReads = () => {
+    const reads: string[] = [];
+    const layer = Layer.succeed(TestResourceHooks, {
+      read: (id: string) =>
+        Effect.sync(() => {
+          reads.push(id);
+          return undefined;
+        }),
+    });
+    return { reads, layer };
+  };
+
+  test(
+    "destroy after failed create with unresolved props skips read and deletes with attr undefined",
+    Effect.gen(function* () {
+      yield* seed({ Zombie: creatingWithUnresolvedProps("Zombie") });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Zombie");
+      expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
+      expect((plan.deletions.Zombie as any).state.attr).toBeUndefined();
+    }),
+  );
+
+  test(
+    "creating-state recovery with unresolved persisted props skips the read probe and re-drives create",
+    Effect.gen(function* () {
+      yield* seed({ Half: creatingWithUnresolvedProps("Half") });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).not.toContain("Half");
+      expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
+
+  test(
+    "resolved persisted creating props still go through read recovery on destroy (control)",
+    Effect.gen(function* () {
+      yield* seed({
+        Zombie: {
+          ...creatingWithUnresolvedProps("Zombie"),
+          props: { string: "resolved" },
+        },
+      });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).toContain("Zombie");
+      expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
+    }),
+  );
+});
