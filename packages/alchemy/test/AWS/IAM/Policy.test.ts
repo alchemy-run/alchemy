@@ -77,6 +77,76 @@ test.provider("create, update, and delete managed policy", (stack) =>
   }),
 );
 
+test.provider(
+  "rotates policy versions past the 5-version cap",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployWith = (actions: [string, ...string[]]) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Policy("VersionCapPolicy", {
+              policyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Action: actions,
+                    Resource: ["*"],
+                  },
+                ],
+              },
+            });
+          }),
+        );
+
+      // 1 create + 6 document updates = 7 versions requested; IAM caps
+      // managed policies at 5 versions, so the provider must prune the
+      // oldest non-default version before each rotation past the cap.
+      const documents: [string, ...string[]][] = [
+        ["s3:ListBucket"],
+        ["s3:GetObject"],
+        ["s3:PutObject"],
+        ["s3:DeleteObject"],
+        ["s3:GetObjectTagging"],
+        ["s3:PutObjectTagging"],
+        ["s3:GetBucketLocation"],
+      ];
+      let policy: { policyArn: string } | undefined;
+      for (const actions of documents) {
+        policy = yield* deployWith(actions);
+      }
+
+      const versions = yield* IAM.listPolicyVersions({
+        PolicyArn: policy!.policyArn,
+      });
+      expect(versions.Versions?.length ?? 0).toBeLessThanOrEqual(5);
+
+      // The default version must carry the last document.
+      const defaultVersion = versions.Versions?.find(
+        (version) => version.IsDefaultVersion,
+      );
+      expect(defaultVersion?.VersionId).toBeDefined();
+      const document = yield* IAM.getPolicyVersion({
+        PolicyArn: policy!.policyArn,
+        VersionId: defaultVersion!.VersionId!,
+      });
+      const decoded = JSON.parse(
+        decodeURIComponent(document.PolicyVersion?.Document ?? ""),
+      ) as { Statement: [{ Action: string[] }] };
+      expect(decoded.Statement[0].Action).toEqual(["s3:GetBucketLocation"]);
+
+      yield* stack.destroy();
+
+      const deleted = yield* IAM.getPolicy({
+        PolicyArn: policy!.policyArn,
+      }).pipe(Effect.option);
+      expect(deleted._tag).toBe("None");
+    }),
+  { timeout: 120_000 },
+);
+
 test.provider("list enumerates the deployed policy", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();

@@ -84,25 +84,39 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(envValue(`${prefix}_TLS`)).toBe("true");
 
       // Runtime shape: the binding resolves the same connection info inside
-      // the deployed function. Retry the first request through cold start.
-      const client = yield* HttpClient.HttpClient;
-      const response = yield* client
-        .get(`${fn.functionUrl!.replace(/\/+$/, "")}/connection`)
-        .pipe(
+      // the deployed function. The first request rides URL propagation AND
+      // the VPC-attached cold start (ENI provisioning), so budget a generous
+      // bounded retry (3s x 60 ≈ 180s).
+      const baseUrl = fn.functionUrl!.replace(/\/+$/, "");
+      const getJson = (path: string, times: number) =>
+        HttpClient.get(`${baseUrl}${path}`).pipe(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
-              : Effect.fail(new Error(`Request failed: ${res.status}`)),
+              : res.text.pipe(
+                  Effect.flatMap((body) =>
+                    Effect.fail(
+                      new Error(`${path} returned ${res.status}: ${body}`),
+                    ),
+                  ),
+                ),
           ),
           Effect.retry({
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(30)),
+            schedule: Schedule.fixed("3 seconds").pipe(
+              Schedule.both(Schedule.recurs(times)),
             ),
           }),
         );
+      const response = yield* getJson("/connection", 60);
       expect((response as { host: string }).host).toBe(cache.endpointAddress);
       expect((response as { port: number }).port).toBe(cache.endpointPort);
       expect((response as { tls: boolean }).tls).toBe(true);
+
+      // Data-plane roundtrip: the VPC-attached function SETs then GETs a key
+      // through the cache over TLS with iovalkey and returns the read-back
+      // value.
+      const roundtrip = yield* getJson("/roundtrip?value=hello-valkey", 10);
+      expect((roundtrip as { value: string }).value).toBe("hello-valkey");
 
       // Destroy immediately — serverless caches bill while they exist —
       // and verify deletion out-of-band with a typed wait.

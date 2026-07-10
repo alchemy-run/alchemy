@@ -12,11 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findGroup = (groupName: string) =>
   xray.getGroup({ GroupName: groupName }).pipe(
     Effect.map((r) => r.Group),
-    Effect.catchTag("InvalidRequestException", (error) =>
-      error.Message === "Group not found"
-        ? Effect.succeed(undefined)
-        : Effect.fail(error),
-    ),
+    Effect.catchTag("GroupNotFound", () => Effect.succeed(undefined)),
   );
 
 class GroupStillExists extends Data.TaggedError("GroupStillExists")<{

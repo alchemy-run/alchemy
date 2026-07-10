@@ -123,13 +123,8 @@ export const GroupProvider = () =>
       const observeGroup = (groupName: string) =>
         xray.getGroup({ GroupName: groupName }).pipe(
           Effect.map((r) => r.Group),
-          // X-Ray reports a missing group as InvalidRequestException with
-          // this exact message.
-          Effect.catchTag("InvalidRequestException", (error) =>
-            error.Message === "Group not found"
-              ? Effect.succeed(undefined)
-              : Effect.fail(error),
-          ),
+          // Typed synthetic tag for a missing group.
+          Effect.catchTag("GroupNotFound", () => Effect.succeed(undefined)),
         );
 
       const observedTags = (groupArn: string) =>
@@ -186,7 +181,8 @@ export const GroupProvider = () =>
           let live = yield* observeGroup(groupName);
 
           // 2. ENSURE — create when missing; a concurrent create surfaces as
-          //    InvalidRequestException "{name} already exists".
+          //    the typed GroupAlreadyExists tag, which we treat as a race
+          //    and re-observe.
           if (live === undefined) {
             live = yield* xray
               .createGroup({
@@ -197,10 +193,8 @@ export const GroupProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.Group),
-                Effect.catchTag("InvalidRequestException", (error) =>
-                  error.Message === `${groupName} already exists`
-                    ? observeGroup(groupName)
-                    : Effect.fail(error),
+                Effect.catchTag("GroupAlreadyExists", () =>
+                  observeGroup(groupName),
                 ),
               );
           }
@@ -248,13 +242,8 @@ export const GroupProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* xray.deleteGroup({ GroupName: output.groupName }).pipe(
-            // X-Ray reports a missing group as InvalidRequestException with
-            // this exact message — idempotent delete.
-            Effect.catchTag("InvalidRequestException", (error) =>
-              error.Message === "Group not found"
-                ? Effect.void
-                : Effect.fail(error),
-            ),
+            // Typed synthetic tag for a missing group — idempotent delete.
+            Effect.catchTag("GroupNotFound", () => Effect.void),
           );
         }),
       });

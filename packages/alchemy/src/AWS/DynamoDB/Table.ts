@@ -44,6 +44,23 @@ export type TableEvent<Data> = Omit<lambda.DynamoDBStreamEvent, "Records"> & {
 
 export type ScalarAttributeType = "S" | "N" | "B";
 
+export interface KinesisStreamingDestination {
+  /**
+   * ARN of the destination Kinesis Data Stream. The stream must be ACTIVE
+   * when the destination is enabled (deploy the `AWS.Kinesis.Stream`
+   * resource in the same stack and pass `stream.streamArn`).
+   */
+  streamArn: string;
+  /**
+   * Precision of the approximate creation timestamp stamped on records
+   * delivered to the Kinesis stream. Changing this on an ACTIVE destination
+   * updates it in place, but the UPDATING→ACTIVE transition can take several
+   * minutes.
+   * @default "MILLISECOND"
+   */
+  approximateCreationDateTimePrecision?: DynamoDB.ApproximateCreationDateTimePrecision;
+}
+
 export type TableProps = {
   /**
    * Name of the table. If omitted, Alchemy generates a deterministic physical
@@ -80,6 +97,24 @@ export type TableProps = {
   timeToLiveSpecification?: DynamoDB.TimeToLiveSpecification;
   warmThroughput?: DynamoDB.WarmThroughput;
   tableClass?: DynamoDB.TableClass;
+  /**
+   * Resource-based IAM policy document (JSON string) attached to the table.
+   * Grants cross-account or scoped-principal access to the table and its
+   * indexes. Removing the property deletes the policy.
+   */
+  resourcePolicy?: string;
+  /**
+   * Streams change data capture records to the given Kinesis Data Stream.
+   * Changing the stream disables the old destination before enabling the
+   * new one; removing the property disables streaming.
+   */
+  kinesisStreamingDestination?: KinesisStreamingDestination;
+  /**
+   * Enables CloudWatch Contributor Insights (table-level rule) for the
+   * table, surfacing the most-accessed and most-throttled keys.
+   * @default false
+   */
+  contributorInsightsEnabled?: boolean;
 };
 
 export type TableBinding = {
@@ -195,6 +230,48 @@ export interface Table extends Resource<
  *     return yield* HttpServerResponse.json(result.Item);
  *   }),
  * };
+ * ```
+ *
+ * @section Table Features
+ * @example Resource Policy
+ * ```typescript
+ * const table = yield* DynamoDB.Table("SharedTable", {
+ *   partitionKey: "pk",
+ *   attributes: { pk: "S" },
+ *   resourcePolicy: JSON.stringify({
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Principal: { AWS: "arn:aws:iam::111122223333:root" },
+ *       Action: ["dynamodb:GetItem", "dynamodb:Query"],
+ *       Resource: "*",
+ *     }],
+ *   }),
+ * });
+ * ```
+ *
+ * @example Kinesis Streaming Destination
+ * ```typescript
+ * import * as Kinesis from "alchemy/AWS/Kinesis";
+ *
+ * const stream = yield* Kinesis.Stream("CdcStream", {});
+ * const table = yield* DynamoDB.Table("CdcTable", {
+ *   partitionKey: "pk",
+ *   attributes: { pk: "S" },
+ *   kinesisStreamingDestination: {
+ *     streamArn: stream.streamArn,
+ *     approximateCreationDateTimePrecision: "MICROSECOND",
+ *   },
+ * });
+ * ```
+ *
+ * @example Contributor Insights
+ * ```typescript
+ * const table = yield* DynamoDB.Table("HotKeyTable", {
+ *   partitionKey: "pk",
+ *   attributes: { pk: "S" },
+ *   contributorInsightsEnabled: true,
+ * });
  * ```
  *
  * @section DynamoDB Streams
@@ -414,6 +491,220 @@ export const TableProvider = () =>
                 isRetryableControlPlaneError(e),
               schedule: Schedule.exponential(250).pipe(
                 Schedule.both(Schedule.recurs(30)),
+              ),
+            }),
+          );
+
+      // Resource policies are compared as canonicalized JSON so formatting
+      // differences between what the user wrote and what AWS stores don't
+      // cause phantom putResourcePolicy calls on every reconcile.
+      const canonicalPolicyDocument = (policy: string | undefined) => {
+        if (policy === undefined) return undefined;
+        try {
+          return JSON.stringify(JSON.parse(policy));
+        } catch {
+          return policy;
+        }
+      };
+
+      const readTableResourcePolicy = (tableArn: string) =>
+        dynamodb.getResourcePolicy({ ResourceArn: tableArn }).pipe(
+          Effect.map((response) => response.Policy),
+          Effect.catchTag("PolicyNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.retry({
+            while: isRetryableControlPlaneError,
+            schedule: Schedule.exponential(250).pipe(
+              Schedule.both(Schedule.recurs(15)),
+            ),
+          }),
+        );
+
+      const putTableResourcePolicy = (tableArn: string, policy: string) =>
+        dynamodb
+          .putResourcePolicy({ ResourceArn: tableArn, Policy: policy })
+          .pipe(
+            Effect.retry({
+              while: isRetryableControlPlaneError,
+              schedule: Schedule.exponential(250).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
+
+      const deleteTableResourcePolicy = (tableArn: string) =>
+        dynamodb.deleteResourcePolicy({ ResourceArn: tableArn }).pipe(
+          Effect.catchTag("PolicyNotFoundException", () => Effect.void),
+          Effect.retry({
+            while: isRetryableControlPlaneError,
+            schedule: Schedule.exponential(250).pipe(
+              Schedule.both(Schedule.recurs(15)),
+            ),
+          }),
+        );
+
+      const isKinesisDestinationTransitioning = (
+        destination: DynamoDB.KinesisDataStreamDestination,
+      ) =>
+        destination.DestinationStatus === "ENABLING" ||
+        destination.DestinationStatus === "DISABLING" ||
+        destination.DestinationStatus === "UPDATING";
+
+      // Kinesis streaming destinations transition ENABLING→ACTIVE and
+      // DISABLING→DISABLED within seconds, but a precision change
+      // (UPDATING→ACTIVE) takes multiple minutes; poll bounded to 8 minutes.
+      const waitForKinesisDestinationsConvergence = Schedule.fixed(
+        "5 seconds",
+      ).pipe(Schedule.both(Schedule.recurs(96)));
+
+      const waitForKinesisDestinationsSettled = (
+        session: {
+          note: (message: string) => Effect.Effect<void, never, never>;
+        },
+        tableName: string,
+      ) => {
+        let elapsedSeconds = 0;
+        return Effect.gen(function* () {
+          const response = yield* dynamodb.describeKinesisStreamingDestination({
+            TableName: tableName,
+          });
+          const destinations = response.KinesisDataStreamDestinations ?? [];
+          if (destinations.some(isKinesisDestinationTransitioning)) {
+            return yield* Effect.fail(new KinesisDestinationNotSettled());
+          }
+          return destinations;
+        }).pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "KinesisDestinationNotSettled" ||
+              isRetryableControlPlaneError(error),
+            schedule: waitForKinesisDestinationsConvergence.pipe(
+              Schedule.tapOutput(([, attempt]) => {
+                elapsedSeconds = (attempt + 1) * 5;
+                return session.note(
+                  `DynamoDB Table provider: waiting for Kinesis streaming destinations on ${tableName} to settle (${formatPollingElapsed(elapsedSeconds)})`,
+                );
+              }),
+            ),
+          }),
+        );
+      };
+
+      const disableKinesisDestination = (
+        tableName: string,
+        streamArn: string,
+      ) =>
+        dynamodb
+          .disableKinesisStreamingDestination({
+            TableName: tableName,
+            StreamArn: streamArn,
+          })
+          .pipe(
+            Effect.retry({
+              while: isRetryableControlPlaneError,
+              schedule: Schedule.exponential(250).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
+
+      const enableKinesisDestination = (
+        tableName: string,
+        destination: KinesisStreamingDestination,
+      ) =>
+        dynamodb
+          .enableKinesisStreamingDestination({
+            TableName: tableName,
+            StreamArn: destination.streamArn,
+            EnableKinesisStreamingConfiguration:
+              destination.approximateCreationDateTimePrecision !== undefined
+                ? {
+                    ApproximateCreationDateTimePrecision:
+                      destination.approximateCreationDateTimePrecision,
+                  }
+                : undefined,
+          })
+          .pipe(
+            Effect.retry({
+              while: isRetryableControlPlaneError,
+              schedule: Schedule.exponential(250).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
+
+      const updateKinesisDestinationPrecision = (
+        tableName: string,
+        destination: KinesisStreamingDestination,
+      ) =>
+        dynamodb
+          .updateKinesisStreamingDestination({
+            TableName: tableName,
+            StreamArn: destination.streamArn,
+            UpdateKinesisStreamingConfiguration: {
+              ApproximateCreationDateTimePrecision:
+                destination.approximateCreationDateTimePrecision,
+            },
+          })
+          .pipe(
+            Effect.retry({
+              while: isRetryableControlPlaneError,
+              schedule: Schedule.exponential(250).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
+
+      // Contributor Insights transitions ENABLING→ENABLED / DISABLING→DISABLED
+      // within seconds, but UpdateContributorInsights rejects a DISABLE while
+      // the status is still ENABLING — wait for a settled status before
+      // diffing observed against desired.
+      const waitForContributorInsightsSettled = (
+        session: {
+          note: (message: string) => Effect.Effect<void, never, never>;
+        },
+        tableName: string,
+      ) =>
+        Effect.gen(function* () {
+          const response = yield* dynamodb.describeContributorInsights({
+            TableName: tableName,
+          });
+          const status = response.ContributorInsightsStatus ?? "DISABLED";
+          if (status === "ENABLING" || status === "DISABLING") {
+            return yield* Effect.fail(new ContributorInsightsNotSettled());
+          }
+          return status;
+        }).pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "ContributorInsightsNotSettled" ||
+              isRetryableControlPlaneError(error),
+            schedule: Schedule.fixed("2 seconds").pipe(
+              Schedule.both(Schedule.recurs(45)),
+              Schedule.tapOutput(([, attempt]) =>
+                session.note(
+                  `DynamoDB Table provider: waiting for Contributor Insights on ${tableName} to settle (${formatPollingElapsed((attempt + 1) * 2)})`,
+                ),
+              ),
+            ),
+          }),
+        );
+
+      const updateTableContributorInsights = (
+        tableName: string,
+        enabled: boolean,
+      ) =>
+        dynamodb
+          .updateContributorInsights({
+            TableName: tableName,
+            ContributorInsightsAction: enabled ? "ENABLE" : "DISABLE",
+          })
+          .pipe(
+            Effect.retry({
+              while: isRetryableControlPlaneError,
+              schedule: Schedule.exponential(250).pipe(
+                Schedule.both(Schedule.recurs(15)),
               ),
             }),
           );
@@ -1333,6 +1624,127 @@ export const TableProvider = () =>
             });
           }
 
+          // Sync resource policy — observed ↔ desired. The observed policy is
+          // read fresh from the cloud (never olds/output) so adoption and
+          // out-of-band drift converge.
+          const observedPolicy = yield* readTableResourcePolicy(
+            state.table.TableArn!,
+          );
+          if (
+            canonicalPolicyDocument(observedPolicy) !==
+            canonicalPolicyDocument(news.resourcePolicy)
+          ) {
+            if (news.resourcePolicy !== undefined) {
+              yield* session.note(
+                `Table ${tableName}: putting resource policy`,
+              );
+              yield* putTableResourcePolicy(
+                state.table.TableArn!,
+                news.resourcePolicy,
+              );
+            } else {
+              yield* session.note(
+                `Table ${tableName}: deleting resource policy`,
+              );
+              yield* deleteTableResourcePolicy(state.table.TableArn!);
+            }
+          }
+
+          // Sync Kinesis streaming destination — observe the table's actual
+          // destinations, wait out any in-flight transition (enable/disable
+          // reject while another change is in progress), disable whatever is
+          // ACTIVE but not desired, then enable/update the desired
+          // destination and wait for it to reach ACTIVE.
+          const desiredKinesisDestination = news.kinesisStreamingDestination;
+          let kinesisDestinations = yield* waitForKinesisDestinationsSettled(
+            session,
+            tableName,
+          );
+          for (const destination of kinesisDestinations) {
+            if (destination.DestinationStatus !== "ACTIVE") continue;
+            if (
+              destination.StreamArn === desiredKinesisDestination?.streamArn
+            ) {
+              continue;
+            }
+            yield* session.note(
+              `Table ${tableName}: disabling Kinesis streaming destination ${destination.StreamArn}`,
+            );
+            yield* disableKinesisDestination(tableName, destination.StreamArn!);
+            kinesisDestinations = yield* waitForKinesisDestinationsSettled(
+              session,
+              tableName,
+            );
+          }
+          if (desiredKinesisDestination !== undefined) {
+            const activeDestination = kinesisDestinations.find(
+              (destination) =>
+                destination.StreamArn === desiredKinesisDestination.streamArn &&
+                destination.DestinationStatus === "ACTIVE",
+            );
+            if (activeDestination === undefined) {
+              yield* session.note(
+                `Table ${tableName}: enabling Kinesis streaming destination ${desiredKinesisDestination.streamArn}`,
+              );
+              yield* enableKinesisDestination(
+                tableName,
+                desiredKinesisDestination,
+              );
+              kinesisDestinations = yield* waitForKinesisDestinationsSettled(
+                session,
+                tableName,
+              );
+            } else if (
+              desiredKinesisDestination.approximateCreationDateTimePrecision !==
+                undefined &&
+              (activeDestination.ApproximateCreationDateTimePrecision ??
+                "MILLISECOND") !==
+                desiredKinesisDestination.approximateCreationDateTimePrecision
+            ) {
+              yield* session.note(
+                `Table ${tableName}: updating Kinesis streaming destination precision to ${desiredKinesisDestination.approximateCreationDateTimePrecision}`,
+              );
+              yield* updateKinesisDestinationPrecision(
+                tableName,
+                desiredKinesisDestination,
+              );
+              kinesisDestinations = yield* waitForKinesisDestinationsSettled(
+                session,
+                tableName,
+              );
+            }
+            const settledDestination = kinesisDestinations.find(
+              (destination) =>
+                destination.StreamArn === desiredKinesisDestination.streamArn,
+            );
+            if (settledDestination?.DestinationStatus !== "ACTIVE") {
+              return yield* Effect.fail(
+                new KinesisStreamingDestinationFailed({
+                  tableName,
+                  streamArn: desiredKinesisDestination.streamArn,
+                  status: settledDestination?.DestinationStatus,
+                  description: settledDestination?.DestinationStatusDescription,
+                }),
+              );
+            }
+          }
+
+          // Sync Contributor Insights — observed ↔ desired.
+          const desiredInsightsEnabled =
+            news.contributorInsightsEnabled ?? false;
+          const observedInsightsStatus =
+            yield* waitForContributorInsightsSettled(session, tableName);
+          const observedInsightsEnabled = observedInsightsStatus === "ENABLED";
+          if (observedInsightsEnabled !== desiredInsightsEnabled) {
+            yield* session.note(
+              `Table ${tableName}: ${desiredInsightsEnabled ? "enabling" : "disabling"} Contributor Insights`,
+            );
+            yield* updateTableContributorInsights(
+              tableName,
+              desiredInsightsEnabled,
+            );
+          }
+
           // Sync tags — diff observed cloud tags against desired.
           //
           // Adoption may bring us a table that already has its own tag set;
@@ -1447,6 +1859,23 @@ class TableIndexesNotStable extends Data.TaggedError("TableIndexesNotStable") {}
 class TableStillDeleting extends Data.TaggedError("TableStillDeleting") {}
 
 class MissingStreamViewType extends Data.TaggedError("MissingStreamViewType") {}
+
+class KinesisDestinationNotSettled extends Data.TaggedError(
+  "KinesisDestinationNotSettled",
+) {}
+
+class ContributorInsightsNotSettled extends Data.TaggedError(
+  "ContributorInsightsNotSettled",
+) {}
+
+class KinesisStreamingDestinationFailed extends Data.TaggedError(
+  "KinesisStreamingDestinationFailed",
+)<{
+  tableName: string;
+  streamArn: string;
+  status: string | undefined;
+  description: string | undefined;
+}> {}
 
 class ConflictingStreamViewTypes extends Data.TaggedError(
   "ConflictingStreamViewTypes",

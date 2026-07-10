@@ -16,7 +16,6 @@ export class SNSEventFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()
 export const SNSEventFunctionLive = SNSEventFunction.make(
   {
     main,
-    handler: "SNSEventFunctionLive",
     url: true,
   },
   Effect.gen(function* () {

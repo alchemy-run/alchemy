@@ -1,4 +1,5 @@
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -98,6 +99,68 @@ export interface UserPoolSchemaAttribute {
 }
 
 /**
+ * The user pool Lambda trigger slots that take a plain function ARN — the
+ * string-valued keys of the pool's `LambdaConfig`. (`CustomSMSSender` /
+ * `CustomEmailSender` take versioned config objects + a KMS key and are
+ * out of scope for the trigger event source.)
+ */
+export type UserPoolTriggerName =
+  | "PreSignUp"
+  | "PostConfirmation"
+  | "PreAuthentication"
+  | "PostAuthentication"
+  | "CustomMessage"
+  | "DefineAuthChallenge"
+  | "CreateAuthChallenge"
+  | "VerifyAuthChallengeResponse"
+  | "PreTokenGeneration"
+  | "UserMigration";
+
+const USER_POOL_TRIGGER_NAMES: readonly UserPoolTriggerName[] = [
+  "PreSignUp",
+  "PostConfirmation",
+  "PreAuthentication",
+  "PostAuthentication",
+  "CustomMessage",
+  "DefineAuthChallenge",
+  "CreateAuthChallenge",
+  "VerifyAuthChallengeResponse",
+  "PreTokenGeneration",
+  "UserMigration",
+];
+
+/**
+ * Lambda trigger configuration for the pool: each key is a trigger slot,
+ * each value the ARN of the Lambda function Cognito invokes for it.
+ * Usually populated through the trigger event source
+ * (`Cognito.onPreSignUp(pool, ...)` etc.) rather than declared directly.
+ */
+export interface UserPoolLambdaConfig extends Partial<
+  Record<UserPoolTriggerName, string>
+> {}
+
+/**
+ * The binding contract of a user pool: event sources contribute
+ * `LambdaConfig` trigger entries (trigger slot → function ARN) that the
+ * provider merges with `props.lambdaConfig` and syncs onto the pool.
+ */
+export interface UserPoolBinding {
+  /** Trigger entries injected by `Cognito.onUserPoolTrigger` and friends. */
+  lambdaConfig?: UserPoolLambdaConfig;
+}
+
+/**
+ * Two different Lambda functions were registered for the same user pool
+ * trigger slot — Cognito supports exactly one function per trigger.
+ */
+export class ConflictingUserPoolTrigger extends Data.TaggedError(
+  "ConflictingUserPoolTrigger",
+)<{
+  readonly trigger: string;
+  readonly functionArns: readonly string[];
+}> {}
+
+/**
  * An account recovery mechanism with its priority (1 is highest).
  */
 export interface UserPoolRecoveryMechanism {
@@ -178,6 +241,14 @@ export interface UserPoolProps {
    */
   tier?: "LITE" | "ESSENTIALS" | "PLUS";
   /**
+   * Lambda trigger configuration (trigger slot → function ARN). Merged with
+   * trigger entries injected through the binding contract by
+   * `Cognito.onUserPoolTrigger` / `onPreSignUp` / etc. — prefer those over
+   * declaring ARNs here, since the event source also creates the invoke
+   * Permission and registers the runtime handler.
+   */
+  lambdaConfig?: UserPoolLambdaConfig;
+  /**
    * Tags to apply to the user pool. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
@@ -194,7 +265,7 @@ export interface UserPool extends Resource<
     /** The name of the user pool. */
     userPoolName: string;
   },
-  never,
+  UserPoolBinding,
   Providers
 > {}
 
@@ -376,9 +447,56 @@ export const UserPoolProvider = () =>
         userPoolName: pool.Name!,
       });
 
+      /**
+       * The pool's desired `LambdaConfig`: `props.lambdaConfig` merged with
+       * the trigger entries contributed through the binding contract
+       * (`Cognito.onUserPoolTrigger` and friends). Fails when two different
+       * function ARNs target the same trigger slot. Returns `undefined`
+       * when no triggers are desired (omitting `LambdaConfig` clears it on
+       * both create and update).
+       */
+      const resolveLambdaConfig = Effect.fn(function* (
+        news: UserPoolProps,
+        bindings: ReadonlyArray<UserPoolBinding | { data?: UserPoolBinding }>,
+      ) {
+        const merged: Partial<Record<UserPoolTriggerName, string>> = {};
+        const contributions = [
+          news.lambdaConfig,
+          ...bindings.map(
+            (binding) =>
+              (binding as { data?: UserPoolBinding }).data?.lambdaConfig ??
+              (binding as UserPoolBinding).lambdaConfig,
+          ),
+        ];
+        for (const config of contributions) {
+          if (config === undefined) continue;
+          for (const trigger of USER_POOL_TRIGGER_NAMES) {
+            const arn = config[trigger];
+            if (arn === undefined) continue;
+            const existing = merged[trigger];
+            if (existing !== undefined && existing !== arn) {
+              return yield* Effect.fail(
+                new ConflictingUserPoolTrigger({
+                  trigger,
+                  functionArns: [existing, arn],
+                }),
+              );
+            }
+            merged[trigger] = arn;
+          }
+        }
+        return Object.keys(merged).length > 0
+          ? (merged as UserPoolLambdaConfig)
+          : undefined;
+      });
+
       /** The update body sent to `updateUserPool` — always the full desired
        * state, because Cognito resets any omitted field to its default. */
-      const desiredUpdate = (news: UserPoolProps) => ({
+      const desiredUpdate = (
+        news: UserPoolProps,
+        lambdaConfig: UserPoolLambdaConfig | undefined,
+      ) => ({
+        LambdaConfig: lambdaConfig,
         Policies:
           news.passwordPolicy === undefined
             ? undefined
@@ -425,8 +543,20 @@ export const UserPoolProvider = () =>
       });
 
       /** True when the observed pool differs from the desired mutable state.
-       * Props the user left undefined are "don't care" and never drift. */
-      const hasDrift = (news: UserPoolProps, observed: cip.UserPoolType) => {
+       * Props the user left undefined are "don't care" and never drift —
+       * except `LambdaConfig`, which the provider owns outright (bindings
+       * contribute to it), so a trigger removed from the program is drift
+       * that clears the observed entry. */
+      const hasDrift = (
+        news: UserPoolProps,
+        observed: cip.UserPoolType,
+        lambdaConfig: UserPoolLambdaConfig | undefined,
+      ) => {
+        for (const trigger of USER_POOL_TRIGGER_NAMES) {
+          if (lambdaConfig?.[trigger] !== observed.LambdaConfig?.[trigger]) {
+            return true;
+          }
+        }
         if (news.passwordPolicy !== undefined) {
           const desired = normalizedPasswordPolicy(news.passwordPolicy);
           const actual = normalizedPasswordPolicy({
@@ -554,10 +684,17 @@ export const UserPoolProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news = {},
+          output,
+          session,
+          bindings,
+        }) {
           const name = output?.userPoolName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
+          const lambdaConfig = yield* resolveLambdaConfig(news, bindings);
 
           // 1. OBSERVE — output.userPoolId is only a cache; fall back to a
           //    name search so out-of-band deletes and adoption converge.
@@ -585,6 +722,7 @@ export const UserPoolProvider = () =>
             observed = yield* cip
               .createUserPool({
                 PoolName: name,
+                LambdaConfig: lambdaConfig,
                 Policies:
                   news.passwordPolicy === undefined
                     ? undefined
@@ -620,10 +758,10 @@ export const UserPoolProvider = () =>
             // 3. SYNC — updateUserPool resets omitted fields to defaults, so
             //    the body is always the full desired mutable state; skip the
             //    call entirely when nothing drifted.
-            if (hasDrift(news, observed)) {
+            if (hasDrift(news, observed, lambdaConfig)) {
               yield* cip.updateUserPool({
                 UserPoolId: observed.Id!,
-                ...desiredUpdate(news),
+                ...desiredUpdate(news, lambdaConfig),
               });
             }
 

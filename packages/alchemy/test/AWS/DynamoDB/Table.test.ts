@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
+import { Stream as KinesisStream } from "@/AWS/Kinesis";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Vitest";
@@ -239,6 +240,210 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         yield* logTestStep("destroying tagged table");
         yield* stack.destroy();
 
+        yield* assertTableIsDeleted(table.tableName);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "create, update, and remove the table resource policy",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting resource policy test");
+        yield* stack.destroy();
+
+        // The policy document references the table ARN, so deploy the table
+        // first and add the policy in a second deploy.
+        yield* logTestStep("deploying table without a resource policy");
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("PolicyTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+
+        const accountId = table.tableArn.split(":")[4];
+        const policyFor = (sid: string, action: string) =>
+          JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Sid: sid,
+                Effect: "Allow",
+                Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                Action: [action],
+                Resource: table.tableArn,
+              },
+            ],
+          });
+
+        yield* logTestStep("adding a resource policy");
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("PolicyTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+              resourcePolicy: policyFor(
+                "AllowSameAccountDescribe",
+                "dynamodb:DescribeTable",
+              ),
+            });
+          }),
+        );
+        const created = yield* waitForResourcePolicy(
+          table.tableArn,
+          "AllowSameAccountDescribe",
+        );
+        expect(created).toContain("AllowSameAccountDescribe");
+
+        yield* logTestStep("updating the resource policy");
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("PolicyTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+              resourcePolicy: policyFor(
+                "AllowSameAccountGet",
+                "dynamodb:GetItem",
+              ),
+            });
+          }),
+        );
+        const updated = yield* waitForResourcePolicy(
+          table.tableArn,
+          "AllowSameAccountGet",
+        );
+        expect(updated).toContain("AllowSameAccountGet");
+        expect(updated).not.toContain("AllowSameAccountDescribe");
+
+        yield* logTestStep("removing the resource policy");
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("PolicyTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+        const removed = yield* waitForResourcePolicy(table.tableArn, undefined);
+        expect(removed).toBeUndefined();
+
+        yield* logTestStep("destroying resource policy test table");
+        yield* stack.destroy();
+        yield* assertTableIsDeleted(table.tableName);
+      }),
+    { timeout: 240_000 },
+  );
+
+  // NOTE: a live precision UPDATE on an ACTIVE destination
+  // (updateKinesisStreamingDestination) is implemented in the provider but
+  // not exercised here: the UPDATING→ACTIVE transition takes multiple
+  // minutes (vs seconds for enable/disable), which blows the test budget.
+  // The enable path below sets an explicit precision, verifying the
+  // configuration plumbing out-of-band.
+  test.provider(
+    "enable and disable the Kinesis streaming destination",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting Kinesis streaming destination test");
+        yield* stack.destroy();
+
+        const program = (enabled: boolean) =>
+          Effect.gen(function* () {
+            const stream = yield* KinesisStream("CdcStream", {
+              streamMode: "PROVISIONED",
+              shardCount: 1,
+            });
+            const table = yield* Table("CdcTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+              kinesisStreamingDestination: enabled
+                ? {
+                    streamArn: stream.streamArn,
+                    approximateCreationDateTimePrecision: "MICROSECOND",
+                  }
+                : undefined,
+            });
+            return { table, stream };
+          });
+
+        yield* logTestStep(
+          "deploying stream + table with streaming destination",
+        );
+        const { table, stream } = yield* stack.deploy(program(true));
+
+        const enabled = yield* waitForKinesisDestination(
+          table.tableName,
+          stream.streamArn,
+          "ACTIVE",
+        );
+        expect(enabled?.DestinationStatus).toEqual("ACTIVE");
+        expect(enabled?.ApproximateCreationDateTimePrecision).toEqual(
+          "MICROSECOND",
+        );
+
+        yield* logTestStep(
+          "removing the streaming destination (stream stays deployed)",
+        );
+        yield* stack.deploy(program(false));
+        const disabled = yield* waitForKinesisDestination(
+          table.tableName,
+          stream.streamArn,
+          "DISABLED",
+        );
+        expect(disabled?.DestinationStatus).toEqual("DISABLED");
+
+        yield* logTestStep("destroying Kinesis streaming destination stack");
+        yield* stack.destroy();
+        yield* assertTableIsDeleted(table.tableName);
+      }),
+    { timeout: 360_000 },
+  );
+
+  test.provider(
+    "enable and disable Contributor Insights",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting Contributor Insights test");
+        yield* stack.destroy();
+
+        yield* logTestStep("deploying table with Contributor Insights");
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("InsightsTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+              contributorInsightsEnabled: true,
+            });
+          }),
+        );
+
+        const enabled = yield* waitForContributorInsights(
+          table.tableName,
+          true,
+        );
+        expect(["ENABLING", "ENABLED"]).toContain(enabled);
+
+        yield* logTestStep("disabling Contributor Insights");
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("InsightsTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+
+        const disabled = yield* waitForContributorInsights(
+          table.tableName,
+          false,
+        );
+        expect(["DISABLING", "DISABLED"]).toContain(disabled);
+
+        yield* logTestStep("destroying Contributor Insights test table");
+        yield* stack.destroy();
         yield* assertTableIsDeleted(table.tableName);
       }),
     { timeout: 240_000 },
@@ -1096,6 +1301,105 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
     );
   });
 
+  const waitForResourcePolicy = Effect.fn(function* (
+    tableArn: string,
+    expectedSid: string | undefined,
+  ) {
+    yield* Effect.logInfo(
+      `DynamoDB Table test: waiting for resource policy on ${tableArn} -> ${expectedSid ?? "absent"}`,
+    );
+    return yield* DynamoDB.getResourcePolicy({
+      ResourceArn: tableArn,
+    }).pipe(
+      Effect.map((result) => result.Policy),
+      Effect.catchTag("PolicyNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+      Effect.flatMap((policy) => {
+        const matches =
+          expectedSid === undefined
+            ? policy === undefined
+            : policy?.includes(expectedSid) === true;
+        if (!matches) {
+          return Effect.logInfo(
+            `DynamoDB Table test: resource policy not ready on ${tableArn}. actual=${policy ?? "absent"}`,
+          ).pipe(Effect.andThen(Effect.fail(new ResourcePolicyNotUpdated())));
+        }
+        return Effect.succeed(policy);
+      }),
+      Effect.retry({
+        while: (error) => error._tag === "ResourcePolicyNotUpdated",
+        schedule: Schedule.fixed("2 seconds").pipe(
+          Schedule.both(Schedule.recurs(15)),
+        ),
+      }),
+    );
+  });
+
+  const waitForKinesisDestination = Effect.fn(function* (
+    tableName: string,
+    streamArn: string,
+    expectedStatus: "ACTIVE" | "DISABLED",
+  ) {
+    yield* Effect.logInfo(
+      `DynamoDB Table test: waiting for Kinesis destination ${streamArn} on ${tableName} -> ${expectedStatus}`,
+    );
+    return yield* DynamoDB.describeKinesisStreamingDestination({
+      TableName: tableName,
+    }).pipe(
+      Effect.flatMap((result) => {
+        const destination = (result.KinesisDataStreamDestinations ?? []).find(
+          (candidate) => candidate.StreamArn === streamArn,
+        );
+        if (destination?.DestinationStatus !== expectedStatus) {
+          return Effect.logInfo(
+            `DynamoDB Table test: Kinesis destination not ready on ${tableName}. actual=${destination?.DestinationStatus ?? "absent"} expected=${expectedStatus}`,
+          ).pipe(
+            Effect.andThen(Effect.fail(new KinesisDestinationNotUpdated())),
+          );
+        }
+        return Effect.succeed(destination);
+      }),
+      Effect.retry({
+        while: (error) => error._tag === "KinesisDestinationNotUpdated",
+        schedule: Schedule.fixed("5 seconds").pipe(
+          Schedule.both(Schedule.recurs(18)),
+        ),
+      }),
+    );
+  });
+
+  const waitForContributorInsights = Effect.fn(function* (
+    tableName: string,
+    enabled: boolean,
+  ) {
+    yield* Effect.logInfo(
+      `DynamoDB Table test: waiting for Contributor Insights on ${tableName} -> ${enabled ? "enabled" : "disabled"}`,
+    );
+    return yield* DynamoDB.describeContributorInsights({
+      TableName: tableName,
+    }).pipe(
+      Effect.flatMap((result) => {
+        const status = result.ContributorInsightsStatus;
+        const isEnabled = status === "ENABLED" || status === "ENABLING";
+        if (isEnabled !== enabled) {
+          return Effect.logInfo(
+            `DynamoDB Table test: Contributor Insights not ready on ${tableName}. actual=${status ?? "undefined"}`,
+          ).pipe(
+            Effect.andThen(Effect.fail(new ContributorInsightsNotUpdated())),
+          );
+        }
+        return Effect.succeed(status);
+      }),
+      Effect.retry({
+        while: (error) => error._tag === "ContributorInsightsNotUpdated",
+        schedule: Schedule.fixed("2 seconds").pipe(
+          Schedule.both(Schedule.recurs(15)),
+        ),
+      }),
+    );
+  });
+
   const logTestStep = (message: string) =>
     Effect.logInfo(`DynamoDB Table test: ${message}`);
 
@@ -1115,5 +1419,17 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
 
   class TableIndexesNotUpdated extends Data.TaggedError(
     "TableIndexesNotUpdated",
+  ) {}
+
+  class ResourcePolicyNotUpdated extends Data.TaggedError(
+    "ResourcePolicyNotUpdated",
+  ) {}
+
+  class KinesisDestinationNotUpdated extends Data.TaggedError(
+    "KinesisDestinationNotUpdated",
+  ) {}
+
+  class ContributorInsightsNotUpdated extends Data.TaggedError(
+    "ContributorInsightsNotUpdated",
   ) {}
 });

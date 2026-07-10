@@ -1,4 +1,9 @@
 export { CachePolicy, CachePolicyProvider } from "./CachePolicy.ts";
+export {
+  CreateInvalidation,
+  type CreateInvalidationRequest,
+} from "./CreateInvalidation.ts";
+export { CreateInvalidationHttp } from "./CreateInvalidationHttp.ts";
 export { Distribution, DistributionProvider } from "./Distribution.ts";
 export { Function, FunctionProvider } from "./Function.ts";
 export { Invalidation, InvalidationProvider } from "./Invalidation.ts";
@@ -20,6 +25,12 @@ export {
   OriginRequestPolicyProvider,
 } from "./OriginRequestPolicy.ts";
 export { PublicKey, PublicKeyProvider } from "./PublicKey.ts";
+export {
+  RealtimeLogConfig,
+  RealtimeLogConfigProvider,
+  type RealtimeLogConfigProps,
+  type RealtimeLogEndpoint,
+} from "./RealtimeLogConfig.ts";
 export {
   ResponseHeadersPolicy,
   ResponseHeadersPolicyProvider,

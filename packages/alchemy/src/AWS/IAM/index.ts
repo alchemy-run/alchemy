@@ -25,6 +25,11 @@ export {
   ServerCertificateProvider,
 } from "./ServerCertificate.ts";
 export {
+  ServiceLinkedRole,
+  ServiceLinkedRoleDeletionFailed,
+  ServiceLinkedRoleProvider,
+} from "./ServiceLinkedRole.ts";
+export {
   ServiceSpecificCredential,
   ServiceSpecificCredentialProvider,
 } from "./ServiceSpecificCredential.ts";

@@ -267,8 +267,8 @@ export const SamplingRuleProvider = () =>
           let live = yield* observeRule(ruleName);
 
           // 2. ENSURE — create when missing; a concurrent create surfaces as
-          //    InvalidRequestException "Sampling rule already exists", which
-          //    we treat as a race and re-observe.
+          //    the typed SamplingRuleAlreadyExists tag, which we treat as a
+          //    race and re-observe.
           if (live === undefined) {
             live = yield* xray
               .createSamplingRule({
@@ -277,10 +277,8 @@ export const SamplingRuleProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.SamplingRuleRecord?.SamplingRule),
-                Effect.catchTag("InvalidRequestException", (error) =>
-                  error.Message === "Sampling rule already exists"
-                    ? observeRule(ruleName)
-                    : Effect.fail(error),
+                Effect.catchTag("SamplingRuleAlreadyExists", () =>
+                  observeRule(ruleName),
                 ),
               );
           }
@@ -332,13 +330,8 @@ export const SamplingRuleProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* xray.deleteSamplingRule({ RuleName: output.ruleName }).pipe(
-            // X-Ray reports a missing rule as InvalidRequestException with
-            // this exact message — idempotent delete.
-            Effect.catchTag("InvalidRequestException", (error) =>
-              error.Message === "Sampling rule does not exist"
-                ? Effect.void
-                : Effect.fail(error),
-            ),
+            // Typed synthetic tag for a missing rule — idempotent delete.
+            Effect.catchTag("SamplingRuleNotFound", () => Effect.void),
           );
         }),
       });

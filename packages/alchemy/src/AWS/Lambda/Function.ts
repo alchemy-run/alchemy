@@ -1336,7 +1336,12 @@ export default handler;
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
-          Handler: `index.${news.handler ?? "default"}`,
+          // Effect-mode functions are wrapped in a generated entry whose ONLY
+          // export is `default` — `handler` names an export of the USER's
+          // module and can only address it when the module is bundled as-is
+          // (isExternal). Honoring it in Effect mode deploys a Lambda that
+          // dies at init with Runtime.HandlerNotFound.
+          Handler: `index.${news.isExternal ? (news.handler ?? "default") : "default"}`,
           Role: roleArn,
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",

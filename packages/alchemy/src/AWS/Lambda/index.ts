@@ -52,4 +52,5 @@ export * from "./TerminateMicrovmHttp.ts";
 export * from "./TopicEventSource.ts";
 export * from "./UpdateMicrovmImageVersion.ts";
 export * from "./UpdateMicrovmImageVersionHttp.ts";
+export * from "./UserPoolTriggerEventSource.ts";
 export * from "./WebSocketEventSource.ts";
