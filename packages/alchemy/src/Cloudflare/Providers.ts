@@ -731,25 +731,27 @@ const cloudflareRetryFactory: Retry.Factory = (lastError) => {
   return {
     while: (error) =>
       defaults.while?.(error) === true || isMisleadinglyTaggedTransient(error),
-    schedule: pipe(
-      Schedule.exponential(Duration.millis(250), 2),
-      Schedule.modifyDelay(
-        Effect.fn(function* (duration) {
-          const error = yield* Ref.get(lastError);
-          // Throttling errors (429): honor a 500ms floor matching the
-          // distilled default.
-          const isThrottling =
-            (error as { _tag?: unknown })?._tag === "TooManyRequests";
-          if (isThrottling && Duration.toMillis(duration) < 500) {
-            return Duration.toMillis(Duration.millis(500));
-          }
-          return Duration.toMillis(duration);
-        }),
+    schedule: Schedule.max([
+      pipe(
+        Schedule.exponential(Duration.millis(250), 2),
+        Schedule.modifyDelay(
+          Effect.fn(function* ({ duration }) {
+            const error = yield* Ref.get(lastError);
+            // Throttling errors (429): honor a 500ms floor matching the
+            // distilled default.
+            const isThrottling =
+              (error as { _tag?: unknown })?._tag === "TooManyRequests";
+            if (isThrottling && Duration.toMillis(duration) < 500) {
+              return Duration.toMillis(Duration.millis(500));
+            }
+            return Duration.toMillis(duration);
+          }),
+        ),
+        Retry.capped(Duration.seconds(5)),
+        Retry.jittered,
       ),
-      Retry.capped(Duration.seconds(5)),
-      Retry.jittered,
-      Schedule.both(Schedule.recurs(8)),
-    ),
+      Schedule.recurs(8),
+    ]),
   };
 };
 

@@ -51,9 +51,10 @@ describe.sequential("AWS.Kinesis.StreamEventSource", () => {
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.fixed("1 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("1 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
 
@@ -99,9 +100,10 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "EventSourceMappingNotReady",
-      schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("2 seconds"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 });

@@ -27,9 +27,10 @@ const logLevel = Effect.provideService(
 
 // Cap exponential backoff at 3s so retries stay bounded when CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // Suffix DO instance ids with a per-process random tag so reruns under
 // `NO_DESTROY=1` don't collide with persisted state from earlier runs

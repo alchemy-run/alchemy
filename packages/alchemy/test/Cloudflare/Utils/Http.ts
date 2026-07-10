@@ -119,9 +119,10 @@ export const expectUrlContains = (
     Effect.retry({
       // Cap individual sleeps at 8s so very long timeouts still
       // sample at a reasonable rate near the end of the budget.
-      schedule: Schedule.exponential(initial, 1.5).pipe(
-        Schedule.either(Schedule.spaced("8 seconds")),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential(initial, 1.5),
+        Schedule.spaced("8 seconds"),
+      ]),
     }),
     // Bound the *total* retry budget. `Effect.retry` on its own would
     // back off forever; the timeout guarantees the test fails loudly
@@ -197,9 +198,10 @@ export const expectUrlAbsent = (
 
   return fetchOnceAbsent(url, marker).pipe(
     Effect.retry({
-      schedule: Schedule.exponential(initial, 1.5).pipe(
-        Schedule.either(Schedule.spaced("8 seconds")),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential(initial, 1.5),
+        Schedule.spaced("8 seconds"),
+      ]),
     }),
     Effect.timeoutOrElse({
       duration: totalTimeout,

@@ -113,9 +113,10 @@ const expectZoneRuleGone = (zoneId: string, ruleId: string) =>
     Effect.catchTag("AccessRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RuleNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -125,9 +126,10 @@ const expectAccountRuleGone = (accountId: string, ruleId: string) =>
     Effect.catchTag("AccessRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RuleNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

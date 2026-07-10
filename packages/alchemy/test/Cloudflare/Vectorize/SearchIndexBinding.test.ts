@@ -37,10 +37,13 @@ const logLevel = Effect.provideService(
 // script is resolvable. Cap each backoff at 5s and stop after 12 attempts
 // (~45s worst case) so a genuine failure surfaces instead of hanging.
 const readinessRetry = {
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.either(Schedule.spaced("5 seconds")),
-    Schedule.both(Schedule.recurs(12)),
-  ),
+  schedule: Schedule.max([
+    Schedule.min([
+      Schedule.exponential("500 millis"),
+      Schedule.spaced("5 seconds"),
+    ]),
+    Schedule.recurs(12),
+  ]),
 } as const;
 
 const getJson = (url: string) =>
@@ -67,9 +70,10 @@ const exercise = (label: string, baseUrl: string) =>
     yield* HttpClient.get(`${baseUrl}/health`).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.both(Schedule.recurs(20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential("500 millis"),
+          Schedule.recurs(20),
+        ]),
       }),
     );
 

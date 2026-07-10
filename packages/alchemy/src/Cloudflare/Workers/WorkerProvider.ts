@@ -125,7 +125,7 @@ const isBindingTargetNotFound = (
   e._tag === "MtlsCertificateNotFound";
 
 const bindingTargetNotFoundRetrySchedule = () =>
-  Schedule.fixed("2 seconds").pipe(Schedule.both(Schedule.recurs(10)));
+  Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 /**
  * Upsert a Worker script, routing to the dispatch-namespace endpoint when
@@ -488,9 +488,10 @@ export const LiveWorkerProvider = () =>
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "WorkerNotFound",
-                schedule: Schedule.exponential(200).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(200),
+                  Schedule.recurs(15),
+                ]),
               }),
             );
           return normalizeCrons(
@@ -640,9 +641,10 @@ export const LiveWorkerProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (error) => error._tag === "WorkerNotFound",
-                  schedule: Schedule.exponential(200).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(200),
+                    Schedule.recurs(15),
+                  ]),
                 }),
               );
             return {
@@ -841,9 +843,10 @@ export const LiveWorkerProvider = () =>
                 // typed as `RouteScriptNotFound` via the createRoute patch.
                 Effect.retry({
                   while: (error) => error._tag === "RouteScriptNotFound",
-                  schedule: Schedule.exponential(200).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.exponential(200),
+                    Schedule.recurs(15),
+                  ]),
                 }),
                 Effect.catchTag("InvalidRoute", (originalError) =>
                   Effect.gen(function* () {
@@ -968,9 +971,10 @@ export const LiveWorkerProvider = () =>
               error._tag === "WorkerNotFound" ||
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
-            schedule: Schedule.exponential(100).pipe(
-              Schedule.both(Schedule.recurs(20)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential(100),
+              Schedule.recurs(20),
+            ]),
           }),
         );
       });
@@ -1631,9 +1635,10 @@ export const LiveWorkerProvider = () =>
                 error._tag === "WorkerNotFound" ||
                 error._tag === "InternalServerError" ||
                 error._tag === "UnknownCloudflareError",
-              schedule: Schedule.exponential(200).pipe(
-                Schedule.both(Schedule.recurs(15)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential(200),
+                Schedule.recurs(15),
+              ]),
             }),
           );
         }
@@ -2135,9 +2140,10 @@ export const LiveWorkerProvider = () =>
                 while: (e) =>
                   e._tag === "InternalServerError" ||
                   e._tag === "UnknownCloudflareError",
-                schedule: Schedule.exponential(1000).pipe(
-                  Schedule.both(Schedule.recurs(5)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.exponential(1000),
+                  Schedule.recurs(5),
+                ]),
               }),
             );
             if (doClasses.length > 0) {

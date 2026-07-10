@@ -40,9 +40,10 @@ const expectGone = (accountId: string, subscriptionId: string) =>
     Effect.catchTag("SubscriptionNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SubscriptionNotDeleted",
-      schedule: Schedule.fixed("500 millis").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("500 millis"),
+        Schedule.recurs(20),
+      ]),
     }),
   );
 

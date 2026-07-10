@@ -32,9 +32,10 @@ const requestTimeout = "5 seconds";
 // retry through `readinessRetry`. Cap the backoff at 3s so 15 attempts stay
 // bounded (~45s) instead of the raw exponential blowing past the timeout.
 const readinessRetry = {
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.either(Schedule.spaced("3 seconds")),
-  ),
+  schedule: Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("3 seconds"),
+  ]),
   times: 15,
 } as const;
 

@@ -73,9 +73,10 @@ const waitForLive = (zoneId: string, certificateId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotLive",
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(15),
+      ]),
     }),
   );
 
@@ -92,9 +93,10 @@ const waitForGone = (zoneId: string, certificateId: string) =>
     Effect.catchTag("HostnameCertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

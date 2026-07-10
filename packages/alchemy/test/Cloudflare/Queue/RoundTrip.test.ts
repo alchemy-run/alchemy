@@ -106,10 +106,13 @@ test.provider(
             // Cap the exponential at 3s — uncapped, the sleeps double each
             // attempt and a handful of misses burns minutes of the test
             // timeout on a single send.
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.either(Schedule.spaced("3 seconds")),
-              Schedule.both(Schedule.recurs(15)),
-            ),
+            schedule: Schedule.max([
+              Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("3 seconds"),
+              ]),
+              Schedule.recurs(15),
+            ]),
           }),
         );
 
@@ -166,10 +169,13 @@ test.provider(
             // Uncapped, the doubling sleeps pass the whole 240s test budget
             // after ~9 attempts and the test dies in a single long sleep even
             // though the consumer would have caught up moments later.
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.either(Schedule.spaced("4 seconds")),
-              Schedule.both(Schedule.recurs(40)),
-            ),
+            schedule: Schedule.max([
+              Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("4 seconds"),
+              ]),
+              Schedule.recurs(40),
+            ]),
           }),
         );
 

@@ -442,26 +442,28 @@ const awsRetryFactory: RetryFactory = (lastError) => ({
     isThrottlingError(error) ||
     isRetryable(error) ||
     isHttpTransportError(error),
-  schedule: pipe(
-    Schedule.exponential(Duration.millis(200), 2),
-    Schedule.modifyDelay(
-      Effect.fn(function* (duration) {
-        const error = yield* Ref.get(lastError);
-        if (isThrottlingError(error)) {
-          // Throttling: floor at 500ms (matches distilled default).
-          if (Duration.toMillis(duration) < 500) {
-            return Duration.toMillis(Duration.millis(500));
+  // Transient transport failures (e.g. a sustained `read ETIMEDOUT` blip
+  // against a control-plane endpoint) can outlast a 10-attempt budget. With
+  // the 5s cap below, the extra attempts add bounded backoff while making
+  // the network-flake recovery materially more robust.
+  schedule: Schedule.max([
+    pipe(
+      Schedule.exponential(Duration.millis(200), 2),
+      Schedule.modifyDelay(
+        Effect.fn(function* ({ duration }) {
+          const error = yield* Ref.get(lastError);
+          if (isThrottlingError(error)) {
+            // Throttling: floor at 500ms (matches distilled default).
+            if (Duration.toMillis(duration) < 500) {
+              return Duration.toMillis(Duration.millis(500));
+            }
           }
-        }
-        return Duration.toMillis(duration);
-      }),
+          return Duration.toMillis(duration);
+        }),
+      ),
+      capped(Duration.seconds(5)),
+      jittered,
     ),
-    capped(Duration.seconds(5)),
-    jittered,
-    // Transient transport failures (e.g. a sustained `read ETIMEDOUT` blip
-    // against a control-plane endpoint) can outlast a 10-attempt budget. With
-    // the 5s cap above, the extra attempts add bounded backoff while making
-    // the network-flake recovery materially more robust.
-    Schedule.both(Schedule.recurs(15)),
-  ),
+    Schedule.recurs(15),
+  ]),
 });

@@ -48,9 +48,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // Cap exponential backoff at 3s so retries stay bounded when the CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // A freshly deployed worker isn't live on every Cloudflare edge yet, so the
 // first RPC calls fail with `Handler does not export a fetch() function.` —

@@ -52,9 +52,10 @@ const fetchReady = (req: Effect.Effect<any, any, any>) =>
     Effect.retry({
       while: (e: unknown): e is WorkerNotReady =>
         e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(20),
+      ]),
     }),
   ) as Effect.Effect<HttpClientResponse>;
 

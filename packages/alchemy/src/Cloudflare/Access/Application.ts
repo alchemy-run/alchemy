@@ -292,10 +292,13 @@ const retryTransientAccessError = <A, E extends { _tag: string }, R>(
     Effect.retry({
       while: (e) =>
         e._tag === "AccessReferenceNotFound" || e._tag === "Forbidden",
-      schedule: Schedule.exponential("1 second", 1.5).pipe(
-        Schedule.either(Schedule.spaced("5 seconds")),
-        Schedule.both(Schedule.recurs(12)),
-      ),
+      schedule: Schedule.max([
+        Schedule.min([
+          Schedule.exponential("1 second", 1.5),
+          Schedule.spaced("5 seconds"),
+        ]),
+        Schedule.recurs(12),
+      ]),
     }),
   );
 

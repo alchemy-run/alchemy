@@ -30,9 +30,10 @@ const expectGone = (accountId: string, gatewayId: string, datasetId: string) =>
     Effect.flatMap(() => Effect.fail(new DatasetStillExists())),
     Effect.retry({
       while: (e): e is DatasetStillExists => e instanceof DatasetStillExists,
-      schedule: Schedule.exponential("250 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag("DatasetNotFound", () => Effect.void),
   );

@@ -51,9 +51,10 @@ const expectGone = (
     Effect.retry({
       while: (e): e is ProviderConfigStillExists =>
         e instanceof ProviderConfigStillExists,
-      schedule: Schedule.exponential("250 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

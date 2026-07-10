@@ -52,9 +52,10 @@ const runToCompletion = (baseUrl: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady =>
           e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential("500 millis"),
+          Schedule.recurs(15),
+        ]),
       }),
     );
     const { instanceId } = (yield* startRes.json) as { instanceId: string };
@@ -140,9 +141,10 @@ test(
           ),
           Effect.retry({
             while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(10)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(10),
+            ]),
           }),
         );
         return (yield* res.json) as { rowCount: number };

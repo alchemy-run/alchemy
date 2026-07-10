@@ -47,9 +47,10 @@ const expectGone = (accountId: string, shareId: string) =>
     Effect.catchTag("ShareNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ShareNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

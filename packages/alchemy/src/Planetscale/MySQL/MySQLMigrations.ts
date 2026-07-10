@@ -217,9 +217,10 @@ const withTemporaryMySQLPassword = <A, E, R>(
           // Already-deleted passwords are a success: nothing to clean up.
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(5)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(5),
+            ]),
           }),
           // Migrations succeeded; don't fail the parent over a release-step
           // hiccup. The password's TTL bounds the orphan window; log loudly

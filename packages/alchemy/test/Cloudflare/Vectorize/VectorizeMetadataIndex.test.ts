@@ -24,10 +24,10 @@ const logLevel = Effect.provideService(
 // still fails fast as a `PredicateFailed` — at ~240s instead of running into
 // the opaque vitest timeout — while leaving enough headroom to absorb
 // concurrent-load latency; the per-test timeouts below exceed this cap.
-const metaIndexPoll = Schedule.both(
+const metaIndexPoll = Schedule.max([
   Schedule.spaced("5 seconds"),
   Schedule.recurs(48),
-);
+]);
 
 // The "coexist" case materializes TWO metadata indexes (category + price) on a
 // single parent and waits for BOTH to surface. Under a full concurrent
@@ -36,10 +36,10 @@ const metaIndexPoll = Schedule.both(
 // poll (~330s). A genuine regression (an index that never materializes) still
 // fails fast as a `PredicateFailed`; the per-test timeout below exceeds this
 // cap so a healthy-but-slow run never races the opaque vitest timeout.
-const multiMetaIndexPoll = Schedule.both(
+const multiMetaIndexPoll = Schedule.max([
   Schedule.spaced("5 seconds"),
   Schedule.recurs(66),
-);
+]);
 
 // Bounded typed wait for a parent VectorizeIndex to actually disappear from
 // Cloudflare after a delete/replace. Index deletes are quick, so a short
@@ -52,7 +52,7 @@ const waitForIndexGone = (accountId: string, indexName: string) =>
       Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(true)),
     ),
     predicate: (gone) => gone,
-    schedule: Schedule.both(Schedule.spaced("2 seconds"), Schedule.recurs(15)),
+    schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
   });
 
 describe.skipIf(!!process.env.FAST)(

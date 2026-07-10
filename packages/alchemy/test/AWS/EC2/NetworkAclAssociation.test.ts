@@ -51,9 +51,10 @@ test.provider("list enumerates the deployed NetworkAclAssociation", (stack) =>
       ),
       Effect.retry({
         while: (e) => e._tag === "NetworkAclAssociationNotListed",
-        schedule: Schedule.spaced("3 seconds").pipe(
-          Schedule.both(Schedule.recurs(10)),
-        ),
+        schedule: Schedule.max([
+          Schedule.spaced("3 seconds"),
+          Schedule.recurs(10),
+        ]),
       }),
     );
 

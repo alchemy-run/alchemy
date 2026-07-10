@@ -332,11 +332,13 @@ export const InternetGatewayProvider = () =>
                     while: (e) => {
                       return e._tag === "DependencyViolation";
                     },
-                    schedule: Schedule.fixed(5000).pipe(
-                      Schedule.both(Schedule.recurs(60)), // Up to 5 minutes
-                      Schedule.tapOutput(([, attempt]) =>
+                    schedule: Schedule.max([
+                      Schedule.fixed(5000),
+                      Schedule.recurs(60),
+                    ]).pipe(
+                      Schedule.tap(({ attempt }) =>
                         session.note(
-                          `Waiting for VPC dependencies to clear before detaching... (attempt ${attempt + 1})`,
+                          `Waiting for VPC dependencies to clear before detaching... (attempt ${attempt})`,
                         ),
                       ),
                     ),
@@ -367,11 +369,13 @@ export const InternetGatewayProvider = () =>
                       e.message?.includes("DependencyViolation"))
                   );
                 },
-                schedule: Schedule.fixed(5000).pipe(
-                  Schedule.both(Schedule.recurs(60)), // Up to 5 minutes
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.fixed(5000),
+                  Schedule.recurs(60),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),
@@ -439,11 +443,13 @@ const waitForInternetGatewayDeleted = (
         return yield* Effect.fail(new Error("Internet gateway still exists"));
       }),
       {
-        schedule: Schedule.fixed(2000).pipe(
-          Schedule.both(Schedule.recurs(15)),
-          Schedule.tapOutput(([, attempt]) =>
+        schedule: Schedule.max([
+          Schedule.fixed(2000),
+          Schedule.recurs(15),
+        ]).pipe(
+          Schedule.tap(({ attempt }) =>
             session.note(
-              `Waiting for internet gateway deletion... (${(attempt + 1) * 2}s)`,
+              `Waiting for internet gateway deletion... (${attempt * 2}s)`,
             ),
           ),
         ),

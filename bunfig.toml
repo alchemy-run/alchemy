@@ -14,6 +14,8 @@ minimumReleaseAgeExcludes = [
   "@distilled.cloud/neon",
   "@distilled.cloud/planetscale",
   "effect",
+  "fast-check",
+  "@effect/atom-react",
   "@effect/language-service",
   "@effect/platform-bun",
   "@effect/platform-node-shared",

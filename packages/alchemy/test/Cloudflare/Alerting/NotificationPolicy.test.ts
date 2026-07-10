@@ -137,8 +137,9 @@ const waitForPolicyDeleted = (accountId: string, policyId: string) =>
     Effect.catchTag("PolicyNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PolicyNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );

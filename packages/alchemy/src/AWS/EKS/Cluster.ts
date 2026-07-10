@@ -163,9 +163,10 @@ const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
 const jsonEqual = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? undefined) === JSON.stringify(b ?? undefined);
 
-const updateRetrySchedule = Schedule.exponential("1 second").pipe(
-  Schedule.both(Schedule.recurs(120)),
-);
+const updateRetrySchedule = Schedule.max([
+  Schedule.exponential("1 second"),
+  Schedule.recurs(120),
+]);
 
 const getKubernetesConnection = (
   state: Pick<

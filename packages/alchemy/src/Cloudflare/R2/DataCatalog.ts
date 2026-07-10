@@ -373,9 +373,10 @@ export const DataCatalogProvider = () =>
 
 // A freshly-created bucket (or freshly-enabled catalog) can briefly 404 on
 // the r2-catalog endpoints before the warehouse propagates.
-const catalogConsistencySchedule = Schedule.exponential(100).pipe(
-  Schedule.both(Schedule.recurs(5)),
-);
+const catalogConsistencySchedule = Schedule.max([
+  Schedule.exponential(100),
+  Schedule.recurs(5),
+]);
 
 /**
  * Read a catalog by bucket name, mapping "gone" (`WarehouseNotFound`, code

@@ -68,9 +68,10 @@ const expectGone = (zoneId: string, keylessCertificateId: string) =>
     Effect.catchTag("KeylessCertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "KeylessNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
