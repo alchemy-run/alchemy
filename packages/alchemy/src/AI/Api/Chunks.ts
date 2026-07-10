@@ -196,6 +196,8 @@ export const foldEvent = (
     }
 
     case "turn.halted": {
+      // a TURN boundary, not the run's end: process runs iterate many
+      // turns per run — the window closes on run.settled, never here
       if (next.openTextId !== undefined) {
         chunks.push({ type: "text-end", id: next.openTextId });
         next = { ...next, openTextId: undefined };
@@ -224,6 +226,29 @@ export const foldEvent = (
       } else if (outcome !== "Completed") {
         chunks.push({ type: "error", errorText: `run halted: ${outcome}` });
       }
+      break;
+    }
+
+    case "run.settled": {
+      // the run's uniform durable terminal — the window closes here
+      if (next.openReasoningId !== undefined) {
+        chunks.push({ type: "reasoning-end", id: next.openReasoningId });
+        next = { ...next, openReasoningId: undefined };
+      }
+      if (next.openTextId !== undefined) {
+        chunks.push({ type: "text-end", id: next.openTextId });
+        next = { ...next, openTextId: undefined };
+      }
+      if (next.stepOpen) {
+        chunks.push({ type: "finish-step" });
+        next = { ...next, stepOpen: false };
+      }
+      if (payload.outcome === "Failed") {
+        chunks.push({
+          type: "error",
+          errorText: String(payload.error ?? "run failed"),
+        });
+      }
       chunks.push({ type: "finish" });
       break;
     }
@@ -238,14 +263,23 @@ export const foldEvent = (
   return [next, chunks];
 };
 
-/** Slice an event stream down to ONE run and end it at the halt. */
+/**
+ * Does an event belong to the run with this admission session? Process
+ * runs iterate turns, each with a DERIVED session (`X#0/i2`) — prefix
+ * matching folds a whole run, agent or process, into one window.
+ */
+export const inRun = (event: KernelEvent, session: string): boolean =>
+  event.session === session ||
+  (event.session !== undefined && event.session.startsWith(`${session}/`));
+
+/** Slice an event stream down to ONE run and end it when it settles. */
 export const sessionEvents = <E>(
   events: Stream.Stream<KernelEvent, E>,
   session: string,
 ): Stream.Stream<KernelEvent, E> =>
   events.pipe(
-    Stream.filter((event) => event.session === session),
-    Stream.takeUntil((event) => event.type === "turn.halted"),
+    Stream.filter((event) => inRun(event, session)),
+    Stream.takeUntil((event) => event.type === "run.settled"),
   );
 
 /**

@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -592,16 +593,16 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               // cancelled while queued: reply already settled by cancel
               admission.cancelled === true
                 ? Effect.void
-                : Effect.flatMap(
-                    Effect.exit(
-                      Effect.suspend(() => {
-                        current = admission;
-                        const session = `${termName}#${oneShot++}`;
+                : Effect.suspend(() => {
+                    current = admission;
+                    const session = `${termName}#${oneShot++}`;
+                    return Effect.flatMap(
+                      Effect.exit(
                         // the admission is a durable fact (§2.7): without
                         // it the run's INPUT is not reconstructible from
                         // the Trace — the serving tier's transcript view
                         // derives its user half from this row
-                        return Effect.andThen(
+                        Effect.andThen(
                           emitRow(
                             session,
                             "run.admitted",
@@ -616,25 +617,49 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                             runTurn,
                             emitRow,
                           }),
-                        );
-                      }).pipe(
-                        Effect.ensuring(
-                          Effect.sync(() => {
-                            current = undefined;
-                          }),
+                        ).pipe(
+                          Effect.ensuring(
+                            Effect.sync(() => {
+                              current = undefined;
+                            }),
+                          ),
                         ),
                       ),
-                    ),
-                    (exit) =>
-                      admission.reply !== undefined
-                        ? Effect.asVoid(Deferred.done(admission.reply, exit))
-                        : Exit.isFailure(exit)
-                          ? Effect.logWarning(
-                              "memory kernel: unobserved run failed",
-                              exit.cause,
-                            )
-                          : Effect.void,
-                  ),
+                      (exit) =>
+                        Effect.andThen(
+                          // the UNIFORM durable terminal: every run
+                          // settles, success or failure — without this
+                          // row a failed run (BudgetExceeded, Refused,
+                          // defect) is not reconstructible from the
+                          // Trace and a serving window has nothing to
+                          // close on (§2.7; found by the org channel: a
+                          // process run's window hung forever because
+                          // only per-ITERATION turn.halted rows exist)
+                          emitRow(
+                            session,
+                            "run.settled",
+                            session,
+                            "settled",
+                            Exit.isSuccess(exit)
+                              ? { outcome: "Completed" }
+                              : {
+                                  outcome: "Failed",
+                                  error: describeRunFailure(exit.cause),
+                                },
+                          ),
+                          admission.reply !== undefined
+                            ? Effect.asVoid(
+                                Deferred.done(admission.reply, exit),
+                              )
+                            : Exit.isFailure(exit)
+                              ? Effect.logWarning(
+                                  "memory kernel: unobserved run failed",
+                                  exit.cause,
+                                )
+                              : Effect.void,
+                        ),
+                    );
+                  }),
             ),
           ),
         );
@@ -978,10 +1003,13 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
               let parsed: unknown;
               try {
                 parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-              } catch (error) {
-                return Effect.fail(
-                  kernelPrompts.resolveInvalidJson(String(error)),
-                );
+              } catch {
+                // a bare string is a legal wire: models reasonably send
+                // prose unquoted for string-shaped halts (found by the
+                // org channel — every plain-sentence resolution bounced
+                // until the budget killed the run). Strictness lives in
+                // the schema decode below, not in JSON syntax.
+                parsed = raw;
               }
               const decoded = S.decodeUnknownResult(haltSchema as never)(
                 parsed,
@@ -1248,6 +1276,18 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
       });
     }),
   );
+
+/** A run failure's model/UI-visible description (typed exits keep their tag). */
+const describeRunFailure = (cause: Cause.Cause<unknown>): string => {
+  const squashed = Cause.squash(cause);
+  if (typeof squashed === "object" && squashed !== null && "_tag" in squashed) {
+    const tagged = squashed as { _tag: string; reason?: unknown };
+    return tagged.reason !== undefined
+      ? `${tagged._tag}: ${String(tagged.reason)}`
+      : tagged._tag;
+  }
+  return String(squashed);
+};
 
 // ─── compilation ─────────────────────────────────────────────────
 

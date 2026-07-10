@@ -88,7 +88,7 @@ const runTurn = Effect.gen(function* () {
   const firehose = yield* Effect.forkChild(
     Stream.runCollect(
       kernel.events.pipe(
-        Stream.takeUntil((event) => event.type === "turn.halted"),
+        Stream.takeUntil((event) => event.type === "run.settled"),
       ),
     ),
   );
@@ -98,7 +98,7 @@ const runTurn = Effect.gen(function* () {
   const trace = yield* Stream.runCollect(
     kernel
       .trace("Librarian")
-      .pipe(Stream.takeUntil((event) => event.type === "turn.halted")),
+      .pipe(Stream.takeUntil((event) => event.type === "run.settled")),
   );
   return { live, trace };
 });

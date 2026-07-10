@@ -178,7 +178,7 @@ describe("memory kernel × live Anthropic", () => {
             const firehose = yield* Effect.forkChild(
               Stream.runCollect(
                 kernel.events.pipe(
-                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                  Stream.takeUntil((event) => event.type === "run.settled"),
                 ),
               ),
             );
@@ -189,7 +189,7 @@ describe("memory kernel × live Anthropic", () => {
               kernel
                 .trace("Mathematician")
                 .pipe(
-                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                  Stream.takeUntil((event) => event.type === "run.settled"),
                 ),
             );
             return { events, trace };
@@ -386,7 +386,7 @@ describe("memory kernel × live Anthropic", () => {
               kernel
                 .trace("Mathematician")
                 .pipe(
-                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                  Stream.takeUntil((event) => event.type === "run.settled"),
                 ),
             ).pipe(Effect.timeout("60 seconds"), Effect.orDie);
             // the parked completion steer enters this turn's round 1
@@ -458,7 +458,7 @@ describe("memory kernel × live Anthropic", () => {
               kernel
                 .trace("Mathematician")
                 .pipe(
-                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                  Stream.takeUntil((event) => event.type === "run.settled"),
                 ),
             );
             return {
@@ -698,7 +698,7 @@ ${AI.never`health = one log_answer call per alarm`}` {}
               kernel
                 .trace("Mathematician")
                 .pipe(
-                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                  Stream.takeUntil((event) => event.type === "run.settled"),
                 ),
             );
           }),
@@ -709,7 +709,8 @@ ${AI.never`health = one log_answer call per alarm`}` {}
         // fact), then the journaled intent, and closes with the halt
         expect(types[0]).toBe("run.admitted");
         expect(types[1]).toBe("model.requested");
-        expect(types[types.length - 1]).toBe("turn.halted");
+        expect(types[types.length - 1]).toBe("run.settled");
+        expect(types[types.length - 2]).toBe("turn.halted");
         // the real tool call was journaled: intent before terminal
         expect(types.indexOf("tool.requested")).toBeGreaterThan(-1);
         expect(types.indexOf("tool.requested")).toBeLessThan(
@@ -744,7 +745,7 @@ ${AI.never`health = one log_answer call per alarm`}` {}
               kernel
                 .trace("Mathematician")
                 .pipe(
-                  Stream.takeUntil((event) => event.type === "turn.halted"),
+                  Stream.takeUntil((event) => event.type === "run.settled"),
                 ),
             );
           }),

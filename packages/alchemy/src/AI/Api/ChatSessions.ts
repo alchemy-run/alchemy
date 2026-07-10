@@ -26,7 +26,7 @@ import { type AskAnswer, AskHub, type PendingAsk } from "../Ask.ts";
 import type { KernelError } from "../Errors.ts";
 import { Kernel, type KernelEvent } from "../Kernel.ts";
 import type { ProcessService } from "../Process.ts";
-import { chunksToMessage, toChunks } from "./Chunks.ts";
+import { chunksToMessage, inRun, toChunks } from "./Chunks.ts";
 import {
   messageText,
   type UIMessage,
@@ -195,8 +195,9 @@ export const makeChatSessions = (options: {
 
 /**
  * Correlate a firehose to ONE run: wait for the `run.admitted` row
- * carrying our item, then follow that session to its halt. The ring is
- * serial, so between admission and halt the session filter is exact.
+ * carrying our item, then follow that run (prefix-matched — process
+ * runs derive per-iteration sessions) until it settles. The ring is
+ * serial, so between admission and settlement the filter is exact.
  */
 const correlateRun =
   (item: unknown) =>
@@ -214,8 +215,8 @@ const correlateRun =
           }
           return false;
         }
-        return event.session === session;
+        return inRun(event, session);
       }),
-      Stream.takeUntil((event) => event.type === "turn.halted"),
+      Stream.takeUntil((event) => event.type === "run.settled"),
     );
   };
