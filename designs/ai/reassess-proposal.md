@@ -49,6 +49,20 @@ config, and give exits three sources"** — not "delete Process."
 Every report reached this independently. The convergence is the
 signal.
 
+### Typed serving boundary (follow-up from live thread use)
+
+The UI transcript is a transport/materialized-view type, never a
+process's domain input. `ChatSessions` routes through typed
+`chatTarget(process, adapter)` pairs: the adapter converts
+`UIMessage[]` into the target's declared `In` (`PostThread`,
+`IssueWorkItem`, …), and TypeScript proves the two match. A
+deterministic coordinator therefore receives `PostThread`, not
+`unknown` / raw `Prompt.Message[]`; domain code owns its formatting
+before dispatching member agents. Authored `data-message` replies are
+semantic conversation history and must survive the adapter. Generic
+stringification is confined to internal diagnostic/prompt projection,
+not exposed as an orchestration API.
+
 ## The five findings, each in two lines
 
 1. **Deterministic orchestration** — Effect already *is* the workflow

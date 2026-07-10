@@ -40,6 +40,33 @@ export interface ConversationSummary {
   readonly messages: number;
 }
 
+/** The serving-boundary input to a target-specific conversation adapter. */
+export interface ChatTargetInput {
+  readonly conversationId: string;
+  readonly history: ReadonlyArray<UIMessage>;
+  readonly message: UIMessage;
+}
+
+/**
+ * A typed route from UI conversation data to one process's domain input.
+ *
+ * `ChatSessions` internally stores heterogeneous targets, but callers
+ * construct each target through `chatTarget`, which proves that its
+ * adapter returns exactly the `In` accepted by its ProcessService. This
+ * is the boundary the old `processes: Record<string, ProcessService<any,
+ * any, any>>` erased, forcing coordinators to stringify raw
+ * `Prompt.Message[]`.
+ */
+export interface ChatTarget<In> {
+  readonly process: Pick<ProcessService<any, In, any>, "send">;
+  readonly toItem: (input: ChatTargetInput) => In;
+}
+
+export const chatTarget = <In>(
+  process: Pick<ProcessService<any, In, any>, "send">,
+  toItem: (input: ChatTargetInput) => In,
+): ChatTarget<In> => ({ process, toItem });
+
 export interface ChatSessionsService {
   /** The conversation index (insertion order). */
   readonly conversations: Effect.Effect<ReadonlyArray<ConversationSummary>>;
@@ -108,6 +135,12 @@ export const makeChatSessions = (options: {
     Pick<ProcessService<any, any, any>, "send">
   >;
   /**
+   * Typed target routes. Prefer this over `processes` whenever a process
+   * has a domain input (`PostThread`, `IssueWorkItem`, …) rather than the
+   * default conversational Prompt messages.
+   */
+  readonly targets?: Record<string, ChatTarget<any>>;
+  /**
    * How a conversation becomes the ring's work item.
    * @default conversationItem (full history + new message)
    */
@@ -123,12 +156,22 @@ export const makeChatSessions = (options: {
     const transcripts = new Map<string, UIMessage[]>();
 
     const routeTo = (conversationId: string) => {
+      const targetName = conversationId.split("/")[0]!;
+      const target = options.targets?.[targetName];
+      if (target !== undefined) return target;
       if (options.processes !== undefined) {
-        const target = conversationId.split("/")[0]!;
-        const process = options.processes[target];
-        if (process !== undefined) return process;
+        const process = options.processes[targetName];
+        if (process !== undefined) {
+          return chatTarget(process, ({ history, message }) =>
+            toItem(history, message),
+          );
+        }
       }
-      if (options.process !== undefined) return options.process;
+      if (options.process !== undefined) {
+        return chatTarget(options.process, ({ history, message }) =>
+          toItem(history, message),
+        );
+      }
       throw new Error(
         `no process for conversation ${JSON.stringify(conversationId)} — ` +
           `expected its first /-segment to name one of: ` +
@@ -162,17 +205,21 @@ export const makeChatSessions = (options: {
         Stream.unwrap(
           Effect.gen(function* () {
             // history BEFORE this message — toItem composes both
-            const process = routeTo(conversationId);
+            const target = routeTo(conversationId);
             const history = transcripts.get(conversationId) ?? [];
             appendTo(conversationId, message);
-            const item = toItem(history, message);
+            const item = target.toItem({
+              conversationId,
+              history,
+              message,
+            });
             // subscribe BEFORE admitting so the run.admitted row (and
             // every delta after it) is already flowing into the window
             const events = yield* Stream.toQueue(kernel.events, {
               capacity: "unbounded",
             });
             yield* Effect.yieldNow;
-            yield* process.send(item);
+            yield* target.process.send(item);
             const collected: UIMessageChunk[] = [];
             return Stream.fromQueue(events).pipe(
               correlateRun(item),

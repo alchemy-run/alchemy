@@ -12,6 +12,7 @@ import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as AiError from "effect/unstable/ai/AiError";
 import type { ProcessContext } from "./ProcessContext.ts";
+import { toPromptText } from "./Text.ts";
 import { type Value, isValue } from "./Value.ts";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
@@ -1281,12 +1282,12 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                                 // just the claim: without the work item
                                 // there is nothing to verify AGAINST (a
                                 // gap the live tests caught)
-                                workItem: asText(item),
+                                workItem: toPromptText(item),
                                 haltProse,
                                 claim:
                                   currentRun.resolved.value === undefined
                                     ? undefined
-                                    : asText(currentRun.resolved.value),
+                                    : toPromptText(currentRun.resolved.value),
                                 ringInstructions: checkInstructions,
                               }),
                             ),
@@ -1537,9 +1538,6 @@ interface SteerCell {
   current?: (input: unknown) => Effect.Effect<void, never, never>;
 }
 
-const asText = (value: unknown): string =>
-  typeof value === "string" ? value : JSON.stringify(value);
-
 /**
  * Extract the judge's verdict from its (agent) dispatch outcome: the
  * first JSON object in the completed text with a recognized `verdict`.
@@ -1695,10 +1693,10 @@ const compileTools = Effect.fn(function* (
           yield* Effect.result(call(task)).pipe(
             Effect.flatMap((result) => {
               const [status, summary] = Result.isSuccess(result)
-                ? (["completed", asText(result.success)] as const)
+                ? (["completed", toPromptText(result.success)] as const)
                 : ([
                     "failed",
-                    asText(
+                    toPromptText(
                       (result as Result.Failure<unknown, unknown>).failure,
                     ),
                   ] as const);

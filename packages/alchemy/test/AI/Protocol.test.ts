@@ -153,4 +153,34 @@ describe("the UI message stream wire format", () => {
     expect(messageText(decoded.messages[0]!)).toBe("hi there");
     expect(messageText(decoded.messages[1]!)).toBe("it is sunny");
   });
+
+  it("authored agent bubbles remain part of conversational memory", () => {
+    expect(
+      messageText({
+        id: "a1",
+        role: "assistant",
+        parts: [
+          {
+            type: "data-message",
+            id: "m1",
+            data: {
+              author: "Scout",
+              text: "fetch has no default timeout",
+            },
+          },
+          {
+            type: "data-message",
+            id: "m2",
+            data: {
+              author: "Sage",
+              text: "use an AbortSignal deadline",
+            },
+          },
+        ],
+      }),
+    ).toBe(
+      "Scout: fetch has no default timeout\n" +
+        "Sage: use an AbortSignal deadline",
+    );
+  });
 });

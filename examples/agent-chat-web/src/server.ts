@@ -25,6 +25,7 @@ import {
   EngineeringLive,
   Helper,
   Issues,
+  type PostThread,
   PostReplyLive,
   ReadFileLive,
   roots,
@@ -32,6 +33,58 @@ import {
   Scout,
   Support,
 } from "./org.ts";
+
+/**
+ * The transport/domain boundary: UI messages become a typed PostThread
+ * before they reach any Channel process. Authored data-message and
+ * legacy post_reply parts become separate member messages; no raw
+ * Prompt objects leak into deterministic orchestration.
+ */
+const toPostThread = ({
+  conversationId,
+  history,
+  message,
+}: AI.Api.ChatTargetInput): PostThread => {
+  const [channel, id = conversationId] = conversationId.split("/");
+  const messages: Array<PostThread["messages"][number]> = [];
+  for (const entry of [...history, message]) {
+    if (entry.role === "user") {
+      const text = AI.Api.messageText(entry);
+      if (text.length > 0) {
+        messages.push({ role: "user", author: "You", text });
+      }
+      continue;
+    }
+    if (entry.role !== "assistant") continue;
+    for (const part of entry.parts) {
+      if (part.type === "data-message") {
+        const data = (part as unknown as {
+          data: { author: string; text: string };
+        }).data;
+        messages.push({
+          role: "assistant",
+          author: data.author,
+          text: data.text,
+        });
+        continue;
+      }
+      if (part.type === "dynamic-tool") {
+        const tool = part as unknown as {
+          toolName?: string;
+          input?: { author?: unknown; text?: unknown };
+        };
+        if (tool.toolName === "post_reply") {
+          messages.push({
+            role: "assistant",
+            author: String(tool.input?.author ?? "Agent"),
+            text: String(tool.input?.text ?? ""),
+          });
+        }
+      }
+    }
+  }
+  return { id, channel: channel ?? "unknown", messages };
+};
 
 const ModelLive = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
@@ -97,10 +150,12 @@ const SessionsLive = Layer.effect(
 
     return AI.Api.ChatSessions.of(
       yield* AI.Api.makeChatSessions({
+        targets: {
+          engineering: AI.Api.chatTarget(engineering, toPostThread),
+          support: AI.Api.chatTarget(support, toPostThread),
+          issues: AI.Api.chatTarget(issues, toPostThread),
+        },
         processes: {
-          engineering,
-          support,
-          issues,
           "dm:Sage": sage,
           "dm:Scout": scout,
           "dm:Helper": helper,

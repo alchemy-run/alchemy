@@ -1436,7 +1436,8 @@ ${AI.budget({ iterations: 4 })}` {}
           )!.prompt,
         );
         expect(judgePrompt).toContain("the numeric answer is found");
-        expect(judgePrompt).toContain('{\\"answer\\":41}');
+        // structured claims use the canonical readable text projection
+        expect(judgePrompt).toContain('\\"answer\\": 41');
         expect(judgePrompt).toContain("must equal 42 exactly");
         // the rejection became the next iteration's first input
         const questPrompts = calls.filter(

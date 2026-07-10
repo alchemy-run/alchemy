@@ -44,6 +44,39 @@ export class Helper extends AI.Agent<Helper>()("Helper")`
 You are Helper, the support specialist. Friendly, practical; you turn
 user complaints into actionable summaries.` {}
 
+// ─── the channel's DOMAIN input ─────────────────────────────────
+//
+// A Channel does not receive raw UIMessage[] / Prompt.Message[]. The
+// serving adapter converts those transport values into this domain
+// value before admission, and the handler is inferred as PostThread.
+export const ThreadMessage = S.Struct({
+  role: S.Literals(["user", "assistant"]),
+  author: S.String,
+  text: S.String,
+});
+export const PostThread = S.Struct({
+  id: S.String,
+  channel: S.String,
+  messages: S.Array(ThreadMessage),
+});
+export type PostThread = typeof PostThread.Type;
+
+const PostOpened = AI.EventSource("workspace.post.opened", PostThread);
+
+/** Domain-owned formatting for an agent task — never generic stringify. */
+const formatPost = (post: PostThread): string =>
+  [
+    `Post ${post.id} in #${post.channel}`,
+    ...post.messages.map(
+      (message) => `${message.author} (${message.role}):\n${message.text}`,
+    ),
+  ].join("\n\n");
+
+const completedText = (outcome: AI.Step.HaltOutcome): string => {
+  if (outcome._tag === "Completed") return outcome.text;
+  throw new Error(`agent did not complete: ${outcome._tag}`);
+};
+
 // ─── #engineering: a DETERMINISTIC coordinator (AI.process) ──────
 
 // a tiny classifier LEAF: the ONE place the coordinator consults an
@@ -61,6 +94,7 @@ BOTH when it is urgent and deep. Never empty.` {}
 // the channel term: a goal per Post (Out = the resolution). No charter —
 // its ProcessService is a handler, not a model loop.
 export class Engineering extends AI.Process<Engineering>()("engineering")`
+${AI.on(PostOpened)}
 ${AI.until(S.String)`the Post is resolved`}` {}
 
 export const EngineeringLive = AI.process(Engineering, (post, ctx) =>
@@ -75,11 +109,11 @@ export const EngineeringLive = AI.process(Engineering, (post, ctx) =>
     // fallback (orElseSucceed) actually catches malformed model output
     // (code fences, prose) instead of it becoming an uncaught defect.
     const routed = yield* classify
-      .dispatch(String(post))
+      .dispatch(formatPost(post))
       .pipe(
         Effect.flatMap((raw) =>
           Effect.try(() => {
-            const t = String((raw as { text?: string }).text ?? "{}");
+            const t = completedText(raw);
             const json = t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1);
             return JSON.parse(json) as unknown;
           }),
@@ -96,10 +130,8 @@ export const EngineeringLive = AI.process(Engineering, (post, ctx) =>
     yield* Effect.forEach(
       routed.members,
       (name) =>
-        members[name].dispatch(String(post)).pipe(
-          Effect.flatMap((answer) =>
-            ctx.post(name, String((answer as { text?: string }).text ?? answer)),
-          ),
+        members[name].dispatch(formatPost(post)).pipe(
+          Effect.flatMap((answer) => ctx.post(name, completedText(answer))),
         ),
       { concurrency: "unbounded" },
     );
@@ -113,6 +145,7 @@ export class Support extends AI.Process<Support>()("support")`
 You are the #support channel coordinator — never a participant. Relay
 ${Helper}'s reply with ${PostReply} (author "Helper"), then resolve.
 Escalate engineering-shaped problems by saying so in your resolution.
+${AI.on(PostOpened)}
 ${AI.until(S.String)`the user's question is answered or escalated`}
 ${AI.budget({ iterations: 6 })}` {}
 
@@ -131,6 +164,7 @@ Close issue ${issueNumber} once it is resolved.` {}
 export class Issues extends AI.Process<Issues>()("issues")`
 Work the issue described in the Post. Investigate with ${Sage}, and
 close it with ${CloseIssue} when genuinely resolved.
+${AI.on(PostOpened)}
 ${AI.until(IssueClosed)}` {}
 
 // ─── physics ─────────────────────────────────────────────────────

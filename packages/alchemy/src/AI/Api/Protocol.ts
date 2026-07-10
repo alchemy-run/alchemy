@@ -180,12 +180,46 @@ export const ChatRequest = S.Struct({
 });
 export type ChatRequest = typeof ChatRequest.Type;
 
-/** Extract the concatenated text of a message's text parts. */
+/**
+ * Project a UI message into conversational memory.
+ *
+ * Authored `data-message` parts are semantic assistant speech (a
+ * deterministic coordinator's `ctx.post`), not UI-only decoration.
+ * Omitting them made the next thread turn forget every agent response
+ * even though the bubbles were visible in the transcript.
+ */
 export const messageText = (message: UIMessage): string =>
   message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => String((part as { text?: unknown }).text ?? ""))
-    .join("");
+    .flatMap((part) => {
+      if (part.type === "text") {
+        return [String((part as { text?: unknown }).text ?? "")];
+      }
+      if (part.type === "data-message") {
+        const data = (
+          part as {
+            data?: { author?: unknown; text?: unknown };
+          }
+        ).data;
+        return [
+          `${String(data?.author ?? "Agent")}: ${String(data?.text ?? "")}`,
+        ];
+      }
+      // legacy prose coordinator: post_reply is a semantic member reply
+      if (part.type === "dynamic-tool") {
+        const tool = part as {
+          toolName?: string;
+          input?: { author?: unknown; text?: unknown };
+        };
+        if (tool.toolName === "post_reply") {
+          return [
+            `${String(tool.input?.author ?? "Agent")}: ${String(tool.input?.text ?? "")}`,
+          ];
+        }
+      }
+      return [];
+    })
+    .filter((text) => text.length > 0)
+    .join("\n");
 
 // ─── SSE framing ─────────────────────────────────────────────────
 

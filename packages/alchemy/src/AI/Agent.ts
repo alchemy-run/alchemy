@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import type { ProcessService } from "./Process.ts";
 import type { Services } from "./Services.ts";
+import type { HaltOutcome } from "./Step.ts";
 
 /**
  * An `Agent` term is prose that hires tools: a tagged template whose
@@ -77,7 +78,7 @@ export interface Agent<
  */
 export interface AgentService<
   In = unknown,
-  Out = unknown,
+  Out = HaltOutcome,
 > extends ProcessService<Out, In, never> {}
 
 export const Agent: {
