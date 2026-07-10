@@ -62,6 +62,8 @@ export interface DurableObjectLike<Shape = any> {
   /** @internal phantom */
   scriptName?: Input<string>;
   /** @internal phantom */
+  transferredFrom?: Input<string>;
+  /** @internal phantom */
   Shape?: Shape;
 }
 
@@ -120,6 +122,17 @@ export interface DurableObjectProps {
    * namespace is hosted by the Worker that declares the binding.
    */
   scriptName?: Input<string> | undefined;
+  /**
+   * Name of the Worker script that previously hosted this Durable Object
+   * class. When set, the deploy performs Cloudflare's data-preserving
+   * `transferred_classes` migration, moving the namespace — including all
+   * stored objects — from that script to this Worker.
+   *
+   * Once the transfer has completed, or when the source script does not host
+   * the class (e.g. on a fresh stage), the property is inert: the class is
+   * created fresh or left as-is, so it is safe to leave in place.
+   */
+  transferredFrom?: Input<string> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -133,6 +146,7 @@ export interface DurableObjectClass extends Effect.Effect<
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
+      props?: Pick<DurableObjectProps, "transferredFrom">,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -787,6 +801,59 @@ export class DurableObjectScope extends Context.Service<
  * });
  * ```
  *
+ * @section Moving a Class Between Workers
+ * A Durable Object class can move from one Worker to another with its
+ * data intact. Declare `transferredFrom` on the Durable Object at its
+ * **new host**, naming the script that previously hosted the class —
+ * Alchemy performs Cloudflare's data-preserving `transferred_classes`
+ * migration on the new host's deploy, and the former host's deploy
+ * converges on its own (it no longer owns the class, so no delete
+ * migration is emitted). Once the transfer has completed — or on a
+ * fresh stage where the source script never hosted the class — the
+ * property is inert, so it is safe to leave in place.
+ *
+ * Without `transferredFrom`, re-binding a previously-local class as a
+ * cross-script reference fails before any upload with
+ * `DurableObjectTransferRequired`: the namespace (and every stored
+ * object) would otherwise be destroyed by the class deletion.
+ *
+ * @example New host declares where the class moved from
+ * ```typescript
+ * // worker-a alchemy.run.ts — the NEW host of the class
+ * const workerA = yield* Cloudflare.Worker("WorkerA", {
+ *   main: "./src/worker-a.ts", // exports MyDOClass
+ *   bindings: {
+ *     MyDO: Cloudflare.DurableObject("MyDO", {
+ *       className: "MyDOClass",
+ *       transferredFrom: "worker-b", // script that used to host it
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @example Former host keeps a cross-script reference
+ * ```typescript
+ * // worker-b alchemy.run.ts — used to host the class, now just binds it
+ * const workerB = yield* Cloudflare.Worker("WorkerB", {
+ *   main: "./src/worker-b.ts", // no longer exports MyDOClass
+ *   bindings: {
+ *     MyDO: Cloudflare.DurableObject("MyDO", {
+ *       className: "MyDOClass",
+ *       scriptName: workerA.workerName,
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @example Transferring an Effect-native Durable Object
+ * ```typescript
+ * // The class form takes the same option at its new host.
+ * export class Counter extends Cloudflare.DurableObject<Counter>()(
+ *   "Counter",
+ *   { transferredFrom: "old-host-script" },
+ * ) {}
+ * ```
+ *
  * @section Adopting an Existing Durable Object
  * When you adopt a Worker that already exists on Cloudflare — created
  * outside Alchemy via Wrangler, the dashboard, or the raw API — its
@@ -868,18 +935,21 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const propsOrImpl = args[1];
     const tag = Context.Service(namespace);
 
-    const binding = (scriptName?: Input<string>) =>
+    const binding = (
+      scriptName?: Input<string>,
+      transferredFrom?: Input<string>,
+    ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
 
         yield* worker.bind`${namespace}`({
-          // TODO(sam): automate class migrations, probably in the provider
           bindings: [
             {
               type: "durable_object_namespace",
               name: namespace,
               className: namespace,
               scriptName,
+              transferredFrom,
             },
           ],
         });
@@ -932,6 +1002,16 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         };
       });
 
+    // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can
+    // carry `transferredFrom` so the host's local binding drives a
+    // data-preserving transfer migration.
+    const classProps =
+      isClassForm && !Effect.isEffect(propsOrImpl)
+        ? (propsOrImpl as
+            | Pick<DurableObjectProps, "transferredFrom">
+            | undefined)
+        : undefined;
+
     const make = Effect.fn(function* (
       impl: Effect.Effect<
         Effect.Effect<DurableObjectShape>,
@@ -944,7 +1024,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // `DurableObjectScope` to the user's constructor effect
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
-      const self = yield* binding();
+      const self = yield* binding(undefined, classProps?.transferredFrom);
       const phase = yield* ALCHEMY_PHASE;
       const constructor = impl.pipe(
         Effect.provide(Layer.succeed(DurableObjectScope, self as any)),
@@ -979,6 +1059,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         name: namespace,
         className: (args[1] as DurableObjectProps)?.className || namespace,
         scriptName: (args[1] as DurableObjectProps)?.scriptName,
+        transferredFrom: (args[1] as DurableObjectProps)?.transferredFrom,
       };
     } else if (Effect.isEffect(propsOrImpl)) {
       // inline Effect DO
