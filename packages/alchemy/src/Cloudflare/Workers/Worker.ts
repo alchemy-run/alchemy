@@ -420,6 +420,30 @@ export interface WorkerProps<
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
   /**
+   * Opt in to deleting a Durable Object class (and its stored data) when it
+   * moves from this Worker to another script.
+   *
+   * When a Durable Object class that this Worker previously hosted becomes a
+   * cross-script reference (a `Cloudflare.DurableObject(..., { scriptName })`
+   * binding pointing at another Worker), Cloudflare requires the class to be
+   * removed from this Worker with a delete-class migration. **Durable Object
+   * storage does not move with the class** — the new host starts with a fresh,
+   * empty namespace, and the delete-class migration permanently destroys the
+   * old namespace and all of its data on this Worker. This is irreversible.
+   *
+   * Because of that, the deploy fails by default with an explanatory error.
+   * Set this to `true` to confirm the deletion: Alchemy then performs the move
+   * as two uploads (Cloudflare rejects doing both at once) — first removing the
+   * cross-script binding while applying the delete-class migration, then
+   * re-attaching the full binding set.
+   *
+   * Only affects the transition where the class leaves this Worker; it never
+   * deletes classes the Worker still hosts locally.
+   *
+   * @default false
+   */
+  deleteMovedDurableObjectClasses?: boolean;
+  /**
    * Tracks Durable Object and Workflow exports for Effect-native Workers only.
    * Populated automatically from bindings; do not set manually.
    * @internal

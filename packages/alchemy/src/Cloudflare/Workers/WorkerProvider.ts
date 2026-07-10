@@ -38,6 +38,32 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
 }> {}
 
 /**
+ * Raised when a Durable Object class moves from this Worker to another script
+ * (it becomes a cross-script binding with `scriptName` set) while the class is
+ * simultaneously being removed from this Worker, and the user has not opted in
+ * to the destructive delete. Durable Object storage does not transfer with the
+ * class, so applying the delete-class migration would irreversibly destroy the
+ * namespace and its data on this Worker. See
+ * {@link WorkerProps.deleteMovedDurableObjectClasses}.
+ */
+export class DurableObjectClassMoved extends Data.TaggedError(
+  "DurableObjectClassMoved",
+)<{
+  scriptName: string;
+  classNames: string[];
+}> {
+  override get message(): string {
+    const classes = this.classNames.map((c) => `'${c}'`).join(", ");
+    return [
+      `Durable Object class ${classes} moved from Worker '${this.scriptName}' to another script (now a cross-script binding with 'scriptName' set), and is being removed from '${this.scriptName}'.`,
+      `Durable Object storage does NOT transfer when a class moves: the new host starts with a fresh, empty namespace, while the namespace on '${this.scriptName}' still holds all of its data. Deploying this change applies a delete-class migration that permanently destroys that namespace and every object stored in it. This cannot be undone.`,
+      `If the data is disposable (or you have already migrated it), opt in explicitly by setting 'deleteMovedDurableObjectClasses: true' on Worker '${this.scriptName}'. Alchemy will then remove the binding and delete the class in two separate uploads, as Cloudflare requires.`,
+      `To keep the data, either keep the class defined on '${this.scriptName}', or perform the move manually across two deploys (first remove the binding, then re-add it as a cross-script reference).`,
+    ].join("\n\n");
+  }
+}
+
+/**
  * Resolve the Workers for Platforms dispatch-namespace *name* from a resolved
  * `namespace` prop or persisted attribute. The engine resolves a passed
  * {@link DispatchNamespace} resource to its Attributes object (see
@@ -1524,47 +1550,126 @@ export const LiveWorkerProvider = () =>
           tailConsumers: undefined,
           usageModel: undefined,
         };
-        const worker = yield* putWorkerScript({
-          accountId,
-          scriptName: name,
-          dispatchNamespace,
-          metadata,
-          files: bundle.files,
-        }).pipe(
-          Effect.catch((err) => {
-            // When adopting a Worker managed by Wrangler (or after a previous
-            // deploy with mismatched migrations), the old_tag precondition
-            // fails. The only way to discover the actual tag is through the
-            // error message — getScriptSettings is meant to return it but
-            // doesn't at runtime.
-            const msg = String(
-              typeof err === "object" && err !== null && "message" in err
-                ? err.message
-                : err,
-            );
-            const expectedTag = msg.match(
-              /when expected tag is ['"]?([^'"]+)['"]?/,
-            )?.[1];
-            if (expectedTag) {
-              return putWorkerScript({
-                accountId,
-                scriptName: name,
-                dispatchNamespace,
-                metadata: {
-                  ...metadata,
-                  migrations: {
-                    ...migrations,
-                    oldTag: expectedTag,
-                    newTag: bumpMigrationTagVersion(expectedTag),
+        // A Durable Object class that moved from this worker to another script
+        // (now referenced via a cross-script binding with `scriptName` set)
+        // lands in `deletedClasses` here while its class name is still bound.
+        // Cloudflare rejects that single upload: its validator matches DO
+        // bindings by `class_name` alone (ignoring `script_name`) and refuses
+        // to delete a class whose binding is still attached ("Cannot apply
+        // --delete-class migration to class 'X' without also removing the
+        // binding that references it").
+        //
+        // That rejection is a safety interlock: Durable Object storage does
+        // NOT move with the class — the new host gets a fresh, empty namespace
+        // and the old namespace on THIS worker still holds all its data.
+        // Silently splitting the upload would turn an innocent-looking topology
+        // refactor into irreversible deletion of that data. So by default we
+        // fail loudly with guidance; only an explicit per-worker opt-in
+        // (`deleteMovedDurableObjectClasses`) performs the destructive
+        // two-phase upload.
+        const conflictingCrossScriptBindings =
+          getConflictingCrossScriptDoBindings(
+            metadataBindings,
+            deletedClasses,
+            name,
+          );
+        if (
+          conflictingCrossScriptBindings.length > 0 &&
+          news.deleteMovedDurableObjectClasses !== true
+        ) {
+          return yield* Effect.fail(
+            new DurableObjectClassMoved({
+              scriptName: name,
+              classNames: Array.from(
+                new Set(conflictingCrossScriptBindings.map((b) => b.className)),
+              ),
+            }),
+          );
+        }
+        // Opt-in confirmed (or no conflict). When there is a conflict, split
+        // the deploy: upload #1 applies the delete migration with the
+        // conflicting cross-script binding(s) omitted, upload #2 re-attaches
+        // the full binding set with no migration.
+        const isTwoPhaseDoMove = conflictingCrossScriptBindings.length > 0;
+        if (isTwoPhaseDoMove) {
+          yield* session.note(
+            "DO class(es) moved cross-script: applying delete migration in a separate upload before attaching cross-script bindings",
+          );
+        }
+
+        const uploadWithTagRetry = (
+          uploadMetadata: workers.PutScriptRequest["metadata"],
+        ) =>
+          putWorkerScript({
+            accountId,
+            scriptName: name,
+            dispatchNamespace,
+            metadata: uploadMetadata,
+            files: bundle.files,
+          }).pipe(
+            Effect.catch((err) => {
+              // When adopting a Worker managed by Wrangler (or after a previous
+              // deploy with mismatched migrations), the old_tag precondition
+              // fails. The only way to discover the actual tag is through the
+              // error message — getScriptSettings is meant to return it but
+              // doesn't at runtime.
+              const msg = String(
+                typeof err === "object" && err !== null && "message" in err
+                  ? err.message
+                  : err,
+              );
+              const expectedTag = msg.match(
+                /when expected tag is ['"]?([^'"]+)['"]?/,
+              )?.[1];
+              if (expectedTag && uploadMetadata.migrations) {
+                return putWorkerScript({
+                  accountId,
+                  scriptName: name,
+                  dispatchNamespace,
+                  metadata: {
+                    ...uploadMetadata,
+                    migrations: {
+                      ...uploadMetadata.migrations,
+                      oldTag: expectedTag,
+                      newTag: bumpMigrationTagVersion(expectedTag),
+                    },
                   },
-                },
-                files: bundle.files,
-              });
-            }
-            // @effect-diagnostics-next-line anyUnknownInErrorContext:off
-            return Effect.fail(err as any);
-          }),
+                  files: bundle.files,
+                });
+              }
+              // @effect-diagnostics-next-line anyUnknownInErrorContext:off
+              return Effect.fail(err as any);
+            }),
+          );
+
+        // Upload #1 carries the delete migration. In the two-phase case it
+        // omits the conflicting cross-script bindings so Cloudflare accepts the
+        // class delete; otherwise it is the normal single upload with the full
+        // binding set.
+        const conflictingBindingSet = new Set<unknown>(
+          conflictingCrossScriptBindings,
         );
+        let worker = yield* uploadWithTagRetry(
+          isTwoPhaseDoMove
+            ? {
+                ...metadata,
+                bindings: metadataBindings.filter(
+                  (b) => !conflictingBindingSet.has(b),
+                ),
+              }
+            : metadata,
+        );
+        // Upload #2 re-attaches the full binding set (cross-script bindings
+        // included) with no migration. Upload #1 already advanced Cloudflare's
+        // migration tag to `newMigrationTag`, and the metadata tags carry the
+        // same `alchemy:migration-tag:` value, so the recorded tag stays
+        // consistent after this final upload.
+        if (isTwoPhaseDoMove) {
+          worker = yield* uploadWithTagRetry({
+            ...metadata,
+            migrations: undefined,
+          });
+        }
         const { settings, durableObjectNamespaces } =
           yield* getWorkerSettingsWithDurableObjects(
             name,
@@ -2542,6 +2647,35 @@ function mergeDurableObjectClasses(
     ).values(),
   );
 }
+
+/**
+ * Given the resolved `durable_object_namespace` metadata bindings and the set
+ * of class names about to be dropped by a `deleted_classes` migration, return
+ * the bindings that would make Cloudflare reject the upload: cross-script
+ * bindings (`scriptName` set to another worker) whose `className` is in
+ * `deletedClasses`. Cloudflare matches DO bindings by `class_name` alone when
+ * validating a delete-class migration, so a `script_name` pointing at the new
+ * host does not exempt the binding — the delete and the binding removal must
+ * ship in two separate uploads. When this returns a non-empty list the provider
+ * takes the two-phase upload path.
+ *
+ * @internal exported for unit testing.
+ */
+export const getConflictingCrossScriptDoBindings = <
+  B extends { type: string; className?: string; scriptName?: string },
+>(
+  metadataBindings: readonly B[],
+  deletedClasses: readonly string[],
+  workerName: string,
+): (B & { className: string; scriptName: string })[] =>
+  metadataBindings.filter(
+    (b): b is B & { className: string; scriptName: string } =>
+      b.type === "durable_object_namespace" &&
+      b.className !== undefined &&
+      deletedClasses.includes(b.className) &&
+      b.scriptName !== undefined &&
+      b.scriptName !== workerName,
+  );
 
 function getDurableObjectBindings(
   bindings: ReadonlyArray<ResourceBinding>,
