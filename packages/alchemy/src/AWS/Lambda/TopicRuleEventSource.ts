@@ -31,9 +31,6 @@ export const isIoTMessage = (event: any): event is IoTMessage =>
 /** @binding */
 export const TopicRuleEventSource = Layer.effect(
   IoTTopicRuleEventSource,
-  // @ts-expect-error - the impl resolves plan-time services (TopicRule,
-  // Permission) whereas TopicRuleEventSourceService erases the requirement
-  // channel to `never`.
   // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
     const host = yield* Lambda.Function;

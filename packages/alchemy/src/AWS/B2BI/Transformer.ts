@@ -1,8 +1,8 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
@@ -17,7 +17,9 @@ export interface TransformerProps {
   /**
    * The transformer's processing state. Newly created transformers default
    * to `inactive`; set to `active` to make the transformer usable by a
-   * capability.
+   * capability. Activation is one-way: an active transformer rejects every
+   * update (including deactivation), so changing the configuration, name, or
+   * status of an active transformer replaces it.
    * @default "inactive"
    */
   status?: "active" | "inactive";
@@ -64,6 +66,11 @@ export interface Transformer extends Resource<
  * An AWS B2B Data Interchange (B2BI) transformer. A transformer describes
  * how to convert inbound EDI documents to a target format (or the reverse)
  * using a mapping template. Transformers are credential-free and testable.
+ *
+ * Activation is one-way: B2BI rejects every update to an `active`
+ * transformer, including a status-only deactivation, so changing the
+ * configuration, name, or status of an active transformer replaces it
+ * (delete-first). Deletion works regardless of status.
  * @resource
  * @section Creating a Transformer
  * @example Inbound X12 to JSON
@@ -97,7 +104,12 @@ const toAttrs = (
 });
 
 /** JSON fingerprint of the mutable transformer configuration. */
-const spec = (props: TransformerProps): string =>
+const spec = (
+  props: Pick<
+    TransformerProps,
+    "inputConversion" | "mapping" | "outputConversion" | "sampleDocuments"
+  >,
+): string =>
   JSON.stringify({
     inputConversion: props.inputConversion ?? null,
     mapping: props.mapping ?? null,
@@ -128,6 +140,25 @@ export const TransformerProvider = () =>
 
       return {
         stables: ["transformerId", "transformerArn"],
+
+        diff: Effect.fn(function* ({ olds, news }) {
+          if (!isResolved(news)) return undefined;
+          // An ACTIVE transformer rejects every update — including a
+          // status-only deactivation ("An active Transformer cannot be
+          // updated", verified live) — so any change away from a deployed
+          // active state forces a replacement. Delete-first: transformer
+          // names are how lost state is recovered (findByName), so the old
+          // instance must be gone before the new one is created.
+          if (olds.status === "active") {
+            const changed =
+              spec(olds) !== spec(news) ||
+              olds.name !== news.name ||
+              (news.status ?? "inactive") !== "active";
+            if (changed) {
+              return { action: "replace", deleteFirst: true } as const;
+            }
+          }
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const found = output?.transformerId
@@ -176,39 +207,25 @@ export const TransformerProvider = () =>
             });
           }
 
-          // 3. Sync — converge name, config, and status. Newly created
-          // transformers are inactive; a status change to active makes them
-          // usable by a capability. An ACTIVE transformer rejects config
-          // updates ("An active Transformer cannot be updated"), so a
-          // config/name change on a live-active transformer must deactivate
-          // first, apply the change, then restore the desired status.
+          // 3. Sync — converge name/config while the transformer is still
+          // inactive, then activate last. An ACTIVE transformer rejects every
+          // update (including a status-only deactivation), so drift against
+          // an active transformer cannot be converged in place — `diff`
+          // reports those changes as a delete-first replacement.
           const configDrift = spec(live) !== spec(news);
           const nameDrift = live.name !== news.name;
           const statusDrift = live.status !== desiredStatus;
+          if (live.status === "active" && (configDrift || nameDrift)) {
+            return yield* Effect.fail(
+              new Error(
+                `Transformer '${live.transformerId}' is active and cannot be updated in place — B2BI rejects every update to an active transformer. Replace it instead.`,
+              ),
+            );
+          }
           if (configDrift || nameDrift) {
-            // An active transformer must be deactivated before its config can
-            // change. Deactivation is eventually consistent, so poll until
-            // the transformer reports `inactive` before pushing the update.
-            if (live.status === "active") {
-              yield* b2bi.updateTransformer({
-                transformerId: live.transformerId,
-                status: "inactive",
-              });
-              yield* b2bi
-                .getTransformer({ transformerId: live.transformerId })
-                .pipe(
-                  Effect.map((t) => t.status),
-                  Effect.repeat({
-                    until: (status) => status !== "active",
-                    schedule: Schedule.fixed("2 seconds").pipe(
-                      Schedule.both(Schedule.recurs(8)),
-                    ),
-                  }),
-                );
-            }
             // Config update carries NO status field (a status change in the
             // same call as a config change is rejected).
-            yield* b2bi.updateTransformer({
+            const updated = yield* b2bi.updateTransformer({
               transformerId: live.transformerId,
               name: news.name,
               inputConversion: news.inputConversion,
@@ -216,16 +233,12 @@ export const TransformerProvider = () =>
               outputConversion: news.outputConversion,
               sampleDocuments: news.sampleDocuments,
             });
-            // Restore the desired status separately.
-            const updated = yield* b2bi.updateTransformer({
-              transformerId: live.transformerId,
-              status: desiredStatus,
-            });
             live = { ...live, ...updated };
-          } else if (statusDrift) {
+          }
+          if (statusDrift && desiredStatus === "active") {
             const updated = yield* b2bi.updateTransformer({
               transformerId: live.transformerId,
-              status: desiredStatus,
+              status: "active",
             });
             live = { ...live, ...updated };
           }
@@ -238,17 +251,9 @@ export const TransformerProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // A transformer must be inactive before deletion; deactivate first,
-          // tolerating a resource that is already gone.
-          yield* b2bi
-            .updateTransformer({
-              transformerId: output.transformerId,
-              status: "inactive",
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catch(() => Effect.void),
-            );
+          // deleteTransformer works on both active and inactive transformers
+          // (verified live) — no deactivation step is needed (nor possible:
+          // an active transformer rejects all updates).
           yield* b2bi
             .deleteTransformer({ transformerId: output.transformerId })
             .pipe(

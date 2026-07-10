@@ -164,7 +164,7 @@ export const DataCatalogProvider = () =>
                   : [],
               );
           }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = news.name ?? output?.name!;
           const arn =

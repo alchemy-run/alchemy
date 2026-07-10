@@ -113,12 +113,15 @@ export const PartnershipProvider = () =>
 
         diff: Effect.fn(function* ({ olds = {}, news }) {
           if (!isResolved(news)) return undefined;
-          // The profile a partnership belongs to is immutable.
+          // The profile a partnership belongs to is immutable. Delete-first:
+          // the replacement keeps the same user-facing name, which is how
+          // lost state is recovered (findByName), so the old instance must
+          // be gone before the new one is created.
           if (
             olds.profileId !== undefined &&
             olds.profileId !== news.profileId
           ) {
-            return { action: "replace" } as const;
+            return { action: "replace", deleteFirst: true } as const;
           }
         }),
 

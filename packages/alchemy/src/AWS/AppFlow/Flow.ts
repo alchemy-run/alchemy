@@ -73,6 +73,14 @@ export interface Flow extends Resource<
  * and one or more destination connectors, applying field-mapping tasks.
  * The credential-free S3-to-S3 path is directly testable; other connectors
  * require a {@link ConnectorProfile} with vendor credentials.
+ *
+ * For an S3 source, the bucket policy must authorize the
+ * `appflow.amazonaws.com` service principal (`s3:GetObject` + `s3:ListBucket`
+ * on the source; `s3:PutObject` and the multipart/ACL actions on the
+ * destination), and the source prefix must contain at least one object when
+ * the flow is created — AppFlow validates connectivity by listing the source
+ * at `CreateFlow` time and rejects an empty prefix with
+ * `ConnectorServerException`.
  * @resource
  * @section Creating a Flow
  * @example S3 to S3 On-Demand Flow
@@ -120,7 +128,7 @@ export const FlowProvider = () =>
       return {
         stables: ["flowName", "flowArn"],
 
-        diff: Effect.fn(function* ({ id, olds = {}, news }) {
+        diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;

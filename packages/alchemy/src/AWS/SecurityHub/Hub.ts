@@ -3,7 +3,12 @@ import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  diffTags,
+  hasAlchemyTags,
+  tagRecord,
+} from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -106,8 +111,8 @@ export const HubProvider = () =>
     Effect.gen(function* () {
       const readTags = (arn: string) =>
         securityhub.listTagsForResource({ ResourceArn: arn }).pipe(
-          Effect.map((r) => r.Tags ?? {}),
-          Effect.catch(() => Effect.succeed({})),
+          Effect.map((r) => tagRecord(r.Tags)),
+          Effect.catch(() => Effect.succeed<Record<string, string>>({})),
         );
 
       return {

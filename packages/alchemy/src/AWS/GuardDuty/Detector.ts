@@ -3,7 +3,12 @@ import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  diffTags,
+  hasAlchemyTags,
+  tagRecord,
+} from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -166,7 +171,10 @@ export const DetectorProvider = () =>
             }
 
             // 3b. SYNC tags — diff against OBSERVED cloud tags.
-            const { upsert, removed } = diffTags(live.Tags ?? {}, desiredTags);
+            const { upsert, removed } = diffTags(
+              tagRecord(live.Tags),
+              desiredTags,
+            );
             const arn = detectorArn(region, accountId, detectorId);
             if (upsert.length > 0) {
               yield* guardduty.tagResource({

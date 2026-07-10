@@ -266,6 +266,19 @@ const loadBalancerRetrySchedule = Schedule.spaced("5 seconds").pipe(
   Schedule.both(Schedule.recurs(36)),
 );
 
+/**
+ * Explicitly-typed pipeable retry for the LB-hostname wait. An inline
+ * `Effect.retry` in the provider leaks `Retry.Return`'s conditional into
+ * declaration emit and widens the provider layer to `unknown` R.
+ */
+const retryUntilServiceReady = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (error) => error instanceof ServiceNotReady,
+    schedule: loadBalancerRetrySchedule,
+  });
+
 const toConnection = (
   cluster: ClusterConnectionProps,
 ): KubernetesClusterConnection => {
@@ -756,11 +769,10 @@ await Effect.runPromise(program).catch((err) => {
               ? Effect.succeed(hostname)
               : Effect.fail(new ServiceNotReady()),
           ),
-          Effect.retry({
-            while: (error) => error instanceof ServiceNotReady,
-            schedule: loadBalancerRetrySchedule,
-          }),
-          Effect.catchTag("ServiceNotReady", () => Effect.succeed(undefined)),
+          retryUntilServiceReady,
+          Effect.catchTag("EKS.ServiceNotReady", () =>
+            Effect.succeed(undefined),
+          ),
         );
 
       return {
@@ -1010,7 +1022,7 @@ await Effect.runPromise(program).catch((err) => {
                   certificateAuthorityData: cluster.certificateAuthority.data,
                 },
                 objects: output.kubernetesObjects ?? [],
-              }).pipe(Effect.catchAll(() => Effect.void));
+              }).pipe(Effect.catch(() => Effect.void));
             }
           }
 

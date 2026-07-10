@@ -6,11 +6,18 @@ import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import { Query, type QueryRequest } from "./Query.ts";
 import type { Table } from "./Table.ts";
-import { withQueryEndpoint } from "./internal.ts";
+import { discover, withEndpoint } from "./internal.ts";
 
 export const QueryHttp = Layer.effect(
   Query,
   Effect.gen(function* () {
+    // Yield-first captures the operations' services (Credentials/Region/
+    // HttpClient) at layer init so the runtime callable is requirement-free.
+    const query = yield* TSQ.query;
+    const describeEndpoints = yield* TSQ.describeEndpoints;
+    const withQueryEndpoint = withEndpoint(
+      discover("query", describeEndpoints({})),
+    );
     return Effect.fn(function* (table: Table) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
@@ -35,7 +42,7 @@ export const QueryHttp = Layer.effect(
       return Effect.fn(`AWS.Timestream.Query(${table.LogicalId})`)(function* (
         request: QueryRequest,
       ) {
-        return yield* withQueryEndpoint(TSQ.query(request));
+        return yield* withQueryEndpoint(query(request));
       });
     });
   }),

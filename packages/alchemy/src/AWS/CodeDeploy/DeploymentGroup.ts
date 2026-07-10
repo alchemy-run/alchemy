@@ -336,20 +336,13 @@ export const DeploymentGroupProvider = () =>
         delete: Effect.fn(function* ({ output, olds }) {
           const appName = output.applicationName || olds?.applicationName;
           if (appName === undefined) return;
-          yield* codedeploy
-            .deleteDeploymentGroup({
-              applicationName: appName,
-              deploymentGroupName: output.deploymentGroupName,
-            })
-            .pipe(
-              Effect.catchTag(
-                [
-                  "DeploymentGroupDoesNotExistException",
-                  "ApplicationDoesNotExistException",
-                ],
-                () => Effect.void,
-              ),
-            );
+          // DeleteDeploymentGroup is idempotent — deleting a non-existent
+          // group (or one under a deleted application) succeeds; its typed
+          // error union has no not-found variants.
+          yield* codedeploy.deleteDeploymentGroup({
+            applicationName: appName,
+            deploymentGroupName: output.deploymentGroupName,
+          });
         }),
 
         // Deployment groups are scoped to an application; there is no global

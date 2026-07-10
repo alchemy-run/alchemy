@@ -50,6 +50,9 @@ export const LifecycleFleetLive = Layer.effect(
               (r) =>
                 (r.Subnets?.[0]?.SubnetId ?? "subnet-0") as `subnet-${string}`,
             ),
+            // Deploy-time lookup only; a failure here is a fixture defect, not
+            // a typed error the Function impl contract can carry.
+            Effect.orDie,
           )
       : ("subnet-0" as `subnet-${string}`);
 

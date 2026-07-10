@@ -39,7 +39,11 @@ const resolveSubnets = Effect.gen(function* () {
     }
   }
   return [...byAz.values()].slice(0, 3);
-});
+}).pipe(
+  // Deploy-time lookup only; a failure here is a fixture defect, not a typed
+  // error the Function impl contract can carry.
+  Effect.orDie,
+);
 
 export const FixtureClusterLive = Layer.effect(
   FixtureCluster,

@@ -136,7 +136,7 @@ export const LocationEfsProvider = () =>
           };
         }),
 
-        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           const replaced =
             news.efsFilesystemArn !== olds.efsFilesystemArn ||
@@ -150,7 +150,7 @@ export const LocationEfsProvider = () =>
           if (replaced) return { action: "replace" } as const;
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 

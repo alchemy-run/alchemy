@@ -149,7 +149,7 @@ export const NamedQueryProvider = () =>
             }
             return attrs;
           }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
           const workGroup = news.workGroup ?? "primary";
 

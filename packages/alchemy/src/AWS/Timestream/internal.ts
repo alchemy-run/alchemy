@@ -26,17 +26,28 @@ interface CachedEndpoint {
 // also avoids an extra round-trip on every write/query.
 const cache = new Map<Kind, CachedEndpoint>();
 
-const discoverWrite = TSW.describeEndpoints({});
-const discoverQuery = TSQ.describeEndpoints({});
-
-const discover = (kind: Kind) =>
+/**
+ * Discover (and cache) the cell-specific endpoint for `kind`, using the given
+ * `DescribeEndpoints` effect. Parameterized over the discovery effect so each
+ * caller carries only its own service module's error union — and so binding
+ * layers can pass an operation captured via yield-first (`yield* op`) whose
+ * calls are requirement-free.
+ */
+export const discover = <E, R>(
+  kind: Kind,
+  describe: Effect.Effect<
+    { Endpoints: { Address: string; CachePeriodInMinutes: number }[] },
+    E,
+    R
+  >,
+): Effect.Effect<string, E, R> =>
   Effect.gen(function* () {
     const now = Date.now();
     const cached = cache.get(kind);
     if (cached !== undefined && cached.expiresAt > now) {
       return cached.url;
     }
-    const response = yield* kind === "write" ? discoverWrite : discoverQuery;
+    const response = yield* describe;
     const endpoint = response.Endpoints[0];
     const url = `https://${endpoint.Address}`;
     cache.set(kind, {
@@ -46,10 +57,16 @@ const discover = (kind: Kind) =>
     return url;
   });
 
-const withEndpoint =
-  (kind: Kind) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    discover(kind).pipe(
+/**
+ * Wrap a distilled Timestream effect so it targets the endpoint produced by
+ * `discovered` (see {@link discover}) via the `Endpoint` service override.
+ */
+export const withEndpoint =
+  <EDisc, RDisc>(discovered: Effect.Effect<string, EDisc, RDisc>) =>
+  <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | EDisc, Exclude<R, Endpoint.Endpoint> | RDisc> =>
+    discovered.pipe(
       Effect.flatMap((url) =>
         effect.pipe(
           Effect.provideService(Endpoint.Endpoint, Effect.succeed(url)),
@@ -62,10 +79,14 @@ const withEndpoint =
  * endpoint. Adds `DescribeEndpoints`'s error union (including the synthetic
  * `TimestreamNotOnboarded` tag) to the wrapped effect's errors.
  */
-export const withWriteEndpoint = withEndpoint("write");
+export const withWriteEndpoint = withEndpoint(
+  discover("write", TSW.describeEndpoints({})),
+);
 
 /**
  * Route a distilled `timestream-query` effect through the discovered query
  * endpoint.
  */
-export const withQueryEndpoint = withEndpoint("query");
+export const withQueryEndpoint = withEndpoint(
+  discover("query", TSQ.describeEndpoints({})),
+);

@@ -105,7 +105,7 @@ export const SchemaProvider = () =>
       return {
         stables: ["schemaArn", "name"],
 
-        diff: Effect.fn(function* ({ id, olds = {}, news }) {
+        diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
@@ -131,7 +131,7 @@ export const SchemaProvider = () =>
           };
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
           // 1. Observe — cloud state is authoritative; output is an ARN cache.

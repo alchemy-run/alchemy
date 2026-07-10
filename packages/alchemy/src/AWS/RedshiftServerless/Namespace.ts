@@ -278,6 +278,7 @@ export const NamespaceProvider = () =>
                 tags: toWireTags(desiredTags),
               })
               .pipe(
+                Effect.map((r) => r.namespace),
                 Effect.catchTag("ConflictException", () =>
                   redshiftserverless
                     .getNamespace({ namespaceName: name })

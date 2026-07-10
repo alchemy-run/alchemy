@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { Dataset, DatasetGroup } from "@/AWS/Forecast";
+import { toTagRecord } from "@/AWS/Forecast/internal.ts";
 import * as Test from "@/Test/Vitest";
 import * as forecast from "@distilled.cloud/aws/forecast";
 import { expect } from "@effect/vitest";
@@ -27,11 +28,11 @@ const assertDatasetGroupDeleted = (arn: string) =>
     }),
   );
 
-// Ungated typed-error probe: proves credentials reach Forecast and the SDK
-// decodes a typed error. In an entitled account a missing dataset surfaces as
-// ResourceNotFoundException; the standing test account has no forecast:* grant,
-// so it surfaces as the shared AccessDeniedException. Either way the boundary
-// is a typed tag — the full lifecycle below is gated.
+// Typed-error probe: proves the SDK decodes Forecast errors as typed tags.
+// A missing dataset surfaces as ResourceNotFoundException. Training resources
+// (predictors, forecasts) take ~an hour of paid training — they are
+// intentionally NOT implemented; only the cheap definition resources below
+// have a live lifecycle.
 test.provider(
   "describeDataset on a nonexistent ARN fails with a typed error",
   () =>
@@ -50,12 +51,48 @@ test.provider(
     }),
 );
 
-// Forecast datasets and dataset groups are cheap metadata objects that
-// provision quickly, but the standing test account has no forecast:* IAM
-// grant, so the live lifecycle is gated behind AWS_TEST_ML=1 and runs
-// unchanged in an entitled account. The expensive training work (predictors,
-// forecasts, import jobs) is out of scope.
-test.provider.skipIf(!process.env.AWS_TEST_ML)(
+// Entitlement probe: Amazon Forecast is closed to new customers — accounts
+// without prior Forecast usage get a typed AccessDeniedException on every
+// create ("Amazon Forecast is no longer available to new customers. Existing
+// customers of Amazon Forecast can continue to use the service as normal.").
+// In an entitled (grandfathered) account the create succeeds, so this probe
+// accepts either outcome and cleans up after itself.
+test.provider(
+  "createDatasetGroup is either entitled or a typed AccessDeniedException",
+  () =>
+    Effect.gen(function* () {
+      const arn = yield* forecast
+        .createDatasetGroup({
+          DatasetGroupName: "alchemy_forecast_entitlement_probe",
+          Domain: "CUSTOM",
+        })
+        .pipe(
+          Effect.map((r) => r.DatasetGroupArn),
+          Effect.catchTag(
+            // A leftover probe group from a crashed prior run is also fine.
+            ["AccessDeniedException", "ResourceAlreadyExistsException"],
+            () => Effect.succeed(undefined),
+          ),
+        );
+      if (arn !== undefined) {
+        // Entitled account — clean up the probe group.
+        yield* forecast
+          .deleteDatasetGroup({ DatasetGroupArn: arn })
+          .pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+      }
+    }),
+);
+
+// Forecast datasets and dataset groups are cheap, fast metadata objects, but
+// the standing test account is blocked by the new-customer closure above —
+// createDatasetGroup fails with AccessDeniedException ("Amazon Forecast is no
+// longer available to new customers"). The lifecycle is implemented fully and
+// gated behind AWS_TEST_FORECAST=1 so a grandfathered account can run it
+// unchanged. The expensive training work (predictors, forecasts, import jobs)
+// is out of scope.
+test.provider.skipIf(!process.env.AWS_TEST_FORECAST)(
   "create, attach, and destroy a dataset and dataset group",
   (stack) =>
     Effect.gen(function* () {
@@ -105,11 +142,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ML)(
       const groupTags = yield* forecast.listTagsForResource({
         ResourceArn: created.group.datasetGroupArn,
       });
-      expect(
-        groupTags.Tags?.some(
-          (t) => t.Key === "alchemy::id" && t.Value === "Sales",
-        ),
-      ).toBe(true);
+      expect(toTagRecord(groupTags.Tags)["alchemy::id"]).toBe("Sales");
 
       // Update: detach the dataset and change tags in place.
       const updated = yield* stack.deploy(
@@ -146,9 +179,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ML)(
       const updatedTags = yield* forecast.listTagsForResource({
         ResourceArn: created.group.datasetGroupArn,
       });
-      expect(
-        updatedTags.Tags?.some((t) => t.Key === "Extra" && t.Value === "yes"),
-      ).toBe(true);
+      expect(toTagRecord(updatedTags.Tags).Extra).toBe("yes");
 
       // Destroy and verify deletion out-of-band.
       yield* stack.destroy();

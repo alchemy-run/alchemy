@@ -470,7 +470,9 @@ export const BrokerProvider = () =>
                       Revision: news.configuration.revision,
                     }
                   : undefined,
-                Logs: news.logs,
+                Logs: news.logs
+                  ? { Audit: news.logs.audit, General: news.logs.general }
+                  : undefined,
                 MaintenanceWindowStartTime: news.maintenanceWindow
                   ? {
                       DayOfWeek: news.maintenanceWindow.dayOfWeek,

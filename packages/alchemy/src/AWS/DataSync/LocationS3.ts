@@ -132,12 +132,10 @@ export const LocationS3Provider = () =>
             ),
           ),
 
-        read: Effect.fn(function* ({ news = {}, output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           const arn =
             output?.locationArn ??
-            (isResolved(news)
-              ? yield* findLocationArnByUri(expectedUriOf(news))
-              : undefined);
+            (yield* findLocationArnByUri(expectedUriOf(olds)));
           if (arn === undefined) return undefined;
           const loc = yield* describe(arn);
           if (loc === undefined) return undefined;
@@ -147,7 +145,7 @@ export const LocationS3Provider = () =>
           };
         }),
 
-        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           const replaced =
             news.s3BucketArn !== olds.s3BucketArn ||
@@ -158,7 +156,7 @@ export const LocationS3Provider = () =>
           if (replaced) return { action: "replace" } as const;
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 

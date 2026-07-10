@@ -86,7 +86,7 @@ export const EventTypeProvider = () =>
     Effect.gen(function* () {
       const createName = Effect.fn(function* (
         id: string,
-        props: EventTypeProps,
+        props: Partial<EventTypeProps>,
       ) {
         return (
           props.name ??
@@ -131,7 +131,7 @@ export const EventTypeProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

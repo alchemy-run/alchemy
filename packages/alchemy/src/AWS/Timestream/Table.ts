@@ -258,7 +258,7 @@ export const TableProvider = () =>
             ? state
             : Unowned(state);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds = {} }) {
           if (!isResolved(news)) return;
           const oldName = yield* createTableName(id, olds);
           const newName = yield* createTableName(id, news);

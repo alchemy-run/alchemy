@@ -152,7 +152,7 @@ export const PlaceIndexProvider = () =>
             ? state
             : Unowned(state);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           const oldName = yield* createIndexName(id, olds);
           const newName = yield* createIndexName(id, news);
@@ -161,7 +161,7 @@ export const PlaceIndexProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const indexName =
             output?.indexName ?? (yield* createIndexName(id, news));
           const internalTags = yield* createInternalTags(id);

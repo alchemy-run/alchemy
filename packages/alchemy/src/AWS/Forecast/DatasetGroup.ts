@@ -9,7 +9,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { readForecastTags, syncForecastTags } from "./internal.ts";
+import {
+  readForecastTags,
+  syncForecastTags,
+  toForecastName,
+} from "./internal.ts";
 
 export interface DatasetGroupProps {
   /**
@@ -89,7 +93,7 @@ export const DatasetGroupProvider = () =>
       ) {
         return (
           props.datasetGroupName ??
-          (yield* createPhysicalName({ id, maxLength: 63 }))
+          toForecastName(yield* createPhysicalName({ id, maxLength: 63 }))
         );
       });
 
@@ -113,7 +117,7 @@ export const DatasetGroupProvider = () =>
       return {
         stables: ["datasetGroupArn", "datasetGroupName"],
 
-        diff: Effect.fn(function* ({ id, olds = {}, news }) {
+        diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
@@ -134,7 +138,7 @@ export const DatasetGroupProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

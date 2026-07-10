@@ -5,19 +5,23 @@ import * as Stream from "effect/Stream";
 import { diffTags } from "../../Tags.ts";
 
 /**
- * A freshly-created IAM role is not immediately assumable by DataSync, so
- * `CreateLocation*` transiently rejects it as `LocationRoleNotAssumable`
- * (patched from `InvalidRequestException` + "Invalid IAM role"). Bounded
- * retry (~30s), explicitly typed so declaration emit never widens the
- * provider layer (see PATTERNS §7).
+ * A freshly-created IAM role (or a just-attached inline policy) takes a
+ * while to propagate to DataSync: `CreateLocation*` transiently rejects it
+ * as `LocationRoleNotAssumable` (patched from `InvalidRequestException` +
+ * "Invalid IAM role") or fails its location access test as
+ * `LocationAccessTestFailed` (patched from `InvalidRequestException` +
+ * "location access test failed"). Bounded retry (~60s), explicitly typed so
+ * declaration emit never widens the provider layer (see PATTERNS §7).
  */
 export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) => e._tag === "LocationRoleNotAssumable",
+    while: (e) =>
+      e._tag === "LocationRoleNotAssumable" ||
+      e._tag === "LocationAccessTestFailed",
     schedule: Schedule.fixed("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
+      Schedule.both(Schedule.recurs(20)),
     ),
   });
 

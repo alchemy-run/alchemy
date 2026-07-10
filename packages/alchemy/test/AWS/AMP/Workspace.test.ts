@@ -118,7 +118,8 @@ test.provider(
         workspaceId,
         name: "alchemy-test-rules",
       });
-      expect(decode(describedRules.ruleGroupsNamespace.data)).toBe(RULES_V1);
+      expect(describedRules.ruleGroupsNamespace.data).toBeDefined();
+      expect(decode(describedRules.ruleGroupsNamespace.data!)).toBe(RULES_V1);
       expect(describedRules.ruleGroupsNamespace.tags?.["alchemy::id"]).toBe(
         "Rules",
       );
@@ -178,7 +179,8 @@ test.provider(
         workspaceId,
         name: "alchemy-test-rules",
       });
-      expect(decode(afterRules.ruleGroupsNamespace.data)).toBe(RULES_V2);
+      expect(afterRules.ruleGroupsNamespace.data).toBeDefined();
+      expect(decode(afterRules.ruleGroupsNamespace.data!)).toBe(RULES_V2);
 
       yield* stack.destroy();
       yield* assertWorkspaceDeleted(workspaceId);

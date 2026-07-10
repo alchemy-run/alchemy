@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
@@ -59,7 +60,7 @@ const resolveNetwork = Effect.gen(function* () {
 // MWAA execution role: trusts the Airflow environment + task principals and
 // grants the standard access to the DAGs bucket, CloudWatch Logs, SQS, and KMS.
 const executionRolePolicy = (
-  bucketArn: string,
+  bucketArn: Output.Output<string>,
   region: string,
   account: string,
 ) => ({
@@ -73,7 +74,7 @@ const executionRolePolicy = (
     {
       Effect: "Allow" as const,
       Action: ["s3:GetObject*", "s3:GetBucket*", "s3:List*"],
-      Resource: [bucketArn, `${bucketArn}/*`],
+      Resource: [bucketArn, Output.interpolate`${bucketArn}/*`],
     },
     {
       Effect: "Allow" as const,

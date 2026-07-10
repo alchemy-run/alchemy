@@ -1,23 +1,33 @@
 import * as AWS from "@/AWS";
-import { Detector, EventType, Variable } from "@/AWS/FraudDetector";
+import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { describe } from "vitest";
+import FraudDetectorTestFunctionLive, {
+  FRAUD_EMAIL,
+  FraudDetectorTestFunction,
+  REVIEW_OUTCOME,
+} from "./fixtures/handler";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const testOptions = { providers: AWS.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
 
-const ENTITY_TYPE = "alchemy_test_customer";
-const EMAIL_VAR = "alchemy_test_email";
-const IP_VAR = "alchemy_test_ip";
-const EVENT_TYPE = "alchemy_test_purchase";
-const DETECTOR_ID = "alchemy_test_checkout";
+// The standing test account has no frauddetector:* IAM grant, so every live
+// call surfaces AccessDeniedException. The full rule-based E2E is gated behind
+// AWS_TEST_FRAUDDETECTOR=1 and runs unchanged in an entitled account; an
+// ungated typed-error probe proves credentials reach the service and the SDK
+// decodes a typed error either way.
+const RUN_LIVE = !!process.env.AWS_TEST_FRAUDDETECTOR;
 
 // Ungated typed-error probe: proves credentials reach Fraud Detector and the
 // SDK decodes a typed error. In an entitled account the missing detector
-// surfaces as ResourceNotFoundException; the standing test account has no
-// frauddetector:* grant, so it surfaces as the shared AccessDeniedException.
-// Either way the boundary is a typed tag — the full lifecycle below is gated.
+// surfaces as ResourceNotFoundException; an ungranted account surfaces
+// AccessDeniedException. Either way the boundary is a typed tag.
 test.provider("getDetectors on a nonexistent id fails with a typed error", () =>
   Effect.gen(function* () {
     const error = yield* Effect.flip(
@@ -31,167 +41,104 @@ test.provider("getDetectors on a nonexistent id fails with a typed error", () =>
   }),
 );
 
-// Fraud Detector variables, event types, and detectors are cheap metadata
-// objects, but the standing test account has no frauddetector:* IAM grant, so
-// the live lifecycle is gated behind AWS_TEST_ML=1 and runs unchanged in an
-// entitled account. A prerequisite entity type is provisioned out-of-band (no
-// EntityType resource in scope). Models, rules, and detector versions (which
-// produce predictions) are out of scope.
-test.provider.skipIf(!process.env.AWS_TEST_ML)(
-  "create and destroy a variable, event type, and detector",
-  (stack) =>
+const sharedStack = Core.scratchStack(testOptions, "FraudDetectorPrediction");
+
+let baseUrl: string;
+
+describe("FraudDetector GetEventPrediction (E2E)", () => {
+  beforeAll(
     Effect.gen(function* () {
-      yield* stack.destroy();
-      // Out-of-band prerequisite: the event type references an entity type.
-      yield* frauddetector.putEntityType({ name: ENTITY_TYPE });
+      if (!RUN_LIVE) return;
+      yield* Effect.logInfo("FraudDetector E2E setup: destroying previous run");
+      yield* sharedStack.destroy();
 
-      const created = yield* stack.deploy(
+      yield* Effect.logInfo(
+        "FraudDetector E2E setup: deploying entity type + variables + outcome + event type + detector + active version + Lambda",
+      );
+      const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          const email = yield* Variable("Email", {
-            name: EMAIL_VAR,
-            dataType: "STRING",
-            dataSource: "EVENT",
-            defaultValue: "unknown",
-            variableType: "EMAIL_ADDRESS",
-            tags: { Environment: "test" },
-          });
-          const ip = yield* Variable("Ip", {
-            name: IP_VAR,
-            dataType: "STRING",
-            dataSource: "EVENT",
-            defaultValue: "0.0.0.0",
-            variableType: "IP_ADDRESS",
-          });
-          const eventType = yield* EventType("Purchase", {
-            name: EVENT_TYPE,
-            eventVariables: [email.name, ip.name],
-            entityTypes: [ENTITY_TYPE],
-            labels: [],
-          });
-          const detector = yield* Detector("Checkout", {
-            detectorId: DETECTOR_ID,
-            eventTypeName: eventType.name,
-            description: "checkout fraud detector",
-            tags: { Environment: "test" },
-          });
-          return { email, ip, eventType, detector };
-        }),
+          return yield* FraudDetectorTestFunction;
+        }).pipe(Effect.provide(FraudDetectorTestFunctionLive)),
       );
 
-      expect(created.email.name).toBe(EMAIL_VAR);
-      expect(created.email.arn).toContain(":variable/");
-      expect(created.eventType.name).toBe(EVENT_TYPE);
-      expect(created.detector.detectorId).toBe(DETECTOR_ID);
-      expect(created.detector.eventTypeName).toBe(EVENT_TYPE);
+      expect(functionUrl).toBeTruthy();
+      baseUrl = functionUrl!.replace(/\/+$/, "");
 
-      // Out-of-band verification via distilled.
-      const variables = yield* frauddetector.getVariables({ name: EMAIL_VAR });
-      expect(variables.variables?.[0]?.variableType).toBe("EMAIL_ADDRESS");
-      expect(variables.variables?.[0]?.defaultValue).toBe("unknown");
-
-      const eventTypes = yield* frauddetector.getEventTypes({
-        name: EVENT_TYPE,
-      });
-      expect(eventTypes.eventTypes?.[0]?.eventVariables?.sort()).toEqual(
-        [EMAIL_VAR, IP_VAR].sort(),
-      );
-
-      const detectors = yield* frauddetector.getDetectors({
-        detectorId: DETECTOR_ID,
-      });
-      expect(detectors.detectors?.[0]?.eventTypeName).toBe(EVENT_TYPE);
-
-      const detectorTags = yield* frauddetector.listTagsForResource({
-        resourceARN: created.detector.arn,
-      });
-      expect(
-        detectorTags.tags?.some(
-          (t) => t.key === "alchemy::id" && t.value === "Checkout",
+      // Readiness probe — fresh function URLs take seconds to serve 200s.
+      yield* HttpClient.get(`${baseUrl}/health`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
-      ).toBe(true);
-
-      // Update: change the variable default value and detector description
-      // in place.
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const email = yield* Variable("Email", {
-            name: EMAIL_VAR,
-            dataType: "STRING",
-            dataSource: "EVENT",
-            defaultValue: "none@example.com",
-            variableType: "EMAIL_ADDRESS",
-            tags: { Environment: "test" },
-          });
-          const ip = yield* Variable("Ip", {
-            name: IP_VAR,
-            dataType: "STRING",
-            dataSource: "EVENT",
-            defaultValue: "0.0.0.0",
-            variableType: "IP_ADDRESS",
-          });
-          const eventType = yield* EventType("Purchase", {
-            name: EVENT_TYPE,
-            eventVariables: [email.name, ip.name],
-            entityTypes: [ENTITY_TYPE],
-            labels: [],
-          });
-          const detector = yield* Detector("Checkout", {
-            detectorId: DETECTOR_ID,
-            eventTypeName: eventType.name,
-            description: "updated checkout fraud detector",
-            tags: { Environment: "test" },
-          });
-          return { email, ip, eventType, detector };
+        Effect.retry({
+          schedule: Schedule.fixed("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(60)),
+          ),
         }),
       );
-      expect(updated.email.arn).toBe(created.email.arn);
-      expect(updated.detector.detectorId).toBe(DETECTOR_ID);
-
-      const reVariables = yield* frauddetector.getVariables({
-        name: EMAIL_VAR,
-      });
-      expect(reVariables.variables?.[0]?.defaultValue).toBe("none@example.com");
-      const reDetectors = yield* frauddetector.getDetectors({
-        detectorId: DETECTOR_ID,
-      });
-      expect(reDetectors.detectors?.[0]?.description).toBe(
-        "updated checkout fraud detector",
-      );
-
-      // Destroy and verify deletion out-of-band.
-      yield* stack.destroy();
-
-      const goneDetector = yield* frauddetector
-        .getDetectors({
-          detectorId: DETECTOR_ID,
-        })
-        .pipe(
-          Effect.map((r) => r.detectors ?? []),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed([]),
-          ),
-        );
-      expect(goneDetector).toHaveLength(0);
-
-      const goneVariables = yield* frauddetector
-        .getVariables({
-          name: EMAIL_VAR,
-        })
-        .pipe(
-          Effect.map((r) => r.variables ?? []),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed([]),
-          ),
-        );
-      expect(goneVariables).toHaveLength(0);
-
-      // Clean up the out-of-band entity type prerequisite.
-      yield* frauddetector
-        .deleteEventType({ name: EVENT_TYPE })
-        .pipe(Effect.catchTag("ValidationException", () => Effect.void));
-      yield* frauddetector
-        .deleteEntityType({ name: ENTITY_TYPE })
-        .pipe(Effect.catchTag("ValidationException", () => Effect.void));
     }),
-  { timeout: 300_000 },
-);
+    { timeout: 300_000 },
+  );
+  afterAll(
+    Effect.gen(function* () {
+      if (!RUN_LIVE) return;
+      yield* sharedStack.destroy();
+    }),
+    { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!RUN_LIVE)(
+    "a fraud email is scored and returns the review outcome",
+    () =>
+      Effect.gen(function* () {
+        // The detector version may take a moment to become ACTIVE after
+        // deploy; retry through transient 5xx while it settles.
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.post(`${baseUrl}/predict`).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ email: FRAUD_EMAIL }),
+          ),
+        ).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.succeed(res)
+              : Effect.fail(new Error(`predict failed: ${res.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("2 seconds").pipe(
+              Schedule.both(Schedule.recurs(8)),
+            ),
+          }),
+        );
+        const body = (yield* response.json) as { outcomes: string[] };
+        expect(body.outcomes).toContain(REVIEW_OUTCOME);
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider.skipIf(!RUN_LIVE)(
+    "a benign email matches no rule and returns no outcome",
+    () =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.execute(
+          HttpClientRequest.post(`${baseUrl}/predict`).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ email: "legit@example.com" }),
+          ),
+        ).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.succeed(res)
+              : Effect.fail(new Error(`predict failed: ${res.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("2 seconds").pipe(
+              Schedule.both(Schedule.recurs(8)),
+            ),
+          }),
+        );
+        const body = (yield* response.json) as { outcomes: string[] };
+        expect(body.outcomes).not.toContain(REVIEW_OUTCOME);
+      }),
+    { timeout: 180_000 },
+  );
+});

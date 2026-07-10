@@ -296,6 +296,7 @@ export const WorkgroupProvider = () =>
                 tags: toWireTags(desiredTags),
               })
               .pipe(
+                Effect.map((r) => r.workgroup),
                 Effect.catchTag("ConflictException", () =>
                   redshiftserverless
                     .getWorkgroup({ workgroupName: name })

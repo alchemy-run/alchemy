@@ -1,16 +1,26 @@
 import * as personalize from "@distilled.cloud/aws/personalize";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { diffTags } from "../../Tags.ts";
 
 /**
- * Coerce a Personalize wire tag list (`{ tagKey, tagValue }[]`, values may be
- * `Redacted`) into a plain `Record<string, string>`.
+ * Unwrap a Personalize `SensitiveString` (decoded as `Redacted`) to its plain
+ * string value. `String(redacted)` would yield `"<redacted>"`, not the value.
+ */
+export const unredact = (value: string | Redacted.Redacted<string>): string =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+/**
+ * Coerce a Personalize wire tag list (`{ tagKey, tagValue }[]`, values decode
+ * as `Redacted`) into a plain `Record<string, string>`.
  */
 export const toTagRecord = (
   tags: personalize.Tag[] | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    (tags ?? []).map((t) => [String(t.tagKey), String(t.tagValue)] as const),
+    (tags ?? []).map(
+      (t) => [unredact(t.tagKey), unredact(t.tagValue)] as const,
+    ),
   );
 
 /**
@@ -41,6 +51,11 @@ export const syncPersonalizeTags = Effect.fn(function* (
     });
   }
   if (removed.length > 0) {
-    yield* personalize.untagResource({ resourceArn: arn, tagKeys: removed });
+    // tagKeys decodes as SensitiveString — wrap in Redacted for the encoder
+    // (which unwraps back to the plain string on the wire).
+    yield* personalize.untagResource({
+      resourceArn: arn,
+      tagKeys: removed.map((key) => Redacted.make(key)),
+    });
   }
 });

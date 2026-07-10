@@ -4,7 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
 export interface WriteRecordsRequest extends Omit<
-  TSW.WriteRecordsInput,
+  TSW.WriteRecordsRequest,
   "DatabaseName" | "TableName"
 > {}
 
@@ -18,7 +18,7 @@ export interface WriteRecords extends Binding.Service<
     (
       request: WriteRecordsRequest,
     ) => Effect.Effect<
-      TSW.WriteRecordsOutput,
+      TSW.WriteRecordsResponse,
       TSW.WriteRecordsError | TSW.DescribeEndpointsError
     >
   >

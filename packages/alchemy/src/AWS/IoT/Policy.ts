@@ -136,7 +136,7 @@ export const PolicyProvider = () =>
           const tags = yield* readIotTags(found.policyArn!);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, news, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);

@@ -122,7 +122,7 @@ export const DatasetProvider = () =>
       return {
         stables: ["datasetArn", "name"],
 
-        diff: Effect.fn(function* ({ id, olds = {}, news }) {
+        diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
@@ -146,7 +146,7 @@ export const DatasetProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

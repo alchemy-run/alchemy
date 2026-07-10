@@ -139,7 +139,7 @@ export const RouteCalculatorProvider = () =>
             ? state
             : Unowned(state);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           const oldName = yield* createCalculatorName(id, olds);
           const newName = yield* createCalculatorName(id, news);
@@ -147,7 +147,7 @@ export const RouteCalculatorProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const calculatorName =
             output?.calculatorName ?? (yield* createCalculatorName(id, news));
           const internalTags = yield* createInternalTags(id);

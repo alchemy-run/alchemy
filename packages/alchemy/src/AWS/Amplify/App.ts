@@ -220,7 +220,7 @@ export const AppProvider = () =>
               appArn: app.appArn,
               name: app.name,
               platform: (app.platform as Platform) ?? "WEB",
-              defaultDomain: app.defaultDomain,
+              defaultDomain: app.defaultDomain ?? "",
               tags: tagRecord(app.tags),
             }));
           }),

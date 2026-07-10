@@ -44,7 +44,7 @@ export const CompleteLifecycleActionHttp = Layer.effect(
         )(function* (request: CompleteLifecycleActionRequest) {
           return yield* complete({
             ...request,
-            AutoScalingGroupName,
+            AutoScalingGroupName: yield* AutoScalingGroupName,
           });
         }),
         heartbeat: Effect.fn(
@@ -52,7 +52,7 @@ export const CompleteLifecycleActionHttp = Layer.effect(
         )(function* (request: RecordLifecycleActionHeartbeatRequest) {
           return yield* heartbeat({
             ...request,
-            AutoScalingGroupName,
+            AutoScalingGroupName: yield* AutoScalingGroupName,
           });
         }),
       };

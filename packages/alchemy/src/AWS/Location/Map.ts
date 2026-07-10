@@ -1,5 +1,6 @@
 import * as location from "@distilled.cloud/aws/location";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as EffectStream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -124,7 +125,9 @@ const readMap = Effect.fn(function* (mapName: string) {
     mapName: found.MapName,
     mapArn: found.MapArn,
     style: found.Configuration.Style,
-    politicalView: found.Configuration.PoliticalView,
+    politicalView: Redacted.isRedacted(found.Configuration.PoliticalView)
+      ? Redacted.value(found.Configuration.PoliticalView)
+      : found.Configuration.PoliticalView,
     dataSource: found.DataSource,
     description: found.Description ? found.Description : undefined,
     tags: toTagRecord(found.Tags),
@@ -167,7 +170,7 @@ export const MapProvider = () =>
             ? state
             : Unowned(state);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           const oldName = yield* createMapName(id, olds);
           const newName = yield* createMapName(id, news);
@@ -179,7 +182,7 @@ export const MapProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const mapName = output?.mapName ?? (yield* createMapName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

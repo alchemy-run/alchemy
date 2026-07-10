@@ -24,6 +24,7 @@ export default GeoTestFunction.make(
   Effect.gen(function* () {
     const searchText = yield* GeoPlaces.SearchText();
     const geocode = yield* GeoPlaces.Geocode();
+    const reverseGeocode = yield* GeoPlaces.ReverseGeocode();
     const calculateRoutes = yield* GeoRoutes.CalculateRoutes();
 
     return {
@@ -40,6 +41,9 @@ export default GeoTestFunction.make(
           const result = yield* searchText({
             QueryText: "Space Needle, Seattle, WA",
             MaxResults: 5,
+            // SearchText requires exactly one of BiasPosition,
+            // Filter.BoundingBox, or Filter.Circle. [longitude, latitude]
+            BiasPosition: [-122.3493, 47.6205],
           });
           const items = result.ResultItems ?? [];
           return yield* HttpServerResponse.json({
@@ -57,6 +61,19 @@ export default GeoTestFunction.make(
           return yield* HttpServerResponse.json({
             count: items.length,
             position: items[0]?.Position,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/reverse-geocode") {
+          const result = yield* reverseGeocode({
+            // [longitude, latitude] — near the Space Needle, Seattle.
+            QueryPosition: [-122.3493, 47.6205],
+            MaxResults: 1,
+          });
+          const items = result.ResultItems ?? [];
+          return yield* HttpServerResponse.json({
+            count: items.length,
+            label: items[0]?.Address?.Label,
           });
         }
 
@@ -86,6 +103,7 @@ export default GeoTestFunction.make(
       Layer.mergeAll(
         GeoPlaces.SearchTextHttp,
         GeoPlaces.GeocodeHttp,
+        GeoPlaces.ReverseGeocodeHttp,
         GeoRoutes.CalculateRoutesHttp,
       ),
     ),

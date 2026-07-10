@@ -255,7 +255,7 @@ export const FileSystemProvider = () =>
             : Unowned(attrs);
         }),
 
-        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           const replaced =
             news.fileSystemType !== olds.fileSystemType ||
@@ -273,7 +273,7 @@ export const FileSystemProvider = () =>
           // undefined → default update path (storage-capacity increase, tags)
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
 
           // 1. OBSERVE — cloud state is authoritative; output is only a cache.

@@ -189,8 +189,11 @@ export const ConnectorProfileProvider = () =>
             );
         }),
 
+        // maxResults is load-bearing: a fully-empty request body serializes
+        // to null and AppFlow rejects it ("The request object must be
+        // non-null", verified live).
         list: () =>
-          appflow.describeConnectorProfiles.pages({}).pipe(
+          appflow.describeConnectorProfiles.pages({ maxResults: 100 }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>

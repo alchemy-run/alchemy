@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { Dataset, DatasetGroup, Schema } from "@/AWS/Personalize";
+import { toTagRecord } from "@/AWS/Personalize/internal.ts";
 import * as Test from "@/Test/Vitest";
 import * as personalize from "@distilled.cloud/aws/personalize";
 import { expect } from "@effect/vitest";
@@ -39,11 +40,11 @@ const assertDatasetGroupDeleted = (arn: string) =>
     }),
   );
 
-// Ungated typed-error probe: proves credentials reach Personalize and the SDK
-// decodes a typed error. In an entitled account a missing group surfaces as
-// ResourceNotFoundException; the standing test account has no personalize:*
-// grant, so it surfaces as the shared AccessDeniedException. Either way the
-// boundary is a typed tag — the full lifecycle below is gated.
+// Typed-error probe: proves the SDK decodes Personalize errors as typed tags.
+// A missing dataset group surfaces as ResourceNotFoundException. Training
+// resources (solutions, campaigns) take ~an hour of paid training — they are
+// intentionally NOT implemented; only the cheap definition resources below
+// have a live lifecycle.
 test.provider(
   "describeDatasetGroup on a nonexistent ARN fails with a typed error",
   () =>
@@ -62,12 +63,11 @@ test.provider(
     }),
 );
 
-// Personalize schemas, dataset groups, and datasets are cheap metadata
-// objects that provision quickly, but the standing test account has no
-// personalize:* IAM grant, so the live lifecycle is gated behind AWS_TEST_ML=1
-// and runs unchanged in an entitled account. The expensive training work
-// (solutions, campaigns, import jobs) is out of scope.
-test.provider.skipIf(!process.env.AWS_TEST_ML)(
+// Personalize schemas, dataset groups, and datasets are cheap, fast metadata
+// objects — the live lifecycle runs ungated with out-of-band verification.
+// The expensive training work (solutions, campaigns, import jobs) is out of
+// scope.
+test.provider(
   "create and destroy a schema, dataset group, and dataset",
   (stack) =>
     Effect.gen(function* () {
@@ -96,7 +96,8 @@ test.provider.skipIf(!process.env.AWS_TEST_ML)(
       expect(created.group.status).toBe("ACTIVE");
       expect(created.dataset.datasetArn).toContain(":dataset/");
       expect(created.dataset.status).toBe("ACTIVE");
-      expect(created.dataset.datasetType).toBe("Interactions");
+      // Personalize canonicalizes the dataset type to uppercase on describe.
+      expect(created.dataset.datasetType).toBe("INTERACTIONS");
 
       // Out-of-band verification via distilled.
       const describedSchema = yield* personalize.describeSchema({
@@ -114,16 +115,12 @@ test.provider.skipIf(!process.env.AWS_TEST_ML)(
       const groupTags = yield* personalize.listTagsForResource({
         resourceArn: created.group.datasetGroupArn,
       });
-      expect(
-        groupTags.tags?.some(
-          (t) => t.tagKey === "alchemy::id" && t.tagValue === "Group",
-        ),
-      ).toBe(true);
+      expect(toTagRecord(groupTags.tags)["alchemy::id"]).toBe("Group");
 
       const describedDataset = yield* personalize.describeDataset({
         datasetArn: created.dataset.datasetArn,
       });
-      expect(describedDataset.dataset?.datasetType).toBe("Interactions");
+      expect(describedDataset.dataset?.datasetType).toBe("INTERACTIONS");
       expect(describedDataset.dataset?.schemaArn).toBe(
         created.schema.schemaArn,
       );
@@ -153,11 +150,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ML)(
       const updatedTags = yield* personalize.listTagsForResource({
         resourceArn: created.group.datasetGroupArn,
       });
-      expect(
-        updatedTags.tags?.some(
-          (t) => t.tagKey === "Extra" && t.tagValue === "yes",
-        ),
-      ).toBe(true);
+      expect(toTagRecord(updatedTags.tags).Extra).toBe("yes");
 
       // Destroy and verify deletion out-of-band.
       yield* stack.destroy();

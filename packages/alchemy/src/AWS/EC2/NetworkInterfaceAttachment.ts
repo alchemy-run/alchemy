@@ -235,10 +235,7 @@ const waitForEniAttachmentState = (
   networkInterfaceId: string,
   target: ec2.AttachmentStatus,
   session?: ScopedPlanStatusSession,
-): Effect.Effect<
-  ec2.AttachmentStatus,
-  ec2.DescribeNetworkInterfacesError | EniAttachmentPending
-> =>
+) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeNetworkInterfaces({
       NetworkInterfaceIds: [networkInterfaceId],

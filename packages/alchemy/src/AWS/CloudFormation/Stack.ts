@@ -2,6 +2,22 @@ import * as cloudformation from "@distilled.cloud/aws/cloudformation";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+
+/**
+ * Bounded wait for a stack to leave an in-progress status. Explicitly-typed
+ * pipeable helper — an inline `Effect.retry` in a provider lifecycle op leaks
+ * `Retry.Return`'s conditional into declaration emit and widens the provider
+ * layer to `unknown` R for every `AWS.providers()` consumer.
+ */
+const retryUntilStackSettled = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "StackNotSettled",
+    schedule: Schedule.fixed("5 seconds").pipe(
+      Schedule.both(Schedule.recurs(120)),
+    ),
+  });
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -254,12 +270,7 @@ export const StackProvider = () =>
                 )
               : Effect.succeed(s),
           ),
-          Effect.retry({
-            while: (e) => e._tag === "StackNotSettled",
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(120)),
-            ),
-          }),
+          retryUntilStackSettled,
         );
         if (stack !== undefined && isFailure(stack.StackStatus)) {
           return yield* Effect.fail(
@@ -279,31 +290,34 @@ export const StackProvider = () =>
         stackId: string,
         stackName: string,
       ) {
-        yield* describe(stackId).pipe(
-          Effect.flatMap((s) => {
-            if (s === undefined) return Effect.void;
-            if (s.StackStatus === "DELETE_FAILED") {
-              return Effect.fail(
-                new StackOperationFailed({
-                  stackName,
-                  status: "DELETE_FAILED",
-                  reason: s.StackStatusReason,
-                }),
-              );
-            }
-            return Effect.fail(
-              new StackNotSettled({
-                stackId,
-                status: s.StackStatus ?? "UNKNOWN",
-              }),
-            );
-          }),
-          Effect.retry({
-            while: (e) => e._tag === "StackNotSettled",
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(120)),
+        yield* retryUntilStackSettled(
+          describe(stackId).pipe(
+            Effect.flatMap(
+              (
+                s,
+              ): Effect.Effect<
+                void,
+                StackNotSettled | StackOperationFailed
+              > => {
+                if (s === undefined) return Effect.void;
+                if (s.StackStatus === "DELETE_FAILED") {
+                  return Effect.fail(
+                    new StackOperationFailed({
+                      stackName,
+                      status: "DELETE_FAILED",
+                      reason: s.StackStatusReason,
+                    }),
+                  );
+                }
+                return Effect.fail(
+                  new StackNotSettled({
+                    stackId,
+                    status: s.StackStatus ?? "UNKNOWN",
+                  }),
+                );
+              },
             ),
-          }),
+          ),
         );
       });
 

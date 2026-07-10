@@ -25,7 +25,7 @@ const waitUntilLocationGone = (locationArn: string) =>
   );
 
 const trustPolicy = {
-  Version: "2012-10-17",
+  Version: "2012-10-17" as const,
   Statement: [
     {
       Effect: "Allow" as const,

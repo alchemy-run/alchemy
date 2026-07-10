@@ -152,6 +152,17 @@ export const ThingTypeProvider = () =>
             live = yield* iot.describeThingType({ thingTypeName });
           }
 
+          // SYNC deprecation — a destroy deprecates the type but AWS blocks
+          // deletion for 5 minutes, so a re-create with the same name can
+          // observe a deprecated type. Converge it back to active.
+          if (live.thingTypeMetadata?.deprecated) {
+            yield* iot.deprecateThingType({
+              thingTypeName,
+              undoDeprecate: true,
+            });
+            live = yield* iot.describeThingType({ thingTypeName });
+          }
+
           // SYNC tags
           yield* syncIotTags(live.thingTypeArn!, id, news.tags);
 
@@ -170,7 +181,12 @@ export const ThingTypeProvider = () =>
           yield* iot
             .deprecateThingType({ thingTypeName: output.thingTypeName })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              // InvalidRequestException: already deprecated (delete must be
+              // idempotent — a repeated destroy re-enters here).
+              Effect.catchTag(
+                ["ResourceNotFoundException", "InvalidRequestException"],
+                () => Effect.void,
+              ),
             );
           yield* iot
             .deleteThingType({ thingTypeName: output.thingTypeName })

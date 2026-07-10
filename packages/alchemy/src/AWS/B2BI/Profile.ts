@@ -1,7 +1,9 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
@@ -28,7 +30,8 @@ export interface ProfileProps {
   email?: string;
   /**
    * Whether Amazon Web Services logs each event in an Amazon CloudWatch log
-   * group for the profile.
+   * group for the profile. Immutable after creation — changing it replaces
+   * the profile.
    * @default "ENABLED"
    */
   logging?: "ENABLED" | "DISABLED";
@@ -115,6 +118,16 @@ export const ProfileProvider = () =>
       return {
         stables: ["profileId", "profileArn"],
 
+        diff: Effect.fn(function* ({ olds = {}, news }) {
+          if (!isResolved(news)) return undefined;
+          // logging has no member on updateProfile — it is immutable after
+          // create, so a change forces a replacement. Delete-first: profiles
+          // are recovered by name (findByName) and capped at 5 per account.
+          if ((olds.logging ?? "ENABLED") !== (news.logging ?? "ENABLED")) {
+            return { action: "replace", deleteFirst: true } as const;
+          }
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const found = output?.profileId
             ? yield* b2bi
@@ -159,10 +172,17 @@ export const ProfileProvider = () =>
             live = yield* b2bi.getProfile({ profileId: created.profileId });
           } else {
             // 3. Sync — converge mutable settings (name/businessName/phone/
-            // email). logging is immutable after create.
+            // email). logging is immutable after create (diff replaces).
+            // phone/email are sensitive members that may decode as Redacted.
+            const unwrap = (
+              v: string | Redacted.Redacted<string> | undefined,
+            ) => (Redacted.isRedacted(v) ? Redacted.value(v) : v);
             const nameDrift = live.name !== news.name;
             const bizDrift = live.businessName !== news.businessName;
-            if (nameDrift || bizDrift) {
+            const phoneDrift = unwrap(live.phone) !== news.phone;
+            const emailDrift =
+              news.email !== undefined && unwrap(live.email) !== news.email;
+            if (nameDrift || bizDrift || phoneDrift || emailDrift) {
               yield* b2bi.updateProfile({
                 profileId: live.profileId,
                 name: news.name,

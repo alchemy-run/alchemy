@@ -200,7 +200,11 @@ export interface Platform<
       id: Id,
       props:
         | InputProps<Resource["Props"]>
-        | Effect.Effect<Resource["Props"], ConfigError.ConfigError, PropsReq>,
+        | Effect.Effect<
+            InputProps<Resource["Props"]>,
+            ConfigError.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,

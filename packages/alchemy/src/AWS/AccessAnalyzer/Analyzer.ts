@@ -6,7 +6,12 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  diffTags,
+  hasAlchemyTags,
+  tagRecord,
+} from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -203,7 +208,7 @@ export const AnalyzerProvider = () =>
           }
 
           // 3. SYNC TAGS — diff against OBSERVED cloud tags
-          const observedTags = analyzer.tags ?? {};
+          const observedTags = tagRecord(analyzer.tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* aa.tagResource({

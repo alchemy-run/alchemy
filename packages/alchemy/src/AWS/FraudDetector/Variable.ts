@@ -85,7 +85,7 @@ export const VariableProvider = () =>
     Effect.gen(function* () {
       const createName = Effect.fn(function* (
         id: string,
-        props: VariableProps,
+        props: Partial<VariableProps>,
       ) {
         return (
           props.name ??
@@ -137,7 +137,7 @@ export const VariableProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Vitest";
 import * as datasync from "@distilled.cloud/aws/datasync";
+import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,7 +21,7 @@ const waitUntilTaskGone = (taskArn: string) =>
   );
 
 const trustPolicy = {
-  Version: "2012-10-17",
+  Version: "2012-10-17" as const,
   Statement: [
     {
       Effect: "Allow" as const,
@@ -31,7 +32,7 @@ const trustPolicy = {
 };
 
 const s3Policy = (arn: Output.Output<string>) => ({
-  Version: "2012-10-17",
+  Version: "2012-10-17" as const,
   Statement: [
     {
       Effect: "Allow" as const,
@@ -48,8 +49,10 @@ const s3Policy = (arn: Output.Output<string>) => ({
         "s3:AbortMultipartUpload",
         "s3:DeleteObject",
         "s3:GetObject",
+        "s3:GetObjectTagging",
         "s3:ListMultipartUploadParts",
         "s3:PutObject",
+        "s3:PutObjectTagging",
       ],
       Resource: [Output.interpolate`${arn}/*`],
     },
@@ -80,7 +83,7 @@ const buildStack = (options?: datasync.Options) =>
       destinationLocationArn: dest.locationArn,
       ...(options !== undefined ? { options } : {}),
     });
-    return { task };
+    return { task, src, dst };
   });
 
 test.provider(
@@ -138,4 +141,65 @@ test.provider(
       expect(gone).toBe(true);
     }),
   { timeout: 240_000 },
+);
+
+// A live BASIC-mode task execution has 1–4 minutes of launch/prepare
+// overhead, so it is gated behind AWS_TEST_SLOW=1.
+test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+  "live S3 -> S3 task execution transfers an object",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        buildStack({ VerifyMode: "ONLY_FILES_TRANSFERRED" }),
+      );
+
+      yield* S3.putObject({
+        Bucket: created.src.bucketName,
+        Key: "hello.txt",
+        Body: "hello datasync",
+      });
+
+      // The freshly-created IAM role's permissions take a while to propagate
+      // to DataSync's location access test (typed LocationAccessTestFailed,
+      // patched from InvalidRequestException + "location access test failed").
+      const started = yield* datasync
+        .startTaskExecution({ TaskArn: created.task.taskArn })
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "LocationAccessTestFailed",
+            schedule: Schedule.fixed("10 seconds").pipe(
+              Schedule.both(Schedule.recurs(12)),
+            ),
+          }),
+        );
+      const finished = yield* datasync
+        .describeTaskExecution({
+          TaskExecutionArn: started.TaskExecutionArn!,
+        })
+        .pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("15 seconds"),
+            until: (e) => e.Status === "SUCCESS" || e.Status === "ERROR",
+            times: 40,
+          }),
+        );
+      if (finished.Status !== "SUCCESS") {
+        // surface the execution failure detail before the assertion trips
+        yield* Effect.log("task execution result", finished.Result);
+      }
+      expect(finished.Status).toBe("SUCCESS");
+
+      // out-of-band: the object landed in the destination bucket
+      yield* S3.headObject({
+        Bucket: created.dst.bucketName,
+        Key: "hello.txt",
+      });
+
+      yield* stack.destroy();
+      const gone = yield* waitUntilTaskGone(created.task.taskArn);
+      expect(gone).toBe(true);
+    }),
+  { timeout: 900_000 },
 );

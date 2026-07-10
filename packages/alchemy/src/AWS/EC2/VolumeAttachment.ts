@@ -1,7 +1,30 @@
+import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
+
+// Explicitly-typed pipeable retry helpers. Inlining `Effect.retry` in a
+// provider lifecycle op leaks `Retry.Return`'s conditional into declaration
+// emit and widens the provider layer to `unknown` R for every consumer of
+// `AWS.providers()`.
+const retryWhileVolumeInUse = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "VolumeInUse",
+    schedule: Schedule.fixed(2000).pipe(Schedule.both(Schedule.recurs(15))),
+  });
+
+const retryWhileIncorrectState = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "IncorrectState",
+    schedule: Schedule.fixed(2000).pipe(Schedule.both(Schedule.recurs(10))),
+  });
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -144,12 +167,7 @@ export const VolumeAttachmentProvider = () =>
               .pipe(
                 // The volume can briefly report VolumeInUse while a prior
                 // detach settles — retry until it frees up.
-                Effect.retry({
-                  while: (e) => e._tag === "VolumeInUse",
-                  schedule: Schedule.fixed(2000).pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
-                }),
+                retryWhileVolumeInUse,
               );
             yield* session.note(
               `Volume ${news.volumeId} attaching to ${news.instanceId} at ${news.device}`,
@@ -219,31 +237,37 @@ export const VolumeAttachmentProvider = () =>
             })
             .pipe(
               Effect.catchTag("InvalidVolume.NotFound", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "IncorrectState",
-                schedule: Schedule.fixed(2000).pipe(
-                  Schedule.both(Schedule.recurs(10)),
-                ),
-              }),
+              retryWhileIncorrectState,
               // Fall back to a forced detach if it still won't release.
-              Effect.catchTag("IncorrectState", (e) =>
-                force
-                  ? ec2
-                      .detachVolume({
-                        VolumeId: volumeId,
-                        InstanceId: instanceId,
-                        Device: device,
-                        Force: true,
-                        DryRun: false,
-                      })
-                      .pipe(
-                        Effect.catchTag(
-                          "InvalidVolume.NotFound",
-                          () => Effect.void,
-                        ),
-                        Effect.catchTag("IncorrectState", () => Effect.void),
-                      )
-                  : Effect.fail(e),
+              // Explicit return type: the ternary's branches are two
+              // structurally different Effects and TS cannot unify them on
+              // its own.
+              Effect.catchTag(
+                "IncorrectState",
+                (
+                  e,
+                ): Effect.Effect<
+                  ec2.VolumeAttachment | void,
+                  ec2.DetachVolumeError,
+                  Credentials | Region | HttpClient
+                > =>
+                  force
+                    ? ec2
+                        .detachVolume({
+                          VolumeId: volumeId,
+                          InstanceId: instanceId,
+                          Device: device,
+                          Force: true,
+                          DryRun: false,
+                        })
+                        .pipe(
+                          Effect.catchTag(
+                            "InvalidVolume.NotFound",
+                            () => Effect.void,
+                          ),
+                          Effect.catchTag("IncorrectState", () => Effect.void),
+                        )
+                    : Effect.fail(e),
               ),
             );
 
@@ -276,7 +300,8 @@ const waitForAttachmentState = (
   session?: ScopedPlanStatusSession,
 ): Effect.Effect<
   ec2.VolumeAttachmentState,
-  ec2.DescribeVolumesError | AttachmentNotReady
+  ec2.DescribeVolumesError | AttachmentNotReady,
+  Credentials | Region | HttpClient
 > =>
   Effect.gen(function* () {
     const result = yield* ec2.describeVolumes({ VolumeIds: [volumeId] });

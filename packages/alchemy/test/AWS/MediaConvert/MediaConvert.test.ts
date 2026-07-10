@@ -155,7 +155,7 @@ test.provider(
       // Out-of-band verification. MediaConvert returns tags only via
       // listTagsForResource, not in the Get response body.
       const observed = yield* mediaconvert.getQueue({ Name: QUEUE_NAME });
-      expect(observed.Queue.Description).toBe("alchemy test queue");
+      expect(observed.Queue?.Description).toBe("alchemy test queue");
       const queueTags = yield* mediaconvert.listTagsForResource({
         Arn: created.queueArn,
       });
@@ -175,8 +175,8 @@ test.provider(
       expect(updated.status).toBe("PAUSED");
 
       const observed2 = yield* mediaconvert.getQueue({ Name: QUEUE_NAME });
-      expect(observed2.Queue.Description).toBe("alchemy test queue v2");
-      expect(observed2.Queue.Status).toBe("PAUSED");
+      expect(observed2.Queue?.Description).toBe("alchemy test queue v2");
+      expect(observed2.Queue?.Status).toBe("PAUSED");
       const queueTags2 = yield* mediaconvert.listTagsForResource({
         Arn: created.queueArn,
       });
@@ -213,7 +213,7 @@ test.provider(
       expect(created.type).toBe("CUSTOM");
 
       const observed = yield* mediaconvert.getPreset({ Name: PRESET_NAME });
-      expect(observed.Preset.Description).toBe("alchemy test preset");
+      expect(observed.Preset?.Description).toBe("alchemy test preset");
       const presetTags = yield* mediaconvert.listTagsForResource({
         Arn: created.presetArn,
       });
@@ -233,7 +233,7 @@ test.provider(
       expect(updated.category).toBe("alchemy");
 
       const observed2 = yield* mediaconvert.getPreset({ Name: PRESET_NAME });
-      expect(observed2.Preset.Description).toBe("alchemy test preset v2");
+      expect(observed2.Preset?.Description).toBe("alchemy test preset v2");
 
       yield* stack.destroy();
       yield* assertPresetDeleted(PRESET_NAME);
@@ -268,7 +268,7 @@ test.provider(
       const observed = yield* mediaconvert.getJobTemplate({
         Name: TEMPLATE_NAME,
       });
-      expect(observed.JobTemplate.Description).toBe("alchemy test template");
+      expect(observed.JobTemplate?.Description).toBe("alchemy test template");
       const templateTags = yield* mediaconvert.listTagsForResource({
         Arn: created.jobTemplateArn,
       });
@@ -290,10 +290,10 @@ test.provider(
       const observed2 = yield* mediaconvert.getJobTemplate({
         Name: TEMPLATE_NAME,
       });
-      expect(observed2.JobTemplate.Description).toBe(
+      expect(observed2.JobTemplate?.Description).toBe(
         "alchemy test template v2",
       );
-      expect(observed2.JobTemplate.Priority).toBe(10);
+      expect(observed2.JobTemplate?.Priority).toBe(10);
 
       yield* stack.destroy();
       yield* assertJobTemplateDeleted(TEMPLATE_NAME);
@@ -359,9 +359,10 @@ test.provider.skipIf(!runJob)(
       expect(created.jobArn).toContain(":jobs/");
 
       const observed = yield* mediaconvert.getJob({ Id: created.jobId });
+      expect(observed.Job).toBeDefined();
       expect(
         ["SUBMITTED", "PROGRESSING", "COMPLETE", "ERROR"].includes(
-          observed.Job.Status!,
+          observed.Job!.Status!,
         ),
       ).toBe(true);
 

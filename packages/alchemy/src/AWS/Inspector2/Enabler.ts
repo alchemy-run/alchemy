@@ -83,8 +83,7 @@ const statusOfType = (
 ): string | undefined => {
   const key = TYPE_TO_STATE_KEY[type];
   if (!resourceState || !key) return undefined;
-  return (resourceState as Record<string, inspector2.State | undefined>)[key]
-    ?.status;
+  return resourceState[key]?.status;
 };
 
 const enabledTypes = (
@@ -92,11 +91,12 @@ const enabledTypes = (
 ): string[] => {
   if (!resourceState) return [];
   const out: string[] = [];
-  for (const [key, type] of Object.entries(RESOURCE_STATE_KEYS)) {
-    const st = (resourceState as Record<string, inspector2.State | undefined>)[
-      key
-    ];
-    if (st?.status === "ENABLED") out.push(type);
+  for (const key of Object.keys(RESOURCE_STATE_KEYS) as Array<
+    keyof typeof RESOURCE_STATE_KEYS
+  >) {
+    if (resourceState[key]?.status === "ENABLED") {
+      out.push(RESOURCE_STATE_KEYS[key]);
+    }
   }
   return out;
 };
@@ -159,7 +159,7 @@ export const EnablerProvider = () =>
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const desired = news.resourceTypes ?? [];
+          const desired: string[] = news.resourceTypes ?? [];
 
           // 1. OBSERVE
           const account = yield* getAccount(accountId);

@@ -41,15 +41,16 @@ const readShare = Effect.fn(function* (arn: string) {
 });
 
 const readPrincipals = Effect.fn(function* (arn: string) {
-  const r = yield* ram
+  const associations = yield* ram
     .getResourceShareAssociations({
       resourceShareArns: [arn],
       associationType: "PRINCIPAL",
     })
     .pipe(
-      Effect.catchTag("UnknownResourceException", () => Effect.succeed({})),
+      Effect.map((r) => r.resourceShareAssociations ?? []),
+      Effect.catchTag("UnknownResourceException", () => Effect.succeed([])),
     );
-  return (r.resourceShareAssociations ?? [])
+  return associations
     .filter((a) => a.status === "ASSOCIATED" || a.status === "ASSOCIATING")
     .map((a) => a.associatedEntity);
 });

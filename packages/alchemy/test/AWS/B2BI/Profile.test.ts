@@ -82,12 +82,12 @@ test.provider(
       );
       expect(noop.profileId).toBe(created.profileId);
 
-      // Update businessName in place.
+      // Update businessName and phone in place.
       const updated = yield* stack.deploy(
         Profile("Acme", {
           name: "alchemy-b2bi-profile",
           businessName: "Alchemy Renamed Corp",
-          phone: "+15555550100",
+          phone: "+15555550199",
           email: "edi@alchemy.example",
         }),
       );
@@ -98,9 +98,23 @@ test.provider(
       });
       expect(reDescribed.businessName).toBe("Alchemy Renamed Corp");
 
+      // Changing logging replaces the profile (no member on updateProfile);
+      // delete-first because profiles are recovered by name and quota-capped.
+      const replaced = yield* stack.deploy(
+        Profile("Acme", {
+          name: "alchemy-b2bi-profile",
+          businessName: "Alchemy Renamed Corp",
+          phone: "+15555550199",
+          email: "edi@alchemy.example",
+          logging: "DISABLED",
+        }),
+      );
+      expect(replaced.profileId).not.toBe(created.profileId);
+      yield* assertProfileGone(created.profileId);
+
       // Destroy and verify.
       yield* stack.destroy();
-      yield* assertProfileGone(created.profileId);
+      yield* assertProfileGone(replaced.profileId);
     }),
   { timeout: 120_000 },
 );

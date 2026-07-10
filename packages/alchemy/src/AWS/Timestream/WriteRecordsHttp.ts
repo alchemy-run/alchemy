@@ -5,12 +5,19 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
-import { withWriteEndpoint } from "./internal.ts";
+import { discover, withEndpoint } from "./internal.ts";
 import { WriteRecords, type WriteRecordsRequest } from "./WriteRecords.ts";
 
 export const WriteRecordsHttp = Layer.effect(
   WriteRecords,
   Effect.gen(function* () {
+    // Yield-first captures the operations' services (Credentials/Region/
+    // HttpClient) at layer init so the runtime callable is requirement-free.
+    const writeRecords = yield* TSW.writeRecords;
+    const describeEndpoints = yield* TSW.describeEndpoints;
+    const withWriteEndpoint = withEndpoint(
+      discover("write", describeEndpoints({})),
+    );
     return Effect.fn(function* (table: Table) {
       const DatabaseName = yield* table.databaseName;
       const TableName = yield* table.tableName;
@@ -41,7 +48,7 @@ export const WriteRecordsHttp = Layer.effect(
       return Effect.fn(`AWS.Timestream.WriteRecords(${table.LogicalId})`)(
         function* (request: WriteRecordsRequest) {
           return yield* withWriteEndpoint(
-            TSW.writeRecords({
+            writeRecords({
               ...request,
               DatabaseName: yield* DatabaseName,
               TableName: yield* TableName,

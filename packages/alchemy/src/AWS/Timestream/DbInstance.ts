@@ -1,4 +1,5 @@
 import * as influxdb from "@distilled.cloud/aws/timestream-influxdb";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
@@ -244,34 +245,74 @@ const findInstanceByName = Effect.fn(function* (name: string) {
   return yield* readInstanceById(match.id);
 });
 
+/**
+ * A DB instance still transitioning toward the awaited status — retried by
+ * {@link waitForStatus}'s bounded schedule.
+ */
+class DbInstanceNotReady extends Data.TaggedError("DbInstanceNotReady")<{
+  readonly identifier: string;
+  readonly status: string | undefined;
+}> {}
+
+/**
+ * A DB instance whose asynchronous provisioning converged to a terminal
+ * failure status (`FAILED` / `REBOOT_FAILED`).
+ */
+export class DbInstanceProvisioningFailed extends Data.TaggedError(
+  "DbInstanceProvisioningFailed",
+)<{
+  readonly identifier: string;
+  readonly status: string;
+}> {}
+
+// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// lifecycle code leaks `Retry.Return`'s conditional type into declaration
+// emit and widens the provider layer to `unknown` for every consumer of
+// `AWS.providers()`.
+const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    // ParseError: a CREATING instance can transiently decode incompletely
+    // while fields are still being populated — treat it as not-ready.
+    while: (e) => e._tag === "DbInstanceNotReady" || e._tag === "ParseError",
+    // Provisioning is slow (~15–20 min); poll every 20s up to ~30 min.
+    schedule: Schedule.spaced("20 seconds").pipe(
+      Schedule.both(Schedule.recurs(90)),
+    ),
+  });
+
 const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>
-  Effect.gen(function* () {
-    const instance = yield* influxdb
-      .getDbInstance({ identifier })
-      .pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
-    if (target === "DELETED") {
-      if (instance === undefined) return;
-      return yield* Effect.fail({ _tag: "NotReady" as const });
-    }
-    if (instance?.status === "AVAILABLE") return;
-    if (instance?.status === "FAILED" || instance?.status === "REBOOT_FAILED") {
+  retryWhileNotReady(
+    Effect.gen(function* () {
+      const instance = yield* influxdb
+        .getDbInstance({ identifier })
+        .pipe(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      if (target === "DELETED") {
+        if (instance === undefined) return;
+        return yield* Effect.fail(
+          new DbInstanceNotReady({ identifier, status: instance.status }),
+        );
+      }
+      if (instance?.status === "AVAILABLE") return;
+      if (
+        instance?.status === "FAILED" ||
+        instance?.status === "REBOOT_FAILED"
+      ) {
+        return yield* Effect.fail(
+          new DbInstanceProvisioningFailed({
+            identifier,
+            status: instance.status,
+          }),
+        );
+      }
       return yield* Effect.fail(
-        new Error(`DB instance ${identifier} entered ${instance.status}`),
+        new DbInstanceNotReady({ identifier, status: instance?.status }),
       );
-    }
-    return yield* Effect.fail({ _tag: "NotReady" as const });
-  }).pipe(
-    Effect.retry({
-      while: (e: { _tag: string }) =>
-        e._tag === "NotReady" || e._tag === "ParseError",
-      // Provisioning is slow (~15–20 min); poll every 20s up to ~30 min.
-      schedule: Schedule.spaced("20 seconds").pipe(
-        Schedule.both(Schedule.recurs(90)),
-      ),
     }),
   );
 
@@ -309,7 +350,7 @@ export const DbInstanceProvider = () =>
             ? state
             : Unowned(state);
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds = {} }) {
           if (!isResolved(news)) return;
           const oldName = yield* createInstanceName(id, olds);
           const newName = yield* createInstanceName(id, news);

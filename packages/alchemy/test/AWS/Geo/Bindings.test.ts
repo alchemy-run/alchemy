@@ -126,6 +126,26 @@ describe("Geo Bindings", () => {
     );
   });
 
+  describe("GeoPlaces.ReverseGeocode", () => {
+    test.provider(
+      "reverse geocodes coordinates into an address",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/reverse-geocode`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            count: number;
+            label?: string;
+          };
+
+          expect(response.count).toBeGreaterThan(0);
+          expect(typeof response.label).toBe("string");
+          expect(response.label!.length).toBeGreaterThan(0);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   describe("GeoRoutes.CalculateRoutes", () => {
     test.provider(
       "computes a route between two points",

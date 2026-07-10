@@ -264,7 +264,7 @@ export const PublicRepositoryProvider = () =>
             policyText: yield* readPolicy(repositoryName),
             tags: toTagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags ?? []))
+          return (yield* hasAlchemyTags(id, toTagRecord(listed.tags)))
             ? attrs
             : Unowned(attrs);
         }),

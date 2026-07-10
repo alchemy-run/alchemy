@@ -63,8 +63,8 @@ export interface Capability extends Resource<
  *     edi: {
  *       capabilityDirection: "INBOUND",
  *       type: { x12Details: { transactionSet: "X12_850", version: "VERSION_4010" } },
- *       inputLocation: { bucketName: bucket, key: "inbound/" },
- *       outputLocation: { bucketName: bucket, key: "processed/" },
+ *       inputLocation: { bucketName: bucket.bucketName, key: "inbound/" },
+ *       outputLocation: { bucketName: bucket.bucketName, key: "processed/" },
  *       transformerId: transformer.transformerId,
  *     },
  *   },

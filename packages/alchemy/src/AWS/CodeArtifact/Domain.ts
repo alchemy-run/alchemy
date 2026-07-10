@@ -210,11 +210,9 @@ export const DomainProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* codeartifact
-            .deleteDomain({ domain: output.domainName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          // DeleteDomain is idempotent — deleting a non-existent domain
+          // succeeds (its typed error union has no not-found variant).
+          yield* codeartifact.deleteDomain({ domain: output.domainName });
         }),
 
         list: () =>

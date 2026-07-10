@@ -43,7 +43,7 @@ const mapping: b2bi.Mapping = {
 
 // Transformers are credential-free; the full lifecycle runs ungated.
 test.provider(
-  "create, activate, update, and destroy a B2BI transformer",
+  "create, update, activate, replace-on-active-change, and destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -66,24 +66,21 @@ test.provider(
       });
       expect(described.name).toBe("alchemy-b2bi-transformer");
 
-      // Activate.
-      const active = yield* stack.deploy(
+      // Update mapping template in place while inactive.
+      const updated = yield* stack.deploy(
         Transformer("X12ToJson", {
           name: "alchemy-b2bi-transformer",
-          status: "active",
           inputConversion,
-          mapping,
+          mapping: {
+            templateLanguage: "JSONATA",
+            template: '{ "orderId": "updated" }',
+          },
         }),
       );
-      expect(active.transformerId).toBe(created.transformerId);
-      expect(active.status).toBe("active");
-      const reDescribed = yield* b2bi.getTransformer({
-        transformerId: created.transformerId,
-      });
-      expect(reDescribed.status).toBe("active");
+      expect(updated.transformerId).toBe(created.transformerId);
 
-      // Update mapping template in place.
-      const updated = yield* stack.deploy(
+      // Activate in place.
+      const active = yield* stack.deploy(
         Transformer("X12ToJson", {
           name: "alchemy-b2bi-transformer",
           status: "active",
@@ -94,11 +91,33 @@ test.provider(
           },
         }),
       );
-      expect(updated.transformerId).toBe(created.transformerId);
+      expect(active.transformerId).toBe(created.transformerId);
+      expect(active.status).toBe("active");
+      const reDescribed = yield* b2bi.getTransformer({
+        transformerId: created.transformerId,
+      });
+      expect(reDescribed.status).toBe("active");
 
-      // Destroy (provider deactivates before delete) and verify.
-      yield* stack.destroy();
+      // A config change on an ACTIVE transformer is a delete-first
+      // replacement — B2BI rejects every update to an active transformer.
+      const replaced = yield* stack.deploy(
+        Transformer("X12ToJson", {
+          name: "alchemy-b2bi-transformer",
+          status: "active",
+          inputConversion,
+          mapping: {
+            templateLanguage: "JSONATA",
+            template: '{ "orderId": "replaced" }',
+          },
+        }),
+      );
+      expect(replaced.transformerId).not.toBe(created.transformerId);
+      expect(replaced.status).toBe("active");
       yield* assertTransformerGone(created.transformerId);
+
+      // Destroy (works even while active) and verify.
+      yield* stack.destroy();
+      yield* assertTransformerGone(replaced.transformerId);
     }),
   { timeout: 150_000 },
 );

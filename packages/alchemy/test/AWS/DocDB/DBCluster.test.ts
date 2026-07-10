@@ -63,7 +63,7 @@ const defaultNetwork = Effect.gen(function* () {
   });
   const subnetIds = (subnets.Subnets ?? [])
     .map((s) => s.SubnetId)
-    .filter((id): id is string => id !== undefined)
+    .filter((id): id is `subnet-${string}` => id !== undefined)
     .sort()
     .slice(0, 2);
   const groups = yield* EC2.describeSecurityGroups({

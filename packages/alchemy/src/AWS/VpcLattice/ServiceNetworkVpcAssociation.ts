@@ -186,6 +186,16 @@ export const ServiceNetworkVpcAssociationProvider = () =>
             }
           }
 
+          // Every branch above guarantees id/arn; this narrows the reassigned
+          // `let` for the type-checker and guards a malformed API response.
+          if (!assoc?.arn || !assoc.id) {
+            return yield* Effect.fail(
+              new Error(
+                "service network VPC association is missing its id/arn",
+              ),
+            );
+          }
+
           yield* syncTags(assoc.arn, desiredTags);
 
           yield* session.note(assoc.arn);

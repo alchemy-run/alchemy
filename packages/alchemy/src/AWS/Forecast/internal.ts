@@ -1,16 +1,24 @@
 import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { diffTags } from "../../Tags.ts";
 
 /**
- * Coerce a Forecast wire tag list (`{ Key, Value }[]`, values may be
+ * Unwrap a Forecast `SensitiveString` (decoded as `Redacted`) to its plain
+ * string value. `String(redacted)` would yield `"<redacted>"`, not the value.
+ */
+export const unredact = (value: string | Redacted.Redacted<string>): string =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+/**
+ * Coerce a Forecast wire tag list (`{ Key, Value }[]`, values decode as
  * `Redacted`) into a plain `Record<string, string>`.
  */
 export const toTagRecord = (
   tags: forecast.Tag[] | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    (tags ?? []).map((t) => [String(t.Key), String(t.Value)] as const),
+    (tags ?? []).map((t) => [unredact(t.Key), unredact(t.Value)] as const),
   );
 
 /**
@@ -41,6 +49,21 @@ export const syncForecastTags = Effect.fn(function* (
     });
   }
   if (removed.length > 0) {
-    yield* forecast.untagResource({ ResourceArn: arn, TagKeys: removed });
+    // TagKeys decodes as SensitiveString — wrap in Redacted for the encoder
+    // (which unwraps back to the plain string on the wire).
+    yield* forecast.untagResource({
+      ResourceArn: arn,
+      TagKeys: removed.map((key) => Redacted.make(key)),
+    });
   }
 });
+
+/**
+ * Coerce a generated physical name into Forecast's identifier constraint
+ * (`^[a-zA-Z][a-zA-Z0-9_]*` — underscores only, must start with a letter).
+ * `createPhysicalName` emits DNS-style hyphens, which Forecast rejects.
+ */
+export const toForecastName = (name: string) => {
+  const sanitized = name.replaceAll(/[^a-zA-Z0-9_]/g, "_");
+  return /^[a-zA-Z]/.test(sanitized) ? sanitized : `f${sanitized.slice(0, 62)}`;
+};

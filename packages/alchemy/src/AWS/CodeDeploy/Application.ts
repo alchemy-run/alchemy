@@ -214,14 +214,11 @@ export const ApplicationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* codedeploy
-            .deleteApplication({ applicationName: output.applicationName })
-            .pipe(
-              Effect.catchTag(
-                "ApplicationDoesNotExistException",
-                () => Effect.void,
-              ),
-            );
+          // DeleteApplication is idempotent — deleting a non-existent
+          // application succeeds (no not-found variant in its error union).
+          yield* codedeploy.deleteApplication({
+            applicationName: output.applicationName,
+          });
         }),
 
         list: () =>

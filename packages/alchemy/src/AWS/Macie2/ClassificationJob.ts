@@ -6,7 +6,12 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  diffTags,
+  hasAlchemyTags,
+  tagRecord,
+} from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -132,13 +137,13 @@ const ClassificationJobResource = Resource<ClassificationJob>(
 
 export { ClassificationJobResource as ClassificationJob };
 
-const createName = (id: string, props: ClassificationJobProps) =>
+const createName = (id: string, props: Partial<ClassificationJobProps>) =>
   props.name
     ? Effect.succeed(props.name)
     : createPhysicalName({ id, maxLength: 200 });
 
 // A stable fingerprint of the immutable definition — any change replaces.
-const fingerprint = (props: ClassificationJobProps) =>
+const fingerprint = (props: Partial<ClassificationJobProps>) =>
   JSON.stringify({
     jobType: props.jobType ?? "ONE_TIME",
     bucketDefinitions: (props.bucketDefinitions ?? [])
@@ -223,7 +228,7 @@ export const ClassificationJobProvider = () =>
           let live = jobId ? yield* describe(jobId) : undefined;
 
           // 2. ENSURE — create the job if it does not exist.
-          if (!live) {
+          if (jobId === undefined || live === undefined) {
             const created = yield* retryThroughEnablement(
               macie2.createClassificationJob({
                 name,
@@ -246,7 +251,10 @@ export const ClassificationJobProvider = () =>
             live = yield* macie2.describeClassificationJob({ jobId });
           } else {
             // 3. SYNC tags — the definition is immutable; only tags mutate.
-            const { upsert, removed } = diffTags(live.tags ?? {}, desiredTags);
+            const { upsert, removed } = diffTags(
+              tagRecord(live.tags),
+              desiredTags,
+            );
             if (upsert.length > 0) {
               yield* macie2.tagResource({
                 resourceArn: live.jobArn!,

@@ -64,7 +64,10 @@ export const DetectorProvider = () =>
   Provider.effect(
     Detector,
     Effect.gen(function* () {
-      const createId = Effect.fn(function* (id: string, props: DetectorProps) {
+      const createId = Effect.fn(function* (
+        id: string,
+        props: Partial<DetectorProps>,
+      ) {
         return (
           props.detectorId ??
           (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
@@ -114,7 +117,7 @@ export const DetectorProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const detectorId = yield* createId(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

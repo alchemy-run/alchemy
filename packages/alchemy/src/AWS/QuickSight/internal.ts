@@ -35,9 +35,18 @@ const isFailed = (status: string | undefined): boolean =>
 
 /**
  * Poll a QuickSight resource until its `ResourceStatus` reaches a terminal
- * value. `*_IN_PROGRESS` retries (bounded); `*_FAILED` fails immediately.
+ * value. `*_IN_PROGRESS` repeats (bounded); `*_FAILED` fails immediately.
  * Creation/update of most QuickSight resources settles within a few seconds
  * (data-source connectivity validation can take longer) — budget ~2.5 min.
+ *
+ * The explicit `Effect.Effect<A, E, R>` return annotation is load-bearing:
+ * inlining retry/repeat combinators in provider lifecycle code lets their
+ * conditional return types survive into declaration emit and widen the
+ * provider layer to `unknown` (see `../VpcLattice/internal.ts`).
+ *
+ * If the bounded schedule is exhausted while the resource is still
+ * `*_IN_PROGRESS`, the last observation is returned as-is so the caller sees
+ * the real (still-converging) resource rather than a spurious failure.
  */
 export const waitForSettled = <
   A extends { status?: string },
@@ -47,35 +56,24 @@ export const waitForSettled = <
   resourceId: string,
   read: Effect.Effect<A | undefined, E, R>,
 ): Effect.Effect<A | undefined, E | QuickSightOperationFailed, R> =>
-  read.pipe(
-    Effect.flatMap((observed) => {
-      if (observed === undefined) return Effect.succeed(undefined);
-      if (isFailed(observed.status)) {
-        return Effect.fail(
-          new QuickSightOperationFailed({
-            resourceId,
-            status: observed.status!,
-            reason: undefined,
-          }),
-        );
-      }
-      if (isInProgress(observed.status)) {
-        return Effect.fail(
-          new QuickSightNotSettled({ resourceId, status: observed.status }),
-        );
-      }
-      return Effect.succeed(observed);
-    }),
-    Effect.retry({
-      while: (e) => e._tag === "QuickSightNotSettled",
+  Effect.flatMap(
+    Effect.repeat(read, {
       schedule: Schedule.fixed("5 seconds").pipe(
         Schedule.both(Schedule.recurs(30)),
       ),
+      until: (observed) =>
+        observed === undefined || !isInProgress(observed.status),
     }),
-    // The retry loop only re-raises QuickSightNotSettled; once the bounded
-    // schedule is exhausted, fall back to one final read so the caller sees
-    // the real (still-converging) resource rather than a spurious "gone".
-    Effect.catchTag("QuickSightNotSettled", () => read),
+    (observed): Effect.Effect<A | undefined, QuickSightOperationFailed> =>
+      observed !== undefined && isFailed(observed.status)
+        ? Effect.fail(
+            new QuickSightOperationFailed({
+              resourceId,
+              status: observed.status!,
+              reason: undefined,
+            }),
+          )
+        : Effect.succeed(observed),
   );
 
 /**

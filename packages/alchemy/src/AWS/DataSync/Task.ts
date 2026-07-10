@@ -169,18 +169,15 @@ export const TaskProvider = () =>
             );
           }),
 
-        read: Effect.fn(function* ({ id, news = {}, output }) {
+        read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
-            output?.taskArn ??
-            (isResolved(news)
-              ? yield* findByName(yield* createName(id, news))
-              : undefined);
+            output?.taskArn ?? (yield* findByName(yield* createName(id, olds)));
           if (arn === undefined) return undefined;
           const t = yield* describe(arn);
           return t === undefined ? undefined : attrsOf(t);
         }),
 
-        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           const replaced =
             news.sourceLocationArn !== olds.sourceLocationArn ||
@@ -189,7 +186,7 @@ export const TaskProvider = () =>
           if (replaced) return { action: "replace" } as const;
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const name = yield* createName(id, news);

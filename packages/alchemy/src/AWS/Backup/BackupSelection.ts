@@ -183,7 +183,7 @@ export const BackupSelectionProvider = () =>
             backupPlanId: output.backupPlanId,
           };
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
@@ -203,9 +203,9 @@ export const BackupSelectionProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.selectionName ?? (yield* createName(id, news));
-          const backupPlanId = news.backupPlanId!;
+          const backupPlanId = news.backupPlanId;
 
           // OBSERVE — confirm an existing selection by id; a selection is
           // immutable so there is nothing to sync when it already exists.

@@ -86,7 +86,7 @@ export const StatementsHttp = Layer.effect(
       )(function* (request: ExecuteStatementRequest) {
         return yield* executeStatement({
           ...request,
-          WorkgroupName: workgroupName,
+          WorkgroupName: yield* workgroupName,
           Database: database,
           SecretArn: options.secretArn,
           DbUser: options.dbUser,

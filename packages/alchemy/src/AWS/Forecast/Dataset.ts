@@ -9,7 +9,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { readForecastTags, syncForecastTags } from "./internal.ts";
+import {
+  readForecastTags,
+  syncForecastTags,
+  toForecastName,
+} from "./internal.ts";
 
 export interface SchemaAttribute {
   /** Name of the field in the dataset (e.g. `item_id`, `timestamp`). */
@@ -116,7 +120,7 @@ export const DatasetProvider = () =>
       const createName = Effect.fn(function* (id: string, props: DatasetProps) {
         return (
           props.datasetName ??
-          (yield* createPhysicalName({ id, maxLength: 63 }))
+          toForecastName(yield* createPhysicalName({ id, maxLength: 63 }))
         );
       });
 
@@ -141,7 +145,7 @@ export const DatasetProvider = () =>
       return {
         stables: ["datasetArn", "datasetName"],
 
-        diff: Effect.fn(function* ({ id, olds = {}, news }) {
+        diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
@@ -168,7 +172,7 @@ export const DatasetProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
