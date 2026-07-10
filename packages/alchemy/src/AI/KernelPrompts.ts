@@ -28,26 +28,73 @@
  * (when `promptHash` itself lands). Plain functions are enough today.
  */
 export const kernelPrompts = {
-  // ── loop halt contract (system prompt) ─────────────────────────
+  // ── control-ref render blocks (in-prose, via Render.displayRef) ──
+  // These are rendered WHERE THE AUTHOR INTERPOLATED THE REF (§A):
+  // `${AI.until(S)\`…\`}` renders `haltContract`, `${AI.budget(…)}`
+  // renders `budgetNote`, etc. — so the model finally sees the exit
+  // condition and the ceilings, in the author's own placement, and the
+  // kernel no longer re-appends a separate heading.
   haltContract: (input: {
     readonly haltProse: string;
     readonly hasSchema: boolean;
-    readonly verified: boolean;
   }): string =>
     "\n\n# Halt condition\n" +
     `This run ends when: ${input.haltProse}\n` +
     "When that condition is met, call the `resolve` tool" +
     (input.hasSchema ? " with the result value" : "") +
     ". If you conclude the goal is unachievable, call `give_up` " +
-    "with your evidence. Keep working until you call one of them." +
-    (input.verified
-      ? "\nYour resolution will be independently verified; rejected " +
-        "resolutions come back with feedback."
-      : ""),
+    "with your evidence. Keep working until you call one of them.",
+
+  /** Appended by the kernel (not the renderer) only when a check exists. */
+  verifiedNote: (): string =>
+    "\nYour resolution will be independently verified; rejected " +
+    "resolutions come back with feedback.",
 
   perpetualNote: (input: { readonly healthProse: string }): string =>
     "\n\nThis is a perpetual ring: you serve one work item per run, " +
     `forever. Health prose: ${input.healthProse}`,
+
+  /** The ceilings, rendered where `${AI.budget(…)}` sits in the charter. */
+  budgetNote: (limits: {
+    readonly tokens?: string;
+    readonly wallClock?: string;
+    readonly iterations?: number;
+    readonly usd?: string;
+    readonly stall?: number;
+  }): string => {
+    const clauses: string[] = [];
+    if (limits.iterations !== undefined)
+      clauses.push(`at most ${limits.iterations} iterations`);
+    if (limits.tokens !== undefined) clauses.push(`${limits.tokens} tokens`);
+    if (limits.wallClock !== undefined) clauses.push(`${limits.wallClock}`);
+    if (limits.usd !== undefined) clauses.push(`$${limits.usd}`);
+    if (limits.stall !== undefined)
+      clauses.push(`${limits.stall} iterations without progress`);
+    if (clauses.length === 0) return "";
+    return (
+      "\n\n# Budget\n" +
+      `You have ${clauses.join(", ")}. Exceeding any of these ends the ` +
+      "run as a budget failure — work efficiently."
+    );
+  },
+
+  /** Rendered where `${AI.concurrency(n)}` sits. */
+  concurrencyNote: (n: number): string => `at most ${n} in flight`,
+
+  /** Rendered where `${AI.on/each/every(…)}` sits. */
+  triggerNote: (input: {
+    readonly mode: "on" | "each" | "every";
+    readonly sources: string;
+  }): string => {
+    switch (input.mode) {
+      case "on":
+        return `woken by ${input.sources}`;
+      case "each":
+        return `serving a queue of ${input.sources}`;
+      case "every":
+        return `on a schedule (${input.sources})`;
+    }
+  },
 
   // ── boundary inputs ─────────────────────────────────────────────
   boundaryNag: (): string =>

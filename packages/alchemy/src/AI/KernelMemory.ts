@@ -907,11 +907,9 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           );
           const service = yield* makeRing({
             termName,
-            system:
-              renderTemplate(term.template, term.refs) +
-              kernelPrompts.perpetualNote({
-                healthProse: renderTemplate(halt.template, halt.refs),
-              }),
+            // the never-halt is in term.refs; the renderer emits the
+            // perpetual note in place (§A) — no kernel re-append
+            system: renderTemplate(term.template, term.refs),
             compiled,
             policy,
             children,
@@ -1063,14 +1061,16 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           children,
         );
 
+        // haltProse still feeds the verifier prompt + boundary nag; the
+        // halt CONTRACT now renders in place via the interpolated
+        // ${AI.until(…)} ref (§A). The kernel only appends the verified
+        // note, which the halt ref can't know (it depends on a check).
         const haltProse = renderTemplate(halt.template, halt.refs);
         const system =
           renderTemplate(term.template, term.refs) +
-          kernelPrompts.haltContract({
-            haltProse,
-            hasSchema: haltSchema !== undefined,
-            verified: judge !== undefined,
-          });
+          (judge !== undefined || machineCheck !== undefined
+            ? kernelPrompts.verifiedNote()
+            : "");
 
         const maxIterations = budget?.iterations ?? policy.maxIterations ?? 24;
         const tokenCeiling =

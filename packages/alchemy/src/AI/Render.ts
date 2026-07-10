@@ -1,4 +1,5 @@
 import { isAgent } from "./Agent.ts";
+import { kernelPrompts } from "./KernelPrompts.ts";
 
 /**
  * The interim deterministic renderer (design §1.6): flattens a term's
@@ -11,10 +12,17 @@ import { isAgent } from "./Agent.ts";
  *   told to fill.
  * - `Tool` / `Agent` / `Process` refs render as their declared name — prose
  *   mentions the collaborator; wiring stays out of band.
- * - Control refs (`Trigger`, `Halt`, `Fold`, `Check`, `Budget`,
- *   `Observe`, `Concurrency`) render as the empty string — they are
- *   wiring, not prose. (The renderer proper will inline `until`'s nested
- *   template into halt-tool descriptions; Phase 1 backlog.)
+ * - **Control refs render their model-facing prose IN PLACE** (§A): a
+ *   `Halt` renders its halt-contract block (or the perpetual note),
+ *   `Budget` renders the ceilings, `Concurrency`/`Trigger` render
+ *   inline. This is why the kernel no longer re-appends a separate
+ *   `# Halt condition` heading — the author's `${AI.until(…)}` /
+ *   `${AI.budget(…)}` placement IS the rendered contract. (Before this,
+ *   every control ref rendered to the empty string and the budget was
+ *   never shown to the model at all.)
+ * - `Check` / `Fold` render the empty string in the HOST prompt: their
+ *   prose is recipient-scoped (it renders into the verifier's / fold
+ *   agent's prompt, not the worker's). `Observe` renders nothing.
  */
 export const renderTemplate = (
   template: TemplateStringsArray | ReadonlyArray<string>,
@@ -40,6 +48,41 @@ const displayRef = (ref: unknown): string => {
       return `{${String(name)}}`;
     case "Tool":
       return String(name);
+    case "Halt": {
+      const halt = ref as {
+        mode: "until" | "never";
+        schema: unknown;
+        template: TemplateStringsArray;
+        refs: ReadonlyArray<unknown>;
+      };
+      const prose = renderTemplate(halt.template, halt.refs);
+      return halt.mode === "never"
+        ? kernelPrompts.perpetualNote({ healthProse: prose })
+        : kernelPrompts.haltContract({
+            haltProse: prose,
+            hasSchema: halt.schema !== undefined,
+          });
+    }
+    case "Budget":
+      return kernelPrompts.budgetNote((ref as { limits: any }).limits);
+    case "Concurrency":
+      return kernelPrompts.concurrencyNote((ref as { n: number }).n);
+    case "Trigger": {
+      const trigger = ref as {
+        mode: "on" | "each" | "every";
+        sources: ReadonlyArray<Record<string, unknown>>;
+      };
+      const sources = trigger.sources
+        .map((source) =>
+          source["~alchemy/Kind"] === "Cron"
+            ? String(source.expression)
+            : String(source["~alchemy/Name"] ?? ""),
+        )
+        .filter((label) => label.length > 0)
+        .join(", ");
+      return kernelPrompts.triggerNote({ mode: trigger.mode, sources });
+    }
+    // Check/Fold prose is recipient-scoped; Observe is silent.
     default:
       return isAgent(ref) || kind === "Process" ? String(name) : "";
   }

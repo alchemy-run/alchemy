@@ -29,7 +29,9 @@ import * as Assets from "./Assets.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
 import * as CloudFront from "./CloudFront/index.ts";
+import * as CloudTrail from "./CloudTrail/index.ts";
 import * as CloudWatch from "./CloudWatch/index.ts";
+import * as Config from "./Config/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as DynamoDB from "./DynamoDB/index.ts";
 import * as EC2 from "./EC2/index.ts";
@@ -51,6 +53,7 @@ import * as RDS from "./RDS/index.ts";
 import * as Region from "./Region.ts";
 import * as Route53 from "./Route53/index.ts";
 import * as S3 from "./S3/index.ts";
+import * as S3Tables from "./S3Tables/index.ts";
 import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
 import * as SNS from "./SNS/index.ts";
@@ -105,6 +108,10 @@ export const providers = () =>
       CloudWatch.Dashboard,
       CloudWatch.InsightRule,
       CloudWatch.MetricStream,
+      CloudTrail.Trail,
+      Config.ConfigRule,
+      Config.ConfigurationRecorder,
+      Config.DeliveryChannel,
       DynamoDB.Table,
       EC2.EgressOnlyInternetGateway,
       EC2.EIP,
@@ -195,6 +202,9 @@ export const providers = () =>
       Route53.HostedZone,
       Route53.Record,
       S3.Bucket,
+      S3Tables.Namespace,
+      S3Tables.Table,
+      S3Tables.TableBucket,
       Scheduler.Schedule,
       Scheduler.ScheduleGroup,
       SecretsManager.Secret,
@@ -245,6 +255,10 @@ export const providers = () =>
           CloudWatch.DashboardProvider(),
           CloudWatch.InsightRuleProvider(),
           CloudWatch.MetricStreamProvider(),
+          CloudTrail.TrailProvider(),
+          Config.ConfigRuleProvider(),
+          Config.ConfigurationRecorderProvider(),
+          Config.DeliveryChannelProvider(),
         ),
         Layer.mergeAll(
           DynamoDB.TableProvider(),
@@ -339,6 +353,9 @@ export const providers = () =>
           Route53.HostedZoneProvider(),
           Route53.RecordProvider(),
           S3.BucketProvider(),
+          S3Tables.NamespaceProvider(),
+          S3Tables.TableProvider(),
+          S3Tables.TableBucketProvider(),
           Scheduler.ScheduleGroupProvider(),
           Scheduler.ScheduleProvider(),
           SecretsManager.SecretProvider(),
