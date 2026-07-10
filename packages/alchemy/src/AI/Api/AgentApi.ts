@@ -30,6 +30,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { Kernel } from "../Kernel.ts";
 import type { ProcessService } from "../Process.ts";
+import { topology } from "../Topology.ts";
 import { ChatSessions } from "./ChatSessions.ts";
 import {
   ChatRequest,
@@ -62,6 +63,13 @@ export interface AgentApiOptions {
    * consumers want the raw wire).
    */
   readonly smoothing?: { readonly delayMs: number };
+  /**
+   * Root terms whose `AI.topology` fold is served at `GET
+   * /api/topology` — the app's sidebar (org-chat: channels grouped by
+   * subkind, agents as DM targets). Derived once at Layer build; terms
+   * are static data.
+   */
+  readonly topology?: ReadonlyArray<unknown>;
 }
 
 /** Split a delta into word-sized pieces (whitespace rides its word). */
@@ -160,6 +168,14 @@ export const agentApi = (options: AgentApiOptions = {}) =>
           HttpServerResponse.jsonUnsafe({ conversations }),
         ),
       );
+
+      // ── the org graph: derived from the term data, never configured ──
+      if (options.topology !== undefined) {
+        const graph = topology(...options.topology);
+        yield* router.add("GET", "/api/topology", () =>
+          Effect.succeed(HttpServerResponse.jsonUnsafe({ topology: graph })),
+        );
+      }
 
       yield* router.add("GET", "/api/chat/:id", () =>
         Effect.gen(function* () {

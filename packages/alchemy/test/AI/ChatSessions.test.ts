@@ -205,6 +205,57 @@ describe("ChatSessions", () => {
     }),
   );
 
+  it.effect("conversation ids route to their target process by prefix", () =>
+    Effect.gen(function* () {
+      class Desk extends AI.Agent<Desk>()("Desk")`You are the desk.` {}
+      const model = scriptedModel([
+        () => [...text("desk here"), finish("stop")],
+        () => [...text("librarian here"), finish("stop")],
+      ]);
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const kernel = yield* AI.Kernel;
+          const librarian = yield* kernel.interpret(Librarian);
+          const desk = yield* kernel.interpret(Desk);
+          const sessions = yield* makeChatSessions({
+            processes: { "dm:Desk": desk, general: librarian },
+          });
+
+          yield* Stream.runDrain(
+            sessions.send("dm:Desk/main", userMessage("u1", "hi desk")),
+          );
+          yield* Stream.runDrain(
+            sessions.send("general/post-1", userMessage("u2", "hi general")),
+          );
+
+          // each ring's trace holds ITS admission — routing was real
+          const deskTrace = yield* Stream.runCollect(
+            kernel
+              .trace("Desk")
+              .pipe(Stream.takeUntil((e) => e.type === "turn.halted")),
+          );
+          expect(
+            (deskTrace.find((e) => e.type === "run.admitted")!.payload as any)
+              .item,
+          ).toBe("hi desk");
+          const libTrace = yield* Stream.runCollect(
+            kernel
+              .trace("Librarian")
+              .pipe(Stream.takeUntil((e) => e.type === "turn.halted")),
+          );
+          expect(
+            (libTrace.find((e) => e.type === "run.admitted")!.payload as any)
+              .item,
+          ).toBe("hi general");
+
+          // transcripts stay per-conversation
+          expect(yield* sessions.transcript("dm:Desk/main")).toHaveLength(2);
+          expect(yield* sessions.transcript("general/post-1")).toHaveLength(2);
+        }),
+      ).pipe(Effect.provide(layers(model)));
+    }),
+  );
+
   it.effect("a parked ask surfaces as a data-ask part and answers back", () =>
     Effect.gen(function* () {
       const action = AI.Parameter("action", S.String)`what needs approval`;

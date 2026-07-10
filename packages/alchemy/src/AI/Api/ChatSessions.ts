@@ -95,8 +95,18 @@ export const conversationItem = (
 };
 
 export const makeChatSessions = (options: {
-  /** The interpreted process term the conversations drive. */
-  readonly process: Pick<ProcessService<any, any, any>, "send">;
+  /**
+   * The interpreted process term(s) the conversations drive. With a
+   * single handle every conversation targets it. With a map, the
+   * conversation id's first `/`-segment routes: `general/post-1` →
+   * `processes.general`, `dm:Sage/main` → `processes["dm:Sage"]` —
+   * the org-chat shape (a channel per target, an agent per DM).
+   */
+  readonly process?: Pick<ProcessService<any, any, any>, "send">;
+  readonly processes?: Record<
+    string,
+    Pick<ProcessService<any, any, any>, "send">
+  >;
   /**
    * How a conversation becomes the ring's work item.
    * @default conversationItem (full history + new message)
@@ -111,6 +121,20 @@ export const makeChatSessions = (options: {
     const askHub = yield* AskHub;
     const toItem = options.toItem ?? conversationItem;
     const transcripts = new Map<string, UIMessage[]>();
+
+    const routeTo = (conversationId: string) => {
+      if (options.processes !== undefined) {
+        const target = conversationId.split("/")[0]!;
+        const process = options.processes[target];
+        if (process !== undefined) return process;
+      }
+      if (options.process !== undefined) return options.process;
+      throw new Error(
+        `no process for conversation ${JSON.stringify(conversationId)} — ` +
+          `expected its first /-segment to name one of: ` +
+          `${Object.keys(options.processes ?? {}).join(", ")}`,
+      );
+    };
 
     const appendTo = (conversationId: string, message: UIMessage) => {
       const existing = transcripts.get(conversationId) ?? [];
@@ -138,6 +162,7 @@ export const makeChatSessions = (options: {
         Stream.unwrap(
           Effect.gen(function* () {
             // history BEFORE this message — toItem composes both
+            const process = routeTo(conversationId);
             const history = transcripts.get(conversationId) ?? [];
             appendTo(conversationId, message);
             const item = toItem(history, message);
@@ -147,7 +172,7 @@ export const makeChatSessions = (options: {
               capacity: "unbounded",
             });
             yield* Effect.yieldNow;
-            yield* options.process.send(item);
+            yield* process.send(item);
             const collected: UIMessageChunk[] = [];
             return Stream.fromQueue(events).pipe(
               correlateRun(item),
