@@ -101,7 +101,13 @@ const ModelLive = AnthropicLanguageModel.layer({
   Layer.provide(FetchHttpClient.layer),
 );
 
-const kernelLayer = AI.memory.pipe(Layer.provide([ModelLive, AI.AskHubMemory]));
+// One shared bus instance: the kernel subscribes to machine-exit
+// sources and tool physics publishes onto the SAME bus. Closing these
+// Layers independently creates split-brain in-memory topics.
+const EventBusLive = AI.EventBusMemory;
+const kernelLayer = AI.memory.pipe(
+  Layer.provide([ModelLive, AI.AskHubMemory, EventBusLive]),
+);
 
 // member agents + the routing classifier — each its own Layer (its own
 // tool physics), the terms-vs-layers pattern
@@ -132,7 +138,7 @@ const IssuesLayer = AI.layer(Issues).pipe(
     kernelLayer,
     SageLive,
     CloseIssueLive,
-    AI.EventBusMemory,
+    EventBusLive,
     RuntimeContext.phantom,
   ]),
 );
@@ -173,6 +179,7 @@ const SessionsLive = Layer.effect(
     HelperLive,
     kernelLayer,
     AI.AskHubMemory,
+    EventBusLive,
     RuntimeContext.phantom,
   ]),
 );

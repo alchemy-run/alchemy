@@ -1039,7 +1039,7 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     "run.resolved",
                     run.session,
                     "resolved",
-                    { observed: true },
+                    { observed: true, value },
                   );
                   return value;
                 }),

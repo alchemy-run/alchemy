@@ -163,8 +163,10 @@ Close issue ${issueNumber} once it is resolved.` {}
 // the run settles when the WORLD closes the issue — not a model claim.
 // The model may cause it (close_issue) or a human may.
 export class Issues extends AI.Process<Issues>()("issues")`
-Work the issue described in the Post. Investigate with ${Sage}, and
-close it with ${CloseIssue} when genuinely resolved.
+Work the issue described in the Post. If the Post explicitly says the
+fix is already verified/applied, close it immediately with ${CloseIssue}
+using its issue number. Otherwise investigate with ${Sage}, and close it
+with ${CloseIssue} only when genuinely resolved.
 ${AI.on(PostOpened)}
 ${AI.until(IssueClosed)}` {}
 
@@ -191,7 +193,7 @@ export const CloseIssueLive = Layer.succeed(CloseIssue, ((input: {
     const bus = yield* AI.EventBus;
     yield* bus.publish(IssueClosed, { number: input.number, by: "Sage" });
     return "closed";
-  })) as never).pipe(Layer.provide(AI.EventBusMemory));
+  })) as never);
 
 /** The sidebar: everything the app renders is derived from these roots. */
 export const roots = [Engineering, Support, Issues, Sage, Scout, Helper];

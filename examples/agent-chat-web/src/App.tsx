@@ -7,9 +7,9 @@
  * to resolution by the Channel process (fan-out to member agents,
  * relayed replies rendered as authored bubbles).
  */
-import { useChat } from "@ai-sdk/react";
+import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { memo, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Message,
   MessageContent,
@@ -34,6 +34,7 @@ import {
   ToolHeader,
   ToolInput,
   ToolOutput,
+  type ToolPart,
 } from "@/components/ai-elements/tool";
 import { type AskData, AskCard } from "@/components/ask-card";
 import { TracePanel } from "@/components/trace-panel";
@@ -144,10 +145,27 @@ function MessagePart({
       </Reasoning>
     );
   }
-  if (part.type === "dynamic-tool") {
-    const input = part.input as Record<string, unknown> | undefined;
+  if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
+    // AI SDK has two equivalent wire projections:
+    // - `dynamic-tool` + `toolName` for unknown-at-compile-time tools;
+    // - `tool-${name}` for named tools reconstructed by useChat.
+    // Normalize both before applying our semantic renderers.
+    const tool = part as unknown as {
+      type: string;
+      toolName?: string;
+      toolCallId: string;
+      state: ToolPart["state"];
+      input?: unknown;
+      output?: unknown;
+      errorText?: string;
+    };
+    const toolName =
+      tool.type === "dynamic-tool"
+        ? String(tool.toolName)
+        : tool.type.slice("tool-".length);
+    const input = tool.input as Record<string, unknown> | undefined;
     // a relayed member reply — the room speaking as a member
-    if (part.toolName === "post_reply" && input?.author !== undefined) {
+    if (toolName === "post_reply" && input?.author !== undefined) {
       return (
         <AuthoredReply
           author={String(input.author)}
@@ -157,14 +175,14 @@ function MessagePart({
     }
     // a delegation to a member agent — an async pill; click to inspect
     // the agent's live run (thinking, tools, messages) in the sidebar
-    if (knownAgents.has(part.toolName)) {
-      const working = part.state !== "output-available";
+    if (knownAgents.has(toolName)) {
+      const working = tool.state !== "output-available";
       return (
         <button
           type="button"
-          onClick={() => openInspector(part.toolName)}
+          onClick={() => openInspector(toolName)}
           className="my-1 flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground hover:bg-accent"
-          title={`Inspect ${part.toolName}'s run`}
+          title={`Inspect ${toolName}'s run`}
         >
           {working ? (
             <Spinner className="size-3" />
@@ -172,22 +190,22 @@ function MessagePart({
             <CheckCircleIcon className="size-3 text-green-600" />
           )}
           {working ? (
-            <Shimmer>{`${part.toolName} is working…`}</Shimmer>
+            <Shimmer>{`${toolName} is working…`}</Shimmer>
           ) : (
-            `${part.toolName} finished`
+            `${toolName} finished`
           )}
         </button>
       );
     }
     // the resolution marker
-    if (part.toolName === "resolve") {
+    if (toolName === "resolve") {
       return (
         <Marker role="status" className="my-1">
           <MarkerIcon>
             <CheckCircleIcon className="size-3 text-green-600" />
           </MarkerIcon>
           <MarkerContent>
-            {part.state === "output-available"
+            {tool.state === "output-available"
               ? `resolved: ${String(input?.value ?? "")}`
               : "resolving…"}
           </MarkerContent>
@@ -195,18 +213,18 @@ function MessagePart({
       );
     }
     return (
-      <Tool key={part.toolCallId}>
+      <Tool key={tool.toolCallId}>
         <ToolHeader
           type="dynamic-tool"
-          toolName={part.toolName}
-          state={part.state}
+          toolName={toolName}
+          state={tool.state}
         />
         <ToolContent>
-          <ToolInput input={part.input} />
+          <ToolInput input={tool.input} />
           <ToolOutput
-            output={part.state === "output-available" ? part.output : undefined}
+            output={tool.state === "output-available" ? tool.output : undefined}
             errorText={
-              part.state === "output-error" ? part.errorText : undefined
+              tool.state === "output-error" ? tool.errorText : undefined
             }
           />
         </ToolContent>
@@ -269,16 +287,17 @@ function MessagePart({
   return null;
 }
 
-const MessageView = memo(function MessageView({
+function MessageView({
   message,
   channelMode = false,
 }: {
   message: UIMessage;
   channelMode?: boolean;
 }) {
+  const hideCoordinatorProse = channelMode && message.role === "assistant";
   const visible = message.parts.some(
     (part) =>
-      !channelMode ||
+      !hideCoordinatorProse ||
       (part.type !== "text" &&
         part.type !== "reasoning" &&
         part.type !== "step-start"),
@@ -292,13 +311,13 @@ const MessageView = memo(function MessageView({
             key={index}
             part={part}
             index={index}
-            channelMode={channelMode}
+            channelMode={hideCoordinatorProse}
           />
         ))}
       </MessageContent>
     </Message>
   );
-});
+}
 
 // ─── the thread (one conversation — a Post's thread or a DM) ─────
 
@@ -312,10 +331,14 @@ function Thread({
   placeholder: string;
 }) {
   const [text, setText] = useState("");
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: "/api/chat" }),
+    [],
+  );
   const { messages, sendMessage, status } = useChat({
     id: conversationId,
     messages: initialMessages,
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    transport,
     experimental_throttle: 50,
   });
   const isBusy = status === "submitted" || status === "streaming";
@@ -497,8 +520,16 @@ function NewPostComposer({
           const value = message.text?.trim();
           if (!value) return;
           const conversationId = `${channel}/${crypto.randomUUID().slice(0, 8)}`;
-          // stash the first message; PostThread sends it on mount
-          pendingFirstMessage.set(conversationId, value);
+          // Own the chat OUTSIDE the soon-to-mount thread component and
+          // send in this user event. The AI SDK Chat retains stream state
+          // across React remounts / index polling; mount-triggered sends
+          // lost their hook state while the backend kept running.
+          const chat = new Chat<UIMessage>({
+            id: conversationId,
+            transport: new DefaultChatTransport({ api: "/api/chat" }),
+          });
+          activeChats.set(conversationId, chat);
+          pendingOutbound.set(conversationId, value);
           setText("");
           onPost(conversationId);
         }}
@@ -518,8 +549,9 @@ function NewPostComposer({
   );
 }
 
-/** First messages of freshly composed Posts, sent when the thread mounts. */
-const pendingFirstMessage = new Map<string, string>();
+/** Live Chat owners keyed by Post id; views subscribe but do not own them. */
+const activeChats = new Map<string, Chat<UIMessage>>();
+const pendingOutbound = new Map<string, string>();
 
 function PostThread({
   conversationId,
@@ -530,21 +562,34 @@ function PostThread({
   channel: string;
   onBack: () => void;
 }) {
-  const [initial, setInitial] = useState<UIMessage[] | undefined>();
-  const firstMessage = pendingFirstMessage.get(conversationId);
+  const [chat, setChat] = useState<Chat<UIMessage> | undefined>(() =>
+    activeChats.get(conversationId),
+  );
 
   useEffect(() => {
-    if (firstMessage !== undefined) {
-      setInitial([]);
-      return;
-    }
+    if (chat !== undefined) return;
     void fetch(`/api/chat/${encodeURIComponent(conversationId)}`)
       .then((response) => response.json())
-      .then((body: { messages: UIMessage[] }) => setInitial(body.messages))
-      .catch(() => setInitial([]));
-  }, [conversationId, firstMessage]);
+      .then((body: { messages: UIMessage[] }) => {
+        const restored = new Chat<UIMessage>({
+          id: conversationId,
+          messages: body.messages,
+          transport: new DefaultChatTransport({ api: "/api/chat" }),
+        });
+        activeChats.set(conversationId, restored);
+        setChat(restored);
+      })
+      .catch(() => {
+        const empty = new Chat<UIMessage>({
+          id: conversationId,
+          transport: new DefaultChatTransport({ api: "/api/chat" }),
+        });
+        activeChats.set(conversationId, empty);
+        setChat(empty);
+      });
+  }, [chat, conversationId]);
 
-  if (initial === undefined) {
+  if (chat === undefined) {
     return <div className="flex-1 p-4 text-sm text-muted-foreground">…</div>;
   }
   return (
@@ -557,47 +602,38 @@ function PostThread({
           Thread in #{channel}
         </span>
       </div>
-      <ThreadWithAutoSend
-        conversationId={conversationId}
-        initialMessages={initial}
-        firstMessage={firstMessage}
+      <ThreadWithChat
+        chat={chat}
         placeholder="Reply to this Post…"
       />
     </div>
   );
 }
 
-/** A Thread that fires a stashed first message once on mount. */
-function ThreadWithAutoSend({
-  conversationId,
-  initialMessages,
-  firstMessage,
+/** A thread view subscribing to a persistent AI SDK Chat owner. */
+function ThreadWithChat({
+  chat,
   placeholder,
 }: {
-  conversationId: string;
-  initialMessages: UIMessage[];
-  firstMessage: string | undefined;
+  chat: Chat<UIMessage>;
   placeholder: string;
 }) {
   const [text, setText] = useState("");
   const { messages, sendMessage, status } = useChat({
-    id: conversationId,
-    messages: initialMessages,
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    chat,
     experimental_throttle: 50,
   });
 
   useEffect(() => {
-    // read-and-delete INSIDE the effect: React StrictMode double-fires
-    // mount effects in dev, and a prop-captured value sent twice
-    // duplicates the Post (and admits two runs)
-    const pending = pendingFirstMessage.get(conversationId);
-    if (pending !== undefined) {
-      pendingFirstMessage.delete(conversationId);
-      sendMessage({ text: pending });
+    const pending = pendingOutbound.get(chat.id);
+    // The external Chat is the idempotency guard: send only after this
+    // view has subscribed, and only while the persistent owner is still
+    // empty. Remounts see the already-added user message and do nothing.
+    if (pending !== undefined && chat.messages.length === 0) {
+      pendingOutbound.delete(chat.id);
+      void chat.sendMessage({ text: pending });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [chat]);
 
   const isBusy = status === "submitted" || status === "streaming";
   const lastMessage = messages.at(-1);
@@ -616,6 +652,11 @@ function ThreadWithAutoSend({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <script
+        type="application/json"
+        data-debug-chat
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(messages) }}
+      />
       <MessageScrollerProvider autoScroll defaultScrollPosition="last-anchor">
         <MessageScroller className="flex-1">
           <MessageScrollerViewport>

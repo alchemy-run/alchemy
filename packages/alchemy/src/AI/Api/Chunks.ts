@@ -203,11 +203,18 @@ export const foldEvent = (
     }
 
     case "run.resolved":
-      if (payload.deterministic === true) {
+      if (payload.deterministic === true || payload.observed === true) {
+        const value = payload.value;
+        const summary =
+          payload.observed === true &&
+          typeof value === "object" &&
+          value !== null
+            ? `world exit observed: ${JSON.stringify(value)}`
+            : String(value ?? "resolved");
         chunks.push({
           type: "data-resolution",
           id: event.id,
-          data: { summary: String(payload.value ?? "resolved") },
+          data: { summary },
         });
       }
       break;

@@ -42,6 +42,7 @@ const submit = async (placeholder: string, text: string) => {
 };
 
 await page.goto("http://localhost:5173/", { waitUntil: "networkidle0" });
+console.log("stage: loaded");
 
 // Channel Post → Thread → 1..* authored member responses.
 await clickText("engineering");
@@ -56,6 +57,7 @@ await page.waitForFunction(
   { timeout: 150_000 },
 );
 const engineering = await page.evaluate(() => document.body.innerText);
+console.log("stage: engineering complete");
 
 // Agent work is a clickable side channel.
 await clickText("Scout finished");
@@ -66,6 +68,7 @@ await page.waitForFunction(
       document.body.textContent?.includes("model.requested")),
 );
 const inspector = await page.evaluate(() => document.body.innerText);
+console.log("stage: inspector opened");
 await page.click('button[aria-label="Close"]');
 
 // Back to Posts, then a 1:1 DM.
@@ -84,6 +87,7 @@ await page.waitForFunction(
   dmItemsBefore,
 );
 const dm = await page.evaluate(() => document.body.innerText);
+console.log("stage: dm complete");
 
 // A prose-coordinated channel also produces an async member pill and
 // relays the final member response.
@@ -92,18 +96,52 @@ await submit(
   "Start a Post in #support…",
   "I cannot log in after resetting my password. What should I try?",
 );
+try {
+  await page.waitForFunction(
+    () =>
+      document.body.textContent?.includes("Helper finished") &&
+      document.body.textContent?.includes("resolved"),
+    { timeout: 45_000 },
+  );
+} catch (error) {
+  console.error(
+    await page.evaluate(() => ({
+      innerText: document.body.innerText,
+      textContent: document.body.textContent,
+      items: [
+        ...document.querySelectorAll('[data-slot="message-scroller-item"]'),
+      ].map((item) => ({
+        innerText: (item as HTMLElement).innerText,
+        textContent: item.textContent,
+      })),
+      chat: document.querySelector("[data-debug-chat]")?.textContent,
+    })),
+  );
+  await page.screenshot({ path: "/tmp/support-timeout.png", fullPage: true });
+  throw error;
+}
+const support = await page.evaluate(() => document.body.innerText);
+console.log("stage: support complete");
+
+// Machine-observed goal: the model may cause close_issue, but the run
+// settles only when the IssueClosed world event is observed.
+await clickText("issues");
+await submit(
+  "Start a Post in #issues…",
+  "Issue #12 is a documentation typo that is already fixed. Verify briefly and close it now.",
+);
 await page.waitForFunction(
-  () =>
-    document.body.textContent?.includes("Helper finished") &&
-    document.body.textContent?.includes("resolved"),
+  () => document.body.textContent?.includes("world exit observed"),
   { timeout: 150_000 },
 );
-const support = await page.evaluate(() => document.body.innerText);
+const issues = await page.evaluate(() => document.body.innerText);
+console.log("stage: issues complete");
 
 // Trace panel is navigable.
 await clickText("trace");
 await page.waitForSelector("aside");
 const trace = await page.evaluate(() => document.body.innerText);
+console.log("stage: trace opened");
 
 await page.screenshot({ path: "/tmp/alchemy-org-smoke.png", fullPage: true });
 console.log(
@@ -135,7 +173,10 @@ console.log(
         hasHelperPill: support.includes("Helper finished"),
         hasResolution: support.includes("resolved"),
       },
-      trace: trace.toLowerCase().includes("trace · scout"),
+      issues: {
+        observedExit: issues.includes("world exit observed"),
+      },
+      trace: trace.toLowerCase().includes("trace · issues"),
       errors,
       screenshot: "/tmp/alchemy-org-smoke.png",
     },
