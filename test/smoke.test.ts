@@ -35,6 +35,7 @@ const examples = [
   "aws-lambda",
   "aws-lambda-httpapi",
   "aws-lambda-rpc",
+  "cloudflare-foldkit",
   "cloudflare-git-artifacts",
   "cloudflare-neon-drizzle",
   "cloudflare-secrets-store",

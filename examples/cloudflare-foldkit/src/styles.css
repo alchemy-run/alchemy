@@ -1,0 +1,62 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.card {
+  text-align: center;
+  padding: 3rem 4rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 12px;
+}
+
+.card h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.count {
+  margin: 1.5rem 0;
+  font-size: 4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.row button {
+  font: inherit;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.row button:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.hint {
+  margin: 2rem 0 0;
+  font-size: 0.875rem;
+  opacity: 0.6;
+  max-width: 32ch;
+}
