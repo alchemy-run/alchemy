@@ -25,11 +25,13 @@ import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
+import * as ApiGatewayV2 from "./ApiGatewayV2/index.ts";
 import * as Assets from "./Assets.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
 import * as CloudFront from "./CloudFront/index.ts";
 import * as CloudWatch from "./CloudWatch/index.ts";
+import * as Cognito from "./Cognito/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as DynamoDB from "./DynamoDB/index.ts";
 import * as EC2 from "./EC2/index.ts";
@@ -40,6 +42,7 @@ import * as ELBv2 from "./ELBv2/index.ts";
 import * as Endpoint from "./Endpoint.ts";
 import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
+import * as Firehose from "./Firehose/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
 import * as Kinesis from "./Kinesis/index.ts";
@@ -47,15 +50,18 @@ import * as KMS from "./KMS/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as Logs from "./Logs/index.ts";
 import * as Organizations from "./Organizations/index.ts";
+import * as Pipes from "./Pipes/index.ts";
 import * as RDS from "./RDS/index.ts";
 import * as Region from "./Region.ts";
 import * as Route53 from "./Route53/index.ts";
 import * as S3 from "./S3/index.ts";
 import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
+import * as SES from "./SES/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
 import * as SSM from "./SSM/index.ts";
+import * as StepFunctions from "./StepFunctions/index.ts";
 import * as Website from "./Website/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -83,6 +89,14 @@ export const providers = () =>
       ApiGateway.UsagePlan,
       ApiGateway.UsagePlanKey,
       ApiGateway.VpcLink,
+      ApiGatewayV2.Api,
+      ApiGatewayV2.ApiMappingResource,
+      ApiGatewayV2.AuthorizerResource,
+      ApiGatewayV2.DomainName,
+      ApiGatewayV2.IntegrationResource,
+      ApiGatewayV2.RouteResource,
+      ApiGatewayV2.StageResource,
+      ApiGatewayV2.VpcLink,
       AutoScaling.AutoScalingGroup,
       AutoScaling.LaunchTemplate,
       AutoScaling.ScalingPolicy,
@@ -106,6 +120,14 @@ export const providers = () =>
       CloudWatch.Dashboard,
       CloudWatch.InsightRule,
       CloudWatch.MetricStream,
+      Cognito.Group,
+      Cognito.IdentityPool,
+      Cognito.IdentityPoolRoleAttachment,
+      Cognito.IdentityProvider,
+      Cognito.ResourceServer,
+      Cognito.UserPool,
+      Cognito.UserPoolClient,
+      Cognito.UserPoolDomain,
       DynamoDB.Table,
       EC2.EgressOnlyInternetGateway,
       EC2.EIP,
@@ -141,6 +163,7 @@ export const providers = () =>
       EventBridge.EventBus,
       EventBridge.Permission,
       EventBridge.Rule,
+      Firehose.DeliveryStream,
       IAM.AccessKey,
       IAM.AccountAlias,
       IAM.AccountPasswordPolicy,
@@ -172,7 +195,12 @@ export const providers = () =>
       Lambda.MicrovmImage,
       Lambda.NetworkConnector,
       Lambda.Permission,
+      Logs.Destination,
       Logs.LogGroup,
+      Logs.LogStream,
+      Logs.MetricFilter,
+      Logs.ResourcePolicy,
+      Logs.SubscriptionFilter,
       Organizations.Account,
       Organizations.DelegatedAdministrator,
       Organizations.Organization,
@@ -183,6 +211,7 @@ export const providers = () =>
       Organizations.Root,
       Organizations.RootPolicyType,
       Organizations.TrustedServiceAccess,
+      Pipes.Pipe,
       RDS.DBCluster,
       RDS.DBClusterEndpoint,
       RDS.DBClusterParameterGroup,
@@ -199,10 +228,16 @@ export const providers = () =>
       Scheduler.Schedule,
       Scheduler.ScheduleGroup,
       SecretsManager.Secret,
+      SES.ConfigurationSet,
+      SES.ConfigurationSetEventDestination,
+      SES.EmailIdentity,
+      SES.EmailTemplate,
       SNS.Subscription,
       SNS.Topic,
       SQS.Queue,
       SSM.Parameter,
+      StepFunctions.Activity,
+      StepFunctions.StateMachine,
       Website.AssetDeployment,
     ]),
   ).pipe(
@@ -224,6 +259,14 @@ export const providers = () =>
           ApiGateway.UsagePlanProvider(),
           ApiGateway.UsagePlanKeyProvider(),
           ApiGateway.VpcLinkProvider(),
+          ApiGatewayV2.ApiProvider(),
+          ApiGatewayV2.ApiMappingProvider(),
+          ApiGatewayV2.AuthorizerProvider(),
+          ApiGatewayV2.DomainNameProvider(),
+          ApiGatewayV2.IntegrationProvider(),
+          ApiGatewayV2.RouteProvider(),
+          ApiGatewayV2.StageProvider(),
+          ApiGatewayV2.VpcLinkProvider(),
           AutoScaling.AutoScalingGroupProvider(),
           AutoScaling.LaunchTemplateProvider(),
           AutoScaling.ScalingPolicyProvider(),
@@ -247,6 +290,14 @@ export const providers = () =>
           CloudWatch.DashboardProvider(),
           CloudWatch.InsightRuleProvider(),
           CloudWatch.MetricStreamProvider(),
+          Cognito.GroupProvider(),
+          Cognito.IdentityPoolProvider(),
+          Cognito.IdentityPoolRoleAttachmentProvider(),
+          Cognito.IdentityProviderProvider(),
+          Cognito.ResourceServerProvider(),
+          Cognito.UserPoolClientProvider(),
+          Cognito.UserPoolDomainProvider(),
+          Cognito.UserPoolProvider(),
         ),
         Layer.mergeAll(
           DynamoDB.TableProvider(),
@@ -284,6 +335,7 @@ export const providers = () =>
           EventBridge.EventBusProvider(),
           EventBridge.PermissionProvider(),
           EventBridge.RuleProvider(),
+          Firehose.DeliveryStreamProvider(),
           IAM.AccessKeyProvider(),
           IAM.AccountAliasProvider(),
           IAM.AccountPasswordPolicyProvider(),
@@ -317,7 +369,12 @@ export const providers = () =>
           Lambda.MicrovmImageProvider(),
           Lambda.NetworkConnectorProvider(),
           Lambda.PermissionProvider(),
+          Logs.DestinationProvider(),
           Logs.LogGroupProvider(),
+          Logs.LogStreamProvider(),
+          Logs.MetricFilterProvider(),
+          Logs.ResourcePolicyProvider(),
+          Logs.SubscriptionFilterProvider(),
           Organizations.AccountProvider(),
           Organizations.DelegatedAdministratorProvider(),
           Organizations.OrganizationalUnitProvider(),
@@ -328,6 +385,7 @@ export const providers = () =>
           Organizations.RootPolicyTypeProvider(),
           Organizations.RootProvider(),
           Organizations.TrustedServiceAccessProvider(),
+          Pipes.PipeProvider(),
           RDS.DBClusterEndpointProvider(),
           RDS.DBClusterParameterGroupProvider(),
           RDS.DBClusterProvider(),
@@ -344,10 +402,16 @@ export const providers = () =>
           Scheduler.ScheduleGroupProvider(),
           Scheduler.ScheduleProvider(),
           SecretsManager.SecretProvider(),
+          SES.ConfigurationSetEventDestinationProvider(),
+          SES.ConfigurationSetProvider(),
+          SES.EmailIdentityProvider(),
+          SES.EmailTemplateProvider(),
           SNS.SubscriptionProvider(),
           SNS.TopicProvider(),
           SQS.QueueProvider(),
           SSM.ParameterProvider(),
+          StepFunctions.ActivityProvider(),
+          StepFunctions.StateMachineProvider(),
           Website.AssetDeploymentProvider(),
         ),
       ),

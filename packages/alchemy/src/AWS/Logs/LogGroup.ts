@@ -89,6 +89,11 @@ export const LogGroupProvider = () =>
       const toLogGroupClass = (
         props: { logGroupClass?: LogGroupClass } = {},
       ): LogGroupClass => props.logGroupClass ?? "STANDARD";
+      // describeLogGroups returns ARNs with a trailing `:*` while reconcile
+      // constructs them without — normalize so refresh/adoption never reports
+      // phantom drift and interpolated IAM ARNs (`${arn}:*`) stay correct.
+      const normalizeLogGroupArn = (arn: string): LogGroupArn =>
+        (arn.endsWith(":*") ? arn.slice(0, -2) : arn) as LogGroupArn;
 
       return {
         stables: ["logGroupArn", "logGroupName"],
@@ -137,7 +142,7 @@ export const LogGroupProvider = () =>
                     );
                   return {
                     logGroupName: group.logGroupName,
-                    logGroupArn: group.arn as LogGroupArn,
+                    logGroupArn: normalizeLogGroupArn(group.arn),
                     retentionInDays: group.retentionInDays,
                     kmsKeyId: group.kmsKeyId,
                     logGroupClass: group.logGroupClass ?? "STANDARD",
@@ -176,7 +181,7 @@ export const LogGroupProvider = () =>
           }
           return {
             logGroupName,
-            logGroupArn: match.arn as LogGroupArn,
+            logGroupArn: normalizeLogGroupArn(match.arn),
             retentionInDays: match.retentionInDays,
             kmsKeyId: match.kmsKeyId,
             logGroupClass: match.logGroupClass ?? "STANDARD",

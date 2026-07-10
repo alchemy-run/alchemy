@@ -1,0 +1,109 @@
+import * as AWS from "@/AWS";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export class FirehoseApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
+  "FirehoseApiFunction",
+) {}
+
+export class BucketAndDeliveryStream extends Context.Service<
+  BucketAndDeliveryStream,
+  {
+    bucket: AWS.S3.Bucket;
+    deliveryStream: AWS.Firehose.DeliveryStream;
+  }
+>()("BucketAndDeliveryStream") {}
+
+export const BucketAndDeliveryStreamLive = Layer.effect(
+  BucketAndDeliveryStream,
+  Effect.gen(function* () {
+    const bucket = yield* AWS.S3.Bucket("FirehoseFixtureBucket", {
+      forceDestroy: true,
+    });
+
+    const deliveryStream = yield* AWS.Firehose.DeliveryStream(
+      "FixtureDeliveryStream",
+      {
+        destination: {
+          bucketArn: bucket.bucketArn,
+          prefix: "records/",
+          // Minimum buffering so AWS_TEST_SLOW=1 S3-arrival polling stays
+          // bounded; ingest assertions never wait on delivery.
+          bufferingIntervalInSeconds: 60,
+          bufferingSizeInMBs: 1,
+        },
+        tags: { fixture: "firehose-bindings" },
+      },
+    );
+
+    return { bucket, deliveryStream };
+  }),
+);
+
+export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
+  {
+    main: import.meta.url,
+    url: true,
+    timeout: Duration.seconds(30),
+  },
+  Effect.gen(function* () {
+    const { deliveryStream } = yield* BucketAndDeliveryStream;
+
+    const putRecord = yield* AWS.Firehose.PutRecord(deliveryStream);
+    const putRecordBatch = yield* AWS.Firehose.PutRecordBatch(deliveryStream);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.originalUrl);
+        const pathname = url.pathname;
+
+        if (request.method === "GET" && pathname === "/ready") {
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
+        if (request.method === "POST" && pathname === "/put-record") {
+          const body = (yield* request.json) as { data: string };
+          return yield* HttpServerResponse.json(
+            yield* putRecord({
+              Record: { Data: new TextEncoder().encode(`${body.data}\n`) },
+            }),
+          );
+        }
+
+        if (request.method === "POST" && pathname === "/put-record-batch") {
+          const body = (yield* request.json) as { records: string[] };
+          return yield* HttpServerResponse.json(
+            yield* putRecordBatch({
+              Records: body.records.map((data) => ({
+                Data: new TextEncoder().encode(`${data}\n`),
+              })),
+            }),
+          );
+        }
+
+        return yield* HttpServerResponse.json(
+          { error: "Not found", method: request.method, pathname },
+          { status: 404 },
+        );
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        AWS.Firehose.PutRecordHttp,
+        AWS.Firehose.PutRecordBatchHttp,
+        BucketAndDeliveryStreamLive,
+      ),
+    ),
+  ),
+  // Re-merge so the deploying Stack can `yield* BucketAndDeliveryStream` and
+  // expose the stream/bucket names as deploy-time outputs. Reusing the same
+  // `BucketAndDeliveryStreamLive` reference keeps it a single shared pair.
+).pipe(Layer.provideMerge(BucketAndDeliveryStreamLive));
+
+export default FirehoseApiFunctionLive;

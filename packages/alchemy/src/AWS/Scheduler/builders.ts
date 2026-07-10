@@ -7,7 +7,7 @@ import type { Queue } from "../SQS/Queue.ts";
 import { Schedule } from "./Schedule.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
-interface ScheduleBuilderState {
+export interface ScheduleBuilderState {
   expression: string;
   name?: string;
   group?: ScheduleGroup;
@@ -83,7 +83,20 @@ export const at = (date: Date, options: ScheduleOptions = {}) =>
     ...options,
   });
 
+/**
+ * The fluent schedule builder returned by `every`/`cron`/`at`. Route it to a
+ * target with `.toLambda`/`.toQueue`/`.toEcsTask`, or consume it on the host
+ * Function with `consumeSchedule(builder, handler)`.
+ */
+export type ScheduleBuilder = ReturnType<typeof makeBuilder>;
+
 const makeBuilder = (state: ScheduleBuilderState) => ({
+  /**
+   * The accumulated builder state (expression, name, group, ...). Read by
+   * `consumeSchedule` to materialize the schedule against the host Function.
+   */
+  state,
+
   named: (name: string) =>
     makeBuilder({
       ...state,
