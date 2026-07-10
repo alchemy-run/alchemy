@@ -84,9 +84,10 @@ const pollLiveRules = (zoneId: string, expectedLength: number) =>
     description: `snippet rules length === ${expectedLength}`,
     effect: listLiveRules(zoneId),
     predicate: (rules) => rules.length === expectedLength,
-    schedule: Schedule.exponential("500 millis").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([
+      Schedule.exponential("500 millis"),
+      Schedule.recurs(10),
+    ]),
   });
 
 const findSnippet = (zoneId: string, name: string) =>

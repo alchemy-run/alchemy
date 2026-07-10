@@ -558,9 +558,10 @@ export const SecurityGroupProvider = () =>
                 // `InvalidVpcID.NotFound`. Retry, bounded.
                 Effect.retry({
                   while: (e) => e._tag === "InvalidVpcID.NotFound",
-                  schedule: Schedule.fixed("1 second").pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("1 second"),
+                    Schedule.recurs(15),
+                  ]),
                 }),
               );
             const newGroupId = result.GroupId! as SecurityGroupId;
@@ -690,11 +691,13 @@ export const SecurityGroupProvider = () =>
                       e.message?.includes("DependencyViolation"))
                   );
                 },
-                schedule: Schedule.fixed(5000).pipe(
-                  Schedule.both(Schedule.recurs(30)), // Up to ~2.5 minutes
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.fixed(5000),
+                  Schedule.recurs(30),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),

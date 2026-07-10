@@ -35,9 +35,7 @@ const retryOnConflict = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "ResourceConflictException",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 
@@ -142,9 +140,7 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
             "The function execution role does not have permissions to call",
           ) ??
             false)),
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });

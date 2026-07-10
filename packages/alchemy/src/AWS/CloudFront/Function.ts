@@ -341,8 +341,10 @@ const isKeyValueStoreAssociationPending = (error: { Message?: string }) => {
   );
 };
 
-const cappedCloudFrontRetrySchedule = Schedule.exponential("100 millis").pipe(
-  Schedule.both(Schedule.recurs(24)),
+const cappedCloudFrontRetrySchedule = Schedule.max([
+  Schedule.exponential("100 millis"),
+  Schedule.recurs(24),
+]).pipe(
   Schedule.map(([duration]) =>
     Duration.isGreaterThan(duration, Duration.seconds(2))
       ? Duration.seconds(2)

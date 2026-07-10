@@ -43,9 +43,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 
 // Bounded spaced schedule — caps total cold-start wait so a real failure
 // surfaces fast instead of riding to the vitest timeout.
-const ready = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
 const untilOk = <E, R>(

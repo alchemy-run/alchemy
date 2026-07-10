@@ -565,10 +565,10 @@ export const waitForOperations = (
               tag === "GatewayTimeout"
             );
           },
-          schedule: Schedule.both(
+          schedule: Schedule.max([
             Schedule.exponential(Duration.millis(500), 1.5),
             Schedule.recurs(60),
-          ),
+          ]),
         }),
         Effect.catchTag("OperationPending", () => Effect.void),
       );

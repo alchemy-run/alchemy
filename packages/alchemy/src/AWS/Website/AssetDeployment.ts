@@ -380,8 +380,10 @@ const retryForBucketReadiness = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: isMissingBucket,
-      schedule: Schedule.exponential("100 millis").pipe(
-        Schedule.both(Schedule.recurs(30)),
+      schedule: Schedule.max([
+        Schedule.exponential("100 millis"),
+        Schedule.recurs(30),
+      ]).pipe(
         Schedule.map(([duration]) =>
           Duration.isGreaterThan(duration, Duration.seconds(2))
             ? Duration.seconds(2)

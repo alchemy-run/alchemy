@@ -389,9 +389,10 @@ export const NetworkAclEntryProvider = () =>
             ),
             Effect.retry({
               while: (e) => e._tag === "EntryNotYetVisible",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("500 millis"),
+                Schedule.recurs(8),
+              ]),
             }),
             Effect.catchTag("EntryNotYetVisible", () =>
               Effect.fail(

@@ -384,9 +384,10 @@ const waitForAssignmentCreation = (instanceArn: string, requestId: string) =>
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "AssignmentCreationInProgress",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(120),
+      ]),
     }),
   );
 
@@ -418,8 +419,9 @@ const waitForAssignmentDeletion = (instanceArn: string, requestId: string) =>
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "AssignmentDeletionInProgress",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(120),
+      ]),
     }),
   );

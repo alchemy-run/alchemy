@@ -45,8 +45,6 @@ export const getDefaultVpc = Effect.gen(function* () {
 }).pipe(
   Effect.retry({
     while: (e) => e._tag === "DefaultVpcNotVisible",
-    schedule: Schedule.spaced("3 seconds").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
   }),
 );

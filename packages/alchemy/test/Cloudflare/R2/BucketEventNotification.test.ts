@@ -51,9 +51,10 @@ const expectGone = (accountId: string, bucketName: string, queueId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "NotificationNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

@@ -542,10 +542,10 @@ const getResults = Effect.fn(function* <T>(
     ),
     Effect.retry({
       while: (e) => e instanceof EmptyResults,
-      schedule: Schedule.both(
+      schedule: Schedule.max([
         Schedule.spaced(Duration.seconds(1)),
         Schedule.recurs(10),
-      ),
+      ]),
     }),
     Effect.orDie,
   );

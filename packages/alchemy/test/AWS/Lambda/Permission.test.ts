@@ -108,9 +108,7 @@ const getPolicyStatement = Effect.fn(function* (
       }),
     ),
     Effect.retry({
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });

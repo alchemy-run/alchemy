@@ -329,9 +329,10 @@ const waitForCreateAccount = (requestId: string) =>
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "CreateAccountInProgress",
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(120)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(120),
+      ]),
     }),
   );
 
@@ -341,8 +342,6 @@ const retryAccountManagement = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       while: (error: any) =>
         error?._tag === "TooManyRequestsException" ||
         error?._tag === "InternalServerException",
-      schedule: Schedule.exponential(200).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
   );

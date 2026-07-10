@@ -93,9 +93,10 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 
@@ -174,9 +175,10 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(18)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(18),
+          ]),
         }),
       );
 

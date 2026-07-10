@@ -414,9 +414,7 @@ const waitForStreamActive = (streamName: string) =>
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "StreamNotActive" || e._tag === "ParseError",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
     }),
   );
 
@@ -430,9 +428,7 @@ const waitForStreamDeleted = (streamName: string) =>
     Effect.retry({
       while: (e: { _tag: string }) =>
         e._tag === "StreamStillExists" || e._tag === "ParseError",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );

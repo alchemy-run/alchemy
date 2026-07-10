@@ -293,8 +293,9 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error) =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.fixed("10 seconds").pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("10 seconds"),
+        Schedule.recurs(60),
+      ]),
     }),
   );

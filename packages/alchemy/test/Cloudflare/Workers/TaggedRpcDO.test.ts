@@ -37,9 +37,10 @@ const requestTimeout = "5 seconds";
 // Cap exponential backoff at 3s so cold-start retries stay bounded when
 // CF edge propagation is slow.
 const readinessRetry = {
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.either(Schedule.spaced("3 seconds")),
-  ),
+  schedule: Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("3 seconds"),
+  ]),
   times: 15,
 } as const;
 
@@ -342,9 +343,10 @@ test(
         }),
       ),
       predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(30)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("2 seconds"),
+        Schedule.recurs(30),
+      ]),
     });
     expect(d1.value).toBe(2);
     expect(dox.value).toBe(1);

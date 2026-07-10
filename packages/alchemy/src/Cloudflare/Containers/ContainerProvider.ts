@@ -1035,10 +1035,10 @@ const resolveDurableObjectApplicationRecovery = ({
 // uncapped `Schedule.exponential(150)` reaches a ~76s single delay by the 10th
 // retry (~150s total), which both blows test budgets and needlessly stalls the
 // update→create fallback when the target is genuinely gone.
-const containerApplicationReadinessSchedule = Schedule.exponential(150).pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-  Schedule.both(Schedule.recurs(10)),
-);
+const containerApplicationReadinessSchedule = Schedule.max([
+  Schedule.min([Schedule.exponential(150), Schedule.spaced("3 seconds")]),
+  Schedule.recurs(10),
+]);
 
 const isContainerApplicationNotFound = (
   error: unknown,

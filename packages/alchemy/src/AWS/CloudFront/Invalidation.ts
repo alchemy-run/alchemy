@@ -110,9 +110,10 @@ export const InvalidationProvider = () =>
             ),
             Effect.retry({
               while: (error) => error._tag === "InvalidationInProgress",
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(120)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(120),
+              ]),
             }),
           );
       });

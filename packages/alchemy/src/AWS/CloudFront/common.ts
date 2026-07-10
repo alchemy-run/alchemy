@@ -27,8 +27,10 @@ const isKvsNotReady = (error: unknown) => {
   return tag === "ResourceNotFoundException" || tag === "ConflictException";
 };
 
-const cappedKvsRetrySchedule = Schedule.exponential("100 millis").pipe(
-  Schedule.both(Schedule.recurs(24)),
+const cappedKvsRetrySchedule = Schedule.max([
+  Schedule.exponential("100 millis"),
+  Schedule.recurs(24),
+]).pipe(
   Schedule.map(([duration]) =>
     Duration.isGreaterThan(duration, Duration.seconds(2))
       ? Duration.seconds(2)
