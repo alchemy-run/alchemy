@@ -463,7 +463,11 @@ describe("memory kernel × live Anthropic", () => {
             );
             return {
               outcome,
-              mathHalt: mathTrace[mathTrace.length - 1]!,
+              // the run's last TURN boundary (run.settled reports the
+              // dispatch exit — an interrupt is a successful settle)
+              mathHalt: [...mathTrace]
+                .reverse()
+                .find((event) => event.type === "turn.halted")!,
               elapsed,
             };
           }),
