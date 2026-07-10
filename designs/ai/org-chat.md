@@ -1,11 +1,18 @@
 # Org Chat — the autonomous Discord/Slack
 
-Status: **v1 built** (July 2026) — kinds (`AI.Process(name, definition)`,
-`AI.charter`/`AI.body`), `AI.topology`, conversation routing by target
-prefix, `run.settled` as the uniform run terminal, and the workspace UI
-(derived sidebar, Posts as runs, threads, DMs, authored reply bubbles)
-all landed; see `examples/agent-chat-web`. Threads-as-steering (R2),
-`steer_run` (R3 coordination), presence, and hosting remain open. Builds on [serving.md](./serving.md)
+Status: **v2 built** (July 2026). v1: kinds, `AI.topology`, conversation
+routing, `run.settled`, the workspace UI. v2 (the
+[reassessment](./reassess-proposal.md)) reshaped the model: coordinators
+are **deterministic by default** (`AI.process(term, handler)` — a
+routing classifier leaf + `Effect.all` fan-out + `ctx.post` relay, no
+LLM in the coordination path), the **prose Process charter is opt-in**
+for open-ended rooms, exits have **three sources** (model / machine /
+human — `#issues` uses `AI.until(IssueClosed)`), control refs render in
+prose, and `AI.value` gives dynamic prose within a static Req.
+`examples/agent-chat-web` is the tutorial: `#engineering` (code),
+`#support` (prose), `#issues` (machine exit). Threads-as-steering (R2),
+`steer_run` (R3), per-item exit correlation + re-admission, presence,
+and hosting remain open. Builds on [serving.md](./serving.md)
 and [chat-apps.md](./chat-apps.md). Companion rename landed first:
 `Loop` → **`Process`** (the agent-loop algebra already said Agent and
 Loop denote one object — a Process `In → Run<Out, Err>` — so the

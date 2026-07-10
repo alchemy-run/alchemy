@@ -1,11 +1,33 @@
 # Reassessment — the proposal (synthesis of five reports)
 
-Status: **proposal for approval** (July 2026). Synthesizes:
+Status: **BUILT** (July 2026). All of A–F landed, each tested and
+committed; the example is rebuilt as the tutorial (§E). Summary of
+what shipped:
+
+- **A** — control refs render in prose (`Render.ts` fixed; the halt
+  contract, budget ceilings, concurrency, and triggers now reach the
+  model where the author wrote them; zero constructor changes).
+- **B** — machine-observed exits: `AI.until(eventSource)` settles a
+  goal run on a world event (no `resolve` tool); one work round then
+  park. Per-item correlation, multi-round-before-park, steer-during-
+  park, and fold-seeded re-admission remain follow-ups.
+- **C** — `AI.process(term, handler)` + `ProcessContext`: deterministic
+  processes with the full ProcessService (mailbox, dispatch, triggers,
+  steer, interrupt, `run.settled`), the default coordinator form.
+- **D** — perpetual/goal doctrine lints (`AI.never` + check/fold/
+  budget/delegates), warnings pending fixture migration.
+- **E** — the example shows a channel three ways: deterministic
+  (`#engineering`), prose (`#support`), and a machine-observed goal
+  (`#issues`).
+- **F** — `AI.value(Tag)` dynamic prose (per-run tool exposure filter
+  deferred).
+
+Synthesizes:
 [deterministic orchestration](./reports/reassess-deterministic-orchestration.md),
 [exit conditions](./reports/reassess-exit-conditions.md),
 [control refs](./reports/reassess-control-refs.md),
 [perpetual vs goal](./reports/perpetual-vs-goal.md),
-[red team](./reports/reassess-red-team.md).
+[Process abstraction](./reports/reassess-process-abstraction.md).
 
 ## The one-paragraph verdict
 

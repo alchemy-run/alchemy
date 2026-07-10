@@ -692,6 +692,25 @@ The survey's most consistent finding, distilled to one rule: **occurrence is det
 
 Designed and tracked in **[designs/ai/serving.md](./serving.md)** — now **built** (Protocol schemas, the KernelEvent→chunk fold, ChatSessions, the AgentApi HTTP layer, and the `examples/agent-chat-web` proof, all live-tested). The one-paragraph summary: agents are served over the AI SDK v5 UI Message Stream protocol (SSE) so the existing frontend ecosystem (`useChat`, and later Cloudflare's `useAgentChat` via a transport swap) plugs in with zero client code; the kernel persists execution facts (the Trace) while the serving tier's conversation transcript is a *materialized view* of those facts (kernel stays session-free); the API only ever `send`s — a chat response is admission + a trace-subscription window, so disconnects kill the window and never the run, and reconnect is replay-from-cursor (the trace endpoint itself is durable-streams-shaped). Asks surface as `data-ask` parts (deliberately not the AI SDK's pre-execution approval part — a parked ask is mid-execution) answered via the control plane.
 
+### 2.11b Reassessment (July 2026) — deterministic-by-default, three exit sources
+
+After the first org-chat build, a five-report review
+([designs/ai/reassess-proposal.md](./reassess-proposal.md)) reshaped
+the model without changing the architecture (Agent and Process remain
+one object). What changed, all built: **coordination is deterministic
+by default** — `AI.process(term, handler)` lifts plain Effect code into
+a term's ProcessService, and the prose `Process` charter is the *opt-in*
+form for genuinely open-ended goal jobs; **control refs render in the
+prose** (the renderer was eliding them to empty strings — `AI.budget`
+was never shown to the model); **exits have three sources** — model-
+declared (`AI.until(schema)`), machine-observed (`AI.until(eventSource)`
+— the world settles the run, reconciler doctrine), human-declared;
+**perpetual = ring (derived) / goal = run**, with lints flagging the
+perpetual-LLM-coordinator anti-pattern; and **`AI.value(Tag)`** gives
+dynamic prose within a static `Req` upper bound. The vocabulary teaches
+common-first: Tool → Agent → Effect code → `AI.process` → the prose
+charter last.
+
 ### 2.11a Org Chat (the autonomous Discord/Slack)
 
 Proposed in **[designs/ai/org-chat.md](./org-chat.md)**: channels,
