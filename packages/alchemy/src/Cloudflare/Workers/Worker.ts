@@ -435,7 +435,10 @@ export interface WorkerProps<
    * Set this to `true` to confirm the deletion: Alchemy then performs the move
    * as two uploads (Cloudflare rejects doing both at once) — first removing the
    * cross-script binding while applying the delete-class migration, then
-   * re-attaching the full binding set.
+   * re-attaching the full binding set. Between the two uploads there is a
+   * brief window where the moved binding is absent — in-flight requests that
+   * use it will fail; the same window exists when performing the move
+   * manually across two deploys.
    *
    * Only affects the transition where the class leaves this Worker; it never
    * deletes classes the Worker still hosts locally.

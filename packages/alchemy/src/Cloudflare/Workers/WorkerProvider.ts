@@ -50,12 +50,14 @@ export class DurableObjectClassMoved extends Data.TaggedError(
   "DurableObjectClassMoved",
 )<{
   scriptName: string;
-  classNames: string[];
+  movedClasses: { className: string; scriptName: string }[];
 }> {
   override get message(): string {
-    const classes = this.classNames.map((c) => `'${c}'`).join(", ");
+    const moves = this.movedClasses
+      .map((m) => `'${m.className}' (now hosted on '${m.scriptName}')`)
+      .join(", ");
     return [
-      `Durable Object class ${classes} moved from Worker '${this.scriptName}' to another script (now a cross-script binding with 'scriptName' set), and is being removed from '${this.scriptName}'.`,
+      `Durable Object class ${moves} moved from Worker '${this.scriptName}' to another script — the binding is now a cross-script reference — and the class is being removed from '${this.scriptName}'.`,
       `Durable Object storage does NOT transfer when a class moves: the new host starts with a fresh, empty namespace, while the namespace on '${this.scriptName}' still holds all of its data. Deploying this change applies a delete-class migration that permanently destroys that namespace and every object stored in it. This cannot be undone.`,
       `If the data is disposable (or you have already migrated it), opt in explicitly by setting 'deleteMovedDurableObjectClasses: true' on Worker '${this.scriptName}'. Alchemy will then remove the binding and delete the class in two separate uploads, as Cloudflare requires.`,
       `To keep the data, either keep the class defined on '${this.scriptName}', or perform the move manually across two deploys (first remove the binding, then re-add it as a cross-script reference).`,
@@ -1561,12 +1563,8 @@ export const LiveWorkerProvider = () =>
         //
         // That rejection is a safety interlock: Durable Object storage does
         // NOT move with the class — the new host gets a fresh, empty namespace
-        // and the old namespace on THIS worker still holds all its data.
-        // Silently splitting the upload would turn an innocent-looking topology
-        // refactor into irreversible deletion of that data. So by default we
-        // fail loudly with guidance; only an explicit per-worker opt-in
-        // (`deleteMovedDurableObjectClasses`) performs the destructive
-        // two-phase upload.
+        // and the old namespace on THIS worker still holds all its data, which
+        // the delete-class migration irreversibly destroys.
         const conflictingCrossScriptBindings =
           getConflictingCrossScriptDoBindings(
             metadataBindings,
@@ -1580,8 +1578,13 @@ export const LiveWorkerProvider = () =>
           return yield* Effect.fail(
             new DurableObjectClassMoved({
               scriptName: name,
-              classNames: Array.from(
-                new Set(conflictingCrossScriptBindings.map((b) => b.className)),
+              movedClasses: Array.from(
+                new Map(
+                  conflictingCrossScriptBindings.map((b) => [
+                    `${b.className} ${b.scriptName}`,
+                    { className: b.className, scriptName: b.scriptName },
+                  ]),
+                ).values(),
               ),
             }),
           );
@@ -1646,15 +1649,17 @@ export const LiveWorkerProvider = () =>
         // omits the conflicting cross-script bindings so Cloudflare accepts the
         // class delete; otherwise it is the normal single upload with the full
         // binding set.
-        const conflictingBindingSet = new Set<unknown>(
-          conflictingCrossScriptBindings,
-        );
+        // Widened to the metadata element type so `.includes` accepts any
+        // binding (the conflict list is narrowed by the type-guard filter).
+        const conflictingBindings: ReadonlyArray<
+          (typeof metadataBindings)[number]
+        > = conflictingCrossScriptBindings;
         let worker = yield* uploadWithTagRetry(
           isTwoPhaseDoMove
             ? {
                 ...metadata,
                 bindings: metadataBindings.filter(
-                  (b) => !conflictingBindingSet.has(b),
+                  (b) => !conflictingBindings.includes(b),
                 ),
               }
             : metadata,

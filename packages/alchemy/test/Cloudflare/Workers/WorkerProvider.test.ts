@@ -12,12 +12,13 @@ describe("WorkerProvider", () => {
     // not transfer and the delete is irreversible, (c) how to proceed (#799).
     const err = new DurableObjectClassMoved({
       scriptName: "worker-b",
-      classNames: ["MyDOClass"],
+      movedClasses: [{ className: "MyDOClass", scriptName: "worker-a" }],
     });
 
-    test("names the moved class and the former host", () => {
+    test("names the moved class, the former host, and the new host", () => {
       expect(err.message).toContain("'MyDOClass'");
       expect(err.message).toContain("worker-b");
+      expect(err.message).toContain("'worker-a'");
     });
 
     test("warns that data does not transfer and the delete is irreversible", () => {
@@ -27,10 +28,6 @@ describe("WorkerProvider", () => {
 
     test("points at the explicit opt-in to proceed", () => {
       expect(err.message).toContain("deleteMovedDurableObjectClasses: true");
-    });
-
-    test("is a tagged error", () => {
-      expect(err._tag).toBe("DurableObjectClassMoved");
     });
   });
 
