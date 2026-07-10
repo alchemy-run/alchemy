@@ -178,6 +178,40 @@ export const foldEvent = (
       break;
     }
 
+    case "child.started":
+    case "child.completed":
+    case "child.failed": {
+      const runId = String(payload.runId ?? event.cause ?? event.id);
+      chunks.push({
+        type: "data-run",
+        id: runId,
+        data: {
+          runId,
+          agent: String(payload.agent ?? "agent"),
+          status:
+            event.type === "child.started"
+              ? "running"
+              : event.type === "child.completed"
+                ? "completed"
+                : "failed",
+          ...(event.type === "child.failed" && {
+            error: String(payload.error ?? "child run failed"),
+          }),
+        },
+      });
+      break;
+    }
+
+    case "run.resolved":
+      if (payload.deterministic === true) {
+        chunks.push({
+          type: "data-resolution",
+          id: event.id,
+          data: { summary: String(payload.value ?? "resolved") },
+        });
+      }
+      break;
+
     case "ask.requested": {
       const askId = String(payload.askId);
       chunks.push({
@@ -376,6 +410,20 @@ export const chunksToMessage = (
       case "data-message":
         touch(`msg:${chunk.id}`, {
           type: "data-message",
+          id: chunk.id,
+          data: chunk.data,
+        });
+        break;
+      case "data-run":
+        touch(`run:${chunk.id}`, {
+          type: "data-run",
+          id: chunk.id,
+          data: chunk.data,
+        });
+        break;
+      case "data-resolution":
+        touch(`resolution:${chunk.id}`, {
+          type: "data-resolution",
           id: chunk.id,
           data: chunk.data,
         });

@@ -127,15 +127,16 @@ export const EngineeringLive = AI.process(Engineering, (post, ctx) =>
     yield* ctx.emit("routing", routed);
 
     // deterministic fan-out + relay — the coordination path has no LLM
+    const selected = [...new Set(routed.members)];
     yield* Effect.forEach(
-      routed.members,
+      selected,
       (name) =>
-        members[name].dispatch(formatPost(post)).pipe(
+        ctx.run(name, members[name].dispatch(formatPost(post))).pipe(
           Effect.flatMap((answer) => ctx.post(name, completedText(answer))),
         ),
       { concurrency: "unbounded" },
     );
-    return `resolved by ${routed.members.join(", ")}`;
+    return `resolved by ${selected.join(", ")}`;
   }),
 );
 

@@ -26,4 +26,17 @@ export interface ProcessContext {
    * the speaker's name (a member agent, or the coordinator itself).
    */
   post(author: string, text: string): Effect.Effect<void>;
+  /**
+   * Run one named child task with parent-side lifecycle facts.
+   *
+   * Emits `child.started` immediately, then `child.completed` or
+   * `child.failed` with one stable run id. The serving fold reconciles
+   * those rows into a clickable `data-run` pill; clicking follows the
+   * child's own ring in the inspector while its final result is later
+   * posted into the thread via `ctx.post`.
+   */
+  run<A, E, R>(
+    agent: string,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, R>;
 }

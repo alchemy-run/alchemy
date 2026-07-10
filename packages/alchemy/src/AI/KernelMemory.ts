@@ -1419,29 +1419,66 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
           policy,
           triggers: triggerStreams,
           runItem: (item, run) => {
-            const ctx: ProcessContext = {
-              emit: (type, payload) =>
-                Effect.asVoid(
-                  run.emitRow(
-                    run.session,
-                    type,
-                    run.session,
-                    "handler",
-                    payload,
-                  ),
-                ),
-              post: (author, text) =>
-                Effect.asVoid(
-                  run.emitRow(
-                    run.session,
-                    "message.posted",
-                    run.session,
-                    "message",
-                    { author, text },
-                  ),
-                ),
+            let ordinal = 0;
+            const emit = (type: string, payload?: unknown) => {
+              const id = `${run.session}:handler:${ordinal++}`;
+              return Effect.asVoid(
+                run.emitRow(run.session, type, id, type, payload),
+              );
             };
-            return handler(item, ctx);
+            const ctx: ProcessContext = {
+              emit,
+              post: (author, text) => emit("message.posted", { author, text }),
+              run: <A, E, R>(
+                agent: string,
+                effect: Effect.Effect<A, E, R>,
+              ): Effect.Effect<A, E, R> =>
+                Effect.gen(function* () {
+                  const runId = `${run.session}:child:${ordinal++}`;
+                  yield* Effect.asVoid(
+                    run.emitRow(
+                      run.session,
+                      "child.started",
+                      runId,
+                      "started",
+                      { runId, agent },
+                    ),
+                  );
+                  const result = yield* Effect.result(effect);
+                  if (Result.isSuccess(result)) {
+                    yield* Effect.asVoid(
+                      run.emitRow(
+                        run.session,
+                        "child.completed",
+                        runId,
+                        "completed",
+                        { runId, agent },
+                      ),
+                    );
+                    return result.success;
+                  }
+                  yield* Effect.asVoid(
+                    run.emitRow(run.session, "child.failed", runId, "failed", {
+                      runId,
+                      agent,
+                      error: toPromptText(
+                        (result as Result.Failure<A, E>).failure,
+                      ),
+                    }),
+                  );
+                  return yield* Effect.fail(
+                    (result as Result.Failure<A, E>).failure,
+                  );
+                }),
+            };
+            return handler(item, ctx).pipe(
+              Effect.tap((value) =>
+                emit("run.resolved", {
+                  value,
+                  deterministic: true,
+                }),
+              ),
+            );
           },
         });
         return service;

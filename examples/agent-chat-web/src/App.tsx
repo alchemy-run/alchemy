@@ -218,6 +218,49 @@ function MessagePart({
     const data = (part as { data: { author: string; text: string } }).data;
     return <AuthoredReply author={data.author} text={data.text} />;
   }
+  if (part.type === "data-run") {
+    const data = (
+      part as {
+        data: {
+          agent: string;
+          status: "running" | "completed" | "failed";
+          error?: string;
+        };
+      }
+    ).data;
+    return (
+      <button
+        type="button"
+        onClick={() => openInspector(data.agent)}
+        className="my-1 flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted-foreground hover:bg-accent"
+        title={`Inspect ${data.agent}'s run`}
+      >
+        {data.status === "running" ? (
+          <Spinner className="size-3" />
+        ) : (
+          <CheckCircleIcon
+            className={`size-3 ${data.status === "failed" ? "text-red-600" : "text-green-600"}`}
+          />
+        )}
+        {data.status === "running"
+          ? `${data.agent} is working…`
+          : data.status === "failed"
+            ? `${data.agent} failed`
+            : `${data.agent} finished`}
+      </button>
+    );
+  }
+  if (part.type === "data-resolution") {
+    const summary = (part as { data: { summary: string } }).data.summary;
+    return (
+      <Marker role="status" className="my-1">
+        <MarkerIcon>
+          <CheckCircleIcon className="size-3 text-green-600" />
+        </MarkerIcon>
+        <MarkerContent>{`resolved: ${summary}`}</MarkerContent>
+      </Marker>
+    );
+  }
   if (part.type === "data-ask") {
     return (
       <AskCard key={(part as { id?: string }).id} data={part.data as AskData} />
@@ -679,7 +722,10 @@ export function App() {
   const [showTrace, setShowTrace] = useState(false);
   // the run inspector: which agent's ring the right sidebar follows
   const [inspecting, setInspecting] = useState<string | undefined>();
-  openInspector = (agent) => setInspecting(agent);
+  openInspector = (agent) => {
+    setShowTrace(false);
+    setInspecting(agent);
+  };
 
   const refreshChats = () =>
     fetch("/api/chats")
@@ -723,7 +769,10 @@ export function App() {
           variant={showTrace ? "secondary" : "ghost"}
           size="sm"
           className="h-7 gap-1.5 text-xs"
-          onClick={() => setShowTrace((current) => !current)}
+          onClick={() => {
+            setInspecting(undefined);
+            setShowTrace((current) => !current);
+          }}
         >
           <ActivityIcon className="size-3.5" />
           trace
@@ -810,14 +859,14 @@ export function App() {
 
         {inspecting !== undefined && (
           <TracePanel
-            key={inspecting}
+            key={`inspector:${inspecting}`}
             ring={inspecting}
             title={`${inspecting}'s run`}
             onClose={() => setInspecting(undefined)}
           />
         )}
         {showTrace && selection !== undefined && (
-          <TracePanel key={selection.name} ring={selection.name} />
+          <TracePanel key={`trace:${selection.name}`} ring={selection.name} />
         )}
       </div>
     </div>

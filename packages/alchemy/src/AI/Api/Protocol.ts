@@ -111,6 +111,25 @@ export const DataMessageChunk = S.Struct({
   data: S.Struct({ author: S.String, text: S.String }),
 });
 
+/** A deterministic coordinator's child-agent lifecycle (clickable pill). */
+export const DataRunChunk = S.Struct({
+  type: S.tag("data-run"),
+  id: S.String,
+  data: S.Struct({
+    runId: S.String,
+    agent: S.String,
+    status: S.Literals(["running", "completed", "failed"]),
+    error: S.optionalKey(S.String),
+  }),
+});
+
+/** A deterministic process handler's final resolution. */
+export const DataResolutionChunk = S.Struct({
+  type: S.tag("data-resolution"),
+  id: S.String,
+  data: S.Struct({ summary: S.String }),
+});
+
 export const DataAskChunk = S.Struct({
   type: S.tag("data-ask"),
   id: S.String,
@@ -144,6 +163,8 @@ export const UIMessageChunk = S.Union([
   ToolOutputAvailableChunk,
   ToolOutputErrorChunk,
   DataMessageChunk,
+  DataRunChunk,
+  DataResolutionChunk,
   DataAskChunk,
   ErrorChunk,
 ]);

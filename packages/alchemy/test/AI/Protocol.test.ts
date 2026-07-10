@@ -89,6 +89,19 @@ describe("the UI message stream wire format", () => {
     );
     expect(
       sseFrame({
+        type: "data-run",
+        id: "run-1",
+        data: {
+          runId: "run-1",
+          agent: "Sage",
+          status: "running",
+        },
+      }),
+    ).toBe(
+      'data: {"type":"data-run","id":"run-1","data":{"runId":"run-1","agent":"Sage","status":"running"}}\n\n',
+    );
+    expect(
+      sseFrame({
         type: "data-ask",
         id: "ask-1",
         data: {

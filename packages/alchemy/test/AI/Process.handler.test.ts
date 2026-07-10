@@ -118,8 +118,12 @@ describe("AI.process — deterministic handler", () => {
 
   it.effect("the handler's run writes admitted/settled to the Trace", () =>
     Effect.gen(function* () {
-      const DeskLive = AI.process(Desk, (item) =>
-        Effect.succeed(`ack: ${String(item)}`),
+      const DeskLive = AI.process(Desk, (item, ctx) =>
+        Effect.gen(function* () {
+          const child = yield* ctx.run("Sage", Effect.succeed("child answer"));
+          yield* ctx.post("Sage", child);
+          return `ack: ${String(item)}`;
+        }),
       );
       // the kernel Layer still requires a model even though this handler
       // never calls one — provide an (unused) scripted model
@@ -146,6 +150,9 @@ describe("AI.process — deterministic handler", () => {
       );
       const types = trace.map((e) => e.type);
       expect(types[0]).toBe("run.admitted");
+      expect(types).toContain("child.started");
+      expect(types).toContain("child.completed");
+      expect(types).toContain("message.posted");
       expect(types.at(-1)).toBe("run.settled");
       expect((trace[0]!.payload as any).item).toBe("hello");
     }),
