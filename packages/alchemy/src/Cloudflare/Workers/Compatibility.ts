@@ -53,17 +53,22 @@ export const getCompatibility = (props: WorkerProps) => {
       // `export default { fetch }` entrypoints, vite builds) routinely import
       // `node:*` built-ins. Without it the bundle uploads fine but Cloudflare
       // rejects the script with `No such module "node:crypto"` (#796).
+      // An explicit `no_nodejs_compat` opts out of the default — appending
+      // `nodejs_compat` alongside it would send Cloudflare a contradictory
+      // flag pair.
+      ...(userFlags.includes("no_nodejs_compat")
+        ? []
+        : props.isExternal
+          ? // ISO dates compare lexically.
+            date >= NODEJS_COMPAT_V2_DATE
+            ? ["nodejs_compat"]
+            : []
+          : ["nodejs_compat"]),
       ...(props.isExternal
-        ? // ISO dates compare lexically.
-          date >= NODEJS_COMPAT_V2_DATE
-          ? ["nodejs_compat"]
-          : []
-        : [
-            "nodejs_compat",
-            ...(date < CROSS_REQUEST_PROMISE_RESOLUTION_DEFAULT_ON
-              ? [CROSS_REQUEST_PROMISE_RESOLUTION]
-              : []),
-          ]),
+        ? []
+        : date < CROSS_REQUEST_PROMISE_RESOLUTION_DEFAULT_ON
+          ? [CROSS_REQUEST_PROMISE_RESOLUTION]
+          : []),
     ].filter((value, index, self) => self.indexOf(value) === index),
   };
 };

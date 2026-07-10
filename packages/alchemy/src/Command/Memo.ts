@@ -21,6 +21,10 @@ export interface MemoOptions {
    * monorepo where the build consumes sibling workspace packages that the
    * default (files under the working directory) does not cover.
    *
+   * Note: providing `include` (or `exclude`) flips the {@link lockfile}
+   * default to `false` — pair it with `lockfile: true` to keep rebuilding
+   * when dependencies change.
+   *
    * @default ["**\/*"] (all files, filtered by `exclude`)
    * @example ["src/**", "package.json", "tsconfig.json"]
    * @example ["**\/*", "../env/src/**"] (also rebuild when a sibling workspace package changes)

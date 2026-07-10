@@ -175,7 +175,8 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * The default scope only hashes files under `cwd` (plus the nearest
  * lockfile), so edits to a sibling workspace package the app imports do
  * not retrigger the build on their own. Add the sibling's sources with a
- * `../` include glob:
+ * `../` include glob — and keep `lockfile: true`, since providing
+ * `include` otherwise drops the lockfile from the hash:
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Web", {
  *   cwd: "apps/web",
@@ -184,6 +185,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *   main: "./src/worker.ts",
  *   memo: {
  *     include: ["**\/*", "../../packages/env/src/**"],
+ *     lockfile: true,
  *   },
  * });
  * ```
@@ -310,11 +312,12 @@ const makeStaticSite = <
  *   construction — passing it through unresolved would hand the subprocess
  *   the JSON-serialized `Config` object (`{"_id":"Config"}`) instead of its
  *   value (#796)
- * - `Output` references pass through raw; `Command.Build`/`Command.Dev`
- *   declare `env` as plain strings so the engine resolves them at reconcile
+ * - `Output` references resolve at reconcile; the resolved value is
+ *   serialized the same way inline values are (an `Output<object>` must
+ *   reach the subprocess as JSON, not `[object Object]`)
  * - binding Effects (`~alchemy/Kind`-marked, e.g. a `WorkerLoader`) have no
  *   env-var representation and are dropped
- * - remaining plain values (numbers, JSON objects) are stringified
+ * - remaining plain values (`null`, numbers, JSON objects) are stringified
  */
 const serializeEnv = Effect.fn(function* (
   env: Input<
@@ -326,20 +329,19 @@ const serializeEnv = Effect.fn(function* (
   const entries: [string, unknown][] = [];
   for (const [k, v] of Object.entries(env ?? {})) {
     if (v === undefined) continue;
-    if (typeof v === "string" || Redacted.isRedacted(v) || Output.isOutput(v)) {
+    if (typeof v === "string" || Redacted.isRedacted(v)) {
       entries.push([k, v]);
+    } else if (Output.isOutput(v)) {
+      entries.push([k, Output.map(v, serializeEnvValue)]);
     } else if (isYieldableEffectLike(v)) {
-      const resolved = yield* asEffect(
-        v as YieldableEffectLike<unknown, unknown, never>,
-      ).pipe(Effect.orDie);
+      const resolved = serializeEnvValue(
+        yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(
+          Effect.orDie,
+        ),
+      );
       if (resolved === undefined) continue;
-      entries.push([
-        k,
-        typeof resolved === "string" || Redacted.isRedacted(resolved)
-          ? resolved
-          : JSON.stringify(resolved),
-      ]);
-    } else if (typeof v === "object" && "~alchemy/Kind" in (v as object)) {
+      entries.push([k, resolved]);
+    } else if (v !== null && typeof v === "object" && "~alchemy/Kind" in v) {
       // A binding Effect (e.g. WorkerLoader) — deploy-time only, nothing to
       // expose to the build subprocess.
       continue;
@@ -352,3 +354,18 @@ const serializeEnv = Effect.fn(function* (
     string | Redacted.Redacted<string>
   >;
 });
+
+/**
+ * Serialize one resolved env value for the build/dev subprocess: strings and
+ * `Redacted` pass through, everything else becomes JSON.
+ */
+const serializeEnvValue = (
+  value: unknown,
+): string | Redacted.Redacted<string> | undefined =>
+  value === undefined
+    ? undefined
+    : typeof value === "string"
+      ? value
+      : Redacted.isRedacted(value)
+        ? (value as Redacted.Redacted<string>)
+        : JSON.stringify(value);

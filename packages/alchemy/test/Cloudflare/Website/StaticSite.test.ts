@@ -1,9 +1,12 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Command from "@/Command/index.ts";
+import * as Output from "@/Output.ts";
 import { Stack } from "@/Stack";
 import { type ResourceState, State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -555,6 +558,95 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+test.provider(
+  "StaticSite: build env resolves Config, Output, and JSON values (#796)",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      // A build that snapshots the env vars it receives into its output.
+      const cwd = yield* fs.makeTempDirectory({
+        prefix: "alchemy-staticsite-env-",
+      });
+      yield* fs.writeFileString(
+        path.join(cwd, "build.sh"),
+        [
+          "#!/bin/bash",
+          "set -euo pipefail",
+          "mkdir -p dist",
+          "{",
+          '  echo "FROM_STRING=${FROM_STRING:-missing}"',
+          '  echo "FROM_CONFIG=${FROM_CONFIG:-missing}"',
+          '  echo "FROM_OUTPUT=${FROM_OUTPUT:-missing}"',
+          '  echo "FROM_OUTPUT_OBJECT=${FROM_OUTPUT_OBJECT:-missing}"',
+          '  echo "FROM_NULL=${FROM_NULL:-missing}"',
+          "} > dist/env.txt",
+        ].join("\n"),
+      );
+
+      // A sibling resource whose attributes provide real `Output` values.
+      const depCwd = yield* fs.makeTempDirectory({
+        prefix: "alchemy-staticsite-env-dep-",
+      });
+      yield* fs.writeFileString(
+        path.join(depCwd, "build.sh"),
+        "#!/bin/bash\nmkdir -p dist\necho dep > dist/dep.txt\n",
+      );
+
+      yield* Effect.sync(() => {
+        process.env.STATICSITE_ENV_TEST = "from-config";
+      });
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const dep = yield* Command.Build("EnvDep", {
+            command: "bash build.sh",
+            shell: true,
+            cwd: depCwd,
+            outdir: "dist",
+          });
+          return yield* Cloudflare.Website.StaticSite("EnvSite", {
+            command: "bash build.sh",
+            shell: true,
+            cwd,
+            outdir: "dist",
+            url: false,
+            env: {
+              FROM_STRING: "plain",
+              FROM_CONFIG: Config.string("STATICSITE_ENV_TEST"),
+              FROM_OUTPUT: dep.outdir,
+              FROM_OUTPUT_OBJECT: Output.map(dep.outdir, (dir) => ({ dir })),
+              // JS callers can pass `null`; it must serialize, not throw.
+              FROM_NULL: null as unknown as string,
+            },
+          });
+        }),
+      );
+
+      const envFile = yield* fs.readFileString(
+        path.join(cwd, "dist", "env.txt"),
+      );
+      expect(envFile).toContain("FROM_STRING=plain");
+      expect(envFile).toContain("FROM_CONFIG=from-config");
+      // Resolved Output<string> — the dep's outdir path, not garbage.
+      const fromOutput = envFile.match(/FROM_OUTPUT=(.*)/)?.[1];
+      expect(fromOutput).toBeDefined();
+      expect(fromOutput).not.toBe("missing");
+      expect(fromOutput).toContain("dist");
+      expect(fromOutput).not.toContain("[object");
+      // Resolved Output<object> — serialized as JSON.
+      const fromOutputObject = envFile.match(/FROM_OUTPUT_OBJECT=(.*)/)?.[1];
+      expect(fromOutputObject).toContain('{"dir":');
+      expect(envFile).toContain("FROM_NULL=null");
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 360_000 },
 );

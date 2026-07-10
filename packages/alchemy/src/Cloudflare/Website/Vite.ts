@@ -144,12 +144,14 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * The default scope only hashes files under the project root (plus the
  * nearest lockfile), so edits to a sibling workspace package the app
  * imports do not retrigger the build on their own. Add the sibling's
- * sources with a `../` include glob:
+ * sources with a `../` include glob — and keep `lockfile: true`, since
+ * providing `include` otherwise drops the lockfile from the hash:
  * ```typescript
  * const site = yield* Cloudflare.Website.Vite("Web", {
  *   rootDir: "apps/web",
  *   memo: {
  *     include: ["**\/*", "../../packages/env/src/**"],
+ *     lockfile: true,
  *   },
  * });
  * ```
