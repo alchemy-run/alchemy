@@ -22,8 +22,8 @@ export default Alchemy.Stack(
       branchId: branch.branchId,
       databaseId: postgres.databaseId,
       connectionId: connection.connectionId,
-      computeServiceId: api.computeServiceId,
-      computeVersionId: api.computeVersionId,
+      appId: api.appId,
+      deploymentId: api.deploymentId,
       url: api.url,
     };
   }),

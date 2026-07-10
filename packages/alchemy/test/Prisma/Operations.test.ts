@@ -48,34 +48,9 @@ const expectedOperationHelpers = [
   "createBranch",
   "updateBranch",
   "deleteBranch",
-  "listComputeServices",
-  "listProjectComputeServices",
-  "getComputeService",
-  "createComputeService",
-  "createProjectComputeService",
-  "updateComputeService",
-  "deleteComputeService",
-  "promoteComputeService",
-  "rollbackComputeService",
-  "listComputeServiceDomains",
-  "createComputeServiceDomain",
   "getCustomDomain",
   "deleteCustomDomain",
   "retryCustomDomain",
-  "listComputeVersions",
-  "listServiceComputeVersions",
-  "getComputeVersion",
-  "getComputeServiceVersion",
-  "createComputeVersion",
-  "createServiceComputeVersion",
-  "deleteComputeVersion",
-  "deleteComputeServiceVersion",
-  "startComputeVersion",
-  "startComputeServiceVersion",
-  "stopComputeVersion",
-  "stopComputeServiceVersion",
-  "getComputeVersionLogsRequest",
-  "getComputeVersionLogsUrl",
   "listApps",
   "getApp",
   "createApp",
@@ -91,8 +66,8 @@ const expectedOperationHelpers = [
   "deleteDeployment",
   "startDeployment",
   "stopDeployment",
-  "getDeploymentLogsUrl",
-  "getBuildLogsUrl",
+  "getDeploymentLogsRequest",
+  "getBuildLogsRequest",
   "listEnvironmentVariables",
   "getEnvironmentVariable",
   "createEnvironmentVariable",
@@ -105,7 +80,6 @@ const expectedOperationHelpers = [
   "revokeWorkspaceIntegration",
   "listScmInstallations",
   "createScmInstallIntent",
-  "connectScmInstallation",
   "listScmInstallationRepositories",
   "listSourceRepositories",
   "getSourceRepository",
@@ -152,8 +126,9 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.createDatabase({ projectId: "project-1" });
       yield* Prisma.createProjectDatabase("project-1", {
         region: "us-east-1",
-        fromDatabase: {
-          id: "database-source",
+        source: {
+          type: "backup",
+          databaseId: "database-source",
           backupId: "backup-1",
         },
       });
@@ -189,48 +164,9 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.updateBranch("branch-1", { isDefault: true });
       yield* Prisma.deleteBranch("branch-1");
 
-      yield* Prisma.listComputeServices({ projectId: "project-1" });
-      yield* Prisma.listProjectComputeServices("project-1", { limit: 1 });
-      yield* Prisma.getComputeService("service-1");
-      yield* Prisma.createComputeService({
-        projectId: "project-1",
-        displayName: "api",
-      });
-      yield* Prisma.createProjectComputeService("project-1", {
-        displayName: "api",
-      });
-      yield* Prisma.updateComputeService("service-1", {
-        displayName: "renamed",
-      });
-      yield* Prisma.deleteComputeService("service-1");
-      yield* Prisma.promoteComputeService("service-1", "version-1");
-      yield* Prisma.rollbackComputeService("service-1", "version-1");
-      yield* Prisma.listComputeServiceDomains("service-1");
-      yield* Prisma.createComputeServiceDomain("service-1", {
-        hostname: "api.example.com",
-      });
       yield* Prisma.getCustomDomain("domain-1");
       yield* Prisma.deleteCustomDomain("domain-1");
       yield* Prisma.retryCustomDomain("domain-1");
-
-      yield* Prisma.listComputeVersions({ computeServiceId: "service-1" });
-      yield* Prisma.listServiceComputeVersions("service-1", { limit: 1 });
-      yield* Prisma.getComputeVersion("version-1");
-      yield* Prisma.getComputeServiceVersion("version-1");
-      yield* Prisma.createComputeVersion({ computeServiceId: "service-1" });
-      yield* Prisma.createServiceComputeVersion("service-1", {
-        skipCodeUpload: true,
-      });
-      yield* Prisma.deleteComputeVersion("version-1");
-      yield* Prisma.deleteComputeServiceVersion("version-1");
-      yield* Prisma.startComputeVersion("version-1");
-      yield* Prisma.startComputeServiceVersion("version-1");
-      yield* Prisma.stopComputeVersion("version-1");
-      yield* Prisma.stopComputeServiceVersion("version-1");
-      yield* Prisma.getComputeVersionLogsRequest("version-1", { tail: 10 });
-      yield* Prisma.getComputeVersionLogsUrl("version-1", {
-        fromStart: true,
-      });
 
       yield* Prisma.listApps({ projectId: "project-1" });
       yield* Prisma.getApp("app-1");
@@ -247,8 +183,8 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.deleteDeployment("deployment-1");
       yield* Prisma.startDeployment("deployment-1");
       yield* Prisma.stopDeployment("deployment-1");
-      yield* Prisma.getDeploymentLogsUrl("deployment-1", { tail: 10 });
-      yield* Prisma.getBuildLogsUrl("build-1");
+      yield* Prisma.getDeploymentLogsRequest("deployment-1", { tail: 10 });
+      yield* Prisma.getBuildLogsRequest("build-1", { follow: true });
 
       yield* Prisma.listEnvironmentVariables({ projectId: "project-1" });
       yield* Prisma.getEnvironmentVariable("env-1");
@@ -270,9 +206,6 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.listScmInstallations({ workspaceId: "workspace-1" });
       yield* Prisma.createScmInstallIntent({
         provider: "github",
-        workspaceId: "workspace-1",
-      });
-      yield* Prisma.connectScmInstallation("scminstall-1", {
         workspaceId: "workspace-1",
       });
       yield* Prisma.listScmInstallationRepositories("scminstall-1", {

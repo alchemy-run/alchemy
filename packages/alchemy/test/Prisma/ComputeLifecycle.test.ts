@@ -1,1163 +1,438 @@
-import {
-  destroyComputeProject,
-  destroyComputeService,
-  destroyComputeVersion,
-} from "@/Prisma/ComputeLifecycle";
 import { PrismaApiError, type PrismaManagementClient } from "@/Prisma/Client";
+import {
+  destroyApp,
+  destroyDeployment,
+  destroyProjectApps,
+  waitForDeploymentStatus,
+} from "@/Prisma/ComputeLifecycle";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
-const makeClient = () => {
-  const statuses = new Map([
-    ["version-running", "running"],
-    ["version-stopped", "stopped"],
-  ]);
-  const calls: string[] = [];
-  const client = {
-    listServiceComputeVersions: (serviceId: string) =>
-      Effect.sync(() => {
-        calls.push(`list:${serviceId}`);
-        return Array.from(statuses.keys()).map((id) => ({
-          id,
-          type: "compute-version" as const,
-          url: `https://api.test/${id}`,
-          foundryVersionId: `foundry-${id}`,
-          createdAt: "2026-01-01T00:00:00Z",
-        }));
-      }),
-    getComputeServiceVersion: (versionId: string) =>
-      Effect.sync(() => {
-        calls.push(`get:${versionId}`);
-        return {
-          id: versionId,
-          type: "compute-version" as const,
-          url: `https://api.test/${versionId}`,
-          foundryVersionId: `foundry-${versionId}`,
-          status: statuses.get(versionId),
-          previewDomain: `${versionId}.example.test`,
-          createdAt: "2026-01-01T00:00:00Z",
-        };
-      }),
-    stopComputeServiceVersion: (versionId: string) =>
-      Effect.sync(() => {
-        calls.push(`stop:${versionId}`);
-        statuses.set(versionId, "stopped");
-      }),
-    deleteComputeServiceVersion: (versionId: string) =>
-      Effect.sync(() => {
-        calls.push(`delete:${versionId}`);
-        statuses.delete(versionId);
-      }),
-    deleteComputeVersion: (versionId: string) =>
-      Effect.sync(() => {
-        calls.push(`delete-global:${versionId}`);
-        statuses.delete(versionId);
-      }),
-    deleteComputeService: (serviceId: string) =>
-      Effect.sync(() => {
-        calls.push(`delete-service:${serviceId}`);
-      }),
-  } as unknown as PrismaManagementClient;
-  return { client, calls };
-};
+const apiError = (
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  status: number,
+) => new PrismaApiError({ method, path, status, message: `HTTP ${status}` });
 
-describe("Prisma Compute lifecycle helpers", () => {
-  it.effect("treats an already-deleted compute version as absent", () =>
-    Effect.gen(function* () {
-      const calls: string[] = [];
-      const client = {
-        getComputeServiceVersion: (versionId: string) =>
-          Effect.gen(function* () {
-            calls.push(`get:${versionId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: `/v1/compute-services/versions/${versionId}`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-          }),
-        getComputeVersion: (versionId: string) =>
-          Effect.gen(function* () {
-            calls.push(`get-global:${versionId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: `/v1/versions/${versionId}`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-          }),
-      } as unknown as PrismaManagementClient;
+const deployment = (id: string, status: string) => ({
+  id,
+  type: "deployment" as const,
+  url: `https://api.prisma.test/v1/deployments/${id}`,
+  foundryVersionId: `foundry-${id}`,
+  status,
+  previewDomain: `${id}.preview.prisma.build`,
+  createdAt: "2026-01-01T00:00:00Z",
+});
 
-      const result = yield* destroyComputeVersion(client, "missing-version");
+describe("Prisma canonical Compute lifecycle", () => {
+  it.live("waits for a deployment to reach its target status", () => {
+    let observed = 0;
+    const client = {
+      getDeployment: (id: string) =>
+        Effect.sync(() =>
+          deployment(id, observed++ === 0 ? "provisioning" : "running"),
+        ),
+    } as unknown as PrismaManagementClient;
 
+    return Effect.gen(function* () {
+      const result = yield* waitForDeploymentStatus(
+        client,
+        "deployment-1",
+        "running",
+        { pollIntervalMs: 1, timeoutSeconds: 1 },
+      );
+      expect(result.status).toBe("running");
+      expect(observed).toBe(2);
+    });
+  });
+
+  it.effect("fails immediately for a failed deployment", () => {
+    const client = {
+      getDeployment: (id: string) => Effect.succeed(deployment(id, "failed")),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const error = yield* waitForDeploymentStatus(
+        client,
+        "deployment-1",
+        "running",
+      ).pipe(Effect.flip);
+      expect((error as Error).message).toContain("deployment-1");
+      expect((error as Error).message).toContain("failed");
+    });
+  });
+
+  it.live("times out with the last observed deployment status", () => {
+    const client = {
+      getDeployment: (id: string) =>
+        Effect.succeed(deployment(id, "provisioning")),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const error = yield* waitForDeploymentStatus(
+        client,
+        "deployment-1",
+        "running",
+        { timeoutSeconds: 0.01, pollIntervalMs: 1 },
+      ).pipe(Effect.flip);
+      expect((error as Error).message).toContain("Timed out");
+      expect((error as Error).message).toContain("provisioning");
+    });
+  });
+
+  it.live("caps a hung deployment observation at the polling deadline", () => {
+    const client = {
+      getDeployment: () => Effect.never,
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const startedAt = Date.now();
+      const error = yield* waitForDeploymentStatus(
+        client,
+        "deployment-hung",
+        "running",
+        { timeoutSeconds: 0.05, pollIntervalMs: 1 },
+      ).pipe(Effect.flip);
+      const elapsed = Date.now() - startedAt;
+
+      expect((error as Error).message).toContain("Timed out");
+      expect((error as Error).message).toContain("last status: 'unknown'");
+      expect(elapsed).toBeLessThan(500);
+    });
+  });
+
+  it.effect("rejects invalid deployment polling timings", () => {
+    const client = {
+      getDeployment: () => Effect.die("invalid options must fail first"),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const timeoutError = yield* waitForDeploymentStatus(
+        client,
+        "deployment-1",
+        "running",
+        { timeoutSeconds: 0 },
+      ).pipe(Effect.flip);
+      const intervalError = yield* waitForDeploymentStatus(
+        client,
+        "deployment-1",
+        "running",
+        { pollIntervalMs: Number.NaN },
+      ).pipe(Effect.flip);
+
+      expect((timeoutError as Error).message).toContain("timeoutSeconds");
+      expect((intervalError as Error).message).toContain("pollIntervalMs");
+    });
+  });
+
+  it.effect("preserves a not-found observation while waiting", () => {
+    const notFound = apiError("GET", "/v1/deployments/deployment-1", 404);
+    const client = {
+      getDeployment: () => Effect.fail(notFound),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const error = yield* waitForDeploymentStatus(
+        client,
+        "deployment-1",
+        "running",
+      ).pipe(Effect.flip);
+      expect(error).toBe(notFound);
+    });
+  });
+
+  it.effect("treats an already deleted deployment as deleted", () => {
+    const client = {
+      getDeployment: (id: string) =>
+        Effect.fail(apiError("GET", `/v1/deployments/${id}`, 404)),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const result = yield* destroyDeployment(client, "deployment-missing");
       expect(result).toEqual({
-        versionId: "missing-version",
+        deploymentId: "deployment-missing",
         previousStatus: undefined,
         stopped: false,
-        deleted: false,
+        deleted: true,
       });
-      expect(calls).toEqual([
-        "get:missing-version",
-        "get-global:missing-version",
-      ]);
-    }),
-  );
+    });
+  });
 
-  it.effect(
-    "falls back to global version routes when service-scoped routes miss",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        let status = "running";
-        const client = {
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`get:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "GET",
-                  path: `/v1/compute-services/versions/${versionId}`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-          getComputeVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`get-global:${versionId}`);
-              return {
-                id: versionId,
-                type: "compute-version" as const,
-                url: `https://api.test/${versionId}`,
-                foundryVersionId: `foundry-${versionId}`,
-                status,
-                previewDomain: `${versionId}.example.test`,
-                createdAt: "2026-01-01T00:00:00Z",
-              };
-            }),
-          stopComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`stop:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "POST",
-                  path: `/v1/compute-services/versions/${versionId}/stop`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-          stopComputeVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`stop-global:${versionId}`);
-              status = "stopped";
-            }),
-          deleteComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/compute-services/versions/${versionId}`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-          deleteComputeVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`delete-global:${versionId}`);
-            }),
-        } as unknown as PrismaManagementClient;
+  it.effect("stops a running deployment before deleting it", () => {
+    const calls: string[] = [];
+    let status = "running";
+    const client = {
+      getDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(`get:${id}`);
+          return deployment(id, status);
+        }),
+      stopDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(`stop:${id}`);
+          status = "stopped";
+        }),
+      deleteDeployment: (id: string) =>
+        Effect.sync(() => {
+          calls.push(`delete:${id}`);
+        }),
+    } as unknown as PrismaManagementClient;
 
-        const result = yield* destroyComputeVersion(client, "version-global");
-
-        expect(result).toEqual({
-          versionId: "version-global",
-          previousStatus: "running",
-          stopped: true,
-          deleted: true,
-        });
-        expect(calls).toEqual([
-          "get:version-global",
-          "get-global:version-global",
-          "stop:version-global",
-          "stop-global:version-global",
-          "get:version-global",
-          "get-global:version-global",
-          "delete:version-global",
-          "delete-global:version-global",
-        ]);
-      }),
-  );
-
-  it.effect(
-    "preserves the service-scoped read error when global read also fails",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        const client = {
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`get:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "GET",
-                  path: `/v1/compute-services/versions/${versionId}`,
-                  status: 500,
-                  message: "Internal Server Error",
-                }),
-              );
-            }),
-          getComputeVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`get-global:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "GET",
-                  path: `/v1/versions/${versionId}`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-        } as unknown as PrismaManagementClient;
-
-        const error = yield* destroyComputeVersion(
-          client,
-          "version-error",
-        ).pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(PrismaApiError);
-        expect((error as PrismaApiError).status).toBe(500);
-        expect(calls).toEqual([
-          "get:version-error",
-          "get-global:version-error",
-        ]);
-      }),
-  );
-
-  it.effect(
-    "preserves the service-scoped stop error without route fallback",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        const client = {
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`get:${versionId}`);
-              return {
-                id: versionId,
-                type: "compute-version" as const,
-                url: `https://api.test/${versionId}`,
-                foundryVersionId: `foundry-${versionId}`,
-                status: "running",
-                previewDomain: `${versionId}.example.test`,
-                createdAt: "2026-01-01T00:00:00Z",
-              };
-            }),
-          stopComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`stop:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "POST",
-                  path: `/v1/compute-services/versions/${versionId}/stop`,
-                  status: 500,
-                  message: "Internal Server Error",
-                }),
-              );
-            }),
-        } as unknown as PrismaManagementClient;
-
-        const error = yield* destroyComputeVersion(
-          client,
-          "version-stop-error",
-        ).pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(PrismaApiError);
-        expect((error as PrismaApiError).status).toBe(500);
-        expect(calls).toEqual([
-          "get:version-stop-error",
-          "stop:version-stop-error",
-        ]);
-      }),
-  );
-
-  it.effect("stops a running version before deleting it", () =>
-    Effect.gen(function* () {
-      const { client, calls } = makeClient();
-
-      const result = yield* destroyComputeVersion(client, "version-running");
-
-      expect(result).toEqual({
-        versionId: "version-running",
+    return Effect.gen(function* () {
+      const result = yield* destroyDeployment(client, "deployment-1");
+      expect(result).toMatchObject({
+        deploymentId: "deployment-1",
         previousStatus: "running",
         stopped: true,
         deleted: true,
       });
       expect(calls).toEqual([
-        "get:version-running",
-        "stop:version-running",
-        "get:version-running",
-        "delete:version-running",
+        "get:deployment-1",
+        "stop:deployment-1",
+        "get:deployment-1",
+        "delete:deployment-1",
       ]);
-    }),
-  );
+    });
+  });
 
-  it.effect("adds platform cleanup context when version delete fails", () =>
-    Effect.gen(function* () {
-      const calls: string[] = [];
-      const client = {
-        getComputeServiceVersion: (versionId: string) =>
-          Effect.sync(() => {
-            calls.push(`get:${versionId}`);
-            return {
-              id: versionId,
-              type: "compute-version" as const,
-              url: `https://api.test/${versionId}`,
-              foundryVersionId: `foundry-${versionId}`,
-              status: "stopped",
-              previewDomain: `${versionId}.example.test`,
-              createdAt: "2026-01-01T00:00:00Z",
-            };
-          }),
-        deleteComputeServiceVersion: (versionId: string) =>
-          Effect.gen(function* () {
-            calls.push(`delete:${versionId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "DELETE",
-                path: `/v1/compute-services/versions/${versionId}`,
-                status: 500,
-                message: "Internal Server Error",
-              }),
-            );
-          }),
-        deleteComputeVersion: (versionId: string) =>
-          Effect.gen(function* () {
-            calls.push(`delete-global:${versionId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "DELETE",
-                path: `/v1/versions/${versionId}`,
-                status: 500,
-                message: "Internal Server Error",
-              }),
-            );
-          }),
-      } as unknown as PrismaManagementClient;
+  it.effect("reports only the canonical deployment cleanup route", () => {
+    const client = {
+      getDeployment: () =>
+        Effect.succeed(deployment("deployment-1", "stopped")),
+      deleteDeployment: (id: string) =>
+        Effect.fail(apiError("DELETE", `/v1/deployments/${id}`, 500)),
+    } as unknown as PrismaManagementClient;
 
-      const error = yield* destroyComputeVersion(client, "version-stuck").pipe(
+    return Effect.gen(function* () {
+      const error = yield* destroyDeployment(client, "deployment-1").pipe(
         Effect.flip,
       );
-
-      expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(
-        "Failed to delete Prisma compute version 'version-stuck'",
+        "DELETE /v1/deployments/deployment-1",
       );
-      expect((error as Error).message).toContain(
-        "while it was in status 'stopped'",
-      );
-      expect((error as Error).message).toContain(
-        "Prisma API returned HTTP 500: Internal Server Error",
-      );
-      expect((error as Error).message).toContain(
-        "known platform-side delete failure",
-      );
-      expect((error as Error).message).toContain(
-        "DELETE /v1/versions/version-stuck",
-      );
-      expect(calls).toEqual([
-        "get:version-stuck",
-        "delete:version-stuck",
-        "delete-global:version-stuck",
-      ]);
-    }),
-  );
+    });
+  });
 
   it.effect(
-    "reports the post-stop status when delete fails after stopping",
-    () =>
-      Effect.gen(function* () {
-        const statuses = new Map([["version-running", "running"]]);
-        const client = {
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => ({
-              id: versionId,
-              type: "compute-version" as const,
-              url: `https://api.test/${versionId}`,
-              foundryVersionId: `foundry-${versionId}`,
-              status: statuses.get(versionId),
-              previewDomain: `${versionId}.example.test`,
-              createdAt: "2026-01-01T00:00:00Z",
-            })),
-          stopComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              statuses.set(versionId, "stopped");
-            }),
-          deleteComputeServiceVersion: (versionId: string) =>
-            Effect.fail(
-              new PrismaApiError({
-                method: "DELETE",
-                path: `/v1/compute-services/versions/${versionId}`,
-                status: 500,
-                message: "Internal Server Error",
-              }),
-            ),
-          deleteComputeVersion: (versionId: string) =>
-            Effect.fail(
-              new PrismaApiError({
-                method: "DELETE",
-                path: `/v1/versions/${versionId}`,
-                status: 500,
-                message: "Internal Server Error",
-              }),
-            ),
-        } as unknown as PrismaManagementClient;
-
-        const error = yield* destroyComputeVersion(
-          client,
-          "version-running",
-        ).pipe(Effect.flip);
-
-        expect((error as Error).message).toContain(
-          "while it was in status 'stopped'",
-        );
-        expect((error as Error).message).not.toContain(
-          "while it was in status 'running'",
-        );
-      }),
-  );
-
-  it.effect(
-    "falls back to global version delete when service-scoped delete fails",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        const client = {
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`get:${versionId}`);
-              return {
-                id: versionId,
-                type: "compute-version" as const,
-                url: `https://api.test/${versionId}`,
-                foundryVersionId: `foundry-${versionId}`,
-                status: "stopped",
-                previewDomain: `${versionId}.example.test`,
-                createdAt: "2026-01-01T00:00:00Z",
-              };
-            }),
-          deleteComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/compute-services/versions/${versionId}`,
-                  status: 500,
-                  message: "Internal Server Error",
-                }),
-              );
-            }),
-          deleteComputeVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`delete-global:${versionId}`);
-            }),
-        } as unknown as PrismaManagementClient;
-
-        const result = yield* destroyComputeVersion(client, "version-fallback");
-
-        expect(result).toEqual({
-          versionId: "version-fallback",
-          previousStatus: "stopped",
-          stopped: false,
-          deleted: true,
-        });
-        expect(calls).toEqual([
-          "get:version-fallback",
-          "delete:version-fallback",
-          "delete-global:version-fallback",
-        ]);
-      }),
-  );
-
-  it.effect(
-    "re-observes before accepting a global delete not-found after service delete fails",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        const client = {
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`get:${versionId}`);
-              return {
-                id: versionId,
-                type: "compute-version" as const,
-                url: `https://api.test/${versionId}`,
-                foundryVersionId: `foundry-${versionId}`,
-                status: "stopped",
-                previewDomain: `${versionId}.example.test`,
-                createdAt: "2026-01-01T00:00:00Z",
-              };
-            }),
-          deleteComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/compute-services/versions/${versionId}`,
-                  status: 500,
-                  message: "Internal Server Error",
-                }),
-              );
-            }),
-          deleteComputeVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete-global:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/versions/${versionId}`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-        } as unknown as PrismaManagementClient;
-
-        const error = yield* destroyComputeVersion(
-          client,
-          "version-observable",
-        ).pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "Service-scoped delete failed: Prisma API returned HTTP 500",
-        );
-        expect((error as Error).message).toContain(
-          "Global delete fallback failed: Prisma API returned HTTP 404",
-        );
-        expect(calls).toEqual([
-          "get:version-observable",
-          "delete:version-observable",
-          "delete-global:version-observable",
-          "get:version-observable",
-        ]);
-      }),
-  );
-
-  it.effect(
-    "accepts a global delete not-found after service delete fails once the version is gone",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        let observed = false;
-        const client = {
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`get:${versionId}`);
-              if (observed) {
-                return yield* Effect.fail(
-                  new PrismaApiError({
-                    method: "GET",
-                    path: `/v1/compute-services/versions/${versionId}`,
-                    status: 404,
-                    message: "not found",
-                  }),
-                );
-              }
-              observed = true;
-              return {
-                id: versionId,
-                type: "compute-version" as const,
-                url: `https://api.test/${versionId}`,
-                foundryVersionId: `foundry-${versionId}`,
-                status: "stopped",
-                previewDomain: `${versionId}.example.test`,
-                createdAt: "2026-01-01T00:00:00Z",
-              };
-            }),
-          deleteComputeServiceVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/compute-services/versions/${versionId}`,
-                  status: 500,
-                  message: "Internal Server Error",
-                }),
-              );
-            }),
-          deleteComputeVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete-global:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/versions/${versionId}`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-        } as unknown as PrismaManagementClient;
-
-        const result = yield* destroyComputeVersion(client, "version-gone");
-
-        expect(result).toEqual({
-          versionId: "version-gone",
-          previousStatus: "stopped",
-          stopped: false,
-          deleted: true,
-        });
-        expect(calls).toEqual([
-          "get:version-gone",
-          "delete:version-gone",
-          "delete-global:version-gone",
-          "get:version-gone",
-        ]);
-      }),
-  );
-
-  it.effect("destroys every version before deleting the service", () =>
-    Effect.gen(function* () {
-      const { client, calls } = makeClient();
-
-      const result = yield* destroyComputeService(client, "service-1");
-
-      expect(result).toEqual({
-        computeServiceId: "service-1",
-        deletedVersionIds: ["version-running", "version-stopped"],
-        serviceDeleted: true,
-      });
-      expect(calls).toEqual([
-        "list:service-1",
-        "get:version-running",
-        "stop:version-running",
-        "get:version-running",
-        "delete:version-running",
-        "get:version-stopped",
-        "delete:version-stopped",
-        "delete-service:service-1",
-      ]);
-    }),
-  );
-
-  it.effect("treats an already-deleted compute service as deleted", () =>
-    Effect.gen(function* () {
+    "uses the App delete cascade without enumerating deployments",
+    () => {
       const calls: string[] = [];
       const client = {
-        listServiceComputeVersions: (serviceId: string) =>
-          Effect.gen(function* () {
-            calls.push(`list:${serviceId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: `/v1/compute-services/${serviceId}/versions`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-          }),
-        deleteComputeService: (serviceId: string) =>
-          Effect.gen(function* () {
-            calls.push(`delete-service:${serviceId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "DELETE",
-                path: `/v1/compute-services/${serviceId}`,
-                status: 404,
-                message: "not found",
-              }),
-            );
+        listAppDeployments: () => Effect.die("must not enumerate deployments"),
+        deleteApp: (id: string) =>
+          Effect.sync(() => {
+            calls.push(`delete-app:${id}`);
           }),
       } as unknown as PrismaManagementClient;
 
-      const result = yield* destroyComputeService(client, "missing-service");
-
-      expect(result).toEqual({
-        computeServiceId: "missing-service",
-        deletedVersionIds: [],
-        serviceDeleted: true,
+      return Effect.gen(function* () {
+        const result = yield* destroyApp(client, "app-1");
+        expect(result).toEqual({ appId: "app-1", appDeleted: true });
+        expect(calls).toEqual(["delete-app:app-1"]);
       });
-      expect(calls).toEqual([
-        "list:missing-service",
-        "delete-service:missing-service",
-      ]);
-    }),
+    },
   );
 
-  it.effect(
-    "tolerates a compute service disappearing during final delete",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        const client = {
-          listServiceComputeVersions: (serviceId: string) =>
-            Effect.sync(() => {
-              calls.push(`list:${serviceId}`);
-              return [];
-            }),
-          deleteComputeService: (serviceId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete-service:${serviceId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/compute-services/${serviceId}`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-        } as unknown as PrismaManagementClient;
+  it.live("retries a bounded App deletion conflict", () => {
+    let attempts = 0;
+    const client = {
+      deleteApp: (id: string) =>
+        Effect.suspend(() => {
+          attempts += 1;
+          return attempts < 3
+            ? Effect.fail(apiError("DELETE", `/v1/apps/${id}`, 409))
+            : Effect.void;
+        }),
+    } as unknown as PrismaManagementClient;
 
-        const result = yield* destroyComputeService(client, "race-service");
+    return Effect.gen(function* () {
+      const result = yield* destroyApp(client, "app-1");
+      expect(result.appDeleted).toBe(true);
+      expect(attempts).toBe(3);
+    });
+  });
 
-        expect(result).toEqual({
-          computeServiceId: "race-service",
-          deletedVersionIds: [],
-          serviceDeleted: true,
-        });
-        expect(calls).toEqual([
-          "list:race-service",
-          "delete-service:race-service",
-        ]);
-      }),
-  );
+  it.effect("treats an already deleted App as deleted", () => {
+    const client = {
+      deleteApp: (id: string) =>
+        Effect.fail(apiError("DELETE", `/v1/apps/${id}`, 404)),
+    } as unknown as PrismaManagementClient;
 
-  it.effect(
-    "re-observes versions when compute service delete reports active versions",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        let deleteAttempts = 0;
-        const client = {
-          listServiceComputeVersions: (serviceId: string) =>
-            Effect.sync(() => {
-              calls.push(`list:${serviceId}`);
-              return deleteAttempts === 0
-                ? []
-                : [
-                    {
-                      id: "late-version",
-                      type: "compute-version" as const,
-                      url: "https://api.test/late-version",
-                      foundryVersionId: "foundry-late-version",
-                      createdAt: "2026-01-01T00:00:00Z",
-                    },
-                  ];
-            }),
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`get:${versionId}`);
-              return {
-                id: versionId,
-                type: "compute-version" as const,
-                url: `https://api.test/${versionId}`,
-                foundryVersionId: `foundry-${versionId}`,
-                status: "stopped",
-                previewDomain: `${versionId}.example.test`,
-                createdAt: "2026-01-01T00:00:00Z",
-              };
-            }),
-          deleteComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`delete:${versionId}`);
-            }),
-          deleteComputeVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`delete-global:${versionId}`);
-            }),
-          deleteComputeService: (serviceId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete-service:${serviceId}`);
-              deleteAttempts += 1;
-              if (deleteAttempts === 1) {
-                return yield* Effect.fail(
-                  new PrismaApiError({
-                    method: "DELETE",
-                    path: `/v1/compute-services/${serviceId}`,
-                    status: 409,
-                    message: "active compute versions exist",
-                  }),
-                );
-              }
-            }),
-        } as unknown as PrismaManagementClient;
+    return Effect.gen(function* () {
+      expect(yield* destroyApp(client, "app-missing")).toEqual({
+        appId: "app-missing",
+        appDeleted: true,
+      });
+    });
+  });
 
-        const result = yield* destroyComputeService(client, "service-1");
+  it.live("surfaces the final App deletion conflict", () => {
+    let attempts = 0;
+    const conflict = apiError("DELETE", "/v1/apps/app-1", 409);
+    const client = {
+      deleteApp: () =>
+        Effect.sync(() => {
+          attempts += 1;
+        }).pipe(Effect.flatMap(() => Effect.fail(conflict))),
+    } as unknown as PrismaManagementClient;
 
-        expect(result).toEqual({
-          computeServiceId: "service-1",
-          deletedVersionIds: ["late-version"],
-          serviceDeleted: true,
-        });
-        expect(calls).toEqual([
-          "list:service-1",
-          "delete-service:service-1",
-          "list:service-1",
-          "get:late-version",
-          "delete:late-version",
-          "delete-service:service-1",
-        ]);
-      }),
-  );
+    return Effect.gen(function* () {
+      const error = yield* destroyApp(client, "app-1").pipe(Effect.flip);
+      expect(error).toBe(conflict);
+      expect(attempts).toBe(5);
+    });
+  });
 
-  it.effect("destroys every compute service before deleting the project", () =>
-    Effect.gen(function* () {
-      const calls: string[] = [];
-      const versionsByService = new Map([
-        ["service-a", ["version-a1", "version-a2"]],
-        ["service-b", ["version-b1"]],
-      ]);
-      const versionStatuses = new Map([
-        ["version-a1", "running"],
-        ["version-a2", "stopped"],
-        ["version-b1", "stopped"],
-      ]);
-      const client = {
-        listProjectComputeServices: (
-          projectId: string,
-          query?: { limit?: number },
-        ) =>
-          Effect.sync(() => {
-            calls.push(`list-services:${projectId}:${query?.limit}`);
-            return ["service-a", "service-b"].map((id) => ({
-              id,
-              type: "compute-service" as const,
-              url: `https://api.test/${id}`,
-              name: id,
-              displayName: id,
-              region: { id: "us-east-1", displayName: "us-east-1" },
-              projectId,
-              latestVersionId: null,
-              createdAt: "2026-01-01T00:00:00Z",
-            }));
-          }),
-        listServiceComputeVersions: (serviceId: string) =>
-          Effect.sync(() => {
-            calls.push(`list-versions:${serviceId}`);
-            return (versionsByService.get(serviceId) ?? []).map((id) => ({
-              id,
-              type: "compute-version" as const,
-              url: `https://api.test/${id}`,
-              foundryVersionId: `foundry-${id}`,
-              createdAt: "2026-01-01T00:00:00Z",
-            }));
-          }),
-        getComputeServiceVersion: (versionId: string) =>
-          Effect.sync(() => {
-            calls.push(`get:${versionId}`);
-            return {
-              id: versionId,
-              type: "compute-version" as const,
-              url: `https://api.test/${versionId}`,
-              foundryVersionId: `foundry-${versionId}`,
-              status: versionStatuses.get(versionId),
-              previewDomain: `${versionId}.example.test`,
-              createdAt: "2026-01-01T00:00:00Z",
-            };
-          }),
-        stopComputeServiceVersion: (versionId: string) =>
-          Effect.sync(() => {
-            calls.push(`stop:${versionId}`);
-            versionStatuses.set(versionId, "stopped");
-          }),
-        deleteComputeServiceVersion: (versionId: string) =>
-          Effect.sync(() => {
-            calls.push(`delete-version:${versionId}`);
-            versionStatuses.delete(versionId);
-          }),
-        deleteComputeVersion: (versionId: string) =>
-          Effect.sync(() => {
-            calls.push(`delete-version-global:${versionId}`);
-            versionStatuses.delete(versionId);
-          }),
-        deleteComputeService: (serviceId: string) =>
-          Effect.sync(() => {
-            calls.push(`delete-service:${serviceId}`);
-          }),
-        deleteProject: (projectId: string) =>
-          Effect.sync(() => {
-            calls.push(`delete-project:${projectId}`);
-          }),
-      } as unknown as PrismaManagementClient;
+  it.effect("deletes project Apps before deleting the project", () => {
+    const calls: string[] = [];
+    const client = {
+      listApps: (query: unknown) =>
+        Effect.sync(() => {
+          calls.push(`list:${JSON.stringify(query)}`);
+          return [{ id: "app-1" }, { id: "app-2" }];
+        }),
+      deleteApp: (id: string) =>
+        Effect.sync(() => {
+          calls.push(`delete-app:${id}`);
+        }),
+      deleteProject: (id: string) =>
+        Effect.sync(() => {
+          calls.push(`delete-project:${id}`);
+        }),
+    } as unknown as PrismaManagementClient;
 
-      const result = yield* destroyComputeProject(client, "project-1");
-
+    return Effect.gen(function* () {
+      const result = yield* destroyProjectApps(client, "project-1");
       expect(result).toEqual({
         projectId: "project-1",
-        deletedServiceIds: ["service-a", "service-b"],
-        deletedVersionIds: ["version-a1", "version-a2", "version-b1"],
+        deletedAppIds: ["app-1", "app-2"],
         projectDeleted: true,
       });
       expect(calls).toEqual([
-        "list-services:project-1:100",
-        "list-versions:service-a",
-        "get:version-a1",
-        "stop:version-a1",
-        "get:version-a1",
-        "delete-version:version-a1",
-        "get:version-a2",
-        "delete-version:version-a2",
-        "delete-service:service-a",
-        "list-versions:service-b",
-        "get:version-b1",
-        "delete-version:version-b1",
-        "delete-service:service-b",
+        'list:{"projectId":"project-1","limit":100}',
+        "delete-app:app-1",
+        "delete-app:app-2",
         "delete-project:project-1",
       ]);
-    }),
-  );
+    });
+  });
 
-  it.effect(
-    "re-observes compute services when project delete reports dependencies",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        let deleteProjectAttempts = 0;
-        const client = {
-          listProjectComputeServices: (projectId: string) =>
-            Effect.sync(() => {
-              calls.push(`list-services:${projectId}`);
-              return deleteProjectAttempts === 0
-                ? []
-                : [
-                    {
-                      id: "late-service",
-                      type: "compute-service" as const,
-                      url: "https://api.test/late-service",
-                      name: "late-service",
-                      displayName: "late-service",
-                      region: { id: "us-east-1", displayName: "us-east-1" },
-                      projectId,
-                      latestVersionId: null,
-                      createdAt: "2026-01-01T00:00:00Z",
-                    },
-                  ];
-            }),
-          listServiceComputeVersions: (serviceId: string) =>
-            Effect.sync(() => {
-              calls.push(`list-versions:${serviceId}`);
-              return [
-                {
-                  id: "late-version",
-                  type: "compute-version" as const,
-                  url: "https://api.test/late-version",
-                  foundryVersionId: "foundry-late-version",
-                  createdAt: "2026-01-01T00:00:00Z",
-                },
-              ];
-            }),
-          getComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`get:${versionId}`);
-              return {
-                id: versionId,
-                type: "compute-version" as const,
-                url: `https://api.test/${versionId}`,
-                foundryVersionId: `foundry-${versionId}`,
-                status: "stopped",
-                previewDomain: `${versionId}.example.test`,
-                createdAt: "2026-01-01T00:00:00Z",
-              };
-            }),
-          deleteComputeServiceVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`delete-version:${versionId}`);
-            }),
-          deleteComputeVersion: (versionId: string) =>
-            Effect.sync(() => {
-              calls.push(`delete-version-global:${versionId}`);
-            }),
-          deleteComputeService: (serviceId: string) =>
-            Effect.sync(() => {
-              calls.push(`delete-service:${serviceId}`);
-            }),
-          deleteProject: (projectId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete-project:${projectId}`);
-              deleteProjectAttempts += 1;
-              if (deleteProjectAttempts === 1) {
-                return yield* Effect.fail(
-                  new PrismaApiError({
-                    method: "DELETE",
-                    path: `/v1/projects/${projectId}`,
-                    status: 400,
-                    message:
-                      "Project cannot be deleted due to existing dependencies.",
-                  }),
-                );
-              }
-            }),
-        } as unknown as PrismaManagementClient;
+  it.effect("treats an already deleted project as deleted", () => {
+    const client = {
+      listApps: () =>
+        Effect.fail(apiError("GET", "/v1/apps?projectId=project-1", 404)),
+      deleteProject: (id: string) =>
+        Effect.fail(apiError("DELETE", `/v1/projects/${id}`, 404)),
+    } as unknown as PrismaManagementClient;
 
-        const result = yield* destroyComputeProject(client, "project-1");
+    return Effect.gen(function* () {
+      expect(yield* destroyProjectApps(client, "project-1")).toEqual({
+        projectId: "project-1",
+        deletedAppIds: [],
+        projectDeleted: true,
+      });
+    });
+  });
 
-        expect(result).toEqual({
-          projectId: "project-1",
-          deletedServiceIds: ["late-service"],
-          deletedVersionIds: ["late-version"],
-          projectDeleted: true,
-        });
-        expect(calls).toEqual([
-          "list-services:project-1",
-          "delete-project:project-1",
-          "list-services:project-1",
-          "list-versions:late-service",
-          "get:late-version",
-          "delete-version:late-version",
-          "delete-service:late-service",
-          "delete-project:project-1",
-        ]);
-      }),
-  );
+  it.live("re-cleans Apps after a blocked project deletion", () => {
+    const calls: string[] = [];
+    let lists = 0;
+    let deletes = 0;
+    const client = {
+      listApps: () =>
+        Effect.sync(() => {
+          lists += 1;
+          calls.push(`list:${lists}`);
+          return lists === 1 ? [{ id: "app-1" }] : [];
+        }),
+      deleteApp: (id: string) =>
+        Effect.sync(() => calls.push(`delete-app:${id}`)),
+      deleteProject: (id: string) =>
+        Effect.suspend(() => {
+          deletes += 1;
+          calls.push(`delete-project:${id}:${deletes}`);
+          return deletes === 1
+            ? Effect.fail(apiError("DELETE", `/v1/projects/${id}`, 409))
+            : Effect.void;
+        }),
+    } as unknown as PrismaManagementClient;
 
-  it.effect("treats an already-deleted compute project as gone", () =>
-    Effect.gen(function* () {
-      const calls: string[] = [];
-      const client = {
-        listProjectComputeServices: (projectId: string) =>
-          Effect.gen(function* () {
-            calls.push(`list-services:${projectId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: `/v1/projects/${projectId}/compute-services`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-          }),
-        deleteProject: (projectId: string) =>
-          Effect.gen(function* () {
-            calls.push(`delete-project:${projectId}`);
-            return yield* Effect.fail(
-              new PrismaApiError({
-                method: "DELETE",
-                path: `/v1/projects/${projectId}`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-          }),
-      } as unknown as PrismaManagementClient;
-
-      const result = yield* destroyComputeProject(client, "missing-project");
-
+    return Effect.gen(function* () {
+      const result = yield* destroyProjectApps(client, "project-1");
       expect(result).toEqual({
-        projectId: "missing-project",
-        deletedServiceIds: [],
-        deletedVersionIds: [],
+        projectId: "project-1",
+        deletedAppIds: ["app-1"],
         projectDeleted: true,
       });
       expect(calls).toEqual([
-        "list-services:missing-project",
-        "delete-project:missing-project",
+        "list:1",
+        "delete-app:app-1",
+        "delete-project:project-1:1",
+        "list:2",
+        "delete-project:project-1:2",
       ]);
-    }),
-  );
+    });
+  });
 
-  it.effect(
-    "tolerates a compute project disappearing during final delete",
-    () =>
-      Effect.gen(function* () {
-        const calls: string[] = [];
-        const client = {
-          listProjectComputeServices: (projectId: string) =>
-            Effect.sync(() => {
-              calls.push(`list-services:${projectId}`);
-              return [];
-            }),
-          deleteProject: (projectId: string) =>
-            Effect.gen(function* () {
-              calls.push(`delete-project:${projectId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "DELETE",
-                  path: `/v1/projects/${projectId}`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
-        } as unknown as PrismaManagementClient;
+  it.effect("supports keeping the project after deleting its Apps", () => {
+    const calls: string[] = [];
+    const client = {
+      listApps: () => Effect.succeed([{ id: "app-1" }]),
+      deleteApp: (id: string) =>
+        Effect.sync(() => calls.push(`delete-app:${id}`)),
+      deleteProject: () => Effect.die("must not delete project"),
+    } as unknown as PrismaManagementClient;
 
-        const result = yield* destroyComputeProject(client, "race-project");
-
-        expect(result).toEqual({
-          projectId: "race-project",
-          deletedServiceIds: [],
-          deletedVersionIds: [],
-          projectDeleted: true,
-        });
-        expect(calls).toEqual([
-          "list-services:race-project",
-          "delete-project:race-project",
-        ]);
-      }),
-  );
-
-  it.effect("can keep the project while deleting compute services", () =>
-    Effect.gen(function* () {
-      const calls: string[] = [];
-      const client = {
-        listProjectComputeServices: (projectId: string) =>
-          Effect.sync(() => {
-            calls.push(`list-services:${projectId}`);
-            return [
-              {
-                id: "service-a",
-                type: "compute-service" as const,
-                url: "https://api.test/service-a",
-                name: "service-a",
-                displayName: "service-a",
-                region: { id: "us-east-1", displayName: "us-east-1" },
-                projectId,
-                latestVersionId: null,
-                createdAt: "2026-01-01T00:00:00Z",
-              },
-            ];
-          }),
-        listServiceComputeVersions: (serviceId: string) =>
-          Effect.sync(() => {
-            calls.push(`list-versions:${serviceId}`);
-            return [];
-          }),
-        deleteComputeService: (serviceId: string) =>
-          Effect.sync(() => {
-            calls.push(`delete-service:${serviceId}`);
-          }),
-        deleteProject: (projectId: string) =>
-          Effect.sync(() => {
-            calls.push(`delete-project:${projectId}`);
-          }),
-      } as unknown as PrismaManagementClient;
-
-      const result = yield* destroyComputeProject(client, "project-1", {
+    return Effect.gen(function* () {
+      const result = yield* destroyProjectApps(client, "project-1", {
         keepProject: true,
       });
+      expect(result.projectDeleted).toBe(false);
+      expect(result.deletedAppIds).toEqual(["app-1"]);
+      expect(calls).toEqual(["delete-app:app-1"]);
+    });
+  });
 
+  it.effect("cleans every App returned across canonical pagination", () => {
+    const apps = Array.from({ length: 101 }, (_, index) => ({
+      id: `app-${index}`,
+    }));
+    const deleted: string[] = [];
+    const client = {
+      // PrismaManagementClient.listApps follows every cursor before returning.
+      listApps: () => Effect.succeed(apps),
+      deleteApp: (id: string) =>
+        Effect.sync(() => {
+          deleted.push(id);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const result = yield* destroyProjectApps(client, "project-1", {
+        keepProject: true,
+      });
+      expect(result.deletedAppIds).toHaveLength(101);
+      expect(deleted).toHaveLength(101);
+    });
+  });
+
+  it.effect("supports keeping Apps during project-scoped inspection", () => {
+    const client = {
+      listApps: () => Effect.succeed([{ id: "app-1" }]),
+      deleteApp: () => Effect.die("must not delete App"),
+      deleteProject: () => Effect.die("must not delete project"),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const result = yield* destroyProjectApps(client, "project-1", {
+        keepApp: true,
+        keepProject: true,
+      });
       expect(result).toEqual({
         projectId: "project-1",
-        deletedServiceIds: ["service-a"],
-        deletedVersionIds: [],
+        deletedAppIds: [],
         projectDeleted: false,
       });
-      expect(calls).toEqual([
-        "list-services:project-1",
-        "list-versions:service-a",
-        "delete-service:service-a",
-      ]);
-    }),
-  );
+    });
+  });
 });

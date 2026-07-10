@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
@@ -38,9 +39,10 @@ export interface EnvironmentVariableProps {
    */
   key: string;
   /**
-   * Secret value. Use Redacted.make for state-safe redaction.
+   * Secret value. Must be wrapped with `Redacted.make(...)` so the engine
+   * redacts it before resource props are persisted to state.
    */
-  value: string | Redacted.Redacted<string>;
+  value: Redacted.Redacted<string>;
 }
 
 export interface EnvironmentVariable extends Resource<
@@ -95,6 +97,7 @@ export interface EnvironmentVariable extends Resource<
 /**
  * A Prisma compute environment variable.
  *
+ * @resource
  * @section Creating a Variable
  * @example Production secret
  * ```typescript
@@ -109,12 +112,6 @@ export interface EnvironmentVariable extends Resource<
 export const EnvironmentVariable = Resource<EnvironmentVariable>(
   "Prisma.EnvironmentVariable",
 );
-
-const valueOf = (value: string | Redacted.Redacted<string>) =>
-  Redacted.isRedacted(value) ? Redacted.value(value) : value;
-
-const redacted = (value: string | Redacted.Redacted<string>) =>
-  Redacted.isRedacted(value) ? value : Redacted.make(value);
 
 const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 const ENV_VALUE_MAX_BYTES = 8 * 1024;
@@ -132,11 +129,11 @@ const validateEnvironmentVariableKey = (key: string) =>
 
 const validateEnvironmentVariableWrite = (
   key: string,
-  value: string | Redacted.Redacted<string>,
+  value: Redacted.Redacted<string>,
 ) =>
   Effect.gen(function* () {
     yield* validateEnvironmentVariableKey(key);
-    const raw = valueOf(value);
+    const raw = Redacted.value(value);
     if (raw.length === 0) {
       return yield* Effect.fail(
         new Error(
@@ -172,9 +169,18 @@ const findVariable = (
       limit: 100,
     })
     .pipe(
-      Effect.map((variables) =>
-        variables.find((variable) => variable.branchId === (branchId ?? null)),
-      ),
+      Effect.flatMap((variables) => {
+        const matches = variables.filter(
+          (variable) => variable.branchId === (branchId ?? null),
+        );
+        return matches.length > 1
+          ? Effect.fail(
+              new Error(
+                `Multiple Prisma environment variables match '${key}' in the requested scope; refusing to select one arbitrarily.`,
+              ),
+            )
+          : Effect.succeed(matches[0]);
+      }),
     );
 
 const attrsFrom = (
@@ -205,6 +211,26 @@ const ensureUserManagedVariable = (variable: ApiEnvironmentVariable) =>
     }
   });
 
+const ensureVariableIdentity = (
+  variable: ApiEnvironmentVariable,
+  expected: {
+    projectId: string;
+    branchId: string | null;
+    class: "production" | "preview";
+    key: string;
+  },
+) =>
+  variable.projectId === expected.projectId &&
+  variable.branchId === expected.branchId &&
+  variable.class === expected.class &&
+  variable.key === expected.key
+    ? Effect.void
+    : Effect.fail(
+        new Error(
+          `Prisma environment variable '${variable.id}' has immutable identity project '${variable.projectId}', branch '${variable.branchId ?? "null"}', class '${variable.class}', key '${variable.key}', but this resource requires project '${expected.projectId}', branch '${expected.branchId ?? "null"}', class '${expected.class}', key '${expected.key}'. Refusing to update or delete a mismatched secret.`,
+        ),
+      );
+
 export const EnvironmentVariableProvider = () =>
   Provider.effect(
     EnvironmentVariable,
@@ -212,13 +238,28 @@ export const EnvironmentVariableProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["environmentVariableId"],
-        list: () => Effect.succeed([]),
+        list: () =>
+          client.listEnvironmentVariables().pipe(
+            Effect.map((variables) =>
+              variables
+                // System-managed variables are project-owned and cannot be
+                // deleted through this API.
+                .filter((variable) => !variable.isManagedBySystem)
+                .map((variable) =>
+                  // The API deliberately never returns plaintext. `delete`
+                  // needs only identity/metadata, so nuke uses an impossible
+                  // empty placeholder rather than pretending to know a secret.
+                  attrsFrom(variable, Redacted.make("")),
+                ),
+            ),
+          ),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.environmentVariableId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId = unresolvedProjectIdOf(olds.project);
+          const oldProjectId =
+            output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -230,10 +271,11 @@ export const EnvironmentVariableProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            isResolved(news.value) &&
-            valueOf(news.value) !== valueOf(olds.value)
-          ) {
+          // Values are write-only: the Management API never returns
+          // plaintext, so equality with `olds` cannot prove the live secret
+          // is still correct. Re-apply every resolved desired value to heal
+          // out-of-band secret drift on ordinary deploys.
+          if (isResolved(news.value)) {
             return { action: "update" } as const;
           }
           return undefined;
@@ -260,9 +302,15 @@ export const EnvironmentVariableProvider = () =>
                     )
                   : undefined;
               });
-          return variable
-            ? attrsFrom(variable, output?.value ?? redacted(olds.value))
-            : undefined;
+          if (!variable) return undefined;
+          const attrs = attrsFrom(
+            variable,
+            // A cold read cannot observe the secret. Never copy the desired
+            // value into output: doing so would make the forced adoption
+            // reconcile falsely conclude the cloud already contains it.
+            output?.value ?? Redacted.make(""),
+          );
+          return variableId === undefined ? Unowned(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           if (news.branchId !== undefined && news.class !== "preview") {
@@ -283,14 +331,8 @@ export const EnvironmentVariableProvider = () =>
                 .pipe(
                   Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
                 )
-            : yield* findVariable(
-                client,
-                projectId,
-                news.class,
-                news.key,
-                news.branchId,
-              );
-          const value = redacted(news.value);
+            : undefined;
+          const value = news.value;
           let created = false;
           if (!variable) {
             const result = yield* client
@@ -304,21 +346,9 @@ export const EnvironmentVariableProvider = () =>
               .pipe(
                 Effect.map((variable) => ({ variable, created: true })),
                 Effect.catchIf(isConflict, () =>
-                  findVariable(
-                    client,
-                    projectId,
-                    news.class,
-                    news.key,
-                    news.branchId,
-                  ).pipe(
-                    Effect.flatMap((variable) =>
-                      variable
-                        ? Effect.succeed({ variable, created: false })
-                        : Effect.fail(
-                            new Error(
-                              `Prisma environment variable '${news.key}' already exists but could not be read`,
-                            ),
-                          ),
+                  Effect.fail(
+                    new Error(
+                      `Prisma environment variable '${news.key}' appeared after the adoption check. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable.`,
                     ),
                   ),
                 ),
@@ -326,12 +356,14 @@ export const EnvironmentVariableProvider = () =>
             variable = result.variable;
             created = result.created;
           }
+          yield* ensureVariableIdentity(variable, {
+            projectId,
+            branchId: news.branchId ?? null,
+            class: news.class,
+            key: news.key,
+          });
           yield* ensureUserManagedVariable(variable);
-          if (
-            !created &&
-            (output?.value === undefined ||
-              Redacted.value(output.value) !== Redacted.value(value))
-          ) {
+          if (!created) {
             variable = yield* client.updateEnvironmentVariable(variable.id, {
               value: Redacted.value(value),
             });
@@ -344,6 +376,12 @@ export const EnvironmentVariableProvider = () =>
             .getEnvironmentVariable(output.environmentVariableId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!variable) return;
+          yield* ensureVariableIdentity(variable, {
+            projectId: output.projectId,
+            branchId: output.branchId,
+            class: output.class,
+            key: output.key,
+          });
           if (variable.isManagedBySystem) {
             // Prisma-owned environment variables are provider-managed system
             // state and are not deletable through this resource lifecycle.

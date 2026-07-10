@@ -6,12 +6,10 @@ import type {
   AppUpdateInput,
   BranchCreateInput,
   BranchUpdateInput,
-  ComputeVersionLogsQuery,
-  DeploymentCreateInput,
+  BuildLogsQuery,
   DatabaseConnectionCreateInput,
-  ComputeServiceCreateInput,
-  ComputeServiceUpdateInput,
-  ComputeVersionCreateInput,
+  DeploymentCreateInput,
+  DeploymentLogsQuery,
   ConnectionCreateInput,
   CustomDomainCreateInput,
   DatabaseCreateInput,
@@ -19,15 +17,12 @@ import type {
   EnvironmentVariableCreateInput,
   EnvironmentVariableUpdateInput,
   PrismaBranchIdFilter,
-  ProjectComputeServiceCreateInput,
   ProjectCreateInput,
   ProjectDatabaseCreateInput,
   ProjectTransferInput,
   ProjectUpdateInput,
   RestoreDatabaseInput,
   ScmInstallIntentCreateInput,
-  ScmInstallationConnectInput,
-  ServiceComputeVersionCreateInput,
   SourceRepositoryCreateInput,
 } from "./Types.ts";
 
@@ -140,98 +135,12 @@ export const updateBranch = (id: string, input: BranchUpdateInput) =>
 export const deleteBranch = (id: string) =>
   withClient((client) => client.deleteBranch(id));
 
-export const listComputeServices = (query?: {
-  cursor?: string | null;
-  limit?: number;
-  projectId?: string;
-  branchId?: PrismaBranchIdFilter;
-  branchGitName?: string;
-}) => withClient((client) => client.listComputeServices(query));
-export const listProjectComputeServices = (
-  projectId: string,
-  query?: { cursor?: string | null; limit?: number },
-) =>
-  withClient((client) => client.listProjectComputeServices(projectId, query));
-export const getComputeService = (id: string) =>
-  withClient((client) => client.getComputeService(id));
-export const createComputeService = (input: ComputeServiceCreateInput) =>
-  withClient((client) => client.createComputeService(input));
-export const createProjectComputeService = (
-  projectId: string,
-  input: ProjectComputeServiceCreateInput,
-) =>
-  withClient((client) => client.createProjectComputeService(projectId, input));
-export const updateComputeService = (
-  id: string,
-  input: ComputeServiceUpdateInput,
-) => withClient((client) => client.updateComputeService(id, input));
-export const deleteComputeService = (id: string) =>
-  withClient((client) => client.deleteComputeService(id));
-export const promoteComputeService = (id: string, versionId: string) =>
-  withClient((client) => client.promoteComputeService(id, versionId));
-export const rollbackComputeService = (id: string, versionId: string) =>
-  withClient((client) => client.rollbackComputeService(id, versionId));
-export const listComputeServiceDomains = (computeServiceId: string) =>
-  withClient((client) => client.listComputeServiceDomains(computeServiceId));
-export const createComputeServiceDomain = (
-  computeServiceId: string,
-  input: CustomDomainCreateInput,
-) =>
-  withClient((client) =>
-    client.createComputeServiceDomain(computeServiceId, input),
-  );
 export const getCustomDomain = (id: string) =>
   withClient((client) => client.getCustomDomain(id));
 export const deleteCustomDomain = (id: string) =>
   withClient((client) => client.deleteCustomDomain(id));
 export const retryCustomDomain = (id: string) =>
   withClient((client) => client.retryCustomDomain(id));
-
-export const listComputeVersions = (query?: {
-  cursor?: string | null;
-  limit?: number;
-  computeServiceId?: string;
-}) => withClient((client) => client.listComputeVersions(query));
-export const listServiceComputeVersions = (
-  computeServiceId: string,
-  query?: { cursor?: string | null; limit?: number },
-) =>
-  withClient((client) =>
-    client.listServiceComputeVersions(computeServiceId, query),
-  );
-export const getComputeVersion = (id: string) =>
-  withClient((client) => client.getComputeVersion(id));
-export const getComputeServiceVersion = (id: string) =>
-  withClient((client) => client.getComputeServiceVersion(id));
-export const createComputeVersion = (input: ComputeVersionCreateInput) =>
-  withClient((client) => client.createComputeVersion(input));
-export const createServiceComputeVersion = (
-  computeServiceId: string,
-  input: ServiceComputeVersionCreateInput,
-) =>
-  withClient((client) =>
-    client.createServiceComputeVersion(computeServiceId, input),
-  );
-export const deleteComputeVersion = (id: string) =>
-  withClient((client) => client.deleteComputeVersion(id));
-export const deleteComputeServiceVersion = (id: string) =>
-  withClient((client) => client.deleteComputeServiceVersion(id));
-export const startComputeVersion = (id: string) =>
-  withClient((client) => client.startComputeVersion(id));
-export const startComputeServiceVersion = (id: string) =>
-  withClient((client) => client.startComputeServiceVersion(id));
-export const stopComputeVersion = (id: string) =>
-  withClient((client) => client.stopComputeVersion(id));
-export const stopComputeServiceVersion = (id: string) =>
-  withClient((client) => client.stopComputeServiceVersion(id));
-export const getComputeVersionLogsRequest = (
-  id: string,
-  query?: ComputeVersionLogsQuery,
-) => withClient((client) => client.getComputeVersionLogsRequest(id, query));
-export const getComputeVersionLogsUrl = (
-  id: string,
-  query?: ComputeVersionLogsQuery,
-) => withClient((client) => client.getComputeVersionLogsUrl(id, query));
 
 export const listApps = (query?: {
   cursor?: string | null;
@@ -263,7 +172,7 @@ export const listAppDeployments = (
 ) => withClient((client) => client.listAppDeployments(appId, query));
 export const createAppDeployment = (
   appId: string,
-  input: DeploymentCreateInput,
+  input?: DeploymentCreateInput,
 ) => withClient((client) => client.createAppDeployment(appId, input));
 export const getDeployment = (id: string) =>
   withClient((client) => client.getDeployment(id));
@@ -273,14 +182,12 @@ export const startDeployment = (id: string) =>
   withClient((client) => client.startDeployment(id));
 export const stopDeployment = (id: string) =>
   withClient((client) => client.stopDeployment(id));
-export const getDeploymentLogsUrl = (
+export const getDeploymentLogsRequest = (
   id: string,
-  query?: ComputeVersionLogsQuery,
-) => withClient((client) => client.getDeploymentLogsUrl(id, query));
-export const getBuildLogsUrl = (
-  buildId: string,
-  query?: ComputeVersionLogsQuery,
-) => withClient((client) => client.getBuildLogsUrl(buildId, query));
+  query?: DeploymentLogsQuery,
+) => withClient((client) => client.getDeploymentLogsRequest(id, query));
+export const getBuildLogsRequest = (buildId: string, query?: BuildLogsQuery) =>
+  withClient((client) => client.getBuildLogsRequest(buildId, query));
 
 export const listEnvironmentVariables = (query?: {
   cursor?: string | null;
@@ -326,17 +233,11 @@ export const revokeWorkspaceIntegration = (
 
 export const listScmInstallations = (query: {
   workspaceId: string;
-  connected?: boolean;
   cursor?: string | null;
   limit?: number;
 }) => withClient((client) => client.listScmInstallations(query));
 export const createScmInstallIntent = (input: ScmInstallIntentCreateInput) =>
   withClient((client) => client.createScmInstallIntent(input));
-export const connectScmInstallation = (
-  installationId: string,
-  input: ScmInstallationConnectInput,
-) =>
-  withClient((client) => client.connectScmInstallation(installationId, input));
 export const listScmInstallationRepositories = (
   installationId: string,
   query?: { cursor?: string | null; limit?: number },

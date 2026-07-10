@@ -144,4 +144,70 @@ describe("PrismaEnvironment", () => {
       ),
     ),
   );
+
+  it.effect("allows HTTP only for loopback Management API URLs", () =>
+    Effect.gen(function* () {
+      const env = yield* PrismaEnvironment;
+      expect(env.baseUrl).toBe("http://127.0.0.1:8787");
+    }).pipe(
+      Effect.provide(
+        testLayer({
+          PRISMA_SERVICE_TOKEN: "test-token",
+          PRISMA_API_URL: "http://127.0.0.1:8787/",
+        }),
+      ),
+    ),
+  );
+
+  it.effect("rejects insecure remote Management API URLs", () =>
+    Effect.gen(function* () {
+      const exit = yield* PrismaEnvironment.pipe(
+        Effect.provide(
+          testLayer({
+            PRISMA_SERVICE_TOKEN: "test-token",
+            PRISMA_API_URL: "http://management.prisma.test",
+          }),
+        ),
+        Effect.exit,
+      );
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag === "Failure") {
+        expect(String(exit.cause)).toContain("must use HTTPS");
+      }
+    }),
+  );
+
+  it.effect("rejects Management API URLs with credentials or path state", () =>
+    Effect.gen(function* () {
+      const credentialExit = yield* PrismaEnvironment.pipe(
+        Effect.provide(
+          testLayer({
+            PRISMA_SERVICE_TOKEN: "test-token",
+            PRISMA_API_URL: "https://token@api.prisma.test",
+          }),
+        ),
+        Effect.exit,
+      );
+      expect(credentialExit._tag).toBe("Failure");
+      if (credentialExit._tag === "Failure") {
+        expect(String(credentialExit.cause)).toContain(
+          "must not contain credentials",
+        );
+      }
+
+      const pathExit = yield* PrismaEnvironment.pipe(
+        Effect.provide(
+          testLayer({
+            PRISMA_SERVICE_TOKEN: "test-token",
+            PRISMA_API_URL: "https://api.prisma.test/proxy",
+          }),
+        ),
+        Effect.exit,
+      );
+      expect(pathExit._tag).toBe("Failure");
+      if (pathExit._tag === "Failure") {
+        expect(String(pathExit.cause)).toContain("must be an origin");
+      }
+    }),
+  );
 });

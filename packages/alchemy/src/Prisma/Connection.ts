@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import { Unowned } from "../AdoptPolicy.ts";
 import * as Binding from "../Binding.ts";
 import { isResolved } from "../Diff.ts";
 import * as Output from "../Output.ts";
@@ -35,7 +36,9 @@ export interface ConnectionProps {
    */
   database: string | Database;
   /**
-   * Connection display name.
+   * Human-readable connection name prefix. Alchemy appends the resource
+   * instance identity because Prisma permits duplicate connection names and
+   * exposes no ownership tags.
    */
   name: string;
   /**
@@ -71,10 +74,6 @@ export interface Connection extends Resource<
      */
     createdAt: string;
     /**
-     * Legacy connection string returned on create/rotate, redacted in state.
-     */
-    connectionString: Redacted.Redacted<string> | undefined;
-    /**
      * Direct Postgres connection string, redacted in state.
      */
     directConnectionString: Redacted.Redacted<string> | undefined;
@@ -107,15 +106,14 @@ export interface ConnectionBindingClient {
   /**
    * Conventional application database URL.
    *
-   * Resolves to the direct Postgres connection string, falling back to the
-   * legacy connection string when direct credentials are unavailable.
+   * Resolves to the pooled Postgres URL first, then direct Postgres, then
+   * Accelerate. This is the serverless-safe default for application traffic.
    */
   databaseUrl: Effect.Effect<string | undefined, never, RuntimeContext>;
   /**
    * Conventional direct database URL.
    *
-   * Resolves to the direct Postgres connection string, falling back to the
-   * legacy connection string when direct credentials are unavailable.
+   * Resolves only to the canonical direct Postgres endpoint.
    */
   directUrl: Effect.Effect<string | undefined, never, RuntimeContext>;
   /**
@@ -130,10 +128,6 @@ export interface ConnectionBindingClient {
    * Database ID this connection belongs to.
    */
   databaseId: Effect.Effect<string, never, RuntimeContext>;
-  /**
-   * Legacy connection string, when available.
-   */
-  connectionString: Effect.Effect<string | undefined, never, RuntimeContext>;
   /**
    * Direct Postgres connection string, when available.
    */
@@ -175,7 +169,6 @@ export interface ConnectionBindingClient {
 export interface ConnectionBindingEnvKeys {
   connectionId: string;
   databaseId: string;
-  connectionString: string;
   directConnectionString: string;
   pooledConnectionString: string;
   accelerateConnectionString: string;
@@ -203,7 +196,7 @@ export interface ConnectionBinding extends Binding.Service<
 export const ConnectionBinding =
   Binding.Service<ConnectionBinding>("Prisma.Connection");
 
-export type ConnectionUrlKind = "legacy" | "direct" | "pooled" | "accelerate";
+export type ConnectionUrlKind = "direct" | "pooled" | "accelerate";
 export type ConnectionUrlPreference =
   | ConnectionUrlKind
   | readonly ConnectionUrlKind[];
@@ -342,7 +335,7 @@ export type ConnectionEnv<
  *
  * const app = yield* Prisma.Compute("api", {
  *   project,
- *   serviceName: "api",
+ *   appName: "api",
  *   main: import.meta.filename,
  *   env,
  * });
@@ -352,7 +345,7 @@ export type ConnectionEnv<
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
- *   { project, serviceName: "api", main: import.meta.filename },
+ *   { project, appName: "api", main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.ConnectionBinding(connection);
  *     return {
@@ -398,11 +391,30 @@ export type ConnectionEnv<
  *   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
  * );
  * ```
+ *
+ * @resource
  */
 export const Connection = Resource<Connection>("Prisma.Connection");
 
-const envName = (value: string) =>
-  value.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
+const fnv1a64 = (value: string) => {
+  let hash = 0xcbf29ce484222325n;
+  for (const byte of new TextEncoder().encode(value)) {
+    hash ^= BigInt(byte);
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return hash.toString(16).padStart(16, "0").toUpperCase();
+};
+
+const envName = (value: string) => {
+  const normalized = value.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
+  // Preserve the established keys for conventional PascalCase FQNs while
+  // disambiguating arbitrary logical IDs whose lossy normalization can
+  // collide (`db-a`, `db_a`, and `db.a`, for example).
+  const canonical = value
+    .split("/")
+    .every((segment) => /^[A-Z][a-z0-9]*$/.test(segment));
+  return canonical ? normalized : `${normalized}_${fnv1a64(value)}`;
+};
 
 const asPreferenceList = (
   preference: ConnectionUrlPreference,
@@ -425,25 +437,23 @@ const selectedConnectionUrl = (
  * fallback logic.
  *
  * JavaScript operators like `??` run before Alchemy Outputs resolve, so use
- * this helper when you want a fallback chain such as direct-then-legacy.
+ * this helper when you want a canonical fallback chain.
  *
- * @default ["direct", "legacy"]
+ * @default ["pooled", "direct", "accelerate"]
  */
 export const connectionUrl = (
   connection: Connection,
-  preference: ConnectionUrlPreference = ["direct", "legacy"],
+  preference: ConnectionUrlPreference = ["pooled", "direct", "accelerate"],
 ): Output.Output<Redacted.Redacted<string> | undefined> => {
   const preferred = asPreferenceList(preference);
   return Output.all(
-    connection.connectionString,
     connection.directConnectionString,
     connection.pooledConnectionString,
     connection.accelerateConnectionString,
   ).pipe(
-    Output.map(([legacy, direct, pooled, accelerate]) =>
+    Output.map(([direct, pooled, accelerate]) =>
       selectedConnectionUrl(
         {
-          legacy,
           direct,
           pooled,
           accelerate,
@@ -471,8 +481,8 @@ const setEnvValue = (
  * Build conventional environment variables for a Prisma Connection.
  *
  * The returned values are Alchemy Outputs, so they can be passed directly to
- * `Prisma.Compute({ env })` or build command env. `DATABASE_URL` and
- * `DIRECT_URL` use the direct connection string with a legacy fallback.
+ * a deployment's `env` or build command env. `DATABASE_URL` prefers the
+ * canonical pooled endpoint, while `DIRECT_URL` is always direct.
  */
 export const connectionEnv = <
   const Options extends ConnectionEnvOptions | undefined = undefined,
@@ -482,9 +492,16 @@ export const connectionEnv = <
 ): ConnectionEnv<Options> => {
   const resolved: ConnectionEnvOptions = options ?? {};
   const env: Record<string, ConnectionEnvValue> = {};
-  const appUrl = connectionUrl(connection);
-  setEnvValue(env, envKey(resolved.databaseUrl, "DATABASE_URL"), appUrl);
-  setEnvValue(env, envKey(resolved.directUrl, "DIRECT_URL"), appUrl);
+  setEnvValue(
+    env,
+    envKey(resolved.databaseUrl, "DATABASE_URL"),
+    connectionUrl(connection),
+  );
+  setEnvValue(
+    env,
+    envKey(resolved.directUrl, "DIRECT_URL"),
+    connectionUrl(connection, "direct"),
+  );
   setEnvValue(
     env,
     envKey(resolved.pooledDatabaseUrl, "POOLED_DATABASE_URL"),
@@ -514,7 +531,6 @@ export const connectionBindingEnvKeys = (
   return {
     connectionId: `${prefix}_CONNECTION_ID`,
     databaseId: `${prefix}_DATABASE_ID`,
-    connectionString: `${prefix}_CONNECTION_STRING`,
     directConnectionString: `${prefix}_DIRECT_CONNECTION_STRING`,
     pooledConnectionString: `${prefix}_POOLED_CONNECTION_STRING`,
     accelerateConnectionString: `${prefix}_ACCELERATE_CONNECTION_STRING`,
@@ -561,7 +577,6 @@ const encodeOptionalValue = <A extends string | Redacted.Redacted<string>>(
 const encodedConnectionBindingEnv = (connection: Connection) => ({
   connectionId: connection.connectionId,
   databaseId: connection.databaseId,
-  connectionString: encodeOptionalValue(connection.connectionString),
   directConnectionString: encodeOptionalValue(
     connection.directConnectionString,
   ),
@@ -582,7 +597,6 @@ const connectionBindingEnv = (connection: Connection) => {
   return {
     [keys.connectionId]: env.connectionId,
     [keys.databaseId]: env.databaseId,
-    [keys.connectionString]: env.connectionString,
     [keys.directConnectionString]: env.directConnectionString,
     [keys.pooledConnectionString]: env.pooledConnectionString,
     [keys.accelerateConnectionString]: env.accelerateConnectionString,
@@ -621,7 +635,6 @@ const connectionWorkerBindings = (
   return [
     workerBindingValue(keys.connectionId, env.connectionId),
     workerBindingValue(keys.databaseId, env.databaseId),
-    workerBindingValue(keys.connectionString, env.connectionString),
     workerBindingValue(keys.directConnectionString, env.directConnectionString),
     workerBindingValue(keys.pooledConnectionString, env.pooledConnectionString),
     workerBindingValue(
@@ -700,10 +713,6 @@ export const ConnectionBindingLive = Layer.effect(
       }
       const keys = connectionBindingEnvKeys(connection);
       const env = encodedConnectionBindingEnv(connection);
-      const connectionString = runtimeOutput(
-        keys.connectionString,
-        env.connectionString,
-      ).pipe(Effect.map(optionalString));
       const directConnectionString = runtimeOutput(
         keys.directConnectionString,
         env.directConnectionString,
@@ -712,23 +721,28 @@ export const ConnectionBindingLive = Layer.effect(
         keys.pooledConnectionString,
         env.pooledConnectionString,
       ).pipe(Effect.map(optionalString));
+      const accelerateConnectionString = runtimeOutput(
+        keys.accelerateConnectionString,
+        env.accelerateConnectionString,
+      ).pipe(Effect.map(optionalString));
       const databaseUrl = Effect.all([
+        pooledConnectionString,
         directConnectionString,
-        connectionString,
-      ]).pipe(Effect.map(([direct, legacy]) => direct ?? legacy));
+        accelerateConnectionString,
+      ]).pipe(
+        Effect.map(
+          ([pooled, direct, accelerate]) => pooled ?? direct ?? accelerate,
+        ),
+      );
       return {
         databaseUrl,
-        directUrl: databaseUrl,
+        directUrl: directConnectionString,
         pooledDatabaseUrl: pooledConnectionString,
         connectionId: runtimeOutput(keys.connectionId, env.connectionId),
         databaseId: runtimeOutput(keys.databaseId, env.databaseId),
-        connectionString,
         directConnectionString,
         pooledConnectionString,
-        accelerateConnectionString: runtimeOutput(
-          keys.accelerateConnectionString,
-          env.accelerateConnectionString,
-        ).pipe(Effect.map(optionalString)),
+        accelerateConnectionString,
         host: runtimeOutput(keys.host, env.host).pipe(
           Effect.map(nullableString),
         ),
@@ -746,15 +760,71 @@ export const ConnectionBindingLive = Layer.effect(
 const findConnection = (
   client: PrismaManagementClient,
   databaseId: string,
-  name: string,
+  predicate: (connection: DatabaseConnection) => boolean,
 ) =>
   client
     .listDatabaseConnections(databaseId, { limit: 100 })
-    .pipe(
-      Effect.map((connections) =>
-        connections.find((c: DatabaseConnection) => c.name === name),
-      ),
+    .pipe(Effect.map((connections) => connections.filter(predicate)));
+
+class AmbiguousPrismaConnectionError extends Error {
+  readonly _tag = "AmbiguousPrismaConnectionError";
+
+  constructor(databaseId: string, name: string, count: number) {
+    super(
+      `Prisma database '${databaseId}' has ${count} connections named '${name}'; use a unique connection name before importing it into Alchemy`,
     );
+  }
+}
+
+class InvalidPrismaConnectionNameError extends Error {
+  readonly _tag = "InvalidPrismaConnectionNameError";
+
+  constructor() {
+    super(
+      "Prisma connection name must contain at least one non-space character",
+    );
+  }
+}
+
+const validateConnectionName = (name: string) => {
+  const trimmed = name.trim();
+  return trimmed.length === 0
+    ? Effect.fail(new InvalidPrismaConnectionNameError())
+    : Effect.succeed(trimmed);
+};
+
+const uniqueConnection = (
+  client: PrismaManagementClient,
+  databaseId: string,
+  description: string,
+  predicate: (connection: DatabaseConnection) => boolean,
+) =>
+  findConnection(client, databaseId, predicate).pipe(
+    Effect.flatMap((connections) =>
+      connections.length <= 1
+        ? Effect.succeed(connections[0])
+        : Effect.fail(
+            new AmbiguousPrismaConnectionError(
+              databaseId,
+              description,
+              connections.length,
+            ),
+          ),
+    ),
+  );
+
+const physicalConnectionPrefix = (name: string) =>
+  `${name.trim().slice(0, 52)}-`;
+
+const physicalConnectionName = (name: string, instanceId: string) => {
+  const instanceToken = instanceId.replaceAll(/[^a-zA-Z0-9]/g, "");
+  const effectiveSuffix =
+    instanceToken.length >= 12
+      ? instanceToken.slice(0, 12)
+      : fnv1a64(instanceId).slice(0, 12);
+  const maxPrefixLength = 65 - effectiveSuffix.length - 1;
+  return `${name.trim().slice(0, maxPrefixLength)}-${effectiveSuffix}`;
+};
 
 const attrsFrom = (
   connection: DatabaseConnection | DatabaseConnectionWithSecrets,
@@ -765,7 +835,6 @@ const attrsFrom = (
   databaseId: connection.database.id,
   kind: connection.kind,
   createdAt: connection.createdAt,
-  connectionString: secrets.connectionString,
   directConnectionString: secrets.directConnectionString,
   pooledConnectionString: secrets.pooledConnectionString,
   accelerateConnectionString: secrets.accelerateConnectionString,
@@ -781,20 +850,34 @@ export const ConnectionProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["connectionId"],
-        list: () => Effect.succeed([]),
-        diff: Effect.fn(function* ({ olds, news, output }) {
+        list: () =>
+          client
+            .listConnections()
+            .pipe(
+              Effect.map((connections) =>
+                connections.map((c) => attrsFrom(c, {})),
+              ),
+            ),
+        diff: Effect.fn(function* ({ instanceId, olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.connectionId)) {
             return { action: "update" } as const;
           }
-          const oldDatabaseId = unresolvedDatabaseIdOf(olds.database);
+          const oldDatabaseId =
+            output?.databaseId ?? unresolvedDatabaseIdOf(olds.database);
           const newDatabaseId = isResolved(news.database)
             ? unresolvedDatabaseIdOf(news.database)
             : undefined;
-          if (
-            concreteIdsChanged(oldDatabaseId, newDatabaseId) ||
-            (isResolved(news.name) && news.name !== olds.name)
-          ) {
+          const nameChanged = isResolved(news.name)
+            ? output
+              ? output.connectionName !==
+                physicalConnectionName(
+                  yield* validateConnectionName(news.name),
+                  instanceId,
+                )
+              : news.name.trim() !== olds.name.trim()
+            : false;
+          if (concreteIdsChanged(oldDatabaseId, newDatabaseId) || nameChanged) {
             return { action: "replace" } as const;
           }
           if (!isResolved(news.rotate)) return undefined;
@@ -803,35 +886,64 @@ export const ConnectionProvider = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ output, olds }) {
+        read: Effect.fn(function* ({ instanceId, output, olds }) {
           const connectionId = isPrismaDevId(output?.connectionId)
             ? undefined
             : output?.connectionId;
-          const connection = connectionId
-            ? yield* client
-                .getConnection(connectionId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
-            : yield* Effect.gen(function* () {
-                const databaseId = unresolvedDatabaseIdOf(olds.database);
-                return databaseId
-                  ? yield* findConnection(client, databaseId, olds.name)
-                  : undefined;
-              });
+          if (connectionId) {
+            const connection = yield* client
+              .getConnection(connectionId)
+              .pipe(
+                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+              );
+            if (!connection) return undefined;
+            const observed = extractConnectionSecrets(connection);
+            return attrsFrom(connection, {
+              directConnectionString: output?.directConnectionString,
+              pooledConnectionString: output?.pooledConnectionString,
+              accelerateConnectionString: output?.accelerateConnectionString,
+              host: observed.host,
+              user: output?.user,
+              password: output?.password,
+            });
+          }
+
+          const databaseId = unresolvedDatabaseIdOf(olds.database);
+          if (!databaseId) return undefined;
+          const name = yield* validateConnectionName(olds.name);
+          const expectedName = physicalConnectionName(name, instanceId);
+          const owned = yield* uniqueConnection(
+            client,
+            databaseId,
+            expectedName,
+            (connection) => connection.name === expectedName,
+          );
+          if (owned) return attrsFrom(owned, {});
+
+          const prefix = physicalConnectionPrefix(name);
+          const generated = yield* uniqueConnection(
+            client,
+            databaseId,
+            `${prefix}<instance-id>`,
+            (connection) =>
+              connection.name !== expectedName &&
+              connection.name.startsWith(prefix) &&
+              /^[0-9a-f]{12}$/i.test(connection.name.slice(prefix.length)),
+          );
+          const connection =
+            generated ??
+            (yield* uniqueConnection(
+              client,
+              databaseId,
+              name,
+              (connection) => connection.name === name,
+            ));
           if (!connection) return undefined;
-          return attrsFrom(connection, {
-            connectionString: output?.connectionString,
-            directConnectionString: output?.directConnectionString,
-            pooledConnectionString: output?.pooledConnectionString,
-            accelerateConnectionString: output?.accelerateConnectionString,
-            host: output?.host,
-            user: output?.user,
-            password: output?.password,
-          });
+          return Unowned(attrsFrom(connection, {}));
         }),
-        reconcile: Effect.fn(function* ({ news, olds, output }) {
+        reconcile: Effect.fn(function* ({ instanceId, news, olds, output }) {
           const databaseId = yield* resolveDatabaseId(news.database);
+          const name = yield* validateConnectionName(news.name);
           const connectionId = isPrismaDevId(output?.connectionId)
             ? undefined
             : output?.connectionId;
@@ -841,34 +953,58 @@ export const ConnectionProvider = () =>
                 .pipe(
                   Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
                 )
-            : yield* findConnection(client, databaseId, news.name);
+            : undefined;
 
-          let secrets: PrismaSecretConnection = {};
+          const expectedName = physicalConnectionName(name, instanceId);
+          if (
+            connection &&
+            (connection.database.id !== databaseId ||
+              connection.name !== expectedName)
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma connection '${connection.id}' resolves to database '${connection.database.id}' with name '${connection.name}', not requested database '${databaseId}' and physical name '${expectedName}'. Refusing to rotate or persist mismatched identity; replace the connection instead.`,
+              ),
+            );
+          }
+
+          if (!connection && !connectionId) {
+            connection = yield* uniqueConnection(
+              client,
+              databaseId,
+              expectedName,
+              (candidate) => candidate.name === expectedName,
+            );
+          }
+
+          let secrets: PrismaSecretConnection = connection
+            ? extractConnectionSecrets(connection)
+            : {};
           let createdConnection = false;
           if (!connection) {
             const result = yield* client
               .createConnection({
                 databaseId,
-                name: news.name,
+                name: expectedName,
               })
               .pipe(
                 Effect.map((connection) => ({
                   connection,
-                  secrets: extractConnectionSecrets(connection),
                   created: true,
                 })),
                 Effect.catchIf(isConflict, () =>
-                  findConnection(client, databaseId, news.name).pipe(
+                  uniqueConnection(
+                    client,
+                    databaseId,
+                    expectedName,
+                    (candidate) => candidate.name === expectedName,
+                  ).pipe(
                     Effect.flatMap((connection) =>
                       connection
-                        ? Effect.succeed({
-                            connection,
-                            secrets: {},
-                            created: false,
-                          })
+                        ? Effect.succeed({ connection, created: false })
                         : Effect.fail(
                             new Error(
-                              `Prisma connection '${news.name}' already exists but could not be read`,
+                              `Generated Prisma connection '${expectedName}' appeared after create but could not be read uniquely.`,
                             ),
                           ),
                     ),
@@ -876,21 +1012,38 @@ export const ConnectionProvider = () =>
                 ),
               );
             connection = result.connection;
-            secrets = result.secrets;
+            secrets = extractConnectionSecrets(connection);
             createdConnection = result.created;
           }
+          const missingCanonicalSecrets =
+            secrets.directConnectionString === undefined &&
+            secrets.pooledConnectionString === undefined &&
+            secrets.accelerateConnectionString === undefined &&
+            output?.directConnectionString === undefined &&
+            output?.pooledConnectionString === undefined &&
+            output?.accelerateConnectionString === undefined;
           if (
             !createdConnection &&
-            (news.rotate ?? false) !== (olds?.rotate ?? false)
+            ((missingCanonicalSecrets && olds !== undefined) ||
+              (news.rotate === true && olds?.rotate !== true))
           ) {
             const rotated = yield* client.rotateConnection(connection.id);
+            if (
+              rotated.id !== connection.id ||
+              rotated.database.id !== databaseId ||
+              rotated.name !== expectedName
+            ) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma rotated connection '${rotated.id}' for database '${rotated.database.id}' with name '${rotated.name}', but connection '${connection.id}' for database '${databaseId}' with name '${expectedName}' was requested. Refusing to persist mismatched credentials.`,
+                ),
+              );
+            }
             connection = rotated;
             secrets = extractConnectionSecrets(rotated);
           }
 
           return attrsFrom(connection, {
-            connectionString:
-              secrets.connectionString ?? output?.connectionString,
             directConnectionString:
               secrets.directConnectionString ?? output?.directConnectionString,
             pooledConnectionString:
@@ -905,8 +1058,22 @@ export const ConnectionProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.connectionId)) return;
+          const connection = yield* client
+            .getConnection(output.connectionId)
+            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          if (!connection) return;
+          if (
+            connection.database.id !== output.databaseId ||
+            connection.name !== output.connectionName
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma connection '${connection.id}' no longer matches persisted database '${output.databaseId}' and name '${output.connectionName}'. Refusing to delete a mismatched connection.`,
+              ),
+            );
+          }
           yield* client
-            .deleteConnection(output.connectionId)
+            .deleteConnection(connection.id)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));
         }),
       };

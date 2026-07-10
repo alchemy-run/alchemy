@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
-import type { ComputeService } from "./ComputeService.ts";
+import type { App } from "./App.ts";
 import type { Database } from "./Database.ts";
 import type { Project } from "./Project.ts";
 
@@ -62,21 +62,8 @@ export const resolveDatabaseId = (database: string | Database) =>
     typeof database === "string" ? database : (database.databaseId as unknown),
   );
 
-export const unresolvedComputeServiceIdOf = (
-  computeService: string | ComputeService | undefined,
-) =>
-  concreteIdOf(
-    typeof computeService === "string"
-      ? computeService
-      : (computeService?.computeServiceId as unknown),
-  );
+export const unresolvedAppIdOf = (app: string | App | undefined) =>
+  concreteIdOf(typeof app === "string" ? app : (app?.appId as unknown));
 
-export const resolveComputeServiceId = (
-  computeService: string | ComputeService,
-) =>
-  resolveId(
-    "compute service id",
-    typeof computeService === "string"
-      ? computeService
-      : (computeService.computeServiceId as unknown),
-  );
+export const resolveAppId = (app: string | App) =>
+  resolveId("app id", typeof app === "string" ? app : (app.appId as unknown));

@@ -1,30 +1,35 @@
 import * as Effect from "effect/Effect";
+import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
+import * as Output from "../Output.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
+  isConflict,
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
-import type { ComputeService } from "./ComputeService.ts";
+import type { App } from "./App.ts";
+import type { Compute } from "./Compute.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdOf,
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
-  resolveComputeServiceId,
-  unresolvedComputeServiceIdOf,
 } from "./Refs.ts";
 import type { CustomDomain as ApiCustomDomain } from "./Types.ts";
 
+type AppReference = string | App | Compute;
+
 export interface CustomDomainProps {
   /**
-   * Compute service ID or `compute.computeServiceId` output that owns the domain.
+   * App ID or Compute output that owns the domain.
    */
-  computeService: string | ComputeService;
+  app: AppReference;
   /**
-   * Hostname to attach to the compute service.
+   * Hostname to attach to the app.
    */
   hostname: string;
 }
@@ -38,21 +43,21 @@ export interface CustomDomain extends Resource<
      */
     customDomainId: string;
     /**
-     * Hostname attached to the compute service.
+     * Hostname attached to the app.
      */
     hostname: string;
     /**
-     * Compute service ID that owns the domain.
+     * Current app ID that owns the domain.
      */
-    computeServiceId: string;
+    appId: string;
     /**
      * Prisma normalized custom domain provisioning status.
      */
     status: ApiCustomDomain["status"];
     /**
-     * Provider-level custom domain provisioning status.
+     * Raw custom-domain status returned by Foundry.
      */
-    providerStatus: ApiCustomDomain["providerStatus"];
+    foundryStatus: string;
     /**
      * Failure reason returned by Prisma, when provisioning failed.
      */
@@ -83,13 +88,14 @@ export interface CustomDomain extends Resource<
 > {}
 
 /**
- * A Prisma Compute custom domain.
+ * A Prisma app custom domain.
  *
+ * @resource
  * @section Creating a Custom Domain
- * @example Attach a hostname to a Compute service
+ * @example Attach a hostname to an app
  * ```typescript
  * const domain = yield* Prisma.CustomDomain("api-domain", {
- *   computeService: api.computeServiceId,
+ *   app: api.appId,
  *   hostname: "api.example.com",
  * });
  * ```
@@ -99,9 +105,9 @@ export const CustomDomain = Resource<CustomDomain>("Prisma.CustomDomain");
 const attrsFrom = (domain: ApiCustomDomain): CustomDomain["Attributes"] => ({
   customDomainId: domain.id,
   hostname: domain.hostname,
-  computeServiceId: domain.computeServiceId,
+  appId: domain.appId,
   status: domain.status,
-  providerStatus: domain.providerStatus,
+  foundryStatus: domain.foundryStatus,
   failureReason: domain.failureReason,
   failureCategory: domain.failureCategory,
   certExpiresAt: domain.certExpiresAt,
@@ -116,38 +122,64 @@ const normalizeHostname = (hostname: string) =>
 const sameHostname = (left: string, right: string) =>
   normalizeHostname(left) === normalizeHostname(right);
 
+const appIdValue = (app: AppReference | undefined) =>
+  typeof app === "string" ? app : app?.appId;
+
+const unresolvedAppIdOf = (app: AppReference | undefined) =>
+  concreteIdOf(appIdValue(app));
+
+const resolveAppId = (app: AppReference) =>
+  Effect.gen(function* () {
+    const value = appIdValue(app);
+    if (typeof value === "string") return value;
+    if (Output.isOutput(value)) {
+      const accessor = yield* value as Output.Output<string>;
+      return yield* accessor;
+    }
+    return yield* Effect.fail(new Error("Unable to resolve Prisma app id."));
+  });
+
 const findDomain = (
   client: PrismaManagementClient,
-  computeServiceId: string,
+  appId: string,
   hostname: string,
 ) =>
-  client.listComputeServiceDomains(computeServiceId).pipe(
+  client.listAppDomains(appId).pipe(
     Effect.catchIf(isNotFound, () => Effect.succeed([])),
-    Effect.map((domains) =>
-      domains.find((domain) => sameHostname(domain.hostname, hostname)),
-    ),
+    Effect.flatMap((domains) => {
+      const matches = domains.filter((domain) =>
+        sameHostname(domain.hostname, hostname),
+      );
+      return matches.length > 1
+        ? Effect.fail(
+            new Error(
+              `Prisma app '${appId}' has multiple custom domains matching '${hostname}'; refusing to select one arbitrarily.`,
+            ),
+          )
+        : Effect.succeed(matches[0]);
+    }),
   );
 
-const ensureDefaultBranchService = (
+const ensureDefaultBranchApp = (
   client: PrismaManagementClient,
-  computeServiceId: string,
+  appId: string,
 ) =>
   Effect.gen(function* () {
-    const service = yield* client.getComputeService(computeServiceId);
-    if (!service.branchId) {
+    const app = yield* client.getApp(appId);
+    if (!app.branchId) {
       return yield* Effect.fail(
         new Error(
-          "Prisma custom domains can only be attached to Compute services on the default Branch.",
+          "Prisma custom domains can only be attached to apps on the default Branch.",
         ),
       );
     }
     const branch = yield* client
-      .getBranch(service.branchId)
+      .getBranch(app.branchId)
       .pipe(
         Effect.catchIf(isNotFound, () =>
           Effect.fail(
             new Error(
-              `Unable to verify default Branch for Compute service ${computeServiceId}.`,
+              `Unable to verify default Branch for Prisma app ${appId}.`,
             ),
           ),
         ),
@@ -155,7 +187,7 @@ const ensureDefaultBranchService = (
     if (!branch.isDefault) {
       return yield* Effect.fail(
         new Error(
-          "Prisma custom domains can only be attached to Compute services on the default Branch.",
+          "Prisma custom domains can only be attached to apps on the default Branch.",
         ),
       );
     }
@@ -168,25 +200,47 @@ export const CustomDomainProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["customDomainId"],
-        list: () => Effect.succeed([]),
+        list: Effect.fn(function* () {
+          const apps = yield* client.listApps();
+          const domains = yield* Effect.forEach(
+            apps,
+            (app) =>
+              client
+                .listAppDomains(app.id)
+                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed([]))),
+            { concurrency: 8 },
+          );
+          return domains.flat().map(attrsFrom);
+        }),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.customDomainId)) {
             return { action: "update" } as const;
           }
-          const oldComputeServiceId = unresolvedComputeServiceIdOf(
-            olds.computeService,
+          const oldAppId = output?.appId ?? unresolvedAppIdOf(olds.app);
+          const newAppId = isResolved(news.app)
+            ? unresolvedAppIdOf(news.app as AppReference)
+            : undefined;
+          const oldHostname = normalizeHostname(
+            output?.hostname ?? olds.hostname,
           );
-          const newComputeServiceId = isResolved(news.computeService)
-            ? unresolvedComputeServiceIdOf(news.computeService)
+          const newHostname = isResolved(news.hostname)
+            ? normalizeHostname(news.hostname)
             : undefined;
           if (
-            concreteIdsChanged(oldComputeServiceId, newComputeServiceId) ||
-            (isResolved(news.hostname) &&
-              normalizeHostname(news.hostname) !==
-                normalizeHostname(olds.hostname))
+            concreteIdsChanged(oldAppId, newAppId) ||
+            (newHostname !== undefined && newHostname !== oldHostname)
           ) {
-            return { action: "replace" } as const;
+            return yield* Effect.fail(
+              new Error(
+                `Prisma cannot atomically replace custom domain '${oldHostname}' without risking traffic before the new domain is active. Create a second Prisma.CustomDomain logical resource, verify DNS/TLS and cut traffic over explicitly, then remove this resource.`,
+              ),
+            );
+          }
+          // A live failed Foundry attempt reaches the canonical retry endpoint
+          // below. Each reconcile performs at most one retry and never polls.
+          if (output?.status === "failed") {
+            return { action: "update" } as const;
           }
           return undefined;
         }),
@@ -201,19 +255,17 @@ export const CustomDomainProvider = () =>
                   Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
                 )
             : yield* Effect.gen(function* () {
-                const computeServiceId = unresolvedComputeServiceIdOf(
-                  olds.computeService,
-                );
-                return computeServiceId
-                  ? yield* findDomain(client, computeServiceId, olds.hostname)
+                const appId = unresolvedAppIdOf(olds.app);
+                return appId
+                  ? yield* findDomain(client, appId, olds.hostname)
                   : undefined;
               });
-          return domain ? attrsFrom(domain) : undefined;
+          if (!domain) return undefined;
+          const attrs = attrsFrom(domain);
+          return customDomainId === undefined ? Unowned(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          const computeServiceId = yield* resolveComputeServiceId(
-            news.computeService,
-          );
+          const appId = yield* resolveAppId(news.app);
           const hostname = normalizeHostname(news.hostname);
           const customDomainId = isPrismaDevId(output?.customDomainId)
             ? undefined
@@ -224,19 +276,66 @@ export const CustomDomainProvider = () =>
                 .pipe(
                   Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
                 )
-            : yield* findDomain(client, computeServiceId, hostname);
-          if (!domain) {
-            yield* ensureDefaultBranchService(client, computeServiceId);
+            : yield* findDomain(client, appId, hostname);
+          const identityMatches = (domain: ApiCustomDomain) =>
+            domain.appId === appId && sameHostname(domain.hostname, hostname);
+          if (domain && !identityMatches(domain)) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma custom domain '${customDomainId}' resolves to app '${domain.appId}' and hostname '${domain.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to claim convergence; replace the mismatched domain.`,
+              ),
+            );
           }
-          return attrsFrom(
-            domain ??
-              (yield* client.createComputeServiceDomain(computeServiceId, {
-                hostname,
-              })),
-          );
+          if (domain && customDomainId === undefined) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma custom domain '${hostname}' already exists on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
+              ),
+            );
+          }
+          if (!domain) {
+            yield* ensureDefaultBranchApp(client, appId);
+          }
+          const reconciled = domain
+            ? domain.status === "failed"
+              ? yield* client.retryCustomDomain(domain.id)
+              : domain
+            : yield* client
+                .createAppDomain(appId, { hostname })
+                .pipe(
+                  Effect.catchIf(isConflict, () =>
+                    Effect.fail(
+                      new Error(
+                        `Prisma custom domain '${hostname}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended domain.`,
+                      ),
+                    ),
+                  ),
+                );
+          if (!identityMatches(reconciled)) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma custom domain '${reconciled.id}' retry/create response resolves to app '${reconciled.appId}' and hostname '${reconciled.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to persist mismatched identity.`,
+              ),
+            );
+          }
+          return attrsFrom(reconciled);
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.customDomainId)) return;
+          const domain = yield* client
+            .getCustomDomain(output.customDomainId)
+            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          if (!domain) return;
+          if (
+            domain.appId !== output.appId ||
+            !sameHostname(domain.hostname, output.hostname)
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma custom domain '${output.customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
+              ),
+            );
+          }
           yield* client
             .deleteCustomDomain(output.customDomainId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));

@@ -13,7 +13,7 @@ const forbiddenPatterns = [
   },
   {
     name: "async/await",
-    pattern: /\b(?:async|await)\b/,
+    pattern: /(?:^|[^\w.])(?:async|await)\b/,
   },
   {
     name: "Effect.promise",
@@ -57,8 +57,8 @@ const forbiddenPatterns = [
 const documentedResources = [
   "Branch",
   "Compute",
-  "ComputeService",
-  "ComputeVersion",
+  "App",
+  "Deployment",
   "Connection",
   "CustomDomain",
   "Database",
@@ -73,11 +73,18 @@ const resourceConfigInterfaces = {
   Database: ["DatabaseDev"],
 } as const;
 
-const stripStrings = (source: string) =>
+const nodePlatformBoundaryFiles = new Set([
+  "Internal/ArchivePlatform.ts",
+  "Internal/ArtifactFile.ts",
+]);
+
+const stripStringsAndComments = (source: string) =>
   source
     .replaceAll(/`(?:\\.|[^`])*`/gs, "``")
     .replaceAll(/"(?:\\.|[^"])*"/g, '""')
-    .replaceAll(/'(?:\\.|[^'])*'/g, "''");
+    .replaceAll(/'(?:\\.|[^'])*'/g, "''")
+    .replaceAll(/\/\*[\s\S]*?\*\//g, "")
+    .replaceAll(/\/\/.*$/gm, "");
 
 describe("Prisma source conventions", () => {
   it.effect("keeps provider source in Effect-style lifecycle conventions", () =>
@@ -94,10 +101,17 @@ describe("Prisma source conventions", () => {
         const fullPath = path.join(sourceRoot, file);
         const source = yield* fs.readFileString(fullPath);
         for (const { name, pattern } of forbiddenPatterns) {
+          if (
+            nodePlatformBoundaryFiles.has(file) &&
+            (name === "raw filesystem/path/os imports" ||
+              name === "async/await")
+          ) {
+            continue;
+          }
           const scannedSource =
             name === "raw filesystem/path/os imports"
               ? source
-              : stripStrings(source);
+              : stripStringsAndComments(source);
           const match = pattern.exec(scannedSource);
           if (match) {
             violations.push(`${file}: ${name}: ${match[0]}`);
@@ -193,6 +207,44 @@ describe("Prisma source conventions", () => {
       }
 
       expect(missingDocs).toEqual([]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("keeps raw artifact bytes out of persisted resource props", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const sourceRoot = path.resolve(import.meta.dirname, "../../src/Prisma");
+      const project = new MorphProject({ useInMemoryFileSystem: true });
+
+      for (const resource of ["Compute", "Deployment"] as const) {
+        const source = yield* fs.readFileString(
+          path.join(sourceRoot, `${resource}.ts`),
+        );
+        const sourceFile = project.createSourceFile(`${resource}.ts`, source, {
+          overwrite: true,
+        });
+        const props = sourceFile.getInterface(`${resource}Props`);
+        expect(props?.getProperty("artifact")).toBeUndefined();
+        expect(props?.getProperty("artifactPath")).toBeDefined();
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("models deployment environment values as redaction markers", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const source = yield* fs.readFileString(
+        path.resolve(import.meta.dirname, "../../src/Prisma/Types.ts"),
+      );
+
+      expect(source).toContain(
+        'export type RedactedDeploymentEnvironmentValue = "[redacted]"',
+      );
+      expect(source).toContain(
+        "envVars?: Record<string, RedactedDeploymentEnvironmentValue>",
+      );
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

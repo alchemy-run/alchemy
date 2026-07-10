@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -29,7 +30,9 @@ export interface BranchProps {
    */
   gitName: string;
   /**
-   * Whether this branch should be the project's default branch.
+   * Promote this branch to be the project's default branch. Setting this to
+   * `false` does not demote a current default because the Management API only
+   * supports promotion; promoting another branch atomically demotes it.
    *
    * @default false
    */
@@ -57,6 +60,11 @@ export interface Branch extends Resource<
      */
     isDefault: boolean;
     /**
+     * Branch that was default before this preview branch was promoted. Alchemy
+     * restores it before deleting this resource so destroy remains reversible.
+     */
+    previousDefaultBranchId?: string;
+    /**
      * Branch role used by Prisma to resolve deploy-time environment variables.
      */
     role: "production" | "preview";
@@ -76,6 +84,7 @@ export interface Branch extends Resource<
 /**
  * A Prisma project branch for preview-class databases and compute resources.
  *
+ * @resource
  * @section Creating a Branch
  * @example Preview branch
  * ```typescript
@@ -92,23 +101,45 @@ const findBranch = (
   projectId: string,
   gitName: string,
 ) =>
-  client
-    .listBranches(projectId, { gitName })
-    .pipe(
-      Effect.map((branches) =>
-        branches.find((b: ApiBranch) => b.gitName === gitName),
-      ),
-    );
+  client.listBranches(projectId, { gitName }).pipe(
+    Effect.flatMap((branches) => {
+      const matches = branches.filter((b: ApiBranch) => b.gitName === gitName);
+      return matches.length > 1
+        ? Effect.fail(
+            new Error(
+              `Prisma project '${projectId}' has multiple branches named '${gitName}'; refusing to select one arbitrarily.`,
+            ),
+          )
+        : Effect.succeed(matches[0]);
+    }),
+  );
 
-const attrsFrom = (branch: ApiBranch): Branch["Attributes"] => ({
+const attrsFrom = (
+  branch: ApiBranch,
+  previousDefaultBranchId?: string,
+): Branch["Attributes"] => ({
   branchId: branch.id,
   gitName: branch.gitName,
   projectId: branch.project.id,
   isDefault: branch.isDefault,
+  ...(previousDefaultBranchId === undefined ? {} : { previousDefaultBranchId }),
   role: branch.role,
   createdAt: branch.createdAt,
   updatedAt: branch.updatedAt,
 });
+
+const ensureBranchIdentity = (
+  branch: ApiBranch,
+  expected: { projectId: string; gitName: string },
+) =>
+  branch.project.id === expected.projectId &&
+  branch.gitName === expected.gitName
+    ? Effect.void
+    : Effect.fail(
+        new Error(
+          `Prisma branch '${branch.id}' belongs to project '${branch.project.id}' with git name '${branch.gitName}', but this resource requires project '${expected.projectId}' and git name '${expected.gitName}'. Refusing to promote or delete a mismatched branch.`,
+        ),
+      );
 
 export const BranchProvider = () =>
   Provider.effect(
@@ -117,24 +148,48 @@ export const BranchProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["branchId"],
-        list: () => Effect.succeed([]),
+        list: Effect.fn(function* () {
+          const projects = yield* client.listProjects();
+          const branches = yield* Effect.forEach(
+            projects,
+            (project) =>
+              client
+                .listBranches(project.id)
+                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed([]))),
+            { concurrency: 8 },
+          );
+          // Current defaults and production-role branches are project-owned
+          // and undeletable through the Branch API. Project deletion removes
+          // them; omit them here so unsafe nuke only receives deletable rows.
+          return branches
+            .flat()
+            .filter(
+              (branch) => !branch.isDefault && branch.role !== "production",
+            )
+            .map((branch) => attrsFrom(branch));
+        }),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.branchId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId = unresolvedProjectIdOf(olds.project);
+          const oldProjectId =
+            output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            (isResolved(news.gitName) && news.gitName !== olds.gitName)
+            (isResolved(news.gitName) &&
+              news.gitName !== (output?.gitName ?? olds.gitName))
           ) {
             return { action: "replace" } as const;
           }
           if (!isResolved(news.isDefault)) return undefined;
-          if ((news.isDefault ?? false) !== (olds.isDefault ?? false)) {
+          // The Management API can promote a branch, atomically demoting the
+          // old default, but explicitly rejects demoting the current default.
+          // `false` therefore means "do not promote", not "demote".
+          if (news.isDefault === true && output?.isDefault !== true) {
             return { action: "update" } as const;
           }
           return undefined;
@@ -155,10 +210,13 @@ export const BranchProvider = () =>
                   ? yield* findBranch(client, projectId, olds.gitName)
                   : undefined;
               });
-          return branch ? attrsFrom(branch) : undefined;
+          if (!branch) return undefined;
+          const attrs = attrsFrom(branch, output?.previousDefaultBranchId);
+          return branchId === undefined ? Unowned(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const projectId = yield* resolveProjectId(news.project);
+          let previousDefaultBranchId = output?.previousDefaultBranchId;
           const branchId = isPrismaDevId(output?.branchId)
             ? undefined
             : output?.branchId;
@@ -168,8 +226,22 @@ export const BranchProvider = () =>
                 .pipe(
                   Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
                 )
-            : yield* findBranch(client, projectId, news.gitName);
+            : undefined;
           if (!branch) {
+            const liveBranches = yield* client.listBranches(projectId);
+            const defaults = liveBranches.filter(
+              (candidate) => candidate.isDefault,
+            );
+            if (defaults.length !== 1) {
+              return yield* Effect.fail(
+                new Error(
+                  defaults.length === 0
+                    ? `Prisma project '${projectId}' has no default branch. Refusing to create a standalone Branch because the Management API would make it the undeletable production branch; create or repair the owning Prisma.Project first.`
+                    : `Prisma project '${projectId}' has ${defaults.length} default branches. Refusing to create a Branch until the project invariant is repaired.`,
+                ),
+              );
+            }
+            previousDefaultBranchId = defaults[0]!.id;
             branch = yield* client
               .createBranch(projectId, {
                 gitName: news.gitName,
@@ -177,42 +249,129 @@ export const BranchProvider = () =>
               })
               .pipe(
                 Effect.catchIf(isConflict, () =>
-                  findBranch(client, projectId, news.gitName).pipe(
-                    Effect.flatMap((branch) =>
-                      branch
-                        ? Effect.succeed(branch)
-                        : Effect.fail(
-                            new Error(
-                              `Prisma branch '${news.gitName}' already exists but could not be read`,
-                            ),
-                          ),
+                  Effect.fail(
+                    new Error(
+                      `Prisma branch '${news.gitName}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended branch.`,
                     ),
                   ),
                 ),
               );
           }
-          if (branch.isDefault !== (news.isDefault ?? false)) {
+          yield* ensureBranchIdentity(branch, {
+            projectId,
+            gitName: news.gitName,
+          });
+          if (news.isDefault === true && !branch.isDefault) {
+            const liveBranches = yield* client.listBranches(projectId);
+            const defaults = liveBranches.filter(
+              (candidate) => candidate.isDefault,
+            );
+            if (defaults.length !== 1 || defaults[0]!.id === branch.id) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma project '${projectId}' does not have exactly one different default branch to restore later. Refusing to promote '${branch.gitName}'.`,
+                ),
+              );
+            }
+            previousDefaultBranchId = defaults[0]!.id;
             branch = yield* client.updateBranch(branch.id, {
-              isDefault: news.isDefault ?? false,
+              isDefault: true,
             });
+            yield* ensureBranchIdentity(branch, {
+              projectId,
+              gitName: news.gitName,
+            });
+            if (!branch.isDefault) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma branch '${branch.id}' promotion did not converge to the default branch.`,
+                ),
+              );
+            }
           }
-          return attrsFrom(branch);
+          return attrsFrom(branch, previousDefaultBranchId);
         }),
-        delete: Effect.fn(function* ({ output, session }) {
+        delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.branchId)) return;
           const branch = yield* client
             .getBranch(output.branchId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!branch) return;
+          yield* ensureBranchIdentity(branch, {
+            projectId: output.projectId,
+            gitName: output.gitName,
+          });
+          if (branch.role === "production") {
+            return yield* Effect.fail(
+              new Error(
+                `Cannot delete Prisma branch '${branch.gitName ?? output.branchId}' directly because its production role is immutable. Delete the owning Prisma.Project.`,
+              ),
+            );
+          }
           if (branch.isDefault) {
-            // Prisma treats the default branch as project-owned state, not an
-            // independently deletable resource.
-            if (session !== undefined) {
-              yield* session.note(
-                "Skipping direct delete for default Prisma branch; Prisma removes it when the owning project is deleted.",
+            const previousDefaultBranchId = output.previousDefaultBranchId;
+            if (
+              previousDefaultBranchId === undefined ||
+              previousDefaultBranchId === branch.id
+            ) {
+              return yield* Effect.fail(
+                new Error(
+                  `Cannot safely delete default Prisma branch '${branch.gitName}' because state does not identify the branch it displaced. Promote another branch explicitly before deleting this resource.`,
+                ),
               );
             }
-            return;
+            const previous = yield* client
+              .getBranch(previousDefaultBranchId)
+              .pipe(
+                Effect.catchIf(isNotFound, () =>
+                  Effect.fail(
+                    new Error(
+                      `Cannot restore previous default Prisma branch '${previousDefaultBranchId}' because it no longer exists. Promote another branch explicitly before deleting '${branch.gitName}'.`,
+                    ),
+                  ),
+                ),
+              );
+            if (
+              previous.project.id !== output.projectId ||
+              previous.id === branch.id
+            ) {
+              return yield* Effect.fail(
+                new Error(
+                  `Previous default Prisma branch '${previous.id}' does not belong to project '${output.projectId}'. Refusing an unsafe promotion.`,
+                ),
+              );
+            }
+            const restored = previous.isDefault
+              ? previous
+              : yield* client.updateBranch(previous.id, { isDefault: true });
+            if (
+              restored.id !== previous.id ||
+              restored.project.id !== output.projectId ||
+              !restored.isDefault
+            ) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma did not confirm restoration of previous default branch '${previous.id}'. Refusing to delete '${branch.gitName}'.`,
+                ),
+              );
+            }
+            const demoted = yield* client
+              .getBranch(branch.id)
+              .pipe(
+                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+              );
+            if (!demoted) return;
+            yield* ensureBranchIdentity(demoted, {
+              projectId: output.projectId,
+              gitName: output.gitName,
+            });
+            if (demoted.isDefault) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma branch '${branch.gitName}' remained default after restoring '${previous.gitName}'. Refusing to delete it.`,
+                ),
+              );
+            }
           }
           yield* client
             .deleteBranch(output.branchId)

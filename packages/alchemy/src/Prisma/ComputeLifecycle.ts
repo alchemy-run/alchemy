@@ -1,37 +1,38 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import {
   isConflict,
   isNotFound,
   PrismaApiError,
   type PrismaManagementClient,
 } from "./Client.ts";
-import { stopComputeServiceVersionWithFallback } from "./Internal/ComputeVersionActions.ts";
-import { observeComputeVersion } from "./Internal/ComputeVersionObserve.ts";
-import type { ComputeVersion } from "./Types.ts";
+import { stopDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
+import { observeDeployment } from "./Internal/DeploymentObserve.ts";
+import type { Deployment } from "./Types.ts";
 export { isConflict } from "./Client.ts";
 
-export interface WaitForComputeVersionStatusOptions {
+export interface WaitForDeploymentStatusOptions {
   /**
-   * Maximum time to wait for a Compute version to reach the requested status.
+   * Maximum time to wait for a deployment to reach the requested status.
    */
   timeoutSeconds?: number;
   /**
-   * Poll interval used while waiting for Prisma Compute status changes.
+   * Poll interval used while waiting for Prisma deployment status changes.
    */
   pollIntervalMs?: number;
 }
 
 /**
- * Result returned after attempting to stop and delete a Prisma Compute version.
+ * Result returned after attempting to stop and delete a Prisma deployment.
  */
-export interface DestroyComputeVersionResult {
+export interface DestroyDeploymentResult {
   /**
-   * Prisma Compute version ID that was targeted.
+   * Prisma deployment ID that was targeted.
    */
-  versionId: string;
+  deploymentId: string;
   /**
-   * Status observed before cleanup started, or undefined if the version was gone.
+   * Status observed before cleanup started, or undefined if the deployment was gone.
    */
   previousStatus: string | undefined;
   /**
@@ -39,45 +40,31 @@ export interface DestroyComputeVersionResult {
    */
   stopped: boolean;
   /**
-   * True when the delete call completed or the version vanished during cleanup.
+   * True when the delete call completed or the deployment vanished during cleanup.
    */
   deleted: boolean;
 }
 
-/**
- * Result returned after deleting the versions under a Prisma Compute service.
- */
-export interface DestroyComputeServiceResult {
-  /**
-   * Prisma Compute service ID that was targeted.
-   */
-  computeServiceId: string;
-  /**
-   * Compute version IDs deleted by this cleanup pass.
-   */
-  deletedVersionIds: string[];
-  /**
-   * True when the Compute service delete call completed or the service vanished.
-   */
-  serviceDeleted: boolean;
+/** Result returned after deleting a Prisma App. */
+export interface DestroyAppResult {
+  /** Prisma App ID that was targeted. */
+  appId: string;
+  /** True when App deletion completed or the app was already gone. */
+  appDeleted: boolean;
 }
 
 /**
- * Result returned after deleting Compute services under a Prisma project.
+ * Result returned after deleting Apps under a Prisma project.
  */
-export interface DestroyComputeProjectResult {
+export interface DestroyProjectAppsResult {
   /**
    * Prisma project ID that was targeted.
    */
   projectId: string;
   /**
-   * Compute service IDs deleted by this cleanup pass.
+   * App IDs deleted by this cleanup pass.
    */
-  deletedServiceIds: string[];
-  /**
-   * Compute version IDs deleted by this cleanup pass.
-   */
-  deletedVersionIds: string[];
+  deletedAppIds: string[];
   /**
    * True when the project delete call completed or the project vanished.
    */
@@ -86,7 +73,17 @@ export interface DestroyComputeProjectResult {
 
 const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
-const DELETE_CONFLICT_RETRY_ATTEMPTS = 3;
+const DELETE_CONFLICT_RETRY_ATTEMPTS = 5;
+
+const deleteRetryDelay = (attempt: number) =>
+  Effect.sleep(Duration.millis(250 * 2 ** attempt));
+
+const ensureError = (error: unknown): Error =>
+  error instanceof Error
+    ? error
+    : new Error("Prisma deployment lifecycle operation failed.", {
+        cause: error,
+      });
 
 const isProjectDeleteBlocked = (error: unknown): boolean =>
   isConflict(error) ||
@@ -95,11 +92,10 @@ const isProjectDeleteBlocked = (error: unknown): boolean =>
     error.path.startsWith("/v1/projects/") &&
     error.status === 400);
 
-const computeVersionDeleteFailed = (
-  versionId: string,
+const deploymentDeleteFailed = (
+  deploymentId: string,
   statusAtDelete: string | undefined,
   error: unknown,
-  primaryError?: unknown,
 ) => {
   const format = (error: unknown) =>
     error instanceof PrismaApiError
@@ -107,28 +103,20 @@ const computeVersionDeleteFailed = (
       : error instanceof Error
         ? error.message
         : String(error);
-  const detail =
-    primaryError === undefined
-      ? format(error)
-      : [
-          `Service-scoped delete failed: ${format(primaryError)}.`,
-          `Global delete fallback failed: ${format(error)}.`,
-        ].join(" ");
+  const detail = format(error);
   const isKnownStoppedDeleteFailure =
     statusAtDelete === "stopped" &&
     error instanceof PrismaApiError &&
-    error.status >= 500 &&
-    (primaryError === undefined ||
-      (primaryError instanceof PrismaApiError && primaryError.status >= 500));
+    error.status >= 500;
   return new Error(
     [
-      `Failed to delete Prisma compute version '${versionId}' while it was in status '${statusAtDelete ?? "unknown"}'.`,
+      `Failed to delete Prisma deployment '${deploymentId}' while it was in status '${statusAtDelete ?? "unknown"}'.`,
       detail,
       isKnownStoppedDeleteFailure
-        ? "Stopped Prisma Compute versions are expected to be deletable; this matches the known platform-side delete failure observed during live smoke testing."
+        ? "Stopped Prisma deployments are expected to be deletable; the Management API returned a server error."
         : undefined,
-      "The version may need platform cleanup before the compute service or project can be deleted.",
-      `Manual check: GET /v1/versions/${versionId}; manual retries: DELETE /v1/compute-services/versions/${versionId}, then DELETE /v1/versions/${versionId}.`,
+      "The deployment may need platform cleanup before the App or project can be deleted.",
+      `Manual check: GET /v1/deployments/${deploymentId}; manual retry: DELETE /v1/deployments/${deploymentId}.`,
     ]
       .filter((line): line is string => line !== undefined)
       .join(" "),
@@ -136,116 +124,127 @@ const computeVersionDeleteFailed = (
   );
 };
 
-const ensureVersionDeletedAfterFallbackNotFound = (
-  client: PrismaManagementClient,
-  versionId: string,
-  statusAtDelete: string | undefined,
-  fallbackError: unknown,
-  primaryError: unknown,
+const deploymentWaitTimedOut = (
+  deploymentId: string,
+  targetStatus: "running" | "stopped",
+  lastStatus: string | undefined,
 ) =>
-  observeComputeVersion(client, versionId).pipe(
-    Effect.as(true),
-    Effect.catchIf(isNotFound, () => Effect.succeed(false)),
-    Effect.catch((observeError) =>
-      Effect.fail(
-        computeVersionDeleteFailed(
-          versionId,
-          statusAtDelete,
-          observeError,
-          primaryError,
-        ),
-      ),
-    ),
-    Effect.flatMap((stillExists) =>
-      stillExists
-        ? Effect.fail(
-            computeVersionDeleteFailed(
-              versionId,
-              statusAtDelete,
-              fallbackError,
-              primaryError,
-            ),
-          )
-        : Effect.void,
-    ),
+  new Error(
+    `Timed out waiting for Prisma deployment '${deploymentId}' to reach '${targetStatus}' (last status: '${lastStatus ?? "unknown"}')`,
   );
 
-export const waitForComputeVersionStatus = Effect.fn(function* (
+export const waitForDeploymentStatus = Effect.fn(function* (
   client: PrismaManagementClient,
-  versionId: string,
+  deploymentId: string,
   targetStatus: "running" | "stopped",
-  options: WaitForComputeVersionStatusOptions = {},
+  options: WaitForDeploymentStatusOptions = {},
 ) {
-  const timeoutMs = (options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1_000;
+  const timeoutSeconds = options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
   const intervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+    return yield* Effect.fail(
+      new Error("timeoutSeconds must be a positive finite number."),
+    );
+  }
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+    return yield* Effect.fail(
+      new Error("pollIntervalMs must be a positive finite number."),
+    );
+  }
+  const timeoutMs = timeoutSeconds * 1_000;
   const startedAt = yield* Effect.sync(() => Date.now());
+  const deadline = startedAt + timeoutMs;
+  let lastStatus: string | undefined;
 
   while (true) {
-    const version = yield* observeComputeVersion(client, versionId);
-    if (version.status === targetStatus) {
-      return version as ComputeVersion;
-    }
-    if (version.status === "failed") {
+    const remainingBeforeObservation = yield* Effect.sync(
+      () => deadline - Date.now(),
+    );
+    if (remainingBeforeObservation <= 0) {
       return yield* Effect.fail(
-        new Error(`Prisma compute version '${versionId}' failed`),
+        deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus),
+      );
+    }
+    const deploymentOption = yield* observeDeployment(
+      client,
+      deploymentId,
+    ).pipe(Effect.timeoutOption(Duration.millis(remainingBeforeObservation)));
+    if (Option.isNone(deploymentOption)) {
+      return yield* Effect.fail(
+        deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus),
+      );
+    }
+    const deployment = deploymentOption.value;
+    lastStatus = deployment.status;
+    if (deployment.status === targetStatus) {
+      return deployment as Deployment;
+    }
+    if (deployment.status === "failed") {
+      return yield* Effect.fail(
+        new Error(`Prisma deployment '${deploymentId}' failed`),
       );
     }
 
     const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
     if (elapsed >= timeoutMs) {
       return yield* Effect.fail(
-        new Error(
-          `Timed out waiting for Prisma compute version '${versionId}' to reach '${targetStatus}' (last status: '${version.status}')`,
-        ),
+        deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus),
       );
     }
 
-    yield* Effect.sleep(Duration.millis(intervalMs));
+    yield* Effect.sleep(
+      Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)),
+    );
   }
 });
 
 /**
- * Stops a running or provisioning Compute version, then deletes it.
+ * Stops a running or provisioning deployment, then deletes it.
  *
- * Deletion first uses the service-scoped public route, then falls back to the
- * global version route. If both routes fail, the error message includes the
- * observed version status and manual retry routes for cleanup.
+ * Uses the canonical deployment lifecycle routes. Errors include the observed
+ * status and exact manual route for cleanup.
  */
-export const destroyComputeVersion: (
+export const destroyDeployment: (
   client: PrismaManagementClient,
-  versionId: string,
-  options?: WaitForComputeVersionStatusOptions,
-) => Effect.Effect<DestroyComputeVersionResult, Error, never> = Effect.fn(
+  deploymentId: string,
+  options?: WaitForDeploymentStatusOptions,
+) => Effect.Effect<DestroyDeploymentResult, Error, never> = Effect.fn(
   function* (
     client: PrismaManagementClient,
-    versionId: string,
-    options: WaitForComputeVersionStatusOptions = {},
+    deploymentId: string,
+    options: WaitForDeploymentStatusOptions = {},
   ) {
-    const version = yield* observeComputeVersion(client, versionId).pipe(
+    const deployment = yield* observeDeployment(client, deploymentId).pipe(
       Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
     );
-    if (!version) {
+    if (!deployment) {
       return {
-        versionId,
+        deploymentId,
         previousStatus: undefined,
         stopped: false,
-        deleted: false,
-      } satisfies DestroyComputeVersionResult;
+        // The postcondition is already satisfied. Report this consistently
+        // with delete calls whose 404 is observed after cleanup starts.
+        deleted: true,
+      } satisfies DestroyDeploymentResult;
     }
 
-    const previousStatus = version.status;
+    const previousStatus = deployment.status;
     let statusAtDelete = previousStatus;
     let stopped = false;
-    if (version.status === "running" || version.status === "provisioning") {
-      yield* stopComputeServiceVersionWithFallback(client, versionId).pipe(
+    if (
+      deployment.status === "running" ||
+      deployment.status === "provisioning"
+    ) {
+      yield* stopDeploymentIdempotent(client, deploymentId).pipe(
         Effect.catchIf(
           (e) => isNotFound(e),
           () => Effect.void,
         ),
+        Effect.mapError(ensureError),
       );
-      const stoppedVersion = yield* waitForComputeVersionStatus(
+      const stoppedVersion = yield* waitForDeploymentStatus(
         client,
-        versionId,
+        deploymentId,
         "stopped",
         options,
       ).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
@@ -253,159 +252,102 @@ export const destroyComputeVersion: (
       stopped = true;
     }
 
-    yield* client
-      .deleteComputeServiceVersion(versionId)
-      .pipe(
-        Effect.catch((primaryError) =>
-          client
-            .deleteComputeVersion(versionId)
-            .pipe(
-              Effect.catch((fallbackError) =>
-                isNotFound(fallbackError)
-                  ? isNotFound(primaryError)
-                    ? Effect.void
-                    : ensureVersionDeletedAfterFallbackNotFound(
-                        client,
-                        versionId,
-                        statusAtDelete,
-                        fallbackError,
-                        primaryError,
-                      )
-                  : Effect.fail(
-                      computeVersionDeleteFailed(
-                        versionId,
-                        statusAtDelete,
-                        fallbackError,
-                        primaryError,
-                      ),
-                    ),
-              ),
-            ),
+    yield* client.deleteDeployment(deploymentId).pipe(
+      Effect.catchIf(isNotFound, () => Effect.void),
+      Effect.catch((error) =>
+        Effect.fail(
+          deploymentDeleteFailed(deploymentId, statusAtDelete, error),
         ),
-      );
+      ),
+    );
 
     return {
-      versionId,
+      deploymentId,
       previousStatus,
       stopped,
       deleted: true,
-    } satisfies DestroyComputeVersionResult;
+    } satisfies DestroyDeploymentResult;
   },
 );
 
 /**
- * Deletes every Compute version under a service, then deletes the service.
+ * Deletes an App. The canonical App delete endpoint cascades its deployments.
  */
-export const destroyComputeService: (
+export const destroyApp: (
   client: PrismaManagementClient,
-  computeServiceId: string,
-  options?: WaitForComputeVersionStatusOptions & { keepService?: boolean },
-) => Effect.Effect<DestroyComputeServiceResult, Error, never> = Effect.fn(
-  function* (
-    client: PrismaManagementClient,
-    computeServiceId: string,
-    options: WaitForComputeVersionStatusOptions & {
-      keepService?: boolean;
-    } = {},
-  ) {
-    const deletedVersionIds = new Set<string>();
-
-    const cleanupVersions = Effect.fn(function* () {
-      const versions = yield* client
-        .listServiceComputeVersions(computeServiceId, {
-          limit: 100,
-        })
-        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
-      if (!versions) return false;
-      for (const version of versions) {
-        const result = yield* destroyComputeVersion(
-          client,
-          version.id,
-          options,
-        );
-        if (result.deleted) deletedVersionIds.add(version.id);
-      }
-      return true;
-    });
-
-    yield* cleanupVersions();
-
-    let serviceDeleted = false;
-    if (!options.keepService) {
-      for (
-        let attempt = 0;
-        attempt < DELETE_CONFLICT_RETRY_ATTEMPTS;
-        attempt++
-      ) {
-        const deleted = yield* client
-          .deleteComputeService(computeServiceId)
-          .pipe(
-            Effect.as(true),
-            Effect.catchIf(isNotFound, () => Effect.succeed(true)),
-            Effect.catchIf(isConflict, (error) =>
-              attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
-                ? cleanupVersions().pipe(Effect.as(false))
-                : Effect.fail(error),
-            ),
-          );
-        if (deleted) {
-          serviceDeleted = true;
-          break;
-        }
+  appId: string,
+  options?: WaitForDeploymentStatusOptions & { keepApp?: boolean },
+) => Effect.Effect<DestroyAppResult, Error, never> = Effect.fn(function* (
+  client: PrismaManagementClient,
+  appId: string,
+  options: WaitForDeploymentStatusOptions & {
+    keepApp?: boolean;
+  } = {},
+) {
+  let appDeleted = false;
+  if (!options.keepApp) {
+    for (let attempt = 0; attempt < DELETE_CONFLICT_RETRY_ATTEMPTS; attempt++) {
+      const deleted = yield* client.deleteApp(appId).pipe(
+        Effect.as(true),
+        Effect.catchIf(isNotFound, () => Effect.succeed(true)),
+        Effect.catchIf(isConflict, (error) =>
+          attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
+            ? deleteRetryDelay(attempt).pipe(Effect.as(false))
+            : Effect.fail(error),
+        ),
+      );
+      if (deleted) {
+        appDeleted = true;
+        break;
       }
     }
+  }
 
-    return {
-      computeServiceId,
-      deletedVersionIds: Array.from(deletedVersionIds),
-      serviceDeleted,
-    } satisfies DestroyComputeServiceResult;
-  },
-);
+  return {
+    appId,
+    appDeleted,
+  } satisfies DestroyAppResult;
+});
 
 /**
- * Deletes every Compute service under a project, then deletes the project.
+ * Deletes every App under a project, then deletes the project.
  *
- * Useful for cleanup-only live smoke retries because callers can start from the
- * project ID and let Alchemy discover the service and version IDs.
+ * Callers can start from the project ID and let Alchemy discover the App IDs.
  */
-export const destroyComputeProject: (
+export const destroyProjectApps: (
   client: PrismaManagementClient,
   projectId: string,
-  options?: WaitForComputeVersionStatusOptions & { keepProject?: boolean },
-) => Effect.Effect<DestroyComputeProjectResult, Error, never> = Effect.fn(
+  options?: WaitForDeploymentStatusOptions & {
+    keepProject?: boolean;
+    keepApp?: boolean;
+  },
+) => Effect.Effect<DestroyProjectAppsResult, Error, never> = Effect.fn(
   function* (
     client: PrismaManagementClient,
     projectId: string,
-    options: WaitForComputeVersionStatusOptions & {
+    options: WaitForDeploymentStatusOptions & {
       keepProject?: boolean;
+      keepApp?: boolean;
     } = {},
   ) {
-    const deletedServiceIds = new Set<string>();
-    const deletedVersionIds = new Set<string>();
+    const deletedAppIds = new Set<string>();
 
-    const cleanupServices = Effect.fn(function* () {
-      const services = yield* client
-        .listProjectComputeServices(projectId, {
+    const cleanupApps = Effect.fn(function* () {
+      const apps = yield* client
+        .listApps({
+          projectId,
           limit: 100,
         })
         .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
-      if (!services) return false;
-      for (const service of services) {
-        const result = yield* destroyComputeService(
-          client,
-          service.id,
-          options,
-        );
-        for (const versionId of result.deletedVersionIds) {
-          deletedVersionIds.add(versionId);
-        }
-        if (result.serviceDeleted) deletedServiceIds.add(service.id);
+      if (!apps) return false;
+      for (const app of apps) {
+        const result = yield* destroyApp(client, app.id, options);
+        if (result.appDeleted) deletedAppIds.add(app.id);
       }
       return true;
     });
 
-    yield* cleanupServices();
+    yield* cleanupApps();
 
     let projectDeleted = false;
     if (!options.keepProject) {
@@ -419,7 +361,10 @@ export const destroyComputeProject: (
           Effect.catchIf(isNotFound, () => Effect.succeed(true)),
           Effect.catchIf(isProjectDeleteBlocked, (error) =>
             attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
-              ? cleanupServices().pipe(Effect.as(false))
+              ? cleanupApps().pipe(
+                  Effect.andThen(deleteRetryDelay(attempt)),
+                  Effect.as(false),
+                )
               : Effect.fail(error),
           ),
         );
@@ -432,10 +377,9 @@ export const destroyComputeProject: (
 
     return {
       projectId,
-      deletedServiceIds: Array.from(deletedServiceIds),
-      deletedVersionIds: Array.from(deletedVersionIds),
+      deletedAppIds: Array.from(deletedAppIds),
       projectDeleted,
-    } satisfies DestroyComputeProjectResult;
+    } satisfies DestroyProjectAppsResult;
   },
 );
 

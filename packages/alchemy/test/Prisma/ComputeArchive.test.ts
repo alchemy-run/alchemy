@@ -78,6 +78,30 @@ describe("createComputeArchive", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
+  it.effect("produces deterministic bytes for unchanged input", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-deterministic-",
+      });
+      yield* fs.writeFileString(path.join(root, "z.ts"), "z");
+      yield* fs.writeFileString(path.join(root, "server.ts"), "server");
+      yield* fs.writeFileString(path.join(root, "a.ts"), "a");
+
+      const first = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+      });
+      const second = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+      });
+
+      expect(second).toEqual(first);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect("rejects unsafe entrypoints", () =>
     Effect.gen(function* () {
       const parent = yield* Effect.exit(normalizeEntrypoint("../server.ts"));
@@ -234,6 +258,243 @@ describe("createComputeArchive", () => {
       );
 
       expect(result._tag).toBe("Failure");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("excludes sensitive files at every workspace depth", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-sensitive-",
+      });
+      yield* fs.makeDirectory(path.join(root, "apps", "api", ".git"), {
+        recursive: true,
+      });
+      yield* fs.makeDirectory(path.join(root, "apps", "api", ".alchemy"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+      yield* fs.writeFileString(path.join(root, ".env"), "ROOT_SECRET=x");
+      yield* fs.writeFileString(
+        path.join(root, "apps", "api", ".env.production"),
+        "NESTED_SECRET=x",
+      );
+      yield* fs.writeFileString(
+        path.join(root, "apps", "api", ".git", "config"),
+        "credential=x",
+      );
+      yield* fs.writeFileString(
+        path.join(root, "apps", "api", ".alchemy", "state"),
+        "secret=x",
+      );
+      yield* fs.writeFileString(path.join(root, "debug.log"), "ignored");
+
+      const archive = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+        ignore: ["*.log"],
+      });
+      const names = parseTar(yield* Effect.sync(() => gunzipSync(archive))).map(
+        (entry) => entry.name,
+      );
+
+      expect(names).toContain("bundle/server.ts");
+      expect(names.some((name) => name.includes(".env"))).toBe(false);
+      expect(names.some((name) => name.includes(".git"))).toBe(false);
+      expect(names.some((name) => name.includes(".alchemy"))).toBe(false);
+      expect(names).not.toContain("bundle/debug.log");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("rejects an entrypoint excluded by the safety policy", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-ignored-entry-",
+      });
+      yield* fs.writeFileString(path.join(root, ".env"), "secret");
+
+      const result = yield* Effect.exit(
+        createComputeArchive({ directory: root, entrypoint: ".env" }),
+      );
+
+      expect(result._tag).toBe("Failure");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "allows dots in ignore names but rejects parent-segment patterns",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-compute-ignore-validation-",
+        });
+        yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+        yield* fs.writeFileString(path.join(root, "foo..bar"), "ignored");
+
+        const archive = yield* createComputeArchive({
+          directory: root,
+          entrypoint: "server.ts",
+          ignore: ["foo..bar"],
+        });
+        const names = parseTar(
+          yield* Effect.sync(() => gunzipSync(archive)),
+        ).map((entry) => entry.name);
+        const unsafe = yield* Effect.exit(
+          createComputeArchive({
+            directory: root,
+            entrypoint: "server.ts",
+            ignore: ["../outside"],
+          }),
+        );
+
+        expect(names).not.toContain("bundle/foo..bar");
+        expect(unsafe._tag).toBe("Failure");
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("reports invalid archive limits as typed errors", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-invalid-limit-",
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+
+      const error = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+        maxEntries: 0,
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("maxEntries");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("does not allow callers to raise production safety ceilings", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-hard-limit-",
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+
+      const entriesError = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+        maxEntries: 50_001,
+      }).pipe(Effect.flip);
+      const fileError = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+        maxFileBytes: 128 * 1024 * 1024 + 1,
+      }).pipe(Effect.flip);
+      const totalError = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+        maxUncompressedBytes: 256 * 1024 * 1024 + 1,
+      }).pipe(Effect.flip);
+
+      expect(entriesError.message).toContain("hard limit");
+      expect(fileError.message).toContain("hard limit");
+      expect(totalError.message).toContain("hard limit");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "creates a verified file-backed archive with explicit cleanup",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-compute-file-archive-",
+        });
+        yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+
+        const archive = yield* createComputeArchive({
+          directory: root,
+          entrypoint: "server.ts",
+          output: "file",
+        });
+        const bytes = yield* fs.readFile(archive.path);
+        const names = parseTar(yield* Effect.sync(() => gunzipSync(bytes))).map(
+          (entry) => entry.name,
+        );
+
+        expect(archive.size).toBe(bytes.byteLength);
+        expect(archive.sha256).toMatch(/^[a-f0-9]{64}$/);
+        expect(names).toContain("bundle/server.ts");
+        expect(yield* fs.exists(archive.path)).toBe(true);
+        yield* archive.cleanup;
+        expect(yield* fs.exists(archive.path)).toBe(false);
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("fails explicitly for oversized files and archives", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-limit-",
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "12345");
+      yield* fs.writeFileString(path.join(root, "other.ts"), "67890");
+
+      const fileResult = yield* Effect.exit(
+        createComputeArchive({
+          directory: root,
+          entrypoint: "server.ts",
+          maxFileBytes: 4,
+        }),
+      );
+      const totalResult = yield* Effect.exit(
+        createComputeArchive({
+          directory: root,
+          entrypoint: "server.ts",
+          maxFileBytes: 10,
+          maxUncompressedBytes: 9,
+        }),
+      );
+
+      expect(fileResult._tag).toBe("Failure");
+      expect(totalResult._tag).toBe("Failure");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("rejects symlink targets that cannot fit the tar format", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-long-link-",
+      });
+      const segments = Array.from(
+        { length: 12 },
+        (_, index) => `segment-${index.toString().padStart(2, "0")}`,
+      );
+      const target = path.join(...segments, "target.ts");
+      yield* fs.makeDirectory(path.join(root, ...segments), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+      yield* fs.writeFileString(path.join(root, target), "target");
+      yield* fs.symlink(target, path.join(root, "long-link.ts"));
+
+      const error = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("symlink target is too long");
     }).pipe(Effect.provide(PlatformServices)),
   );
 });

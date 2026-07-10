@@ -117,6 +117,8 @@ export interface Update<
   R extends ResourceLike = ResourceLike,
 > extends BaseNode<R> {
   action: "update";
+  /** True while this is the first reconcile after a cold adoption. */
+  adopting?: boolean;
   props: R["Props"];
   state:
     | CreatedResourceState
@@ -765,12 +767,8 @@ export const make = <A>(
                   downstream,
                   removalPolicy: resource.RemovalPolicy,
                 } satisfies CreatedResourceState;
-                yield* state.set({
-                  stack: stackName,
-                  stage: stage,
-                  fqn,
-                  value: adoptedState,
-                });
+                // Planning and dry runs must never claim ownership. The
+                // in-memory adopted snapshot is persisted only by Apply.
                 oldState = adoptedState;
                 forceUpdateAfterAdoption = true;
               }
@@ -818,12 +816,26 @@ export const make = <A>(
                     output: oldState.attr,
                   })
                   .pipe(providePlanScope(fqn, oldState.instanceId));
-                if (attr) {
-                  return Node<Create>({
-                    action: "create",
-                    props: news,
-                    state: { ...oldState, attr },
-                  });
+                if (attr !== undefined) {
+                  const isUnowned = Unowned.is(attr);
+                  const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+                  if (isUnowned && !adoptThis) {
+                    return yield* new OwnedBySomeoneElse({
+                      message:
+                        `Cannot adopt resource '${fqn}' (${resource.Type}): ` +
+                        "it exists in the cloud but is not owned by this " +
+                        "stack/stage/logical-id. Re-run with `--adopt` (or " +
+                        "wrap the effect in `adopt(true)`) to take it over.",
+                      resourceType: resource.Type,
+                      logicalId: id,
+                    });
+                  }
+                  // Continue through the normal diff below with the recovered
+                  // live snapshot. Desired props may have changed while the
+                  // previous create was interrupted; bypassing diff here can
+                  // drive an immutable change through reconcile and falsely
+                  // persist the old physical resource as converged.
+                  oldState = { ...oldState, attr: stripUnowned(attr) };
                 }
               }
             }
@@ -1013,6 +1025,7 @@ export const make = <A>(
               // Stable created/updated resources follow the normal CRUD mapping.
               return Node<Update>({
                 action: "update",
+                adopting: forceUpdateAfterAdoption,
                 props: news,
                 state: oldState,
               });

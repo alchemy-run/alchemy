@@ -51,11 +51,20 @@ const nonEmptyToken = (
 ): token is Redacted.Redacted<string> =>
   token !== undefined && Redacted.value(token).trim().length > 0;
 
+const validStoredCredentials = (
+  credentials: PrismaStoredCredentials | undefined,
+): credentials is PrismaStoredCredentials =>
+  credentials?.type === "serviceToken" &&
+  credentials.serviceToken.trim().length > 0;
+
+const trimToken = (token: Redacted.Redacted<string>) =>
+  Redacted.make(Redacted.value(token).trim());
+
 const readEnvServiceToken = Effect.fnUntraced(function* () {
   const serviceToken = yield* getEnvRedacted(PRISMA_SERVICE_TOKEN_ENV);
   if (nonEmptyToken(serviceToken)) {
     return {
-      serviceToken,
+      serviceToken: trimToken(serviceToken),
       envName: PRISMA_SERVICE_TOKEN_ENV,
     };
   }
@@ -63,7 +72,7 @@ const readEnvServiceToken = Effect.fnUntraced(function* () {
   const apiToken = yield* getEnvRedacted(PRISMA_API_TOKEN_ENV);
   if (nonEmptyToken(apiToken)) {
     return {
-      serviceToken: apiToken,
+      serviceToken: trimToken(apiToken),
       envName: PRISMA_API_TOKEN_ENV,
     };
   }
@@ -86,7 +95,7 @@ export const PrismaAuth = AuthProviderLayer<
     const loginStored = Effect.fnUntraced(function* (profileName: string) {
       const serviceToken = yield* Clank.password({
         message: "Prisma Service Token",
-        validate: (v) => (v.length === 0 ? "Required" : undefined),
+        validate: (v) => (v.trim().length === 0 ? "Required" : undefined),
       }).pipe(retryOnce);
 
       yield* store.write<PrismaStoredCredentials>(
@@ -94,7 +103,7 @@ export const PrismaAuth = AuthProviderLayer<
         "prisma-stored",
         {
           type: "serviceToken",
-          serviceToken,
+          serviceToken: serviceToken.trim(),
         },
       );
       yield* Clank.success("Prisma: credentials saved.");
@@ -155,16 +164,18 @@ export const PrismaAuth = AuthProviderLayer<
             .read<PrismaStoredCredentials>(profileName, "prisma-stored")
             .pipe(
               Effect.flatMap((creds) =>
-                creds == null
+                !validStoredCredentials(creds)
                   ? Effect.fail(
                       new AuthError({
                         message:
-                          "Prisma stored credentials not found. Run: alchemy login --configure",
+                          creds == null
+                            ? "Prisma stored credentials not found. Run: alchemy login --configure"
+                            : "Prisma stored credentials are invalid. Run: alchemy login --configure",
                       }),
                     )
                   : Effect.succeed({
                       type: "serviceToken" as const,
-                      serviceToken: Redacted.make(creds.serviceToken),
+                      serviceToken: Redacted.make(creds.serviceToken.trim()),
                       source: { type: "stored" as const },
                     }),
               ),
@@ -197,7 +208,9 @@ export const PrismaAuth = AuthProviderLayer<
               .read<PrismaStoredCredentials>(profileName, "prisma-stored")
               .pipe(
                 Effect.flatMap((creds) =>
-                  creds == null ? loginStored(profileName) : Effect.void,
+                  validStoredCredentials(creds)
+                    ? Effect.void
+                    : loginStored(profileName),
                 ),
               ),
           ),

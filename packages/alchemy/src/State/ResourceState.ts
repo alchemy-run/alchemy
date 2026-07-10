@@ -74,6 +74,8 @@ export interface CreatedResourceState extends BaseResourceState {
 
 export interface UpdatingReourceState extends BaseResourceState {
   status: "updating";
+  /** Persisted until the first post-adoption reconcile succeeds. */
+  adopting?: true;
   /** The new resource properties that are being (or have been) applied. */
   props: Props;
   old: {

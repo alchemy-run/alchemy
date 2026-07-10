@@ -58,31 +58,27 @@ if (wantsCleanup && !hasLiveCredentials) {
 }
 
 test.provider.skipIf(!runCleanup)(
-  "live cleans up an existing Prisma Compute project/service from configured credentials",
+  "live cleans up an existing Prisma Compute project/App from configured credentials",
   () =>
     Effect.gen(function* () {
       const client = yield* Prisma.PrismaClient;
       const projectId = process.env.PRISMA_CLEANUP_PROJECT_ID!.trim();
-      const computeServiceId =
-        process.env.PRISMA_CLEANUP_COMPUTE_SERVICE_ID?.trim() || undefined;
-      const computeVersionId =
-        process.env.PRISMA_CLEANUP_COMPUTE_VERSION_ID?.trim() || undefined;
+      const appId = process.env.PRISMA_CLEANUP_APP_ID?.trim() || undefined;
+      const deploymentId =
+        process.env.PRISMA_CLEANUP_DEPLOYMENT_ID?.trim() || undefined;
 
-      if (computeVersionId) {
-        yield* Prisma.destroyComputeVersion(client, computeVersionId, {
+      if (deploymentId) {
+        yield* Prisma.destroyDeployment(client, deploymentId, {
           timeoutSeconds: 240,
         });
       }
-      yield* Prisma.destroyComputeProject(client, projectId, {
+      yield* Prisma.destroyProjectApps(client, projectId, {
         timeoutSeconds: 240,
       });
 
       yield* expectGone("Prisma project", Prisma.getProject(projectId));
-      if (computeServiceId) {
-        yield* expectGone(
-          "Prisma compute service",
-          Prisma.getComputeService(computeServiceId),
-        );
+      if (appId) {
+        yield* expectGone("Prisma App", Prisma.getApp(appId));
       }
     }).pipe(logLevel),
   { timeout: 600_000 },
@@ -128,8 +124,8 @@ test.provider.skipIf(!runLive)(
       let deployed:
         | {
             projectId: string;
-            computeServiceId: string;
-            computeVersionId: string;
+            appId: string;
+            deploymentId: string;
           }
         | undefined;
 
@@ -142,7 +138,7 @@ test.provider.skipIf(!runLive)(
             });
             const app = yield* Prisma.Compute("App", {
               project: project.projectId,
-              serviceName: name,
+              appName: name,
               path: appDir,
               entrypoint: "server.ts",
               port: 8080,
@@ -150,20 +146,20 @@ test.provider.skipIf(!runLive)(
                 GREETING: "hello from alchemy",
               },
               timeoutSeconds: 240,
-              destroyOldVersion: true,
+              destroyOldDeployment: true,
             });
             return { project, app };
           }),
         );
 
         expect(output.project.projectId).toBeDefined();
-        expect(output.app.computeServiceId).toBeDefined();
-        expect(output.app.computeVersionId).toBeDefined();
+        expect(output.app.appId).toBeDefined();
+        expect(output.app.deploymentId).toBeDefined();
         expect(output.app.url).toBeDefined();
         deployed = {
           projectId: output.project.projectId,
-          computeServiceId: output.app.computeServiceId,
-          computeVersionId: output.app.computeVersionId!,
+          appId: output.app.appId,
+          deploymentId: output.app.deploymentId!,
         };
 
         const text = yield* fetchText(`${output.app.url}/`);
@@ -177,15 +173,15 @@ test.provider.skipIf(!runLive)(
                   [
                     "Prisma Compute live smoke deployed successfully but destroy failed.",
                     `projectId=${deployed?.projectId}`,
-                    `computeServiceId=${deployed?.computeServiceId}`,
-                    `computeVersionId=${deployed?.computeVersionId}`,
+                    `appId=${deployed?.appId}`,
+                    `deploymentId=${deployed?.deploymentId}`,
                     deployed
                       ? [
                           "Retry cleanup after the platform fix with:",
                           "PRISMA_SERVICE_TOKEN=... \\",
                           `PRISMA_CLEANUP_PROJECT_ID=${deployed.projectId} \\`,
-                          `PRISMA_CLEANUP_COMPUTE_SERVICE_ID=${deployed.computeServiceId} \\`,
-                          `PRISMA_CLEANUP_COMPUTE_VERSION_ID=${deployed.computeVersionId} \\`,
+                          `PRISMA_CLEANUP_APP_ID=${deployed.appId} \\`,
+                          `PRISMA_CLEANUP_DEPLOYMENT_ID=${deployed.deploymentId} \\`,
                           "ALCHEMY_RUN_LIVE_PRISMA_CLEANUP=true bun vitest run packages/alchemy/test/Prisma/Compute.live.test.ts",
                         ].join(" ")
                       : undefined,
@@ -200,10 +196,7 @@ test.provider.skipIf(!runLive)(
           "Prisma project",
           Prisma.getProject(deployed.projectId),
         );
-        yield* expectGone(
-          "Prisma compute service",
-          Prisma.getComputeService(deployed.computeServiceId),
-        );
+        yield* expectGone("Prisma App", Prisma.getApp(deployed.appId));
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {
@@ -217,7 +210,7 @@ test.provider.skipIf(!runLive)(
 );
 
 test.provider.skipIf(!runLive)(
-  "live rolls a Prisma Compute service back to an existing version",
+  "live rolls a Prisma App back to an existing deployment",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -262,34 +255,33 @@ test.provider.skipIf(!runLive)(
             });
             const app = yield* Prisma.Compute("App", {
               project: project.projectId,
-              serviceName: name,
+              appName: name,
               path: appDir,
               entrypoint: "server.ts",
               port: 8080,
               env: { GREETING: "rollback target" },
               timeoutSeconds: 240,
-              destroyOldVersion: false,
+              destroyOldDeployment: false,
             });
             return { project, app };
           }),
         );
 
-        const serviceId = output.app.computeServiceId;
-        const versionId = output.app.computeVersionId;
-        expect(serviceId).toBeDefined();
-        expect(versionId).toBeDefined();
+        const appId = output.app.appId;
+        const deploymentId = output.app.deploymentId;
+        expect(appId).toBeDefined();
+        expect(deploymentId).toBeDefined();
 
-        // Roll the service back to its currently-live version. The control
-        // plane accepts a roll to the live version (roll-forward / drift heal)
-        // and returns the stable service endpoint plus the number of custom
+        // Roll the App back to its currently-live deployment. The control
+        // plane accepts a roll to the live deployment (roll-forward / drift
+        // heal) and returns the stable App endpoint plus the number of custom
         // domains reassigned (0 here, since none are attached). This drives
-        // the real POST /v1/compute-services/{id}/rollback contract.
-        const result = yield* Prisma.rollbackComputeService(
-          serviceId,
-          versionId!,
-        );
-        expect(typeof result.serviceEndpointDomain).toBe("string");
-        expect(result.serviceEndpointDomain.length).toBeGreaterThan(0);
+        // the canonical POST /v1/apps/{id}/rollback contract.
+        const result = yield* Prisma.rollbackApp(appId, {
+          deploymentId: deploymentId!,
+        });
+        expect(typeof result.appEndpointDomain).toBe("string");
+        expect(result.appEndpointDomain.length).toBeGreaterThan(0);
         expect(result.reassignedDomains).toBe(0);
 
         const text = yield* fetchText(`${output.app.url}/`);

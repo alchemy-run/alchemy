@@ -1,3 +1,5 @@
+import { Database } from "./Database.ts";
+
 /**
  * Product-shaped convenience alias for {@link Database}.
  *
@@ -15,6 +17,8 @@
  *   region: "us-east-1",
  * });
  * ```
+ *
+ * @resource
  */
-export { Database as Postgres } from "./Database.ts";
+export const Postgres = Database;
 export type { DatabaseProps as PostgresProps } from "./Database.ts";

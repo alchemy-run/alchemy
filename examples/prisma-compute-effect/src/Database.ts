@@ -2,20 +2,20 @@ import * as Prisma from "alchemy/Prisma";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
-export const region = "eu-west-3";
+export const region = "eu-west-3" as const;
 
-export const serviceNameConfig = Config.string("PRISMA_EFFECT_SERVICE").pipe(
+export const appNameConfig = Config.string("PRISMA_EFFECT_APP").pipe(
   Effect.orElseSucceed(() => "alchemy-prisma-compute-effect"),
 );
 
 export const Project = Prisma.Project(
   "Project",
   Effect.gen(function* () {
-    const serviceName = yield* serviceNameConfig;
+    const appName = yield* appNameConfig;
 
     return {
       name: yield* Config.string("PRISMA_PROJECT").pipe(
-        Effect.orElseSucceed(() => `${serviceName}-project`),
+        Effect.orElseSucceed(() => `${appName}-project`),
       ),
       createDatabase: false,
       region,
@@ -42,10 +42,8 @@ export const Postgres = Prisma.Postgres(
     const branch = yield* MainBranch;
     return {
       project,
-      name: "main",
       region,
       branchId: branch.branchId,
-      isDefault: true,
     };
   }),
 );

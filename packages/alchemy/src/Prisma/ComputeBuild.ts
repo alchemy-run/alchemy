@@ -1,9 +1,10 @@
 import * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import type { PlatformError } from "effect/PlatformError";
+import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
@@ -37,8 +38,26 @@ export interface ComputeAutoBuildOptions {
   framework?: ComputeAutoBuildFramework;
   /**
    * Environment variables supplied to the build command.
+   * Plain strings are persisted in Alchemy state when this is configured
+   * through `Prisma.Compute`. Wrap secrets with `Redacted.make(secret)`.
+   *
+   * ```typescript
+   * env: { NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!) }
+   * ```
    */
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  /**
+   * Maximum bytes retained from each build output stream.
+   *
+   * @default 1048576 (1 MiB)
+   */
+  outputLimitBytes?: number;
+  /**
+   * Maximum wall-clock time for the framework build command.
+   *
+   * @default 900 (15 minutes)
+   */
+  timeoutSeconds?: number;
 }
 
 export interface ComputeBuildArtifact {
@@ -84,7 +103,66 @@ export interface RunBuildCommandOptions {
   command: string;
   cwd?: string;
   env?: Record<string, string>;
+  /**
+   * Maximum bytes retained from each output stream before the build is
+   * interrupted. This prevents noisy build tools from exhausting memory.
+   *
+   * @default 1048576 (1 MiB)
+   */
+  outputLimitBytes?: number;
+  /**
+   * Maximum wall-clock time for the build command.
+   *
+   * @default 900 (15 minutes)
+   */
+  timeoutSeconds?: number;
 }
+
+const DEFAULT_BUILD_OUTPUT_LIMIT_BYTES = 1024 * 1024;
+const DEFAULT_BUILD_TIMEOUT_SECONDS = 15 * 60;
+const STAGING_MAX_ENTRIES = 50_000;
+const STAGING_MAX_TOTAL_BYTES = 256 * 1024 * 1024;
+const STAGING_MAX_FILE_BYTES = 128 * 1024 * 1024;
+const STAGING_TIMEOUT_SECONDS = 2 * 60;
+
+interface StagingBudget {
+  entries: number;
+  totalBytes: number;
+  readonly deadline: number;
+}
+
+const collectBoundedOutput = (
+  stream: Stream.Stream<Uint8Array, unknown>,
+  label: string,
+  limit: number,
+) =>
+  Stream.runFoldEffect(
+    stream,
+    () => ({ chunks: [] as Uint8Array[], bytes: 0 }),
+    (state, chunk) => {
+      const bytes = state.bytes + chunk.byteLength;
+      return bytes > limit
+        ? Effect.fail(
+            new Error(
+              `Build ${label} exceeded the ${limit} byte output safety limit. Reduce build verbosity or raise outputLimitBytes explicitly.`,
+            ),
+          )
+        : Effect.sync(() => {
+            state.chunks.push(chunk);
+            return { chunks: state.chunks, bytes };
+          });
+    },
+  ).pipe(
+    Effect.map(({ chunks, bytes }) => {
+      const output = new Uint8Array(bytes);
+      let offset = 0;
+      for (const chunk of chunks) {
+        output.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return { text: new TextDecoder().decode(output), bytes };
+    }),
+  );
 
 /**
  * Run a shell build command, dying on non-zero exit. Local stand-in for the
@@ -95,10 +173,22 @@ export const runBuildCommand = Effect.fn(function* ({
   command,
   cwd,
   env,
+  outputLimitBytes = DEFAULT_BUILD_OUTPUT_LIMIT_BYTES,
+  timeoutSeconds = DEFAULT_BUILD_TIMEOUT_SECONDS,
 }: RunBuildCommandOptions) {
+  if (!Number.isSafeInteger(outputLimitBytes) || outputLimitBytes <= 0) {
+    return yield* Effect.fail(
+      new Error("outputLimitBytes must be a positive safe integer"),
+    );
+  }
+  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+    return yield* Effect.fail(
+      new Error("timeoutSeconds must be a positive finite number"),
+    );
+  }
   const spawner = yield* ChildProcessSpawner;
   const path = yield* Path.Path;
-  const result = yield* Effect.scoped(
+  const resultOption = yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(
         ChildProcess.make(command, [], {
@@ -109,34 +199,57 @@ export const runBuildCommand = Effect.fn(function* ({
           stdin: "ignore",
           stdout: "pipe",
           stderr: "pipe",
-          detached: false,
+          killSignal: "SIGKILL",
         }),
       );
-      return yield* Effect.all(
+      const result = yield* Effect.all(
         {
           exitCode: handle.exitCode,
-          stdout: Stream.mkString(Stream.decodeText(handle.stdout)),
-          stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
+          stdout: collectBoundedOutput(
+            handle.stdout,
+            "stdout",
+            outputLimitBytes,
+          ),
+          stderr: collectBoundedOutput(
+            handle.stderr,
+            "stderr",
+            outputLimitBytes,
+          ),
         },
         { concurrency: "unbounded" },
       );
-    }),
+      // A successful build shell can still leave daemonized descendants in
+      // its detached process group. Always reap the group after output has
+      // closed; ESRCH is expected when no descendants remain.
+      yield* handle.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore);
+      return result;
+    }).pipe(Effect.timeoutOption(Duration.seconds(timeoutSeconds))),
   );
+  if (Option.isNone(resultOption)) {
+    return yield* Effect.fail(
+      new Error(`Build command timed out after ${timeoutSeconds} seconds.`),
+    );
+  }
+  const result = resultOption.value;
 
   if (result.exitCode !== 0) {
     return yield* Effect.fail(
       new Error(
-        `Build command failed with exit code ${result.exitCode}${result.stderr ? `\n${result.stderr}` : ""}`,
+        `Build command failed with exit code ${result.exitCode} (stdout: ${result.stdout.bytes} bytes; stderr: ${result.stderr.bytes} bytes).`,
       ),
     );
   }
 
-  yield* Effect.logDebug("Build output", result.stdout);
-  if (result.stderr) {
-    yield* Effect.logDebug("Build stderr", result.stderr);
-  }
+  yield* Effect.logDebug("Build command completed", {
+    stdoutBytes: result.stdout.bytes,
+    stderrBytes: result.stderr.bytes,
+  });
 
-  return result;
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.text,
+    stderr: result.stderr.text,
+  };
 });
 
 const NEXT_CONFIG_FILENAMES = [
@@ -191,11 +304,13 @@ const strategies: readonly BuildStrategy[] = [
       buildFramework({
         appPath: options.appPath,
         env: options.env,
+        outputLimitBytes: options.outputLimitBytes,
+        timeoutSeconds: options.timeoutSeconds,
         cliName: "next",
         args: ["build"],
         failurePrefix: "Next.js",
         missingMessage:
-          "Could not find the Next.js CLI. Install it with `npm install next` or ensure npx/bunx is available.",
+          "Could not find an installed Next.js CLI. Install `next` in the application or workspace before deploying.",
         sourceDir: ".next/standalone",
         entrypoint: "server.js",
         defaultPort: 3000,
@@ -222,11 +337,13 @@ const strategies: readonly BuildStrategy[] = [
       buildFramework({
         appPath: options.appPath,
         env: options.env,
+        outputLimitBytes: options.outputLimitBytes,
+        timeoutSeconds: options.timeoutSeconds,
         cliName: "nuxt",
         args: ["build"],
         failurePrefix: "Nuxt",
         missingMessage:
-          "Could not find the Nuxt CLI. Install it with `npm install nuxt` or ensure npx/bunx is available.",
+          "Could not find an installed Nuxt CLI. Install `nuxt` in the application or workspace before deploying.",
         sourceDir: ".output",
         entrypoint: "server/index.mjs",
         defaultPort: 3000,
@@ -248,11 +365,13 @@ const strategies: readonly BuildStrategy[] = [
       buildFramework({
         appPath: options.appPath,
         env: options.env,
+        outputLimitBytes: options.outputLimitBytes,
+        timeoutSeconds: options.timeoutSeconds,
         cliName: "astro",
         args: ["build"],
         failurePrefix: "Astro",
         missingMessage:
-          "Could not find the Astro CLI. Install it with `npm install astro` or ensure npx/bunx is available.",
+          "Could not find an installed Astro CLI. Install `astro` in the application or workspace before deploying.",
         sourceDir: "dist",
         entrypoint: "server/entry.mjs",
         defaultPort: 4321,
@@ -280,11 +399,13 @@ const strategies: readonly BuildStrategy[] = [
       buildFramework({
         appPath: options.appPath,
         env: options.env,
+        outputLimitBytes: options.outputLimitBytes,
+        timeoutSeconds: options.timeoutSeconds,
         cliName: "vite",
         args: ["build"],
         failurePrefix: "TanStack Start",
         missingMessage:
-          "Could not find the Vite CLI. Install it with `npm install vite` or ensure npx/bunx is available.",
+          "Could not find an installed Vite CLI. Install `vite` in the application or workspace before deploying.",
         sourceDir: ".output",
         entrypoint: "server/index.mjs",
         defaultPort: 3000,
@@ -323,6 +444,8 @@ export const runComputeAutoBuild = Effect.fn(function* (
 const buildFramework = Effect.fn(function* (options: {
   appPath: string;
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  outputLimitBytes?: number;
+  timeoutSeconds?: number;
   cliName: string;
   args: string[];
   failurePrefix: string;
@@ -347,6 +470,8 @@ const buildFramework = Effect.fn(function* (options: {
     ),
     cwd: options.appPath,
     env: processBuildEnv(options.env),
+    outputLimitBytes: options.outputLimitBytes,
+    timeoutSeconds: options.timeoutSeconds,
   });
 
   const requiredPath = path.join(
@@ -358,36 +483,52 @@ const buildFramework = Effect.fn(function* (options: {
   }
 
   const temp = yield* makeTempArtifactDir();
+  const budget = makeStagingBudget();
   const build = Effect.gen(function* () {
-    yield* copyDirectoryPreserveSymlinks(
-      path.join(options.appPath, options.sourceDir),
-      temp.artifactDir,
+    return yield* withStagingDeadline(
+      Effect.gen(function* () {
+        yield* copyDirectoryPreserveSymlinks(
+          path.join(options.appPath, options.sourceDir),
+          temp.artifactDir,
+          temp.artifactDir,
+          options.appPath,
+          budget,
+        );
+        yield* materializeBunNodeModuleAliases(
+          temp.artifactDir,
+          path.join(options.appPath, options.sourceDir),
+          budget,
+        );
+        const entrypoint = yield* resolveFrameworkEntrypoint(
+          temp.artifactDir,
+          options.entrypoint,
+          options.allowNestedEntrypoint ?? false,
+        );
+        const extrasBaseDir = options.extrasRelativeToEntrypoint
+          ? path.dirname(path.join(temp.artifactDir, entrypoint))
+          : temp.artifactDir;
+        for (const extra of options.extras ?? []) {
+          const extraSource = path.join(options.appPath, extra.from);
+          if (yield* directoryExists(extraSource)) {
+            const extraTarget = path.join(extrasBaseDir, extra.to);
+            yield* copyDirectoryPreserveSymlinks(
+              extraSource,
+              extraTarget,
+              temp.artifactDir,
+              options.appPath,
+              budget,
+            );
+          }
+        }
+        return {
+          directory: temp.artifactDir,
+          entrypoint,
+          defaultPort: options.defaultPort,
+          cleanup: temp.cleanup,
+        };
+      }),
+      budget,
     );
-    yield* materializeBunNodeModuleAliases(
-      temp.artifactDir,
-      path.join(options.appPath, options.sourceDir),
-    );
-    const entrypoint = yield* resolveFrameworkEntrypoint(
-      temp.artifactDir,
-      options.entrypoint,
-      options.allowNestedEntrypoint ?? false,
-    );
-    const extrasBaseDir = options.extrasRelativeToEntrypoint
-      ? path.dirname(path.join(temp.artifactDir, entrypoint))
-      : temp.artifactDir;
-    for (const extra of options.extras ?? []) {
-      const extraSource = path.join(options.appPath, extra.from);
-      if (yield* directoryExists(extraSource)) {
-        const extraTarget = path.join(extrasBaseDir, extra.to);
-        yield* copyDirectoryPreserveSymlinks(extraSource, extraTarget);
-      }
-    }
-    return {
-      directory: temp.artifactDir,
-      entrypoint,
-      defaultPort: options.defaultPort,
-      cleanup: temp.cleanup,
-    };
   });
 
   return yield* build.pipe(
@@ -409,21 +550,28 @@ const buildNestjs = Effect.fn(function* (options: ComputeAutoBuildOptions) {
             options.appPath,
             "nest",
             ["build"],
-            "Could not find the Nest CLI. Add a `build` script to package.json, install @nestjs/cli, or ensure npx/bunx is available.",
+            "Could not find an installed Nest CLI. Add a `build` script to package.json or install `@nestjs/cli` in the application or workspace before deploying.",
           )
         : packageScriptCommand("build"),
     cwd: options.appPath,
     env: processBuildEnv(options.env),
+    outputLimitBytes: options.outputLimitBytes,
+    timeoutSeconds: options.timeoutSeconds,
   });
 
   const compiledEntry = yield* resolveNestjsCompiledEntrypoint(options.appPath);
   const temp = yield* makeTempArtifactDir();
+  const budget = makeStagingBudget();
   const build = Effect.gen(function* () {
-    const entrypoint = yield* stageTracedNestjsArtifact({
-      appPath: options.appPath,
-      artifactDir: temp.artifactDir,
-      compiledEntry,
-    });
+    const entrypoint = yield* withStagingDeadline(
+      stageTracedNestjsArtifact({
+        appPath: options.appPath,
+        artifactDir: temp.artifactDir,
+        compiledEntry,
+        budget,
+      }),
+      budget,
+    );
     return {
       directory: temp.artifactDir,
       entrypoint,
@@ -485,9 +633,13 @@ const stageTracedNestjsArtifact = Effect.fn(function* (options: {
   appPath: string;
   artifactDir: string;
   compiledEntry: string;
+  budget: StagingBudget;
 }) {
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const sourceRoot = yield* resolveSourceRoot(options.appPath);
+  const realSourceRoot = yield* fs.realPath(sourceRoot);
+  const artifactRoot = path.resolve(options.artifactDir);
   const entry = path.join(options.appPath, options.compiledEntry);
   const entrypoint = path.relative(sourceRoot, entry).replaceAll("\\", "/");
   const fileList = yield* Effect.tryPromise({
@@ -502,23 +654,65 @@ const stageTracedNestjsArtifact = Effect.fn(function* (options: {
   });
 
   const sortedFiles = fileList.sort((a, b) => a.localeCompare(b));
+  if (sortedFiles.length > STAGING_MAX_ENTRIES) {
+    return yield* Effect.fail(
+      new Error(
+        `Compute artifact staging exceeded the ${STAGING_MAX_ENTRIES} entry safety limit while tracing NestJS dependencies.`,
+      ),
+    );
+  }
   for (const file of sortedFiles) {
+    const normalized = normalizeRelativePath(file);
+    if (normalized === undefined || normalized === ".") {
+      return yield* Effect.fail(
+        new Error(`NestJS dependency trace returned an unsafe path: ${file}`),
+      );
+    }
     yield* stageTracedPath(
-      path.join(sourceRoot, file),
-      path.join(options.artifactDir, file),
+      path.join(sourceRoot, normalized),
+      path.join(options.artifactDir, normalized),
+      [realSourceRoot],
+      artifactRoot,
+      options.budget,
     );
   }
 
   return entrypoint;
 });
 
-const copyDirectoryPreserveSymlinks: (
+const copyDirectoryPreserveSymlinks = Effect.fn(function* (
   sourceDir: string,
   targetDir: string,
-) => Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =
-  Effect.fn(function* (sourceDir, targetDir) {
+  targetRoot: string,
+  sourceBoundary: string,
+  budget: StagingBudget,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const realSourceRoot = yield* fs.realPath(sourceDir);
+  const realSourceBoundary = yield* fs.realPath(sourceBoundary);
+  yield* assertPathWithinRoots(realSourceRoot, [realSourceBoundary], sourceDir);
+  yield* copyDirectoryWithinRoots(
+    sourceDir,
+    targetDir,
+    [realSourceRoot],
+    path.resolve(targetRoot),
+    budget,
+  );
+});
+
+const copyDirectoryWithinRoots: (
+  sourceDir: string,
+  targetDir: string,
+  allowedRoots: readonly string[],
+  targetRoot: string,
+  budget: StagingBudget,
+) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path> =
+  Effect.fn(function* (sourceDir, targetDir, allowedRoots, targetRoot, budget) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    yield* assertRealPathWithinRoots(sourceDir, allowedRoots);
+    yield* assertSafeStagingDestination(targetDir, targetRoot);
     yield* fs.makeDirectory(targetDir, { recursive: true });
 
     const entries = (yield* readDirectoryEntries(sourceDir)).sort((a, b) =>
@@ -528,9 +722,16 @@ const copyDirectoryPreserveSymlinks: (
       const source = path.join(sourceDir, entry.name);
       const target = path.join(targetDir, entry.name);
       if (entry.type === "SymbolicLink") {
-        const symlinkTarget = (yield* fs.readLink(source)).replaceAll(
-          "\\",
-          "/",
+        const symlinkTarget = yield* validateStagedSymlink(
+          source,
+          allowedRoots,
+        );
+        yield* accountStagingEntry(budget, source, 0);
+        yield* assertSafeStagingDestination(target, targetRoot);
+        yield* assertPathWithinRoots(
+          path.resolve(path.dirname(target), symlinkTarget),
+          [targetRoot],
+          target,
         );
         yield* fs.remove(target, { recursive: true, force: true });
         yield* fs.symlink(symlinkTarget, target);
@@ -538,13 +739,43 @@ const copyDirectoryPreserveSymlinks: (
       }
 
       if (entry.type === "Directory") {
-        yield* copyDirectoryPreserveSymlinks(source, target);
-      } else if (entry.type === "File") {
+        yield* assertRealPathWithinRoots(source, allowedRoots);
+        yield* accountStagingEntry(budget, source, 0);
+        yield* copyDirectoryWithinRoots(
+          source,
+          target,
+          allowedRoots,
+          targetRoot,
+          budget,
+        );
+        continue;
+      }
+
+      if (entry.type === "File") {
+        yield* assertRealPathWithinRoots(source, allowedRoots);
         const stat = yield* fs.stat(source);
+        const size = yield* safeFileSize(source, stat.size);
+        yield* accountStagingEntry(budget, source, size);
+        yield* assertSafeStagingDestination(target, targetRoot);
         yield* fs.makeDirectory(path.dirname(target), { recursive: true });
         yield* fs.copyFile(source, target);
+        const copied = yield* fs.stat(target);
+        if (copied.type !== "File" || Number(copied.size) !== size) {
+          yield* fs.remove(target, { force: true }).pipe(Effect.ignore);
+          return yield* Effect.fail(
+            new Error(`Compute artifact file changed while staging: ${source}`),
+          );
+        }
         yield* fs.chmod(target, stat.mode & 0o777);
+        continue;
       }
+
+      yield* accountStagingEntry(budget, source, 0);
+      return yield* Effect.fail(
+        new Error(
+          `Unsupported filesystem entry in compute artifact: ${source}`,
+        ),
+      );
     }
   });
 
@@ -552,6 +783,13 @@ const readDirectoryEntries = Effect.fn(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const names = yield* fs.readDirectory(directory);
+  if (names.length > STAGING_MAX_ENTRIES) {
+    return yield* Effect.fail(
+      new Error(
+        `Compute artifact directory exceeds the ${STAGING_MAX_ENTRIES} entry safety limit: ${directory}`,
+      ),
+    );
+  }
   return yield* Effect.forEach(names, (name) =>
     Effect.gen(function* () {
       const file = path.join(directory, name);
@@ -577,6 +815,7 @@ const readDirectoryEntries = Effect.fn(function* (directory: string) {
 const materializeBunNodeModuleAliases = Effect.fn(function* (
   artifactDir: string,
   sourceDir: string,
+  budget: StagingBudget,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -587,6 +826,7 @@ const materializeBunNodeModuleAliases = Effect.fn(function* (
     yield* fs.realPath(artifactDir),
     yield* fs.realPath(sourceDir),
   ];
+  const targetRoot = path.resolve(artifactDir);
 
   for (const entry of yield* fs.readDirectory(aliasRoot)) {
     const source = path.join(aliasRoot, entry);
@@ -597,12 +837,15 @@ const materializeBunNodeModuleAliases = Effect.fn(function* (
 
     if (entry.startsWith("@")) {
       const targetScope = path.join(nodeModules, entry);
+      yield* assertSafeStagingDestination(targetScope, targetRoot);
       yield* fs.makeDirectory(targetScope, { recursive: true });
       for (const packageName of yield* fs.readDirectory(source)) {
         yield* copyAliasIfMissing(
           allowedRoots,
           path.join(source, packageName),
           path.join(targetScope, packageName),
+          targetRoot,
+          budget,
         );
       }
     } else {
@@ -610,6 +853,8 @@ const materializeBunNodeModuleAliases = Effect.fn(function* (
         allowedRoots,
         source,
         path.join(nodeModules, entry),
+        targetRoot,
+        budget,
       );
     }
   }
@@ -619,25 +864,43 @@ const copyAliasIfMissing = Effect.fn(function* (
   allowedRoots: readonly string[],
   source: string,
   target: string,
+  targetRoot: string,
+  budget: StagingBudget,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   if (yield* fs.exists(target)) return;
   const realSource = yield* fs.realPath(source);
-  const insideAllowedRoot = allowedRoots.some((root) => {
-    const relative = path.relative(root, realSource);
-    return (
-      relative !== ".." &&
-      !relative.startsWith(`..${path.sep}`) &&
-      !path.isAbsolute(relative)
+  yield* assertPathWithinRoots(realSource, allowedRoots, source);
+  const stat = yield* fs.stat(realSource);
+  yield* assertSafeStagingDestination(target, targetRoot);
+  if (stat.type === "Directory") {
+    yield* accountStagingEntry(budget, source, 0);
+    yield* copyDirectoryWithinRoots(
+      realSource,
+      target,
+      allowedRoots,
+      targetRoot,
+      budget,
     );
-  });
-  if (!insideAllowedRoot) {
-    return yield* Effect.fail(
-      new Error(`Bun package alias escapes compute artifact root: ${source}`),
-    );
+    return;
   }
-  yield* fs.copy(realSource, target, { overwrite: false });
+  if (stat.type === "File") {
+    const size = yield* safeFileSize(source, stat.size);
+    yield* accountStagingEntry(budget, source, size);
+    yield* fs.copyFile(realSource, target);
+    const copied = yield* fs.stat(target);
+    if (copied.type !== "File" || Number(copied.size) !== size) {
+      yield* fs.remove(target, { force: true }).pipe(Effect.ignore);
+      return yield* Effect.fail(
+        new Error(`Compute artifact file changed while staging: ${source}`),
+      );
+    }
+    yield* fs.chmod(target, stat.mode & 0o777);
+    return;
+  }
+  return yield* Effect.fail(
+    new Error(`Unsupported Bun package alias source: ${source}`),
+  );
 });
 
 const resolveFrameworkEntrypoint = Effect.fn(function* (
@@ -708,7 +971,15 @@ function buildBun(options: ComputeAutoBuildOptions) {
         ].join(" "),
         cwd: options.appPath,
         env: processBuildEnv(options.env),
+        outputLimitBytes: options.outputLimitBytes,
+        timeoutSeconds: options.timeoutSeconds,
       });
+
+      const budget = makeStagingBudget();
+      yield* withStagingDeadline(
+        validateStagedDirectory(temp.artifactDir, budget),
+        budget,
+      );
 
       const outputFiles = (yield* fs.readDirectory(temp.artifactDir))
         .filter((file) => file.endsWith(".js"))
@@ -759,6 +1030,13 @@ const resolveBunEntrypoint = Effect.fn(function* (
       new Error(`Entrypoint file does not exist: ${entrypointPath}`),
     );
   }
+  const realAppPath = yield* fs.realPath(appPath);
+  const realEntrypointPath = yield* fs.realPath(entrypointPath);
+  yield* assertPathWithinRoots(
+    realEntrypointPath,
+    [realAppPath],
+    entrypointPath,
+  );
   return normalized;
 });
 
@@ -907,6 +1185,9 @@ const directoryExists = Effect.fn(function* (dirPath: string) {
 const stageTracedPath = Effect.fn(function* (
   sourcePath: string,
   destinationPath: string,
+  allowedRoots: readonly string[],
+  targetRoot: string,
+  budget: StagingBudget,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -916,19 +1197,274 @@ const stageTracedPath = Effect.fn(function* (
   const stat = yield* fs
     .stat(sourcePath)
     .pipe(Effect.catch(() => Effect.succeed(undefined)));
-  if (stat === undefined && symlinkTarget === undefined) return;
+  if (stat === undefined && symlinkTarget === undefined) {
+    return yield* Effect.fail(
+      new Error(`NestJS dependency disappeared while staging: ${sourcePath}`),
+    );
+  }
 
+  yield* assertSafeStagingDestination(destinationPath, targetRoot);
   yield* fs.makeDirectory(path.dirname(destinationPath), { recursive: true });
   if (symlinkTarget !== undefined) {
+    const validatedTarget = yield* validateStagedSymlink(
+      sourcePath,
+      allowedRoots,
+    );
+    yield* accountStagingEntry(budget, sourcePath, 0);
+    yield* assertPathWithinRoots(
+      path.resolve(path.dirname(destinationPath), validatedTarget),
+      [targetRoot],
+      destinationPath,
+    );
     yield* fs.remove(destinationPath, { recursive: true, force: true });
-    yield* fs.symlink(symlinkTarget, destinationPath);
+    yield* fs.symlink(validatedTarget, destinationPath);
     return;
   }
 
   if (stat?.type === "File") {
+    yield* assertRealPathWithinRoots(sourcePath, allowedRoots);
+    const size = yield* safeFileSize(sourcePath, stat.size);
+    yield* accountStagingEntry(budget, sourcePath, size);
     yield* fs.copyFile(sourcePath, destinationPath);
+    const copied = yield* fs.stat(destinationPath);
+    if (copied.type !== "File" || Number(copied.size) !== size) {
+      yield* fs.remove(destinationPath, { force: true }).pipe(Effect.ignore);
+      return yield* Effect.fail(
+        new Error(`Compute artifact file changed while staging: ${sourcePath}`),
+      );
+    }
     yield* fs.chmod(destinationPath, stat.mode & 0o777);
+    return;
   }
+
+  yield* accountStagingEntry(budget, sourcePath, 0);
+  return yield* Effect.fail(
+    new Error(
+      `Unsupported filesystem entry in NestJS dependency trace: ${sourcePath}`,
+    ),
+  );
+});
+
+const makeStagingBudget = (): StagingBudget => ({
+  entries: 0,
+  totalBytes: 0,
+  deadline: Date.now() + STAGING_TIMEOUT_SECONDS * 1000,
+});
+
+const withStagingDeadline = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  budget: StagingBudget,
+): Effect.Effect<A, E | Error, R> =>
+  effect.pipe(
+    Effect.timeoutOption(
+      Duration.millis(Math.max(1, budget.deadline - Date.now())),
+    ),
+    Effect.flatMap((result) =>
+      Option.isSome(result)
+        ? Effect.succeed(result.value)
+        : Effect.fail(
+            new Error(
+              `Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`,
+            ),
+          ),
+    ),
+  );
+
+const accountStagingEntry = (
+  budget: StagingBudget,
+  source: string,
+  size: number,
+) => {
+  if (Date.now() > budget.deadline) {
+    return Effect.fail(
+      new Error(
+        `Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`,
+      ),
+    );
+  }
+  if (size > STAGING_MAX_FILE_BYTES) {
+    return Effect.fail(
+      new Error(
+        `Compute artifact file exceeds the ${STAGING_MAX_FILE_BYTES} byte per-file safety limit: ${source}`,
+      ),
+    );
+  }
+  const entries = budget.entries + 1;
+  if (entries > STAGING_MAX_ENTRIES) {
+    return Effect.fail(
+      new Error(
+        `Compute artifact staging exceeded the ${STAGING_MAX_ENTRIES} entry safety limit.`,
+      ),
+    );
+  }
+  const totalBytes = budget.totalBytes + size;
+  if (
+    !Number.isSafeInteger(totalBytes) ||
+    totalBytes > STAGING_MAX_TOTAL_BYTES
+  ) {
+    return Effect.fail(
+      new Error(
+        `Compute artifact staging exceeded the ${STAGING_MAX_TOTAL_BYTES} byte total safety limit.`,
+      ),
+    );
+  }
+  budget.entries = entries;
+  budget.totalBytes = totalBytes;
+  return Effect.void;
+};
+
+const safeFileSize = (source: string, rawSize: FileSystem.Size) => {
+  const size = Number(rawSize);
+  return Number.isSafeInteger(size) && size >= 0
+    ? Effect.succeed(size)
+    : Effect.fail(
+        new Error(`Compute artifact has an invalid file size: ${source}`),
+      );
+};
+
+const assertRealPathWithinRoots = Effect.fn(function* (
+  source: string,
+  allowedRoots: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const realSource = yield* fs.realPath(source);
+  yield* assertPathWithinRoots(realSource, allowedRoots, source);
+  return realSource;
+});
+
+const assertSafeStagingDestination = Effect.fn(function* (
+  destination: string,
+  targetRoot: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const absoluteDestination = path.resolve(destination);
+  const absoluteTargetRoot = path.resolve(targetRoot);
+  yield* assertPathWithinRoots(
+    absoluteDestination,
+    [absoluteTargetRoot],
+    destination,
+  );
+
+  let existingAncestor = absoluteDestination;
+  while (!(yield* fs.exists(existingAncestor))) {
+    const isDanglingSymlink = yield* fs.readLink(existingAncestor).pipe(
+      Effect.as(true),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+    if (isDanglingSymlink) {
+      return yield* Effect.fail(
+        new Error(
+          `Compute artifact destination contains a dangling symlink: ${existingAncestor}`,
+        ),
+      );
+    }
+    const parent = path.dirname(existingAncestor);
+    if (parent === existingAncestor) {
+      return yield* Effect.fail(
+        new Error(
+          `Could not establish a safe compute artifact destination: ${destination}`,
+        ),
+      );
+    }
+    existingAncestor = parent;
+  }
+
+  const realAncestor = yield* fs.realPath(existingAncestor);
+  const realTargetRoot = yield* fs.realPath(absoluteTargetRoot);
+  yield* assertPathWithinRoots(realAncestor, [realTargetRoot], destination);
+});
+
+const assertPathWithinRoots = Effect.fn(function* (
+  realSource: string,
+  allowedRoots: readonly string[],
+  displaySource: string,
+) {
+  const path = yield* Path.Path;
+  if (
+    allowedRoots.some((root) => {
+      const relative = path.relative(root, realSource);
+      return (
+        relative !== ".." &&
+        !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative)
+      );
+    })
+  ) {
+    return;
+  }
+  return yield* Effect.fail(
+    new Error(
+      `Compute artifact path escapes its staging root: ${displaySource}`,
+    ),
+  );
+});
+
+const validateStagedSymlink = Effect.fn(function* (
+  source: string,
+  allowedRoots: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const target = yield* fs.readLink(source);
+  if (path.isAbsolute(target) || /^[a-zA-Z]:[\\/]/.test(target)) {
+    return yield* Effect.fail(
+      new Error(`Compute artifact contains an absolute symlink: ${source}`),
+    );
+  }
+  yield* assertRealPathWithinRoots(source, allowedRoots);
+  return target;
+});
+
+const validateStagedDirectory = Effect.fn(function* (
+  root: string,
+  budget: StagingBudget,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const realRoot = yield* fs.realPath(root);
+
+  const visit: (
+    directory: string,
+  ) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path> =
+    Effect.fn(function* (directory) {
+      yield* assertRealPathWithinRoots(directory, [realRoot]);
+      const entries = (yield* readDirectoryEntries(directory)).sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
+      for (const entry of entries) {
+        const source = path.join(directory, entry.name);
+        if (entry.type === "SymbolicLink") {
+          yield* validateStagedSymlink(source, [realRoot]);
+          yield* accountStagingEntry(budget, source, 0);
+          continue;
+        }
+        if (entry.type === "Directory") {
+          yield* assertRealPathWithinRoots(source, [realRoot]);
+          yield* accountStagingEntry(budget, source, 0);
+          yield* visit(source);
+          continue;
+        }
+        if (entry.type === "File") {
+          yield* assertRealPathWithinRoots(source, [realRoot]);
+          const stat = yield* fs.stat(source);
+          yield* accountStagingEntry(
+            budget,
+            source,
+            yield* safeFileSize(source, stat.size),
+          );
+          continue;
+        }
+        yield* accountStagingEntry(budget, source, 0);
+        return yield* Effect.fail(
+          new Error(
+            `Unsupported filesystem entry in compute artifact: ${source}`,
+          ),
+        );
+      }
+    });
+
+  yield* visit(root);
 });
 
 const resolveSourceRoot = Effect.fn(function* (startPath: string) {
@@ -965,20 +1501,30 @@ const packageCliCommand = Effect.fn(function* (
   args: readonly string[],
   missingMessage: string,
 ) {
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const localBin = path.join(appPath, "node_modules", ".bin", cliName);
-  const argText = args.map(shellQuote).join(" ");
-  return [
-    `if [ -x ${shellQuote(localBin)} ]; then`,
-    `${shellQuote(localBin)} ${argText};`,
-    "elif command -v npx >/dev/null 2>&1; then",
-    `npx ${shellQuote(cliName)} ${argText};`,
-    "elif command -v bunx >/dev/null 2>&1; then",
-    `bunx ${shellQuote(cliName)} ${argText};`,
-    "else",
-    `echo ${shellQuote(missingMessage)} >&2; exit 127;`,
-    "fi",
-  ].join(" ");
+  const sourceRoot = yield* resolveSourceRoot(appPath);
+  const executable = process.platform === "win32" ? `${cliName}.cmd` : cliName;
+  const candidates = Array.from(
+    new Set(
+      [appPath, sourceRoot].map((root) =>
+        path.join(root, "node_modules", ".bin", executable),
+      ),
+    ),
+  );
+  for (const candidate of candidates) {
+    const stat = yield* fs
+      .stat(candidate)
+      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    if (
+      stat?.type === "File" &&
+      (process.platform === "win32" || (stat.mode & 0o111) !== 0)
+    ) {
+      const argText = args.map(shellQuote).join(" ");
+      return `${shellQuote(candidate)}${argText.length > 0 ? ` ${argText}` : ""}`;
+    }
+  }
+  return yield* Effect.fail(new Error(missingMessage));
 });
 
 const packageScriptCommand = (scriptName: string) =>

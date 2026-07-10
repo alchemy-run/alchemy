@@ -1,6 +1,6 @@
 # Prisma Compute Effect
 
-Minimal Effect-native Prisma Compute service managed by Alchemy.
+Minimal Effect-native Prisma Compute app managed by Alchemy.
 
 This example is intentionally not a framework app. It shows the provider-native
 runtime path:
@@ -13,10 +13,10 @@ runtime path:
 - `Prisma.ConnectionBinding(Connection)` inside the deployed runtime
 
 `alchemy.run.ts` only wires the stack together. The Prisma data resources live
-in `src/Database.ts`, and the Effect-native Compute service lives in
+in `src/Database.ts`, and the Effect-native Compute app lives in
 `src/Api.ts`.
 
-The deployed service responds on `/` and `/api/health` with JSON showing the
+The deployed app responds on `/` and `/api/health` with JSON showing the
 bound database and connection IDs.
 
 ## Deploy

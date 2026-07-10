@@ -18,7 +18,7 @@ test.provider("dev mode returns a local Compute without a token", (stack) =>
       Effect.gen(function* () {
         return yield* Prisma.Compute("App", {
           project: "project-dev",
-          serviceName: "api",
+          appName: "api",
           port: 8787,
           dev: {
             url: "http://localhost:8787",
@@ -29,7 +29,7 @@ test.provider("dev mode returns a local Compute without a token", (stack) =>
 
     expect(app.local).toBe(true);
     expect(app.url).toBe("http://localhost:8787");
-    expect(app.computeServiceId).toContain("dev:");
+    expect(app.appId).toContain("dev:");
 
     yield* stack.destroy();
   }),
@@ -47,7 +47,7 @@ test.provider("dev mode supports the same stack shape with Project", (stack) =>
         });
         const app = yield* Prisma.Compute("AppWithProject", {
           project,
-          serviceName: "api",
+          appName: "api",
           port: 8787,
           dev: {
             url: "http://localhost:8787",
@@ -93,7 +93,7 @@ test.provider(
             "App",
             {
               project,
-              serviceName: "api",
+              appName: "api",
               main: import.meta.filename,
               dev: {
                 url: "http://localhost:8787",
@@ -120,7 +120,6 @@ test.provider(
         expect.arrayContaining([
           output.keys.connectionId,
           output.keys.databaseId,
-          output.keys.connectionString,
           output.keys.directConnectionString,
           output.keys.pooledConnectionString,
           output.keys.accelerateConnectionString,
@@ -148,7 +147,6 @@ test.provider(
           const database = yield* Prisma.Database("Database", {
             project,
             name: "main",
-            isDefault: true,
             dev: {
               name: "alchemy-compute-dev-owned-shapes",
             },
@@ -162,13 +160,13 @@ test.provider(
             gitName: "main",
             isDefault: true,
           });
-          const service = yield* Prisma.ComputeService("ComputeService", {
+          const appResource = yield* Prisma.App("App", {
             project,
             displayName: "api",
             branchId: branch.branchId,
           });
-          const version = yield* Prisma.ComputeVersion("ComputeVersion", {
-            computeService: service,
+          const deployment = yield* Prisma.Deployment("Deployment", {
+            app: appResource,
             portMapping: { http: 3000 },
           });
           const env = yield* Prisma.EnvironmentVariable("Environment", {
@@ -187,8 +185,8 @@ test.provider(
             database,
             connection,
             branch,
-            service,
-            version,
+            appResource,
+            deployment,
             env,
             repo,
           };
@@ -201,11 +199,9 @@ test.provider(
       expect(output.connection.databaseId).toBe(output.database.databaseId);
       expect(output.branch.projectId).toBe(output.project.projectId);
       expect(output.branch.isDefault).toBe(true);
-      expect(output.service.projectId).toBe(output.project.projectId);
-      expect(output.service.branchId).toBe(output.branch.branchId);
-      expect(output.version.computeServiceId).toBe(
-        output.service.computeServiceId,
-      );
+      expect(output.appResource.projectId).toBe(output.project.projectId);
+      expect(output.appResource.branchId).toBe(output.branch.branchId);
+      expect(output.deployment.appId).toBe(output.appResource.appId);
       expect(output.env.projectId).toBe(output.project.projectId);
       expect(output.env.key).toBe("TOKEN");
       expect(Redacted.value(output.env.value)).toBe("secret");
@@ -245,7 +241,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Prisma.Compute("AppWithCommand", {
             project: "project-dev",
-            serviceName: "api",
+            appName: "api",
             path: root,
             port: 8788,
             env: {

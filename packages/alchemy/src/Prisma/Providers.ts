@@ -13,10 +13,10 @@ import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { PrismaAuth } from "./AuthProvider.ts";
+import { App, AppProvider } from "./App.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import { Compute, ComputeDevProvider, ComputeProvider } from "./Compute.ts";
-import { ComputeService, ComputeServiceProvider } from "./ComputeService.ts";
-import { ComputeVersion, ComputeVersionProvider } from "./ComputeVersion.ts";
+import { Deployment, DeploymentProvider } from "./Deployment.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
@@ -29,7 +29,7 @@ import {
   ensurePrismaDevDatabase,
 } from "./PrismaDevDatabase.ts";
 import { PrismaClientLive } from "./Client.ts";
-import { PrismaEnvironment, fromProfile } from "./PrismaEnvironment.ts";
+import { fromProfile } from "./PrismaEnvironment.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import {
   SourceRepository,
@@ -109,8 +109,8 @@ export const providers = () =>
       Connection,
       Branch,
       Compute,
-      ComputeService,
-      ComputeVersion,
+      App,
+      Deployment,
       CustomDomain,
       EnvironmentVariable,
       SourceRepository,
@@ -131,8 +131,8 @@ const devProviderLayer = () =>
     connectionDevProvider(),
     branchDevProvider(),
     ComputeDevProvider(),
-    computeServiceDevProvider(),
-    computeVersionDevProvider(),
+    appDevProvider(),
+    deploymentDevProvider(),
     customDomainDevProvider(),
     environmentVariableDevProvider(),
     sourceRepositoryDevProvider(),
@@ -166,7 +166,7 @@ const devProvider = <R extends ResourceLike>(
       const newsRecord = isRecord(news) ? news : {};
       const outputRecord = isRecord(output) ? output : undefined;
       return {
-        ...(outputRecord ?? {}),
+        ...outputRecord,
         ...attrs({ id, news: newsRecord, output: outputRecord }),
       } as R["Attributes"];
     }),
@@ -209,7 +209,6 @@ const projectDevProvider = () =>
       news.createDatabase === false ? undefined : devId("database", id),
     defaultConnectionId:
       news.createDatabase === false ? undefined : devId("connection", id),
-    connectionString: undefined,
     directConnectionString: undefined,
     pooledConnectionString: undefined,
     accelerateConnectionString: undefined,
@@ -248,7 +247,6 @@ const databaseDevProvider = () =>
         branchId: news.branchId ?? null,
         defaultConnectionId: devId("connection", id),
         createdAt: output?.createdAt ?? DEV_TIMESTAMP,
-        connectionString: local?.connectionString,
         directConnectionString: local?.directConnectionString,
         pooledConnectionString: local?.pooledConnectionString,
         accelerateConnectionString: local?.accelerateConnectionString,
@@ -269,7 +267,6 @@ const connectionDevProvider = () =>
     databaseId: attrOrString(news.database, "databaseId"),
     kind: "postgres",
     createdAt: DEV_TIMESTAMP,
-    connectionString: attrOrRedactedString(news.database, "connectionString"),
     directConnectionString: attrOrRedactedString(
       news.database,
       "directConnectionString",
@@ -293,32 +290,32 @@ const branchDevProvider = () =>
     gitName: news.gitName,
     projectId: attrOrString(news.project, "projectId"),
     isDefault: news.isDefault ?? false,
+    role: news.isDefault ? "production" : "preview",
     createdAt: DEV_TIMESTAMP,
     updatedAt: DEV_TIMESTAMP,
   }));
 
-const computeServiceDevProvider = () =>
-  devProvider(ComputeService, ["computeServiceId"], ({ id, news }) => ({
-    computeServiceId: devId("compute-service", id),
+const appDevProvider = () =>
+  devProvider(App, ["appId"], ({ id, news }) => ({
+    appId: devId("app", id),
     name: news.displayName,
     projectId: attrOrString(news.project, "projectId"),
     regionId: news.regionId ?? "us-east-1",
     branchId: news.branchId ?? null,
-    latestVersionId: null,
-    serviceEndpointDomain: "localhost",
+    latestDeploymentId: null,
+    appEndpointDomain: "localhost",
     createdAt: DEV_TIMESTAMP,
   }));
 
-const computeVersionDevProvider = () =>
-  devProvider(ComputeVersion, ["computeVersionId"], ({ id, news }) => ({
-    computeVersionId: devId("compute-version", id),
-    computeServiceId: attrOrString(news.computeService, "computeServiceId"),
+const deploymentDevProvider = () =>
+  devProvider(Deployment, ["deploymentId"], ({ id, news }) => ({
+    deploymentId: devId("deployment", id),
+    appId: attrOrString(news.app, "appId"),
     foundryVersionId: devId("foundry-version", id),
     status: "new",
     previewDomain: undefined,
-    uploadUrl: undefined,
     artifactHash: undefined,
-    serviceEndpointDomain: undefined,
+    appEndpointDomain: undefined,
     createdAt: DEV_TIMESTAMP,
   }));
 
@@ -326,9 +323,9 @@ const customDomainDevProvider = () =>
   devProvider(CustomDomain, ["customDomainId"], ({ id, news }) => ({
     customDomainId: devId("custom-domain", id),
     hostname: news.hostname,
-    computeServiceId: attrOrString(news.computeService, "computeServiceId"),
+    appId: attrOrString(news.app, "appId"),
     status: "active",
-    providerStatus: "active",
+    foundryStatus: "active",
     failureReason: null,
     failureCategory: null,
     certExpiresAt: null,
@@ -351,12 +348,10 @@ const environmentVariableDevProvider = () =>
     ({ id, news }) => ({
       environmentVariableId: devId("environment-variable", id),
       projectId: attrOrString(news.project, "projectId"),
-      branchId: null,
+      branchId: news.branchId ?? null,
       class: news.class,
       key: news.key,
-      value: Redacted.isRedacted(news.value)
-        ? news.value
-        : Redacted.make(news.value),
+      value: news.value,
       valueKid: devId("value-kid", id),
       isManagedBySystem: false,
       createdAt: DEV_TIMESTAMP,
@@ -386,8 +381,8 @@ const liveProviderLayer = () =>
     ConnectionProvider(),
     BranchProvider(),
     ComputeProvider(),
-    ComputeServiceProvider(),
-    ComputeVersionProvider(),
+    AppProvider(),
+    DeploymentProvider(),
     CustomDomainProvider(),
     EnvironmentVariableProvider(),
     SourceRepositoryProvider(),

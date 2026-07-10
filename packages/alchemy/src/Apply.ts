@@ -714,6 +714,9 @@ const executeNode = (
           string,
           any
         >;
+        const adopting =
+          node.adopting === true ||
+          (node.state.status === "updating" && node.state.adopting === true);
 
         yield* node.state.status === "replaced"
           ? commit<ReplacedResourceState>({
@@ -738,15 +741,17 @@ const executeNode = (
               downstream: node.downstream,
               old:
                 node.state.status === "updating" ? node.state.old : node.state,
+              adopting: adopting ? true : undefined,
               removalPolicy: node.resource.RemovalPolicy,
             });
 
         yield* report("updating");
 
-        const previousProps =
-          node.state.status === "created" ||
-          node.state.status === "updated" ||
-          node.state.status === "replaced"
+        const previousProps = adopting
+          ? undefined
+          : node.state.status === "created" ||
+              node.state.status === "updated" ||
+              node.state.status === "replaced"
             ? node.state.props
             : node.state.old.props;
 

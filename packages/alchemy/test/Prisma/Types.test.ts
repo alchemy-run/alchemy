@@ -1,18 +1,19 @@
 import type { ProjectCreateResult } from "@/Prisma/Client";
 import type {
   Database,
-  DatabaseConnectionWithSecrets,
+  DatabaseConnectionWithOptionalSecrets,
   DatabaseSourceInput,
 } from "@/Prisma/Types";
 import { describe, expect, it } from "@effect/vitest";
 
 const nullableDatabaseSource: Database["source"] = null;
-const endpointSecretMayBeAbsent: DatabaseConnectionWithSecrets["endpoints"] = {
-  direct: {
-    host: "db.prisma.test",
-    port: 5432,
-  },
-};
+const endpointSecretMayBeAbsent: DatabaseConnectionWithOptionalSecrets["endpoints"] =
+  {
+    direct: {
+      host: "db.prisma.test",
+      port: 5432,
+    },
+  };
 const validDatabaseSourceInput: DatabaseSourceInput = {
   type: "backup",
   databaseId: "db_source",

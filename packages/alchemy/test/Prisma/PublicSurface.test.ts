@@ -27,10 +27,11 @@ const publicExports = [
   "connectionUrl",
   "Branch",
   "BranchProvider",
-  "ComputeService",
-  "ComputeServiceProvider",
-  "ComputeVersion",
-  "ComputeVersionProvider",
+  "App",
+  "AppProvider",
+  "Deployment",
+  "DeploymentProvider",
+  "MAX_DEPLOYMENT_ARTIFACT_BYTES",
   "CustomDomain",
   "CustomDomainProvider",
   "EnvironmentVariable",
@@ -84,34 +85,9 @@ const publicExports = [
   "createBranch",
   "updateBranch",
   "deleteBranch",
-  "listComputeServices",
-  "listProjectComputeServices",
-  "getComputeService",
-  "createComputeService",
-  "createProjectComputeService",
-  "updateComputeService",
-  "deleteComputeService",
-  "promoteComputeService",
-  "rollbackComputeService",
-  "listComputeServiceDomains",
-  "createComputeServiceDomain",
   "getCustomDomain",
   "deleteCustomDomain",
   "retryCustomDomain",
-  "listComputeVersions",
-  "listServiceComputeVersions",
-  "getComputeVersion",
-  "getComputeServiceVersion",
-  "createComputeVersion",
-  "createServiceComputeVersion",
-  "deleteComputeVersion",
-  "deleteComputeServiceVersion",
-  "startComputeVersion",
-  "startComputeServiceVersion",
-  "stopComputeVersion",
-  "stopComputeServiceVersion",
-  "getComputeVersionLogsRequest",
-  "getComputeVersionLogsUrl",
   "listApps",
   "getApp",
   "createApp",
@@ -127,8 +103,8 @@ const publicExports = [
   "deleteDeployment",
   "startDeployment",
   "stopDeployment",
-  "getDeploymentLogsUrl",
-  "getBuildLogsUrl",
+  "getDeploymentLogsRequest",
+  "getBuildLogsRequest",
   "listEnvironmentVariables",
   "getEnvironmentVariable",
   "createEnvironmentVariable",
@@ -141,7 +117,6 @@ const publicExports = [
   "revokeWorkspaceIntegration",
   "listScmInstallations",
   "createScmInstallIntent",
-  "connectScmInstallation",
   "listScmInstallationRepositories",
   "listSourceRepositories",
   "getSourceRepository",
@@ -152,16 +127,18 @@ const publicExports = [
   "normalizeEntrypoint",
   "runBuildCommand",
   "runComputeAutoBuild",
-  "parseComputeLogRecord",
-  "tailComputeVersionLogs",
-  "waitForComputeVersionStatus",
-  "destroyComputeVersion",
-  "destroyComputeService",
-  "destroyComputeProject",
+  "parseDeploymentLogRecord",
+  "tailDeploymentLogs",
+  "waitForDeploymentStatus",
+  "waitForDeploymentUrl",
+  "destroyDeployment",
+  "destroyApp",
+  "destroyProjectApps",
   "toDeploymentUrl",
   "syncComputeEnvironment",
   "readUploadArtifact",
   "uploadArtifact",
+  "validateDeploymentArtifactBytes",
   "extractConnectionSecrets",
   "requestBody",
   "isNotFound",
@@ -170,6 +147,7 @@ const publicExports = [
 ] as const;
 
 const publicPrismaDeepImports = [
+  "App",
   "AuthProvider",
   "Branch",
   "Client",
@@ -177,11 +155,10 @@ const publicPrismaDeepImports = [
   "ComputeArchive",
   "ComputeBuild",
   "ComputeLifecycle",
-  "ComputeService",
-  "ComputeVersion",
   "Connection",
   "CustomDomain",
   "Database",
+  "Deployment",
   "EnvironmentVariable",
   "Operations",
   "Postgres",
@@ -194,16 +171,20 @@ const publicPrismaDeepImports = [
 ] as const;
 
 const internalPrismaDeepImports = [
-  "ComputeApp",
-  "ComputeVersionObserve",
-  "EnvironmentVariableValidation",
-  "Internal/ComputeVersionActions",
-  "Internal/ComputeVersionObserve",
+  "Internal/DeploymentActions",
+  "Internal/DeploymentObserve",
   "PrismaDevDatabase",
   "Refs",
 ] as const;
 
 const internalPrismaRootFiles = ["PrismaDevDatabase", "Refs"] as const;
+
+const removedPrismaDeepImports = [
+  "ComputeApp",
+  "ComputeService",
+  "ComputeVersion",
+  "ComputeVersionObserve",
+] as const;
 
 const importPackagePath = (specifier: string) =>
   import(/* @vite-ignore */ specifier);
@@ -251,10 +232,12 @@ describe("Prisma public surface", () => {
     expect(Prisma.Postgres).toBe(Prisma.Database);
   });
 
-  it("does not expose the previous ComputeApp deep import", async () => {
-    await expect(
-      importPackagePath("alchemy/Prisma/ComputeApp"),
-    ).rejects.toThrow();
+  it("does not expose removed Compute deep imports", async () => {
+    for (const moduleName of removedPrismaDeepImports) {
+      await expect(
+        importPackagePath(`alchemy/Prisma/${moduleName}`),
+      ).rejects.toThrow();
+    }
   });
 
   it("does not expose internal Prisma deep imports", async () => {
@@ -332,6 +315,9 @@ describe("Prisma public surface", () => {
         worker: "./src/Prisma/*.ts",
         import: "./lib/Prisma/*.js",
       });
+      for (const moduleName of removedPrismaDeepImports) {
+        expect(packageJson.exports[`./Prisma/${moduleName}`]).toBeNull();
+      }
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

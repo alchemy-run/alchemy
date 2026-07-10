@@ -34,7 +34,7 @@ export interface ResourceRef {
   name: string;
 }
 
-export type PrismaRegionId = (typeof KNOWN_REGION_IDS)[number] | (string & {});
+export type PrismaRegionId = (typeof KNOWN_REGION_IDS)[number];
 
 export type PrismaDatabaseRegionId = PrismaRegionId | "inherit";
 
@@ -69,8 +69,21 @@ export interface Region {
   id: string;
   type: "region";
   name: string;
-  product?: "postgres" | "accelerate";
+  product: "postgres" | "accelerate";
   status?: "available" | "unavailable";
+}
+
+export interface PostgresRegion {
+  id: string;
+  type: "region";
+  name: string;
+  status: "available" | "unavailable";
+}
+
+export interface AccelerateRegion {
+  id: string;
+  type: "region";
+  name: string;
 }
 
 export interface Project {
@@ -110,6 +123,10 @@ export interface EndpointDetail {
 }
 
 export interface EndpointDetailWithSecret extends EndpointDetail {
+  connectionString: string;
+}
+
+export interface EndpointDetailWithOptionalSecret extends EndpointDetail {
   connectionString?: string;
 }
 
@@ -125,6 +142,12 @@ export interface ConnectionEndpointsWithSecrets {
   accelerate?: EndpointDetailWithSecret;
 }
 
+export interface ConnectionEndpointsWithOptionalSecrets {
+  direct?: EndpointDetailWithOptionalSecret;
+  pooled?: EndpointDetailWithOptionalSecret;
+  accelerate?: EndpointDetailWithOptionalSecret;
+}
+
 export interface DatabaseConnection {
   id: string;
   type: "connection";
@@ -133,11 +156,6 @@ export interface DatabaseConnection {
   createdAt: string;
   kind: "postgres" | "accelerate";
   endpoints: ConnectionEndpoints;
-  connectionString?: string;
-  directConnection?: { host: string; pass: string; user: string } | null;
-  host?: string | null;
-  pass?: string | null;
-  user?: string | null;
   database: ResourceRef;
 }
 
@@ -146,10 +164,13 @@ export interface DatabaseConnectionWithSecrets extends Omit<
   "endpoints"
 > {
   endpoints: ConnectionEndpointsWithSecrets;
-  connectionString?: string;
-  host?: string | null;
-  pass?: string | null;
-  user?: string | null;
+}
+
+export interface DatabaseConnectionWithOptionalSecrets extends Omit<
+  DatabaseConnection,
+  "endpoints"
+> {
+  endpoints: ConnectionEndpointsWithOptionalSecrets;
 }
 
 export interface ConnectionCreateInput {
@@ -193,21 +214,10 @@ export interface DatabaseCreateInput {
   branchGitName?: string | null;
 }
 
-export interface ProjectDatabaseCreateInput extends Omit<
+export type ProjectDatabaseCreateInput = Omit<
   DatabaseCreateInput,
   "projectId" | "branchId" | "branchGitName"
-> {
-  /**
-   * Deprecated Prisma API compatibility field for cloning from another
-   * database. Prefer `source` for new callers.
-   *
-   * @deprecated Use `source` instead.
-   */
-  fromDatabase?: {
-    id: string;
-    backupId?: string;
-  };
-}
+>;
 
 export interface DatabaseUpdateInput {
   name?: string;
@@ -224,7 +234,6 @@ export interface Backup {
   id: string;
   type?: "backup";
   backupType: "full" | "incremental";
-  databaseId?: string;
   createdAt: string;
   size?: number;
   status: "running" | "completed" | "failed" | "unknown";
@@ -254,6 +263,10 @@ export interface RestoreDatabaseInput {
   source: { type: "backup"; databaseId: string; backupId: string };
 }
 
+export interface RestoredDatabase extends Omit<Database, "source"> {
+  source: Extract<DatabaseSource, { type: "backup" }>;
+}
+
 export interface Branch {
   id: string;
   type: "branch";
@@ -275,82 +288,7 @@ export interface BranchUpdateInput {
   isDefault?: boolean | null;
 }
 
-export interface ComputeService {
-  id: string;
-  type: "compute-service";
-  url: string;
-  name: string;
-  region: { id: string; name: string };
-  projectId: string;
-  branchId: string | null;
-  latestVersionId: string | null;
-  serviceEndpointDomain: string;
-  createdAt: string;
-}
-
-export interface ComputeServiceCreateInput {
-  projectId: string;
-  displayName: string;
-  regionId?: PrismaRegionId;
-  branchId?: string | null;
-  branchGitName?: string | null;
-}
-
-export interface ProjectComputeServiceCreateInput extends Omit<
-  ComputeServiceCreateInput,
-  "projectId"
-> {}
-
-export interface ComputeServiceUpdateInput {
-  displayName?: string;
-  branchId?: string | null;
-  branchGitName?: string | null;
-}
-
-export interface ComputeVersionListItem {
-  id: string;
-  type: "compute-version";
-  url: string;
-  foundryVersionId: string;
-  createdAt: string;
-}
-
-export interface ComputeVersion {
-  id: string;
-  type: "compute-version";
-  url: string;
-  foundryVersionId: string;
-  status: string;
-  previewDomain: string | null;
-  envVars?: Record<string, string>;
-  portMapping?: { http?: number };
-  createdAt: string;
-}
-
-export interface ComputeVersionCreateInput {
-  computeServiceId: string;
-  portMapping?: { http?: number | null };
-  skipCodeUpload?: boolean;
-}
-
-export interface ServiceComputeVersionCreateInput extends Omit<
-  ComputeVersionCreateInput,
-  "computeServiceId"
-> {}
-
-export interface ComputeVersionCreateResult {
-  id: string;
-  type: "compute-version";
-  url: string;
-  foundryVersionId: string;
-  uploadUrl: string | null;
-}
-
-export interface StartComputeVersionResult {
-  previewDomain: string;
-}
-
-export interface ComputeVersionLogsQuery {
+export interface DeploymentLogsQuery {
   /**
    * Number of trailing log lines to stream first.
    */
@@ -360,18 +298,14 @@ export interface ComputeVersionLogsQuery {
    */
   fromStart?: boolean;
   /**
-   * Raw Prisma API query key for callers that mirror the HTTP API.
-   */
-  from_start?: "true" | "false";
-  /**
    * Reconnect cursor returned by a terminal log event.
    */
   cursor?: string;
 }
 
-export interface ComputeVersionLogsRequest {
+export interface DeploymentLogsRequest {
   /**
-   * WebSocket URL for `/v1/compute-services/versions/{versionId}/logs`.
+   * WebSocket URL for `/v1/deployments/{deploymentId}/logs`.
    */
   url: string;
   /**
@@ -382,27 +316,50 @@ export interface ComputeVersionLogsRequest {
   };
 }
 
-export interface PromoteComputeServiceResult {
-  serviceEndpointDomain: string;
-  reassignedDomains: number;
+/** Query parameters for the authenticated build-log NDJSON stream. */
+export interface BuildLogsQuery {
+  /**
+   * Keep following an in-flight build after the currently available records
+   * have been drained.
+   */
+  follow?: boolean;
+  /** Resume from the opaque cursor returned by a terminal record. */
+  cursor?: string;
 }
 
-/**
- * Result of rolling a Compute service back (or forward) to an existing
- * version. Mirrors {@link PromoteComputeServiceResult}: rollback returns the
- * stable service endpoint and the number of custom domains moved from the
- * previously-live version to the rolled-to version.
- */
-export interface RollbackComputeServiceResult {
-  serviceEndpointDomain: string;
-  reassignedDomains: number;
+/** Authenticated HTTP request metadata for a build-log NDJSON stream. */
+export interface BuildLogsRequest {
+  /** HTTP(S) URL for `/v1/builds/{buildId}/logs`. */
+  url: string;
+  /** Headers required by the Management API build-log endpoint. */
+  headers: {
+    Authorization: Redacted.Redacted<string>;
+    Accept: "application/x-ndjson";
+  };
 }
 
-/**
- * The `/v1/apps` surface is the current public naming for Compute services.
- * An App wraps the same underlying service; deployments are the app-facing
- * name for compute versions.
- */
+export interface BuildLogLine {
+  type: "log";
+  text: string;
+  level: "info" | "error";
+  source: "runner" | "stdout" | "stderr";
+  step?: string;
+  cursor: string;
+}
+
+export interface BuildLogTerminal {
+  type: "terminal";
+  kind: "end" | "error";
+  code: string;
+  message: string;
+  retryable: boolean;
+  cursor: string | null;
+}
+
+/** One JSON line returned by the build-log NDJSON stream. */
+export type BuildLogRecord = BuildLogLine | BuildLogTerminal;
+
+/** A Prisma App deployed through the canonical `/v1/apps` API. */
 export interface App {
   id: string;
   type: "app";
@@ -430,17 +387,9 @@ export interface AppUpdateInput {
   branchGitName?: string | null;
 }
 
-/**
- * Promote/rollback target for an App. Pass the new `deploymentId`; the
- * legacy `versionId` is still accepted but deprecated — when both are
- * present `deploymentId` wins.
- */
+/** Canonical deployment target for App promotion and rollback. */
 export interface AppDeploymentTarget {
-  deploymentId?: string;
-  /**
-   * @deprecated Use `deploymentId` instead.
-   */
-  versionId?: string;
+  deploymentId: string;
 }
 
 export interface PromoteAppResult {
@@ -461,6 +410,9 @@ export interface DeploymentListItem {
   createdAt: string;
 }
 
+/** Marker returned in place of every deployment environment secret value. */
+export type RedactedDeploymentEnvironmentValue = "[redacted]";
+
 export interface Deployment {
   id: string;
   type: "deployment";
@@ -468,7 +420,11 @@ export interface Deployment {
   foundryVersionId: string;
   status: string;
   previewDomain: string | null;
-  envVars?: Record<string, string>;
+  /**
+   * Environment variable names captured by the deployment. Values are always
+   * the literal redaction marker; the Management API never returns secrets.
+   */
+  envVars?: Record<string, RedactedDeploymentEnvironmentValue>;
   portMapping?: { http?: number };
   createdAt: string;
 }
@@ -517,9 +473,11 @@ export interface CustomDomain {
   type: "custom-domain";
   url: string;
   hostname: string;
-  computeServiceId: string;
+  /** Current app identifier returned by the Management API. */
+  appId: string;
   status: CustomDomainStatus;
-  providerStatus: string;
+  /** Raw custom-domain status returned by Foundry. */
+  foundryStatus: string;
   failureReason: string | null;
   failureCategory: CustomDomainFailureCategory | null;
   certExpiresAt: string | null;
@@ -587,23 +545,8 @@ export interface ScmInstallation {
   accountLogin: string;
   accountType: "user" | "organization";
   suspended: boolean;
-  /**
-   * Whether the installation is connected to the workspace in the list query.
-   * Connectable installations of the caller's other workspaces are returned
-   * with `connected: false` (full user sessions only).
-   */
-  connected: boolean;
-  /**
-   * When the installation was connected to the workspace, `null` for
-   * connectable-but-not-connected rows.
-   */
-  connectedAt: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface ScmInstallationConnectInput {
-  workspaceId: string;
 }
 
 export interface ScmInstallIntentCreateInput {
@@ -650,7 +593,6 @@ export interface SourceRepositoryCreateInput {
 }
 
 export interface PrismaSecretConnection {
-  connectionString?: Redacted.Redacted<string>;
   directConnectionString?: Redacted.Redacted<string>;
   pooledConnectionString?: Redacted.Redacted<string>;
   accelerateConnectionString?: Redacted.Redacted<string>;

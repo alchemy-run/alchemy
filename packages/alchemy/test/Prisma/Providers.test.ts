@@ -39,8 +39,8 @@ describe("Prisma providers", () => {
         Prisma.Connection.Type,
         Prisma.Branch.Type,
         Prisma.Compute.Type,
-        Prisma.ComputeService.Type,
-        Prisma.ComputeVersion.Type,
+        Prisma.App.Type,
+        Prisma.Deployment.Type,
         Prisma.CustomDomain.Type,
         Prisma.EnvironmentVariable.Type,
         Prisma.SourceRepository.Type,
@@ -50,9 +50,9 @@ describe("Prisma providers", () => {
         [Prisma.Database.Type, ["databaseId"]],
         [Prisma.Connection.Type, ["connectionId"]],
         [Prisma.Branch.Type, ["branchId"]],
-        [Prisma.Compute.Type, ["computeServiceId"]],
-        [Prisma.ComputeService.Type, ["computeServiceId"]],
-        [Prisma.ComputeVersion.Type, ["computeVersionId"]],
+        [Prisma.Compute.Type, ["appId"]],
+        [Prisma.App.Type, ["appId"]],
+        [Prisma.Deployment.Type, ["deploymentId"]],
         [Prisma.CustomDomain.Type, ["customDomainId"]],
         [Prisma.EnvironmentVariable.Type, ["environmentVariableId"]],
         [Prisma.SourceRepository.Type, ["sourceRepositoryId"]],
@@ -81,11 +81,14 @@ describe("Prisma providers", () => {
       const projectProvider = yield* Provider.findProviderByType(
         Prisma.Project.Type as any,
       );
-      const serviceProvider = yield* Provider.findProviderByType(
-        Prisma.ComputeService.Type as any,
+      const appProvider = yield* Provider.findProviderByType(
+        Prisma.App.Type as any,
       );
       const envProvider = yield* Provider.findProviderByType(
         Prisma.EnvironmentVariable.Type as any,
+      );
+      const branchProvider = yield* Provider.findProviderByType(
+        Prisma.Branch.Type as any,
       );
 
       const project = (yield* projectProvider.reconcile(
@@ -94,29 +97,37 @@ describe("Prisma providers", () => {
           createDatabase: false,
         }),
       )) as Prisma.Project["Attributes"];
-      const service = (yield* serviceProvider.reconcile(
-        reconcileInput("ComputeService", {
+      const app = (yield* appProvider.reconcile(
+        reconcileInput("App", {
           project,
           displayName: "api",
           regionId: "us-east-1",
         }),
-      )) as Prisma.ComputeService["Attributes"];
+      )) as Prisma.App["Attributes"];
       const env = (yield* envProvider.reconcile(
         reconcileInput("Environment", {
           project,
-          class: "production",
+          branchId: "branch-preview",
+          class: "preview",
           key: "TOKEN",
           value: Redacted.make("secret"),
         }),
       )) as Prisma.EnvironmentVariable["Attributes"];
+      const branch = (yield* branchProvider.reconcile(
+        reconcileInput("Branch", {
+          project,
+          gitName: "main",
+          isDefault: true,
+        }),
+      )) as Prisma.Branch["Attributes"];
 
       expect(project.projectId).toBe("dev:project:Project");
-      expect(service.projectId).toBe(project.projectId);
-      expect(service.computeServiceId).toBe(
-        "dev:compute-service:ComputeService",
-      );
+      expect(app.projectId).toBe(project.projectId);
+      expect(app.appId).toBe("dev:app:App");
       expect(env.projectId).toBe(project.projectId);
+      expect(env.branchId).toBe("branch-preview");
       expect(Redacted.value(env.value)).toBe("secret");
+      expect(branch.role).toBe("production");
     }).pipe(providePrismaDev),
   );
 
@@ -127,8 +138,8 @@ describe("Prisma providers", () => {
         const client = yield* Prisma.PrismaClient;
 
         expect(typeof client.listProjects).toBe("function");
-        expect(typeof client.createProjectComputeService).toBe("function");
-        expect(typeof client.getComputeVersionLogsUrl).toBe("function");
+        expect(typeof client.createApp).toBe("function");
+        expect(typeof client.getDeploymentLogsRequest).toBe("function");
       }).pipe(
         Effect.provide(Prisma.managementApi()),
         Effect.provide(

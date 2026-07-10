@@ -1,4 +1,4 @@
-import { runComputeAutoBuild } from "@/Prisma/ComputeBuild";
+import { runBuildCommand, runComputeAutoBuild } from "@/Prisma/ComputeBuild";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -107,6 +107,67 @@ describe("Prisma Compute auto-build", () => {
 
       yield* artifact.cleanup;
       expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("forwards output limits to framework build commands", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-build-limit-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nestBin = path.join(binDir, "nest");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        nestBin,
+        "#!/usr/bin/env sh\nprintf '123456789'\n",
+      );
+      yield* fs.chmod(nestBin, 0o755);
+
+      const error = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nestjs",
+        outputLimitBytes: 8,
+      }).pipe(Effect.flip);
+
+      expect((error as Error).message).toContain(
+        "Build stdout exceeded the 8 byte output safety limit",
+      );
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.live("forwards deadlines to framework build commands", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-build-timeout-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nestBin = path.join(binDir, "nest");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nsleep 10\n");
+      yield* fs.chmod(nestBin, 0o755);
+
+      const error = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nestjs",
+        timeoutSeconds: 0.05,
+      }).pipe(Effect.flip);
+
+      expect((error as Error).message).toContain(
+        "Build command timed out after 0.05 seconds",
+      );
     }).pipe(Effect.provide(PlatformServices)),
   );
 
@@ -252,6 +313,202 @@ describe("Prisma Compute auto-build", () => {
 
         yield* artifact.cleanup;
         expect(yield* fs.exists(artifact.directory)).toBe(false);
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("uses an installed workspace framework CLI", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-workspace-cli-",
+      });
+      const appPath = path.join(root, "apps", "web");
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nextBin = path.join(binDir, "next");
+      yield* fs.makeDirectory(appPath, { recursive: true });
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ workspaces: ["apps/*"] }),
+      );
+      yield* fs.writeFileString(
+        path.join(appPath, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        nextBin,
+        [
+          "#!/bin/sh",
+          "mkdir -p .next/standalone",
+          "printf 'workspace next server' > .next/standalone/server.js",
+          "",
+        ].join("\n"),
+      );
+      yield* fs.chmod(nextBin, 0o755);
+
+      const artifact = yield* runComputeAutoBuild({
+        appPath,
+        framework: "nextjs",
+      });
+
+      expect(
+        yield* fs.readFileString(path.join(artifact.directory, "server.js")),
+      ).toBe("workspace next server");
+      yield* artifact.cleanup;
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("never downloads a missing framework CLI", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-no-network-cli-",
+      });
+      const fakeBin = path.join(root, "fake-bin");
+      const fallbackMarker = path.join(root, "network-fallback-ran");
+      yield* fs.makeDirectory(fakeBin, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      for (const executable of ["npx", "bunx"]) {
+        const executablePath = path.join(fakeBin, executable);
+        yield* fs.writeFileString(
+          executablePath,
+          `#!/bin/sh\nprintf invoked > ${JSON.stringify(fallbackMarker)}\nexit 127\n`,
+        );
+        yield* fs.chmod(executablePath, 0o755);
+      }
+
+      const error = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nextjs",
+        env: { PATH: fakeBin },
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "Could not find an installed Next.js CLI",
+      );
+      expect(yield* fs.exists(fallbackMarker)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("rejects framework symlinks that escape the output root", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-link-escape-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nextBin = path.join(binDir, "next");
+      const standalone = path.join(root, ".next", "standalone");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.makeDirectory(standalone, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
+      yield* fs.chmod(nextBin, 0o755);
+      yield* fs.writeFileString(
+        path.join(standalone, "server.js"),
+        "console.log('server');",
+      );
+      yield* fs.writeFileString(path.join(root, "outside.txt"), "secret");
+      yield* fs.symlink(
+        "../../outside.txt",
+        path.join(standalone, "outside.txt"),
+      );
+
+      const error = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nextjs",
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "Compute artifact path escapes its staging root",
+      );
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "rejects a framework output directory outside the application",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-auto-output-root-escape-",
+        });
+        const outside = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-auto-external-output-",
+        });
+        const binDir = path.join(root, "node_modules", ".bin");
+        const nextBin = path.join(binDir, "next");
+        yield* fs.makeDirectory(binDir, { recursive: true });
+        yield* fs.makeDirectory(path.join(root, ".next"), { recursive: true });
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+        );
+        yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
+        yield* fs.chmod(nextBin, 0o755);
+        yield* fs.writeFileString(
+          path.join(outside, "server.js"),
+          "console.log('server');",
+        );
+        yield* fs.symlink(outside, path.join(root, ".next", "standalone"));
+
+        const error = yield* runComputeAutoBuild({
+          appPath: root,
+          framework: "nextjs",
+        }).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(
+          "Compute artifact path escapes its staging root",
+        );
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "rejects an oversized framework output file before copying it",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-auto-oversized-file-",
+        });
+        const binDir = path.join(root, "node_modules", ".bin");
+        const nextBin = path.join(binDir, "next");
+        const standalone = path.join(root, ".next", "standalone");
+        const server = path.join(standalone, "server.js");
+        yield* fs.makeDirectory(binDir, { recursive: true });
+        yield* fs.makeDirectory(standalone, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+        );
+        yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
+        yield* fs.chmod(nextBin, 0o755);
+        yield* fs.writeFileString(server, "");
+        yield* fs.truncate(server, 128 * 1024 * 1024 + 1);
+
+        const error = yield* runComputeAutoBuild({
+          appPath: root,
+          framework: "nextjs",
+        }).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(
+          "134217728 byte per-file safety limit",
+        );
       }).pipe(Effect.provide(PlatformServices)),
   );
 
@@ -412,5 +669,99 @@ describe("Prisma Compute auto-build", () => {
         yield* artifact.cleanup;
         expect(yield* fs.exists(artifact.directory)).toBe(false);
       }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("bounds retained build stdout", () =>
+    Effect.gen(function* () {
+      const error = yield* runBuildCommand({
+        command: "printf '123456789'",
+        outputLimitBytes: 8,
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "Build stdout exceeded the 8 byte output safety limit",
+      );
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("bounds retained build stderr", () =>
+    Effect.gen(function* () {
+      const error = yield* runBuildCommand({
+        command: "printf '123456789' >&2",
+        outputLimitBytes: 8,
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "Build stderr exceeded the 8 byte output safety limit",
+      );
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("does not expose failed build output in errors", () =>
+    Effect.gen(function* () {
+      const error = yield* runBuildCommand({
+        command: "printf 'BUILD_SECRET_SENTINEL' >&2; exit 17",
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("exit code 17");
+      expect((error as Error).message).toContain("stderr: 21 bytes");
+      expect((error as Error).message).not.toContain("BUILD_SECRET_SENTINEL");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.live("interrupts a silent build at its configured deadline", () =>
+    Effect.gen(function* () {
+      const error = yield* runBuildCommand({
+        command: "sleep 10",
+        timeoutSeconds: 0.05,
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "Build command timed out after 0.05 seconds",
+      );
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.live("kills descendant processes when a build times out", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-build-process-group-",
+      });
+      const marker = path.join(root, "descendant-survived");
+
+      yield* runBuildCommand({
+        command: `(sleep 0.4; printf survived > ${JSON.stringify(marker)}) & sleep 10`,
+        timeoutSeconds: 0.05,
+      }).pipe(Effect.flip);
+      yield* Effect.sleep("700 millis");
+
+      expect(yield* fs.exists(marker)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.live("reaps descendants left by a successful build shell", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-build-success-process-group-",
+      });
+      const marker = path.join(root, "descendant-survived");
+
+      yield* runBuildCommand({
+        command: `(sleep 0.4; printf survived > ${JSON.stringify(marker)}) >/dev/null 2>&1 &`,
+      });
+      yield* Effect.sleep("700 millis");
+
+      expect(yield* fs.exists(marker)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
   );
 });

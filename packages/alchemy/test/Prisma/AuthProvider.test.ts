@@ -103,6 +103,19 @@ describe("Prisma auth provider", () => {
     ),
   );
 
+  it.effect("trims surrounding token whitespace", () =>
+    Effect.gen(function* () {
+      const credentials = yield* readEnvCredentials;
+      expect(Redacted.value(credentials.serviceToken)).toBe("test-token");
+    }).pipe(
+      Effect.provide(
+        testLayer({
+          PRISMA_SERVICE_TOKEN: "  test-token\n",
+        }),
+      ),
+    ),
+  );
+
   it.effect(
     "prefers PRISMA_SERVICE_TOKEN when both token env vars are set",
     () =>
@@ -206,5 +219,22 @@ describe("Prisma auth provider", () => {
         );
       }
     }).pipe(Effect.provide(testLayer())),
+  );
+
+  it.effect("rejects empty stored Prisma service tokens", () =>
+    Effect.gen(function* () {
+      const exit = yield* readStoredCredentials.pipe(Effect.exit);
+
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag === "Failure") {
+        expect(String(exit.cause)).toContain(
+          "Prisma stored credentials are invalid",
+        );
+      }
+    }).pipe(
+      Effect.provide(
+        testLayer({}, { type: "serviceToken", serviceToken: "   " }),
+      ),
+    ),
   );
 });

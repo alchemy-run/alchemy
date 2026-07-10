@@ -8,7 +8,7 @@ import {
   MainBranch,
   Project,
   region,
-  serviceNameConfig,
+  appNameConfig,
 } from "./Database.ts";
 
 const messageConfig = Config.string("PRISMA_EFFECT_MESSAGE").pipe(
@@ -23,7 +23,7 @@ export default class Api extends Prisma.Compute<Api>()(
 
     return {
       project,
-      serviceName: yield* serviceNameConfig,
+      appName: yield* appNameConfig,
       regionId: region,
       branchGitName: "main",
       main: import.meta.filename,
@@ -31,7 +31,7 @@ export default class Api extends Prisma.Compute<Api>()(
       env: {
         PRISMA_EFFECT_MESSAGE: yield* messageConfig,
       },
-      destroyOldVersion: true,
+      destroyOldDeployment: true,
     };
   }),
   Effect.gen(function* () {
