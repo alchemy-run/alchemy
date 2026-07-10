@@ -19,8 +19,12 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as AI from "alchemy/AI";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import {
+  Classify,
+  CloseIssueLive,
   Engineering,
+  EngineeringLive,
   Helper,
+  Issues,
   PostReplyLive,
   ReadFileLive,
   roots,
@@ -46,29 +50,57 @@ const ModelLive = AnthropicLanguageModel.layer({
 
 const kernelLayer = AI.memory.pipe(Layer.provide([ModelLive, AI.AskHubMemory]));
 
+// member agents + the routing classifier — each its own Layer (its own
+// tool physics), the terms-vs-layers pattern
+const SageLive = AI.layer(Sage).pipe(
+  Layer.provide([kernelLayer, ReadFileLive, RuntimeContext.phantom]),
+);
+const ScoutLive = AI.layer(Scout).pipe(
+  Layer.provide([kernelLayer, RuntimeContext.phantom]),
+);
+const HelperLive = AI.layer(Helper).pipe(
+  Layer.provide([kernelLayer, RuntimeContext.phantom]),
+);
+const ClassifyLive = AI.layer(Classify).pipe(
+  Layer.provide([kernelLayer, RuntimeContext.phantom]),
+);
+
+// #engineering: the DETERMINISTIC coordinator (AI.process) — provided
+// its classifier + members; #support: the PROSE coordinator; #issues:
+// the goal with a machine-observed exit
+const EngineeringLayer = EngineeringLive.pipe(
+  Layer.provide([kernelLayer, ClassifyLive, SageLive, ScoutLive, RuntimeContext.phantom]),
+);
+const SupportLayer = AI.layer(Support).pipe(
+  Layer.provide([kernelLayer, HelperLive, PostReplyLive, RuntimeContext.phantom]),
+);
+const IssuesLayer = AI.layer(Issues).pipe(
+  Layer.provide([
+    kernelLayer,
+    SageLive,
+    CloseIssueLive,
+    AI.EventBusMemory,
+    RuntimeContext.phantom,
+  ]),
+);
+
 const SessionsLive = Layer.effect(
   AI.Api.ChatSessions,
   Effect.gen(function* () {
-    const kernel = yield* AI.Kernel;
-    // members first: the channels' delegation tools resolve these tags
-    const sage = yield* kernel.interpret(Sage);
-    const scout = yield* kernel.interpret(Scout);
-    const helper = yield* kernel.interpret(Helper);
-    const engineering = yield* kernel
-      .interpret(Engineering)
-      .pipe(
-        Effect.provideService(Sage, sage),
-        Effect.provideService(Scout, scout),
-      );
-    const support = yield* kernel
-      .interpret(Support)
-      .pipe(Effect.provideService(Helper, helper));
+    // resolve the interpreted process tags (provided by the Layers below)
+    const engineering = yield* Engineering;
+    const support = yield* Support;
+    const issues = yield* Issues;
+    const sage = yield* Sage;
+    const scout = yield* Scout;
+    const helper = yield* Helper;
 
     return AI.Api.ChatSessions.of(
       yield* AI.Api.makeChatSessions({
         processes: {
           engineering,
           support,
+          issues,
           "dm:Sage": sage,
           "dm:Scout": scout,
           "dm:Helper": helper,
@@ -78,10 +110,14 @@ const SessionsLive = Layer.effect(
   }),
 ).pipe(
   Layer.provide([
+    EngineeringLayer,
+    SupportLayer,
+    IssuesLayer,
+    SageLive,
+    ScoutLive,
+    HelperLive,
     kernelLayer,
     AI.AskHubMemory,
-    PostReplyLive,
-    ReadFileLive,
     RuntimeContext.phantom,
   ]),
 );

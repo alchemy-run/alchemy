@@ -80,6 +80,15 @@ describe("the UI message stream wire format", () => {
     );
     expect(
       sseFrame({
+        type: "data-message",
+        id: "m-1",
+        data: { author: "Scout", text: "use an LRU" },
+      }),
+    ).toBe(
+      'data: {"type":"data-message","id":"m-1","data":{"author":"Scout","text":"use an LRU"}}\n\n',
+    );
+    expect(
+      sseFrame({
         type: "data-ask",
         id: "ask-1",
         data: {

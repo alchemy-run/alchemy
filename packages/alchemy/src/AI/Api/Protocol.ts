@@ -99,6 +99,18 @@ export const ToolOutputErrorChunk = S.Struct({
  * `POST /api/asks/:id`. Reconciliation by stable `id` (same id ⇒
  * update in place: pending → answered).
  */
+/**
+ * An authored message posted by a deterministic process's `ctx.post`
+ * (reassess §C/§E) — a `message.posted` Trace row. Rendered as an
+ * authored bubble, the code analogue of a prose coordinator's
+ * `post_reply` tool. Reconciled by stable `id`.
+ */
+export const DataMessageChunk = S.Struct({
+  type: S.tag("data-message"),
+  id: S.String,
+  data: S.Struct({ author: S.String, text: S.String }),
+});
+
 export const DataAskChunk = S.Struct({
   type: S.tag("data-ask"),
   id: S.String,
@@ -131,6 +143,7 @@ export const UIMessageChunk = S.Union([
   ToolInputAvailableChunk,
   ToolOutputAvailableChunk,
   ToolOutputErrorChunk,
+  DataMessageChunk,
   DataAskChunk,
   ErrorChunk,
 ]);

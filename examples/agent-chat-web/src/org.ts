@@ -1,11 +1,18 @@
 /**
- * The org (designs/ai/org-chat.md): channels, agents, and their
- * hierarchy — all process terms. `Channel` is a USER-DEFINED kind
- * (proof of the §2.5 extension mechanism, defined here in the example,
- * not in the framework): its scaffold simulates the room and drives
- * each Post to resolution; instances only say what's specific to them.
- * The UI's sidebar is `AI.topology` over these roots — nothing below
- * is configuration.
+ * The org (designs/ai/org-chat.md + reassess-proposal.md): channels,
+ * agents, and their hierarchy — process terms whose sidebar is derived
+ * by `AI.topology`. This example is the TUTORIAL for the reassessment:
+ * it shows the same "channel" three ways —
+ *
+ * - `#engineering` — a **deterministic** coordinator (`AI.process`): a
+ *   routing classifier LEAF picks members, `Effect.all` fans out, and
+ *   `ctx.post` relays. No LLM in the coordination path (reassess §C).
+ * - `#support` — a **prose** coordinator (a `Process` charter): the
+ *   rarer, open-ended form where a charter drives the room (§the
+ *   Process term is opt-in).
+ * - `#issues` — a **goal** process with a **machine-observed exit**
+ *   (`AI.until(IssueClosed)`): the run settles when the world closes
+ *   the issue, not on a model claim (reassess §B).
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,8 +24,7 @@ import * as AI from "alchemy/AI";
 const author = AI.Parameter("author", S.String)`who is speaking (your own name)`;
 const text = AI.Parameter("text", S.String)`the message text`;
 class PostReply extends AI.Tool<PostReply>()("post_reply")`
-Post a reply into the Post's thread as ${author} saying ${text}. Use
-this to relay each participant's contribution so the room can read it.` {}
+Post a reply into the Post's thread as ${author} saying ${text}.` {}
 
 const path = AI.Parameter("path", S.String)`repo-relative file path`;
 class ReadFile extends AI.Tool<ReadFile>()("read_file")`
@@ -28,66 +34,107 @@ Read the file at ${path} from the project.` {}
 
 export class Sage extends AI.Agent<Sage>()("Sage")`
 You are Sage, the team's senior engineer. Thorough and terse; you read
-code before you opine (${ReadFile}). You end with a concrete
-recommendation.` {}
+code before you opine (${ReadFile}). End with a concrete recommendation.` {}
 
 export class Scout extends AI.Agent<Scout>()("Scout")`
-You are Scout, fast and breadth-first. You answer immediately with
-your best take, clearly flagging what you're unsure about.` {}
+You are Scout, fast and breadth-first. Answer immediately with your best
+take, clearly flagging what you're unsure about.` {}
 
 export class Helper extends AI.Agent<Helper>()("Helper")`
-You are Helper, the support specialist. Friendly, practical, you turn
+You are Helper, the support specialist. Friendly, practical; you turn
 user complaints into actionable summaries.` {}
 
-// ─── the Channel kind (userland!) ────────────────────────────────
+// ─── #engineering: a DETERMINISTIC coordinator (AI.process) ──────
 
-export const Channel = AI.Process("Channel", {
-  charter: (name: string) => AI.charter`
-You are the #${name} channel of a team workspace — the room's
-COORDINATOR, never a participant. You NEVER write prose into the
-thread: any text you produce is invisible to users. The only things
-users see are (a) member messages you relay with ${PostReply} and
-(b) your one-line resolution summary.
-
-${AI.body}
-
-For each Post:
-1. Decide which member(s) should handle it — one for simple things,
-   several in parallel (background runs) when it is both urgent and
-   deep.
-2. When a member finishes, relay their final response into the thread
-   with ${PostReply} (author = the member's name, text = their
-   response, verbatim unless very long).
-3. Questions about the channel itself (who is here, what this channel
-   does) are answered in your RESOLUTION SUMMARY, never as prose.
-4. Resolve the moment the Post needs nothing more. Do not ask the
-   user clarifying questions in prose — if the Post is unactionable,
-   resolve saying what is missing.
-${AI.until(S.String)`the Post is resolved — every needed member reply is relayed and the resolution states the outcome`}
-${AI.budget({ iterations: 8 })}`,
-  meta: { category: "channel", icon: "hash" },
+// a tiny classifier LEAF: the ONE place the coordinator consults an
+// LLM, with a typed schema and a deterministic fallback (reassess §C)
+const Routing = S.Struct({
+  members: S.Array(S.Literals(["Sage", "Scout"])),
+  reason: S.String,
 });
+export class Classify extends AI.Agent<Classify>()("Classify")`
+You route an engineering question to the right members. Reply with ONLY
+a JSON object {"members":["Sage"|"Scout"...],"reason":"…"}: Sage for
+depth (architecture, code, trade-offs), Scout for speed (quick takes),
+BOTH when it is urgent and deep. Never empty.` {}
 
-// ─── the channels ────────────────────────────────────────────────
+// the channel term: a goal per Post (Out = the resolution). No charter —
+// its ProcessService is a handler, not a model loop.
+export class Engineering extends AI.Process<Engineering>()("engineering")`
+${AI.until(S.String)`the Post is resolved`}` {}
 
-export class Engineering extends Channel<Engineering>()("engineering")`
-This is the engineering channel. ${Sage} (depth: architecture, code,
-trade-offs) and ${Scout} (speed: quick takes, breadth) are here. Route
-deep questions to Sage, quick ones to Scout, and genuinely hard ones
-to both in parallel.` {}
+export const EngineeringLive = AI.process(Engineering, (post, ctx) =>
+  Effect.gen(function* () {
+    const classify = yield* Classify;
+    const sage = yield* Sage;
+    const scout = yield* Scout;
+    const members = { Sage: sage, Scout: scout } as const;
 
-export class Support extends Channel<Support>()("support")`
-This is the user-support channel. ${Helper} handles user questions
-and complaints. Escalate anything engineering-shaped by saying so in
-your resolution.` {}
+    // the leaf: fuzzy routing, with a deterministic fallback. The parse
+    // is a TYPED failure (Effect.try), not a synchronous throw — so the
+    // fallback (orElseSucceed) actually catches malformed model output
+    // (code fences, prose) instead of it becoming an uncaught defect.
+    const routed = yield* classify
+      .dispatch(String(post))
+      .pipe(
+        Effect.flatMap((raw) =>
+          Effect.try(() => {
+            const t = String((raw as { text?: string }).text ?? "{}");
+            const json = t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1);
+            return JSON.parse(json) as unknown;
+          }),
+        ),
+        Effect.flatMap((json) => S.decodeUnknownEffect(Routing)(json)),
+        Effect.orElseSucceed(() => ({
+          members: ["Scout"] as ReadonlyArray<"Sage" | "Scout">,
+          reason: "fallback: default to a quick take",
+        })),
+      );
+    yield* ctx.emit("routing", routed);
+
+    // deterministic fan-out + relay — the coordination path has no LLM
+    yield* Effect.forEach(
+      routed.members,
+      (name) =>
+        members[name].dispatch(String(post)).pipe(
+          Effect.flatMap((answer) =>
+            ctx.post(name, String((answer as { text?: string }).text ?? answer)),
+          ),
+        ),
+      { concurrency: "unbounded" },
+    );
+    return `resolved by ${routed.members.join(", ")}`;
+  }),
+);
+
+// ─── #support: a PROSE coordinator (the opt-in Process charter) ──
+
+export class Support extends AI.Process<Support>()("support")`
+You are the #support channel coordinator — never a participant. Relay
+${Helper}'s reply with ${PostReply} (author "Helper"), then resolve.
+Escalate engineering-shaped problems by saying so in your resolution.
+${AI.until(S.String)`the user's question is answered or escalated`}
+${AI.budget({ iterations: 6 })}` {}
+
+// ─── #issues: a GOAL with a MACHINE-OBSERVED exit ───────────────
+
+export const IssueClosed = AI.EventSource(
+  "github.issue.closed",
+  S.Struct({ number: S.Number, by: S.String }),
+);
+const issueNumber = AI.Parameter("number", S.Number)`the issue number`;
+class CloseIssue extends AI.Tool<CloseIssue>()("close_issue")`
+Close issue ${issueNumber} once it is resolved.` {}
+
+// the run settles when the WORLD closes the issue — not a model claim.
+// The model may cause it (close_issue) or a human may.
+export class Issues extends AI.Process<Issues>()("issues")`
+Work the issue described in the Post. Investigate with ${Sage}, and
+close it with ${CloseIssue} when genuinely resolved.
+${AI.until(IssueClosed)}` {}
 
 // ─── physics ─────────────────────────────────────────────────────
 
-/**
- * PostReply's physics: the reply lands in the Trace via the tool's
- * `tool.completed` row (params carry author+text) — the UI renders
- * those as authored message bubbles. The handler itself just echoes.
- */
 export const PostReplyLive = Layer.succeed(PostReply, ((input: {
   author: string;
   text: string;
@@ -100,5 +147,16 @@ export const ReadFileLive = Layer.succeed(ReadFile, ((input: {
     `// ${input.path} (demo stub)\nexport const answer = 42;\n`,
   )) as never);
 
+// close_issue publishes the world event — the reconciler doctrine: the
+// model CAUSES it, the run settles on OBSERVING it
+export const CloseIssueLive = Layer.succeed(CloseIssue, ((input: {
+  number: number;
+}) =>
+  Effect.gen(function* () {
+    const bus = yield* AI.EventBus;
+    yield* bus.publish(IssueClosed, { number: input.number, by: "Sage" });
+    return "closed";
+  })) as never).pipe(Layer.provide(AI.EventBusMemory));
+
 /** The sidebar: everything the app renders is derived from these roots. */
-export const roots = [Engineering, Support, Sage, Scout, Helper];
+export const roots = [Engineering, Support, Issues, Sage, Scout, Helper];

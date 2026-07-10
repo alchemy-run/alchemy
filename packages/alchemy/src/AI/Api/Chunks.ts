@@ -164,6 +164,20 @@ export const foldEvent = (
       });
       break;
 
+    case "message.posted": {
+      // a deterministic process's ctx.post — an authored bubble
+      const id = event.id;
+      chunks.push({
+        type: "data-message",
+        id,
+        data: {
+          author: String(payload.author ?? ""),
+          text: String(payload.text ?? ""),
+        },
+      });
+      break;
+    }
+
     case "ask.requested": {
       const askId = String(payload.askId);
       chunks.push({
@@ -355,6 +369,13 @@ export const chunksToMessage = (
       case "data-ask":
         touch(`ask:${chunk.id}`, {
           type: "data-ask",
+          id: chunk.id,
+          data: chunk.data,
+        });
+        break;
+      case "data-message":
+        touch(`msg:${chunk.id}`, {
+          type: "data-message",
           id: chunk.id,
           data: chunk.data,
         });

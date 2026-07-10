@@ -213,6 +213,11 @@ function MessagePart({
       </Tool>
     );
   }
+  if (part.type === "data-message") {
+    // a deterministic coordinator's ctx.post — an authored bubble
+    const data = (part as { data: { author: string; text: string } }).data;
+    return <AuthoredReply author={data.author} text={data.text} />;
+  }
   if (part.type === "data-ask") {
     return (
       <AskCard key={(part as { id?: string }).id} data={part.data as AskData} />
