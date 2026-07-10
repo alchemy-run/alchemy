@@ -156,6 +156,27 @@ export interface FunctionProps extends PlatformProps {
     securityGroupIds: string[];
   };
   /**
+   * EFS file systems to mount into the function's execution environment.
+   * Each entry mounts an EFS access point (e.g.
+   * `accessPoint.accessPointArn`) at a local path that must begin with
+   * `/mnt/`. Requires `vpc`: the function must be attached to a VPC that can
+   * reach an available EFS mount target for the file system. The execution
+   * role is automatically granted EFS client access
+   * (`AmazonElasticFileSystemClientReadWriteAccess`).
+   */
+  fileSystemConfigs?: {
+    /**
+     * ARN of the EFS access point to mount
+     * (e.g. `accessPoint.accessPointArn`).
+     */
+    arn: string;
+    /**
+     * Local mount path inside the function. Must begin with `/mnt/`
+     * (e.g. `/mnt/files`).
+     */
+    localMountPath: string;
+  }[];
+  /**
    * Maximum execution time before the function is forcibly terminated.
    * Rounded up to whole seconds.
    *
@@ -167,6 +188,17 @@ export interface FunctionProps extends PlatformProps {
    * Omit to remove the function-level reserved concurrency limit.
    */
   reservedConcurrentExecutions?: number;
+  /**
+   * AWS X-Ray tracing mode for the function.
+   *
+   * `"Active"` samples and records incoming requests as X-Ray traces and
+   * attaches the `AWSXRayDaemonWriteAccess` managed policy to the execution
+   * role so the runtime can publish trace segments. `"PassThrough"` only
+   * forwards an upstream trace header without sampling.
+   *
+   * @default "PassThrough"
+   */
+  tracing?: "Active" | "PassThrough";
   /**
    * Asynchronous invocation settings (retries, event age, destinations) for
    * the unqualified function. Omit to remove any existing config and fall
@@ -802,6 +834,40 @@ export const FunctionProvider = () =>
         return env;
       });
 
+      const xrayWriteAccessPolicyArn =
+        "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
+
+      /**
+       * Converge the X-Ray write managed policy on the execution role with
+       * the desired tracing mode. Attaching is idempotent; detaching is only
+       * attempted when the previous state may have had it attached (routine
+       * update from `Active`, or adoption where the prior props are unknown)
+       * to avoid a wasted IAM call on every deploy.
+       */
+      const syncTracingPolicy = Effect.fn(function* ({
+        roleName,
+        tracing,
+        mayHaveBeenActive,
+      }: {
+        roleName: string;
+        tracing: FunctionProps["tracing"];
+        mayHaveBeenActive: boolean;
+      }) {
+        if (tracing === "Active") {
+          yield* iam.attachRolePolicy({
+            RoleName: roleName,
+            PolicyArn: xrayWriteAccessPolicyArn,
+          });
+        } else if (mayHaveBeenActive) {
+          yield* iam
+            .detachRolePolicy({
+              RoleName: roleName,
+              PolicyArn: xrayWriteAccessPolicyArn,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
+      });
+
       const createRoleIfNotExists = Effect.fn(function* ({
         id,
         roleName,
@@ -1196,6 +1262,9 @@ export default handler;
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
+        // Resolved EFS mounts. `undefined` leaves the function's existing
+        // config untouched (precreate stub); `[]` explicitly clears mounts.
+        fileSystemConfigs?: Lambda.FileSystemConfig[];
         session: { note: (note: string) => Effect.Effect<void> };
       }) => Effect.Effect<
         void,
@@ -1210,6 +1279,7 @@ export default handler;
         env,
         functionName,
         preferUpdate,
+        fileSystemConfigs,
         session,
       }: {
         id: string;
@@ -1220,6 +1290,7 @@ export default handler;
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
+        fileSystemConfigs?: Lambda.FileSystemConfig[];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
@@ -1281,12 +1352,16 @@ export default handler;
             : undefined,
           Tags: tags,
           Timeout: toTimeoutSeconds(news.timeout),
+          // Always explicit so removing the `tracing` prop converges back to
+          // the AWS default on update.
+          TracingConfig: { Mode: news.tracing ?? "PassThrough" },
           VpcConfig: news.vpc
             ? {
                 SubnetIds: news.vpc.subnetIds,
                 SecurityGroupIds: news.vpc.securityGroupIds,
               }
             : undefined,
+          FileSystemConfigs: fileSystemConfigs,
         };
 
         const getAndUpdate = Lambda.getFunction({
@@ -1750,6 +1825,28 @@ export default handler;
             bindings,
           });
 
+          yield* syncTracingPolicy({
+            roleName,
+            tracing: news.tracing,
+            // Routine update from Active, or adoption (output without olds)
+            // where the prior tracing mode is unknown.
+            mayHaveBeenActive:
+              olds?.tracing === "Active" ||
+              (olds === undefined && output !== undefined),
+          });
+
+          // EFS mounts authenticate the execution role against the access
+          // point at sandbox start — grant client access before the function
+          // configuration references the file system. Attaching is
+          // idempotent; the policy is detached with the rest on delete.
+          if (news.fileSystemConfigs && news.fileSystemConfigs.length > 0) {
+            yield* iam.attachRolePolicy({
+              RoleName: roleName,
+              PolicyArn:
+                "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
+            });
+          }
+
           const { identityHash, buildArchive } = yield* bundleCode(id, news);
           const { archive, archiveHash } = yield* buildArchive;
 
@@ -1765,6 +1862,17 @@ export default handler;
             },
             functionName,
             preferUpdate: output !== undefined,
+            // `[]` (when the prop was removed on a function that previously
+            // had mounts) explicitly clears the file-system config;
+            // `undefined` when it never had any leaves it untouched.
+            fileSystemConfigs: news.fileSystemConfigs
+              ? news.fileSystemConfigs.map((c) => ({
+                  Arn: c.arn,
+                  LocalMountPath: c.localMountPath,
+                }))
+              : olds?.fileSystemConfigs
+                ? []
+                : undefined,
             session,
           });
 

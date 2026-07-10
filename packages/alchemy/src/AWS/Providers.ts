@@ -26,6 +26,7 @@ import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
 import * as ApiGatewayV2 from "./ApiGatewayV2/index.ts";
+import * as AppSync from "./AppSync/index.ts";
 import * as Assets from "./Assets.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
@@ -37,7 +38,9 @@ import * as DynamoDB from "./DynamoDB/index.ts";
 import * as EC2 from "./EC2/index.ts";
 import * as ECR from "./ECR/index.ts";
 import * as ECS from "./ECS/index.ts";
+import * as EFS from "./EFS/index.ts";
 import * as EKS from "./EKS/index.ts";
+import * as ElastiCache from "./ElastiCache/index.ts";
 import * as ELBv2 from "./ELBv2/index.ts";
 import * as Endpoint from "./Endpoint.ts";
 import { Default as DefaultEnvironment } from "./Environment.ts";
@@ -62,7 +65,9 @@ import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
 import * as SSM from "./SSM/index.ts";
 import * as StepFunctions from "./StepFunctions/index.ts";
+import * as WAFv2 from "./WAFv2/index.ts";
 import * as Website from "./Website/index.ts";
+import * as XRay from "./XRay/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "AWS",
@@ -97,6 +102,13 @@ export const providers = () =>
       ApiGatewayV2.RouteResource,
       ApiGatewayV2.StageResource,
       ApiGatewayV2.VpcLink,
+      AppSync.ApiAssociationResource,
+      AppSync.ApiKeyResource,
+      AppSync.DataSourceResource,
+      AppSync.DomainName,
+      AppSync.FunctionResource,
+      AppSync.GraphqlApi,
+      AppSync.ResolverResource,
       AutoScaling.AutoScalingGroup,
       AutoScaling.LaunchTemplate,
       AutoScaling.ScalingPolicy,
@@ -151,10 +163,14 @@ export const providers = () =>
       ECS.Cluster,
       ECS.Service,
       ECS.Task,
+      EFS.AccessPoint,
+      EFS.FileSystem,
+      EFS.MountTarget,
       EKS.AccessEntry,
       EKS.Addon,
       EKS.Cluster,
       EKS.PodIdentityAssociation,
+      ElastiCache.ServerlessCache,
       ELBv2.Listener,
       ELBv2.ListenerRule,
       ELBv2.LoadBalancer,
@@ -238,7 +254,13 @@ export const providers = () =>
       SSM.Parameter,
       StepFunctions.Activity,
       StepFunctions.StateMachine,
+      WAFv2.IPSet,
+      WAFv2.RuleGroup,
+      WAFv2.WebACL,
+      WAFv2.WebACLAssociation,
       Website.AssetDeployment,
+      XRay.Group,
+      XRay.SamplingRule,
     ]),
   ).pipe(
     Layer.provide(
@@ -267,6 +289,13 @@ export const providers = () =>
           ApiGatewayV2.RouteProvider(),
           ApiGatewayV2.StageProvider(),
           ApiGatewayV2.VpcLinkProvider(),
+          AppSync.ApiAssociationProvider(),
+          AppSync.ApiKeyProvider(),
+          AppSync.DataSourceProvider(),
+          AppSync.DomainNameProvider(),
+          AppSync.FunctionProvider(),
+          AppSync.GraphqlApiProvider(),
+          AppSync.ResolverProvider(),
           AutoScaling.AutoScalingGroupProvider(),
           AutoScaling.LaunchTemplateProvider(),
           AutoScaling.ScalingPolicyProvider(),
@@ -323,10 +352,14 @@ export const providers = () =>
           ECS.ClusterProvider(),
           ECS.ServiceProvider(),
           ECS.TaskProvider(),
+          EFS.AccessPointProvider(),
+          EFS.FileSystemProvider(),
+          EFS.MountTargetProvider(),
           EKS.AccessEntryProvider(),
           EKS.AddonProvider(),
           EKS.ClusterProvider(),
           EKS.PodIdentityAssociationProvider(),
+          ElastiCache.ServerlessCacheProvider(),
           ELBv2.ListenerProvider(),
           ELBv2.ListenerRuleProvider(),
           ELBv2.LoadBalancerProvider(),
@@ -412,7 +445,13 @@ export const providers = () =>
           SSM.ParameterProvider(),
           StepFunctions.ActivityProvider(),
           StepFunctions.StateMachineProvider(),
+          WAFv2.IPSetProvider(),
+          WAFv2.RuleGroupProvider(),
+          WAFv2.WebACLAssociationProvider(),
+          WAFv2.WebACLProvider(),
           Website.AssetDeploymentProvider(),
+          XRay.GroupProvider(),
+          XRay.SamplingRuleProvider(),
         ),
       ),
     ),

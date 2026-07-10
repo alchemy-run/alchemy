@@ -70,9 +70,9 @@ export const decodeCloudWatchLogsEvent = (
  */
 export const LogGroupEventSource = Layer.effect(
   LogsLogGroupEventSource,
-  // @ts-expect-error - the impl resolves plan-time services (SubscriptionFilter,
-  // Permission) whereas LogGroupEventSourceService erases the requirement
-  // channel to `never`.
+  // The impl resolves plan-time services (SubscriptionFilter, Permission)
+  // whereas LogGroupEventSourceService erases the requirement channel to
+  // `never`.
   // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
     const host = yield* Lambda.Function;

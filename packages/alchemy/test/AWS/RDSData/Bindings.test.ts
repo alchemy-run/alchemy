@@ -285,6 +285,35 @@ describe("RDSData Bindings", () => {
     );
   });
 
+  // RDS.Connect is not a Data API binding, but it targets the same cluster
+  // and only resolves connection settings (endpoint + secret credentials), so
+  // it shares this fixture instead of provisioning a second Aurora cluster.
+  describe("RDS.Connect", () => {
+    test.provider.skipIf(!SLOW)(
+      "resolves host, port, database and credentials from the secret",
+      (_stack) =>
+        Effect.gen(function* () {
+          const info = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/connect-info`),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            host: string;
+            port: number;
+            database?: string;
+            username?: string;
+            hasPassword: boolean;
+            ssl: boolean;
+          };
+          expect(info.host).toMatch(/\.rds\.amazonaws\.com$/);
+          expect(info.port).toBe(5432);
+          expect(info.database).toBe("app");
+          expect(info.username).toBe("app");
+          expect(info.hasPassword).toBe(true);
+          expect(info.ssl).toBe(true);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   // `ExecuteSql` is deprecated (Aurora Serverless v1 era API) — implemented
   // for completeness but intentionally not exercised against live AWS.
 });

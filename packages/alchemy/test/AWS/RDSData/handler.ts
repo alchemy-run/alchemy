@@ -115,6 +115,10 @@ export default RDSDataTestFunction.make(
     const rollbackTransaction = yield* RDSData.RollbackTransaction(cluster, {
       secret,
     });
+    // RDS.Connect resolves connection settings (endpoint + secret credentials)
+    // — no socket is opened, so it is exercisable from this ingress-free
+    // fixture alongside the Data API bindings.
+    const connect = yield* RDS.Connect(cluster, { secret, database: "app" });
 
     const ClusterIdentifier = yield* cluster.dbClusterIdentifier;
     const ClusterArn = yield* cluster.dbClusterArn;
@@ -133,6 +137,22 @@ export default RDSDataTestFunction.make(
           return yield* HttpServerResponse.json({
             clusterIdentifier,
             clusterArn,
+          });
+        }
+
+        // RDS.Connect binding: resolves host/port from the cluster endpoint
+        // and credentials from the Secrets Manager secret. The password is
+        // never echoed back — only its presence.
+        if (request.method === "GET" && pathname === "/connect-info") {
+          const info = yield* connect;
+          return yield* HttpServerResponse.json({
+            host: info.host,
+            port: info.port,
+            database: info.database,
+            username: info.username,
+            hasPassword:
+              typeof info.password === "string" && info.password.length > 0,
+            ssl: info.ssl,
           });
         }
 
@@ -273,6 +293,7 @@ export default RDSDataTestFunction.make(
         RDSData.BeginTransactionHttp,
         RDSData.CommitTransactionHttp,
         RDSData.RollbackTransactionHttp,
+        RDS.ConnectHttp,
       ),
     ),
   ),

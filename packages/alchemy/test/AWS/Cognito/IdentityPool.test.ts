@@ -117,7 +117,7 @@ test.provider(
                 {
                   Effect: "Allow",
                   Principal: { Federated: "cognito-identity.amazonaws.com" },
-                  Action: "sts:AssumeRoleWithWebIdentity",
+                  Action: ["sts:AssumeRoleWithWebIdentity"],
                   Condition: {
                     StringEquals: {
                       "cognito-identity.amazonaws.com:aud":

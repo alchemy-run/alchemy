@@ -190,6 +190,12 @@ export const UserPoolDomainProvider = () =>
       return UserPoolDomain.Provider.of({
         stables: ["domain", "userPoolId"],
 
+        // Sub-resource keyed entirely by its user pool (userPoolId) with no global
+        // enumeration API of its own — nuke reaches it through the parent's
+        // deletion, so enumeration returns empty per the ProviderService
+        // doctrine.
+        list: () => Effect.succeed([]),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const domain =
             output?.domain ?? (yield* createDomain(id, olds ?? {}));

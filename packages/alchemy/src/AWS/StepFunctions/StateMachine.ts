@@ -580,13 +580,21 @@ export const StateMachineProvider = () =>
                     stateMachineArn: item.stateMachineArn,
                   })
                   .pipe(
-                    Effect.map((machine) => ({
-                      stateMachineName: machine.name,
-                      stateMachineArn: machine.stateMachineArn,
-                      type: machine.type as StateMachineType,
-                      roleArn: machine.roleArn,
-                      roleName: undefined,
-                    })),
+                    // name/roleArn are optional on the wire; a machine
+                    // missing either cannot be expressed as Attributes.
+                    Effect.map((machine) =>
+                      machine.name != null &&
+                      machine.stateMachineArn != null &&
+                      machine.roleArn != null
+                        ? {
+                            stateMachineName: machine.name,
+                            stateMachineArn: machine.stateMachineArn,
+                            type: machine.type as StateMachineType,
+                            roleArn: machine.roleArn,
+                            roleName: undefined as string | undefined,
+                          }
+                        : undefined,
+                    ),
                     Effect.catchTag("StateMachineDoesNotExist", () =>
                       Effect.succeed(undefined),
                     ),

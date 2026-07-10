@@ -122,6 +122,12 @@ export const IdentityPoolRoleAttachmentProvider = () =>
       return IdentityPoolRoleAttachment.Provider.of({
         stables: ["identityPoolId"],
 
+        // Sub-resource keyed entirely by its identity pool (identityPoolId) with no global
+        // enumeration API of its own — nuke reaches it through the parent's
+        // deletion, so enumeration returns empty per the ProviderService
+        // doctrine.
+        list: () => Effect.succeed([]),
+
         read: Effect.fn(function* ({ olds, output }) {
           const identityPoolId = output?.identityPoolId ?? olds?.identityPoolId;
           if (identityPoolId === undefined) return undefined;

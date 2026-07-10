@@ -106,6 +106,12 @@ export const GroupProvider = () =>
       return Group.Provider.of({
         stables: ["groupName", "userPoolId"],
 
+        // Sub-resource keyed entirely by its user pool (userPoolId) with no global
+        // enumeration API of its own — nuke reaches it through the parent's
+        // deletion, so enumeration returns empty per the ProviderService
+        // doctrine.
+        list: () => Effect.succeed([]),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const userPoolId = output?.userPoolId ?? olds?.userPoolId;
           if (userPoolId === undefined) return undefined;
