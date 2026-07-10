@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Binding from "../Binding.ts";
 import { isResolved } from "../Diff.ts";
@@ -16,6 +17,7 @@ import {
   type PrismaManagementClient,
 } from "./Client.ts";
 import type { Database } from "./Database.ts";
+import { hasCanonicalConnectionSecrets } from "./Internal/DatabaseSecrets.ts";
 import type { Providers } from "./Providers.ts";
 import {
   concreteIdsChanged,
@@ -813,6 +815,39 @@ const uniqueConnection = (
     ),
   );
 
+class GeneratedConnectionNotVisible extends Error {}
+
+const generatedConnectionRecoverySchedule = Schedule.max([
+  Schedule.exponential("250 millis"),
+  Schedule.recurs(6),
+]);
+
+const recoverGeneratedConnectionAfterConflict = (
+  client: PrismaManagementClient,
+  databaseId: string,
+  expectedName: string,
+) =>
+  uniqueConnection(
+    client,
+    databaseId,
+    expectedName,
+    (candidate) => candidate.name === expectedName,
+  ).pipe(
+    Effect.flatMap((connection) =>
+      connection
+        ? Effect.succeed(connection)
+        : Effect.fail(
+            new GeneratedConnectionNotVisible(
+              `Generated Prisma connection '${expectedName}' is not visible yet.`,
+            ),
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error instanceof GeneratedConnectionNotVisible,
+      schedule: generatedConnectionRecoverySchedule,
+    }),
+  );
+
 const physicalConnectionPrefix = (name: string) =>
   `${name.trim().slice(0, 52)}-`;
 
@@ -825,6 +860,24 @@ const physicalConnectionName = (name: string, instanceId: string) => {
   const maxPrefixLength = 65 - effectiveSuffix.length - 1;
   return `${name.trim().slice(0, maxPrefixLength)}-${effectiveSuffix}`;
 };
+
+const isGeneratedPhysicalConnectionName = (
+  physicalName: string,
+  logicalName: string,
+) => {
+  const prefix = physicalConnectionPrefix(logicalName);
+  return (
+    physicalName.startsWith(prefix) &&
+    /^[0-9a-f]{12}$/i.test(physicalName.slice(prefix.length))
+  );
+};
+
+const isAdoptablePhysicalConnectionName = (
+  physicalName: string,
+  logicalName: string,
+) =>
+  physicalName === logicalName.trim() ||
+  isGeneratedPhysicalConnectionName(physicalName, logicalName);
 
 const attrsFrom = (
   connection: DatabaseConnection | DatabaseConnectionWithSecrets,
@@ -858,7 +911,7 @@ export const ConnectionProvider = () =>
                 connections.map((c) => attrsFrom(c, {})),
               ),
             ),
-        diff: Effect.fn(function* ({ instanceId, olds, news, output }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.connectionId)) {
             return { action: "update" } as const;
@@ -868,15 +921,11 @@ export const ConnectionProvider = () =>
           const newDatabaseId = isResolved(news.database)
             ? unresolvedDatabaseIdOf(news.database)
             : undefined;
-          const nameChanged = isResolved(news.name)
-            ? output
-              ? output.connectionName !==
-                physicalConnectionName(
-                  yield* validateConnectionName(news.name),
-                  instanceId,
-                )
-              : news.name.trim() !== olds.name.trim()
-            : false;
+          const resolvedName = isResolved(news.name)
+            ? yield* validateConnectionName(news.name)
+            : undefined;
+          const nameChanged =
+            resolvedName !== undefined && resolvedName !== olds.name.trim();
           if (concreteIdsChanged(oldDatabaseId, newDatabaseId) || nameChanged) {
             return { action: "replace" } as const;
           }
@@ -890,13 +939,23 @@ export const ConnectionProvider = () =>
           const connectionId = isPrismaDevId(output?.connectionId)
             ? undefined
             : output?.connectionId;
-          if (connectionId) {
+          if (connectionId && output) {
             const connection = yield* client
               .getConnection(connectionId)
               .pipe(
                 Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
               );
             if (!connection) return undefined;
+            if (
+              connection.database.id !== output.databaseId ||
+              connection.name !== output.connectionName
+            ) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma connection '${connection.id}' no longer matches persisted database '${output.databaseId}' and name '${output.connectionName}'. Refusing to refresh a mismatched connection.`,
+                ),
+              );
+            }
             const observed = extractConnectionSecrets(connection);
             return attrsFrom(connection, {
               directConnectionString: output?.directConnectionString,
@@ -927,8 +986,7 @@ export const ConnectionProvider = () =>
             `${prefix}<instance-id>`,
             (connection) =>
               connection.name !== expectedName &&
-              connection.name.startsWith(prefix) &&
-              /^[0-9a-f]{12}$/i.test(connection.name.slice(prefix.length)),
+              isGeneratedPhysicalConnectionName(connection.name, name),
           );
           const connection =
             generated ??
@@ -956,14 +1014,26 @@ export const ConnectionProvider = () =>
             : undefined;
 
           const expectedName = physicalConnectionName(name, instanceId);
+          const physicalName =
+            connectionId && output ? output.connectionName : expectedName;
           if (
-            connection &&
-            (connection.database.id !== databaseId ||
-              connection.name !== expectedName)
+            connectionId &&
+            !isAdoptablePhysicalConnectionName(physicalName, name)
           ) {
             return yield* Effect.fail(
               new Error(
-                `Prisma connection '${connection.id}' resolves to database '${connection.database.id}' with name '${connection.name}', not requested database '${databaseId}' and physical name '${expectedName}'. Refusing to rotate or persist mismatched identity; replace the connection instead.`,
+                `Persisted Prisma connection '${connectionId}' has physical name '${physicalName}', which does not match requested logical name '${name}'. Refusing to adopt or persist a mismatched connection.`,
+              ),
+            );
+          }
+          if (
+            connection &&
+            (connection.database.id !== databaseId ||
+              connection.name !== physicalName)
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma connection '${connection.id}' resolves to database '${connection.database.id}' with name '${connection.name}', not requested database '${databaseId}' and physical name '${physicalName}'. Refusing to rotate or persist mismatched identity; replace the connection instead.`,
               ),
             );
           }
@@ -980,40 +1050,23 @@ export const ConnectionProvider = () =>
           let secrets: PrismaSecretConnection = connection
             ? extractConnectionSecrets(connection)
             : {};
-          let createdConnection = false;
           if (!connection) {
-            const result = yield* client
-              .createConnection({
-                databaseId,
-                name: expectedName,
-              })
-              .pipe(
-                Effect.map((connection) => ({
-                  connection,
-                  created: true,
-                })),
-                Effect.catchIf(isConflict, () =>
-                  uniqueConnection(
-                    client,
-                    databaseId,
-                    expectedName,
-                    (candidate) => candidate.name === expectedName,
-                  ).pipe(
-                    Effect.flatMap((connection) =>
-                      connection
-                        ? Effect.succeed({ connection, created: false })
-                        : Effect.fail(
-                            new Error(
-                              `Generated Prisma connection '${expectedName}' appeared after create but could not be read uniquely.`,
-                            ),
-                          ),
+            const create = client.createConnection({
+              databaseId,
+              name: physicalName,
+            });
+            connection = yield* physicalName === expectedName
+              ? create.pipe(
+                  Effect.catchIf(isConflict, () =>
+                    recoverGeneratedConnectionAfterConflict(
+                      client,
+                      databaseId,
+                      expectedName,
                     ),
                   ),
-                ),
-              );
-            connection = result.connection;
+                )
+              : create;
             secrets = extractConnectionSecrets(connection);
-            createdConnection = result.created;
           }
           const missingCanonicalSecrets =
             secrets.directConnectionString === undefined &&
@@ -1022,25 +1075,33 @@ export const ConnectionProvider = () =>
             output?.directConnectionString === undefined &&
             output?.pooledConnectionString === undefined &&
             output?.accelerateConnectionString === undefined;
+          const recoveringOwnedGeneratedSecrets =
+            physicalName === expectedName && missingCanonicalSecrets;
           if (
-            !createdConnection &&
-            ((missingCanonicalSecrets && olds !== undefined) ||
-              (news.rotate === true && olds?.rotate !== true))
+            recoveringOwnedGeneratedSecrets ||
+            (news.rotate === true && olds?.rotate !== true)
           ) {
             const rotated = yield* client.rotateConnection(connection.id);
             if (
               rotated.id !== connection.id ||
               rotated.database.id !== databaseId ||
-              rotated.name !== expectedName
+              rotated.name !== physicalName
             ) {
               return yield* Effect.fail(
                 new Error(
-                  `Prisma rotated connection '${rotated.id}' for database '${rotated.database.id}' with name '${rotated.name}', but connection '${connection.id}' for database '${databaseId}' with name '${expectedName}' was requested. Refusing to persist mismatched credentials.`,
+                  `Prisma rotated connection '${rotated.id}' for database '${rotated.database.id}' with name '${rotated.name}', but connection '${connection.id}' for database '${databaseId}' with name '${physicalName}' was requested. Refusing to persist mismatched credentials.`,
                 ),
               );
             }
             connection = rotated;
             secrets = extractConnectionSecrets(rotated);
+            if (!hasCanonicalConnectionSecrets(secrets)) {
+              return yield* Effect.fail(
+                new Error(
+                  `Prisma rotated connection '${connection.id}' for database '${databaseId}' without returning a canonical connection URL. Refusing to persist missing or stale credentials.`,
+                ),
+              );
+            }
           }
 
           return attrsFrom(connection, {

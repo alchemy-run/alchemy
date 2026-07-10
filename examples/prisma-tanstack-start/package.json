@@ -11,8 +11,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "db:init": "prisma-next db init",
-    "db:setup": "bun run emit && bun run db:init && bun run seed",
+    "db:migrate": "bun run emit && prisma-next migration apply --no-interactive --yes && prisma-next db verify --no-interactive --strict",
+    "db:setup": "bun run db:migrate && bun run seed",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
     "dev": "alchemy dev",
@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@prisma-next/cli": "^0.8.0",
+    "@prisma-next/target-postgres": "^0.8.0",
     "@prisma-next/vite-plugin-contract-emit": "^0.8.0",
     "@types/node": "catalog:",
     "@types/pg": "^8.20.0",

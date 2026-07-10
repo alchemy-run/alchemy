@@ -555,9 +555,10 @@ const retryTransient = <A, E, R>(
         e instanceof PrismaApiError &&
         isRetryableRequest(method, path) &&
         isRetryableStatus(e.status),
-      schedule: Schedule.exponential("100 millis").pipe(
-        Schedule.both(Schedule.recurs(4)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("100 millis"),
+        Schedule.recurs(4),
+      ]),
     }),
   );
 

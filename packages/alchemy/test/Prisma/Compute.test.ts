@@ -15,6 +15,7 @@ import {
 } from "@/Prisma/Client";
 import * as Output from "@/Output";
 import type { ResourceBinding } from "@/Resource";
+import { Stack } from "@/Stack";
 import { PlatformServices } from "@/Util/PlatformServices";
 import type { Branch as ApiBranch } from "@/Prisma/Types";
 import { describe, expect, it } from "@effect/vitest";
@@ -105,10 +106,204 @@ const readHttpBodyBytes = Effect.fn(function* (body: HttpBody.HttpBody) {
   return output;
 });
 
+const readTarString = (buffer: Uint8Array, start: number, length: number) => {
+  const bytes = buffer.slice(start, start + length);
+  const end = bytes.indexOf(0);
+  return new TextDecoder().decode(end >= 0 ? bytes.slice(0, end) : bytes);
+};
+
+const readTarFile = (buffer: Uint8Array, expectedName: string) => {
+  let offset = 0;
+  while (offset + 512 <= buffer.length) {
+    const header = buffer.slice(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) break;
+    const name = readTarString(header, 0, 100);
+    const prefix = readTarString(header, 345, 155);
+    const fullName = prefix ? `${prefix}/${name}` : name;
+    const size = Number.parseInt(
+      readTarString(header, 124, 12).trim() || "0",
+      8,
+    );
+    const bodyStart = offset + 512;
+    if (fullName === expectedName) {
+      return new TextDecoder().decode(
+        buffer.slice(bodyStart, bodyStart + size),
+      );
+    }
+    offset = bodyStart + size + ((512 - (size % 512)) % 512);
+  }
+  throw new Error(`Missing tar entry '${expectedName}'.`);
+};
+
 const httpBodyContentType = (body: HttpBody.HttpBody) =>
   body._tag === "Uint8Array" || body._tag === "Stream"
     ? body.contentType
     : undefined;
+
+const makeHealthLifecycleFixture = (options?: {
+  latestDeploymentId?: string | null;
+  previewStatus?: number;
+  stableStatus?: number;
+  rollbackFailures?: number;
+  getAppFailureCalls?: readonly number[];
+}) => {
+  const calls: Array<[string, unknown?]> = [];
+  const deployments = new Map<
+    string,
+    "new" | "running" | "provisioning" | "stopped"
+  >([["version-old", "running"]]);
+  let deploymentCounter = 0;
+  let previewStatus = options?.previewStatus ?? 204;
+  let stableStatus = options?.stableStatus ?? 204;
+  let rollbackFailuresRemaining = options?.rollbackFailures ?? 0;
+  let getAppCalls = 0;
+  let latestDeploymentId =
+    options?.latestDeploymentId === undefined
+      ? "version-old"
+      : options.latestDeploymentId;
+
+  const app = () => ({
+    id: "service-1",
+    type: "app" as const,
+    url: "https://api.prisma.test/v1/apps/service-1",
+    name: "api",
+    region: { id: "us-east-1", name: "US East" },
+    projectId: "project-1",
+    branchId: "branch-main",
+    latestDeploymentId,
+    appEndpointDomain: "api.prisma.build",
+    createdAt: "2026-01-01T00:00:00Z",
+  });
+  const client = {
+    getApp: (id: string) => {
+      getAppCalls += 1;
+      calls.push(["getApp", id]);
+      if (options?.getAppFailureCalls?.includes(getAppCalls)) {
+        return Effect.fail(
+          new PrismaApiError({
+            method: "GET",
+            path: `/v1/apps/${id}`,
+            status: 503,
+            message: "app observation unavailable",
+          }),
+        );
+      }
+      return Effect.succeed(app());
+    },
+    createAppDeployment: (appId: string, input: unknown) => {
+      calls.push(["createAppDeployment", { appId, input }]);
+      deploymentCounter += 1;
+      const deploymentId =
+        deploymentCounter === 1
+          ? "version-new"
+          : `version-new-${deploymentCounter}`;
+      deployments.set(deploymentId, "new");
+      return Effect.succeed({
+        id: deploymentId,
+        type: "deployment" as const,
+        url: `https://api.prisma.test/v1/deployments/${deploymentId}`,
+        foundryVersionId: `foundry-${deploymentId}`,
+        uploadUrl: `https://upload.prisma.test/${deploymentId}.tar.gz`,
+      });
+    },
+    getDeployment: (id: string) => {
+      calls.push(["getDeployment", id]);
+      const status = deployments.get(id);
+      return status
+        ? Effect.succeed({
+            id,
+            type: "deployment" as const,
+            url: `https://api.prisma.test/v1/deployments/${id}`,
+            foundryVersionId: `foundry-${id}`,
+            status,
+            previewDomain: `${id}.preview.prisma.build`,
+            createdAt: "2026-01-01T00:00:00Z",
+          })
+        : Effect.fail(
+            new PrismaApiError({
+              method: "GET",
+              path: `/v1/deployments/${id}`,
+              status: 404,
+              message: "not found",
+            }),
+          );
+    },
+    startDeployment: (id: string) =>
+      Effect.sync(() => {
+        calls.push(["startDeployment", id]);
+        deployments.set(id, "running");
+        return { previewDomain: `${id}.preview.prisma.build` };
+      }),
+    promoteApp: (appId: string, target: { deploymentId: string }) =>
+      Effect.sync(() => {
+        calls.push(["promoteApp", { appId, ...target }]);
+        latestDeploymentId = target.deploymentId;
+        return { appEndpointDomain: "api.prisma.build" };
+      }),
+    rollbackApp: (appId: string, target: { deploymentId: string }) =>
+      Effect.gen(function* () {
+        calls.push(["rollbackApp", { appId, ...target }]);
+        if (rollbackFailuresRemaining > 0) {
+          rollbackFailuresRemaining -= 1;
+          return yield* Effect.fail(
+            new PrismaApiError({
+              method: "POST",
+              path: `/v1/apps/${appId}/rollback`,
+              status: 503,
+              message: "rollback unavailable",
+            }),
+          );
+        }
+        latestDeploymentId = target.deploymentId;
+        return { appEndpointDomain: "api.prisma.build" };
+      }),
+    stopDeployment: (id: string) =>
+      Effect.sync(() => {
+        calls.push(["stopDeployment", id]);
+        deployments.set(id, "stopped");
+      }),
+    deleteDeployment: (id: string) =>
+      Effect.sync(() => {
+        calls.push(["deleteDeployment", id]);
+        deployments.delete(id);
+      }),
+  } as unknown as PrismaManagementClient;
+  const http = HttpClient.make((request) => {
+    if (request.url.startsWith("https://upload.prisma.test/")) {
+      calls.push(["upload", request.url]);
+      return readHttpBodyBytes(request.body as HttpBody.HttpBody).pipe(
+        Effect.as(HttpClientResponse.fromWeb(request, new Response(null))),
+      );
+    }
+    calls.push(["healthRequest", request.url]);
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        new Response(null, {
+          status: new URL(request.url).hostname.endsWith(
+            ".preview.prisma.build",
+          )
+            ? previewStatus
+            : stableStatus,
+        }),
+      ),
+    );
+  });
+
+  return {
+    calls,
+    client,
+    http,
+    hasDeployment: (id: string) => deployments.has(id),
+    latestDeploymentId: () => latestDeploymentId,
+    setPreviewStatus: (status: number) => {
+      previewStatus = status;
+    },
+    setStableStatus: (status: number) => {
+      stableStatus = status;
+    },
+  };
+};
 
 describe("Prisma Compute", () => {
   it.live("accepts a streaming 200 response without consuming its body", () => {
@@ -131,6 +326,137 @@ describe("Prisma Compute", () => {
       appName: "api",
       urlReadinessTimeoutSeconds: 0.05,
     }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
+  });
+
+  it.live("waits for the configured application health contract", () => {
+    const requests: string[] = [];
+    const http = HttpClient.make((request) => {
+      requests.push(request.url);
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(null, {
+            status: requests.length === 1 ? 503 : 204,
+          }),
+        ),
+      );
+    });
+
+    return Effect.gen(function* () {
+      yield* waitForDeploymentUrl("https://app.prisma.build", {
+        project: "project-1",
+        appName: "api",
+        healthCheck: { path: "/api/health" },
+        pollIntervalMs: 1,
+        urlReadinessTimeoutSeconds: 0.1,
+      });
+
+      expect(requests).toEqual([
+        "https://app.prisma.build/api/health",
+        "https://app.prisma.build/api/health",
+      ]);
+    }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
+  });
+
+  it.effect("rejects unsafe application health contracts", () =>
+    Effect.gen(function* () {
+      const pathError = yield* waitForDeploymentUrl(
+        "https://app.prisma.build",
+        {
+          project: "project-1",
+          appName: "api",
+          healthCheck: { path: "//attacker.example/health" },
+        },
+      ).pipe(Effect.flip);
+      const statusError = yield* waitForDeploymentUrl(
+        "https://app.prisma.build",
+        {
+          project: "project-1",
+          appName: "api",
+          healthCheck: { path: "/health", statusCodes: [] },
+        },
+      ).pipe(Effect.flip);
+
+      expect((pathError as Error).message).toContain("healthCheck.path");
+      expect((statusError as Error).message).toContain(
+        "healthCheck.statusCodes",
+      );
+    }),
+  );
+
+  it.effect("fails closed when an application health probe cannot run", () =>
+    Effect.gen(function* () {
+      const props = {
+        project: "project-1",
+        appName: "api",
+        healthCheck: { path: "/health" },
+      } as const;
+      const missingUrl = yield* waitForDeploymentUrl(undefined, props).pipe(
+        Effect.flip,
+      );
+      const missingRoutingUrl = yield* waitForDeploymentUrl(undefined, {
+        project: "project-1",
+        appName: "api",
+      }).pipe(Effect.flip);
+      const disabled = yield* waitForDeploymentUrl("https://app.prisma.build", {
+        ...props,
+        verifyUrl: false,
+      }).pipe(Effect.flip);
+      const missingClient = yield* waitForDeploymentUrl(
+        "https://app.prisma.build",
+        props,
+      ).pipe(Effect.flip);
+
+      expect((missingUrl as Error).message).toContain("did not return");
+      expect((missingRoutingUrl as Error).message).toContain(
+        "readiness verification",
+      );
+      expect((disabled as Error).message).toContain("verifyUrl: false");
+      expect((missingClient as Error).message).toContain("HTTP client");
+    }),
+  );
+
+  it.live("observes health redirects without following them", () => {
+    const redirects: RequestRedirect[] = [];
+    const fetch = (async (
+      _input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1],
+    ) => {
+      redirects.push(init?.redirect ?? "follow");
+      return init?.redirect === "manual"
+        ? new Response(null, {
+            status: 302,
+            headers: { location: "https://attacker.example/" },
+          })
+        : new Response(null, { status: 200 });
+    }) as typeof globalThis.fetch;
+
+    return Effect.gen(function* () {
+      yield* waitForDeploymentUrl("https://app.prisma.build", {
+        project: "project-1",
+        appName: "api",
+        healthCheck: { path: "/health", statusCodes: [302] },
+        pollIntervalMs: 1,
+        urlReadinessTimeoutSeconds: 0.05,
+      });
+      const defaultStatusError = yield* waitForDeploymentUrl(
+        "https://app.prisma.build",
+        {
+          project: "project-1",
+          appName: "api",
+          healthCheck: { path: "/health" },
+          pollIntervalMs: 1,
+          urlReadinessTimeoutSeconds: 0.01,
+        },
+      ).pipe(Effect.flip);
+
+      expect(redirects.length).toBeGreaterThanOrEqual(2);
+      expect(redirects.every((redirect) => redirect === "manual")).toBe(true);
+      expect((defaultStatusError as Error).message).toContain("HTTP 302");
+    }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    );
   });
 
   it.live("enforces one deadline for stalled requests and 404 bodies", () => {
@@ -267,6 +593,38 @@ describe("Prisma Compute", () => {
     }).pipe(
       Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
+    );
+  });
+
+  it.effect("rejects a health check when deployment start is disabled", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            start: false,
+            skipPromote: true,
+            healthCheck: { path: "/health" },
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect((error as Error).message).toContain("healthCheck requires start");
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(PlatformServices),
     );
   });
 
@@ -1968,6 +2326,393 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.live(
+    "blocks promotion and deletes a new deployment when preview health fails",
+    () => {
+      const fixture = makeHealthLifecycleFixture({ previewStatus: 503 });
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const error = yield* provider
+          .reconcile({
+            id: "App",
+            fqn: "App",
+            instanceId: "00000000000000000000000000000000",
+            news: {
+              project: "project-1",
+              appName: "api",
+              artifactPath: fixtureArtifactV2Path,
+              branchId: "branch-main",
+              healthCheck: { path: "/health" },
+              pollIntervalMs: 1,
+              timeoutSeconds: 0.05,
+              urlReadinessTimeoutSeconds: 0.02,
+            },
+            olds: {
+              project: "project-1",
+              appName: "api",
+              artifactPath: fixtureArtifactV1Path,
+              branchId: "branch-main",
+            },
+            output: {
+              appId: "service-1",
+              deploymentId: "version-old",
+              projectId: "project-1",
+              appName: "api",
+              regionId: "us-east-1",
+              deploymentEndpointDomain: "version-old.preview.prisma.build",
+              deploymentUrl: "https://version-old.preview.prisma.build",
+              appEndpointDomain: "api.prisma.build",
+              url: "https://api.prisma.build",
+              promoted: true,
+              previousDeploymentId: undefined,
+              previousDeploymentAction: undefined,
+              artifactHash: Redacted.make("old-hash"),
+              local: false,
+            },
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
+
+        expect((error as Error).message).toContain(
+          "https://version-new.preview.prisma.build/health",
+        );
+        expect((error as Error).message).toContain("HTTP 503");
+        expect(
+          fixture.calls.filter(([operation]) => operation === "promoteApp"),
+        ).toEqual([]);
+        expect(fixture.calls).toContainEqual(["stopDeployment", "version-new"]);
+        expect(fixture.calls).toContainEqual([
+          "deleteDeployment",
+          "version-new",
+        ]);
+        expect(fixture.hasDeployment("version-new")).toBe(false);
+        expect(fixture.hasDeployment("version-old")).toBe(true);
+        expect(fixture.latestDeploymentId()).toBe("version-old");
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(
+          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
+        ),
+        Effect.provideService(HttpClient.HttpClient, fixture.http),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.live(
+    "rolls back promotion and deletes the new deployment when stable health fails",
+    () => {
+      const fixture = makeHealthLifecycleFixture({
+        previewStatus: 204,
+        stableStatus: 503,
+      });
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const error = yield* provider
+          .reconcile({
+            id: "App",
+            fqn: "App",
+            instanceId: "00000000000000000000000000000000",
+            news: {
+              project: "project-1",
+              appName: "api",
+              artifactPath: fixtureArtifactV2Path,
+              branchId: "branch-main",
+              healthCheck: { path: "/health" },
+              pollIntervalMs: 1,
+              timeoutSeconds: 0.05,
+              urlReadinessTimeoutSeconds: 0.02,
+            },
+            olds: {
+              project: "project-1",
+              appName: "api",
+              artifactPath: fixtureArtifactV1Path,
+              branchId: "branch-main",
+            },
+            output: {
+              appId: "service-1",
+              deploymentId: "version-old",
+              projectId: "project-1",
+              appName: "api",
+              regionId: "us-east-1",
+              deploymentEndpointDomain: "version-old.preview.prisma.build",
+              deploymentUrl: "https://version-old.preview.prisma.build",
+              appEndpointDomain: "api.prisma.build",
+              url: "https://api.prisma.build",
+              promoted: true,
+              previousDeploymentId: undefined,
+              previousDeploymentAction: undefined,
+              artifactHash: Redacted.make("old-hash"),
+              local: false,
+            },
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
+
+        expect((error as Error).message).toContain(
+          "https://api.prisma.build/health",
+        );
+        expect((error as Error).message).toContain("HTTP 503");
+        expect(fixture.calls).toContainEqual([
+          "promoteApp",
+          { appId: "service-1", deploymentId: "version-new" },
+        ]);
+        expect(fixture.calls).toContainEqual([
+          "rollbackApp",
+          { appId: "service-1", deploymentId: "version-old" },
+        ]);
+        expect(fixture.calls).toContainEqual([
+          "deleteDeployment",
+          "version-new",
+        ]);
+        const promotionIndex = fixture.calls.findIndex(
+          ([operation]) => operation === "promoteApp",
+        );
+        const rollbackIndex = fixture.calls.findIndex(
+          ([operation]) => operation === "rollbackApp",
+        );
+        const deletionIndex = fixture.calls.findIndex(
+          ([operation]) => operation === "deleteDeployment",
+        );
+        expect(promotionIndex).toBeLessThan(rollbackIndex);
+        expect(rollbackIndex).toBeLessThan(deletionIndex);
+        expect(fixture.hasDeployment("version-new")).toBe(false);
+        expect(fixture.hasDeployment("version-old")).toBe(true);
+        expect(fixture.latestDeploymentId()).toBe("version-old");
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(
+          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
+        ),
+        Effect.provideService(HttpClient.HttpClient, fixture.http),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.live(
+    "fails closed on rollback failure and recovers from persisted state before retrying",
+    () => {
+      const fixture = makeHealthLifecycleFixture({
+        previewStatus: 204,
+        stableStatus: 503,
+        rollbackFailures: 2,
+        getAppFailureCalls: [4],
+      });
+      const news = {
+        project: "project-1",
+        appName: "api",
+        artifactPath: fixtureArtifactV2Path,
+        branchId: "branch-main",
+        healthCheck: { path: "/health" },
+        pollIntervalMs: 1,
+        timeoutSeconds: 0.05,
+        urlReadinessTimeoutSeconds: 0.02,
+      } as const;
+      const olds = {
+        project: "project-1",
+        appName: "api",
+        artifactPath: fixtureArtifactV1Path,
+        branchId: "branch-main",
+      } as const;
+      const output = {
+        appId: "service-1",
+        deploymentId: "version-old",
+        projectId: "project-1",
+        appName: "api",
+        regionId: "us-east-1",
+        deploymentEndpointDomain: "version-old.preview.prisma.build",
+        deploymentUrl: "https://version-old.preview.prisma.build",
+        appEndpointDomain: "api.prisma.build",
+        url: "https://api.prisma.build",
+        promoted: true,
+        previousDeploymentId: undefined,
+        previousDeploymentAction: undefined,
+        artifactHash: Redacted.make("old-hash"),
+        local: false,
+      } as const;
+      const reconcile = Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        return yield* provider.reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news,
+          olds,
+          output,
+          session: undefined as never,
+          bindings: [],
+        });
+      });
+
+      return Effect.gen(function* () {
+        const firstError = yield* reconcile.pipe(Effect.flip);
+
+        expect(firstError).toBeInstanceOf(AggregateError);
+        expect((firstError as AggregateError).message).toContain(
+          "promoted deployment 'version-new'",
+        );
+        expect((firstError as AggregateError).message).toContain(
+          "rollback to deployment 'version-old' failed",
+        );
+        expect((firstError as AggregateError).message).toContain(
+          "next reconcile will retry recovery",
+        );
+        expect(fixture.latestDeploymentId()).toBe("version-new");
+        expect(fixture.hasDeployment("version-new")).toBe(true);
+        expect(fixture.hasDeployment("version-old")).toBe(true);
+        expect(
+          fixture.calls.filter(
+            ([operation]) => operation === "deleteDeployment",
+          ),
+        ).toEqual([]);
+
+        fixture.setStableStatus(204);
+        const callsBeforeBlockedRetry = fixture.calls.length;
+        const retryError = yield* reconcile.pipe(Effect.flip);
+        const blockedRetryCalls = fixture.calls.slice(callsBeforeBlockedRetry);
+
+        expect(retryError).toBeInstanceOf(AggregateError);
+        expect((retryError as AggregateError).message).toContain(
+          "no environment variables or new deployment were changed",
+        );
+        expect(
+          (retryError as AggregateError).errors.some(
+            (error) =>
+              error instanceof Error &&
+              error.message === "app observation unavailable",
+          ),
+        ).toBe(true);
+        expect(
+          blockedRetryCalls.filter(
+            ([operation]) => operation === "createAppDeployment",
+          ),
+        ).toEqual([]);
+        expect(
+          fixture.calls.filter(
+            ([operation]) => operation === "createAppDeployment",
+          ),
+        ).toHaveLength(1);
+        expect(fixture.latestDeploymentId()).toBe("version-new");
+        expect(fixture.hasDeployment("version-new")).toBe(true);
+
+        const callsBeforeRecovery = fixture.calls.length;
+        const recovered = yield* reconcile;
+        const recoveryCalls = fixture.calls.slice(callsBeforeRecovery);
+        const rollbackIndex = recoveryCalls.findIndex(
+          ([operation]) => operation === "rollbackApp",
+        );
+        const failedDeletionIndex = recoveryCalls.findIndex(
+          ([operation, value]) =>
+            operation === "deleteDeployment" && value === "version-new",
+        );
+        const replacementCreationIndex = recoveryCalls.findIndex(
+          ([operation]) => operation === "createAppDeployment",
+        );
+
+        expect(recovered.deploymentId).toBe("version-new-2");
+        expect(recovered.promoted).toBe(true);
+        expect(recovered.readinessStatus).toBe("ready");
+        expect(rollbackIndex).toBeGreaterThanOrEqual(0);
+        expect(rollbackIndex).toBeLessThan(failedDeletionIndex);
+        expect(failedDeletionIndex).toBeLessThan(replacementCreationIndex);
+        expect(fixture.hasDeployment("version-new")).toBe(false);
+        expect(fixture.hasDeployment("version-new-2")).toBe(true);
+        expect(fixture.latestDeploymentId()).toBe("version-new-2");
+        expect(
+          fixture.calls.filter(
+            ([operation]) => operation === "createAppDeployment",
+          ),
+        ).toHaveLength(2);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(
+          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
+        ),
+        Effect.provideService(HttpClient.HttpClient, fixture.http),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect(
+    "honors custom accepted health statuses before and after promotion",
+    () => {
+      const fixture = makeHealthLifecycleFixture({
+        latestDeploymentId: null,
+        previewStatus: 302,
+        stableStatus: 302,
+      });
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const output = yield* provider.reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            appName: "api",
+            artifactPath: fixtureArtifactV2Path,
+            branchId: "branch-main",
+            healthCheck: { path: "/ready", statusCodes: [302] },
+            pollIntervalMs: 1,
+            timeoutSeconds: 0.05,
+            urlReadinessTimeoutSeconds: 0.02,
+          },
+          olds: undefined,
+          output: {
+            appId: "service-1",
+            deploymentId: undefined,
+            projectId: "project-1",
+            appName: "api",
+            regionId: "us-east-1",
+            deploymentEndpointDomain: undefined,
+            deploymentUrl: undefined,
+            appEndpointDomain: "api.prisma.build",
+            url: undefined,
+            promoted: false,
+            previousDeploymentId: undefined,
+            previousDeploymentAction: undefined,
+            artifactHash: undefined,
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(output.deploymentId).toBe("version-new");
+        expect(output.promoted).toBe(true);
+        expect(output.readinessStatus).toBe("ready");
+        expect(
+          fixture.calls.filter(([operation]) => operation === "healthRequest"),
+        ).toEqual([
+          ["healthRequest", "https://version-new.preview.prisma.build/ready"],
+          ["healthRequest", "https://api.prisma.build/ready"],
+        ]);
+        expect(
+          fixture.calls.filter(([operation]) => operation === "rollbackApp"),
+        ).toEqual([]);
+        expect(
+          fixture.calls.filter(
+            ([operation]) => operation === "deleteDeployment",
+          ),
+        ).toEqual([]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(
+          Layer.succeed(PrismaClient, withDefaultBranch(fixture.client)),
+        ),
+        Effect.provideService(HttpClient.HttpClient, fixture.http),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
   it.effect("uploads a pre-created artifact from artifactPath", () => {
     let uploaded:
       | { url: string; contentType: string | undefined; bytes: Uint8Array }
@@ -2193,15 +2938,18 @@ describe("Prisma Compute", () => {
         expect(output.deploymentId).toBe("version-1");
         expect(uploaded?.url).toBe("https://upload.prisma.test/effect.tar.gz");
         expect(uploaded?.contentType).toBe("application/gzip");
-        const tarText = new TextDecoder().decode(
-          yield* Effect.sync(() => gunzipSync(uploaded!.bytes)),
-        );
-        expect(tarText).toContain("compute.manifest.json");
-        expect(tarText).toContain("bundle/index.js");
-        expect(tarText).toContain("Prisma Compute bootstrap starting");
-        expect(tarText.includes("ALCHEMY_PHASE")).toBe(true);
-        expect(tarText.includes("runtime")).toBe(true);
-        expect(tarText).toContain("effect-native-ok");
+        const tar = yield* Effect.sync(() => gunzipSync(uploaded!.bytes));
+        const manifest = readTarFile(tar, "compute.manifest.json");
+        const bundle = readTarFile(tar, "bundle/index.js");
+        expect(JSON.parse(manifest)).toMatchObject({
+          entrypoint: "bundle/index.js",
+        });
+        expect(bundle).toContain("Prisma Compute bootstrap starting");
+        expect(bundle).toMatch(/hostname\s*:\s*["'`]0\.0\.0\.0["'`]/);
+        expect(bundle.match(/prisma-runtime-stage-sentinel/g)).toHaveLength(2);
+        expect(bundle).toContain("ALCHEMY_PHASE");
+        expect(bundle).toContain("runtime");
+        expect(bundle).toContain("effect-native-ok");
         expect(calls).toContainEqual([
           "createAppDeployment",
           {
@@ -2213,6 +2961,12 @@ describe("Prisma Compute", () => {
           },
         ]);
       }).pipe(
+        Effect.provideService(Stack, {
+          name: "prisma-runtime-stack-sentinel",
+          stage: "prisma-runtime-stage-sentinel",
+          bindings: {},
+          resources: {},
+        }),
         Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
@@ -4164,6 +4918,40 @@ describe("Prisma Compute", () => {
         bindings: [],
       });
 
+      const callsBeforeSkip = calls.length;
+      const firstWithSkip = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          appName: "api",
+          artifactPath: fixtureArtifactV1Path,
+          port: 3000,
+          skipPromote: true,
+        },
+        olds: {
+          project: "project-1",
+          appName: "api",
+          artifactPath: fixtureArtifactV1Path,
+          port: 3000,
+        },
+        output: first,
+        session: undefined as never,
+        bindings: [],
+      });
+      const skipCalls = calls.slice(callsBeforeSkip);
+      expect(firstWithSkip.deploymentId).toBe("version-1");
+      expect(firstWithSkip.promoted).toBe(true);
+      expect(firstWithSkip.url).toBe("https://api.prisma.build");
+      expect(skipCalls.map(([operation]) => operation)).not.toContain(
+        "createAppDeployment",
+      );
+      expect(skipCalls.map(([operation]) => operation)).not.toContain(
+        "promoteApp",
+      );
+      calls.splice(callsBeforeSkip);
+
       const second = yield* provider.reconcile({
         id: "App",
         fqn: "App",
@@ -4180,8 +4968,9 @@ describe("Prisma Compute", () => {
           appName: "api",
           artifactPath: fixtureArtifactV1Path,
           port: 3000,
+          skipPromote: true,
         },
-        output: first,
+        output: firstWithSkip,
         session: undefined as never,
         bindings: [],
       });

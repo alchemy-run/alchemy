@@ -3,13 +3,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import {
-  Connection,
-  MainBranch,
-  Project,
-  region,
-  appNameConfig,
-} from "./Database.ts";
+import { Connection, Project, region, appNameConfig } from "./Database.ts";
 
 const messageConfig = Config.string("PRISMA_EFFECT_MESSAGE").pipe(
   Effect.orElseSucceed(() => "hello from Effect-native Prisma Compute"),
@@ -19,7 +13,6 @@ export default class Api extends Prisma.Compute<Api>()(
   "Api",
   Effect.gen(function* () {
     const project = yield* Project;
-    yield* MainBranch;
 
     return {
       project,
@@ -28,6 +21,7 @@ export default class Api extends Prisma.Compute<Api>()(
       branchGitName: "main",
       main: import.meta.filename,
       port: 3000,
+      healthCheck: { path: "/api/health" },
       env: {
         PRISMA_EFFECT_MESSAGE: yield* messageConfig,
       },
@@ -51,14 +45,26 @@ export default class Api extends Prisma.Compute<Api>()(
         }
 
         const databaseUrl = yield* db.databaseUrl;
-        const response = {
+        if (databaseUrl === undefined) {
+          return yield* HttpServerResponse.json(
+            {
+              ok: false,
+              mode: "effect-native",
+              databaseBinding: "unavailable",
+            },
+            { status: 503 },
+          );
+        }
+
+        const response: Record<string, string | boolean> = {
           ok: true,
           mode: "effect-native",
-          message: yield* messageConfig,
-          databaseId: yield* db.databaseId,
-          connectionId: yield* db.connectionId,
-          hasDatabaseUrl: databaseUrl !== undefined,
+          databaseBinding: "ready",
         };
+
+        if (url.pathname === "/") {
+          response.message = yield* messageConfig;
+        }
 
         return yield* HttpServerResponse.json(response);
       }),

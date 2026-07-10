@@ -97,7 +97,15 @@ export const resolvePort = (options: { port?: number } | undefined) =>
     ? Effect.succeed(options.port)
     : Config.number("PORT").pipe(Config.withDefault(3000));
 
-export const BunHttpServer = () =>
+export interface BunHttpServerOptions {
+  /**
+   * Network interface on which the Bun HTTP server listens.
+   * Omit to use Bun's default.
+   */
+  hostname?: string;
+}
+
+export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
   Layer.effect(
     HttpServer,
     Effect.gen(function* () {
@@ -108,7 +116,12 @@ export const BunHttpServer = () =>
         serve: (handler, options) =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
-            const server = yield* BunHttpServerPlatform.make({ port });
+            const server = yield* BunHttpServerPlatform.make({
+              port,
+              ...(serverOptions?.hostname === undefined
+                ? {}
+                : { hostname: serverOptions.hostname }),
+            });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };

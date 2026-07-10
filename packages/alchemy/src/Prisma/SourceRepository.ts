@@ -175,9 +175,10 @@ const attrsFrom = (
 
 class SourceRepositoryLinkNotReady extends Error {}
 
-const sourceRepositoryConsistencySchedule = Schedule.exponential(
-  "250 millis",
-).pipe(Schedule.both(Schedule.recurs(5)));
+const sourceRepositoryConsistencySchedule = Schedule.max([
+  Schedule.exponential("250 millis"),
+  Schedule.recurs(5),
+]);
 
 const verifyRepositoryLink = Effect.fn(function* (
   client: PrismaManagementClient,

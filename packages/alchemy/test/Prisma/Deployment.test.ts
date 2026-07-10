@@ -12,6 +12,8 @@ import {
   PrismaClient,
   type PrismaManagementClient,
 } from "@/Prisma/Client";
+import { executeArtifactUpload } from "@/Prisma/Internal/ArtifactUpload";
+import { PrismaHttpClientLive } from "@/Prisma/Providers";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256, sha256Object } from "@/Util/sha256";
 import { describe, expect, it } from "@effect/vitest";
@@ -26,6 +28,11 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import {
+  createServer as createHttpServer,
+  type RequestListener,
+  type Server as NodeHttpServer,
+} from "node:http";
 import { WebSocketServer } from "ws";
 
 const currentClient = <T extends object>(client: T): PrismaManagementClient => {
@@ -146,6 +153,51 @@ describe("Prisma Deployment", () => {
     }).pipe(
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("streams file-backed artifacts with a fixed Content-Length", () => {
+    let contentLength: string | undefined;
+    let uploadedBytes = 0;
+
+    return withHttpServer(
+      (request, response) => {
+        contentLength = request.headers["content-length"];
+        request.on("data", (chunk: Buffer) => {
+          uploadedBytes += chunk.byteLength;
+        });
+        request.on("end", () => {
+          response.statusCode = contentLength === undefined ? 411 : 204;
+          response.end();
+        });
+      },
+      (uploadUrl) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectory({
+            prefix: "alchemy-prisma-fixed-length-upload-",
+          });
+          const artifactPath = path.join(root, "artifact.tar.gz");
+          yield* fs.writeFileString(artifactPath, "fixed-length-archive");
+          const artifact = yield* readUploadArtifact({
+            artifactPath,
+            output: "file",
+          });
+
+          yield* executeArtifactUpload(
+            uploadUrl,
+            artifact!,
+            "application/gzip",
+          );
+
+          expect(contentLength).toBe(String(artifact!.size));
+          expect(uploadedBytes).toBe(artifact!.size);
+        }).pipe(
+          Effect.provide(PrismaHttpClientLive),
+          Effect.provide(PlatformServices),
+          Effect.scoped,
+        ),
     );
   });
 
@@ -1669,5 +1721,46 @@ const listenUrl = (server: WebSocketServer) =>
 
     server.once("listening", complete);
     server.once("error", fail);
+    return Effect.sync(cleanup);
+  });
+
+const withHttpServer = <A, E, R>(
+  handler: RequestListener,
+  f: (url: string) => Effect.Effect<A, E, R>,
+) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => createHttpServer(handler)),
+    (server) => Effect.flatMap(listenHttpServerUrl(server), f),
+    (server) =>
+      Effect.callback<void>((resume) => {
+        server.close(() => resume(Effect.void));
+      }).pipe(Effect.ignore),
+  );
+
+const listenHttpServerUrl = (server: NodeHttpServer) =>
+  Effect.callback<string, Error>((resume) => {
+    const complete = () => {
+      cleanup();
+      const address = server.address();
+      if (address && typeof address === "object") {
+        resume(Effect.succeed(`http://127.0.0.1:${address.port}`));
+      } else {
+        resume(Effect.fail(new Error("HTTP server has no TCP address")));
+      }
+    };
+    const fail = (cause: unknown) => {
+      cleanup();
+      resume(
+        Effect.fail(cause instanceof Error ? cause : new Error(String(cause))),
+      );
+    };
+    const cleanup = () => {
+      server.off("listening", complete);
+      server.off("error", fail);
+    };
+
+    server.once("listening", complete);
+    server.once("error", fail);
+    server.listen(0, "127.0.0.1");
     return Effect.sync(cleanup);
   });

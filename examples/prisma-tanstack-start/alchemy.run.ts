@@ -1,7 +1,11 @@
 import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Command from "alchemy/Command";
+import * as Output from "alchemy/Output";
 import * as Prisma from "alchemy/Prisma";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
 const tanstackMessageConfig = (fallback: string) =>
@@ -10,47 +14,42 @@ const tanstackMessageConfig = (fallback: string) =>
 export default Alchemy.Stack(
   "PrismaTanstackStart",
   {
-    providers: Prisma.providers(),
-    state: Alchemy.localState(),
+    providers: Layer.mergeAll(Prisma.providers(), Command.providers()),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const stage = yield* Alchemy.Stage;
     const appName = yield* Config.string("PRISMA_TANSTACK_APP").pipe(
-      Effect.orElseSucceed(() => "alchemy-prisma-tanstack-start"),
+      Effect.orElseSucceed(() => `alchemy-prisma-tanstack-start-${stage}`),
     );
     const customDomainHostname = yield* Config.string(
       "PRISMA_TANSTACK_DOMAIN",
     ).pipe(Effect.orElseSucceed(() => undefined));
+    const devPort = yield* Config.number("PRISMA_TANSTACK_DEV_PORT").pipe(
+      Effect.orElseSucceed(() => 3000),
+    );
 
     // Project is the Prisma Console container for everything else in this
-    // stack: branches, databases, connections, env vars, and Apps.
+    // stack: its default branch, databases, connections, env vars, and Apps.
     // `createDatabase: false` keeps the example explicit so the database below
     // is visible as its own Alchemy resource.
     const project = yield* Prisma.Project("Project", {
       name: yield* Config.string("PRISMA_PROJECT").pipe(
-        Effect.orElseSucceed(() => `${appName}-project`),
+        Effect.orElseSucceed(() => undefined),
       ),
       createDatabase: false,
       region: "eu-west-3",
     });
 
-    // Branch is optional for a minimal database-only app, but useful once
-    // Compute is involved. It gives the database and App the same
-    // deployment lane, so later you can model `main`, preview branches, or prod
-    // promotion without changing the app env contract.
-    const branch = yield* Prisma.Branch("MainBranch", {
-      project,
-      gitName: "main",
-      isDefault: true,
-    });
-
     // Postgres is the product-shaped alias for Prisma.Database. In deploy it
-    // creates a real Prisma Postgres database and attaches it to the branch
-    // above. In `alchemy dev`, the `dev` block starts a local Prisma Postgres
-    // via `@prisma/dev` and returns the same connection-string attributes.
+    // creates a real Prisma Postgres database and attaches it to the default
+    // `main` branch created transactionally with the project. In `alchemy dev`,
+    // the `dev` block starts a local Prisma Postgres via `@prisma/dev` and
+    // returns the same connection-string attributes.
     const postgres = yield* Prisma.Postgres("Postgres", {
       project,
       region: "eu-west-3",
-      branchId: branch.branchId,
+      branchGitName: "main",
       dev: {
         provider: "@prisma/dev",
         // Local dev should boot into a useful app, not an empty shell. This
@@ -68,20 +67,38 @@ export default Alchemy.Stack(
       name: "web",
     });
 
-    // EnvironmentVariable is for project-level config managed by Prisma. Both
-    // it and Compute.env below reconcile branch-scoped Management API values;
-    // use a standalone resource when ownership should remain independent.
-    const sharedFlag = yield* Prisma.EnvironmentVariable("SharedFlag", {
-      project,
-      class: "production",
-      key: "TANSTACK_SHARED_FLAG",
-      value: Redacted.make("project-level"),
+    // The deployed application receives only the pooled credential it uses.
+    // The direct credential is scoped to the schema command below.
+    const runtimeDatabaseEnv = Prisma.connectionEnv(connection, {
+      directUrl: false,
+      pooledDatabaseUrl: false,
+      connectionId: false,
+      databaseId: false,
     });
 
-    // The application uses the pooled URL for normal traffic and the direct
-    // URL for migrations. `connectionEnv` supplies those canonical choices as
-    // DATABASE_URL and DIRECT_URL respectively.
-    const databaseEnv = Prisma.connectionEnv(connection);
+    // Apply checked-in, transactional Prisma Next migrations before building a
+    // deployment. Apply is idempotent and intentionally runs every deploy so a
+    // restored or drifted database is verified instead of trusting local state.
+    // Production data is never seeded here.
+    const databaseSchema = yield* Command.Exec("DatabaseSchema", {
+      command: "bun run db:migrate",
+      cwd: ".",
+      env: {
+        DATABASE_URL: Prisma.connectionUrl(connection, "direct").as<
+          Redacted.Redacted<string>
+        >(),
+        // Bound server-side lock waits and statement execution independently
+        // from the release-process deadline below.
+        PGOPTIONS: "-c lock_timeout=30s -c statement_timeout=5min",
+        // The release subprocess needs only the database credential. Shadow
+        // the IaC process's Management API credentials so schema tooling and
+        // any of its plugins cannot read the workspace-scoped service token.
+        PRISMA_SERVICE_TOKEN: "",
+        PRISMA_API_TOKEN: "",
+      },
+      memo: false,
+      timeout: "6 minutes",
+    });
 
     // Compute builds the TanStack Start app, uploads the `.output` artifact
     // to Prisma Compute, and promotes a Deployment. The env block is the runtime
@@ -91,32 +108,34 @@ export default Alchemy.Stack(
       project,
       appName,
       regionId: "eu-west-3",
-      branchId: branch.branchId,
+      branchGitName: "main",
       path: ".",
       build: {
-        // Run Prisma Next setup before the deploy artifact is built. The seed
-        // script is idempotent, so repeated deploys refresh the demo data.
-        command: "bun run db:setup && bun run build",
+        command: "bun run build",
         outdir: ".output",
         entrypoint: "server/index.mjs",
         env: {
-          // Contract application and seeding must use the direct endpoint;
-          // the runtime env below keeps DATABASE_URL pooled for app traffic.
-          DATABASE_URL: databaseEnv.DIRECT_URL,
-          DIRECT_URL: databaseEnv.DIRECT_URL,
+          // Creates an explicit dependency on successful schema convergence
+          // without exposing the migration credential to the build.
+          ALCHEMY_SCHEMA_HASH: databaseSchema.hash.pipe(
+            Output.map((hash) => hash.input ?? "unmemoized"),
+          ),
         },
       },
       port: 3000,
+      healthCheck: { path: "/api/health" },
       env: {
-        ...databaseEnv,
+        ...runtimeDatabaseEnv,
         TANSTACK_MESSAGE: yield* tanstackMessageConfig(
           "hello from TanStack Start on Prisma Compute",
         ),
-        PRISMA_PROJECT_ID: project.projectId,
-        PRISMA_BRANCH_ID: branch.branchId,
+        // Keep values consumed by this deployment in Compute.env so they are
+        // reconciled before the deployment snapshots its branch environment.
+        TANSTACK_SHARED_FLAG: Redacted.make("project-level"),
       },
       dev: {
         command: "bun run dev:start",
+        port: devPort,
         env: {
           TANSTACK_MESSAGE: yield* tanstackMessageConfig(
             "hello from local alchemy dev",
@@ -137,10 +156,9 @@ export default Alchemy.Stack(
 
     return {
       projectId: project.projectId,
-      branchId: branch.branchId,
+      branchId: postgres.branchId,
       databaseId: postgres.databaseId,
       connectionId: connection.connectionId,
-      sharedFlagId: sharedFlag.environmentVariableId,
       appId: app.appId,
       deploymentId: app.deploymentId,
       url: app.url,

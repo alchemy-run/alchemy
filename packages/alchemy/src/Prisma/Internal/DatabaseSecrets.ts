@@ -31,9 +31,10 @@ export const mergeConnectionSecrets = (
 
 class DatabaseCredentialsNotReady extends Error {}
 
-const databaseCredentialsSchedule = Schedule.exponential("250 millis").pipe(
-  Schedule.both(Schedule.recurs(6)),
-);
+const databaseCredentialsSchedule = Schedule.max([
+  Schedule.exponential("250 millis"),
+  Schedule.recurs(6),
+]);
 
 const waitForRotatableDatabase = (
   client: PrismaManagementClient,

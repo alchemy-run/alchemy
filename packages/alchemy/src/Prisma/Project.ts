@@ -15,6 +15,7 @@ import {
 } from "./Client.ts";
 import { destroyProjectApps } from "./ComputeLifecycle.ts";
 import {
+  hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
@@ -158,6 +159,33 @@ const findProjectByName = (client: PrismaManagementClient, name: string) =>
     }),
   );
 
+class GeneratedProjectNotVisible extends Error {}
+
+const generatedProjectRecoverySchedule = Schedule.max([
+  Schedule.exponential("250 millis"),
+  Schedule.recurs(6),
+]);
+
+const recoverGeneratedProjectAfterConflict = (
+  client: PrismaManagementClient,
+  name: string,
+) =>
+  findProjectByName(client, name).pipe(
+    Effect.flatMap((project) =>
+      project
+        ? Effect.succeed(project)
+        : Effect.fail(
+            new GeneratedProjectNotVisible(
+              `Generated Prisma project '${name}' already exists but is not visible yet.`,
+            ),
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error instanceof GeneratedProjectNotVisible,
+      schedule: generatedProjectRecoverySchedule,
+    }),
+  );
+
 const defaultDatabase = (client: PrismaManagementClient, projectId: string) =>
   client.listProjectDatabases(projectId, { limit: 100 }).pipe(
     Effect.flatMap((databases) => {
@@ -174,9 +202,10 @@ const defaultDatabase = (client: PrismaManagementClient, projectId: string) =>
 
 class DefaultDatabaseConsistencyError extends Error {}
 
-const defaultDatabaseConsistencySchedule = Schedule.exponential(
-  "250 millis",
-).pipe(Schedule.both(Schedule.recurs(6)));
+const defaultDatabaseConsistencySchedule = Schedule.max([
+  Schedule.exponential("250 millis"),
+  Schedule.recurs(6),
+]);
 
 const requireDefaultDatabaseInRegion = (
   database: ProjectDatabaseAttrs | undefined,
@@ -430,6 +459,7 @@ export const ProjectProvider = () =>
           let createdDatabase: ProjectDatabaseAttrs | undefined;
           let secrets: PrismaSecretConnection = {};
           let createdProject = false;
+          let recoverCreateSecrets = false;
           if (!project) {
             const result = yield* client
               .createProject({
@@ -455,24 +485,22 @@ export const ProjectProvider = () =>
                     project.database?.connections[0],
                   ),
                   created: true,
+                  recoverSecrets: true,
                 })),
                 Effect.catchIf(isConflict, () =>
                   news.name === undefined
-                    ? findProjectByName(client, name).pipe(
-                        Effect.flatMap((project) =>
-                          project
-                            ? Effect.succeed({
-                                project,
-                                database: undefined,
-                                secrets: {},
-                                created: false,
-                              })
-                            : Effect.fail(
-                                new Error(
-                                  `Generated Prisma project '${name}' already exists but could not be read`,
-                                ),
-                              ),
-                        ),
+                    ? recoverGeneratedProjectAfterConflict(client, name).pipe(
+                        Effect.map((project) => ({
+                          project,
+                          database: undefined,
+                          secrets: {},
+                          // The generated physical name is owned by this
+                          // resource instance. Treat a conflict followed by an
+                          // exact read as lost-response recovery so write-only
+                          // default credentials are restored.
+                          created: false,
+                          recoverSecrets: true,
+                        })),
                       )
                     : Effect.fail(
                         new Error(
@@ -485,11 +513,22 @@ export const ProjectProvider = () =>
             createdDatabase = result.database;
             secrets = result.secrets;
             createdProject = result.created;
+            recoverCreateSecrets = result.recoverSecrets;
           }
           if (!project) {
             return yield* Effect.fail(
               new Error(
                 `Prisma project '${name}' could not be observed after create recovery.`,
+              ),
+            );
+          }
+          const ownedGeneratedIdentity =
+            news.name === undefined && project.name === name;
+
+          if (news.createDatabase === false && createdDatabase) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma created unexpected default database '${createdDatabase.name}' (${createdDatabase.id}) for project '${project.name}' even though createDatabase was false. Refusing to persist a state the Management API cannot remove in place.`,
               ),
             );
           }
@@ -612,7 +651,9 @@ export const ProjectProvider = () =>
           let finalSecrets = knownSecrets;
           if (
             database &&
-            (createdProject ||
+            (recoverCreateSecrets ||
+              (ownedGeneratedIdentity &&
+                !hasCanonicalConnectionSecrets(knownSecrets)) ||
               defaultDatabaseChanged ||
               olds !== undefined ||
               news.rotateCredentialsOnAdopt === true)

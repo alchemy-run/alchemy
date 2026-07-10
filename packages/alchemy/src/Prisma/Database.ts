@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
@@ -14,6 +15,7 @@ import {
 } from "./Client.ts";
 import type { Project } from "./Project.ts";
 import {
+  hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
@@ -262,6 +264,34 @@ const findDatabaseByName = (
             ),
           )
         : Effect.succeed(matches[0]);
+    }),
+  );
+
+class GeneratedDatabaseNotVisible extends Error {}
+
+const generatedDatabaseRecoverySchedule = Schedule.max([
+  Schedule.exponential("250 millis"),
+  Schedule.recurs(6),
+]);
+
+const recoverGeneratedDatabaseAfterConflict = (
+  client: PrismaManagementClient,
+  projectId: string,
+  name: string,
+) =>
+  findDatabaseByName(client, projectId, name).pipe(
+    Effect.flatMap((database) =>
+      database
+        ? Effect.succeed(database)
+        : Effect.fail(
+            new GeneratedDatabaseNotVisible(
+              `Generated Prisma database '${name}' already exists but is not visible yet.`,
+            ),
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error instanceof GeneratedDatabaseNotVisible,
+      schedule: generatedDatabaseRecoverySchedule,
     }),
   );
 
@@ -643,45 +673,8 @@ export const DatabaseProvider = () =>
             database = yield* findDatabaseByName(client, projectId, name);
           }
 
-          if (database) {
-            if (database.project.id !== projectId) {
-              return yield* Effect.fail(
-                new Error(
-                  database.isDefault
-                    ? `Cannot move default Prisma database '${database.name}' from project '${database.project.id}' to '${projectId}' because the old default cannot be deleted. Promote another database in the original project first, then retry the move.`
-                    : `Prisma database '${database.name}' belongs to project '${database.project.id}', not requested project '${projectId}'. Refusing to claim convergence; replace the database.`,
-                ),
-              );
-            }
-            if (database.region?.id !== region) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma database '${database.name}' is in immutable region '${database.region?.id ?? "unknown"}', not requested region '${region}'. Refusing to claim convergence; replace the database.`,
-                ),
-              );
-            }
-            if (!sourceMatches(database.source, news.source)) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma database '${database.name}' has immutable source ${JSON.stringify(database.source)}, not requested source ${JSON.stringify(news.source ?? { type: "empty" })}. Refusing to claim convergence; replace the database.`,
-                ),
-              );
-            }
-          }
-
-          if (
-            database?.isDefault === true &&
-            (news.isDefault ?? false) === false
-          ) {
-            return yield* Effect.fail(
-              new Error(
-                `Cannot demote default Prisma database '${database.name}' directly because the Management API has no demotion operation. Promote another database in project '${projectId}' first, then retry this deployment.`,
-              ),
-            );
-          }
-
           let secrets: PrismaSecretConnection = {};
-          let createdDatabase = false;
+          let recoverCreateSecrets = false;
           const attach = branchAttachment(news);
           if (!database) {
             if (
@@ -708,24 +701,24 @@ export const DatabaseProvider = () =>
                 Effect.map((database) => ({
                   database,
                   secrets: extractConnectionSecrets(database.connections[0]),
-                  created: true,
+                  recoverSecrets: true,
                 })),
                 Effect.catchIf(isConflict, () =>
                   news.name === undefined
-                    ? findDatabaseByName(client, projectId, name).pipe(
-                        Effect.flatMap((database) =>
-                          database
-                            ? Effect.succeed({
-                                database,
-                                secrets: {},
-                                created: false,
-                              })
-                            : Effect.fail(
-                                new Error(
-                                  `Generated Prisma database '${name}' already exists but could not be read`,
-                                ),
-                              ),
-                        ),
+                    ? recoverGeneratedDatabaseAfterConflict(
+                        client,
+                        projectId,
+                        name,
+                      ).pipe(
+                        Effect.map((database) => ({
+                          database,
+                          secrets: {},
+                          // The generated physical name is owned by this
+                          // resource instance. A conflict after the POST can
+                          // be a lost successful response, so recover the
+                          // write-only default credentials below.
+                          recoverSecrets: true,
+                        })),
                       )
                     : Effect.fail(
                         new Error(
@@ -736,8 +729,45 @@ export const DatabaseProvider = () =>
               );
             database = result.database;
             secrets = result.secrets;
-            createdDatabase = result.created;
+            recoverCreateSecrets = result.recoverSecrets;
           }
+
+          if (database.project.id !== projectId) {
+            return yield* Effect.fail(
+              new Error(
+                database.isDefault
+                  ? `Cannot move default Prisma database '${database.name}' from project '${database.project.id}' to '${projectId}' because the old default cannot be deleted. Promote another database in the original project first, then retry the move.`
+                  : `Prisma database '${database.name}' belongs to project '${database.project.id}', not requested project '${projectId}'. Refusing to claim convergence; replace the database.`,
+              ),
+            );
+          }
+          if (database.region?.id !== region) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma database '${database.name}' is in immutable region '${database.region?.id ?? "unknown"}', not requested region '${region}'. Refusing to claim convergence; replace the database.`,
+              ),
+            );
+          }
+          if (!sourceMatches(database.source, news.source)) {
+            return yield* Effect.fail(
+              new Error(
+                `Prisma database '${database.name}' has immutable source ${JSON.stringify(database.source)}, not requested source ${JSON.stringify(news.source ?? { type: "empty" })}. Refusing to claim convergence; replace the database.`,
+              ),
+            );
+          }
+          if (
+            database.isDefault === true &&
+            (news.isDefault ?? false) === false
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Cannot demote default Prisma database '${database.name}' directly because the Management API has no demotion operation. Promote another database in project '${projectId}' first, then retry this deployment.`,
+              ),
+            );
+          }
+
+          const ownedGeneratedIdentity =
+            news.name === undefined && database.name === name;
 
           const desired = { ...news, name };
           const needsPatch =
@@ -768,7 +798,9 @@ export const DatabaseProvider = () =>
             password: persistedSecrets?.password,
           });
           if (
-            createdDatabase ||
+            recoverCreateSecrets ||
+            (ownedGeneratedIdentity &&
+              !hasCanonicalConnectionSecrets(knownSecrets)) ||
             olds !== undefined ||
             news.rotateCredentialsOnAdopt === true
           ) {

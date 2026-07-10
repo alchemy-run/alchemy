@@ -3672,6 +3672,243 @@ describe("Prisma resource providers", () => {
     }).pipe(Effect.provide(providerLayer(client)));
   });
 
+  it.effect(
+    "recovers credentials after a generated database create conflict",
+    () => {
+      const calls: Call[] = [];
+      let attemptedName: string | undefined;
+      const recoveredDatabase = () => ({
+        id: "database-recovered",
+        type: "database" as const,
+        url: "https://api.prisma.test/v1/databases/database-recovered",
+        name: attemptedName!,
+        status: "ready" as const,
+        createdAt,
+        isDefault: false,
+        defaultConnectionId: "connection-recovered",
+        connections: [],
+        project: resourceRef("projects", "project-1", "app"),
+        region: { id: "us-east-1", name: "US East" },
+        source: { type: "empty" as const },
+        branchId: "branch-main",
+      });
+      const client = {
+        listProjectDatabases: (projectId: string, query: unknown) =>
+          Effect.sync(() => {
+            calls.push(["listProjectDatabases", { projectId, query }]);
+            return attemptedName === undefined ? [] : [recoveredDatabase()];
+          }),
+        createDatabase: (input: { name: string }) =>
+          Effect.gen(function* () {
+            calls.push(["createDatabase", input]);
+            attemptedName = input.name;
+            return yield* Effect.fail(
+              new PrismaApiError({
+                method: "POST",
+                path: "/v1/databases",
+                status: 409,
+                message: "already exists",
+              }),
+            );
+          }),
+        listBranches: () =>
+          Effect.succeed([
+            {
+              id: "branch-main",
+              gitName: "main",
+            },
+          ]),
+        rotateConnection: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["rotateConnection", id]);
+            return databaseConnection("database-recovered", id);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDatabase.Provider;
+        const recovered = yield* provider.reconcile(
+          reconcileInput("Database", {
+            project: "project-1",
+            region: "us-east-1",
+            branchGitName: "main",
+          }),
+        );
+
+        expect(attemptedName).toContain("-Database-test-");
+        expect(redactedValue(recovered.directConnectionString)).toContain(
+          "database-recovered",
+        );
+        expect(calls).toContainEqual([
+          "rotateConnection",
+          "connection-recovered",
+        ]);
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provideService(Stack, {
+          name: "prisma-database-recovery-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+        Effect.provideService(InstanceId, "00000000000000000000000000000000"),
+      );
+    },
+  );
+
+  it.effect(
+    "recovers default credentials after a generated project create conflict",
+    () => {
+      const calls: Call[] = [];
+      let attemptedName: string | undefined;
+      const project = () => ({
+        id: "project-recovered",
+        type: "project" as const,
+        url: "https://api.prisma.test/v1/projects/project-recovered",
+        name: attemptedName!,
+        createdAt,
+        defaultRegion: "us-east-1",
+        workspace: resourceRef("workspaces", "workspace-1", "team"),
+      });
+      const database = {
+        id: "database-default",
+        type: "database" as const,
+        url: "https://api.prisma.test/v1/databases/database-default",
+        name: "default",
+        status: "ready" as const,
+        createdAt,
+        isDefault: true,
+        defaultConnectionId: "connection-default",
+        connections: [],
+        project: resourceRef("projects", "project-recovered", "recovered"),
+        region: { id: "us-east-1", name: "US East" },
+        source: { type: "empty" as const },
+        branchId: null,
+      };
+      const client = {
+        listProjects: () =>
+          Effect.sync(() => {
+            calls.push(["listProjects"]);
+            return attemptedName === undefined ? [] : [project()];
+          }),
+        createProject: (input: { name: string }) =>
+          Effect.gen(function* () {
+            calls.push(["createProject", input]);
+            attemptedName = input.name;
+            return yield* Effect.fail(
+              new PrismaApiError({
+                method: "POST",
+                path: "/v1/projects",
+                status: 409,
+                message: "already exists",
+              }),
+            );
+          }),
+        listProjectDatabases: (projectId: string, query: unknown) =>
+          Effect.sync(() => {
+            calls.push(["listProjectDatabases", { projectId, query }]);
+            return [database];
+          }),
+        rotateConnection: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["rotateConnection", id]);
+            return databaseConnection("database-default", id);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaProject.Provider;
+        const recovered = yield* provider.reconcile(
+          reconcileInput("Project", {
+            createDatabase: true,
+            region: "us-east-1",
+          }),
+        );
+
+        expect(attemptedName).toContain("-Project-test-");
+        expect(redactedValue(recovered.directConnectionString)).toContain(
+          "database-default",
+        );
+        expect(calls).toContainEqual([
+          "rotateConnection",
+          "connection-default",
+        ]);
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provideService(Stack, {
+          name: "prisma-project-recovery-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+        Effect.provideService(InstanceId, "00000000000000000000000000000000"),
+      );
+    },
+  );
+
+  it.effect(
+    "rejects a createDatabase false response that contains a default database",
+    () => {
+      const calls: Call[] = [];
+      const client = {
+        createProject: (input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["createProject", input]);
+            return {
+              id: "project-1",
+              type: "project" as const,
+              url: "https://api.prisma.test/v1/projects/project-1",
+              name: "app",
+              createdAt,
+              defaultRegion: "us-east-1",
+              workspace: resourceRef("workspaces", "workspace-1", "team"),
+              database: {
+                id: "database-unexpected",
+                type: "database" as const,
+                url: "https://api.prisma.test/v1/databases/database-unexpected",
+                name: "default",
+                status: "ready" as const,
+                createdAt,
+                isDefault: true,
+                defaultConnectionId: null,
+                connections: [],
+                region: { id: "us-east-1", name: "US East" },
+                source: { type: "empty" as const },
+                branchId: null,
+              },
+            };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaProject.Provider;
+        const error = yield* provider
+          .reconcile(
+            reconcileInput("Project", {
+              name: "app",
+              createDatabase: false,
+              region: "us-east-1",
+            }),
+          )
+          .pipe(Effect.flip);
+
+        expect((error as Error).message).toContain(
+          "created unexpected default database",
+        );
+        expect(calls).toEqual([
+          [
+            "createProject",
+            { name: "app", createDatabase: false, region: "us-east-1" },
+          ],
+        ]);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
+
   it.effect("ensures a default database on an existing Prisma project", () => {
     const calls: Call[] = [];
     let createdDefault: ApiDatabase | undefined;

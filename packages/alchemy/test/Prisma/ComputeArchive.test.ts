@@ -2,6 +2,7 @@ import {
   createComputeArchive,
   normalizeEntrypoint,
 } from "@/Prisma/ComputeArchive";
+import { closeDirectoryHandle } from "@/Prisma/Internal/ArchivePlatform";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -48,6 +49,27 @@ const parseTar = (buffer: Uint8Array) => {
 };
 
 describe("createComputeArchive", () => {
+  it("closes Node and Bun directory handles without masking traversal", async () => {
+    await expect(
+      closeDirectoryHandle({ close: () => undefined }),
+    ).resolves.toBeUndefined();
+    await expect(
+      closeDirectoryHandle({ close: () => Promise.resolve() }),
+    ).resolves.toBeUndefined();
+    await expect(
+      closeDirectoryHandle({
+        close: () => Promise.reject(new Error("closed")),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      closeDirectoryHandle({
+        close: () => {
+          throw new Error("closed");
+        },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it.effect("creates the tar.gz format expected by Prisma Compute", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

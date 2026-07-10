@@ -1,36 +1,26 @@
+import { Stage } from "alchemy";
 import * as Prisma from "alchemy/Prisma";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
 export const region = "eu-west-3" as const;
 
-export const appNameConfig = Config.string("PRISMA_EFFECT_APP").pipe(
-  Effect.orElseSucceed(() => "alchemy-prisma-compute-effect"),
-);
+export const appNameConfig = Effect.gen(function* () {
+  const stage = yield* Stage;
+  return yield* Config.string("PRISMA_EFFECT_APP").pipe(
+    Effect.orElseSucceed(() => `alchemy-prisma-compute-effect-${stage}`),
+  );
+});
 
 export const Project = Prisma.Project(
   "Project",
   Effect.gen(function* () {
-    const appName = yield* appNameConfig;
-
     return {
       name: yield* Config.string("PRISMA_PROJECT").pipe(
-        Effect.orElseSucceed(() => `${appName}-project`),
+        Effect.orElseSucceed(() => undefined),
       ),
       createDatabase: false,
       region,
-    };
-  }),
-);
-
-export const MainBranch = Prisma.Branch(
-  "MainBranch",
-  Effect.gen(function* () {
-    const project = yield* Project;
-    return {
-      project,
-      gitName: "main",
-      isDefault: true,
     };
   }),
 );
@@ -39,11 +29,12 @@ export const Postgres = Prisma.Postgres(
   "Postgres",
   Effect.gen(function* () {
     const project = yield* Project;
-    const branch = yield* MainBranch;
     return {
       project,
       region,
-      branchId: branch.branchId,
+      // Project creation owns the default `main` branch. Select it by its
+      // Management API natural key instead of trying to create it again.
+      branchGitName: "main",
     };
   }),
 );

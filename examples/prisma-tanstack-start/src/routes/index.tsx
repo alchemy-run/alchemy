@@ -1,20 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getDashboardData } from "../prisma/queries";
+import { getLatestPosts } from "../prisma/queries";
 
 const getRuntime = createServerFn({ method: "GET" }).handler(async () => {
-  const dashboard = await getDashboardData(10);
+  const posts = await getLatestPosts(10);
   return {
-    hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
-    hasDirectUrl: Boolean(process.env.DIRECT_URL),
+    databaseReady: Boolean(process.env.DATABASE_URL),
+    configurationReady: process.env.TANSTACK_SHARED_FLAG === "project-level",
     message: process.env.TANSTACK_MESSAGE ?? "missing message",
-    sharedFlag: process.env.TANSTACK_SHARED_FLAG ?? "missing shared flag",
-    projectId: process.env.PRISMA_PROJECT_ID ?? "missing project",
-    branchId: process.env.PRISMA_BRANCH_ID ?? "missing branch",
-    databaseId: process.env.PRISMA_DATABASE_ID ?? "missing database",
-    connectionId: process.env.PRISMA_CONNECTION_ID ?? "missing connection",
-    renderedAt: new Date().toISOString(),
-    ...dashboard,
+    posts: posts.map((post) => ({
+      title: post.title,
+      excerpt: post.excerpt,
+    })),
   };
 });
 
@@ -75,18 +72,14 @@ function Home() {
         >
           <RuntimeRow label="Message" value={runtime.message} />
           <RuntimeRow
-            label="Database URL"
-            value={String(runtime.hasDatabaseUrl)}
+            label="Database"
+            value={runtime.databaseReady ? "ready" : "unavailable"}
           />
-          <RuntimeRow label="Direct URL" value={String(runtime.hasDirectUrl)} />
-          <RuntimeRow label="Project" value={runtime.projectId} />
-          <RuntimeRow label="Branch" value={runtime.branchId} />
-          <RuntimeRow label="Database" value={runtime.databaseId} />
-          <RuntimeRow label="Connection" value={runtime.connectionId} />
-          <RuntimeRow label="Shared Flag" value={runtime.sharedFlag} />
-          <RuntimeRow label="Seed Users" value={String(runtime.counts.users)} />
-          <RuntimeRow label="Seed Posts" value={String(runtime.counts.posts)} />
-          <RuntimeRow label="Rendered" value={runtime.renderedAt} />
+          <RuntimeRow
+            label="Configuration"
+            value={runtime.configurationReady ? "ready" : "unavailable"}
+          />
+          <RuntimeRow label="Posts" value={String(runtime.posts.length)} />
           <RuntimeRow label="Health" value="/api/health" />
         </dl>
 
@@ -105,7 +98,7 @@ function Home() {
           >
             {runtime.posts.map((post) => (
               <article
-                key={post.id}
+                key={post.title}
                 style={{
                   padding: 16,
                   border: "1px solid #d9deea",

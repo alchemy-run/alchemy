@@ -854,6 +854,7 @@
       },
       "devDependencies": {
         "@prisma-next/cli": "^0.8.0",
+        "@prisma-next/target-postgres": "^0.8.0",
         "@prisma-next/vite-plugin-contract-emit": "^0.8.0",
         "@types/node": "catalog:",
         "@types/pg": "^8.20.0",

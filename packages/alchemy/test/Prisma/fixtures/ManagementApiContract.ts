@@ -5,7 +5,7 @@
  */
 export const managementApiContract = {
   repository: "prisma/pdp-control-plane",
-  commit: "2607c40afcf304f0117e9135209d5310a48f91a3",
+  commit: "d41acd2502f911132967aa3c589da8621b87a792",
   routes: [
     "DELETE /v1/apps/{appId}",
     "DELETE /v1/branches/{branchId}",

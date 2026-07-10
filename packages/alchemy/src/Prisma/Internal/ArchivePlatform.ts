@@ -34,6 +34,21 @@ export interface SecureDirectoryEntry {
   readonly type: "Directory" | "File" | "SymbolicLink" | "Other";
 }
 
+interface CloseableDirectoryHandle {
+  readonly close: () => void | Promise<void>;
+}
+
+export const closeDirectoryHandle = async (
+  handle: CloseableDirectoryHandle,
+) => {
+  try {
+    await handle.close();
+  } catch {
+    // Async directory iteration closes the handle when it exits. Ignore both
+    // Node's already-closed rejection and Bun's equivalent synchronous error.
+  }
+};
+
 const entryLimitError = (maxEntries: number) =>
   new Error(
     `Compute artifact exceeds the ${maxEntries} entry safety limit. Narrow the artifact directory or add ignore patterns.`,
@@ -91,7 +106,7 @@ export const readDirectoryEntriesSecure = (options: {
           });
         }
       } finally {
-        await handle.close().catch(() => undefined);
+        await closeDirectoryHandle(handle);
       }
       const after = await lstat(options.directory, { bigint: true });
       if (

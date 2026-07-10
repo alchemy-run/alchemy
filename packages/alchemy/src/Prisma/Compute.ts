@@ -8,6 +8,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
@@ -105,6 +106,10 @@ export interface ComputeCommandBuild {
   entrypoint?: string;
   /**
    * Environment variables supplied to the build command.
+   * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
+   * inherited; include one here explicitly only when the application build
+   * genuinely needs Prisma Management API access.
+   *
    * Plain strings are persisted in Alchemy state. Wrap secrets with
    * `Redacted.make(secret)`; Prisma-side encryption does not protect a value
    * already stored in Alchemy state.
@@ -141,6 +146,10 @@ export interface ComputeAutoBuild {
   framework?: ComputeAutoBuildFramework;
   /**
    * Environment variables supplied to the build command.
+   * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
+   * inherited; include one here explicitly only when the application build
+   * genuinely needs Prisma Management API access.
+   *
    * Plain strings are persisted in Alchemy state. Wrap secrets with
    * `Redacted.make(secret)`.
    *
@@ -205,6 +214,23 @@ export interface ComputeDev {
    * `Redacted.make(secret)`.
    */
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+}
+
+export interface ComputeHealthCheck {
+  /**
+   * Absolute application path to probe after the deployment starts and after
+   * promotion.
+   *
+   * @example "/api/health"
+   */
+  path: string;
+  /**
+   * Exact HTTP status codes that indicate readiness. When omitted, any 2xx
+   * response is healthy.
+   *
+   * @default Any status from 200 through 299
+   */
+  statusCodes?: readonly number[];
 }
 
 export interface ComputeProps extends PlatformProps {
@@ -368,6 +394,18 @@ export interface ComputeProps extends PlatformProps {
    */
   verifyUrl?: boolean;
   /**
+   * Optional application-level health check. Without this option, URL
+   * verification only waits for Prisma edge routing to stop returning its
+   * platform-level service-not-found response. With this option, Alchemy also
+   * sends a public GET to the preview URL before promotion and to the stable
+   * App URL afterward. Redirects are not followed. Each probe phase gets the
+   * full `urlReadinessTimeoutSeconds` budget.
+   *
+   * Health checks run only during cloud deployment, not `alchemy dev`, and
+   * cannot be combined with `verifyUrl: false` or `start: false`.
+   */
+  healthCheck?: ComputeHealthCheck;
+  /**
    * Maximum time to wait for Prisma's public URL to stop returning the
    * platform-level "Service not found" page.
    *
@@ -505,6 +543,14 @@ const isEffectNativeCompute = (props: ComputeProps) =>
 /**
  * A Prisma Compute deployment resource.
  *
+ * Prisma's create-deployment API exposes neither an idempotency key nor a
+ * caller-defined recovery key. If the API commits a deployment but its create
+ * response is lost before Alchemy persists the returned ID, that deployment
+ * can remain orphaned and a later deploy may create another one. Alchemy does
+ * not guess that the App's latest deployment is owned, because it could belong
+ * to another actor. Use a durable, locked state backend and inspect the App's
+ * deployment history after an interrupted create.
+ *
  * @section Deploying an App
  * @example Deploy a directory with an entrypoint
  * ```typescript
@@ -595,6 +641,22 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *   appName: "api",
  *   artifactPath: "./dist/app.tar.gz",
  *   port: 8080,
+ * });
+ * ```
+ *
+ * @section Deployment Health
+ * @example Require application readiness before promotion
+ * ```typescript
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   appName: "api",
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ *   healthCheck: {
+ *     path: "/api/health",
+ *     // Defaults to any 2xx response when omitted.
+ *     statusCodes: [200, 204],
+ *   },
  * });
  * ```
  *
@@ -735,9 +797,10 @@ const stopTrackedDevProcess = Effect.fn(function* (processKey: string) {
   devProcesses.delete(processKey);
 });
 
-const projectConsistencySchedule = Schedule.exponential(
-  Duration.millis(500),
-).pipe(Schedule.both(Schedule.recurs(6)));
+const projectConsistencySchedule = Schedule.max([
+  Schedule.exponential(Duration.millis(500)),
+  Schedule.recurs(6),
+]);
 
 const isAppProvisioningNotFound = (error: unknown): boolean =>
   error instanceof PrismaApiError &&
@@ -889,8 +952,55 @@ const validateComputeEnvironmentWrite = (
     }
   });
 
+const validateComputeHealthCheck = (
+  healthCheck: ComputeHealthCheck | undefined,
+) =>
+  Effect.gen(function* () {
+    if (healthCheck === undefined) return;
+    if (
+      !healthCheck.path.startsWith("/") ||
+      healthCheck.path.startsWith("//") ||
+      healthCheck.path.includes("\\") ||
+      /\s/.test(healthCheck.path)
+    ) {
+      return yield* Effect.fail(
+        new Error(
+          "healthCheck.path must be an absolute application path beginning with one '/'.",
+        ),
+      );
+    }
+    if (
+      healthCheck.statusCodes !== undefined &&
+      healthCheck.statusCodes.length === 0
+    ) {
+      return yield* Effect.fail(
+        new Error("healthCheck.statusCodes must contain at least one status."),
+      );
+    }
+    for (const status of healthCheck.statusCodes ?? []) {
+      if (!Number.isInteger(status) || status < 100 || status > 599) {
+        return yield* Effect.fail(
+          new Error(
+            "healthCheck.statusCodes must contain HTTP status integers from 100 through 599.",
+          ),
+        );
+      }
+    }
+  });
+
 const validateComputeProps = (props: ComputeProps) =>
   Effect.gen(function* () {
+    yield* validateComputeHealthCheck(props.healthCheck);
+    if (props.healthCheck !== undefined && props.verifyUrl === false) {
+      return yield* Effect.fail(
+        new Error("healthCheck cannot be combined with verifyUrl: false."),
+      );
+    }
+    if (props.healthCheck !== undefined && props.start === false) {
+      return yield* Effect.fail(
+        new Error("healthCheck requires start to be enabled."),
+      );
+    }
     for (const [name, value] of [
       ["timeoutSeconds", props.timeoutSeconds],
       ["pollIntervalMs", props.pollIntervalMs],
@@ -1046,11 +1156,43 @@ export const waitForDeploymentUrl = Effect.fn(function* (
   url: string | undefined,
   props: ComputeProps,
 ) {
-  if (!url || props.verifyUrl === false) return;
+  yield* validateComputeHealthCheck(props.healthCheck);
+  if (props.healthCheck !== undefined && props.verifyUrl === false) {
+    return yield* Effect.fail(
+      new Error("healthCheck cannot be combined with verifyUrl: false."),
+    );
+  }
+  if (props.verifyUrl === false) return;
+  if (!url) {
+    return yield* Effect.fail(
+      new Error(
+        props.healthCheck === undefined
+          ? "Prisma Compute did not return a public URL for readiness verification."
+          : "Prisma Compute did not return a public URL for the configured healthCheck.",
+      ),
+    );
+  }
   const httpOption = yield* Effect.serviceOption(HttpClient.HttpClient);
-  if (Option.isNone(httpOption)) return;
+  if (Option.isNone(httpOption)) {
+    return props.healthCheck === undefined
+      ? undefined
+      : yield* Effect.fail(
+          new Error(
+            "Prisma Compute healthCheck requires an HTTP client service.",
+          ),
+        );
+  }
 
   const http = httpOption.value;
+  const probeUrl =
+    props.healthCheck === undefined
+      ? url
+      : new URL(props.healthCheck.path, url).toString();
+  const acceptsStatus = (status: number) =>
+    props.healthCheck === undefined ||
+    (props.healthCheck.statusCodes === undefined
+      ? status >= 200 && status <= 299
+      : props.healthCheck.statusCodes.includes(status));
   const timeoutSeconds = props.urlReadinessTimeoutSeconds ?? 60;
   const intervalMs = props.pollIntervalMs ?? 1_000;
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
@@ -1073,20 +1215,25 @@ export const waitForDeploymentUrl = Effect.fn(function* (
     const remainingBeforeRequest = timeoutMs - (beforeRequest - startedAt);
     if (remainingBeforeRequest <= 0) {
       return yield* Effect.fail(
-        deploymentUrlTimeoutError(url, lastStatus, lastBody),
+        deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody),
       );
     }
     const requestTimeoutMs = Math.min(5_000, remainingBeforeRequest);
-    const response = yield* http.execute(HttpClientRequest.get(url)).pipe(
+    const response = yield* http.execute(HttpClientRequest.get(probeUrl)).pipe(
+      Effect.provideService(FetchHttpClient.RequestInit, {
+        redirect: "manual",
+      }),
       Effect.timeoutOption(Duration.millis(requestTimeoutMs)),
       Effect.map(Option.getOrUndefined),
       Effect.catch(() => Effect.succeed(undefined)),
     );
     if (response) {
       lastStatus = response.status;
-      // A successful/redirect/error response proves that routing is live. Do
-      // not consume its body: application responses may intentionally stream.
-      if (response.status !== 404) {
+      // Without an application health check, any non-404 response proves that
+      // edge routing is live. A configured health check must also match its
+      // status contract. Do not consume non-404 bodies: application responses
+      // may intentionally stream.
+      if (response.status !== 404 && acceptsStatus(response.status)) {
         return;
       }
       const beforeBody = yield* Effect.sync(() => Date.now());
@@ -1100,7 +1247,12 @@ export const waitForDeploymentUrl = Effect.fn(function* (
         );
         if (Option.isSome(bodyPrefix)) {
           lastBody = bodyPrefix.value;
-          if (!isPrismaEdgeServiceNotFound(response.status, lastBody)) return;
+          if (
+            !isPrismaEdgeServiceNotFound(response.status, lastBody) &&
+            acceptsStatus(response.status)
+          ) {
+            return;
+          }
         }
       }
     }
@@ -1108,7 +1260,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
     const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
     if (elapsed >= timeoutMs) {
       return yield* Effect.fail(
-        deploymentUrlTimeoutError(url, lastStatus, lastBody),
+        deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody),
       );
     }
 
@@ -1266,6 +1418,7 @@ const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -1288,12 +1441,15 @@ const platform = Layer.mergeAll(
   Logger.layer([Logger.consolePretty()]),
 );
 
-const stack = Layer.succeed(Stack, {
-  name: ${JSON.stringify(stack.name)},
-  stage: ${JSON.stringify(stack.stage)},
-  bindings: {},
-  resources: {},
-});
+const stack = Layer.mergeAll(
+  Layer.succeed(Stack, {
+    name: ${JSON.stringify(stack.name)},
+    stage: ${JSON.stringify(stack.stage)},
+    bindings: {},
+    resources: {},
+  }),
+  Layer.succeed(Stage, ${JSON.stringify(stack.stage)}),
+);
 
 const program = tag.pipe(
   Effect.flatMap((app) => app.RuntimeContext.exports),
@@ -1301,7 +1457,7 @@ const program = tag.pipe(
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer()),
+      Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(
@@ -2089,7 +2245,7 @@ export const ComputeProvider = () =>
               }),
             ),
           );
-          const app = ensuredApp.app;
+          let app = ensuredApp.app;
           let preserveCreatedAppOnFailure = false;
           const cleanupCreatedAppOnFailure = (error: unknown) =>
             ensuredApp.created && !preserveCreatedAppOnFailure
@@ -2130,6 +2286,7 @@ export const ComputeProvider = () =>
                 | string
                 | undefined,
             );
+            const promotionRequested = !(effectiveNews.skipPromote ?? false);
             let persistedPendingCleanup = output?.pendingDeploymentCleanup;
             const cleanupPreviousDeployment = Effect.fn(function* (
               deploymentId: string,
@@ -2169,6 +2326,76 @@ export const ComputeProvider = () =>
               );
               return "stopped" as const;
             });
+
+            // Apply persists the previous stable Attributes before reconcile.
+            // If a prior attempt promoted a new generation, failed its stable
+            // health check, and could not roll back, that durable output still
+            // identifies the deployment we must restore while the App points
+            // at the displaced unhealthy generation. Recover that transition
+            // before changing env or creating another deployment, otherwise a
+            // retry would use the unhealthy generation as its rollback target.
+            if (
+              promotionRequested &&
+              output?.promoted === true &&
+              output.deploymentId !== undefined &&
+              outputArtifactHash !== deploymentHash &&
+              app.latestDeploymentId !== null &&
+              app.latestDeploymentId !== output.deploymentId
+            ) {
+              const persistedDeploymentId = output.deploymentId;
+              const displacedDeploymentId = app.latestDeploymentId;
+              const rollback = yield* client
+                .rollbackApp(app.id, {
+                  deploymentId: persistedDeploymentId,
+                })
+                .pipe(Effect.result);
+              const observedAfterRollback = yield* client
+                .getApp(app.id)
+                .pipe(Effect.result);
+
+              if (
+                Result.isFailure(observedAfterRollback) ||
+                observedAfterRollback.success.latestDeploymentId !==
+                  persistedDeploymentId
+              ) {
+                return yield* Effect.fail(
+                  new AggregateError(
+                    [
+                      ...(Result.isFailure(rollback) ? [rollback.failure] : []),
+                      ...(Result.isFailure(observedAfterRollback)
+                        ? [observedAfterRollback.failure]
+                        : [
+                            new Error(
+                              `Prisma App '${app.id}' still reports deployment '${observedAfterRollback.success.latestDeploymentId ?? "none"}' as latest after rollback recovery targeted '${persistedDeploymentId}'.`,
+                            ),
+                          ]),
+                    ],
+                    `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/apps/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
+                  ),
+                );
+              }
+
+              app = observedAfterRollback.success;
+              yield* destroyDeployment(
+                client,
+                displacedDeploymentId,
+                effectiveNews,
+              ).pipe(
+                Effect.catch((cleanupError) =>
+                  Effect.fail(
+                    new AggregateError(
+                      [
+                        ...(Result.isFailure(rollback)
+                          ? [rollback.failure]
+                          : []),
+                        cleanupError,
+                      ],
+                      `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
+                    ),
+                  ),
+                ),
+              );
+            }
 
             if (
               output?.readinessStatus === "pending" &&
@@ -2366,8 +2593,8 @@ export const ComputeProvider = () =>
               | "destroyed"
               | "still-active"
               | null = previousDeploymentId ? "still-active" : null;
-            const promoted = !(effectiveNews.skipPromote ?? false);
-            if (promoted) {
+            let promoted = app.latestDeploymentId === deployment.id;
+            if (promotionRequested) {
               // Replay promotion even when latestDeploymentId already matches.
               // Promotion also repairs endpoint/custom-domain routing drift.
               preserveCreatedAppOnFailure = true;
@@ -2377,6 +2604,7 @@ export const ComputeProvider = () =>
                 deployment.id,
               );
               appEndpointDomain = promotedApp.appEndpointDomain;
+              promoted = true;
             }
 
             const deploymentUrl = toDeploymentUrl(deployment.previewDomain);
@@ -2384,11 +2612,7 @@ export const ComputeProvider = () =>
               toDeploymentUrl(appEndpointDomain) ??
               toDeploymentUrl(deployment.previewDomain);
             let readinessStatus: "ready" | "pending" | "skipped" = "skipped";
-            if (
-              promoted &&
-              effectiveNews.verifyUrl !== false &&
-              appUrl !== undefined
-            ) {
+            if (promoted && effectiveNews.verifyUrl !== false) {
               const readiness = yield* waitForDeploymentUrl(
                 appUrl,
                 effectiveNews,
@@ -2429,9 +2653,11 @@ export const ComputeProvider = () =>
                   observedAfterRollback.success.latestDeploymentId ===
                     deployment.id
                 ) {
-                  readinessStatus = "pending";
-                  yield* Effect.logWarning(
-                    `Prisma App '${app.id}' is live on deployment '${deployment.id}', but stable endpoint readiness is still pending; keeping previous deployment '${previousDeploymentId}' active and retrying on the next reconcile.`,
+                  return yield* Effect.fail(
+                    new AggregateError(
+                      [readiness.failure, rollback.failure],
+                      `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${previousDeploymentId}' failed. The App still reports '${deployment.id}' as latest. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/apps/${app.id}/rollback before making any new cloud changes.`,
+                    ),
                   );
                 } else {
                   return yield* Effect.fail(

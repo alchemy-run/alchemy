@@ -310,9 +310,10 @@ const fetchText = (url: string) =>
     return yield* response.text;
   }).pipe(
     Effect.retry({
-      schedule: Schedule.exponential(Duration.seconds(1)).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential(Duration.seconds(1)),
+        Schedule.recurs(8),
+      ]),
     }),
   );
 
@@ -325,8 +326,9 @@ const expectGone = <A, E, R>(label: string, effect: Effect.Effect<A, E, R>) =>
     if (!gone) return yield* Effect.fail(new Error(`${label} still exists`));
   }).pipe(
     Effect.retry({
-      schedule: Schedule.exponential(Duration.seconds(1)).pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential(Duration.seconds(1)),
+        Schedule.recurs(8),
+      ]),
     }),
   );

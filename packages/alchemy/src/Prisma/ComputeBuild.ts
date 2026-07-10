@@ -38,6 +38,10 @@ export interface ComputeAutoBuildOptions {
   framework?: ComputeAutoBuildFramework;
   /**
    * Environment variables supplied to the build command.
+   * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
+   * inherited; include one here explicitly only when the application build
+   * genuinely needs Prisma Management API access.
+   *
    * Plain strings are persisted in Alchemy state when this is configured
    * through `Prisma.Compute`. Wrap secrets with `Redacted.make(secret)`.
    *
@@ -102,6 +106,11 @@ type BuildServices =
 export interface RunBuildCommandOptions {
   command: string;
   cwd?: string;
+  /**
+   * Explicit environment variables supplied to the build command. Ambient
+   * Prisma Management API credentials are withheld unless they are provided
+   * here intentionally.
+   */
   env?: Record<string, string>;
   /**
    * Maximum bytes retained from each output stream before the build is
@@ -124,6 +133,10 @@ const STAGING_MAX_ENTRIES = 50_000;
 const STAGING_MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 const STAGING_MAX_FILE_BYTES = 128 * 1024 * 1024;
 const STAGING_TIMEOUT_SECONDS = 2 * 60;
+const PRISMA_MANAGEMENT_CREDENTIAL_ENV_NAMES = new Set([
+  "PRISMA_SERVICE_TOKEN",
+  "PRISMA_API_TOKEN",
+]);
 
 interface StagingBudget {
   entries: number;
@@ -166,8 +179,9 @@ const collectBoundedOutput = (
 
 /**
  * Run a shell build command, dying on non-zero exit. Local stand-in for the
- * removed `Build/Command.ts` helper, matching `Command.CommandExecutorLive`
- * spawn semantics (`shell: true`, env extended over `process.env`).
+ * removed `Build/Command.ts` helper. Build commands inherit the ambient
+ * environment except for Prisma Management API credentials, which must be
+ * passed explicitly through `env` when a build genuinely needs them.
  */
 export const runBuildCommand = Effect.fn(function* ({
   command,
@@ -194,8 +208,8 @@ export const runBuildCommand = Effect.fn(function* ({
         ChildProcess.make(command, [], {
           cwd: path.resolve(cwd ?? "."),
           shell: true,
-          env: env ?? {},
-          extendEnv: true,
+          env: buildProcessEnvironment(env),
+          extendEnv: false,
           stdin: "ignore",
           stdout: "pipe",
           stderr: "pipe",
@@ -250,6 +264,19 @@ export const runBuildCommand = Effect.fn(function* ({
     stdout: result.stdout.text,
     stderr: result.stderr.text,
   };
+});
+
+const buildProcessEnvironment = (
+  explicitEnv: Record<string, string> = {},
+): Record<string, string> => ({
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined &&
+        !PRISMA_MANAGEMENT_CREDENTIAL_ENV_NAMES.has(entry[0].toUpperCase()),
+    ),
+  ),
+  ...explicitEnv,
 });
 
 const NEXT_CONFIG_FILENAMES = [

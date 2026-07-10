@@ -5,6 +5,22 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
+const inspectBuildEnvironmentCommand = [
+  JSON.stringify(process.execPath),
+  "-e",
+  JSON.stringify(
+    "process.stdout.write(JSON.stringify({ serviceToken: process.env.PRISMA_SERVICE_TOKEN ?? null, apiToken: process.env.PRISMA_API_TOKEN ?? null, inherited: process.env.ALCHEMY_BUILD_INHERITED_SENTINEL ?? null }))",
+  ),
+].join(" ");
+
+const restoreProcessEnv = (name: string, value: string | undefined) => {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+};
+
 describe("Prisma Compute auto-build", () => {
   it.effect("builds a Bun app from package.json main", () =>
     Effect.gen(function* () {
@@ -709,6 +725,54 @@ describe("Prisma Compute auto-build", () => {
       expect((error as Error).message).toContain("exit code 17");
       expect((error as Error).message).toContain("stderr: 21 bytes");
       expect((error as Error).message).not.toContain("BUILD_SECRET_SENTINEL");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("withholds ambient Prisma credentials from build commands", () =>
+    Effect.gen(function* () {
+      const previousServiceToken = process.env.PRISMA_SERVICE_TOKEN;
+      const previousApiToken = process.env.PRISMA_API_TOKEN;
+      const previousInherited = process.env.ALCHEMY_BUILD_INHERITED_SENTINEL;
+      process.env.PRISMA_SERVICE_TOKEN = "ambient-service-token";
+      process.env.PRISMA_API_TOKEN = "ambient-api-token";
+      process.env.ALCHEMY_BUILD_INHERITED_SENTINEL = "inherited-value";
+
+      try {
+        const result = yield* runBuildCommand({
+          command: inspectBuildEnvironmentCommand,
+        });
+
+        expect(JSON.parse(result.stdout)).toEqual({
+          serviceToken: null,
+          apiToken: null,
+          inherited: "inherited-value",
+        });
+      } finally {
+        restoreProcessEnv("PRISMA_SERVICE_TOKEN", previousServiceToken);
+        restoreProcessEnv("PRISMA_API_TOKEN", previousApiToken);
+        restoreProcessEnv(
+          "ALCHEMY_BUILD_INHERITED_SENTINEL",
+          previousInherited,
+        );
+      }
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("allows explicitly configured Prisma build credentials", () =>
+    Effect.gen(function* () {
+      const result = yield* runBuildCommand({
+        command: inspectBuildEnvironmentCommand,
+        env: {
+          PRISMA_SERVICE_TOKEN: "explicit-service-token",
+          PRISMA_API_TOKEN: "explicit-api-token",
+        },
+      });
+
+      expect(JSON.parse(result.stdout)).toEqual({
+        serviceToken: "explicit-service-token",
+        apiToken: "explicit-api-token",
+        inherited: null,
+      });
     }).pipe(Effect.provide(PlatformServices)),
   );
 

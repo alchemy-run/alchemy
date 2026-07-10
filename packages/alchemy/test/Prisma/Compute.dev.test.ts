@@ -261,9 +261,10 @@ test.provider(
 
       const output = yield* fs.readFileString(outputPath).pipe(
         Effect.retry({
-          schedule: Schedule.fixed("50 millis").pipe(
-            Schedule.both(Schedule.recurs(40)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("50 millis"),
+            Schedule.recurs(40),
+          ]),
         }),
       );
 
@@ -276,9 +277,10 @@ test.provider(
 
       const stopped = yield* fs.readFileString(stoppedPath).pipe(
         Effect.retry({
-          schedule: Schedule.fixed("50 millis").pipe(
-            Schedule.both(Schedule.recurs(40)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("50 millis"),
+            Schedule.recurs(40),
+          ]),
         }),
       );
 

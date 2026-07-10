@@ -1,10 +1,10 @@
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type { Scope } from "effect/Scope";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
@@ -44,6 +44,8 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
+export const PrismaHttpClientLive = NodeHttpClient.layerNodeHttp;
+
 const managementApiLayer = () =>
   PrismaClientLive.pipe(
     Layer.provideMerge(fromProfile()),
@@ -51,7 +53,7 @@ const managementApiLayer = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.succeed(AuthProviders, {}),
-        FetchHttpClient.layer,
+        PrismaHttpClientLive,
         Layer.provide(ProfileLive, PlatformServices),
         Layer.provide(CredentialsStoreLive, PlatformServices),
       ),

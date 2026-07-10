@@ -1,6 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as Duration from "effect/Duration";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../Diff.ts";
@@ -16,9 +14,9 @@ import {
   destroyDeployment,
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
+import { executeArtifactUpload } from "./Internal/ArtifactUpload.ts";
 import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
 import {
-  artifactFileStream,
   inspectArtifactFile,
   readArtifactFile,
   type ArtifactFile,
@@ -38,17 +36,12 @@ import {
   unresolvedAppIdOf,
 } from "./Refs.ts";
 import type { Deployment as ApiDeployment } from "./Types.ts";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 type ObservedDeployment = Omit<ApiDeployment, "createdAt"> & {
   createdAt?: string;
 };
 
 export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 256 * 1024 * 1024;
-const ARTIFACT_UPLOAD_TIMEOUT = Duration.minutes(5);
-const UPLOAD_ERROR_BODY_BYTES = 64 * 1024;
 
 export interface DeploymentProps {
   /**
@@ -334,65 +327,7 @@ export const uploadArtifact = (
       catch: () =>
         new Error("Prisma artifact upload URL must be credential-free HTTPS."),
     });
-    const http = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.put(uploadUrl).pipe(
-      artifact instanceof Uint8Array
-        ? HttpClientRequest.bodyUint8Array(artifact, contentType)
-        : HttpClientRequest.bodyStream(artifactFileStream(artifact), {
-            contentType,
-            contentLength: artifact.size,
-          }),
-    );
-    const responseOption = yield* http.execute(request).pipe(
-      Effect.mapError(
-        () =>
-          new Error(
-            "Prisma artifact upload transport failed before a response was received.",
-          ),
-      ),
-      Effect.timeoutOption(ARTIFACT_UPLOAD_TIMEOUT),
-    );
-    if (Option.isNone(responseOption)) {
-      return yield* Effect.fail(
-        new Error("Prisma artifact upload timed out after 5 minutes."),
-      );
-    }
-    const response = responseOption.value;
-    if (response.status < 200 || response.status >= 300) {
-      const bodyBytesOption = yield* readResponsePrefixByteCount(
-        response,
-        UPLOAD_ERROR_BODY_BYTES,
-      ).pipe(
-        Effect.timeoutOption(Duration.seconds(2)),
-        Effect.catch(() => Effect.succeed(Option.none<number>())),
-      );
-      const diagnostic = Option.match(bodyBytesOption, {
-        onNone: () => "diagnostic body unavailable",
-        onSome: (bytes) => `diagnostic body prefix: ${bytes} bytes`,
-      });
-      return yield* Effect.fail(
-        new Error(
-          `Prisma artifact upload failed (HTTP ${response.status}; ${diagnostic}).`,
-        ),
-      );
-    }
-  });
-
-const readResponsePrefixByteCount = (
-  response: HttpClientResponse.HttpClientResponse,
-  limit: number,
-) =>
-  Effect.gen(function* () {
-    let bytes = 0;
-    yield* Stream.runForEachWhile(response.stream, (chunk) =>
-      Effect.sync(() => {
-        const remaining = limit - bytes;
-        if (remaining <= 0) return false;
-        bytes += Math.min(chunk.byteLength, remaining);
-        return bytes < limit;
-      }),
-    );
-    return bytes;
+    yield* executeArtifactUpload(uploadUrl, artifact, contentType);
   });
 
 export const DeploymentProvider = () =>
