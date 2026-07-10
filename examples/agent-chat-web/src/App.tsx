@@ -501,9 +501,13 @@ function ThreadWithAutoSend({
   });
 
   useEffect(() => {
-    if (firstMessage !== undefined) {
+    // read-and-delete INSIDE the effect: React StrictMode double-fires
+    // mount effects in dev, and a prop-captured value sent twice
+    // duplicates the Post (and admits two runs)
+    const pending = pendingFirstMessage.get(conversationId);
+    if (pending !== undefined) {
       pendingFirstMessage.delete(conversationId);
-      sendMessage({ text: firstMessage });
+      sendMessage({ text: pending });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

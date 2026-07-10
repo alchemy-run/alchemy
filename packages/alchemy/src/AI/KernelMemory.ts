@@ -10,7 +10,7 @@ import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
-import type * as AiError from "effect/unstable/ai/AiError";
+import * as AiError from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type * as Response from "effect/unstable/ai/Response";
@@ -361,6 +361,22 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                           disableToolCallResolution: true,
                         })
                         .pipe(
+                          // a wire connection that produces NOTHING for
+                          // this long is dead, not slow — without a stall
+                          // guard a silently dropped SSE connection wedges
+                          // the ring FOREVER (found live: a #support post
+                          // hung at model.requested with no terminal).
+                          // Retryable: the retry loop below reconnects.
+                          Stream.timeoutOrElse({
+                            duration: "45 seconds",
+                            orElse: () =>
+                              Stream.fail(
+                                new AiError.InternalProviderError({
+                                  description:
+                                    "provider stream stalled: no parts for 45s",
+                                }),
+                              ),
+                          }),
                           // widened: the `as never` toolkit collapses the
                           // inferred Tools to {}, dropping tool-call parts
                           Stream.runForEach((part: Response.AnyPart) => {
@@ -445,8 +461,10 @@ export const memory: Layer.Layer<Kernel, never, LanguageModel.LanguageModel> =
                     yield* attempt.pipe(
                       Effect.retry({
                         // the `as never` toolkit collapses the inferred
-                        // error union; the wire errors are AiError
-                        while: (error: AiError.AiError) => error.isRetryable,
+                        // error union; the wire errors are AiError (the
+                        // stall guard's InternalProviderError included)
+                        while: (error: AiError.AiErrorReason) =>
+                          error.isRetryable,
                         schedule: Schedule.exponential("500 millis"),
                         times: 4,
                       }),
