@@ -100,12 +100,13 @@ class General extends Channel<General>()("General")`
 Casual chat for everyone. ${Sage} hangs out here.` {}
 ```
 
-### The rule: a kind is a macro plus a decorator
+### The rule: a kind is a macro plus metadata — nothing else
 
 A kind must never require kernel knowledge — otherwise every kernel
 (memory, Cloudflare) needs code for every user kind and the extension
-point is dead. So a kind is defined entirely in term-space and
-Layer-space:
+point is dead. And a kind must never *embed* an implementation — the
+codebase's own law is contract-as-tag, implementation-as-Layer,
+provided elsewhere. What survives those two constraints is small:
 
 1. **Macro (term-level):** the kind *lowers* to a plain `Process`.
    Its charter scaffolding — the "you are a channel; simulate the
@@ -113,38 +114,54 @@ Layer-space:
    `${PostMessage}`, `${AI.never}`) — is spliced around the instance's
    template by **template composition** (templates are data: concat
    the strings arrays, concat the refs). The kernel sees an ordinary
-   `Process` term; `InterpretableTerm` stays `Agent | Process`.
-2. **Decorator (Layer-level):** the kind *wraps* the interpreted
-   `ProcessService` with its **service extension** — the verbs that
-   make it app-shaped:
-
-   ```ts
-   interface ChannelService extends ProcessService<never, Message> {
-     post(message: Message): Effect<void>          // EventBus.publish
-     timeline(after?: number): Stream<Message>     // Trace projection
-     threads(): Effect<ReadonlyArray<ThreadRef>>   // run registry read
-   }
-   ```
-
-   Every extra verb is implemented over **existing seams** (EventBus,
-   Trace, admission ledger) — the service builder is an Effect with its
-   own requirements, discharged by ordinary Layer composition. No new
-   kernel authority is minted; a kind can only re-package what any
-   consumer of the seams could do.
-3. **Meta (topology-level):** the term carries `~alchemy/Subkind:
+   `Process` term; `InterpretableTerm` stays `Agent | Process`. The
+   instance's tag resolves to plain `ProcessService`.
+2. **Meta (topology-level):** the term carries `~alchemy/Subkind:
    "Channel"` (while `~alchemy/Kind` stays `"Process"`) plus a
    user-defined `meta` blob. `AI.topology` reports both, the serving
    tier passes them through untouched, and the app maps subkind →
-   component. This is the whole "extend the DSL with their own
-   interface" story for v1: **interface = service verbs (code) + meta
-   (UI)** — deliberately not a component-schema DSL.
+   component/route. That is the whole "extend the DSL with their own
+   interface" story for v1.
 
-### Sketch of the kind constructor
+### Why NOT a service extension (`post`, `timeline`, …)
+
+An earlier draft gave kinds a third slot: a decorator adding verbs to
+the interpreted service (`ChannelService.post/timeline/threads`).
+Tracing the actual consumers dissolved it:
+
+| Flow | What actually implements it |
+| --- | --- |
+| human posts a message | `POST /api/channels/:id/messages` → serving tier → `EventBus.publish` → trigger wakes the ring (all existing, all generic) |
+| timeline renders | `GET …/timeline` → serving tier projects `message.posted` Trace rows → SSE (the ChatSessions pattern, generic over a **row convention**) |
+| an agent speaks | the `${PostMessage}` **Tool** — physics over the same seams |
+| a charter references a channel | interpolation → delegation/steer tools → `ProcessService` (existing) |
+
+No flow needs a kind-specific service verb. The real integration
+points of a kind are its **event source** (ingress) and its **row
+convention** (egress) — both already first-class. Embedding `service`
+in the kind would have (a) conflated contract with implementation on
+the definition, and (b) invented API for a consumer that doesn't
+exist. If a domain later wants a typed client API (`generalChannel.
+post(...)` from the user's own backend code), the standard pattern
+already covers it: declare a companion `Context.Service` contract and
+provide a Layer implemented over the seams — separately, like every
+binding in this codebase. We add nothing until a real consumer demands
+it.
+
+### The constructor: `AI.Process` gets a dual interface
+
+A kind is a *specialized Process constructor* — so the constructor of
+kinds is `AI.Process` itself, with a second, config-taking form (the
+base constructor is the trivial kind):
 
 ```ts
-const Channel = AI.kind("Channel", {
-  // spliced AROUND each instance's template (which becomes ${body})
-  charter: (name) => AI.charter`
+// instance of the base kind (unchanged, today's API)
+class Fix extends AI.Process<Fix>()("Fix")`…` {}
+
+// a KIND: name + definition instead of a template
+const Channel = AI.Process("Channel", {
+  // the macro: spliced around each instance's prose (${AI.body})
+  charter: (name: string) => AI.charter`
 You are the #${name} channel of the workspace. Messages arrive; you
 decide how the room responds — you never answer yourself. ${AI.body}
 Open a thread for anything non-trivial. Use ${PostMessage} to speak
@@ -152,25 +169,21 @@ as the room.
 ${AI.on(ChannelMessage)}
 ${AI.never`every message gets a response or an explicit pass`}`,
 
-  // decorates the interpreted ProcessService; Req here = EventBus etc.
-  service: Effect.fn(function* (process, term) {
-    const bus = yield* AI.EventBus;
-    const kernel = yield* AI.Kernel;
-    return {
-      ...process,
-      post: (message) => bus.publish(ChannelMessage, message),
-      timeline: (after) => projectMessages(kernel.trace(term.name, after)),
-    } satisfies ChannelService;
-  }),
-
+  // user-defined; flows through topology to the app untouched
   meta: { category: "channel", icon: "hash" },
-})
+});
+
+// instances of the kind — same shape as any Process
+class General extends Channel<General>()("General")`
+Casual chat for everyone. ${Sage} hangs out here.` {}
 ```
 
-`AI.layer(General)` then does what it always did — `kernel.interpret`
-— plus the kind's decorator; the tag `General` resolves to
-`ChannelService`. Instances remain free to interpolate their own
-members and tools (scaffold refs ∪ instance refs is the term's `Req`).
+The two call forms are unambiguous at runtime (second argument
+present) and in the overloads (`AI.Process(name)` curries a template
+taker; `AI.Process(name, definition)` returns a kind constructor).
+Rejected names: `AI.ProcessKind` (clunky; and the dual interface says
+the same thing structurally), `AI.Aspect` (connotes cross-cutting
+concerns; these are domain nouns).
 
 ### Consequences worth writing down
 
@@ -182,15 +195,16 @@ members and tools (scaffold refs ∪ instance refs is the term's `Req`).
   through scaffold refs; Agent's specialization is *kernel policy*
   (the no-tool-calls halt is lore, not a ref), so it cannot be
   expressed as a kind today. If that ever changes, Agent collapsing
-  into `AI.kind` would be the confirmation the abstraction is right.
+  into the kind form would be confirmation the abstraction is right.
 - **Kinds nest into the ordinary type machinery**: `ProcessOut/In/Err`
   are derived from the *composed* refs, so a kind that scaffolds
   `AI.on(ChannelMessage)` gives every instance `In = Message` for
   free, and `AI.never` gives `Out = never`. The types teach the same
   lesson as the charter.
 - **Two new mechanical utilities** fall out: `AI.charter` (template
-  composition with a `${AI.body}` splice point) and the `AI.kind`
-  constructor typing. Both are term-space, testable without a kernel.
+  composition with a `${AI.body}` splice point) and the kind-form
+  overload typing on `AI.Process`. Both are term-space, testable
+  without a kernel.
 
 ## 3. Primitive extensions (each small, each independently testable)
 
@@ -258,15 +272,16 @@ Same vendored component stack (chat-apps.md), new shell:
 ## 5. Research projects
 
 - **R0 (kinds — the extension mechanism, §2.5):** template composition
-  (`AI.charter` + `${AI.body}` splice), the `AI.kind` constructor
-  typing (composed-refs channel derivation; `Context.Service<Self,
-  KindService>`), service decoration in `AI.layer`, subkind + meta
-  through topology. The org example is the proof: `Channel`/`Group`
-  live in userland. **Open questions:** can a kind's scaffold refs be
+  (`AI.charter` + `${AI.body}` splice), the dual-interface overload on
+  `AI.Process` (composed-refs channel derivation; instances stay plain
+  `Context.Service<Self, ProcessService>`), subkind + meta through
+  topology. The org example is the proof: `Channel`/`Group` live in
+  userland. **Open questions:** can a kind's scaffold refs be
   overridden per instance (probably no — scaffold is constitutional)?
-  do kinds compose (a kind extending a kind — defer)? how does a
-  decorator's Req surface in `AI.layer`'s type (must join the Layer's
-  requirements)?
+  do kinds compose (a kind extending a kind — defer)? does the demo
+  ever hit a wall that genuinely demands a typed client API beyond
+  ingress-by-event + egress-by-row-convention (watch for it; don't
+  pre-build it)?
 - **R1 (topology):** the `AI.topology` fold; how groups render vs
   channels; whether membership (who's "in" a channel) is exactly the
   agent refs or needs joins.
@@ -289,8 +304,8 @@ Same vendored component stack (chat-apps.md), new shell:
 
 ## 6. Build order
 
-1. **R0 first — the kind mechanism** (`AI.charter`, `AI.kind`,
-   decorator in `AI.layer`, subkind in topology), proven by a scripted
+1. **R0 first — the kind mechanism** (`AI.charter`, the kind-form
+   overload on `AI.Process`, subkind in topology), proven by a scripted
    test defining a toy kind. Everything downstream builds ON it; doing
    it later means rebuilding `Channel` twice.
 2. `AI.topology` + `GET /api/topology` + sidebar (pure wins, no risk).
