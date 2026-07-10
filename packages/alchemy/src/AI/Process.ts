@@ -194,7 +194,152 @@ export interface Process<
   "~alchemy/Self": Self;
 }
 
+// ─── kinds: user-defined Process specializations (org-chat §2.5) ─────
+//
+// A kind is a MACRO plus METADATA — never kernel knowledge, never an
+// embedded implementation. It lowers to a plain Process term: the
+// kind's charter scaffolding is spliced around each instance's prose
+// by template composition (templates are data), and the instance
+// carries `~alchemy/Subkind` + the kind's `meta` for topology/UI.
+// `InterpretableTerm` stays `Agent | Process`; the tag resolves to
+// plain `ProcessService`.
+
+/** The splice marker: where an instance's prose lands in the scaffold. */
+export interface CharterBody {
+  "~alchemy/Kind": "CharterBody";
+}
+export const body: CharterBody = { "~alchemy/Kind": "CharterBody" };
+
+/** A captured scaffold template (`AI.charter\`…${AI.body}…\``). */
+export interface Charter<Refs extends any[] = any[]> {
+  "~alchemy/Kind": "Charter";
+  strings: ReadonlyArray<string>;
+  refs: Refs;
+}
+
+export const charter = <const Refs extends any[]>(
+  strings: TemplateStringsArray,
+  ...refs: Refs
+): Charter<Refs> => ({
+  "~alchemy/Kind": "Charter",
+  strings: [...strings],
+  refs,
+});
+
+const isCharterBody = (ref: unknown): ref is CharterBody =>
+  typeof ref === "object" &&
+  ref !== null &&
+  (ref as Record<string, unknown>)["~alchemy/Kind"] === "CharterBody";
+
+/**
+ * Splice an instance's template into a scaffold at its `${AI.body}`
+ * marker. Pure data surgery: strings concatenate at the seam, refs
+ * interleave. The scaffold's refs around the body — triggers, halts,
+ * budgets, standard tools — are constitutional: instances cannot
+ * remove them, only add their own.
+ */
+export const spliceCharter = (
+  scaffold: Charter,
+  instance: { strings: ReadonlyArray<string>; refs: ReadonlyArray<unknown> },
+): { strings: ReadonlyArray<string>; refs: ReadonlyArray<unknown> } => {
+  const at = scaffold.refs.findIndex(isCharterBody);
+  if (at === -1) {
+    throw new Error(
+      "kind charter has no ${AI.body} splice point — the scaffold must say where instance prose lands",
+    );
+  }
+  const strings =
+    instance.refs.length === 0
+      ? [
+          ...scaffold.strings.slice(0, at),
+          // no instance refs: the body collapses into ONE seam string
+          (scaffold.strings[at] ?? "") +
+            (instance.strings[0] ?? "") +
+            (scaffold.strings[at + 1] ?? ""),
+          ...scaffold.strings.slice(at + 2),
+        ]
+      : [
+          ...scaffold.strings.slice(0, at),
+          (scaffold.strings[at] ?? "") + (instance.strings[0] ?? ""),
+          ...instance.strings.slice(1, -1),
+          (instance.strings[instance.strings.length - 1] ?? "") +
+            (scaffold.strings[at + 1] ?? ""),
+          ...scaffold.strings.slice(at + 2),
+        ];
+  const refs = [
+    ...scaffold.refs.slice(0, at),
+    ...instance.refs,
+    ...scaffold.refs.slice(at + 1),
+  ];
+  return { strings, refs };
+};
+
+/** A kind's definition: the macro and the app-facing metadata. */
+export interface ProcessKindDefinition<
+  ScaffoldRefs extends any[] = any[],
+  Meta = unknown,
+> {
+  /**
+   * The scaffold spliced around each instance's template. Receives the
+   * instance name; must contain exactly one `${AI.body}`.
+   */
+  readonly charter: (name: string) => Charter<ScaffoldRefs>;
+  /**
+   * User-defined, JSON-ish. Flows through `AI.topology` and the
+   * serving tier to the app untouched — the "integrate with my app"
+   * hook (icon, category, ordering…).
+   */
+  readonly meta?: Meta;
+}
+
+/** The constructor a kind returns — same dual shape as `AI.Process`. */
+export interface ProcessKind<
+  KindName extends string = string,
+  ScaffoldRefs extends any[] = any[],
+  Meta = unknown,
+> {
+  "~alchemy/Kind": "ProcessKind";
+  "~alchemy/Name": KindName;
+  readonly definition: ProcessKindDefinition<ScaffoldRefs, Meta>;
+  <Self>(): {
+    <Name extends string>(
+      name: Name,
+    ): {
+      <const Refs extends any[]>(
+        template: TemplateStringsArray,
+        ...refs: Refs
+      ): Process<
+        ProcessOut<[...ScaffoldRefs, ...Refs]>,
+        ProcessIn<[...ScaffoldRefs, ...Refs]>,
+        ProcessErr<[...ScaffoldRefs, ...Refs]>,
+        Services<[...ScaffoldRefs, ...Refs]>,
+        Name,
+        [...ScaffoldRefs, ...Refs],
+        Self
+      > &
+        Context.Service<
+          Self,
+          ProcessService<
+            ProcessOut<[...ScaffoldRefs, ...Refs]>,
+            ProcessIn<[...ScaffoldRefs, ...Refs]>,
+            ProcessErr<[...ScaffoldRefs, ...Refs]>
+          >
+        >;
+    };
+  };
+}
+
 export const Process: {
+  // ── the kind form: AI.Process(name, definition) ────────────────
+  <
+    KindName extends string,
+    const ScaffoldRefs extends any[],
+    const Meta = unknown,
+  >(
+    name: KindName,
+    definition: ProcessKindDefinition<ScaffoldRefs, Meta>,
+  ): ProcessKind<KindName, ScaffoldRefs, Meta>;
+  // ── the instance forms (the base constructor is the trivial kind) ──
   <Self>(): {
     <Name extends string>(
       name: Name,
@@ -232,18 +377,23 @@ export const Process: {
       Refs
     >;
   };
-} = ((name?: string) =>
-  name
+} = ((name?: string, definition?: ProcessKindDefinition) => {
+  if (name !== undefined && definition !== undefined) {
+    return makeProcessKind(name, definition);
+  }
+  return name
     ? (template: TemplateStringsArray, ...refs: any[]) =>
         makeProcess(name, template, refs)
     : (name: string) =>
         (template: TemplateStringsArray, ...refs: any[]) =>
-          makeProcess(name, template, refs)) as any;
+          makeProcess(name, template, refs);
+}) as any;
 
 const makeProcess = (
   name: string,
-  template: TemplateStringsArray,
+  template: TemplateStringsArray | ReadonlyArray<string>,
   refs: any[],
+  branding?: { subkind: string; meta: unknown },
 ) =>
   Object.assign(
     class extends (Context.Service<any, ProcessService<any, any, any>>()(
@@ -254,8 +404,38 @@ const makeProcess = (
       "~alchemy/Name": name,
       refs,
       template,
+      ...(branding !== undefined && {
+        "~alchemy/Subkind": branding.subkind,
+        "~alchemy/Meta": branding.meta,
+      }),
     },
   ) as any;
+
+const makeProcessKind = (
+  kindName: string,
+  definition: ProcessKindDefinition,
+): any =>
+  Object.assign(
+    // the kind is itself a constructor with the <Self>() dual shape
+    () =>
+      (name: string) =>
+      (template: TemplateStringsArray, ...refs: any[]) => {
+        const scaffold = definition.charter(name);
+        const composed = spliceCharter(scaffold, {
+          strings: [...template],
+          refs,
+        });
+        return makeProcess(name, composed.strings, [...composed.refs], {
+          subkind: kindName,
+          meta: definition.meta,
+        });
+      },
+    {
+      "~alchemy/Kind": "ProcessKind",
+      "~alchemy/Name": kindName,
+      definition,
+    },
+  );
 
 export const isProcess = (
   value: unknown,

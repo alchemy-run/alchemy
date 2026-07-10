@@ -21,5 +21,6 @@ export * from "./Process.ts";
 export * from "./Services.ts";
 export * as Step from "./Step.ts";
 export * from "./Tool.ts";
+export * from "./Topology.ts";
 export * from "./TraceStore.ts";
 export * from "./Trigger.ts";

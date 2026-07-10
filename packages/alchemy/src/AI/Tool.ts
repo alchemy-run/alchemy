@@ -119,3 +119,8 @@ const makeTool = (
     template,
   }) as any;
 };
+
+export const isTool = (value: unknown): value is Tool<any, any> =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  (value as Record<string, unknown>)["~alchemy/Kind"] === "Tool";
