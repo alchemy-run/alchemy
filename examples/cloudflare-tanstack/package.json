@@ -26,10 +26,12 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@alchemy.run/node-utils": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "rolldown": "catalog:",
     "typescript": "^5.9.3",
     "vite": "catalog:"
   }

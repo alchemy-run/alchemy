@@ -1,7 +1,13 @@
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { hashPlugin } from "./experimental-hash-plugin.ts";
 
 export default defineConfig({
-  plugins: [tanstackStart(), viteReact()],
+  build: {
+    rolldownOptions: {
+      external: ["cloudflare:workers"],
+    },
+  },
+  plugins: [tanstackStart(), viteReact(), hashPlugin()],
 });

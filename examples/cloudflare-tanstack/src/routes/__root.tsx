@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import * as r2 from "@distilled.cloud/cloudflare/r2";
 import {
   HeadContent,
   Outlet,
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -25,6 +26,7 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  console.log(r2.getBucket);
   return (
     <Document>
       <Outlet />
